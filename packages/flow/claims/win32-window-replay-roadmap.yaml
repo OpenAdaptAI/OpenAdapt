@@ -1,0 +1,29 @@
+id: win32-window-replay-roadmap
+claim: >-
+  Windows hosts can replay window-scoped remote-display workflows (the
+  Citrix/RDP client window on a Windows endpoint) through the same
+  governed pixel contract already proven on macOS hosts.
+surfaces: [docs]
+tier: roadmap
+evidence:
+  - path: tests/test_win32_window_client.py
+    proves: >-
+      MOCK-ONLY conformance: the win32 WindowClient implements the
+      remote-display WindowClient seam (exact process/title/class
+      selection with ambiguity halt, client-area coordinate mapping under
+      per-monitor DPI awareness, PrintWindow-then-BitBlt capture fallback,
+      focus-verification refusal, and the UIPI elevation guard) against a
+      scripted Win32 API — never against a real Windows host.
+  - path: docs/desktop/CITRIX_PIXEL.md
+    kind: doc
+    proves: >-
+      The remote-display contract the client implements and the evidence
+      ladder for qualifying it (Parallels/RDP client-window analog first,
+      then a counted live Citrix host run).
+caveats:
+  - >-
+    NOT qualified: no counted end-to-end batch on a real Windows host or
+    a real client window exists. The contract tests mock every Win32
+    call; real DPI virtualization, UIPI, foreground-arbitration, and
+    PrintWindow rendering behavior remain unproven until the
+    Parallels/real-Windows validation procedure is executed and counted.

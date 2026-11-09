@@ -1,0 +1,65 @@
+{
+  "$defs": {
+    "ApproverKind": {
+      "description": "Who or what made an approval decision.",
+      "enum": [
+        "person",
+        "rule",
+        "agent",
+        "system"
+      ],
+      "title": "ApproverKind",
+      "type": "string"
+    },
+    "StepClass": {
+      "description": "What kind of step a decision is about.",
+      "enum": [
+        "read_only",
+        "reversible",
+        "consequential",
+        "irreversible",
+        "clinical_write"
+      ],
+      "title": "StepClass",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Which kinds of approver may decide each class of step.\n\nThe default allows only a person for every class. A deployment may\nwiden a class to rules, agents or systems. ``clinical_write`` accepts a\nnon-person approver only when ``clinical_write_opt_in_sha256`` pins the\ncustomer's signed opt-in.",
+  "properties": {
+    "allowed": {
+      "additionalProperties": {
+        "items": {
+          "$ref": "#/$defs/ApproverKind"
+        },
+        "type": "array"
+      },
+      "propertyNames": {
+        "$ref": "#/$defs/StepClass"
+      },
+      "title": "Allowed",
+      "type": "object"
+    },
+    "clinical_write_opt_in_sha256": {
+      "anyOf": [
+        {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Clinical Write Opt In Sha256"
+    },
+    "schema_version": {
+      "const": "openadapt.approver-policy/v1",
+      "default": "openadapt.approver-policy/v1",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "title": "ApproverPolicyV1",
+  "type": "object"
+}

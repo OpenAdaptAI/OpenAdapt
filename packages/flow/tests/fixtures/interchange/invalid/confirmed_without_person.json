@@ -1,0 +1,150 @@
+{
+  "schema_version": "openadapt.records-interchange/v0",
+  "exchange_id": "ex-ref-0007",
+  "direction": "to_executor",
+  "workflow": "example.referral_triage",
+  "session_id": "fax-2026-10-29",
+  "artifacts": [
+    {
+      "artifact_id": "fax1",
+      "kind": "source_document",
+      "source_type": "fax_folder",
+      "file_number": "TEST-0007",
+      "date": "2026-10-29",
+      "doctype": "referral",
+      "payload": {
+        "path": "payloads/referral-0007.txt",
+        "sha256": "e15b9b1523df9ac14f3010931330d5e2cb2dcf11b9bec70671805d16e28bd66b",
+        "mime": "text/plain",
+        "bytes": 192
+      }
+    }
+  ],
+  "fields": [
+    {
+      "name": "subject_name",
+      "type": "text",
+      "value": "TESTPATIENT, ALPHA",
+      "confidence": 0.94,
+      "reads": [
+        {
+          "channel": "document_parse",
+          "value": "TESTPATIENT, ALPHA",
+          "artifact_id": "fax1",
+          "locator": {
+            "page": 1,
+            "line": 2
+          }
+        }
+      ]
+    },
+    {
+      "name": "date_of_birth",
+      "type": "date",
+      "value": "1970-01-01",
+      "confidence": 0.95,
+      "reads": [
+        {
+          "channel": "document_parse",
+          "value": "1970-01-01",
+          "artifact_id": "fax1"
+        }
+      ]
+    },
+    {
+      "name": "subject_id",
+      "type": "code",
+      "value": "TEST-0000-0007",
+      "confidence": 0.71,
+      "status": "confirmed",
+      "reads": [
+        {
+          "channel": "document_parse",
+          "value": "TEST-OOOO-0007",
+          "artifact_id": "fax1"
+        },
+        {
+          "channel": "human",
+          "value": "TEST-0000-0007"
+        }
+      ]
+    },
+    {
+      "name": "priority",
+      "type": "enum",
+      "value": "urgent",
+      "confidence": 1.0,
+      "reads": [
+        {
+          "channel": "human",
+          "value": "urgent"
+        }
+      ]
+    }
+  ],
+  "identities": [
+    {
+      "identity_id": "subject",
+      "role": "subject",
+      "fields": [
+        "subject_name",
+        "date_of_birth",
+        "subject_id"
+      ],
+      "match": {
+        "status": "new",
+        "candidates": 0
+      }
+    }
+  ],
+  "decisions": [
+    {
+      "decision_id": "triage",
+      "question": "What priority should this referral get?",
+      "options": [
+        "urgent",
+        "soon",
+        "routine",
+        "decline"
+      ],
+      "choice": "urgent",
+      "output_field": "priority",
+      "authorized_roles": [
+        "physician"
+      ],
+      "decided_by": {
+        "kind": "human",
+        "id": "physician:p-1",
+        "role": "physician"
+      },
+      "decided_at": "2026-10-29T14:10:00+00:00",
+      "advisory": [
+        {
+          "source": {
+            "kind": "model",
+            "id": "local:qwen-small"
+          },
+          "option": "soon",
+          "rationale": "advisory only"
+        }
+      ]
+    }
+  ],
+  "outcome": "pending",
+  "provenance": {
+    "tool_name": "fixture-generator",
+    "tool_version": "0",
+    "producer": {
+      "kind": "system",
+      "id": "document-side@site"
+    },
+    "captured_at": "2026-10-29T14:00:00+00:00",
+    "checksum": "sha256:6b973add85fb0b37e1c8b97979ca1d3d344421dfe4adefc214ededbee37c87e8"
+  },
+  "extensions": {
+    "org.openadapt.example.referral": {
+      "referring_clinic": "Example Family Practice",
+      "reason_code": "TEST-R1"
+    }
+  }
+}

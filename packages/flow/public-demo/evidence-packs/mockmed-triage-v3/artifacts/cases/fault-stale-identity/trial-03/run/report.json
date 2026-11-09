@@ -1,0 +1,165 @@
+{
+  "workflow_name": "mockmed-triage",
+  "started_at": "2026-07-26T07:07:16.846963+00:00",
+  "execution_profile": "standard",
+  "execution_outcome": "HALTED",
+  "production_eligible": false,
+  "execution_completed": false,
+  "outcome_envelope": {
+    "version": "openadapt.execution-outcome/v1",
+    "outcome": "HALTED",
+    "profile": "standard",
+    "production_eligible": false,
+    "execution_completed": false,
+    "required_contracts": {
+      "authorization": 1,
+      "identity": 1,
+      "postcondition": 2,
+      "effect": 0
+    },
+    "passed_contracts": {
+      "authorization": 1,
+      "identity": 0,
+      "postcondition": 0,
+      "effect": 0
+    },
+    "evidence_classes": [
+      "authorization"
+    ],
+    "model_calls": 0,
+    "external_network_calls": "observed",
+    "compensation_actions": 0
+  },
+  "execution_target_kind": "web",
+  "execution_origin": "http://127.0.0.1:63394/",
+  "execution_entry_url": "http://127.0.0.1:63394/?fault=ok&idempotency=demo#tasks",
+  "bundle_content_digest": "5ed622b5568dac64e4202dae379835277f954c0b24fb2ead8108f32e1c1ce68e",
+  "source_recording_sha256": null,
+  "parameter_schema_sha256": "b9706e023d1b70651493a1b2b68bb1939f7173f74b5e574d4f9fa57acc89fc6d",
+  "governed_authorization_id": "2fc39b0674964b8d90fbc128881b895e",
+  "governed_approval_source": "public-demo-qualified-campaign",
+  "governed_authorization_created_at": "2026-07-26T07:07:16.846209+00:00",
+  "governed_policy_name": "clinical-write",
+  "governed_minimum_effect_tier": 1,
+  "governed_runtime_inputs_digest": "342463e1dfa0e45e5a5dac4c34a3daf2f1499aeeb2fa7eefeb8f0a9a027b3ea1",
+  "governed_authorized_effect_contracts": {},
+  "required_identity_step_ids": [
+    "step_000",
+    "step_001",
+    "step_002",
+    "step_003",
+    "step_005"
+  ],
+  "approved_unverified_effect_step_ids": [],
+  "params": {
+    "note": "Synthetic follow-up in two weeks"
+  },
+  "results": [
+    {
+      "step_id": "step_000",
+      "intent": "click 'Open'",
+      "ok": false,
+      "skipped": false,
+      "exception_handled": false,
+      "resolution": {
+        "rung": "structural",
+        "point": [
+          781,
+          186
+        ],
+        "confidence": 1.0,
+        "elapsed_ms": 36.323499865829945,
+        "structural_handle": {
+          "point": [
+            781,
+            186
+          ],
+          "confidence": 1.0,
+          "region": [
+            736,
+            168,
+            90,
+            36
+          ],
+          "target_fingerprint": "d40946deca325be1aa495d87c139d4745cd5811b718f084cda67f0fba09ca93a",
+          "candidate_count": 1,
+          "supported_operations": [
+            "dom_click",
+            "dom_double_click"
+          ]
+        }
+      },
+      "identity": {
+        "status": "mismatch",
+        "mode": "structured",
+        "coverage": 0.0,
+        "expected": "<structured identity template>",
+        "observed": "Changed IdentityKnee pain referralHigh",
+        "param": null,
+        "signal_evidence": [],
+        "quorum_required": null,
+        "quorum_verified": null
+      },
+      "input_verified": null,
+      "input_retried": false,
+      "postconditions_ok": null,
+      "interstitial_actions": [],
+      "effect_verified": null,
+      "effect_approved_unverified": false,
+      "safety_halt": true,
+      "effect_results": [],
+      "effect_evidence": [],
+      "failure_category": "governed_refusal",
+      "effect_contract_hashes": [],
+      "actuation": null,
+      "delivery_receipt": null,
+      "delivery_uncertainty": null,
+      "postcondition_drift_rescues": [],
+      "drift_oracle_calls": 0,
+      "heal": null,
+      "error": "Identity check failed for step 'step_000' (click 'Open'): a target was found positionally (rung 'structural', confidence 1.00) but its surrounding text does not match the recorded target's — expected '<structured identity template>', observed 'Changed IdentityKnee pain referralHigh' (coverage 0.00) — refusing to act; run aborted",
+      "before_png": "steps/step_000_before.png",
+      "after_png": "steps/step_000_after.png",
+      "elapsed_ms": 294.75320782512426
+    }
+  ],
+  "success": false,
+  "terminal_outcome": null,
+  "visited_states": [],
+  "halt": {
+    "state_id": "step_000",
+    "intent": "click 'Open'",
+    "reason": "Identity check failed for step 'step_000' (click 'Open'): a target was found positionally (rung 'structural', confidence 1.00) but its surrounding text does not match the recorded target's — expected '<structured identity template>', observed 'Changed IdentityKnee pain referralHigh' (coverage 0.00) — refusing to act; run aborted",
+    "outcome": "halt",
+    "observed_texts": [
+      "MockMed",
+      "Clinical demo —all data is fake",
+      "Referral Tasks",
+      "Patient",
+      "Reason",
+      "Priority",
+      "Action",
+      "Changed Identity",
+      "Knee pain referral",
+      "High",
+      "Open",
+      "AlexTestcase",
+      "Cardiology follow-up",
+      "Medium",
+      "Sam Specimen",
+      "Dermatology consult",
+      "Low"
+    ],
+    "completed_intents": []
+  },
+  "rung_counts": {},
+  "heal_count": 0,
+  "model_calls": 0,
+  "external_network_calls": "observed",
+  "est_model_cost_usd": 0.0,
+  "total_ms": 299.26454089581966,
+  "identity_applicable_steps": 5,
+  "identity_armed_steps": 5,
+  "identity_unarmed": [],
+  "screenshots_may_leave_box": false
+}

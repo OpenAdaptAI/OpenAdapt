@@ -1,0 +1,206 @@
+{
+  "data_classification": "synthetic",
+  "duration_ms": 3445,
+  "events": [
+    {
+      "at_ms": 0,
+      "frame": {
+        "controls": {
+          "pause": false,
+          "resume": false,
+          "stop": false
+        },
+        "event_sequence": 0,
+        "mode": "demonstration",
+        "observed_at_monotonic_ms": 1278810950.969666,
+        "observed_at_unix_ms": 1785049598922,
+        "phase": "recording",
+        "presentation": true,
+        "profile": "demo",
+        "schema_version": "openadapt.control-overlay-frame/v2",
+        "state_id": "visible:recording:demonstration:demo:no-step:no-total:no-pause:no-resume:no-stop:no-target",
+        "status": "Watching your demonstration",
+        "step": {
+          "current": null,
+          "total": null
+        },
+        "target_tracking": null,
+        "visible": true,
+        "workflow_label": "Workflow demonstration"
+      },
+      "media_frame_index": 0
+    },
+    {
+      "at_ms": 287,
+      "frame": {
+        "controls": {
+          "pause": false,
+          "resume": false,
+          "stop": false
+        },
+        "event_sequence": 1,
+        "mode": "demonstration",
+        "observed_at_monotonic_ms": 1278811237.8695,
+        "observed_at_unix_ms": 1785049599209,
+        "phase": "recording",
+        "presentation": true,
+        "profile": "demo",
+        "schema_version": "openadapt.control-overlay-frame/v2",
+        "state_id": "visible:recording:demonstration:demo:no-step:no-total:no-pause:no-resume:no-stop:no-target",
+        "status": "Watching your demonstration",
+        "step": {
+          "current": null,
+          "total": null
+        },
+        "target_tracking": null,
+        "visible": true,
+        "workflow_label": "Workflow demonstration"
+      },
+      "media_frame_index": 1
+    },
+    {
+      "at_ms": 520,
+      "frame": {
+        "controls": {
+          "pause": false,
+          "resume": false,
+          "stop": false
+        },
+        "event_sequence": 2,
+        "mode": "demonstration",
+        "observed_at_monotonic_ms": 1278811471.058,
+        "observed_at_unix_ms": 1785049599442,
+        "phase": "recording",
+        "presentation": true,
+        "profile": "demo",
+        "schema_version": "openadapt.control-overlay-frame/v2",
+        "state_id": "visible:recording:demonstration:demo:no-step:no-total:no-pause:no-resume:no-stop:no-target",
+        "status": "Watching your demonstration",
+        "step": {
+          "current": null,
+          "total": null
+        },
+        "target_tracking": null,
+        "visible": true,
+        "workflow_label": "Workflow demonstration"
+      },
+      "media_frame_index": 2
+    },
+    {
+      "at_ms": 743,
+      "frame": {
+        "controls": {
+          "pause": false,
+          "resume": false,
+          "stop": false
+        },
+        "event_sequence": 3,
+        "mode": "demonstration",
+        "observed_at_monotonic_ms": 1278811693.916791,
+        "observed_at_unix_ms": 1785049599665,
+        "phase": "recording",
+        "presentation": true,
+        "profile": "demo",
+        "schema_version": "openadapt.control-overlay-frame/v2",
+        "state_id": "visible:recording:demonstration:demo:no-step:no-total:no-pause:no-resume:no-stop:no-target",
+        "status": "Watching your demonstration",
+        "step": {
+          "current": null,
+          "total": null
+        },
+        "target_tracking": null,
+        "visible": true,
+        "workflow_label": "Workflow demonstration"
+      },
+      "media_frame_index": 3
+    },
+    {
+      "at_ms": 978,
+      "frame": {
+        "controls": {
+          "pause": false,
+          "resume": false,
+          "stop": false
+        },
+        "event_sequence": 4,
+        "mode": "demonstration",
+        "observed_at_monotonic_ms": 1278811929.100041,
+        "observed_at_unix_ms": 1785049599900,
+        "phase": "recording",
+        "presentation": true,
+        "profile": "demo",
+        "schema_version": "openadapt.control-overlay-frame/v2",
+        "state_id": "visible:recording:demonstration:demo:no-step:no-total:no-pause:no-resume:no-stop:no-target",
+        "status": "Watching your demonstration",
+        "step": {
+          "current": null,
+          "total": null
+        },
+        "target_tracking": null,
+        "visible": true,
+        "workflow_label": "Workflow demonstration"
+      },
+      "media_frame_index": 4
+    },
+    {
+      "at_ms": 1202,
+      "frame": {
+        "controls": {
+          "pause": false,
+          "resume": false,
+          "stop": false
+        },
+        "event_sequence": 5,
+        "mode": "demonstration",
+        "observed_at_monotonic_ms": 1278812153.276166,
+        "observed_at_unix_ms": 1785049600124,
+        "phase": "recording",
+        "presentation": true,
+        "profile": "demo",
+        "schema_version": "openadapt.control-overlay-frame/v2",
+        "state_id": "visible:recording:demonstration:demo:no-step:no-total:no-pause:no-resume:no-stop:no-target",
+        "status": "Watching your demonstration",
+        "step": {
+          "current": null,
+          "total": null
+        },
+        "target_tracking": null,
+        "visible": true,
+        "workflow_label": "Workflow demonstration"
+      },
+      "media_frame_index": 5
+    },
+    {
+      "at_ms": 1695,
+      "frame": {
+        "controls": {
+          "pause": false,
+          "resume": false,
+          "stop": false
+        },
+        "event_sequence": 6,
+        "mode": "demonstration",
+        "observed_at_monotonic_ms": 1278812645.606083,
+        "observed_at_unix_ms": 1785049600616,
+        "phase": "recording",
+        "presentation": true,
+        "profile": "demo",
+        "schema_version": "openadapt.control-overlay-frame/v2",
+        "state_id": "visible:recording:demonstration:demo:no-step:no-total:no-pause:no-resume:no-stop:no-target",
+        "status": "Watching your demonstration",
+        "step": {
+          "current": null,
+          "total": null
+        },
+        "target_tracking": null,
+        "visible": true,
+        "workflow_label": "Workflow demonstration"
+      },
+      "media_frame_index": 6
+    }
+  ],
+  "evidence_pack_id": "mockmed-triage-v3",
+  "media_frame_count": 8,
+  "media_sha256": "6a15175effc07fa737f3a1c020baa6a13e7548f382cf5f25d419e6ffb64b91bf",
+  "schema_version": "openadapt.control-overlay-timeline/v2"
+}

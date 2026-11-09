@@ -1,0 +1,41 @@
+arm,block,pos,ref,mismatch,correct,readback,new_charts,engine_success,transaction_outcome,actuation,api_fallback,approvals,approval_kinds,approval_wait_s,engine_s,wall_s,checkpoints,error,load_start,load_end,gate_waited_s,engine_sha
+api,1,1,r1-nadia-brennan,False,True,12/12,1,True,COMPLETED_UNVERIFIED,api,,1,api_request,0.023,1.114,4.369,41,,,,,352af585b
+api,1,2,r2-marcus-feld,False,True,12/12,1,True,COMPLETED_UNVERIFIED,api,,1,api_request,0.023,1.092,3.806,41,,,,,352af585b
+api,1,3,r3-ines-carvalho,False,True,12/12,1,True,COMPLETED_UNVERIFIED,api,,1,api_request,0.021,1.053,3.758,41,,,,,352af585b
+api,1,4,r4-theo-lindqvist,False,True,12/12,1,True,COMPLETED_UNVERIFIED,api,,1,api_request,0.026,1.1,3.783,41,,,,,352af585b
+browser,1,1,r1-nadia-brennan,False,True,12/12,1,True,COMPLETED_UNVERIFIED,dom,API steps are off for this run,2,dom+dom,0.043,18.324,21.29,41,,,,,352af585b
+browser,1,2,r2-marcus-feld,False,False,0/12,0,False,RECONCILIATION_REQUIRED,,API steps are off for this run,2,dom+dom,0.048,14.588,17.402,40,,,,,352af585b
+browser,1,3,r3-ines-carvalho,False,True,12/12,1,True,COMPLETED_UNVERIFIED,dom,API steps are off for this run,2,dom+dom,0.05,16.038,18.852,41,,,,,352af585b
+browser,1,4,r4-theo-lindqvist,False,True,12/12,1,True,COMPLETED_UNVERIFIED,dom,API steps are off for this run,2,dom+dom,0.049,15.285,18.056,41,,,,,352af585b
+api,2,1,r5-grace-adeyemi,False,True,12/12,1,True,COMPLETED_UNVERIFIED,api,,1,api_request,0.025,1.188,4.307,41,,,,,352af585b
+api,2,2,r6-rosa-delgado,True,True,0/12,0,False,RECONCILIATION_REQUIRED,dom,the check before saving (step_039) did not pass: missing ['No matches were found.']; the save was not sent,1,dom,0.026,22.666,25.59,39,,,,,352af585b
+api,2,3,r7-arlo-whitcombe,False,True,12/12,1,True,COMPLETED_UNVERIFIED,api,,1,api_request,0.03,1.125,3.803,41,,,,,352af585b
+api,2,4,r8-priya-raman,False,True,12/12,1,True,COMPLETED_UNVERIFIED,api,,1,api_request,0.025,1.152,3.842,41,,,,,352af585b
+browser,2,1,r5-grace-adeyemi,False,True,12/12,1,True,COMPLETED_UNVERIFIED,dom,API steps are off for this run,2,dom+dom,0.055,18.26,21.718,41,,,,,352af585b
+browser,2,2,r6-rosa-delgado,True,True,0/12,0,False,RECONCILIATION_REQUIRED,dom,API steps are off for this run,1,dom,0.031,24.871,28.107,39,,,,,352af585b
+browser,2,3,r7-arlo-whitcombe,False,True,12/12,1,True,COMPLETED_UNVERIFIED,dom,API steps are off for this run,2,dom+dom,0.047,16.847,19.804,41,,,,,352af585b
+browser,2,4,r8-priya-raman,False,True,12/12,1,True,COMPLETED_UNVERIFIED,dom,API steps are off for this run,2,dom+dom,0.048,15.714,18.419,41,,,,,352af585b
+browser,3,1,r1-nadia-brennan,False,True,12/12,1,True,COMPLETED_UNVERIFIED,dom,API steps are off for this run,2,dom+dom,0.047,15.583,18.693,41,,,,,352af585b
+browser,3,2,r2-marcus-feld,False,True,12/12,1,True,COMPLETED_UNVERIFIED,dom,API steps are off for this run,2,dom+dom,0.052,15.871,18.792,41,,,,,352af585b
+browser,3,3,r3-ines-carvalho,False,True,12/12,1,True,COMPLETED_UNVERIFIED,dom,API steps are off for this run,2,dom+dom,0.047,22.049,25.165,41,,,,,352af585b
+api,3,1,r1-nadia-brennan,False,True,12/12,1,True,COMPLETED_UNVERIFIED,api,,1,api_request,0.027,1.822,5.114,41,,,,,352af585b
+api,3,2,r2-marcus-feld,False,True,12/12,1,True,COMPLETED_UNVERIFIED,api,,1,api_request,0.028,1.102,3.921,41,,,,,352af585b
+api,3,3,r3-ines-carvalho,False,True,12/12,1,True,COMPLETED_UNVERIFIED,api,,1,api_request,0.031,1.081,3.904,41,,,,,352af585b
+api,3,4,r4-theo-lindqvist,False,True,12/12,1,True,COMPLETED_UNVERIFIED,api,,1,api_request,0.025,1.106,3.773,41,,,,,352af585b
+browser,3,4,r4-theo-lindqvist,False,True,12/12,1,True,COMPLETED_UNVERIFIED,dom,API steps are off for this run,2,dom+dom,0.053,15.59,18.753,41,,,,,352af585b
+api,4,1,r5-grace-adeyemi,False,True,12/12,1,True,COMPLETED_UNVERIFIED,api,,1,api_request,0.028,1.082,4.212,41,,,,,352af585b
+api,4,2,r6-rosa-delgado,True,True,0/12,0,False,RECONCILIATION_REQUIRED,dom,the check before saving (step_039) did not pass: missing ['No matches were found.']; the save was not sent,1,dom,0.03,22.625,25.706,39,,,,,352af585b
+api,4,3,r7-arlo-whitcombe,False,True,12/12,1,True,COMPLETED_UNVERIFIED,api,,1,api_request,0.03,1.123,3.806,41,,,,,352af585b
+api,4,4,r8-priya-raman,False,True,12/12,1,True,COMPLETED_UNVERIFIED,api,,1,api_request,0.027,1.057,3.865,41,,,,,352af585b
+browser,4,1,r5-grace-adeyemi,False,True,12/12,1,True,COMPLETED_UNVERIFIED,dom,API steps are off for this run,2,dom+dom,0.048,15.514,18.949,41,,,,,352af585b
+browser,4,2,r6-rosa-delgado,True,True,0/12,0,False,RECONCILIATION_REQUIRED,dom,API steps are off for this run,1,dom,0.022,22.555,25.298,39,,,,,352af585b
+browser,4,3,r7-arlo-whitcombe,False,True,12/12,1,True,COMPLETED_UNVERIFIED,dom,API steps are off for this run,2,dom+dom,0.053,15.174,17.925,41,,,,,352af585b
+browser,4,4,r8-priya-raman,False,True,12/12,1,True,COMPLETED_UNVERIFIED,dom,API steps are off for this run,2,dom+dom,0.043,15.596,18.571,41,,,,,352af585b
+api,5,1,r1-nadia-brennan,False,True,12/12,1,True,COMPLETED_UNVERIFIED,api,,1,api_request,0.028,1.3,4.671,41,,,,,352af585b
+api,5,2,r2-marcus-feld,False,True,12/12,1,True,COMPLETED_UNVERIFIED,api,,1,api_request,0.029,1.363,4.065,41,,,,,352af585b
+api,5,3,r3-ines-carvalho,False,True,12/12,1,True,COMPLETED_UNVERIFIED,api,,1,api_request,0.026,1.495,4.167,41,,,,,352af585b
+api,5,4,r4-theo-lindqvist,False,True,12/12,1,True,COMPLETED_UNVERIFIED,api,,1,api_request,0.026,1.533,4.193,41,,,,,352af585b
+browser,5,1,r1-nadia-brennan,False,True,12/12,1,True,COMPLETED_UNVERIFIED,dom,API steps are off for this run,2,dom+dom,0.049,20.218,23.385,41,,,,,352af585b
+browser,5,2,r2-marcus-feld,False,True,12/12,1,True,COMPLETED_UNVERIFIED,dom,API steps are off for this run,2,dom+dom,0.053,18.634,21.533,41,,,,,352af585b
+browser,5,3,r3-ines-carvalho,False,True,12/12,1,True,COMPLETED_UNVERIFIED,dom,API steps are off for this run,2,dom+dom,0.06,16.615,19.53,41,,,,,352af585b
+browser,5,4,r4-theo-lindqvist,False,True,12/12,1,True,COMPLETED_UNVERIFIED,dom,API steps are off for this run,2,dom+dom,0.052,15.536,18.458,41,,,,,352af585b

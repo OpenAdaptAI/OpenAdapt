@@ -1,0 +1,116 @@
+name: FFmpeg pin
+
+# openadapt-capture ships no FFmpeg bytes. `capture install-ffmpeg` fetches one
+# pinned archive per platform and refuses it unless its SHA-256 matches a digest
+# compiled into the package.
+#
+# Two things can break that quietly, and neither shows up in the unit suite:
+# a release asset replaced behind the pinned URL, and a pin bumped to a build
+# that is no longer the LGPL configuration. Both lanes below read the live
+# artifact, so a pin edit is proven in the pull request that makes it, and a
+# replaced asset is caught on the weekly schedule.
+
+on:
+  schedule:
+    # Thursday 05:41 UTC.
+    - cron: "41 5 * * 4"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "openadapt_capture/ffmpeg_runtime.py"
+      - "scripts/check_ffmpeg_pin.py"
+      - ".github/workflows/ffmpeg-pin.yml"
+
+concurrency:
+  group: capture-ffmpeg-pin-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify-pin:
+    name: Verify every pinned artifact and its licence
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install exact uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: "0.11.29"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Check the pinned digests and the build configuration
+        run: uv run python scripts/check_ffmpeg_pin.py
+
+  install-smoke:
+    name: Install and probe on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install exact uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: "0.11.29"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Show the plan without fetching anything
+        run: uv run capture install-ffmpeg --dry-run
+
+      - name: Install the pinned runtime and run a real encode-and-decode probe
+        run: uv run capture install-ffmpeg
+
+      - name: Record with the installed runtime resolved and nothing else
+        shell: bash
+        env:
+          # Strip every earlier mechanism so the installed runtime is what
+          # resolves. A hosted runner may already carry an ffmpeg on PATH,
+          # which outranks it by design.
+          OPENADAPT_FFMPEG_PATH: ""
+          OPENADAPT_FFPROBE_PATH: ""
+          OPENADAPT_DESKTOP_FFMPEG_PATH: ""
+        run: |
+          set -euo pipefail
+          uv run python - <<'PY'
+          import os
+          import shutil
+
+          from openadapt_capture import ffmpeg_runtime, video
+
+          installed = ffmpeg_runtime.find_installed_runtime()
+          assert installed is not None, "install-ffmpeg left no usable receipt"
+
+          # Hide any FFmpeg the runner image already provides.
+          os.environ["PATH"] = os.pathsep.join(
+              part
+              for part in os.environ["PATH"].split(os.pathsep)
+              if part and not shutil.which("ffmpeg", path=part)
+          )
+          video._desktop_data_dirs = lambda: []
+
+          provision = video.require_video_encoder()
+          assert provision.source == "capture install-ffmpeg", provision.source
+          assert provision.executable == installed[0], provision.executable
+          print(f"encoded and decoded with {provision.codec} into {provision.muxer}")
+          PY
+
+      - name: Remove the runtime again
+        run: uv run capture uninstall-ffmpeg

@@ -1,0 +1,29 @@
+# SOC 2: automated dependency updates (OA-C-23).
+version: 2
+updates:
+  # The uv ecosystem updates uv.lock with pyproject.toml; the pip ecosystem
+  # left the lock stale, so CI's `uv sync --locked` rejected every bump.
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    ignore:
+      # Keep PyGObject >=3.46,<3.51 so the Linux extra installs on GLib 2.64
+      # distros; 3.51+ needs newer GLib. See docs/DESIGN.md.
+      - dependency-name: "pygobject"
+        versions: [">=3.51"]
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    groups:
+      # CodeQL persists version-specific state between init and analyze.
+      codeql-action:
+        patterns:
+          - "github/codeql-action/*"

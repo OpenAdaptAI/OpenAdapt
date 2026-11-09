@@ -1,0 +1,25 @@
+id: deterministic-zero-model-replay
+claim: >-
+  Replay is deterministic, local, and $0 — zero model calls on either the
+  record or the replay side.
+surfaces: [README.md, website, docs]
+tier: supported
+evidence:
+  - path: tests/e2e/test_record_compile_replay.py
+    proves: >-
+      Baseline replay x3 resolves every step on the `template` rung with 0
+      heals and 0 model calls; healed bundles replay clean afterward.
+  - path: tests/test_replayer.py
+    proves: >-
+      The replayer is a deterministic resolution ladder; the VLM rung is a
+      fallback, not on the default path — the core runtime is model-free.
+  - path: benchmark/BENCHMARK.md
+    kind: benchmark
+    proves: >-
+      CI-reproducible MockMed run artifact: 100/100 compiled replays at
+      4.9s p50 with zero model calls, measured 2026-07-08 on Flow 0.1.0
+      (pre-v0.2.0 source build); field/artifact reference.
+caveats:
+  - >-
+    A VLM rung exists as the lowest fallback of the ladder; it is not
+    invoked on a clean deterministic replay, and never on the record side.

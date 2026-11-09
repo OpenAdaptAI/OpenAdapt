@@ -1,0 +1,78 @@
+{
+  "started_at": "2026-07-08T17:34:43.972171+00:00",
+  "demo_url": "https://demo.openemr.io/openemr/index.php",
+  "runs": [
+    {
+      "run": 1,
+      "success": true,
+      "note_visible": true,
+      "steps_ok": 18,
+      "steps_total": 18,
+      "rung_counts": {
+        "template": 8,
+        "geometry": 1
+      },
+      "heal_count": 1,
+      "total_s": 37.7,
+      "first_failure": null
+    },
+    {
+      "run": 2,
+      "success": true,
+      "note_visible": true,
+      "steps_ok": 18,
+      "steps_total": 18,
+      "rung_counts": {
+        "template": 8,
+        "geometry": 1
+      },
+      "heal_count": 1,
+      "total_s": 36.0,
+      "first_failure": null
+    },
+    {
+      "run": 3,
+      "success": true,
+      "note_visible": false,
+      "steps_ok": 18,
+      "steps_total": 18,
+      "rung_counts": {
+        "template": 8,
+        "geometry": 1
+      },
+      "heal_count": 1,
+      "total_s": 37.3,
+      "first_failure": null
+    },
+    {
+      "run": 4,
+      "success": true,
+      "note_visible": true,
+      "steps_ok": 18,
+      "steps_total": 18,
+      "rung_counts": {
+        "template": 8,
+        "geometry": 1
+      },
+      "heal_count": 1,
+      "total_s": 36.5,
+      "first_failure": null
+    },
+    {
+      "run": 5,
+      "success": true,
+      "note_visible": false,
+      "steps_ok": 18,
+      "steps_total": 18,
+      "rung_counts": {
+        "template": 8,
+        "geometry": 1
+      },
+      "heal_count": 1,
+      "total_s": 37.1,
+      "first_failure": null
+    }
+  ],
+  "success_rate": "5/5",
+  "verified_rate": "3/5"
+}

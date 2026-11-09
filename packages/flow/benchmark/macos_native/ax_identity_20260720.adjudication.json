@@ -1,0 +1,25 @@
+{
+  "acceptance_scope": "TextEdit on one Apple-Silicon macOS host with an active user session and Screen Recording + Accessibility granted. Proves the live AX identity + structural round-trip and safe misses; the refusal contract is unit-covered. Experimental: not a general per-application support claim, and no native AXPress actuation is claimed (a resolved element is acted on by the gated physical click).",
+  "candidate": {
+    "flow_version": "1.19.0",
+    "git_dirty": true,
+    "git_sha": "b1a3726f1b5f3fc2507c214a3ffd1659f3725ceb"
+  },
+  "capabilities_proven": [
+    "IdentityBackend.structured_text_at",
+    "StructuralActionBackend.structural_locator_at",
+    "StructuralActionBackend.locate_structural"
+  ],
+  "evidence_classification": "diagnostic_local_engineering_evidence",
+  "lane": "development",
+  "original_evidence": {
+    "bytes": 2737,
+    "path": "benchmark/macos_native/ax_identity_20260720.json",
+    "preserved_byte_for_byte": true,
+    "sha256": "23848e0be694f97c0b749bf34f3aa6cb26fffe7a0ad5b29fc6ebe98e2dcb4f74",
+    "status": "passed",
+    "status_is_not_rewritten_or_superseded": true
+  },
+  "refusal_contract_is_unit_covered_in": "tests/test_macos_structural.py",
+  "task": "macos_ax_structured_identity"
+}

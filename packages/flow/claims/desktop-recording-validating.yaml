@@ -1,0 +1,41 @@
+id: desktop-recording-validating
+claim: >-
+  The product CLI records desktop workflows through openadapt-capture and
+  `record --backend windows|macos|linux|rdp|citrix` captures the operator's
+  real demonstration and emits the compile-ready recording format, so
+  record -> compile -> replay closes on the desktop substrate, not just the
+  browser.
+surfaces: [README.md, docs, website]
+tier: validating
+evidence:
+  - path: tests/test_desktop_record.py
+    proves: >-
+      The live-capture orchestration + CLI wiring (record --backend
+      windows|macos|linux|rdp|citrix -> openadapt-capture ->
+      convert_capture), and that a desktop-shaped recording COMPILES into a
+      bundle and REPLAYS to completion through the desktop backend path,
+      resolving each click to its recorded target (runs on default CI).
+  - path: tests/test_capture_adapter.py
+    proves: >-
+      The capture->recording bridge over a REAL openadapt-capture session
+      (its own event-processing pipeline + frame extraction) feeding the
+      UNMODIFIED compiler (runs on default CI: the `test` job installs the
+      `capture` extra; openadapt-capture >=0.5.4 imports clean headless).
+  - path: docs/desktop/RECORDING.md
+    kind: doc
+    proves: >-
+      The capture-assisted and live-observer paths, fail-closed secret
+      handling, RDP coordinate binding, and reuse of
+      openadapt-capture + the capture adapter.
+caveats:
+  - >-
+    Offline capture carries NO structural (UIA AutomationId) locator, so
+    replay uses the visual ladder (template/ocr/geometry). The live capture
+    needs a display (openadapt-capture is the optional `capture` extra); the
+    CI proof covers a real on-disk capture session -> convert -> compile ->
+    replay, not a live recorder run (the live recorder has its own
+    integration suite in the openadapt-capture repo).
+  - >-
+    `--secret` is refused on an unqualified pixel/desktop capture with no
+    field geometry, and RDP recording uses the replay pixel space or a
+    deployment-calibrated client-window mapping.

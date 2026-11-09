@@ -1,0 +1,23 @@
+{
+  "observed": "exact_record",
+  "oracle_kind": "exact_record",
+  "passed": true,
+  "read_boundary": "independent from browser pixels and RunReport",
+  "read_path": "GET /api/db",
+  "schema_version": "openadapt.public-demo-oracle/v1",
+  "silent_incorrect_success": false,
+  "snapshot": {
+    "records": [
+      {
+        "id": 1,
+        "key": "mockmed-triage-p1-v1",
+        "note": "Synthetic follow-up in two weeks",
+        "patient_id": "p1",
+        "source": "replay",
+        "type": "Triage"
+      }
+    ],
+    "rejected_writes": 0
+  },
+  "wrong_target_action": false
+}

@@ -1,0 +1,10 @@
+
+## Caveats (honest limits)
+- Fixture: a private copy of the realrun OpenEMR fixture (same pinned images, compose file, baseline SQL, reset and Rosa seed; own podman project `openadapt-openemr-bench` on ports 9311/9310, with `site_addr_oath` changed to the new port). It was needed because another session was resetting the shared fixture during the first smoke runs (those runs are kept in runs/smoke-shared-fixture-invalid and excluded). CPU is still shared: load is recorded per run; other sessions' probe processes seen during a run are recorded in result.json (`foreign_after`).
+- Sign-in and opening the New Patient form are inside the clock here (the prior study kept them off camera), so absolute numbers are a few seconds higher than the prior study's engine/agent times. The phase table lets you subtract them.
+- Screen recording (CDP screencast) runs during every timed run in all arms, as in the prior study; its attach time is a separate phase and `wall_ex_recorder` excludes it, but its CPU cost during the task is not removed.
+- The replay outcome on normal referrals is `COMPLETED_UNVERIFIED` (the engine's own check); correctness here is the harness's independent SQL read-back.
+- Agent time depends on Anthropic API latency at the time of each run; runs were interleaved with the replay arms to spread drift, not to remove it. Agent was given the same "do not create a duplicate" instruction as the prior study.
+- Within a block the patient list grows by one chart per run (same as prior batches); positions are rotated across blocks.
+- Warm replay clears the OCR memo at the start of every run (conservative); a real long-lived runner might hit it more.
+- 22:10-23:15 ET window: another process ran replays and reset the shared realrun fixture. This benchmark never used that fixture after the first smoke runs (private `openadapt-openemr-bench` fixture; every run checks its container start time, and no run was invalidated), so no timed run was fixture-contaminated. That process did compete for CPU: block 1 of every arm (22:27-23:50) overlaps it. `figures.json` reports the figures both for blocks 1 to 10 and excluding block 1.

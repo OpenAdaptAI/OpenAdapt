@@ -1,0 +1,42 @@
+id: rdp-validating
+claim: >-
+  RDP has scoped acceptance for real-network framebuffer decode and input
+  delivery into Windows 11 with independent exact file-effect verification.
+surfaces: [README.md, docs, website]
+tier: validating
+reproducibility: field
+evidence:
+  - path: tests/e2e/test_parallels_rdp_e2e.py
+    proves: >-
+      Opt-in snapshot-safe real RDP qualification harness with exactly three
+      trials, independent guest-tools oracle, failure taxonomy, and cleanup.
+  - path: tests/test_rdp_backend.py
+    proves: >-
+      CI covers the backend/transport contract, framebuffer conversion,
+      pointer and keyboard delivery, resize rebaseline between actions,
+      mid-lease geometry refusal, pre-delivery horizontal-scroll refusal,
+      typed uncertain transport failures, and record-compile-replay
+      conformance.
+  - path: tests/test_rdp_multiapp_campaign_contract.py
+    proves: >-
+      Required CI covers the bounded 27-trial FreeRDP campaign contract,
+      independent SQLite, CSV, and Maildir oracles, fail-closed visual
+      action preflight, uncertain-delivery handling, and result accounting.
+  - path: benchmark/rdp_multiapp/README.md
+    kind: doc
+    proves: >-
+      The public synthetic multi-window campaign defines the workflow,
+      faults, independent persisted surfaces, and acceptance denominator.
+  - path: benchmark/rdp/results_82a658a_20260718.sanitized.json
+    kind: benchmark
+    proves: >-
+      Candidate 82a658a passed 3/3 at 51.845, 10.467, and 7.477 seconds,
+      with zero failures, silent incorrect successes, over-halts, or model calls.
+caveats:
+  - >-
+    Acceptance covers the named 1280x800 Windows Run/file task and exact VM
+    environment, not arbitrary applications, identity policies, or Citrix.
+  - >-
+    The multi-window campaign uses deterministic synthetic applications.
+    It exercises the real FreeRDP pixel and input path but does not qualify
+    a named customer application or environment.

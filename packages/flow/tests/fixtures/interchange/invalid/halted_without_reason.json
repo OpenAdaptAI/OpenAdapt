@@ -1,0 +1,63 @@
+{
+  "schema_version": "openadapt.records-interchange/v0",
+  "exchange_id": "ex-ref-0008-r",
+  "direction": "from_executor",
+  "workflow": "example.referral_triage",
+  "session_id": "fax-2026-10-29",
+  "in_reply_to": "ex-ref-0008",
+  "artifacts": [
+    {
+      "artifact_id": "chart",
+      "kind": "structured_observation",
+      "source_type": "rdp_screen",
+      "file_number": "TEST-0007",
+      "date": "2026-10-29",
+      "doctype": "triage-entry"
+    }
+  ],
+  "fields": [
+    {
+      "name": "subject_id_echo",
+      "type": "code",
+      "value": "TEST-0000-0008",
+      "confidence": 1.0
+    }
+  ],
+  "identities": [
+    {
+      "identity_id": "subject",
+      "role": "subject",
+      "fields": [
+        "subject_id_echo"
+      ],
+      "match": {
+        "status": "ambiguous",
+        "candidates": 2,
+        "checked_by": {
+          "kind": "executor",
+          "id": "openadapt-flow@site-runner-1"
+        }
+      }
+    }
+  ],
+  "outcome": "halted",
+  "provenance": {
+    "tool_name": "fixture-generator",
+    "tool_version": "0",
+    "producer": {
+      "kind": "executor",
+      "id": "openadapt-flow@site-runner-1"
+    },
+    "captured_at": "2026-10-29T14:00:00+00:00",
+    "checksum": "sha256:ea9345a27c58f1cc1b23a484234fe03fa40ea7b5b3ecdfb3a7fce0e0441cd548"
+  },
+  "halt_reason": " ",
+  "seals": [
+    {
+      "kind": "openadapt.seal/offline-ed25519",
+      "covers": "sha256:ea9345a27c58f1cc1b23a484234fe03fa40ea7b5b3ecdfb3a7fce0e0441cd548",
+      "key_id": "site-key-1",
+      "uri": "seals/run-0001.seal.json"
+    }
+  ]
+}

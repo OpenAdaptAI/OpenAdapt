@@ -1,0 +1,317 @@
+{
+  "$defs": {
+    "BusinessDecisionDeliveryMode": {
+      "description": "Whether the decision can leave the customer-controlled context.",
+      "enum": [
+        "remote_answerable",
+        "local_answer_required"
+      ],
+      "title": "BusinessDecisionDeliveryMode",
+      "type": "string"
+    },
+    "BusinessDecisionOptionBindingV1": {
+      "additionalProperties": false,
+      "description": "One finite option and its opaque compiled-successor commitment.",
+      "properties": {
+        "option_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+          "title": "Option Id",
+          "type": "string"
+        },
+        "target_binding_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Target Binding Digest",
+          "type": "string"
+        }
+      },
+      "required": [
+        "option_id",
+        "target_binding_digest"
+      ],
+      "title": "BusinessDecisionOptionBindingV1",
+      "type": "object"
+    },
+    "BusinessDecisionRequiredAuthn": {
+      "description": "The exact authentication profile required by the qualified contract.",
+      "enum": [
+        "local_enterprise_identity",
+        "aal2",
+        "webauthn"
+      ],
+      "title": "BusinessDecisionRequiredAuthn",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "A signed remote-safe projection of one exact business-decision pause.",
+  "properties": {
+    "authorized_answer_issuer_key_ids": {
+      "items": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+        "type": "string"
+      },
+      "maxItems": 16,
+      "minItems": 1,
+      "title": "Authorized Answer Issuer Key Ids",
+      "type": "array"
+    },
+    "authorized_role_refs": {
+      "items": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+        "type": "string"
+      },
+      "maxItems": 16,
+      "minItems": 1,
+      "title": "Authorized Role Refs",
+      "type": "array"
+    },
+    "authorized_route_refs": {
+      "items": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+        "type": "string"
+      },
+      "maxItems": 16,
+      "minItems": 1,
+      "title": "Authorized Route Refs",
+      "type": "array"
+    },
+    "bundle_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Bundle Digest",
+      "type": "string"
+    },
+    "control_frames_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Control Frames Digest",
+      "type": "string"
+    },
+    "created_at": {
+      "maxLength": 40,
+      "minLength": 20,
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?(Z|[+-]\\d{2}:\\d{2})$",
+      "title": "Created At",
+      "type": "string"
+    },
+    "decision_contract_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Decision Contract Digest",
+      "type": "string"
+    },
+    "decision_contract_revision": {
+      "maximum": 2147483647,
+      "minimum": 1,
+      "title": "Decision Contract Revision",
+      "type": "integer"
+    },
+    "delivery_mode": {
+      "$ref": "#/$defs/BusinessDecisionDeliveryMode"
+    },
+    "delivery_policy_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Delivery Policy Digest",
+      "type": "string"
+    },
+    "expires_at": {
+      "maxLength": 40,
+      "minLength": 20,
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?(Z|[+-]\\d{2}:\\d{2})$",
+      "title": "Expires At",
+      "type": "string"
+    },
+    "governed_runtime_inputs_digest": {
+      "anyOf": [
+        {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Governed Runtime Inputs Digest"
+    },
+    "idempotency_scope_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Idempotency Scope Digest",
+      "type": "string"
+    },
+    "issuer_key_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Issuer Key Id",
+      "type": "string"
+    },
+    "local_evidence_required": {
+      "title": "Local Evidence Required",
+      "type": "boolean"
+    },
+    "options": {
+      "items": {
+        "$ref": "#/$defs/BusinessDecisionOptionBindingV1"
+      },
+      "maxItems": 32,
+      "minItems": 2,
+      "title": "Options",
+      "type": "array"
+    },
+    "pause_binding_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Pause Binding Digest",
+      "type": "string"
+    },
+    "pause_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Pause Id",
+      "type": "string"
+    },
+    "presentation_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Presentation Digest",
+      "type": "string"
+    },
+    "presentation_ref": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Presentation Ref",
+      "type": "string"
+    },
+    "program_scope_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Program Scope Digest",
+      "type": "string"
+    },
+    "relay_capability_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Relay Capability Digest",
+      "type": "string"
+    },
+    "request_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Request Digest",
+      "type": "string"
+    },
+    "request_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Request Id",
+      "type": "string"
+    },
+    "request_revision": {
+      "default": 1,
+      "maximum": 2147483647,
+      "minimum": 1,
+      "title": "Request Revision",
+      "type": "integer"
+    },
+    "required_authn": {
+      "$ref": "#/$defs/BusinessDecisionRequiredAuthn"
+    },
+    "required_evidence_count": {
+      "default": 0,
+      "maximum": 64,
+      "minimum": 0,
+      "title": "Required Evidence Count",
+      "type": "integer"
+    },
+    "role_mapping_digest": {
+      "pattern": "^hmac-sha256:[0-9a-f]{64}$",
+      "title": "Role Mapping Digest",
+      "type": "string"
+    },
+    "run_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "runner_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Runner Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "openadapt.business-decision-task/v1",
+      "default": "openadapt.business-decision-task/v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "signature": {
+      "pattern": "^hmac-sha256:[0-9a-f]{64}$",
+      "title": "Signature",
+      "type": "string"
+    },
+    "signature_algorithm": {
+      "const": "hmac-sha256",
+      "default": "hmac-sha256",
+      "title": "Signature Algorithm",
+      "type": "string"
+    },
+    "supersedes_request_digest": {
+      "anyOf": [
+        {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Supersedes Request Digest"
+    },
+    "task_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Task Id",
+      "type": "string"
+    },
+    "task_revision": {
+      "default": 1,
+      "maximum": 2147483647,
+      "minimum": 1,
+      "title": "Task Revision",
+      "type": "integer"
+    },
+    "tenant_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Tenant Id",
+      "type": "string"
+    },
+    "workflow_contract_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Workflow Contract Digest",
+      "type": "string"
+    }
+  },
+  "required": [
+    "task_id",
+    "tenant_id",
+    "runner_id",
+    "run_id",
+    "pause_id",
+    "pause_binding_digest",
+    "request_id",
+    "request_digest",
+    "bundle_digest",
+    "workflow_contract_digest",
+    "decision_contract_digest",
+    "decision_contract_revision",
+    "delivery_policy_digest",
+    "program_scope_digest",
+    "control_frames_digest",
+    "presentation_ref",
+    "presentation_digest",
+    "options",
+    "authorized_role_refs",
+    "authorized_route_refs",
+    "authorized_answer_issuer_key_ids",
+    "role_mapping_digest",
+    "required_authn",
+    "delivery_mode",
+    "local_evidence_required",
+    "relay_capability_digest",
+    "idempotency_scope_digest",
+    "created_at",
+    "expires_at",
+    "issuer_key_id",
+    "signature"
+  ],
+  "title": "BusinessDecisionTaskV1",
+  "type": "object"
+}

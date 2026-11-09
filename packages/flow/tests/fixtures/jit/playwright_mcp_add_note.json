@@ -1,0 +1,50 @@
+{
+  "task_id": "mockmed.add_note",
+  "inputs": {
+    "note": "Synthetic follow-up in two weeks"
+  },
+  "dialect": "playwright_mcp",
+  "source": "Playwright MCP tool calls with CSS-selector targets, one run, recorded against MockMed",
+  "actions": [
+    {
+      "name": "browser_snapshot",
+      "arguments": {}
+    },
+    {
+      "name": "browser_click",
+      "arguments": {
+        "element": "Open button, first referral",
+        "target": "#open-p1"
+      }
+    },
+    {
+      "name": "browser_click",
+      "arguments": {
+        "element": "New Encounter",
+        "target": "#new-encounter"
+      }
+    },
+    {
+      "name": "browser_click",
+      "arguments": {
+        "element": "Triage",
+        "target": "#type-triage"
+      }
+    },
+    {
+      "name": "browser_type",
+      "arguments": {
+        "element": "Note",
+        "target": "#note",
+        "text": "Synthetic follow-up in two weeks"
+      }
+    },
+    {
+      "name": "browser_click",
+      "arguments": {
+        "element": "Save Encounter",
+        "target": "#save-encounter"
+      }
+    }
+  ]
+}

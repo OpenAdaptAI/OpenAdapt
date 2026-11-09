@@ -1,0 +1,40 @@
+# Register a person on Medplum exactly once, checked through FHIR only.
+# The same shape as ../../readpath/ensure_patient.yaml, with the task's
+# parameter names, and the `use` codes FHIR clients commonly add allowed.
+schema_version: openadapt.ensure-record/v1
+resource_type: Patient
+base_url: ${BENCH_FHIR_URL}
+access_token_env: BENCH_RECORD_TOKEN
+self: ["${BENCH_AGENT_REF}"]
+
+fields:
+  given: {path: name.given, compare: casefold}
+  family: {path: name.family, compare: casefold}
+  birthDate: {path: birthDate, compare: date}
+  gender: {path: gender}
+  line: {path: address.line, compare: casefold}
+  city: {path: address.city, compare: casefold}
+  state: {path: address.state}
+  postalCode: {path: address.postalCode}
+  phone: {path: "telecom[system=phone].value", compare: digits}
+  email: {path: "telecom[system=email].value", compare: casefold}
+
+identity:
+  - [given, family, birthDate]
+  - [email]
+search: {given: given, family: family, birthDate: birthdate, email: email}
+
+closed: true
+allow:
+  - active=true
+  - name.use="official"
+  - address.use="home"
+  - telecom.use="home"
+  - telecom.use="mobile"
+
+change_feed:
+  audit: {heartbeat: true}
+  history: true
+  history_author: false
+  sweep_types: [Patient, AllergyIntolerance, Appointment, Observation, Condition, Encounter]
+settle_s: 1

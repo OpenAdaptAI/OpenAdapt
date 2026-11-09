@@ -1,0 +1,173 @@
+{
+  "version": "1.1.0",
+  "protocol": "silent-saves/2026-10-19.2",
+  "executor": "self-repair",
+  "readback": false,
+  "items": 100,
+  "verified_saves": {
+    "k": 62,
+    "n": 90,
+    "rate": 0.6889,
+    "ci95": [
+      0.5872,
+      0.7751
+    ]
+  },
+  "silent_wrong_saves": {
+    "k": 0,
+    "n": 100,
+    "rate": 0.0,
+    "ci95": [
+      0.0,
+      0.037
+    ]
+  },
+  "false_stops": {
+    "k": 28,
+    "n": 90,
+    "rate": 0.3111,
+    "ci95": [
+      0.2249,
+      0.4128
+    ]
+  },
+  "detection": {
+    "what": "server faults: bad saves reported as success",
+    "silent_wrong": {
+      "k": 0,
+      "n": 5,
+      "rate": 0.0,
+      "ci95": [
+        0.0,
+        0.4345
+      ]
+    }
+  },
+  "prevention": {
+    "what": "trap changes: wrong records that landed, reported or not",
+    "wrong_saves_landed": {
+      "k": 0,
+      "n": 25,
+      "rate": 0.0,
+      "ci95": [
+        0.0,
+        0.1332
+      ]
+    },
+    "stopped_when_no_correct_save": {
+      "k": 5,
+      "n": 5,
+      "rate": 1.0,
+      "ci95": [
+        0.5655,
+        1.0
+      ]
+    }
+  },
+  "human": {
+    "events": 0,
+    "scripted_events": 0,
+    "minutes_logged": 0,
+    "minutes_per_100_items": 0.0,
+    "items_left_for_a_person": 38,
+    "note": "minutes are only what a person logged; scripted events log 0"
+  },
+  "cost_usd_total": 0.47666,
+  "cost_per_verified_item_usd": 0.007688,
+  "model_calls_per_item": 0.3,
+  "seconds_per_item": {
+    "n": 100,
+    "median": 7.604,
+    "p90": 15.012
+  },
+  "by_release": {
+    "baseline": {
+      "items": 15,
+      "correct": 15,
+      "silent_wrong": 0,
+      "safe_stop": 0,
+      "flagged_wrong": 0,
+      "false_alarm": 0
+    },
+    "renamed controls": {
+      "items": 10,
+      "correct": 9,
+      "silent_wrong": 0,
+      "safe_stop": 1,
+      "flagged_wrong": 0,
+      "false_alarm": 0
+    },
+    "display scaling": {
+      "items": 10,
+      "correct": 0,
+      "silent_wrong": 0,
+      "safe_stop": 10,
+      "flagged_wrong": 0,
+      "false_alarm": 0
+    },
+    "moved controls": {
+      "items": 10,
+      "correct": 9,
+      "silent_wrong": 0,
+      "safe_stop": 0,
+      "flagged_wrong": 1,
+      "false_alarm": 0
+    },
+    "new interstitial": {
+      "items": 10,
+      "correct": 0,
+      "silent_wrong": 0,
+      "safe_stop": 10,
+      "flagged_wrong": 0,
+      "false_alarm": 0
+    },
+    "latency": {
+      "items": 10,
+      "correct": 9,
+      "silent_wrong": 0,
+      "safe_stop": 0,
+      "flagged_wrong": 1,
+      "false_alarm": 0
+    },
+    "reordered queue": {
+      "items": 10,
+      "correct": 10,
+      "silent_wrong": 0,
+      "safe_stop": 0,
+      "flagged_wrong": 0,
+      "false_alarm": 0
+    },
+    "renamed and moved New Encounter": {
+      "items": 10,
+      "correct": 0,
+      "silent_wrong": 0,
+      "safe_stop": 10,
+      "flagged_wrong": 0,
+      "false_alarm": 0
+    },
+    "look-alike referral": {
+      "items": 5,
+      "correct": 5,
+      "silent_wrong": 0,
+      "safe_stop": 0,
+      "flagged_wrong": 0,
+      "false_alarm": 0
+    },
+    "relabeled and reordered type": {
+      "items": 5,
+      "correct": 5,
+      "silent_wrong": 0,
+      "safe_stop": 0,
+      "flagged_wrong": 0,
+      "false_alarm": 0
+    },
+    "target referral gone": {
+      "items": 5,
+      "correct": 0,
+      "silent_wrong": 0,
+      "safe_stop": 5,
+      "flagged_wrong": 0,
+      "false_alarm": 0
+    }
+  }
+}

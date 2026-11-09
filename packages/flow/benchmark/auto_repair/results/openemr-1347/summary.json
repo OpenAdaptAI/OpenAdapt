@@ -1,0 +1,28 @@
+{
+  "app": "openemr",
+  "note": "Throughput runs of 2026-10-19 (#1296 harness, engine b82131e5), the runs #1347 reports",
+  "bundle_name": "openemr-create-synthetic-patient",
+  "reports_read": 110,
+  "funnel": {
+    "stops": 8,
+    "to_repair": 0,
+    "to_reconciliation": 8,
+    "to_person": 0,
+    "auto_repair_off": 0,
+    "repair_runs": 0,
+    "repairs_proposed": 0,
+    "proposals": 0,
+    "probe_passed": 0,
+    "approved": 0,
+    "approved_by_person": 0,
+    "approved_by_standard_change": 0,
+    "resumed_items": 0,
+    "resumed_not_verified": 0,
+    "repair_success_rate": null,
+    "person_decisions": 0,
+    "person_wait_s_total": 0,
+    "model_calls": 0,
+    "est_model_cost_usd": 0.0,
+    "repair_status_counts": {}
+  }
+}

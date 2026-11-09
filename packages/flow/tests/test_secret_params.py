@@ -1,0 +1,336 @@
+"""Secret-typed parameters: never persisted, injected from the environment.
+
+Fast unit tests (no browser) covering the secret contract end to end:
+
+* the Recorder never writes a secret's literal (meta/events) and redacts its
+  field region from the persisted frames;
+* the compiler carries the secret through to ``Step.secret`` /
+  ``Workflow.secret_params`` with ``text=None`` and no leak;
+* the Replayer injects the value from ``OPENADAPT_FLOW_SECRET_<PARAM>`` and
+  fails fast with an actionable message when it is missing.
+"""
+
+from __future__ import annotations
+
+import io
+import json
+from pathlib import Path
+
+import numpy as np
+import pytest
+from PIL import Image
+
+from openadapt_flow.compiler import compile_recording
+from openadapt_flow.ir import ActionKind, Step, Workflow
+from openadapt_flow.recorder import Recorder
+from openadapt_flow.runtime.replayer import Replayer, secret_env_var
+
+SECRET = "hunter2-SUPER-secret-value"
+
+
+def _png(size=(1280, 800), color=(250, 250, 250)) -> bytes:
+    buf = io.BytesIO()
+    Image.new("RGB", size, color).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+class FakeBackend:
+    def __init__(self) -> None:
+        self._png = _png()
+        self.actions: list = []
+
+    @property
+    def viewport(self):
+        return (1280, 800)
+
+    def screenshot(self):
+        return self._png
+
+    def click(self, x, y, *, double=False):
+        self.actions.append(("click", x, y, double))
+
+    def type_text(self, text):
+        self.actions.append(("type", text))
+
+    def press(self, key):
+        self.actions.append(("press", key))
+
+    def scroll(self, dx, dy):
+        self.actions.append(("scroll", dx, dy))
+
+
+def _events(rec_dir: Path) -> list[dict]:
+    return [
+        json.loads(line)
+        for line in (rec_dir / "events.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+
+
+# -- Recorder ---------------------------------------------------------------
+
+
+def test_recorder_secret_not_persisted_and_region_redacted(tmp_path: Path) -> None:
+    rec = Recorder(FakeBackend(), tmp_path / "rec", app_url="http://app/")
+    before = _png()
+    rec.record_observed(
+        {"kind": "type"},
+        before_png=before,
+        structural_before={},
+        param="password",
+        secret=True,
+        redact_region=(100, 200, 300, 40),
+    )
+    rec_dir = rec.finish()
+
+    # meta: the param is listed as secret, its value is NOWHERE.
+    meta = json.loads((rec_dir / "meta.json").read_text())
+    assert meta["secret_params"] == ["password"]
+    assert "password" not in meta["params"]
+    blob = (rec_dir / "meta.json").read_text() + (rec_dir / "events.jsonl").read_text()
+    assert SECRET not in blob
+
+    # events: the type event carries the param + secret flag but NO text.
+    (event,) = _events(rec_dir)
+    assert event["kind"] == "type"
+    assert event["param"] == "password"
+    assert event["secret"] is True
+    assert "text" not in event
+
+    # frames: the redacted region is solid black in both frames.
+    for suffix in ("before", "after"):
+        arr = np.asarray(
+            Image.open(rec_dir / "frames" / f"0000_{suffix}.png").convert("RGB")
+        )
+        region = arr[200:240, 100:400]
+        assert region.sum() == 0, f"{suffix} region not redacted"
+
+
+def test_recorder_non_secret_param_keeps_value(tmp_path: Path) -> None:
+    rec = Recorder(FakeBackend(), tmp_path / "rec")
+    rec.record_observed(
+        {"kind": "type", "text": "visible note"},
+        before_png=_png(),
+        structural_before={},
+        param="note",
+    )
+    rec_dir = rec.finish()
+    meta = json.loads((rec_dir / "meta.json").read_text())
+    assert meta["params"] == {"note": "visible note"}
+    assert meta["secret_params"] == []
+    (event,) = _events(rec_dir)
+    assert event["text"] == "visible note" and event["param"] == "note"
+
+
+# -- compiler ---------------------------------------------------------------
+
+
+def _write_secret_recording(rec_dir: Path) -> None:
+    (rec_dir / "frames").mkdir(parents=True)
+    (rec_dir / "frames" / "0000_before.png").write_bytes(_png())
+    (rec_dir / "frames" / "0000_after.png").write_bytes(_png())
+    (rec_dir / "meta.json").write_text(
+        json.dumps(
+            {
+                "id": "abc",
+                "created_at": "2026-07-13T00:00:00+00:00",
+                "viewport": [1280, 800],
+                "app_url": "http://app/",
+                "params": {},
+                "secret_params": ["password"],
+            }
+        )
+    )
+    (rec_dir / "events.jsonl").write_text(
+        json.dumps({"i": 0, "kind": "type", "param": "password", "secret": True}) + "\n"
+    )
+
+
+def test_compiler_carries_secret_without_value(tmp_path: Path) -> None:
+    rec_dir = tmp_path / "rec"
+    _write_secret_recording(rec_dir)
+    bundle = tmp_path / "bundle"
+    workflow = compile_recording(rec_dir, bundle, name="secret-wf")
+
+    assert workflow.secret_params == ["password"]
+    (step,) = workflow.steps
+    assert step.action is ActionKind.TYPE
+    assert step.secret is True
+    assert step.param == "password"
+    assert step.text is None
+    # Nothing in the persisted bundle carries a value for the secret.
+    assert "password" not in workflow.params
+    assert SECRET not in (bundle / "workflow.json").read_text()
+
+
+# -- replayer ---------------------------------------------------------------
+
+
+def test_secret_env_var_mapping() -> None:
+    assert secret_env_var("password") == "OPENADAPT_FLOW_SECRET_PASSWORD"
+    assert secret_env_var("api-key") == "OPENADAPT_FLOW_SECRET_API_KEY"
+
+
+def _secret_workflow() -> Workflow:
+    return Workflow(
+        name="secret-only",
+        params={},
+        secret_params=["password"],
+        steps=[
+            Step(
+                id="step_000",
+                intent="type <password> (secret)",
+                action=ActionKind.TYPE,
+                param="password",
+                secret=True,
+            )
+        ],
+    )
+
+
+def test_replayer_injects_secret_from_env(tmp_path, monkeypatch) -> None:
+    from tests.test_replayer import FakeBackend as RBackend, FakeVision
+
+    monkeypatch.setenv("OPENADAPT_FLOW_SECRET_PASSWORD", SECRET)
+    backend = RBackend()
+    bundle = tmp_path / "bundle"
+    (bundle / "templates").mkdir(parents=True)
+    report = Replayer(backend, vision=FakeVision()).run(
+        _secret_workflow(), params={}, bundle_dir=bundle, run_dir=tmp_path / "run"
+    )
+    assert report.success, [r.error for r in report.results]
+    assert ("type", SECRET) in backend.actions
+
+
+def test_replayer_missing_secret_errors_clearly(tmp_path, monkeypatch) -> None:
+    from tests.test_replayer import FakeBackend as RBackend, FakeVision
+
+    monkeypatch.delenv("OPENADAPT_FLOW_SECRET_PASSWORD", raising=False)
+    backend = RBackend()
+    bundle = tmp_path / "bundle"
+    (bundle / "templates").mkdir(parents=True)
+    report = Replayer(backend, vision=FakeVision()).run(
+        _secret_workflow(), params={}, bundle_dir=bundle, run_dir=tmp_path / "run"
+    )
+    assert not report.success
+    (result,) = report.results
+    assert "OPENADAPT_FLOW_SECRET_PASSWORD" in (result.error or "")
+    # Nothing was typed: the secret never reached the backend.
+    assert not any(a[0] == "type" for a in backend.actions)
+
+
+# -- a value typed into a password field is a secret once it's a parameter ----
+
+
+def _password_recording(tmp_path: Path, label: str = "Password") -> Path:
+    """A recording whose TYPE step typed SECRET into a field labeled ``label``."""
+    recording = tmp_path / "recording"
+    (recording / "frames").mkdir(parents=True)
+    for suffix in ("before", "after"):
+        (recording / "frames" / f"0000_{suffix}.png").write_bytes(_png())
+    (recording / "events.jsonl").write_text(
+        json.dumps({"i": 0, "kind": "type", "text": SECRET, "field_label": label})
+        + "\n"
+    )
+    (recording / "meta.json").write_text(
+        json.dumps(
+            {
+                "id": "rec-password-001",
+                "created_at": "2026-10-10T00:00:00+00:00",
+                "viewport": [1280, 800],
+                "app_url": "http://localhost:0/",
+                "params": {},
+            }
+        )
+    )
+    return recording
+
+
+def _assert_no_literal(bundle: Path) -> None:
+    for path in bundle.rglob("*"):
+        if path.is_file() and path.suffix in (".json", ".py", ".txt", ".md"):
+            assert SECRET not in path.read_text(), path
+
+
+@pytest.mark.parametrize(
+    "label", ["Password", "New password", "PIN", "Passcode", "Client secret"]
+)
+def test_credential_proposal_is_flagged_secret_without_example(
+    tmp_path: Path, label: str
+) -> None:
+    from openadapt_flow.compiler import param_confirm as pc
+
+    bundle = tmp_path / "bundle"
+    compile_recording(_password_recording(tmp_path, label), bundle, name="login")
+    [proposal] = pc.load_proposals(bundle)
+    assert proposal.secret is True
+    assert proposal.masked_example is None
+    sidecar = json.loads((bundle / pc.PROPOSALS_FILENAME).read_text())
+    assert sidecar["proposals"][0]["secret"] is True
+
+
+def test_non_credential_proposal_is_not_secret(tmp_path: Path) -> None:
+    from openadapt_flow.compiler import param_confirm as pc
+
+    bundle = tmp_path / "bundle"
+    compile_recording(_password_recording(tmp_path, "Spinal level"), bundle, name="x")
+    [proposal] = pc.load_proposals(bundle)
+    assert proposal.secret is False
+    assert proposal.masked_example is not None
+
+
+@pytest.mark.parametrize("how", ["accept", "confirm", "rename", "interactive"])
+def test_confirming_a_password_proposal_makes_a_secret_parameter(
+    tmp_path: Path, how: str
+) -> None:
+    from openadapt_flow.compiler import param_confirm as pc
+
+    recording = _password_recording(tmp_path)
+    bundle = tmp_path / "bundle"
+    compile_recording(recording, bundle, name="login")
+    proposals = pc.load_proposals(bundle)
+    if how == "accept":
+        decisions = pc.decisions_from_accept_list(proposals, ["password"])
+    elif how == "confirm":
+        decisions = pc.decisions_from_file(
+            proposals, {"password": {"action": "confirm"}}
+        )
+    elif how == "rename":
+        decisions = pc.decisions_from_file(
+            proposals, {"password": {"action": "rename", "name": "login_password"}}
+        )
+    else:
+        decisions = pc.decisions_interactive(
+            proposals, input_fn=lambda _: "c", output_fn=lambda _: None
+        )
+    assert [d.secret for d in decisions] == [True]
+
+    wf = pc.apply_decisions(recording, bundle, name="login", decisions=decisions)
+    name = decisions[0].name
+    assert wf.secret_params == [name]
+    assert name not in wf.params
+    assert name not in wf.param_specs
+    assert wf.steps[0].secret is True and wf.steps[0].text is None
+    _assert_no_literal(bundle)
+
+
+def test_cli_accept_params_password_writes_no_literal(tmp_path: Path) -> None:
+    from openadapt_flow.__main__ import main
+
+    recording = _password_recording(tmp_path)
+    bundle = tmp_path / "bundle"
+    rc = main(
+        [
+            "compile",
+            str(recording),
+            "--out",
+            str(bundle),
+            "--name",
+            "login",
+            "--accept-params",
+            "password",
+        ]
+    )
+    assert rc == 0
+    assert Workflow.load(bundle).secret_params == ["password"]
+    _assert_no_literal(bundle)

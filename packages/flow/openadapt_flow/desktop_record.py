@@ -1,0 +1,426 @@
+"""Live desktop recording for ``record --backend windows|macos|linux|rdp|citrix``.
+
+Capturing the operator's REAL desktop demonstration is NOT reinvented here — it
+reuses the two tested pieces that already exist in this repo:
+
+* **openadapt-capture** (``openadapt_capture.Recorder``) — the cross-platform
+  GUI capture component: it records the operator's mouse/keyboard input stream
+  time-aligned with an action-gated screen video into a *capture session*
+  directory. This is the extensively-tested capture stack; we do not touch it.
+* **the capture adapter** (:func:`openadapt_flow.adapters.capture.convert_capture`)
+  — converts that capture session into the EXACT recording format the compiler
+  consumes (``meta.json`` + ``events.jsonl`` + ``frames/``), running
+  openadapt-capture's own event-processing pipeline (raw streams -> merged
+  clicks / typed text). This adapter is already unit-tested end to end
+  (``tests/test_capture_adapter.py``).
+
+This module is the thin, genuinely-missing piece: the LIVE orchestration that
+``record --backend windows|macos|linux|rdp|citrix`` needs — start a capture session, let the
+operator perform the workflow, stop on Ctrl-C, then convert to a compile-ready
+recording:
+
+    record --backend windows … → (openadapt-capture) → convert_capture
+        → compile → replay --backend windows
+
+What is REAL vs deferred (see ``docs/desktop/RECORDING.md`` for the full map):
+
+* REAL: the operator's demonstration on the desktop is captured and converted
+  into a recording that compiles into a bundle and replays through the desktop
+  backends. Recording is substrate-agnostic (pixel frames + coordinates), so a
+  recording made here drives the ``windows`` (WAA) or ``rdp`` (pixel-only)
+  backend at replay.
+* REAL: human Windows demonstrations retain action-time UIA evidence from
+  ``openadapt-capture`` and compile it into the same structural-locator
+  contract as scripted Windows recording. RDP/Citrix remain externally
+  black-box: the local remote-client UIA tree is deliberately not promoted
+  because it cannot identify controls inside the remote session.
+
+openadapt-capture is the optional ``capture`` extra (``pip install
+'openadapt-flow[capture]'``); it is imported lazily so the flow core never
+pulls it onto the replay hot path.
+"""
+
+from __future__ import annotations
+
+import functools
+import importlib.util
+import json
+import shlex
+import subprocess
+import sys
+import time
+from pathlib import Path
+from typing import Any, Callable, ContextManager, Optional, Protocol
+
+# Platforms where openadapt-capture's window-scoped capture is implemented
+# (openadapt_capture.window_capture.resolve_window / capture_window). Kept in
+# lock-step with that module: recording ONE window in its own pixel space needs
+# a per-window capture primitive (macOS CGWindowListCreateImage / Windows
+# Win32 + region grab). Elsewhere we refuse UP FRONT rather than start a
+# full-screen capture that silently ignores the requested --window scope.
+WINDOW_CAPTURE_PLATFORMS = ("darwin", "win32")
+
+
+class _CaptureRecorder(Protocol):
+    """The slice of ``openadapt_capture.Recorder`` this orchestration uses.
+
+    A context manager that records on ``__enter__`` and stops (joining its
+    threads) on ``__exit__``; ``wait_for_ready`` blocks until capture is live.
+    Declared here (not imported) so this module type-checks without the
+    optional ``capture`` extra and so tests can inject a fake.
+    """
+
+    def __enter__(self) -> "_CaptureRecorder": ...
+
+    def __exit__(self, *exc: Any) -> None: ...
+
+    def wait_for_ready(self, timeout: float = ...) -> bool: ...
+
+
+RecorderFactory = Callable[[str, str], ContextManager[_CaptureRecorder]]
+ConvertFn = Callable[..., Path]
+
+
+#: Modules the default recorder imports. The ``[capture]`` extra installs
+#: openadapt-capture, which brings loguru with it.
+CAPTURE_MODULES = ("openadapt_capture", "loguru")
+
+_CAPTURE_INSTALL_HINT = (
+    "Install it, then run record again:\n\n"
+    "    python -m pip install 'openadapt[capture]'       "
+    "(if you use the OpenAdapt launcher)\n"
+    "    python -m pip install 'openadapt-flow[capture]'  "
+    "(if you use openadapt-flow on its own)\n\n"
+    "Recording a browser workflow with --url needs no extra."
+)
+
+
+def _module_available(name: str) -> bool:
+    if name in sys.modules:
+        return sys.modules[name] is not None
+    try:
+        return importlib.util.find_spec(name) is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def _require_capture_extra() -> None:
+    """Refuse before any prompt or file when the capture extra is missing."""
+    missing = [name for name in CAPTURE_MODULES if not _module_available(name)]
+    if missing:
+        raise SystemExit(
+            "record: desktop recording needs the capture extra, and Python "
+            f"can't import {', '.join(missing)}. " + _CAPTURE_INSTALL_HINT
+        )
+
+
+def _default_recorder_factory(
+    task_description: str,
+    capture_dir: str,
+    window: Optional[dict[str, Optional[str]]] = None,
+) -> ContextManager[_CaptureRecorder]:
+    """Build a live ``openadapt_capture.Recorder`` (lazy import of the extra).
+
+    ``window`` is the openadapt-capture window-scoping spec
+    (``{"owner": <app-substring>, "title": <title-substring>}`` or ``None``).
+    When set, capture records ONE window in that window's own pixel space
+    (``openadapt_capture.window_capture``) instead of the full screen; the
+    resolved window's identity (owner/title/pid/window id) is persisted on the
+    capture session and surfaced by the capture adapter into ``meta.json``.
+    """
+    try:
+        from loguru import logger
+        from openadapt_capture import Recorder as CaptureRecorder
+        from openadapt_capture import recorder as capture_recorder
+    except ImportError as exc:  # pragma: no cover - exercised via install state
+        raise ImportError(
+            "openadapt-capture is required to record a desktop workflow but is "
+            "not installed. " + _CAPTURE_INSTALL_HINT
+        ) from exc
+    import inspect
+
+    params = inspect.signature(CaptureRecorder.__init__).parameters
+    if "window" not in params:
+        raise SystemExit(
+            "record: this openadapt-capture does not accept window=. "
+            "Need openadapt-capture>=1.2.2. Run: pip install -U "
+            "'openadapt-capture==1.2.2'"
+        )
+    if hasattr(capture_recorder, "LOG_LEVEL"):
+        capture_recorder.LOG_LEVEL = "WARNING"
+    logger.remove()
+    logger.add(sys.stderr, level="WARNING")
+    kwargs: dict[str, Any] = {
+        "task_description": task_description,
+        "capture_dir": capture_dir,
+        "window": window,
+    }
+    if "plot_performance" in params:
+        kwargs["plot_performance"] = False
+    return CaptureRecorder(**kwargs)
+
+
+def parse_until_cmd(raw: str) -> list[str]:
+    """Split ``--until-cmd`` into argv. Empty input is a usage error."""
+
+    argv = shlex.split(raw)
+    if not argv:
+        raise SystemExit("record: --until-cmd is empty. Nothing was recorded.")
+    return argv
+
+
+class UntilCommand:
+    """Poll a command. Exit 0 stops the record. Other exits keep recording.
+
+    The command is not part of the demonstration. Ctrl-C still stops.
+    Probe failures must not stop the record (fail closed on the check, not
+    on the capture).
+    """
+
+    def __init__(
+        self,
+        argv: list[str],
+        *,
+        interval_s: float = 2.0,
+        timeout_s: float = 30.0,
+        run: Optional[Callable[..., Any]] = None,
+        announce: bool = True,
+    ) -> None:
+        if not argv:
+            raise ValueError("until-cmd argv must not be empty")
+        self.argv = list(argv)
+        self.interval_s = interval_s
+        self.timeout_s = timeout_s
+        self._run = run or subprocess.run
+        self._announce = announce
+        self._next = 0.0
+        self._fired = False
+
+    def __call__(self) -> bool:
+        if self._fired:
+            return True
+        now = time.monotonic()
+        if now < self._next:
+            return False
+        self._next = now + self.interval_s
+        try:
+            result = self._run(
+                self.argv,
+                capture_output=True,
+                timeout=self.timeout_s,
+            )
+        except Exception:
+            return False
+        if int(getattr(result, "returncode", 1)) != 0:
+            return False
+        self._fired = True
+        if self._announce:
+            print("\n[record] check succeeded; stopping.")
+        return True
+
+
+def _wait_for_stop(stop: Optional[Callable[[], bool]]) -> None:
+    """Block until the operator interrupts (Ctrl-C) or ``stop()`` returns True.
+
+    ``stop`` is a test/programmatic hook or ``--until-cmd``. Ctrl-C remains
+    the fallback when the check has not succeeded yet.
+    """
+    try:
+        while True:
+            if stop is not None and stop():
+                return
+            time.sleep(0.2)
+    except KeyboardInterrupt:
+        print("\n[record] stopping (Ctrl-C).")
+        if stop is not None:
+            print("[record] If you set --until-cmd, run that check before compile.")
+
+
+def record_desktop_capture(
+    out_dir: Path | str,
+    *,
+    task_description: str = "openadapt-flow desktop recording",
+    params: Optional[dict[str, str]] = None,
+    identifier_region: Optional[tuple[int, int, int, int]] = None,
+    window: Optional[dict[str, Optional[str]]] = None,
+    backend_kind: Optional[str] = None,
+    replay_window: Optional[str] = None,
+    replay_window_title: Optional[str] = None,
+    readiness_text: Optional[str] = None,
+    capture_dir: Optional[Path | str] = None,
+    ready_timeout_s: float = 60.0,
+    recorder_factory: Optional[RecorderFactory] = None,
+    convert: Optional[ConvertFn] = None,
+    stop: Optional[Callable[[], bool]] = None,
+    announce: bool = True,
+) -> Path:
+    """Record a live desktop demonstration and convert it to a recording.
+
+    Runs an openadapt-capture session while the operator performs the workflow,
+    then converts it (via :func:`convert_capture`) into the compile-ready
+    recording format. Returns the recording directory.
+
+    Args:
+        out_dir: Output recording directory (compile input).
+        task_description: Stored on the capture session / recording metadata.
+        params: ``{param_name: demonstrated_value}`` — a typed value equal to a
+            demonstrated value is marked as that parameter (overridable at
+            replay). Desktop has no field identity, so parameters are keyed by
+            their demonstrated VALUE (mirrors ``convert_capture``).
+        identifier_region: Operator-marked RECORD-IDENTIFYING region
+            ``(x, y, w, h)`` in the recording's pixel space (the patient
+            banner / MRN cell — ``record --identifier X,Y,W,H``). Stamped
+            additively into the recording's ``meta.json`` so the compiler
+            crops those pixels (``anchor.identifier_crop``) and the pixel
+            identity tier arms on remote-display replays. A pixel capture has
+            no field identity, so the region is marked once for the
+            recording (the identifying banner is static app chrome).
+        window: Window-scoping spec
+            ``{"owner": <app-substring>, "title": <title-substring>}`` (either
+            value may be ``None``). When set, capture records ONE window in
+            that window's OWN pixel space (``record --window``) instead of the
+            full screen — closing the coordinate-space gap with the pixel
+            (``rdp``) replay surface. The window's identity (target + resolved
+            owner/title/pid/window id) rides on the capture session and is
+            surfaced into ``meta.json`` by the capture adapter. Refused up front
+            on hosts where capture has no per-window primitive
+            (see :data:`WINDOW_CAPTURE_PLATFORMS`).
+        backend_kind: Optional replay substrate identity (``rdp`` or
+            ``citrix``) to seal into the compiled bundle's local execution
+            hints. Other backends do not use the ``rdp_*`` target contract.
+        replay_window: Optional exact owner/process selector for replay.
+        replay_window_title: Optional exact title selector for replay.
+        readiness_text: Optional current-frame marker required by governed
+            Citrix execution.
+        capture_dir: Where the raw capture session is written (default: a
+            ``.capture`` subdir of ``out_dir``). Kept so the raw session is
+            inspectable / re-convertible.
+        ready_timeout_s: Seconds to wait for capture to become live.
+        recorder_factory: Builds the capture recorder (default: the real
+            ``openadapt_capture.Recorder``). Injected in tests.
+        convert: The capture->recording converter (default:
+            ``adapters.capture.convert_capture``). Injected in tests.
+        stop: Optional predicate; when it returns True recording stops (default:
+            wait for Ctrl-C). A test/programmatic hook.
+        announce: Print operator instructions (suppressed in tests).
+
+    Returns:
+        The recording directory (compile-ready).
+    """
+    if window is not None and sys.platform not in WINDOW_CAPTURE_PLATFORMS:
+        # Fail LOUD before starting: a full-screen fallback would silently
+        # ignore the requested --window scope and record coordinates in the
+        # wrong pixel space (the exact corruption window-scoping prevents).
+        raise SystemExit(
+            "window-scoped recording (--window) is not supported on this host "
+            f"(platform {sys.platform!r}); openadapt-capture implements "
+            "per-window capture only on "
+            f"{' and '.join(WINDOW_CAPTURE_PLATFORMS)}. Record on a supported "
+            "host, or omit --window to capture the full screen."
+        )
+    if backend_kind is not None and backend_kind not in ("rdp", "citrix"):
+        raise ValueError(
+            "backend_kind execution hints are supported only for rdp or citrix"
+        )
+    if recorder_factory is None:
+        # The default recorder needs the [capture] extra. Check for it before
+        # the output directories exist and before the operator is told to
+        # start demonstrating; the lazy import in the factory stays as a
+        # backstop.
+        _require_capture_extra()
+
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    cap_dir = Path(capture_dir) if capture_dir is not None else out_dir / ".capture"
+    cap_dir.mkdir(parents=True, exist_ok=True)
+
+    # Injected factories keep the tested 2-arg ``(task, capture_dir)`` shape;
+    # the DEFAULT factory carries the window spec through to the capture
+    # Recorder (functools.partial keeps the call site's arity unchanged).
+    factory = recorder_factory or functools.partial(
+        _default_recorder_factory, window=window
+    )
+    if convert is None:
+        from openadapt_flow.adapters.capture import convert_capture
+
+        convert = functools.partial(
+            convert_capture,
+            # A native Windows window remains a native UIA surface. Only an
+            # explicitly remote target suppresses the local client-window UIA
+            # observation, which cannot see controls inside RDP/Citrix.
+            include_structural=backend_kind not in ("rdp", "citrix"),
+        )
+
+    if announce:
+        scope_line = ""
+        if window is not None:
+            scope_line = (
+                "  Window-scoped capture is active (recording that window's "
+                "own pixels; target selectors are not printed).\n"
+            )
+        until_line = ""
+        if stop is not None:
+            until_line = (
+                "  Recording stops when the check succeeds.\n"
+                "  Ctrl-C still stops (fallback).\n"
+            )
+        print(
+            f"Recording desktop workflow (task: {task_description!r}).\n"
+            f"{scope_line}"
+            f"{until_line}"
+            "  Perform your workflow on the target desktop now.\n"
+            "  Press Ctrl-C here to finish."
+        )
+
+    with factory(task_description, str(cap_dir)) as recorder:
+        wait_ready = getattr(recorder, "wait_for_ready", None)
+        if callable(wait_ready):
+            wait_ready(timeout=ready_timeout_s)
+        _wait_for_stop(stop)
+    # The recorder context has exited: capture threads joined, the session is
+    # fully written to disk. Convert it into the compile-ready recording.
+    recording = convert(cap_dir, out_dir, params=params or {})
+    if backend_kind is None and identifier_region is None:
+        return recording
+    meta_path = Path(recording) / "meta.json"
+    meta = json.loads(meta_path.read_text())
+    changed = False
+    if backend_kind is not None:
+        # Capture accepts a substring selector, while replay requires one exact
+        # owner/title. Prefer the exact resolved window identity unless the
+        # operator supplied an explicit replay selector.
+        window_capture = meta.get("window_capture")
+        resolved_owner = None
+        resolved_title = None
+        if isinstance(window_capture, dict):
+            resolved_owner = window_capture.get("resolved_owner")
+            resolved_title = window_capture.get("resolved_title")
+
+        if backend_kind == "citrix":
+            from openadapt_flow.backends.citrix_workspace import (
+                default_citrix_owner,
+            )
+
+            default_owner: Optional[str] = default_citrix_owner()
+        else:
+            default_owner = None
+
+        hints: dict[str, str] = {"backend": backend_kind}
+        owner = replay_window or resolved_owner or default_owner
+        title = replay_window_title or resolved_title
+        if owner and str(owner).strip():
+            hints["rdp_window"] = str(owner).strip()
+        if title and str(title).strip():
+            hints["rdp_window_title"] = str(title).strip()
+        if readiness_text and readiness_text.strip():
+            hints["rdp_readiness_text"] = readiness_text.strip()
+        meta["backend_hints"] = hints
+        changed = True
+    if identifier_region is not None:
+        # Additive meta.json stamp (the compiler reads `identifier_region`).
+        # Written post-convert so the converter contract stays unchanged.
+        meta["identifier_region"] = [int(v) for v in identifier_region]
+        changed = True
+    if changed:
+        meta_path.write_text(json.dumps(meta, indent=2))
+    return recording

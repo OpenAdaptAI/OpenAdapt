@@ -1,0 +1,2436 @@
+"""Unified CLI for OpenAdapt ecosystem.
+
+Usage:
+    openadapt flow record --url <app> --out rec   # record a workflow
+    openadapt flow compile rec --out bundle        # compile it
+    openadapt flow replay bundle --url <app>        # run it, local, $0
+    openadapt flow lint bundle
+    openadapt flow certify bundle --policy clinical-write
+
+    openadapt capture start --name my-task
+    openadapt capture list
+    openadapt capture view <name>
+
+    openadapt train start --capture my-task --model qwen3vl-2b
+    openadapt train status
+    openadapt train stop
+
+    openadapt eval run --checkpoint model.pt --benchmark waa
+    openadapt eval run --agent api-claude --benchmark waa
+
+    openadapt serve --port 8080
+
+    openadapt version
+    openadapt doctor
+"""
+
+import json
+import os
+import platform
+import re
+import shlex
+import sys
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Optional
+
+import click
+
+from openadapt.version import __version__
+
+
+class _FlowFirstGroup(click.Group):
+    """Command group that lists ``flow`` first in ``--help``.
+
+    The demonstration compiler is the flagship, so it should lead the
+    command listing instead of sorting alphabetically behind ``capture``.
+    Everything else keeps its normal alphabetical order.
+
+    On an interpreter the engine doesn't support, the help starts with the
+    remedy, so a bare ``openadapt`` explains the problem before anything else.
+    """
+
+    def list_commands(self, ctx):
+        commands = super().list_commands(ctx)
+        return sorted(commands, key=lambda name: (name != "flow", name))
+
+    def format_help(self, ctx, formatter):
+        if not _python_supported():
+            formatter.write(_python_remedy() + "\n\n")
+        super().format_help(ctx, formatter)
+
+    def resolve_command(self, ctx, args):
+        # `openadapt run` or `openadapt replay` is a Flow verb typed without
+        # `flow`. Point at the launcher form instead of a bare "No such
+        # command" or Click's nearest launcher name (`replay` -> `deploy`).
+        name = args[0] if args else ""
+        if (
+            not ctx.resilient_parsing
+            and self.get_command(ctx, name) is None
+            and name in _flow_verbs()
+        ):
+            raise click.UsageError(
+                f"No such command '{name}'. Did you mean 'openadapt flow {name}'?",
+                ctx,
+            )
+        if not ctx.resilient_parsing and self.get_command(ctx, name) is None:
+            # A command this launcher doesn't know may be one a newer
+            # openadapt elsewhere on PATH has.
+            _warn_about_launcher_conflicts()
+        return super().resolve_command(ctx, args)
+
+
+def _print_version(ctx: click.Context, _param, value: bool) -> None:
+    """``--version``, then any other ``openadapt`` on PATH that would shadow it."""
+    if not value or ctx.resilient_parsing:
+        return
+    click.echo(f"openadapt, version {__version__}")
+    _warn_about_launcher_conflicts()
+    ctx.exit()
+
+
+@click.group(cls=_FlowFirstGroup)
+@click.option(
+    "--version",
+    is_flag=True,
+    expose_value=False,
+    is_eager=True,
+    callback=_print_version,
+    help="Show the version and exit.",
+)
+def main():
+    """OpenAdapt launcher for the openadapt-flow compiler.
+
+    Compile a demonstrated workflow into deterministic local replay. Healthy
+    runs make no model calls; configured checks can halt on ambiguity. Native
+    and remote substrates use platform-specific extras and permissions;
+    training/evaluation commands are research.
+
+    \b
+    Quick Start (Python 3.10-3.12):
+        python -m pip install --upgrade openadapt
+        openadapt quickstart
+
+    \b
+    Manual Demo Lifecycle:
+        openadapt flow demo-record --out rec
+        openadapt flow compile rec --out bundle --name demo
+        openadapt flow lint bundle
+        openadapt flow certify bundle --policy permissive
+        openadapt flow replay bundle --demo-app
+
+    Lint lists the demo's coverage gaps. The demo has warnings, so
+    `lint --strict` exits 1 on it.
+    The manual demo is runnable but not certified for consequential work.
+    Use `openadapt flow tutorial` for the effect-verified first run.
+
+    \b
+    Give an MCP client your compiled workflows:
+        openadapt agent serve --bundles DIR --mode production
+    """
+    pass
+
+
+# =============================================================================
+# Flow Commands (the demonstration compiler — flagship path)
+# =============================================================================
+
+_FLOW_X11_SONAME_CASE = {
+    "xcomposite": "Xcomposite",
+    "xdamage": "Xdamage",
+    "xfixes": "Xfixes",
+    "xrandr": "Xrandr",
+}
+
+
+def _correct_released_flow_x11_sonames() -> None:
+    """Correct the four case-sensitive X11 probes in released Flow builds."""
+    if sys.platform != "linux":
+        return
+    try:
+        import openadapt_flow._browser_setup as browser_setup
+    except ImportError:
+        return
+    sonames = getattr(browser_setup, "_LINUX_CHROMIUM_SONAMES", None)
+    if not isinstance(sonames, (list, tuple)):
+        return
+    corrected = tuple(_FLOW_X11_SONAME_CASE.get(name, name) for name in sonames)
+    browser_setup._LINUX_CHROMIUM_SONAMES = corrected
+
+
+# Flow prints its own follow-up commands with the `openadapt-flow` executable
+# name. A `uv tool install openadapt` (what https://openadapt.ai/install.sh
+# runs) puts only `openadapt` on PATH, so a printed `openadapt-flow record ...`
+# fails there. `openadapt flow <verb>` works for every install method.
+_FLOW_COMMAND = re.compile(
+    r"(?<![\w./\[-])(?<!uvx )openadapt-flow (?=([a-z][a-z-]*)\b)"
+)
+# Verbs to rewrite when Flow's parser can't be read. Only real Flow verbs are
+# rewritten, so a package name or a sentence that mentions Flow stays as is.
+_FALLBACK_FLOW_VERBS = frozenset(
+    {
+        "certify",
+        "compile",
+        "demo-record",
+        "explain",
+        "lint",
+        "record",
+        "replay",
+        "run",
+        "tutorial",
+        "visualize",
+    }
+)
+
+
+def _flow_subparsers() -> Optional[dict]:
+    """Return the installed Flow's subcommand parsers, or None if unreadable."""
+    try:
+        import argparse
+
+        from openadapt_flow.__main__ import build_parser
+
+        parser = build_parser()
+        for action in parser._actions:
+            if isinstance(action, argparse._SubParsersAction):
+                return dict(action.choices)
+    except Exception:
+        pass
+    return None
+
+
+def _flow_verbs() -> frozenset[str]:
+    """Return the installed Flow's top-level subcommand names."""
+    subparsers = _flow_subparsers()
+    return _FALLBACK_FLOW_VERBS if subparsers is None else frozenset(subparsers)
+
+
+def _flow_tutorial_options() -> Optional[frozenset[str]]:
+    """Return the installed Flow tutorial's long options, or None if unreadable."""
+    tutorial = (_flow_subparsers() or {}).get("tutorial")
+    try:
+        names = tutorial._option_string_actions
+    except AttributeError:
+        return None
+    return frozenset(name for name in names if name.startswith("--"))
+
+
+def _launcher_spelling(text: str, verbs: frozenset[str]) -> str:
+    """Rewrite printed `openadapt-flow <verb>` commands to `openadapt flow`."""
+
+    def replace(match: re.Match) -> str:
+        return "openadapt flow " if match.group(1) in verbs else match.group(0)
+
+    return _FLOW_COMMAND.sub(replace, text)
+
+
+class _LauncherSpellingStream:
+    """Text stream that rewrites Flow's printed commands to launcher form.
+
+    Everything except ``write`` delegates to the wrapped stream, so
+    ``isatty``, ``fileno``, ``encoding``, and ``flush`` behave as before.
+    """
+
+    def __init__(self, stream, verbs: frozenset[str]):
+        self._stream = stream
+        self._verbs = verbs
+
+    def write(self, text):
+        self._stream.write(_launcher_spelling(text, self._verbs))
+        return len(text)
+
+    def writelines(self, lines):
+        for line in lines:
+            self.write(line)
+
+    def __getattr__(self, name):
+        return getattr(self._stream, name)
+
+
+def _invoke_flow(argv: list[str]) -> int:
+    """Invoke the canonical engine once and return its exit code."""
+    if not _python_supported():
+        _echo_python_remedy()
+        return 1
+    try:
+        from openadapt_flow.__main__ import main as flow_main
+    except ImportError:
+        click.echo("Error: openadapt-flow not installed.", err=True)
+        click.echo("Reinstall with: pip install --upgrade openadapt", err=True)
+        click.echo("Engine only: pip install openadapt-flow", err=True)
+        return 1
+
+    _correct_released_flow_x11_sonames()
+    if argv[:1] != ["tutorial"]:
+        return int(flow_main(argv))
+    # The tutorial is the first-run path and ends by printing next steps.
+    # Rewrite only its human-readable output; other verbs can print
+    # machine-readable output that must stay byte-for-byte.
+    from contextlib import redirect_stdout
+
+    with redirect_stdout(_LauncherSpellingStream(sys.stdout, _flow_verbs())):
+        return int(flow_main(argv))
+
+
+def _run_flow(argv: list[str]) -> None:
+    """Delegate to the openadapt-flow CLI, preserving its exit code.
+
+    openadapt-flow exposes an argparse ``main(argv)`` entry point; each
+    ``openadapt flow <verb>`` click command reconstructs that verb's argv
+    and hands off here so behavior is identical to ``openadapt-flow <verb>``.
+    Imported lazily so ``openadapt`` (and ``openadapt flow --help``) work
+    even when openadapt-flow isn't installed.
+    """
+    sys.exit(_invoke_flow(argv))
+
+
+_DEFAULT_QUICKSTART_DIR = "openadapt-quickstart"
+
+# Oldest and newest interpreter the engine supports. openadapt-flow,
+# openadapt-agent, and Flow's OCR dependency publish Requires-Python <3.13, so
+# pyproject.toml installs them only below 3.13 while the launcher itself
+# installs on any Python >=3.10. Without that split, pip on 3.13 and 3.14
+# silently backtracked to openadapt 1.3.0, an unrelated pre-compiler CLI.
+# tests/test_python_support.py keeps this range, the dependency markers, the
+# classifiers, and the CI guard matrix in step.
+_SUPPORTED_PYTHON = ((3, 10), (3, 12))
+
+
+def _host_platform() -> str:
+    return sys.platform
+
+
+def _python_fix() -> str:
+    """Return the uv install steps for the shell this host uses."""
+    if _host_platform() == "win32":
+        # cmd and PowerShell can't run `curl ... | sh` or the POSIX script.
+        installer = (
+            '  powershell -ExecutionPolicy ByPass -c "irm '
+            'https://astral.sh/uv/install.ps1 | iex"\n'
+        )
+        script = ""
+    else:
+        installer = "  curl -LsSf https://astral.sh/uv/install.sh | sh\n"
+        script = (
+            "\nOr use the installer script: https://raw.githubusercontent.com/"
+            "OpenAdaptAI/OpenAdapt/main/packages/flow/scripts/install.sh"
+        )
+    return (
+        "Install OpenAdapt with uv, which downloads Python 3.12 if you don't "
+        "have it:\n"
+        f"{installer}"
+        "  uv tool install --python 3.12 openadapt\n"
+        f"Then run: openadapt quickstart{script}"
+    )
+
+
+def _shell_quote(value) -> str:
+    """Quote one argument for pasting into this host's usual shell.
+
+    POSIX shells get ``shlex.quote``. Windows gets the double quotes that cmd
+    and PowerShell both read; single quotes reach the program literally there.
+    """
+    import subprocess
+
+    if _host_platform() == "win32":
+        return subprocess.list2cmdline([str(value)])
+    return shlex.quote(str(value))
+
+
+def _pip_install(spec: str) -> str:
+    """Return a pip command whose bracketed spec survives cmd, PowerShell and zsh."""
+    return f'python -m pip install "{spec}"'
+
+
+def _python_minor() -> tuple[int, int]:
+    """Return this interpreter's ``(major, minor)`` version."""
+    return (sys.version_info[0], sys.version_info[1])
+
+
+def _python_supported() -> bool:
+    """Return whether this interpreter is in the engine's supported range."""
+    oldest, newest = _SUPPORTED_PYTHON
+    return oldest <= _python_minor() <= newest
+
+
+def _python_remedy() -> str:
+    """Return the plain-language fix for this interpreter."""
+    current = "{}.{}".format(*_python_minor())
+    if _python_supported():
+        # A supported interpreter can still refuse installs (PEP 668).
+        reason = (
+            "OpenAdapt needs Python 3.10\u20133.12 in its own environment. "
+            f"This Python {current} is managed by your operating system, so "
+            "pip can't add packages to it."
+        )
+    else:
+        reason = (
+            "OpenAdapt needs Python 3.10\u20133.12. This is Python "
+            f"{current}, which the OpenAdapt engine doesn't support yet, so "
+            "only the launcher is installed."
+        )
+    return f"{reason}\n{_python_fix()}"
+
+
+def _echo_python_remedy() -> None:
+    """Print the plain-language fix for an unsupported interpreter."""
+    click.echo(_python_remedy(), err=True)
+
+
+def _require_supported_python() -> None:
+    """Stop before delegation when this interpreter cannot run the engine.
+
+    On Python 3.13 and newer pip installs the launcher without the engine
+    (see `_SUPPORTED_PYTHON`). Any command that needs the engine stops here
+    with the remedy instead of an ImportError or a misleading reinstall hint.
+    """
+    if not _python_supported():
+        _echo_python_remedy()
+        raise click.exceptions.Exit(1)
+
+
+# openadapt-agent 2.0.1 requires `serve --bundles`. The bundle-free
+# `serve --allow-run` that generates and serves the synthetic tutorial ships
+# after it, so the quickstart offers that command only when it will work.
+_AGENT_TUTORIAL_SERVE_MINIMUM = (2, 0, 2)
+
+
+def _release_tuple(value: str) -> Optional[tuple[int, int, int]]:
+    """Parse a stable ``X.Y.Z`` release, ignoring post and local suffixes."""
+    match = re.fullmatch(
+        r"(\d+)\.(\d+)\.(\d+)(?:\.post\d+)?(?:\+[a-zA-Z0-9.-]+)?", value
+    )
+    if match is None:
+        return None
+    major, minor, patch = (int(part) for part in match.groups())
+    return major, minor, patch
+
+
+def _agent_serves_tutorial() -> bool:
+    """Return whether the installed agent bridge can serve the tutorial."""
+    from importlib.metadata import PackageNotFoundError
+    from importlib.metadata import version as dist_version
+
+    try:
+        installed = _release_tuple(dist_version("openadapt-agent"))
+    except PackageNotFoundError:
+        return False
+    return installed is not None and installed >= _AGENT_TUTORIAL_SERVE_MINIMUM
+
+
+def _transaction_outcome(run_dir: Path) -> Optional[str]:
+    """Return the transaction outcome a run recorded, or None if unreadable."""
+    import json
+
+    try:
+        report = json.loads((run_dir / "report.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    outcome = report.get("transaction_outcome") if isinstance(report, dict) else None
+    return outcome if isinstance(outcome, str) else None
+
+
+def _halted_rerun_result(run_dir: Path) -> str:
+    """Say what the halted rerun left behind, from its transaction outcome.
+
+    Only HALTED_BEFORE_EFFECT proves that nothing was written. Any other
+    value, a missing report, or an unknown outcome means a save may have gone
+    through, so the line tells the reader to check the record and never says
+    that a retry is safe.
+    """
+    outcome = _transaction_outcome(run_dir)
+    if outcome == "HALTED_BEFORE_EFFECT":
+        return (
+            "Result: stopped before saving (transaction outcome "
+            "HALTED_BEFORE_EFFECT). The engine proved nothing was written."
+        )
+    return (
+        f"Result: check the record (transaction outcome {outcome or 'unknown'}). "
+        "A save may have gone through, so nothing is retried until a person "
+        "checks the record."
+    )
+
+
+def _is_externally_managed_error(error: BaseException) -> bool:
+    """Match pip's PEP 668 externally-managed-environment failure text."""
+    return "externally-managed-environment" in str(error)
+
+
+# Options quickstart parses itself. Click consumes them before passthrough,
+# so they only matter here as suggestions for a mistyped flag.
+_QUICKSTART_OPTIONS = frozenset(
+    {
+        "--out",
+        "--headless",
+        "--no-break",
+        "--verbose",
+        "--headed",
+        "--break-it",
+        "--help",
+    }
+)
+
+
+def _refuse_unknown_tutorial_options(args: list[str]) -> None:
+    """Stop on a long option that neither quickstart nor Flow's tutorial has.
+
+    Without this, a typo such as ``--brek-it`` reaches the engine, whose
+    parser prints its whole ``openadapt-flow`` command list. Names must match
+    exactly: an abbreviation that Flow would expand (``--brea``) could change
+    what runs without the launcher knowing. When Flow's options can't be read,
+    everything forwards unchanged and Flow reports its own error.
+    """
+    import difflib
+
+    options = _flow_tutorial_options()
+    if options is None:
+        return
+    for token in args:
+        name = token.split("=", 1)[0]
+        if not name.startswith("--") or name == "--" or name in options:
+            continue
+        message = f"No such option: {name}."
+        close = difflib.get_close_matches(
+            name, sorted(options | _QUICKSTART_OPTIONS), n=1
+        )
+        if close:
+            message += f" Did you mean {close[0]}?"
+        raise click.UsageError(message)
+
+
+@contextmanager
+def _synthetic_scrub_off():
+    """Keep an unconfigured privacy provider from blocking the synthetic app.
+
+    The bundled tutorial contains only fixed synthetic data. An operator's
+    explicit setting is left alone; the default is restored afterwards.
+    """
+    scrub = os.environ.get("OPENADAPT_FLOW_SCRUB")
+    if scrub in (None, "auto"):
+        os.environ["OPENADAPT_FLOW_SCRUB"] = "off"
+    try:
+        yield
+    finally:
+        if scrub is None:
+            os.environ.pop("OPENADAPT_FLOW_SCRUB", None)
+        elif scrub == "auto":
+            os.environ["OPENADAPT_FLOW_SCRUB"] = scrub
+
+
+def _quickstart_root(out: Optional[Path]) -> Path:
+    if out is None:
+        root = Path(_DEFAULT_QUICKSTART_DIR).resolve()
+        suffix = 2
+        while root.exists():
+            root = Path(f"{_DEFAULT_QUICKSTART_DIR}-{suffix}").resolve()
+            suffix += 1
+        return root
+    root = out.expanduser().resolve()
+    if root.exists():
+        raise click.UsageError(
+            f"Output already exists: {root}. Pass --out with a new directory."
+        )
+    return root
+
+
+@main.command(
+    "quickstart",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+    },
+)
+@click.option(
+    "--out",
+    type=click.Path(path_type=Path),
+    default=None,
+    help=(
+        f"Directory for the recording, program, and run reports. Default: "
+        f"{_DEFAULT_QUICKSTART_DIR}, suffixed -2, -3, ... when taken."
+    ),
+)
+@click.option(
+    "--headless",
+    is_flag=True,
+    help="Hide the browser. It is shown by default when a display is available.",
+)
+@click.option(
+    "--no-break",
+    "no_break",
+    is_flag=True,
+    help="Skip the last part, where one save fails silently.",
+)
+@click.option(
+    "--verbose",
+    is_flag=True,
+    help="Also print each run's engine detail and report path.",
+)
+@click.option("--headed", is_flag=True, hidden=True)
+@click.option("--break-it", "break_it", is_flag=True, hidden=True)
+@click.pass_context
+def quickstart(
+    command_ctx: click.Context,
+    out: Optional[Path],
+    headless: bool,
+    no_break: bool,
+    verbose: bool,
+    headed: bool,
+    break_it: bool,
+) -> None:
+    """Show a task once, run it, then watch it catch a save that didn't happen.
+
+    About 30 seconds, in a synthetic clinic app on this computer. OpenAdapt
+    turns one demonstration into a program, runs it five times and checks
+    every save in the app's database, then makes one save fail silently: the
+    screen says saved, the database has nothing, and OpenAdapt stops. The
+    program makes no AI calls. Nothing in the output directory is overwritten.
+
+    Other flags of the engine tutorial (for example --guided or
+    --interactive-record) run that tutorial instead, unchanged.
+    """
+    _require_supported_python()
+    _refuse_unknown_tutorial_options(command_ctx.args)
+    root = _quickstart_root(out)
+
+    if command_ctx.args or not _flow_runs_quickstart():
+        # Engine-owned flags (--guided, --interactive-record, and future
+        # engine additions) run the engine's own tutorial, as before. So does
+        # a Flow older than the pieces the three-act quickstart uses.
+        _engine_tutorial(root, out is None, headed, break_it, command_ctx.args)
+        return
+
+    from openadapt.quickstart import next_steps, run_quickstart
+    from openadapt.quickstart.engine import display_available
+
+    visible = not headless and (headed or display_available())
+    steps = next_steps(
+        _hint,
+        _shell_quote,
+        _agent_serves_tutorial(),
+        keep=_keep_command(),
+        shadow=_shadowing_openadapt if _under_uvx() else None,
+    )
+    try:
+        with _synthetic_scrub_off():
+            outcome = run_quickstart(
+                root,
+                visible=visible,
+                break_it=not no_break,
+                verbose=verbose,
+                steps=steps,
+            )
+    except KeyboardInterrupt:
+        click.echo(f"\nStopped. Anything written so far is in {root}", err=True)
+        raise click.exceptions.Exit(130)
+    except Exception as error:
+        if _is_externally_managed_error(error):
+            _echo_python_remedy()
+            raise click.exceptions.Exit(1) from error
+        if type(error).__name__ in ("TutorialError", "DurableAuthorityBusy"):
+            raise click.ClickException(
+                f"The quickstart stopped: {error}\nAnything it wrote is in {root}"
+            ) from error
+        raise
+    if outcome.checked != len(outcome.runs) or (
+        outcome.broken is not None and not outcome.broken.stopped
+    ):
+        raise click.exceptions.Exit(1)
+
+
+# The oldest Flow with every piece the three-act quickstart uses (shared
+# browser, record checks bound to run inputs, the side-by-side page).
+_QUICKSTART_FLOW_MINIMUM = (2, 2, 0)
+
+
+def _flow_runs_quickstart() -> bool:
+    """Return whether the installed Flow can run the three-act quickstart."""
+    from importlib.metadata import PackageNotFoundError
+    from importlib.metadata import version as dist_version
+
+    try:
+        installed = _release_tuple(dist_version("openadapt-flow"))
+    except PackageNotFoundError:
+        return False
+    return installed is not None and installed >= _QUICKSTART_FLOW_MINIMUM
+
+
+def _engine_tutorial(
+    root: Path, announce: bool, headed: bool, break_it: bool, extra: list[str]
+) -> None:
+    """Run the engine's own tutorial with engine-only flags, as before."""
+    if announce:
+        click.echo(f"Using output directory: {root}")
+    argv = ["tutorial", "--out", str(root), "--name", "local-quickstart"]
+    if headed:
+        argv.append("--headed")
+    if break_it:
+        argv.append("--break-it")
+    argv.extend(extra)
+    try:
+        with _synthetic_scrub_off():
+            code = _invoke_flow(argv)
+    except Exception as error:
+        if _is_externally_managed_error(error):
+            _echo_python_remedy()
+            raise click.exceptions.Exit(1) from error
+        raise
+    if code:
+        raise click.ClickException(
+            f"The verified tutorial stopped with exit code {code}. "
+            f"Any completed artifacts remain in {root}."
+        )
+    click.echo(f"\nBundle: {root / 'bundle'}")
+    click.echo(f"Run evidence: {root / 'run'}")
+    if break_it:
+        click.echo(f"Caught-fault evidence: {root / 'run-broken' / 'REPORT.md'}")
+        click.echo(_halted_rerun_result(root / "run-broken"))
+
+
+def _hint(rest: str) -> str:
+    """Spell an ``openadapt`` command the way it reaches this same version.
+
+    Under ``uvx`` this process runs from a throwaway environment in uv's cache,
+    so the shell may have no ``openadapt`` or an older one that lacks the verb.
+    Repeat the ``uvx`` form there; otherwise keep the plain command.
+    """
+
+    if _under_uvx():
+        major, minor = sys.version_info[:2]
+        return f"uvx --python {major}.{minor} openadapt {rest}"
+    return f"openadapt {rest}"
+
+
+def _under_uvx() -> bool:
+    """True when this process runs from a ``uvx`` throwaway environment."""
+    return "/uv/archive-v" in sys.prefix.replace("\\", "/")
+
+
+def _keep_command() -> Optional[str]:
+    """Under ``uvx``: the command that installs this launcher for good."""
+    if not _under_uvx():
+        return None
+    major, minor = sys.version_info[:2]
+    return f"uv tool install --python {major}.{minor} openadapt"
+
+
+def _launcher_version(path: str, run=None) -> Optional[str]:
+    """Ask the ``openadapt`` at ``path`` for its version; None when it can't say."""
+    import subprocess
+
+    try:
+        result = (run or subprocess.run)(
+            [path, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            env={**os.environ, _NO_LAUNCHER_CHECK: "1"},
+        )
+        text = f"{result.stdout} {result.stderr}"
+    except Exception:  # noqa: BLE001 - an unrunnable openadapt has no version
+        return None
+    match = re.search(r"\b(\d+\.\d+\.\d+\S*)", text)
+    return match.group(1) if match else None
+
+
+def _shadowing_openadapt(which=None, run=None) -> Optional[str]:
+    """Warn when the shell's ``openadapt`` is another version than this one.
+
+    Under ``uvx`` the printed commands repeat ``uvx`` and reach this version,
+    but a person who types plain ``openadapt`` gets whatever is first on PATH,
+    for example an older install in a Conda ``bin`` ahead of ``~/.local/bin``.
+    A copy of this same version is fine and gets no warning.
+    """
+    import shutil
+
+    found = (which or shutil.which)("openadapt")
+    if not found:
+        return None
+    version = _launcher_version(found, run)
+    if version == __version__:
+        return None
+    named = f"is {version}" if version else "is an unknown version"
+    return (
+        f"Your shell's openadapt {named} at {found}; the commands above use "
+        "uvx so they run this version."
+    )
+
+
+def _path_launchers(environ=None) -> list[Path]:
+    """Every ``openadapt`` executable on PATH, in PATH order (``which -a``)."""
+    env = os.environ if environ is None else environ
+    names = ["openadapt.exe", "openadapt"] if os.name == "nt" else ["openadapt"]
+    found: list[Path] = []
+    seen: set[Path] = set()
+    for folder in env.get("PATH", "").split(os.pathsep):
+        for name in names:
+            candidate = Path(folder or ".") / name
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                real = candidate.resolve()
+                if real not in seen:
+                    seen.add(real)
+                    found.append(candidate)
+    return found
+
+
+def _this_launcher_dir() -> Path:
+    return (Path(sys.prefix) / ("Scripts" if os.name == "nt" else "bin")).resolve()
+
+
+def _uninstall_fix(path: Path) -> str:
+    """How to remove the ``openadapt`` at ``path`` from its own environment."""
+    folder = path.parent
+    for name in ("python", "python3", "python.exe"):
+        python = folder / name
+        if python.is_file():
+            return (
+                f"{_shell_quote(python)} -m pip uninstall openadapt openadapt-flow, "
+                "then run: hash -r"
+            )
+    return (
+        f"pip uninstall openadapt openadapt-flow from {folder.parent}, "
+        "then run: hash -r"
+    )
+
+
+def _launcher_conflicts(launchers=None, run=None) -> list[str]:
+    """Plain warnings when PATH holds another ``openadapt`` that matters.
+
+    Two cases: the first ``openadapt`` on PATH is another version than this
+    one (so typing ``openadapt`` runs that one), or a newer ``openadapt`` is
+    on PATH than the one running. Each names the paths and versions; the first
+    also says how to remove the other install. Copies of this same version
+    are fine.
+    """
+    here = _this_launcher_dir()
+    others = [
+        path
+        for path in (_path_launchers() if launchers is None else launchers)
+        if path.parent.resolve() != here
+    ]
+    if not others:
+        return []
+    versions = {path: _launcher_version(str(path), run) for path in others}
+    lines = []
+    first = (_path_launchers() if launchers is None else launchers)[0]
+    if first in versions and versions[first] != __version__:
+        named = versions[first] or "an unknown version"
+        lines.append(
+            f"Your shell runs openadapt {named} at {first} before this one "
+            f"({__version__}). To remove it: {_uninstall_fix(first)}"
+        )
+    mine = _release_tuple(__version__)
+    for path, version in versions.items():
+        theirs = _release_tuple(version or "")
+        if mine is not None and theirs is not None and theirs > mine:
+            lines.append(
+                f"A newer openadapt, {version}, is at {path}; this one is "
+                f"{__version__}."
+            )
+    return lines
+
+
+#: Set in the environment of every ``openadapt --version`` this check runs, so
+#: the child never runs the check itself. Without it, two installs that both
+#: carry the check ask each other for their version forever.
+_NO_LAUNCHER_CHECK = "OPENADAPT_NO_LAUNCHER_CHECK"
+
+
+def _warn_about_launcher_conflicts() -> None:
+    if os.environ.get(_NO_LAUNCHER_CHECK):
+        return
+    try:
+        lines = _launcher_conflicts()
+    except Exception:  # noqa: BLE001 - a PATH check must never break a command
+        return
+    for line in lines:
+        click.echo(line, err=True)
+
+
+_SECRET_REFERENCE = re.compile(r"^(?:env:[A-Z][A-Z0-9_]*|keychain:[^/\s]+/[^/\s]+)$")
+# Flow 1.33 and 1.34 probe four X11 libraries in the wrong case, so on Linux
+# they refuse to download Chromium on hosts that have them. 1.35.0 fixed it.
+# Launcher 1.20 requires Flow 2.6: ledger listing uses its persistent
+# owed-recheck API.
+_SUPPORTED_FLOW_RANGE = ">=2.6.0,<3.0.0"
+_RDP_INSTALL_COMMAND = _pip_install("openadapt[rdp]")
+_CHROMIUM_SYSTEM_LIBS_COMMAND = (
+    f"{shlex.quote(sys.executable)} -m playwright install-deps chromium"
+)
+
+
+def _supported_flow_version(value: str) -> bool:
+    """Return whether a stable Flow version is in the launcher's supported range."""
+    parsed = _release_tuple(value)
+    return parsed is not None and (2, 6, 0) <= parsed < (3, 0, 0)
+
+
+# The Python modules each native or remote Flow backend imports when its
+# surface opens, by host platform, and the extra that installs them. "*" means
+# any host. A host that isn't listed can't open that surface: the macOS and
+# Linux bindings install only on their own OS, and Flow's Citrix window client
+# exists for macOS (Quartz) and Windows (Win32, through ctypes) hosts only.
+_MAC_MODULES = ("AppKit", "Quartz", "ApplicationServices")
+_NATIVE_BACKENDS: dict[str, tuple[dict[str, tuple[str, ...]], str]] = {
+    "macos": ({"darwin": _MAC_MODULES}, "macos"),
+    "linux": ({"linux": ("gi",)}, "linux"),
+    "windows": ({"*": ("requests",)}, "windows"),
+    "citrix": ({"darwin": _MAC_MODULES, "win32": ()}, "macos"),
+}
+_HOST_NAMES = {"darwin": "macOS", "linux": "Linux", "win32": "Windows"}
+
+
+def _native_backend_status(backend: str) -> tuple[str, str]:
+    """Check one native or remote backend's Python dependencies on this host.
+
+    Returns ``(status, message)`` with status ``OK``, ``MISSING``, or
+    ``UNSUPPORTED``. Modules are located without being imported. Permissions,
+    windows, and the target are still checked by Flow when the surface opens.
+    """
+    from importlib.util import find_spec
+
+    hosts, extra = _NATIVE_BACKENDS[backend]
+    host = _host_platform()
+    modules = hosts.get(host, hosts.get("*"))
+    if modules is None:
+        supported = " or ".join(_HOST_NAMES[name] for name in hosts)
+        return (
+            "UNSUPPORTED",
+            f"{backend}: Flow opens this surface from {supported} hosts only, "
+            f"and this host is {_HOST_NAMES.get(host, host)}.",
+        )
+    missing = [name for name in modules if find_spec(name) is None]
+    if missing:
+        return (
+            "MISSING",
+            f"{backend}: {', '.join(missing)} not installed. "
+            f"Run: {_pip_install(f'openadapt[{extra}]')}",
+        )
+    return (
+        "OK",
+        f"{backend}: its Python dependencies are installed. Flow checks "
+        "permissions and the target when that surface opens.",
+    )
+
+
+@main.command("deploy")
+@click.option(
+    "--backend",
+    type=click.Choice(["web", "windows", "macos", "linux", "rdp", "citrix"]),
+    default="web",
+    show_default=True,
+    help="The execution surface that this customer deployment will use.",
+)
+@click.option(
+    "--secret-ref",
+    multiple=True,
+    help="Secret reference only: env:NAME or keychain:service/item. Never pass a secret value.",
+)
+def deploy(backend: str, secret_ref: tuple[str, ...]) -> None:
+    """Check this host and print the safe Flow/Desktop deployment path.
+
+    This launcher command does not create another runtime or service manager.
+    It records no secret value, starts no connector, and does not treat an
+    incomplete preflight as a healthy deployment. It composes the installed
+    Flow connector, operator console, and repair lifecycle instead.
+    """
+    from importlib.metadata import PackageNotFoundError
+    from importlib.metadata import version as dist_version
+    from importlib.util import find_spec
+
+    click.echo("OpenAdapt deployment preflight")
+    click.echo("=" * 30)
+    click.echo("Environment fingerprint:")
+    click.echo(f"  platform: {platform.system()} {platform.release()}")
+    click.echo(f"  machine: {platform.machine() or 'unknown'}")
+    click.echo(f"  python: {platform.python_version()}")
+    try:
+        flow_version = dist_version("openadapt-flow")
+    except PackageNotFoundError:
+        flow_version = "not installed"
+    click.echo(f"  openadapt-flow: {flow_version}")
+    click.echo(f"  requested backend: {backend}")
+
+    # [MISSING] and [UNSUPPORTED] items fail the preflight. [SETUP] items are
+    # ones this command can't check, so their count turns a pass into
+    # "incomplete" instead of failing a host that may be ready.
+    failures = []
+    setup_pending = 0
+    bad_refs = [value for value in secret_ref if not _SECRET_REFERENCE.fullmatch(value)]
+    click.echo("\nSecret references:")
+    if not secret_ref:
+        click.echo("  [--] none supplied (valid for a local-only preflight)")
+    for value in secret_ref:
+        if value in bad_refs:
+            click.echo("  [INVALID] rejected secret reference (value hidden)")
+        elif value.startswith("env:"):
+            # Flow refuses an unset or empty variable, so this does too. Only
+            # the reference is printed, never the value.
+            if os.environ.get(value[len("env:") :]):
+                click.echo(f"  [OK] {value} is set in this environment")
+            else:
+                failures.append(value)
+                click.echo(
+                    f"  [MISSING] {value} is not set (or is empty) in this environment"
+                )
+        else:
+            setup_pending += 1
+            click.echo(
+                f"  [SETUP] {value}: this preflight can't check that the "
+                "keychain item exists"
+            )
+    if bad_refs:
+        raise click.UsageError(
+            "Secret references must use env:NAME or keychain:service/item; "
+            "do not pass secret values."
+        )
+
+    click.echo("\nHealth checks:")
+    if not _python_supported():
+        click.echo(
+            f"  [UNSUPPORTED] Python {platform.python_version()}; the OpenAdapt "
+            "engine supports Python 3.10\u20133.12"
+        )
+        for line in _python_fix().splitlines():
+            click.echo(f"     {line}")
+        # The engine and Playwright can't install on this interpreter, so the
+        # later checks would only suggest a reinstall that can't help here.
+        raise click.ClickException(
+            "Preflight failed. Reinstall OpenAdapt with Python 3.10\u20133.12 "
+            "as shown above, and then run this command again."
+        )
+    flow_importable = find_spec("openadapt_flow") is not None
+    flow_version_ready = flow_version != "not installed" and _supported_flow_version(
+        flow_version
+    )
+    if flow_importable and flow_version_ready:
+        click.echo(
+            "  [OK] canonical openadapt-flow engine is installed at a supported version"
+        )
+    elif not flow_importable or flow_version == "not installed":
+        failures.append("flow")
+        click.echo("  [MISSING] canonical openadapt-flow engine is not installed")
+    else:
+        failures.append("flow-version")
+        click.echo(
+            f"  [UNSUPPORTED] openadapt-flow {flow_version}; this launcher "
+            f"requires {_SUPPORTED_FLOW_RANGE}"
+        )
+
+    if backend == "web":
+        browser_ready = find_spec("playwright") is not None
+        if browser_ready:
+            click.echo("  [OK] Playwright is installed for the web backend")
+        else:
+            failures.append("browser")
+            click.echo(
+                "  [MISSING] the base OpenAdapt install does not contain "
+                "Playwright. Run: python -m pip install --upgrade openadapt"
+            )
+    elif backend == "rdp":
+        if find_spec("aardwolf") is not None:
+            click.echo("  [OK] RDP transport dependency is installed")
+        else:
+            failures.append("rdp")
+            click.echo(
+                "  [MISSING] RDP transport dependency is not installed. Run: "
+                + _RDP_INSTALL_COMMAND
+            )
+    else:
+        status, message = _native_backend_status(backend)
+        if status != "OK":
+            failures.append(backend)
+        click.echo(f"  [{status}] {message}")
+        setup_pending += 1
+        click.echo(
+            f"  [SETUP] {backend} target readiness is checked by Flow when the "
+            "configured target opens; this guide does not claim it is ready."
+        )
+
+    console_ready = all(
+        find_spec(name) is not None
+        for name in ("fastapi", "uvicorn", "openadapt_types")
+    )
+    if console_ready:
+        click.echo("  [OK] optional local operator console is installed")
+    else:
+        click.echo("  [--] optional local operator console is not installed")
+
+    if failures:
+        raise click.ClickException(
+            "Preflight failed. Resolve every [MISSING] and [UNSUPPORTED] item "
+            "above before service setup."
+        )
+
+    if setup_pending:
+        items = "item" if setup_pending == 1 else "items"
+        click.echo(
+            "\nPreflight incomplete. The installed components passed, but this "
+            f"command can't check the {setup_pending} [SETUP] {items} above. "
+            "No service was started."
+        )
+    else:
+        click.echo(
+            "\nPreflight passed for the installed components. No service was started."
+        )
+    click.echo("\nGuided deployment path:")
+    click.echo(
+        "  1. Re-run full host diagnostics: openadapt doctor --backend " + backend
+    )
+    click.echo("  2. Open the authenticated Cloud connector settings:")
+    click.echo("     https://app.openadapt.ai/dashboard/settings/connectors")
+    click.echo(
+        "     Create the customer-local connector there and put the issued "
+        "references in its environment or OS keychain."
+    )
+    click.echo(
+        "  3. Start one governed poll only after authenticated setup: "
+        "openadapt flow connector run --profile deployment.yaml --once"
+    )
+    if console_ready:
+        click.echo(
+            "  4. Inspect local health, reports, and halt evidence: "
+            "openadapt flow console --bundles bundles --runs runs"
+        )
+        click.echo(
+            "     The console is loopback-only and read-only unless you explicitly "
+            "enable its governed actions."
+        )
+    else:
+        click.echo("  4. Optional local console setup:")
+        click.echo("     " + _pip_install(f"openadapt-flow[console]=={flow_version}"))
+        click.echo(
+            "     Re-run this preflight after installation before you start the console."
+        )
+    click.echo(
+        "  5. In OpenAdapt Desktop, use the signed-in workspace connection and "
+        "open the matching run report; do not use the Desktop view as proof of effect."
+    )
+    click.echo(
+        "  6. Upgrade the launcher and its pinned Flow dependency: "
+        "python -m pip install --upgrade openadapt"
+    )
+    click.echo(
+        "  7. Roll back a governed bundle, not an unverified package: "
+        "openadapt flow repair rollback --store repair-store"
+    )
+    click.echo(
+        "  8. Uninstall only after retaining required run evidence: "
+        "python -m pip uninstall openadapt openadapt-flow"
+    )
+
+
+@main.command(
+    "flow",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        # Flow owns its argparse help. Do not let Click consume --help first.
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def flow(command_ctx: click.Context) -> None:
+    """Run the canonical demonstration compiler and governed runtime.
+
+    Every argument passes to openadapt-flow unchanged. This keeps the launcher
+    command list, help, options, validation, and exit codes identical to the
+    installed engine version.
+    """
+    _run_flow(list(command_ctx.args))
+
+
+@main.command(
+    "pull",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def pull(command_ctx: click.Context) -> None:
+    """Download a packaged workflow: `openadapt pull openemr/new-referral`.
+
+    `openadapt pull --list` shows what is available. Every argument passes to
+    `openadapt-flow pull` unchanged.
+    """
+    _require_supported_python()
+    if "pull" not in _flow_verbs():
+        args = list(command_ctx.args)
+        if not args or args[0] in ("--help", "-h"):
+            click.echo("Usage: openadapt pull <app>/<task> [--out DIR] | --list")
+            click.echo("")
+            click.echo("Pulling workflows needs a newer openadapt-flow:")
+            click.echo("  pip install --upgrade openadapt-flow")
+            sys.exit(0)
+        click.echo("Error: this openadapt-flow has no `pull` command.", err=True)
+        click.echo("Upgrade with: pip install --upgrade openadapt-flow", err=True)
+        sys.exit(1)
+    _run_flow(["pull", *command_ctx.args])
+
+
+FIRST_TOOL_GUIDE = "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/FIRST_TOOL.md"
+
+
+@main.command("setup")
+@click.option(
+    "--dry-run", is_flag=True, help="List what setup would change, and change nothing."
+)
+@click.option("--undo", is_flag=True, help="Reverse what earlier setup runs changed.")
+@click.option(
+    "--client",
+    "only",
+    multiple=True,
+    type=click.Choice(["claude", "cursor", "codex", "gemini"]),
+    help="Set up only this client (repeat for more). Default: every one found.",
+)
+def setup(dry_run: bool, undo: bool, only: tuple[str, ...]) -> None:
+    """Add OpenAdapt to Claude Code, Cursor, Codex and Gemini CLI.
+
+    For each one installed, register the OpenAdapt MCP server and install a
+    skill that tells the agent how to turn a browser task into a tool it can
+    call again. Prints every change. Running it again changes nothing that is
+    already set up.
+    """
+    from openadapt.setup_clients import CLIENTS, Setup, server_command
+
+    _require_supported_python()
+    clients = [c for c in CLIENTS if not only or c.key in only]
+    run = Setup(
+        home=Path.home(), command=server_command(), say=click.echo, dry_run=dry_run
+    )
+    if undo:
+        run.undo()
+        sys.exit(1 if run.failures else 0)
+    found = run.install(clients)
+    if not found:
+        click.echo(
+            "No supported agent found. Install Claude Code, Cursor, Codex or "
+            "Gemini CLI, then run openadapt setup again."
+        )
+        sys.exit(1)
+    if dry_run:
+        sys.exit(1 if run.failures else 0)
+    click.echo(
+        "\nNext: restart your agent so it loads OpenAdapt. To try it on a "
+        "local example app, run:\n"
+        "  openadapt agent example-app\n"
+        f"and follow {FIRST_TOOL_GUIDE}\n"
+        "Undo with: openadapt setup --undo"
+    )
+    sys.exit(1 if run.failures else 0)
+
+
+@main.group("bench")
+def bench() -> None:
+    """Public benchmarks you can rerun with your own agent."""
+
+
+def _flow_checkout() -> Optional[Path]:
+    """``packages/flow`` of the OpenAdapt checkout this runs from, if any.
+
+    The benchmarks need their compose files and case sets, which live in the
+    repository, not in the installed package.
+    """
+    here = Path(__file__).resolve().parents[1]
+    for root in (here, *Path.cwd().resolve().parents, Path.cwd().resolve()):
+        flow = root / "packages" / "flow"
+        if (flow / "benchmark" / "fhir_medplum" / "public" / "run.py").is_file():
+            return flow
+    return None
+
+
+@bench.command(
+    "medplum",
+    context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+    add_help_option=False,
+)
+@click.pass_context
+def bench_medplum(ctx: click.Context) -> None:
+    """Your agent writes to a local Medplum; OpenAdapt checks every write.
+
+    Options go to the runner; `openadapt bench medplum --help` lists them.
+    Needs Docker and an OpenAdapt checkout (see
+    packages/flow/benchmark/fhir_medplum/public/README.md).
+    """
+    import subprocess
+
+    _require_supported_python()
+    flow = _flow_checkout()
+    if flow is None:
+        click.echo(
+            "Error: run this from an OpenAdapt checkout "
+            "(git clone https://github.com/OpenAdaptAI/OpenAdapt).",
+            err=True,
+        )
+        sys.exit(1)
+    env = {
+        **os.environ,
+        "PYTHONPATH": os.pathsep.join(
+            p for p in (str(flow), os.environ.get("PYTHONPATH", "")) if p
+        ),
+    }
+    cmd = [sys.executable, "-m", "benchmark.fhir_medplum.public.run", *ctx.args]
+    sys.exit(subprocess.run(cmd, env=env).returncode)
+
+
+@main.group("verify")
+def verify() -> None:
+    """Verify writes against the system of record, for any agent.
+
+    Around each write your agent makes, it gets a verified receipt or a
+    refusal, never an unverified success. Python agents use the SDK
+    (`from openadapt.verify import ...`); any MCP client uses `openadapt
+    verify serve`.
+    """
+
+
+@verify.command("serve")
+@click.option(
+    "--contracts",
+    "contracts",
+    required=True,
+    type=click.Path(file_okay=False),
+    help="Folder of write contracts (<name>.yaml, openadapt.verify/v1).",
+)
+@click.option(
+    "--state",
+    "state",
+    default=None,
+    type=click.Path(file_okay=False),
+    help="Where baselines and receipts go (default ~/.openadapt/verify).",
+)
+def verify_serve(contracts: str, state: Optional[str]) -> None:
+    """Serve verify_contracts, verify_begin, verify_check and verify_recheck
+    over MCP (stdio)."""
+    _require_supported_python()
+    try:
+        from openadapt_flow.agent.cli import main as agent_main
+    except ImportError:
+        click.echo("Error: the OpenAdapt engine is not installed.", err=True)
+        click.echo("Reinstall with: pip install --upgrade openadapt", err=True)
+        sys.exit(1)
+    argv = ["serve", "--verify", contracts]
+    if state:
+        argv += ["--verify-state", state]
+    sys.exit(int(agent_main(argv) or 0))
+
+
+def _write_ledger(folder: Optional[str]):
+    """The uncertain-write ledger (default ~/.openadapt/ledger)."""
+    _require_supported_python()
+    try:
+        from openadapt_flow.write_ledger import FileLedger, Ledger, default_ledger
+    except ImportError:
+        click.echo("Error: the OpenAdapt engine is not installed.", err=True)
+        sys.exit(1)
+    return Ledger(FileLedger(folder)) if folder else default_ledger()
+
+
+_LEDGER_OPTION = click.option(
+    "--ledger",
+    "ledger_dir",
+    default=None,
+    type=click.Path(file_okay=False),
+    help="Ledger folder (default: OPENADAPT_LEDGER_DIR or ~/.openadapt/ledger).",
+)
+
+
+@verify.group("ledger")
+def verify_ledger() -> None:
+    """Writes whose outcome isn't known yet, held so they aren't sent twice.
+
+    Every verified write goes through the ledger. A write that may have
+    landed, or was refuted, is held: no worker sends it again until a
+    read-back resolves it (`reconcile`) or a person checks the record
+    (`release`). The ledger holds no record values.
+    """
+
+
+@verify_ledger.command("list")
+@_LEDGER_OPTION
+def verify_ledger_list(ledger_dir: Optional[str]) -> None:
+    """Show held and open writes: key, state, when it began, outcome.
+
+    Also each provisional CONFIRMED whose recheck is still owed, with its due
+    time, so a recheck isn't lost when the server that holds it restarts.
+    """
+    ledger = _write_ledger(ledger_dir)
+    rows = ledger.unresolved()
+    owed = ledger.rechecks_owed()
+    if not rows and not owed:
+        click.echo("No held or open writes. No rechecks owed.")
+        return
+    for key, attempt in owed:
+        click.echo(
+            f"{key}  recheck-owed  began {attempt.begun.get('at')}  "
+            f"due {attempt.recheck_owed}  by {attempt.begun.get('actor_kind')}:"
+            f"{attempt.begun.get('actor_id')}"
+        )
+    for key, attempt in rows:
+        outcome = (attempt.resolved or {}).get("outcome", "-")
+        state = "review" if attempt.review else ledger.state(attempt)
+        click.echo(
+            f"{key}  {state:<11}  began {attempt.begun.get('at')}  "
+            f"outcome {outcome}  by {attempt.begun.get('actor_kind')}:"
+            f"{attempt.begun.get('actor_id')}"
+        )
+
+
+@verify_ledger.command("reconcile")
+@click.option(
+    "--contracts",
+    "contracts",
+    required=True,
+    type=click.Path(exists=True, file_okay=False),
+    help="Folder of write contracts (<name>.yaml) the writes were made under.",
+)
+@click.argument("key", required=False)
+@_LEDGER_OPTION
+def verify_ledger_reconcile(
+    contracts: str, key: Optional[str], ledger_dir: Optional[str]
+) -> None:
+    """Read held writes back and resolve the ones the store now settles."""
+    from openadapt_flow.verifier import Contract, VerifierError, reconcile
+
+    ledger = _write_ledger(ledger_dir)
+    by_digest = {}
+    for path in sorted(Path(contracts).glob("*.y*ml")):
+        try:
+            contract = Contract.load(path)
+        except VerifierError as exc:
+            click.echo(f"Error: contract {path.name}: {exc}", err=True)
+            sys.exit(2)
+        by_digest[contract.identity] = contract
+    rows = [(k, a) for k, a in ledger.unresolved() if key is None or k == key]
+    if key is not None and not rows:
+        click.echo(f"Error: no held or open write with key {key}", err=True)
+        sys.exit(2)
+    for k, attempt in rows:
+        contract = by_digest.get(str(attempt.begun.get("contract")))
+        if contract is None:
+            click.echo(f"{k}  skipped: its contract isn't in {contracts}")
+            continue
+        try:
+            state = reconcile(contract, k, ledger=ledger)
+        except VerifierError as exc:
+            click.echo(f"{k}  skipped: {exc}")
+            continue
+        click.echo(f"{k}  {state}")
+
+
+@verify_ledger.command("release")
+@click.argument("key")
+@click.option("--by", "by", required=True, help="Who checked the record.")
+@click.option("--reason", "reason", required=True, help="What they found.")
+@click.option(
+    "--found",
+    "found",
+    required=True,
+    type=click.Choice(["absent", "landed"]),
+    help="absent: the write isn't in the store, so it may be sent again. "
+    "landed: it is, so it is never sent again.",
+)
+@_LEDGER_OPTION
+def verify_ledger_release(
+    key: str, by: str, reason: str, found: str, ledger_dir: Optional[str]
+) -> None:
+    """Release a held write after a person checked the record."""
+    from openadapt_flow.write_ledger import LedgerError
+
+    ledger = _write_ledger(ledger_dir)
+    try:
+        ledger.release(key, by=by, reason=reason, found=found)
+    except LedgerError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(2)
+    click.echo(f"{key}  released by {by} (found {found})")
+
+
+@main.command(
+    "shadow",
+    context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+)
+@click.pass_context
+def shadow(command_ctx: click.Context) -> None:
+    """Check each write your agent makes against the system of record.
+
+    Never blocks or changes a write; writes report.html and report.json.
+    Every argument passes to `openadapt flow shadow`; its options are listed
+    by `openadapt flow shadow --help`.
+    """
+    if "shadow" not in _flow_verbs():
+        click.echo(
+            "Error: the installed openadapt-flow has no shadow command.", err=True
+        )
+        click.echo("Upgrade with: pip install --upgrade openadapt", err=True)
+        sys.exit(2)
+    _run_flow(["shadow", *command_ctx.args])
+
+
+@main.command(
+    "agent",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        # The agent bridge owns its argparse help.
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def agent(command_ctx: click.Context) -> None:
+    """Serve compiled workflows to an MCP client (openadapt-agent).
+
+    Every argument passes to openadapt-agent unchanged. Use this form where
+    only `openadapt` is on PATH, as after `uv tool install openadapt` or
+    pipx, which keep the `openadapt-agent` executable inside the tool's own
+    environment. Nothing is written to stdout before the bridge starts, so an
+    MCP client can launch this command directly.
+    """
+    _require_supported_python()
+    try:
+        from openadapt_agent.cli import main as agent_main
+    except ImportError:
+        click.echo("Error: openadapt-agent is not installed.", err=True)
+        click.echo("Reinstall with: pip install --upgrade openadapt", err=True)
+        sys.exit(1)
+    sys.exit(int(agent_main(list(command_ctx.args)) or 0))
+
+
+@main.command(
+    "seal",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def seal(command_ctx: click.Context) -> None:
+    """Check an OpenAdapt Seal offline: `openadapt seal verify <file|url|folder>`.
+
+    A folder is a run folder (or a folder of them, such as the quickstart's)
+    signed on this computer; each run's report is checked against its
+    `seal.json`. `openadapt seal view RUN_DIR` writes the run's Seal as one
+    offline page (`RUN_DIR/seal.html`) and opens it. Also `openadapt seal keys
+    pin` to pin Cloud's Seal keys after a person confirms them. Every other
+    argument passes to `openadapt-agent seal` unchanged.
+    """
+    _require_supported_python()
+    args = list(command_ctx.args)
+    if args[:1] == ["view"]:
+        sys.exit(_view_sealed_runs(args[1:]))
+    if len(args) >= 2 and args[0] == "verify" and Path(args[1]).is_dir():
+        sys.exit(_verify_sealed_runs(Path(args[1]), args[2:]))
+    try:
+        from openadapt_agent import seal_cli  # noqa: F401
+        from openadapt_agent.cli import main as agent_main
+    except ImportError:
+        args = list(command_ctx.args)
+        if not args or args[0] in ("--help", "-h"):
+            click.echo("Usage: openadapt seal verify <file|url|->")
+            click.echo("       openadapt seal keys pin | keys show")
+            click.echo("")
+            click.echo("Seal checks need a newer openadapt-agent:")
+            click.echo("  pip install --upgrade openadapt-agent")
+            sys.exit(0)
+        click.echo("Error: this openadapt-agent cannot check Seals.", err=True)
+        click.echo("Upgrade with: pip install --upgrade openadapt-agent", err=True)
+        sys.exit(1)
+    sys.exit(int(agent_main(["seal", *command_ctx.args]) or 0))
+
+
+def _view_sealed_runs(argv: list[str]) -> int:
+    """`openadapt seal view RUN_DIR`: write each sealed run's offline Seal page."""
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="openadapt seal view",
+        description=(
+            "Write a sealed run's Seal as one offline page, RUN_DIR/seal.html, and "
+            "open it. The page checks the Ed25519 signature over the run's report "
+            "in the browser, replays the run over its program map, and makes no "
+            "network requests. A folder of runs (such as the quickstart's) gets "
+            "one page per sealed run."
+        ),
+    )
+    parser.add_argument(
+        "run_dir", type=Path, help="a sealed run folder, or a folder of them"
+    )
+    parser.add_argument(
+        "--keys",
+        type=Path,
+        default=None,
+        help="the Seal key registry to trust (default: this computer's Seal key)",
+    )
+    parser.add_argument(
+        "--bundle",
+        type=Path,
+        default=None,
+        help="the run's compiled bundle, for the program map (default: found next to the run)",
+    )
+    parser.add_argument("--no-open", action="store_true", help="write the page only")
+    options = parser.parse_args(argv)
+    folder = options.run_dir
+    runs = _sealed_run_dirs(folder) if folder.is_dir() else []
+    if not runs:
+        click.echo(f"no sealed run in {folder} (no seal.json)", err=True)
+        return 1
+    try:
+        from openadapt.seal_view import SealViewError, open_page, write_seal_page
+    except ImportError:  # pragma: no cover - the viewer ships with the launcher
+        click.echo("This install has no Seal viewer.", err=True)
+        return 1
+    keys = None
+    if options.keys is not None:
+        try:
+            keys = json.loads(options.keys.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            click.echo(f"can't read the key registry {options.keys}: {exc}", err=True)
+            return 1
+    pages = []
+    for run in runs:
+        try:
+            page = write_seal_page(
+                run,
+                keys=keys,
+                bundle_dir=options.bundle,
+                commands=_hint(f"seal verify {_shell_quote(run)}"),
+            )
+        except (SealViewError, ImportError) as exc:
+            click.echo(f"  {run.name}  no page: {exc}", err=True)
+            continue
+        except Exception as exc:  # noqa: BLE001 - e.g. no Seal key on this computer
+            click.echo(f"  {run.name}  no page: {type(exc).__name__}: {exc}", err=True)
+            continue
+        pages.append(page)
+        click.echo(f"Seal: {page}")
+    if not pages:
+        return 1
+    if not options.no_open:
+        from openadapt.quickstart.engine import display_available
+
+        if display_available():
+            open_page(pages[0])
+    return 0 if len(pages) == len(runs) else 1
+
+
+def _sealed_run_dirs(folder: Path) -> list[Path]:
+    """The run folder itself when it is sealed, else its sealed run folders."""
+    if (folder / "seal.json").is_file():
+        return [folder]
+    return sorted(
+        child
+        for child in folder.iterdir()
+        if child.is_dir() and (child / "seal.json").is_file()
+    )
+
+
+def _verify_sealed_runs(folder: Path, extra: list[str]) -> int:
+    """Check each sealed run under ``folder`` with Flow's offline Seal check.
+
+    One sealed run folder goes to `openadapt flow local-seal verify` with
+    every option. A folder of them (the quickstart's) is checked run by run
+    against this computer's Seal key, or the keys pinned with ``--keys FILE``.
+    """
+    if any(arg in ("--help", "-h") for arg in extra):
+        return _invoke_flow(["local-seal", "verify", "--help"])
+    runs = _sealed_run_dirs(folder)
+    if not runs:
+        click.echo(f"not valid: no sealed run in {folder} (no seal.json)", err=True)
+        return 1
+    if runs == [folder]:
+        return _invoke_flow(["local-seal", "verify", str(folder), *extra])
+    try:
+        from openadapt_flow.offline_seal import (
+            load_registry,
+            parse_key_registry,
+            public_key_entry,
+            seal_home,
+            verify_run,
+        )
+    except ImportError:
+        click.echo(
+            "This openadapt-flow cannot check offline Seals. Upgrade with: "
+            "pip install --upgrade openadapt",
+            err=True,
+        )
+        return 1
+    if extra[:1] == ["--keys"] and len(extra) == 2:
+        registry = load_registry(Path(extra[1]))
+        source = f"keys pinned in {extra[1]}"
+    elif extra:
+        raise click.UsageError(
+            "A folder of runs takes only --keys FILE. Check one run folder for "
+            "the other options."
+        )
+    else:
+        entry = public_key_entry(seal_home())
+        registry = parse_key_registry([entry])
+        source = f"this computer's Seal key, {entry['key_id']}"
+    click.echo(f"Checking {len(runs)} sealed runs in {folder} against {source}")
+    valid = 0
+    for run in runs:
+        result = verify_run(run, registry)
+        if result.ok:
+            valid += 1
+            click.echo(f"  {run.name}  valid")
+        else:
+            click.echo(f"  {run.name}  not valid: {result.reason}")
+    click.echo(f"{valid} of {len(runs)} valid")
+    return 0 if valid == len(runs) else 1
+
+
+@main.command("connect")
+@click.option(
+    "--pairing", default=None, help="Five-minute pairing code from Cloud settings"
+)
+@click.option("--uri", default=None, help="Exact openadapt://connect desktop deep link")
+@click.option(
+    "--host", default=None, help="Cloud origin (default: https://app.openadapt.ai)"
+)
+@click.option("--device-name", default=None, help="Name shown for this computer")
+@click.option(
+    "--destination-kind",
+    type=click.Choice(["openadapt-managed", "customer-managed", "local"]),
+    default=None,
+    help="Trust class for the pairing destination",
+)
+@click.option(
+    "--trusted-host",
+    multiple=True,
+    help="Exact allowed customer-managed origin (repeatable)",
+)
+def connect(pairing, uri, host, device_name, destination_kind, trusted_host):
+    """Connect this computer to the signed-in OpenAdapt Cloud workspace.
+
+    The browser creates a five-minute, one-use pairing. This command claims it
+    and saves the resulting workspace credential in the OS keychain. It cannot
+    execute arbitrary terminal commands or grant browser access to the shell.
+    """
+    if bool(pairing) == bool(uri):
+        raise click.UsageError("Pass exactly one of --pairing or --uri.")
+    _require_supported_python()
+    try:
+        from openadapt_flow import hosted
+
+        if not hasattr(hosted, "connect"):
+            raise ImportError
+    except ImportError:
+        click.echo(
+            "Error: this connection flow needs a newer openadapt-flow. "
+            "Run: pip install --upgrade openadapt",
+            err=True,
+        )
+        raise click.exceptions.Exit(1)
+
+    argv = ["connect", "--pairing", pairing] if pairing else ["connect", "--uri", uri]
+    if host:
+        argv += ["--host", host]
+    if device_name:
+        argv += ["--device-name", device_name]
+    if destination_kind:
+        argv += ["--destination-kind", destination_kind]
+    for value in trusted_host:
+        argv += ["--trusted-host", value]
+    _run_flow(argv)
+
+
+# =============================================================================
+# Capture Commands
+# =============================================================================
+
+
+@main.group()
+def capture():
+    """Standalone local human GUI capture (optional [capture] extra).
+
+    For a compile-ready workflow recording, prefer `openadapt flow record`.
+    These commands observe the current interactive desktop; they do not choose
+    or connect a replay target.
+
+    \b
+    Examples:
+        openadapt capture start --name login-flow
+        openadapt capture list
+        openadapt capture view login-flow
+    """
+    pass
+
+
+@capture.command("start")
+@click.option("--name", "-n", required=True, help="Name for the capture session")
+@click.option("--video/--no-video", default=True, help="Record video")
+@click.option("--audio/--no-audio", default=False, help="Record audio")
+def capture_start(name: str, video: bool, audio: bool):
+    """Start a new capture session."""
+    try:
+        from openadapt_capture import Recorder
+
+        click.echo(f"Starting capture session: {name}")
+        click.echo("Press Ctrl+C (or Ctrl x3) to stop recording...")
+
+        with Recorder(
+            f"./{name}",
+            task_description=name,
+            capture_video=video,
+            capture_audio=audio,
+        ) as recorder:
+            if not recorder.wait_for_ready():
+                raise click.ClickException(
+                    "Capture did not become ready. No successful capture was saved."
+                )
+            click.echo("Recording...")
+            try:
+                while recorder.is_recording:
+                    import time
+
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                pass
+
+        click.echo(f"\nCapture saved: ./{name}/ ({recorder.event_count} events)")
+
+    except ImportError:
+        click.echo("Error: openadapt-capture not installed.", err=True)
+        click.echo("Install with: pip install openadapt-capture", err=True)
+        sys.exit(1)
+
+
+# Hidden: it can't stop a capture, so it isn't listed with the commands that
+# work. Typing it still explains how to stop one, and it exits non-zero
+# because nothing was stopped.
+@capture.command("stop", hidden=True)
+def capture_stop():
+    """Explain how to stop a capture started in another terminal."""
+    raise click.ClickException(
+        "No separate capture-stop control channel is available. Stop the capture "
+        "with Ctrl+C in the recorder terminal. A separate stop command will remain "
+        "unavailable until Capture provides an authenticated, owner-only local "
+        "control channel."
+    )
+
+
+@capture.command("list")
+@click.option("--path", "-p", default=".", help="Path to search for captures")
+def capture_list(path: str):
+    """List available captures."""
+    try:
+        from pathlib import Path
+
+        from openadapt_capture import Capture
+
+        captures_found = 0
+        for capture_dir in sorted(Path(path).iterdir()):
+            if capture_dir.is_dir() and (capture_dir / "recording.db").exists():
+                try:
+                    cap = Capture.load(str(capture_dir))
+                    desc = cap.task_description or ""
+                    n_actions = sum(1 for _ in cap.actions())
+                    cap.close()
+                    click.echo(f"  {capture_dir.name}  ({n_actions} actions)  {desc}")
+                    captures_found += 1
+                except Exception:
+                    continue
+
+        if captures_found == 0:
+            click.echo("No captures found.")
+        else:
+            click.echo(f"\nTotal: {captures_found} capture(s)")
+
+    except ImportError:
+        click.echo("Error: openadapt-capture not installed.", err=True)
+        sys.exit(1)
+
+
+@capture.command("view")
+@click.argument("name")
+@click.option("--open/--no-open", default=True, help="Open in browser")
+def capture_view(name: str, open: bool):
+    """View a capture recording."""
+    try:
+        from pathlib import Path
+
+        from openadapt_capture import create_html
+
+        capture_path = Path(name)
+        if not capture_path.exists():
+            click.echo(f"Error: Capture not found: {name}", err=True)
+            sys.exit(1)
+
+        output_path = capture_path / "viewer.html"
+        create_html(str(capture_path), str(output_path))
+        click.echo(f"Viewer generated: {output_path}")
+
+        if open:
+            import webbrowser
+
+            webbrowser.open(f"file://{output_path.absolute()}")
+
+    except ImportError:
+        click.echo("Error: openadapt-capture not installed.", err=True)
+        sys.exit(1)
+
+
+# =============================================================================
+# Train Commands
+# =============================================================================
+
+
+@main.group()
+def train():
+    """Research: train ML models on captured demonstrations.
+
+    \b
+    Examples:
+        openadapt train start --capture login-flow --model qwen3vl-2b
+        openadapt train status
+        openadapt train stop
+    """
+    pass
+
+
+@train.command("start")
+@click.option("--capture", "-c", required=True, help="Path to capture directory")
+@click.option("--model", "-m", default="qwen3vl-2b", help="Model to train")
+@click.option("--config", help="Path to training config YAML")
+@click.option("--output", "-o", default="training_output", help="Output directory")
+@click.option("--open/--no-open", default=True, help="Open dashboard in browser")
+def train_start(
+    capture: str, model: str, config: Optional[str], output: str, open: bool
+):
+    """Start model training."""
+    try:
+        click.echo("Starting training...")
+        click.echo(f"  Capture: {capture}")
+        click.echo(f"  Output: {output}")
+
+        # Import and run training. The model is determined by the config
+        # file; --model is kept for backward compatibility only.
+        from openadapt_ml.scripts.train import main as train_main
+
+        if not config:
+            from openadapt_ml.cloud.local import detect_device
+
+            if "cuda" in detect_device():
+                config = "configs/qwen3vl_capture.yaml"
+            else:
+                config = "configs/qwen3vl_capture_4bit.yaml"
+        try:
+            from openadapt_ml.cloud.local import resolve_config_path
+
+            config = str(resolve_config_path(config))
+        except ImportError:
+            # Older openadapt-ml without resolve_config_path; use as-is.
+            pass
+
+        from pathlib import Path
+
+        if not Path(config).exists():
+            click.echo(f"Error: config not found: {config}", err=True)
+            click.echo(
+                "Upgrade openadapt-ml so bundled configs resolve, or pass "
+                "--config with a path to a training config YAML.",
+                err=True,
+            )
+            sys.exit(1)
+        click.echo(f"  Config: {config}")
+
+        train_main(
+            config_path=config,
+            capture_path=capture,
+            output_dir=output,
+            open_dashboard=open,
+        )
+
+    except ImportError as e:
+        click.echo(f"Error: failed to import openadapt-ml ({e}).", err=True)
+        click.echo('Install with: pip install "openadapt-ml[training]"', err=True)
+        sys.exit(1)
+
+
+@train.command("status")
+@click.option("--output", "-o", default="training_output", help="Output directory")
+def train_status(output: str):
+    """Check training status."""
+    try:
+        import json
+        from pathlib import Path
+
+        log_path = Path(output) / "training_log.json"
+        if not log_path.exists():
+            click.echo("No active training found.")
+            return
+
+        with open(log_path) as f:
+            log = json.load(f)
+
+        status = log.get("status", "unknown")
+        epoch = log.get("epoch", 0)
+        loss = log.get("loss", 0)
+        elapsed = log.get("elapsed_time", 0)
+
+        click.echo(f"Status: {status}")
+        click.echo(f"Epoch: {epoch}")
+        click.echo(f"Loss: {loss:.4f}")
+        click.echo(f"Elapsed: {elapsed / 60:.1f} minutes")
+
+    except Exception as e:
+        click.echo(f"Error reading training status: {e}", err=True)
+        sys.exit(1)
+
+
+@train.command("stop")
+@click.option("--output", "-o", default="training_output", help="Output directory")
+def train_stop(output: str):
+    """Stop active training."""
+    try:
+        from pathlib import Path
+
+        stop_file = Path(output) / "STOP_TRAINING"
+        stop_file.touch()
+        click.echo("Stop signal sent. Training will stop after current step.")
+
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+
+# =============================================================================
+# Eval Commands
+# =============================================================================
+
+
+@main.group()
+def eval():
+    """Research: evaluate computer-use models on benchmarks.
+
+    \b
+    Examples:
+        openadapt eval run --checkpoint model.pt --benchmark waa
+        openadapt eval run --agent api-claude --benchmark waa
+        openadapt eval mock --tasks 10
+    """
+    pass
+
+
+@eval.command("run")
+@click.option("--checkpoint", "-c", help="Path to model checkpoint")
+@click.option(
+    "--agent",
+    "-a",
+    type=click.Choice(["api-claude", "api-openai"]),
+    help="API agent to use",
+)
+@click.option("--benchmark", "-b", default="waa", help="Benchmark name")
+@click.option("--tasks", "-t", default=10, help="Number of tasks")
+@click.option("--server", "-s", help="WAA server URL for live eval")
+@click.option("--demo", help="Demo file for agent")
+def eval_run(
+    checkpoint: Optional[str],
+    agent: Optional[str],
+    benchmark: str,
+    tasks: int,
+    server: Optional[str],
+    demo: Optional[str],
+):
+    """Run benchmark evaluation."""
+    try:
+        from openadapt_evals import (
+            ApiAgent,
+            WAALiveAdapter,
+            WAAMockAdapter,
+            compute_metrics,
+            evaluate_agent_on_benchmark,
+        )
+
+        # Create agent
+        if checkpoint:
+            click.echo(f"Loading model from: {checkpoint}")
+            from openadapt_evals import PolicyAgent
+
+            eval_agent = PolicyAgent(checkpoint_path=checkpoint)
+        elif agent:
+            provider = "anthropic" if "claude" in agent else "openai"
+            click.echo(f"Using API agent: {provider}")
+
+            demo_text = None
+            if demo:
+                with open(demo) as f:
+                    demo_text = f.read()
+
+            eval_agent = ApiAgent(provider=provider, demo=demo_text)
+        else:
+            click.echo("Error: Specify --checkpoint or --agent", err=True)
+            sys.exit(1)
+
+        # Create adapter
+        if server:
+            click.echo(f"Connecting to: {server}")
+            adapter = WAALiveAdapter(server_url=server)
+        else:
+            click.echo(f"Using mock adapter with {tasks} tasks")
+            adapter = WAAMockAdapter(num_tasks=tasks)
+
+        # Run evaluation
+        click.echo("Running evaluation...")
+        results = evaluate_agent_on_benchmark(eval_agent, adapter, max_steps=15)
+
+        # Compute and display metrics
+        metrics = compute_metrics(results)
+        click.echo("\nResults:")
+        click.echo(f"  Success rate: {metrics['success_rate']:.1%}")
+        click.echo(f"  Avg steps: {metrics['avg_steps']:.1f}")
+        click.echo(f"  Total tasks: {metrics['total_tasks']}")
+
+    except ImportError as e:
+        click.echo(f"Error: Missing dependency: {e}", err=True)
+        sys.exit(1)
+
+
+@eval.command("mock")
+@click.option("--tasks", "-t", default=10, help="Number of mock tasks")
+@click.option("--output", "-o", default="benchmark_results", help="Output directory")
+def eval_mock(tasks: int, output: str):
+    """Run mock evaluation for testing."""
+    try:
+        from openadapt_evals import (
+            SmartMockAgent,
+            WAAMockAdapter,
+            compute_metrics,
+            evaluate_agent_on_benchmark,
+        )
+
+        click.echo(f"Running mock evaluation with {tasks} tasks...")
+
+        agent = SmartMockAgent()
+        adapter = WAAMockAdapter(num_tasks=tasks)
+        results = evaluate_agent_on_benchmark(agent, adapter, max_steps=15)
+
+        metrics = compute_metrics(results)
+        click.echo("\nResults:")
+        click.echo(f"  Success rate: {metrics['success_rate']:.1%}")
+        click.echo(f"  Avg steps: {metrics['avg_steps']:.1f}")
+
+    except ImportError:
+        click.echo("Error: openadapt-evals not installed.", err=True)
+        sys.exit(1)
+
+
+# =============================================================================
+# Serve Command
+# =============================================================================
+
+
+@main.command()
+@click.option("--port", "-p", default=8080, help="Port to serve on")
+@click.option("--output", "-o", default="training_output", help="Output directory")
+@click.option("--open/--no-open", default=True, help="Open in browser")
+def serve(port: int, output: str, open: bool):
+    """Research: serve the training dashboard and viewer.
+
+    \b
+    Examples:
+        openadapt serve --port 8080
+        openadapt serve --output training_output --open
+    """
+    try:
+        click.echo(f"Starting server on port {port}...")
+        click.echo(f"Serving from: {output}")
+
+        import argparse
+        from pathlib import Path
+
+        from openadapt_ml.cloud import local as oa_local
+
+        # cmd_serve resolves the 'current' run against the module-level
+        # TRAINING_OUTPUT constant; point it at the requested directory
+        # so --output is honored.
+        oa_local.TRAINING_OUTPUT = Path(output)
+
+        sys.exit(
+            oa_local.cmd_serve(
+                argparse.Namespace(
+                    port=port,
+                    benchmark=None,
+                    no_regenerate=False,
+                    start_page=None,
+                    quiet=False,
+                    open=open,
+                )
+            )
+        )
+
+    except ImportError as e:
+        click.echo(f"Error: failed to import openadapt-ml ({e}).", err=True)
+        click.echo('Install with: pip install "openadapt-ml[training]"', err=True)
+        sys.exit(1)
+
+
+# =============================================================================
+# Utility Commands
+# =============================================================================
+
+
+@main.command()
+def version():
+    """Show version information for all packages."""
+    # Read distribution metadata instead of importing the packages:
+    # importing executes package code (openadapt-capture takes a
+    # screenshot at import time, which crashes in headless environments
+    # like CI), and metadata is what we actually want here.
+    from importlib.metadata import PackageNotFoundError
+    from importlib.metadata import version as dist_version
+
+    def installed(name: str) -> Optional[str]:
+        try:
+            return dist_version(name)
+        except PackageNotFoundError:
+            return None
+
+    click.echo("OpenAdapt Ecosystem Versions:")
+    click.echo("=" * 40)
+
+    # The base install brings in these four.
+    for name in ("openadapt", "openadapt-flow", "openadapt-agent", "openadapt-types"):
+        click.echo(f"  {name}: {installed(name) or 'not installed'}")
+    capture = installed("openadapt-capture") or "not installed (optional extra)"
+    click.echo(f"  openadapt-capture: {capture}")
+    click.echo(
+        "  OpenAdapt Desktop: a separate app, not a Python package, so its "
+        "version isn't listed here"
+    )
+
+    # Research packages print only when installed, so a base install doesn't
+    # look broken.
+    research = [
+        (name, number)
+        for name in (
+            "openadapt-ml",
+            "openadapt-evals",
+            "openadapt-viewer",
+            "openadapt-grounding",
+            "openadapt-retrieval",
+        )
+        if (number := installed(name))
+    ]
+    if research:
+        click.echo("\nResearch (optional):")
+        for name, number in research:
+            click.echo(f"  {name}: {number}")
+
+
+@main.command()
+@click.option(
+    "--backend",
+    type=click.Choice(["web", "windows", "macos", "linux", "rdp", "citrix"]),
+    default=None,
+    help="Explain setup for one execution surface.",
+)
+def doctor(backend: str | None):
+    """Check system requirements and dependencies."""
+    click.echo("OpenAdapt System Check")
+    click.echo("=" * 40)
+
+    # Check Python version
+    import platform
+
+    click.echo(f"\nPython: {platform.python_version()}")
+    click.echo(f"Platform: {platform.system()} {platform.release()}")
+    if not _python_supported():
+        # Every later check would report the engine as missing and suggest a
+        # reinstall that can't help on this interpreter. Say what will.
+        click.echo(
+            "  [UNSUPPORTED] The OpenAdapt engine supports Python 3.10\u20133.12."
+        )
+        click.echo(_python_remedy())
+        raise click.ClickException(
+            "System check failed. Reinstall OpenAdapt with Python 3.10\u20133.12 "
+            "as shown above, and then run this command again."
+        )
+
+    from importlib.util import find_spec
+
+    failures = []
+    click.echo("\nSelected execution surface:")
+    if backend == "rdp":
+        if find_spec("aardwolf") is not None:
+            click.echo(
+                "  [OK] rdp: browser support is not required and the RDP "
+                "transport dependency is installed. Flow checks the target "
+                "and credentials when it opens the connection."
+            )
+        else:
+            failures.append("rdp")
+            click.echo(
+                "  [MISSING] rdp: the RDP transport dependency is not installed. "
+                "Run: " + _RDP_INSTALL_COMMAND
+            )
+    elif backend and backend != "web":
+        status, message = _native_backend_status(backend)
+        if status != "OK":
+            failures.append(backend)
+        click.echo(f"  [{status}] {message}")
+        click.echo(
+            f"  [--] {backend}: browser support is not required; "
+            "no Playwright or Chromium setup will run."
+        )
+    else:
+        playwright = find_spec("playwright") is not None
+        if not playwright:
+            failures.append("playwright")
+            click.echo(
+                "  [MISSING] Browser: the base install does not contain "
+                "Playwright. Run `python -m pip install --upgrade openadapt`."
+            )
+        else:
+            _correct_released_flow_x11_sonames()
+            try:
+                from openadapt_flow._browser_setup import (
+                    _chromium_present,
+                    _missing_chromium_system_libs,
+                )
+            except (ImportError, AttributeError):
+                failures.append("browser-diagnostics")
+                click.echo(
+                    "  [MISSING] Browser: the installed Flow version cannot check "
+                    "Chromium dependencies. Run `python -m pip install --upgrade "
+                    "openadapt`."
+                )
+            else:
+                try:
+                    missing_system_libs = _missing_chromium_system_libs()
+                except Exception:
+                    failures.append("browser-system-library-check")
+                    click.echo(
+                        "  [ERROR] Browser: OpenAdapt could not check Chromium's "
+                        "system libraries. Reinstall OpenAdapt, then run this "
+                        "command again."
+                    )
+                else:
+                    if missing_system_libs:
+                        failures.append("browser-system-libraries")
+                        click.echo(
+                            "  [MISSING] Browser: Chromium needs these system "
+                            f"libraries: {', '.join(missing_system_libs)}"
+                        )
+                        click.echo(
+                            "  Install them once: " + _CHROMIUM_SYSTEM_LIBS_COMMAND
+                        )
+                    else:
+                        try:
+                            chromium = _chromium_present()
+                        except Exception:
+                            failures.append("chromium-check")
+                            click.echo(
+                                "  [ERROR] Browser: OpenAdapt could not inspect "
+                                "the installed Chromium build. Reinstall "
+                                "OpenAdapt, then run this command again."
+                            )
+                        else:
+                            if chromium:
+                                click.echo(
+                                    "  [OK] Browser: Playwright, Chromium, and its "
+                                    "system libraries are ready."
+                                )
+                            else:
+                                click.echo(
+                                    "  [READY] Browser: Playwright and Chromium's "
+                                    "system libraries are ready. OpenAdapt will try "
+                                    "to download the matching Chromium build on the "
+                                    "first web action."
+                                )
+
+    # Core packages: installed by the base `pip install openadapt`. Only
+    # these are treated as required; a missing one is a real problem.
+    click.echo("\nCore packages (installed with `pip install openadapt`):")
+    core = [
+        "openadapt_flow",
+        "openadapt_agent",
+        "playwright",
+    ]
+    for pkg in core:
+        # find_spec checks installability without executing package code
+        # (importing openadapt-capture screenshots at import time, which
+        # crashes headless environments)
+        if find_spec(pkg) is not None:
+            click.echo(f"  [OK] {pkg}")
+        else:
+            failures.append(f"core:{pkg}")
+            click.echo(
+                f"  [MISSING] {pkg} (core dependency; reinstall with "
+                f"`pip install openadapt`)"
+            )
+
+    # Optional packages: opt-in extras the base install intentionally
+    # excludes. A missing extra is expected, not a failure — report how to
+    # install it rather than flagging it. Maps import name -> extra name.
+    click.echo('\nOptional packages (install with `pip install "openadapt[...]"`):')
+    optional = [
+        ("openadapt_capture", "capture"),
+        ("openadapt_ml", "ml"),
+        ("openadapt_evals", "evals"),
+        ("openadapt_viewer", "viewer"),
+        ("openadapt_grounding", "grounding"),
+        ("openadapt_retrieval", "retrieval"),
+        ("openadapt_privacy", "privacy"),
+    ]
+    for pkg, extra in optional:
+        if find_spec(pkg) is not None:
+            click.echo(f"  [OK] {pkg}")
+        else:
+            click.echo(
+                f"  [--] {pkg} (optional; install with "
+                f'`pip install "openadapt[{extra}]"`)'
+            )
+
+    # A GPU and model API keys matter only to the research extras (`openadapt
+    # train`, `openadapt eval`). Healthy runs of compiled workflows make no
+    # model calls, so a base install doesn't list them as missing.
+    research = ("openadapt_ml", "openadapt_evals")
+    if all(find_spec(name) is None for name in research):
+        click.echo(
+            "\nModel access: not required. Healthy runs of compiled workflows "
+            "make no model calls."
+        )
+    else:
+        click.echo("\nResearch extras (not used by compiled workflows):")
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                click.echo(f"  [OK] CUDA available: {torch.cuda.get_device_name(0)}")
+            elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+                click.echo("  [OK] MPS available (Apple Silicon)")
+            else:
+                click.echo("  [--] No GPU detected (CPU mode)")
+        except ImportError:
+            click.echo(
+                "  [--] PyTorch not installed (needed only for `openadapt train` "
+                "and `openadapt eval run --checkpoint`)"
+            )
+
+        import os
+
+        for key, agent in (
+            ("ANTHROPIC_API_KEY", "api-claude"),
+            ("OPENAI_API_KEY", "api-openai"),
+        ):
+            if os.environ.get(key):
+                click.echo(f"  [OK] {key} is set")
+            else:
+                click.echo(
+                    f"  [--] {key} not set (needed only for "
+                    f"`openadapt eval run --agent {agent}`)"
+                )
+
+    if failures:
+        raise click.ClickException(
+            "System check failed. Install each required dependency shown as "
+            "[MISSING], or use a host that supports each [UNSUPPORTED] surface, "
+            "and then run this command again."
+        )
+
+
+if __name__ == "__main__":
+    main()

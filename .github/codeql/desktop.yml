@@ -1,0 +1,6 @@
+# CodeQL scope for the JavaScript/TypeScript and Rust analyses, which exist for
+# OpenAdapt Desktop (its React UI and Tauri shell). The frozen pre-1.0 monolith
+# under legacy/ is not analyzed for these languages.
+name: openadapt-desktop
+paths:
+  - packages/desktop

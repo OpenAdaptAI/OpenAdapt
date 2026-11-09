@@ -1,0 +1,298 @@
+# Execution surfaces
+
+OpenAdapt drives six execution surfaces through one governed runtime:
+`web`, `windows`, `macos`, `linux`, `rdp`, and `citrix`. The browser is one
+surface among six, not a privileged default.
+
+[BACKEND_PARITY.md](BACKEND_PARITY.md) lists every command and Python entry
+point against the six surfaces: tested, works, or refused with its reason.
+
+## Surface selection is explicit in production
+
+- Under `--profile standard` or `--profile regulated`, `record` and `run`
+  REFUSE to proceed without an explicit target: pass `--backend` (one of
+  `web`, `windows`, `macos`, `linux`, `rdp`, `citrix`) or set `backend.kind`
+  in the deployment `--config`. There is no implicit browser default in
+  production.
+- Under `--profile demo` (or with no profile, the permissive pre-profile
+  posture), an omitted `--backend` records capture on this OS (`macos`,
+  `windows`, or `linux`) and prints a visible notice. Pass `--url` without
+  `--backend` to record the browser. An explicit `--backend` still wins.
+  With `--profile demo`, the CLI also remembers your last explicitly
+  selected target in a per-user state file
+  (`~/.openadapt/flow_cli.json`, override with `OPENADAPT_FLOW_CLI_STATE`)
+  and offers it as the default next time when that target is this OS, again
+  with a visible notice. This convenience is CLI state only; it is never
+  written into a workflow bundle.
+
+## Workflows are bound to their surface
+
+The recorder stamps the surface into the recording (`meta.json` `surface`),
+and `compile` seals it into the bundle (`workflow.json` `surface` plus the
+implied `execution_mode`). A workflow recorded and qualified on one surface
+refuses to `replay`/`run` on another:
+
+```text
+run REFUSED: this workflow is bound to surface 'windows', but the resolved
+backend targets 'web'. ...
+```
+
+Pass `--allow-surface-override` to proceed anyway; the override is recorded in
+the run report (`surface_override: true`, alongside `recorded_surface` and
+`execution_target_kind`) as compatibility evidence, so a cross-surface run is
+never silent. A surface-bound bundle also supplies its own default target: an
+unqualified `replay bundle` selects the bound surface rather than the browser.
+Bundles compiled before surface binding carry no `surface` and behave exactly
+as before.
+
+A composition does not merge surfaces. `openadapt-flow compose` copies each
+child bundle into a parent artifact; `run` executes those children one at a
+time against the surface sealed into that child. There is no backend switch
+inside a recording, and no parent-level `--backend` that retargets every
+child.
+
+## Execution boundary and evidence, per surface
+
+Every substrate runs on the same small `Backend` protocol and the same governed
+runtime. Each surface keeps its own deployment and evidence boundary.
+
+| Surface | Execution boundary | Required workflow evidence |
+| --- | --- | --- |
+| Browser (web) | Local, customer-controlled, or managed browser runner | Exact browser, application, environment, identity, effect, and policy contracts |
+| Native desktop (Windows, macOS, Linux) | Local or customer-controlled | Exact host and application identity, native accessibility evidence, and an independent effect check |
+| Remote display (RDP) | Local or customer-controlled | Exact client window or network session, remote-display identity, and an independent effect check |
+| Citrix / VDI | Local or customer-controlled | Exact Workspace, server, application, display, identity, and effect contracts, with counted ICA/HDX trials |
+
+Per-substrate engineering evidence is reported per the
+[capability and qualification matrix](PRODUCT_STATUS.md):
+
+| Substrate | Selector | Evidence basis | Evidence |
+|---|---|---|---|
+| Web / browser | `--backend web` | Required CI and third-party apps | The lifecycle on in-tree apps on every CI build; local runs on OpenEMR, Odoo, Frappe Lending and openIMIS test copies |
+| Native macOS (AX) | `--backend macos` | Counted effects and a third-party app | 3/3 fixed TextEdit trials with exact file-byte effects, driving the backend directly; refused a two-window ambiguity without changing either file. On calibre (Qt, SQLite): record, compile and a governed run `VERIFIED` against its database; a same-title book by another author and two identical books stopped with nothing written |
+| Native Windows (UIA) | `--backend windows` | Counted task acceptance | 3/3 fixed trials of an in-tree WinForms app in a Windows 11 VM, with independently confirmed SQLite effects; 3/3 refusal for both stale and ambiguous targets |
+| Native Linux (AT-SPI) | `--backend linux` | CI on real AT-SPI and counted task acceptance | The `flow-linux-atspi` job drives a real GTK3 workflow through an isolated X11 / session-D-Bus environment (three verified effects, three ambiguous-target and three stale-target refusals), and records, compiles, runs governed and repairs a write workflow on a GTK3 app with SQLite |
+| RDP (remote display) | `--backend rdp` | Counted task acceptance | Aardwolf RDP into a Windows 11 VM passed 3/3 fixed remote-input trials with independent guest-tools file verification; a separate real-FreeRDP batch covers record → compile → governed replay and refusal; through the stock Remote Desktop client on a real AVC444 session, 105 scripted runs saved 55 records confirmed in the database, with 0 wrong-record saves and 40 false stops |
+| Citrix / VDI (pixel ladder) | `--backend citrix` | Required CI and counted no-DOM stand-in | Dedicated exact-Workspace-window driver, readiness gate, durable resume, and 3 healthy + 3 drift-halt no-DOM trials; the retained artifact records `ica_hdx_accepted=false` until a counted ICA/HDX run is attached |
+
+[BACKEND_PARITY.md](BACKEND_PARITY.md) breaks this down by capability.
+Every row is bounded to its stated evidence. Accepted application workflows are
+qualified against their own controls, session/display policy, identity evidence,
+and effect oracle; code-qualified Citrix deployments additionally attach the
+counted ICA/HDX record for their exact Workspace/server/application matrix.
+Details:
+[`backends/RDP.md`](backends/RDP.md),
+[`desktop/LINUX_NATIVE.md`](desktop/LINUX_NATIVE.md),
+[`desktop/CITRIX_PIXEL.md`](desktop/CITRIX_PIXEL.md).
+
+## What `record` observes
+
+`record` opens the operator's real interface and watches what you do: real
+clicks, typing, key presses, and scrolls, writing the same recording format
+`compile` consumes. Perform the workflow, then press Ctrl-C (or close the
+window) to finish. The `--backend` selector picks the substrate, and the same
+selector is available on `replay` and `run`.
+
+`--backend web` is browser-first (the app is a `--url`). For `windows`,
+`macos`, `linux`, `rdp`, and `citrix`, the Capture component records local
+screen, mouse, keyboard, timing, and available action-time structure.
+`--macos-app` / `--macos-window-title` scope the macOS Capture window.
+`--window` / `--window-title` scope a Windows-hosted local capture, and
+`--rdp-window` / `--rdp-window-title` bind a local RDP or Citrix client window
+to both capture and replay. `--task` records the operator's intent alongside
+the demonstration. A compiled bundle is bound to the exact surface it was
+recorded on.
+
+`record` captures a person doing the task. An AI agent can show the task
+instead, in a browser, a macOS, Linux, or native Windows app, or over RDP or
+Citrix, through openadapt-agent's recording tools; see
+[Recording on Windows, RDP and Citrix](RECORDING_ON_WINDOWS_RDP_CITRIX.md).
+
+Install the Capture component together with the runtime for the surface that
+will replay the workflow. Recorded parameter values become the defaults, and
+`--param` overrides them at replay; see [`PARAMETERS.md`](PARAMETERS.md).
+
+## First workflow, per surface
+
+Each surface has an equivalent record -> compile -> replay path:
+
+| Workflow surface | Exact install |
+|---|---|
+| Browser | `pip install 'openadapt-flow[browser]'` |
+| Native Windows | `pip install 'openadapt-flow[capture,windows]'` |
+| Native macOS | `pip install 'openadapt-flow[capture,macos]'` |
+| Native Linux | `pip install 'openadapt-flow[capture,linux]'` plus the AT-SPI system packages in [`desktop/LINUX_NATIVE.md`](desktop/LINUX_NATIVE.md) |
+| Network RDP | Recorder: `pip install 'openadapt-flow[capture]'` inside the demonstrated session; runner: `pip install 'openadapt-flow[rdp]'` |
+| Local RDP/Citrix client window | macOS host: `pip install 'openadapt-flow[capture,macos]'`; Windows host: `pip install 'openadapt-flow[capture,windows]'` |
+
+```bash
+# Browser (Playwright / Chromium)
+openadapt-flow record --backend web --url https://your.app --out rec
+openadapt-flow compile rec --out bundle --name my-task
+openadapt-flow replay bundle --url https://your.app
+
+# Attach the same recorder to one existing signed-in local Chromium tab.
+openadapt-flow record --backend web --url https://your.app \
+  --browser-cdp-endpoint http://127.0.0.1:9222 --out rec
+
+# Windows: Capture records the local window; the in-guest WAA agent replays it.
+openadapt-flow record --backend windows --window "Target App" --out rec
+openadapt-flow compile rec --out bundle --name my-task
+openadapt-flow replay bundle --agent-url http://localhost:5001
+
+# macOS: the app and title scope the local Capture window.
+openadapt-flow record --backend macos --macos-app TextEdit \
+  --macos-window-title notes.txt --out rec
+openadapt-flow compile rec --out bundle --name my-task
+openadapt-flow replay bundle --macos-app TextEdit \
+  --macos-window-title notes.txt
+
+# Linux: Capture records the local desktop; AT-SPI selects the replay target.
+openadapt-flow record --backend linux --out rec
+openadapt-flow compile rec --out bundle --name my-task
+openadapt-flow replay bundle --linux-app gedit \
+  --linux-window-title "Untitled Document 1"
+
+# Network RDP: run record inside the demonstrated remote session.
+openadapt-flow record --backend rdp --out rec
+openadapt-flow compile rec --out bundle --name my-task
+openadapt-flow replay bundle --rdp-host 10.0.0.5
+
+# Citrix / VDI (one exact local Citrix Workspace window)
+openadapt-flow record --backend citrix --window "Citrix Viewer" \
+  --rdp-window "Citrix Viewer" --rdp-window-title "Ward A" \
+  --rdp-readiness-text "Appointments" --out rec
+openadapt-flow compile rec --out bundle --name my-task
+openadapt-flow replay bundle --rdp-window "Citrix Viewer" \
+  --rdp-window-title "Ward A" --rdp-readiness-text "Appointments"
+```
+
+The bound surface is the replay default, so `--backend` may be omitted on
+`replay`/`run` for a bound bundle. During record, `--macos-app` /
+`--macos-window-title` scope the macOS Capture window, and the local
+RDP/Citrix flags `--rdp-window` / `--rdp-window-title` scope Capture and enter
+the bundle's existing replay-binding metadata. `--agent-url`, `--linux-app`,
+`--linux-window-title`, and `--rdp-host` are replay targets. The local Capture
+session cannot control them, so `record` refuses them instead of accepting an
+unused flag. Pass them to `replay`/`run`. Generate a draft with
+`python -m openadapt_flow.cli_config init bundle --out deploy.yaml --backend rdp`
+(or `citrix`, `macos`, `linux`, `windows`, `web`); fill `unresolved`, then
+`run ... --config deploy.yaml --profile standard|regulated` wires the same
+selection for a real deployment.
+
+The browser attach mode keeps the Playwright-native recording contract. It
+binds one same-origin tab and reuses the same event schema, DOM evidence,
+before/after frames, secret redaction, compiler, and governed replay path as a
+browser that Flow launches. Attach mode preserves a browser profile that has
+already completed sign-in, SSO, or 2FA. The endpoint is local-loopback only, so
+it refuses remote CDP endpoints. Flow refuses ambiguous same-origin tabs and
+does not navigate or close the attached browser. You can resize the tab or move
+its window between monitors: Flow waits for a stable CSS-pixel frame and binds
+the next event to the new viewport. It refuses an action only if that action
+overlaps the coordinate-space transition. See
+[`BROWSER_RECORDING.md`](BROWSER_RECORDING.md) for setup, exact tab selection,
+secret handling, and the boundary with the Capture Chrome extension prototype.
+
+## The two remote execution modes
+
+Remote systems (a Windows guest, a virtual desktop, a published app) can be
+driven in exactly two modes, and the difference is a policy and capability
+decision, not an implementation detail:
+
+- **In-session** (`execution_mode: in_session`): the driver runs INSIDE the
+  session it automates and uses the platform's accessibility / structured
+  layer (Windows UIA via the in-guest WAA agent, macOS AX, Linux AT-SPI, the
+  browser DOM). Choose this when policy permits installing the agent in the
+  remote session; it enables structural resolution and structured-text
+  identity.
+- **External** (`execution_mode: external`): the driver runs OUTSIDE the
+  remote session and drives the LOCAL client window (RDP client, Citrix
+  Workspace) via pixels, keyboard, and mouse. Zero install inside the remote
+  session; resolution and identity use the pixel/OCR ladder, with the
+  documented pixel-substrate limits (`docs/LIMITS.md`).
+
+The mode is fixed by explicit capability negotiation at qualification time,
+recorded in the bundle (`execution_mode`), and never silently switched at run
+time: `rdp` and `citrix` recordings are `external`; `web`, `windows`,
+`macos`, and `linux` recordings are `in_session`. Moving a workflow between
+modes means re-recording or re-qualifying it on the other surface (or an
+explicit, report-recorded `--allow-surface-override`).
+
+## Lookup capabilities: structure or pixels
+
+To find a step's target, Flow first looks it up in the page or
+accessibility structure (the browser DOM, macOS AX, Windows UIA, Linux
+AT-SPI) and falls back to pixels. Structure is much more reliable where it
+exists: on a desktop drift benchmark it found 21 of 21 targets where pixels
+alone found 6 of 21. It does not exist over an RDP or Citrix window viewed
+from outside the session; Flow sees only pixels there. A workflow qualified
+with structure lookups could pass qualification and then fail in
+production on that surface, so Flow checks for this.
+
+**Declare the surface.** Set `backend.deployment_surface` in
+`deployment.yaml`:
+
+| Value | Means | Structure lookups |
+|---|---|---|
+| `local` | Flow runs on the same machine as the application | Yes, where the backend reads structure |
+| `remote_in_session` | Flow is installed inside the remote or virtual desktop session | Yes |
+| `remote_display` | Flow is outside the session, looking at its client window | No, pixels only |
+| `unknown` | Not known | No: read as `remote_display` |
+
+If you leave it out, `rdp` and `citrix` are `remote_display` and every
+other backend is `local`. An `rdp` or `citrix` backend declared `local` or
+`remote_in_session` is refused, because those backends always view the
+session from outside. To get structure inside a Citrix or RDP session,
+install the Flow runtime in that session and use its own backend (for
+example `windows`).
+
+**What qualification records.** `openadapt-flow qualify` records which
+lookups the signed cases actually used (`structure`, `pixels`, or both) and
+the surface they ran for, in the bundle's qualification project
+(`workflow.json`, `qualification.lookup`) and in
+`qualification/lookup.json`. A certification binds that record, so it can't
+be edited afterwards without losing the certification. In `verify.yaml`,
+`app.surface` takes the same values as `deployment_surface` and defaults to
+`local`.
+
+**The pixels-only pass.** Every `qualify` also runs the cases with
+structure lookups turned off and reports how many trials still behaved as
+required:
+
+- When `app.surface` is `remote_display` (or `unknown`), the campaign runs
+  only with structure turned off. That pixels-only result is the
+  qualification: any trial that doesn't behave as required fails it, and the
+  bundle is recorded as qualified on pixels.
+- Otherwise the signed cases run with structure, and a second, unsigned pass
+  runs them again on pixels. Its pass rate is for information. A low rate
+  means the workflow depends on structure and will need its own
+  qualification before it can run on a remote display.
+
+The pixels-only pass turns off the structure step of the lookup only. On a
+browser test copy, the identity checks and the guarded clicks still read
+the page as they normally do, so the pass doesn't reproduce every difference
+a real remote display makes.
+
+On a browser today, the pass mostly fails. Under the Standard profile Flow
+delivers a browser click only through an action bound to the page element,
+and a click that pixels found has no such binding. On the MockMed demo the
+pixels-only pass ran 18 trials and passed 0, each stopping at the first
+click with "production action lacks a closed runtime actuation path". So a
+web workflow can't yet be qualified for a remote-display surface through
+the browser: with `app.surface: remote_display` the campaign refuses at the
+first trial. That needs a qualification campaign driven through the RDP or
+Citrix backend, which `qualify` doesn't run yet (see the limits in
+[Qualify a workflow](QUALIFY_A_WORKFLOW.md#limits)).
+
+**At run time.** Before the first action, a run compares the surface it is
+on with the qualified record. If the workflow was qualified with structure
+and this surface offers pixels only, the run halts with
+`HALTED_BEFORE_EFFECT`, writes nothing, and the report tells the operator to
+requalify the workflow for this surface (`app.surface: remote_display`) or
+run Flow inside the remote session. A workflow qualified on pixels runs on
+any surface. Bundles qualified before this record existed carry none and
+behave as before.
+
+The remote-display evidence for this check is synthetic so far: the tests
+simulate a pixel-only surface, and there is no counted run against a live
+Citrix deployment yet.

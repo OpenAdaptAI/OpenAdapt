@@ -1,0 +1,84 @@
+# openadapt-flow — ON-PREM (air-gapped) deployment via Docker Compose.
+#
+# An ALTERNATIVE to the systemd install (install.sh --systemd) for sites that
+# prefer containers. It stands up the local runner and (optionally) the on-prem
+# VLM appliance on an INTERNAL Docker network with NO route to the internet.
+#
+# Air-gap is expressed structurally:
+#   * the `clinic-lan` network is `internal: true` -> Docker installs no default
+#     gateway, so containers on it CANNOT reach the internet (only each other).
+#   * no ports are published to the host by the runner (nothing inbound either).
+#   * the image is built from a LOCAL wheelhouse (see Dockerfile) — no PyPI.
+#
+# What is REAL vs STUB:
+#   [REAL]  the compose topology, internal network, volumes, fail-closed env.
+#   [REAL]  `runner` runs the shipped `openadapt-flow run` via bin/run-queue.sh.
+#   [STUB]  the images must be BUILT OFFLINE first (Dockerfile needs a staged
+#           ./wheels wheelhouse); this file does not fetch anything.
+#   [STUB]  `vlm` profile needs a real GPU box + a locally-staged model; the
+#           appliance is opt-in and LAN-only even here.
+#
+# Validate without building:   docker compose -f docker-compose.yml config
+# Bring up the runner:         docker compose up -d runner
+# With the VLM appliance:      docker compose --profile vlm up -d
+
+services:
+  runner:
+    build:
+      # Repo root is the build context so the engine source is available to the
+      # offline wheelhouse install. See ./Dockerfile.
+      context: ../..
+      dockerfile: deploy/on-prem/Dockerfile
+    image: openadapt-flow-onprem:local
+    restart: unless-stopped
+    # Fail-closed PHI scrubbing + local storage/audit wiring. NO cloud keys.
+    environment:
+      OPENADAPT_FLOW_SCRUB: "on"
+      OPENADAPT_FLOW_SCRUB_IMAGES: "1"
+      OPENADAPT_ONPREM_ROOT: /srv/openadapt
+      OPENADAPT_ONPREM_CONFIG: /srv/openadapt/deployment.yaml
+      OPENADAPT_ONPREM_AUDIT_LOG: /srv/openadapt/audit/audit.log
+      POLL_SECONDS: "10"
+    volumes:
+      # Bind the clinic's ENCRYPTED host volume in. Everything PHI-at-rest lives
+      # here (bundles, runs, jobs, audit) — on a full-disk-encrypted disk.
+      - type: bind
+        source: ${OPENADAPT_ONPREM_STORAGE:-./storage}
+        target: /srv/openadapt
+    command: ["bin/run-queue.sh", "watch"]
+    networks:
+      - clinic-lan
+    # No `ports:` — nothing is published to the host or beyond.
+
+  # OPTIONAL on-prem VLM appliance (identity-veto / grounding / state-verify).
+  # LAN-only, opt-in. Requires a GPU box + a locally-staged model; see
+  # docs/deployment/ON_PREM_VLM.md. Enabled only with `--profile vlm`.
+  vlm-appliance:
+    profiles: ["vlm"]
+    build:
+      context: ../..
+      dockerfile: deploy/on-prem/Dockerfile
+    image: openadapt-flow-onprem:local
+    restart: unless-stopped
+    environment:
+      VLM_BACKEND: "vllm"
+      VLM_MODEL: "mPLUG/GUI-Owl-1.5-8B-Instruct"
+      # vLLM must be served locally on the LAN/host — never a cloud endpoint.
+      VLM_VLLM_URL: "http://vllm.lan:8000/v1"
+      # Token value comes from the host env / secret, not from this file. It
+      # MUST be set in the host env before enabling the `vlm` profile — an empty
+      # token leaves the appliance unauthenticated. The service rejects an empty
+      # token at startup; the empty default here only keeps `compose config`
+      # valid when the profile is disabled (the default runner-only case).
+      VLM_SERVICE_TOKEN: "${VLM_SERVICE_TOKEN:-}"
+    command: ["openadapt-flow-vlm-service", "--host", "0.0.0.0", "--port", "8077"]
+    # Published only onto the internal clinic-lan network, reachable by `runner`
+    # as https://vlm-appliance:8077 — never exposed to the host/internet.
+    networks:
+      - clinic-lan
+
+networks:
+  clinic-lan:
+    driver: bridge
+    # THE air-gap knob: no gateway to the outside world.
+    internal: true

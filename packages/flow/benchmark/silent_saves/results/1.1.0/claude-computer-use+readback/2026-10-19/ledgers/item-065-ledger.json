@@ -1,0 +1,237 @@
+{
+  "model": "claude-sonnet-5-5",
+  "effort": "medium",
+  "tool": "computer_toolset_20260801",
+  "price_per_mtok_usd": {
+    "input": 2.0,
+    "output": 10.0,
+    "cache_read": 0.2,
+    "cache_write": 2.5
+  },
+  "started_at": 1792429057.6501172,
+  "finished_at": 1792429086.1752949,
+  "model_calls": 7,
+  "actions": 19,
+  "cost_usd": 0.053087,
+  "final_text": "I opened Jane Sample's referral, started a Triage encounter, and saved the note \"Synthetic follow-up note 65: recheck in 16 days\". The encounter list shows the full note. The green confirmation banner cuts it off after \"recheck in\", but the saved entry is complete.",
+  "refused_actions": [],
+  "calls": [
+    {
+      "turn": 1,
+      "started_s": 1792429057.6501231,
+      "ended_s": 1792429059.7982578,
+      "input_tokens": 4,
+      "output_tokens": 92,
+      "cache_read_input_tokens": 0,
+      "cache_creation_input_tokens": 5010,
+      "cost_usd": 0.013453,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              775,
+              186
+            ]
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 1
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgBx3xPMUqh5gdyGguw1R",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 2,
+      "started_s": 1792429061.7730932,
+      "ended_s": 1792429063.121254,
+      "input_tokens": 2,
+      "output_tokens": 109,
+      "cache_read_input_tokens": 5010,
+      "cache_creation_input_tokens": 1498,
+      "cost_usd": 0.005841,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              775,
+              186
+            ]
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 2
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgBx4Fai8bCGUdD9xFnMA",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 3,
+      "started_s": 1792429066.072138,
+      "ended_s": 1792429067.486033,
+      "input_tokens": 2,
+      "output_tokens": 98,
+      "cache_read_input_tokens": 6508,
+      "cache_creation_input_tokens": 1507,
+      "cost_usd": 0.0060531000000000005,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              113,
+              159
+            ]
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 1
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgBx4ZwGqEzDezVub8TBp",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 4,
+      "started_s": 1792429069.484331,
+      "ended_s": 1792429070.988682,
+      "input_tokens": 2,
+      "output_tokens": 92,
+      "cache_read_input_tokens": 8015,
+      "cache_creation_input_tokens": 1496,
+      "cost_usd": 0.006267,
+      "actions": [
+        {
+          "name": "wait",
+          "input": {
+            "duration": 2
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgBx4pdJd9zqk7GUXawJX",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 5,
+      "started_s": 1792429073.653475,
+      "ended_s": 1792429075.671384,
+      "input_tokens": 2,
+      "output_tokens": 156,
+      "cache_read_input_tokens": 9511,
+      "cache_creation_input_tokens": 1477,
+      "cost_usd": 0.0071587,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              85,
+              213
+            ]
+          }
+        },
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              343,
+              350
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "Synthetic follow-up note 65: recheck in 16 days"
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 1
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgBx58R8ymrGik1B6Sk8v",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 6,
+      "started_s": 1792429078.365264,
+      "ended_s": 1792429080.12367,
+      "input_tokens": 2,
+      "output_tokens": 98,
+      "cache_read_input_tokens": 10988,
+      "cache_creation_input_tokens": 1578,
+      "cost_usd": 0.0071266,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              133,
+              457
+            ]
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 3
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgBx5UcaJCy9FGwyy4tLw",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 7,
+      "started_s": 1792429084.0965178,
+      "ended_s": 1792429086.174727,
+      "input_tokens": 2,
+      "output_tokens": 93,
+      "cache_read_input_tokens": 12566,
+      "cache_creation_input_tokens": 1496,
+      "cost_usd": 0.0071872,
+      "actions": [],
+      "request_id": "req_011CgBx5u4ykjN6MCXSjBMTC",
+      "stop_reason": "end_turn"
+    }
+  ]
+}

@@ -1,0 +1,207 @@
+name: docker-rdp-vision-ladder
+
+# Real-RDP vision-ladder qualification.
+#
+# Runs the record -> compile -> replay contract through the vision-only resolver
+# ladder over a genuine FreeRDP client/server round-trip (benchmark/rdp_ladder),
+# on a real RDP pixel surface with NO structural backend. This is the CI-viable
+# Linux analog of the aardwolf-over-Windows transport proof in benchmark/rdp.
+#
+# Pull requests that touch this harness or its exact core dependencies run the
+# qualification before merge. workflow_dispatch remains available for later
+# default-branch reruns. There is deliberately no schedule until a rebased
+# candidate produces a fresh accepted 3x healthy + 3x refusal batch, avoiding
+# recurring runner spend and red-main noise from an intentionally pending
+# qualification. The accepted campaign requires 3 healthy trials and 6 refusal
+# trials: 3 screen-drift cases and 3 wrong-record cases. The fixture image is
+# amd64+arm64; GitHub's runner is amd64.
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/docker-rdp-vision-ladder.yml"
+      - "benchmark/rdp_ladder/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "openadapt_flow/backends/rdp_backend.py"
+      - "openadapt_flow/compiler/compile.py"
+      - "openadapt_flow/deployment.py"
+      - "openadapt_flow/ir.py"
+      - "openadapt_flow/identity_signals.py"
+      - "openadapt_flow/policy.py"
+      - "openadapt_flow/recorder.py"
+      - "openadapt_flow/run_gate.py"
+      - "openadapt_flow/runtime/identity.py"
+      - "openadapt_flow/runtime/identity_template.py"
+      - "openadapt_flow/runtime/identity_vlm.py"
+      - "openadapt_flow/runtime/replayer.py"
+      - "openadapt_flow/runtime/resolver.py"
+      - "openadapt_flow/runtime/effects/**"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-rdp-vision-ladder-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docker-rdp-vision-ladder:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        timeout-minutes: 3
+        with:
+          fetch-depth: 0
+          # pull_request normally checks out a synthetic merge ref. Qualifying
+          # the exact PR head keeps the recorded candidate SHA reproducible;
+          # workflow_dispatch falls back to its explicitly selected ref.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        timeout-minutes: 3
+        with:
+          python-version: "3.12"
+
+      - name: Install flow with the vision + rdp stack
+        timeout-minutes: 7
+        run: |
+          python -m pip install --upgrade pip
+          # Core owns cv2/RapidOCR/Pillow/NumPy hashing; the rdp extra installs the
+          # product transport dependency even though this Linux fixture injects
+          # the swappable DockerX11RdpTransport into the same backend.
+          pip install -e ".[rdp]"
+          pip check
+
+      - name: Build the real-RDP fixture image
+        timeout-minutes: 5
+        run: docker build -t oaflow-rdp-fixture:latest benchmark/rdp_ladder/fixture
+
+      - name: Start the RDP round-trip
+        timeout-minutes: 2
+        run: |
+          mkdir -p "${RUNNER_TEMP}/rdp-ladder-oracle"
+          docker run -d --name oaflow-rdp-ladder --shm-size=1g \
+            -e RDP_FIXTURE_ORACLE_ROOT=/oracle \
+            -v "${RUNNER_TEMP}/rdp-ladder-oracle:/oracle" \
+            oaflow-rdp-fixture:latest
+          sleep 22
+
+      - name: Run the vision-ladder qualification
+        timeout-minutes: 15
+        run: |
+          python benchmark/rdp_ladder/run_rdp_ladder_qualification.py \
+            --container oaflow-rdp-ladder \
+            --oracle-root "${RUNNER_TEMP}/rdp-ladder-oracle" \
+            --output runs/rdp-ladder/results.json \
+            --presentation-dir runs/rdp-ladder/presentation \
+            --candidate-commit "$(git rev-parse HEAD)" \
+            --base-commit "$(git merge-base HEAD origin/main)"
+
+      # Evidence belongs to the required qualification gate. Upload it before
+      # teardown even when qualification refuses, so a failed gate retains its
+      # exact diagnostic record. The presentation renderer is a separate,
+      # optional downstream job and cannot turn accepted evidence into a red
+      # required check.
+      - name: Upload fail-closed qualification evidence
+        if: always()
+        timeout-minutes: 2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rdp-ladder-qualification
+          path: runs/rdp-ladder/
+          if-no-files-found: error
+
+      - name: Tear down
+        if: always()
+        timeout-minutes: 2
+        run: docker rm -f oaflow-rdp-ladder || true
+
+  # Presentation is a derivative of accepted evidence, not qualification
+  # evidence itself. It runs only for an explicit dispatch of the exact main
+  # ref. Pull requests retain the required qualification context above without
+  # spending runner time on FFmpeg or depending on renderer completion.
+  rdp-presentation:
+    needs: docker-rdp-vision-ladder
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' &&
+        github.ref == 'refs/heads/main'
+      }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Download accepted qualification evidence
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: rdp-ladder-qualification
+          path: runs/rdp-ladder
+
+      - name: Install bounded presentation dependencies
+        timeout-minutes: 5
+        run: |
+          set -uo pipefail
+          # The hosted runner resolves its Ubuntu mirror through
+          # /etc/apt/apt-mirrors.txt, which points at azure.archive.ubuntu.com.
+          # That mirror fails intermittently, and every failure costs minutes of
+          # apt retries before the canonical archive is tried. Prefer the
+          # canonical archive up front. Keep this best-effort: if the file is
+          # absent or already canonical, the run continues unchanged.
+          #
+          # The apt work now runs BEFORE the editable install so the whole
+          # 5-minute bound backs the mirror, not the ~2 minutes of pip that used
+          # to precede it. Three attempts add at most 30 seconds of sleep, which
+          # leaves over four minutes for the attempts themselves; a mirror that
+          # hangs rather than failing is still caught by the unchanged
+          # 5-minute step timeout. The 22-minute job budget is unchanged.
+          sudo sed -i \
+            's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
+            /etc/apt/apt-mirrors.txt 2>/dev/null || true
+          update_ok=""
+          for attempt in 1 2 3; do
+            if sudo apt-get update -qq; then
+              update_ok=1
+              break
+            fi
+            echo "::warning::apt-get update failed (attempt ${attempt}/3); retrying"
+            sleep $((attempt * 10))
+          done
+          if [ -z "$update_ok" ]; then
+            echo "::error::apt-get update failed three times; the Ubuntu mirror is unreachable"
+            exit 1
+          fi
+          set -e
+          sudo apt-get install -y -qq ffmpeg
+          python -m pip install -e .
+
+      - name: Render the paced RDP presentation
+        timeout-minutes: 15
+        run: |
+          python benchmark/rdp_ladder/render_presentation.py \
+            --presentation-dir runs/rdp-ladder/presentation \
+            --output runs/rdp-ladder/openadapt-rdp-demo.mp4
+
+      - name: Upload presentation derivative
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rdp-ladder-presentation
+          path: |
+            runs/rdp-ladder/openadapt-rdp-demo.mp4
+            runs/rdp-ladder/openadapt-rdp-demo.timeline.json
+            runs/rdp-ladder/openadapt-rdp-demo.manifest.json
+          if-no-files-found: error
+
+      - name: Tear down presentation workspace
+        if: always()
+        timeout-minutes: 1
+        run: rm -rf runs/rdp-ladder

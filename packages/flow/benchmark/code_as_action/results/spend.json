@@ -1,0 +1,206 @@
+{
+  "runs": [
+    {
+      "label": "mockmed code t1",
+      "usd": 0.010642,
+      "at": "2026-10-18T19:24:34Z"
+    },
+    {
+      "label": "mockmed code t1",
+      "usd": 0.010804,
+      "at": "2026-10-18T19:25:21Z"
+    },
+    {
+      "label": "mockmed code t1",
+      "usd": 0.012239,
+      "at": "2026-10-18T19:25:56Z"
+    },
+    {
+      "label": "openemr code r1",
+      "usd": 0.047661,
+      "at": "2026-10-18T19:41:04Z"
+    },
+    {
+      "label": "mockmed code t1",
+      "usd": 0.010693,
+      "at": "2026-10-18T19:46:26Z"
+    },
+    {
+      "label": "mockmed every_turn t1",
+      "usd": 0.074932,
+      "at": "2026-10-18T19:46:47Z"
+    },
+    {
+      "label": "mockmed selective t1",
+      "usd": 0.014273,
+      "at": "2026-10-18T19:47:29Z"
+    },
+    {
+      "label": "mockmed every_turn t2",
+      "usd": 0.075382,
+      "at": "2026-10-18T19:47:55Z"
+    },
+    {
+      "label": "mockmed selective t2",
+      "usd": 0.014273,
+      "at": "2026-10-18T19:48:19Z"
+    },
+    {
+      "label": "mockmed code t2",
+      "usd": 0.010693,
+      "at": "2026-10-18T19:48:33Z"
+    },
+    {
+      "label": "mockmed selective t3",
+      "usd": 0.014273,
+      "at": "2026-10-18T19:48:44Z"
+    },
+    {
+      "label": "mockmed code t3",
+      "usd": 0.012381,
+      "at": "2026-10-18T19:49:00Z"
+    },
+    {
+      "label": "mockmed every_turn t3",
+      "usd": 0.075072,
+      "at": "2026-10-18T19:49:18Z"
+    },
+    {
+      "label": "mockmed code t4",
+      "usd": 0.012251,
+      "at": "2026-10-18T19:49:40Z"
+    },
+    {
+      "label": "mockmed every_turn t4",
+      "usd": 0.074902,
+      "at": "2026-10-18T19:50:16Z"
+    },
+    {
+      "label": "mockmed selective t4",
+      "usd": 0.014273,
+      "at": "2026-10-18T19:50:39Z"
+    },
+    {
+      "label": "mockmed every_turn t5",
+      "usd": 0.074932,
+      "at": "2026-10-18T19:51:22Z"
+    },
+    {
+      "label": "mockmed selective t5",
+      "usd": 0.014273,
+      "at": "2026-10-18T19:51:46Z"
+    },
+    {
+      "label": "mockmed code t5",
+      "usd": 0.012381,
+      "at": "2026-10-18T19:52:12Z"
+    },
+    {
+      "label": "openemr every_turn r1",
+      "usd": 0.027621,
+      "at": "2026-10-18T19:52:51Z"
+    },
+    {
+      "label": "openemr every_turn r1",
+      "usd": 0.105354,
+      "at": "2026-10-18T19:57:41Z"
+    },
+    {
+      "label": "openemr code r1",
+      "usd": 0.056315,
+      "at": "2026-10-18T20:00:49Z"
+    },
+    {
+      "label": "openemr every_turn r1",
+      "usd": 0.426621,
+      "at": "2026-10-18T20:08:39Z"
+    },
+    {
+      "label": "openemr code r1",
+      "usd": 0.065987,
+      "at": "2026-10-18T20:11:53Z"
+    },
+    {
+      "label": "openemr code r2",
+      "usd": 0.046911,
+      "at": "2026-10-18T20:13:59Z"
+    },
+    {
+      "label": "openemr code r3",
+      "usd": 0.045941,
+      "at": "2026-10-18T20:15:47Z"
+    },
+    {
+      "label": "openemr code r4",
+      "usd": 0.048208,
+      "at": "2026-10-18T20:18:14Z"
+    },
+    {
+      "label": "openemr code r5",
+      "usd": 0.061664,
+      "at": "2026-10-18T20:21:30Z"
+    },
+    {
+      "label": "openemr code r6",
+      "usd": 0.047633,
+      "at": "2026-10-18T20:24:20Z"
+    },
+    {
+      "label": "openemr code r7",
+      "usd": 0.065492,
+      "at": "2026-10-18T20:26:39Z"
+    },
+    {
+      "label": "openemr code r8",
+      "usd": 0.064428,
+      "at": "2026-10-18T20:28:46Z"
+    },
+    {
+      "label": "openemr every_turn r2",
+      "usd": 0.364369,
+      "at": "2026-10-18T20:30:26Z"
+    },
+    {
+      "label": "openemr every_turn r3",
+      "usd": 0.227369,
+      "at": "2026-10-18T20:31:27Z"
+    },
+    {
+      "label": "openemr every_turn r4",
+      "usd": 0.311481,
+      "at": "2026-10-18T20:32:47Z"
+    },
+    {
+      "label": "openemr every_turn r5",
+      "usd": 0.207888,
+      "at": "2026-10-18T20:33:48Z"
+    },
+    {
+      "label": "openemr every_turn r6",
+      "usd": 0.437405,
+      "at": "2026-10-18T20:35:34Z"
+    },
+    {
+      "label": "openemr every_turn r7",
+      "usd": 0.321476,
+      "at": "2026-10-18T20:36:53Z"
+    },
+    {
+      "label": "openemr every_turn r8",
+      "usd": 0.342196,
+      "at": "2026-10-18T20:38:15Z"
+    },
+    {
+      "label": "openemr code r4",
+      "usd": 0.148079,
+      "at": "2026-10-18T20:44:13Z"
+    },
+    {
+      "label": "openemr code r7",
+      "usd": 0.047129,
+      "at": "2026-10-18T20:45:36Z"
+    }
+  ],
+  "total_usd": 4.055897,
+  "cap_usd": 15.0
+}

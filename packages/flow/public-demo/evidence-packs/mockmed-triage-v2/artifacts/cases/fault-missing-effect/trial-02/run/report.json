@@ -1,0 +1,512 @@
+{
+  "workflow_name": "mockmed-triage",
+  "started_at": "2026-07-25T19:28:37.875592+00:00",
+  "execution_profile": "standard",
+  "execution_outcome": "HALTED",
+  "production_eligible": false,
+  "execution_completed": false,
+  "outcome_envelope": {
+    "version": "openadapt.execution-outcome/v1",
+    "outcome": "HALTED",
+    "profile": "standard",
+    "production_eligible": false,
+    "execution_completed": false,
+    "required_contracts": {
+      "authorization": 1,
+      "identity": 5,
+      "postcondition": 8,
+      "effect": 2
+    },
+    "passed_contracts": {
+      "authorization": 1,
+      "identity": 5,
+      "postcondition": 8,
+      "effect": 0
+    },
+    "evidence_classes": [
+      "authorization",
+      "identity",
+      "postcondition"
+    ],
+    "model_calls": 0,
+    "external_network_calls": "observed",
+    "compensation_actions": 0
+  },
+  "execution_target_kind": "web",
+  "execution_origin": "http://127.0.0.1:63222/",
+  "execution_entry_url": "http://127.0.0.1:63222/?fault=optimistic&idempotency=demo#tasks",
+  "bundle_content_digest": "2c2a1fe22e332a712d54782fb445c12b20d83a79c88700bea7a33530344bb14e",
+  "source_recording_sha256": null,
+  "parameter_schema_sha256": "b9706e023d1b70651493a1b2b68bb1939f7173f74b5e574d4f9fa57acc89fc6d",
+  "governed_authorization_id": "4f82db83652e42869867c86dd7a96a7c",
+  "governed_approval_source": "public-demo-qualified-campaign",
+  "governed_authorization_created_at": "2026-07-25T19:28:37.874829+00:00",
+  "governed_policy_name": "clinical-write",
+  "governed_minimum_effect_tier": 1,
+  "governed_runtime_inputs_digest": "342463e1dfa0e45e5a5dac4c34a3daf2f1499aeeb2fa7eefeb8f0a9a027b3ea1",
+  "governed_authorized_effect_contracts": {},
+  "required_identity_step_ids": [
+    "step_000",
+    "step_001",
+    "step_002",
+    "step_003",
+    "step_005"
+  ],
+  "approved_unverified_effect_step_ids": [],
+  "params": {
+    "note": "Synthetic follow-up in two weeks"
+  },
+  "results": [
+    {
+      "step_id": "step_000",
+      "intent": "click 'Open'",
+      "ok": true,
+      "skipped": false,
+      "exception_handled": false,
+      "resolution": {
+        "rung": "structural",
+        "point": [
+          776,
+          186
+        ],
+        "confidence": 1.0,
+        "elapsed_ms": 6.757665891200304,
+        "structural_handle": {
+          "point": [
+            776,
+            186
+          ],
+          "confidence": 1.0,
+          "region": [
+            731,
+            168,
+            90,
+            36
+          ],
+          "target_fingerprint": "b1b4dc0048f62aea2d7b8dbe9cac94c7d242351d5d96dad4896439da93381a41",
+          "candidate_count": 1,
+          "supported_operations": [
+            "dom_click",
+            "dom_double_click"
+          ]
+        }
+      },
+      "identity": {
+        "status": "verified",
+        "mode": "structured",
+        "coverage": 1.0,
+        "expected": "<structured identity template>",
+        "observed": "Jane SampleKnee pain referralHigh",
+        "param": null,
+        "signal_evidence": [],
+        "quorum_required": null,
+        "quorum_verified": null
+      },
+      "input_verified": null,
+      "input_retried": false,
+      "postconditions_ok": true,
+      "interstitial_actions": [],
+      "effect_verified": null,
+      "effect_approved_unverified": false,
+      "safety_halt": false,
+      "effect_results": [],
+      "effect_evidence": [],
+      "failure_category": null,
+      "effect_contract_hashes": [],
+      "actuation": "dom",
+      "delivery_receipt": {
+        "status": "delivered",
+        "receipt_id": "playwright-d6966cfbb97747a79ce74b412f0f2695",
+        "operation": "dom_click",
+        "native": false,
+        "target_fingerprint": "b1b4dc0048f62aea2d7b8dbe9cac94c7d242351d5d96dad4896439da93381a41",
+        "delivered_at": "2026-07-25T19:28:38.155729+00:00",
+        "outcome_verified": false
+      },
+      "postcondition_drift_rescues": [],
+      "drift_oracle_calls": 0,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_000_before.png",
+      "after_png": "steps/step_000_after.png",
+      "elapsed_ms": 762.4619579873979
+    },
+    {
+      "step_id": "step_001",
+      "intent": "click 'New Encounter'",
+      "ok": true,
+      "skipped": false,
+      "exception_handled": false,
+      "resolution": {
+        "rung": "structural",
+        "point": [
+          114,
+          159
+        ],
+        "confidence": 1.0,
+        "elapsed_ms": 6.609167205169797,
+        "structural_handle": {
+          "point": [
+            114,
+            159
+          ],
+          "confidence": 1.0,
+          "region": [
+            24,
+            139,
+            180,
+            40
+          ],
+          "target_fingerprint": "e5f82e20e7e2634289dbb82b61e14649b39ea0c54fefcf7536dffe58bdc6dc2d",
+          "candidate_count": 1,
+          "supported_operations": [
+            "dom_click",
+            "dom_double_click"
+          ]
+        }
+      },
+      "identity": {
+        "status": "verified",
+        "mode": "structured",
+        "coverage": 1.0,
+        "expected": "<structured identity template>",
+        "observed": "Jane Sample — MRN P1 — DOB 1980-01-01",
+        "param": null,
+        "signal_evidence": [],
+        "quorum_required": null,
+        "quorum_verified": null
+      },
+      "input_verified": null,
+      "input_retried": false,
+      "postconditions_ok": true,
+      "interstitial_actions": [],
+      "effect_verified": null,
+      "effect_approved_unverified": false,
+      "safety_halt": false,
+      "effect_results": [],
+      "effect_evidence": [],
+      "failure_category": null,
+      "effect_contract_hashes": [],
+      "actuation": "dom",
+      "delivery_receipt": {
+        "status": "delivered",
+        "receipt_id": "playwright-9eb81b0d2f2b43e9bfc9a83921c7c665",
+        "operation": "dom_click",
+        "native": false,
+        "target_fingerprint": "e5f82e20e7e2634289dbb82b61e14649b39ea0c54fefcf7536dffe58bdc6dc2d",
+        "delivered_at": "2026-07-25T19:28:38.855847+00:00",
+        "outcome_verified": false
+      },
+      "postcondition_drift_rescues": [],
+      "drift_oracle_calls": 0,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_001_before.png",
+      "after_png": "steps/step_001_after.png",
+      "elapsed_ms": 662.4382499139756
+    },
+    {
+      "step_id": "step_002",
+      "intent": "click 'Triage'",
+      "ok": true,
+      "skipped": false,
+      "exception_handled": false,
+      "resolution": {
+        "rung": "structural",
+        "point": [
+          85,
+          214
+        ],
+        "confidence": 1.0,
+        "elapsed_ms": 7.587042171508074,
+        "structural_handle": {
+          "point": [
+            85,
+            214
+          ],
+          "confidence": 1.0,
+          "region": [
+            25,
+            195,
+            120,
+            38
+          ],
+          "target_fingerprint": "394a8242151b03563611784e672cf42e1d49bf2885e691d80d2801fb0a392665",
+          "candidate_count": 1,
+          "supported_operations": [
+            "dom_click",
+            "dom_double_click"
+          ]
+        }
+      },
+      "identity": {
+        "status": "verified",
+        "mode": "structured",
+        "coverage": 1.0,
+        "expected": "<structured identity template>",
+        "observed": "Jane Sample — MRN P1 — DOB 1980-01-01",
+        "param": null,
+        "signal_evidence": [],
+        "quorum_required": null,
+        "quorum_verified": null
+      },
+      "input_verified": null,
+      "input_retried": false,
+      "postconditions_ok": true,
+      "interstitial_actions": [],
+      "effect_verified": null,
+      "effect_approved_unverified": false,
+      "safety_halt": false,
+      "effect_results": [],
+      "effect_evidence": [],
+      "failure_category": null,
+      "effect_contract_hashes": [],
+      "actuation": "dom",
+      "delivery_receipt": {
+        "status": "delivered",
+        "receipt_id": "playwright-3fe5a83285b64c29b9f9cb6b9d843937",
+        "operation": "dom_click",
+        "native": false,
+        "target_fingerprint": "394a8242151b03563611784e672cf42e1d49bf2885e691d80d2801fb0a392665",
+        "delivered_at": "2026-07-25T19:28:39.537935+00:00",
+        "outcome_verified": false
+      },
+      "postcondition_drift_rescues": [],
+      "drift_oracle_calls": 0,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_002_before.png",
+      "after_png": "steps/step_002_after.png",
+      "elapsed_ms": 391.89829188399017
+    },
+    {
+      "step_id": "step_003",
+      "intent": "click at (480, 268)",
+      "ok": true,
+      "skipped": false,
+      "exception_handled": false,
+      "resolution": {
+        "rung": "structural",
+        "point": [
+          480,
+          269
+        ],
+        "confidence": 1.0,
+        "elapsed_ms": 6.599707994610071,
+        "structural_handle": {
+          "point": [
+            480,
+            269
+          ],
+          "confidence": 1.0,
+          "region": [
+            24,
+            260,
+            912,
+            17
+          ],
+          "target_fingerprint": "09d3ed55172da2854d19fc01cb0d0e0e0b468cdbcd4a3c75428b75b6086c759b",
+          "candidate_count": 1,
+          "supported_operations": [
+            "dom_click",
+            "dom_double_click"
+          ]
+        }
+      },
+      "identity": {
+        "status": "verified",
+        "mode": "structured",
+        "coverage": 1.0,
+        "expected": "<structured identity template>",
+        "observed": "Jane Sample — MRN P1 — DOB 1980-01-01",
+        "param": null,
+        "signal_evidence": [],
+        "quorum_required": null,
+        "quorum_verified": null
+      },
+      "input_verified": null,
+      "input_retried": false,
+      "postconditions_ok": true,
+      "interstitial_actions": [],
+      "effect_verified": null,
+      "effect_approved_unverified": false,
+      "safety_halt": false,
+      "effect_results": [],
+      "effect_evidence": [],
+      "failure_category": null,
+      "effect_contract_hashes": [],
+      "actuation": "dom",
+      "delivery_receipt": {
+        "status": "delivered",
+        "receipt_id": "playwright-06c605f070814bedbc5c217fa7a71eea",
+        "operation": "dom_click",
+        "native": false,
+        "target_fingerprint": "09d3ed55172da2854d19fc01cb0d0e0e0b468cdbcd4a3c75428b75b6086c759b",
+        "delivered_at": "2026-07-25T19:28:39.921097+00:00",
+        "outcome_verified": false
+      },
+      "postcondition_drift_rescues": [],
+      "drift_oracle_calls": 0,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_003_before.png",
+      "after_png": "steps/step_003_after.png",
+      "elapsed_ms": 399.87270906567574
+    },
+    {
+      "step_id": "step_004",
+      "intent": "type <note>",
+      "ok": true,
+      "skipped": false,
+      "exception_handled": false,
+      "resolution": null,
+      "identity": null,
+      "input_verified": true,
+      "input_retried": false,
+      "postconditions_ok": true,
+      "interstitial_actions": [],
+      "effect_verified": null,
+      "effect_approved_unverified": false,
+      "safety_halt": false,
+      "effect_results": [],
+      "effect_evidence": [],
+      "failure_category": null,
+      "effect_contract_hashes": [],
+      "actuation": null,
+      "delivery_receipt": null,
+      "postcondition_drift_rescues": [],
+      "drift_oracle_calls": 0,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_004_before.png",
+      "after_png": "steps/step_004_after.png",
+      "elapsed_ms": 479.53687491826713
+    },
+    {
+      "step_id": "step_005",
+      "intent": "click 'Save Encounter'",
+      "ok": false,
+      "skipped": false,
+      "exception_handled": false,
+      "resolution": {
+        "rung": "structural",
+        "point": [
+          134,
+          457
+        ],
+        "confidence": 1.0,
+        "elapsed_ms": 6.2240001279860735,
+        "structural_handle": {
+          "point": [
+            134,
+            457
+          ],
+          "confidence": 1.0,
+          "region": [
+            24,
+            437,
+            220,
+            40
+          ],
+          "target_fingerprint": "c1a5389fc2f2fd316b490eb83701a6668f8319e4b1e1e190853924ca50177e63",
+          "candidate_count": 1,
+          "supported_operations": [
+            "dom_click",
+            "dom_double_click"
+          ]
+        }
+      },
+      "identity": {
+        "status": "verified",
+        "mode": "structured",
+        "coverage": 1.0,
+        "expected": "<structured identity template>",
+        "observed": "Jane Sample — MRN P1 — DOB 1980-01-01",
+        "param": null,
+        "signal_evidence": [],
+        "quorum_required": null,
+        "quorum_verified": null
+      },
+      "input_verified": null,
+      "input_retried": false,
+      "postconditions_ok": true,
+      "interstitial_actions": [],
+      "effect_verified": false,
+      "effect_approved_unverified": false,
+      "safety_halt": true,
+      "effect_results": [
+        "[rest] record_written: REFUTED → ESCALATED — no compensator available for an irreversible refuted effect -- durably halt and escalate"
+      ],
+      "effect_evidence": [
+        {
+          "effect_contract_hash": "sha256:de1ec3dd32c33b1683a590f55d45fea21a5a4290687eac7f350df7842e84815b",
+          "substrate": "rest",
+          "verification_tier": 1,
+          "initial_verdict": "refuted",
+          "final_verdict": "refuted",
+          "reconciliation_completed": false,
+          "reconciliation_actions": 0
+        }
+      ],
+      "failure_category": "governed_refusal",
+      "effect_contract_hashes": [
+        "sha256:de1ec3dd32c33b1683a590f55d45fea21a5a4290687eac7f350df7842e84815b"
+      ],
+      "actuation": "dom",
+      "delivery_receipt": {
+        "status": "delivered",
+        "receipt_id": "playwright-d602fb0f6f3842e8aa2d79e0641a1827",
+        "operation": "dom_click",
+        "native": false,
+        "target_fingerprint": "c1a5389fc2f2fd316b490eb83701a6668f8319e4b1e1e190853924ca50177e63",
+        "delivered_at": "2026-07-25T19:28:40.846487+00:00",
+        "outcome_verified": false
+      },
+      "postcondition_drift_rescues": [],
+      "drift_oracle_calls": 0,
+      "heal": null,
+      "error": "System-of-record effect verification HALTED step 'step_005' (click 'Save Encounter'): record_written refuted against the rest system of record and could not be reconciled (escalated) — [rest] record_written: 0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed) -- no compensator available for an irreversible refuted effect -- durably halt and escalate — run aborted",
+      "before_png": "steps/step_005_before.png",
+      "after_png": "steps/step_005_after.png",
+      "elapsed_ms": 6053.203250048682
+    }
+  ],
+  "success": false,
+  "terminal_outcome": null,
+  "visited_states": [],
+  "halt": {
+    "state_id": "step_005",
+    "intent": "click 'Save Encounter'",
+    "reason": "System-of-record effect verification HALTED step 'step_005' (click 'Save Encounter'): record_written refuted against the rest system of record and could not be reconciled (escalated) — [rest] record_written: 0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed) -- no compensator available for an irreversible refuted effect -- durably halt and escalate — run aborted",
+    "outcome": "halt",
+    "observed_texts": [
+      "MockMed",
+      "Clinical demo — all data is fake",
+      "JaneSample—MRNP1—DOB1980-01-01",
+      "Encountersaved-",
+      "Syntheticfollow-upin twoweeks",
+      "NewEncounter",
+      "Encounters",
+      "·Triage—Synthetic follow-up in two weeks"
+    ],
+    "completed_intents": [
+      "click 'Open'",
+      "click 'New Encounter'",
+      "click 'Triage'",
+      "click at (480, 268)",
+      "type <note>"
+    ]
+  },
+  "rung_counts": {
+    "structural": 4
+  },
+  "heal_count": 0,
+  "model_calls": 0,
+  "external_network_calls": "observed",
+  "est_model_cost_usd": 0.0,
+  "total_ms": 8762.50920793973,
+  "identity_applicable_steps": 5,
+  "identity_armed_steps": 5,
+  "identity_unarmed": [],
+  "screenshots_may_leave_box": false
+}

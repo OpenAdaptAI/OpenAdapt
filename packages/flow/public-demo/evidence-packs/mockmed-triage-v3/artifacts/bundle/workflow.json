@@ -1,0 +1,1355 @@
+{
+  "schema_version": 2,
+  "name": "mockmed-triage",
+  "recording_id": "3290705d23254d978c7a335776e407ad",
+  "contains_phi": false,
+  "phi_scrubbed": false,
+  "encrypted": false,
+  "created_at": "2026-07-26T07:06:47.886221+00:00",
+  "viewport": [
+    1280,
+    800
+  ],
+  "params": {
+    "note": "Synthetic follow-up in two weeks"
+  },
+  "param_specs": {
+    "note": {
+      "name": "note",
+      "type": "string",
+      "example": "Synthetic follow-up in two weeks",
+      "required": true,
+      "choices": []
+    }
+  },
+  "secret_params": [],
+  "steps": [
+    {
+      "id": "step_000",
+      "intent": "click 'Open'",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_000.png",
+        "structural": {
+          "selector": "#open-p1",
+          "frame_path": null,
+          "role": "button",
+          "name": "Open",
+          "automation_id": null,
+          "window_name": null
+        },
+        "region": [
+          695,
+          154,
+          160,
+          64
+        ],
+        "click_point": [
+          775,
+          186
+        ],
+        "ocr_text": "Open",
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": {
+          "schema_version": 1,
+          "salt": "c8887ea55d5a3781d3962e9dd6ef76d9",
+          "band_len": 30,
+          "tokens": [
+            {
+              "c": "6ea091d5f9ee7cfe",
+              "r": "6ea091d5f9ee7cfe",
+              "n": 10,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "2df90d28ac6dcd27",
+              "r": "2df90d28ac6dcd27",
+              "n": 4,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "f2edf2308507962c",
+              "r": "29a63eedb29d1153",
+              "n": 4,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "044b63bb729bddd4",
+              "r": "044b63bb729bddd4",
+              "n": 8,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "3f52bc804134d00a",
+              "r": "aa748a391080ede9",
+              "n": 4,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            }
+          ],
+          "concats": [
+            {
+              "i": 0,
+              "size": 2,
+              "c": "c47b03ec0c8a0d7e",
+              "r": "c47b03ec0c8a0d7e",
+              "digit": false,
+              "name": true,
+              "n": 14
+            },
+            {
+              "i": 0,
+              "size": 3,
+              "c": "11f5d4c43f93d95e",
+              "r": "b00bf35d2690abd3",
+              "digit": false,
+              "name": true,
+              "n": 18
+            },
+            {
+              "i": 0,
+              "size": 4,
+              "c": "aa06789d3d05b361",
+              "r": "4d17e4c7cac5fbd3",
+              "digit": false,
+              "name": true,
+              "n": 26
+            },
+            {
+              "i": 1,
+              "size": 2,
+              "c": "ca3513c757f4ced2",
+              "r": "834701f25ee7b09f",
+              "digit": false,
+              "name": true,
+              "n": 8
+            },
+            {
+              "i": 1,
+              "size": 3,
+              "c": "35eb5657b10f3ba0",
+              "r": "ea7820d360bfd89f",
+              "digit": false,
+              "name": true,
+              "n": 16
+            },
+            {
+              "i": 1,
+              "size": 4,
+              "c": "9e5ff3eed4ca9fa4",
+              "r": "6ace3fdb6b3fb235",
+              "digit": false,
+              "name": true,
+              "n": 20
+            },
+            {
+              "i": 2,
+              "size": 2,
+              "c": "879bca194b8f65b6",
+              "r": "a58edebd1fd7fe82",
+              "digit": false,
+              "name": true,
+              "n": 12
+            },
+            {
+              "i": 2,
+              "size": 3,
+              "c": "30505790b18a521f",
+              "r": "50b8da0b181f02f9",
+              "digit": false,
+              "name": true,
+              "n": 16
+            },
+            {
+              "i": 3,
+              "size": 2,
+              "c": "60caa1d8baeeb22d",
+              "r": "fe5efbea8109e8ea",
+              "digit": false,
+              "name": true,
+              "n": 12
+            }
+          ],
+          "structured": "dde9db65d2c7c866",
+          "signal_hashes": {
+            "structured|exact|": "5d864e6463d5eeb130a9093c4317f587e83557fd87a0cfa63938c41e53865f37",
+            "structured|normalized|unicode_nfkc": "5d864e6463d5eeb130a9093c4317f587e83557fd87a0cfa63938c41e53865f37",
+            "structured|normalized|casefold": "dde9db65d2c7c866fb6770b431537b34c8f4e1cfed0edbd6fb3cd0c7036f2977",
+            "structured|normalized|collapse_whitespace": "5d864e6463d5eeb130a9093c4317f587e83557fd87a0cfa63938c41e53865f37",
+            "structured|normalized|strip_punctuation": "5d864e6463d5eeb130a9093c4317f587e83557fd87a0cfa63938c41e53865f37",
+            "structured|normalized|unicode_nfkc,casefold": "dde9db65d2c7c866fb6770b431537b34c8f4e1cfed0edbd6fb3cd0c7036f2977",
+            "structured|normalized|unicode_nfkc,collapse_whitespace": "5d864e6463d5eeb130a9093c4317f587e83557fd87a0cfa63938c41e53865f37",
+            "structured|normalized|unicode_nfkc,strip_punctuation": "5d864e6463d5eeb130a9093c4317f587e83557fd87a0cfa63938c41e53865f37",
+            "structured|normalized|casefold,collapse_whitespace": "dde9db65d2c7c866fb6770b431537b34c8f4e1cfed0edbd6fb3cd0c7036f2977",
+            "structured|normalized|casefold,strip_punctuation": "dde9db65d2c7c866fb6770b431537b34c8f4e1cfed0edbd6fb3cd0c7036f2977",
+            "structured|normalized|collapse_whitespace,strip_punctuation": "5d864e6463d5eeb130a9093c4317f587e83557fd87a0cfa63938c41e53865f37",
+            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "dde9db65d2c7c866fb6770b431537b34c8f4e1cfed0edbd6fb3cd0c7036f2977",
+            "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "dde9db65d2c7c866fb6770b431537b34c8f4e1cfed0edbd6fb3cd0c7036f2977",
+            "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "5d864e6463d5eeb130a9093c4317f587e83557fd87a0cfa63938c41e53865f37",
+            "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "dde9db65d2c7c866fb6770b431537b34c8f4e1cfed0edbd6fb3cd0c7036f2977",
+            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "dde9db65d2c7c866fb6770b431537b34c8f4e1cfed0edbd6fb3cd0c7036f2977",
+            "captured_context|exact|": "fcc4aadc296a76b5ced8f382c21f59bd765ceede824de377a71568a726bc9423",
+            "captured_context|normalized|unicode_nfkc": "fcc4aadc296a76b5ced8f382c21f59bd765ceede824de377a71568a726bc9423",
+            "captured_context|normalized|casefold": "ad5c86ac035fa66d1a0dde4c362fd78dc733688188a4d92134efd4943919c781",
+            "captured_context|normalized|collapse_whitespace": "fcc4aadc296a76b5ced8f382c21f59bd765ceede824de377a71568a726bc9423",
+            "captured_context|normalized|strip_punctuation": "fcc4aadc296a76b5ced8f382c21f59bd765ceede824de377a71568a726bc9423",
+            "captured_context|normalized|unicode_nfkc,casefold": "ad5c86ac035fa66d1a0dde4c362fd78dc733688188a4d92134efd4943919c781",
+            "captured_context|normalized|unicode_nfkc,collapse_whitespace": "fcc4aadc296a76b5ced8f382c21f59bd765ceede824de377a71568a726bc9423",
+            "captured_context|normalized|unicode_nfkc,strip_punctuation": "fcc4aadc296a76b5ced8f382c21f59bd765ceede824de377a71568a726bc9423",
+            "captured_context|normalized|casefold,collapse_whitespace": "ad5c86ac035fa66d1a0dde4c362fd78dc733688188a4d92134efd4943919c781",
+            "captured_context|normalized|casefold,strip_punctuation": "ad5c86ac035fa66d1a0dde4c362fd78dc733688188a4d92134efd4943919c781",
+            "captured_context|normalized|collapse_whitespace,strip_punctuation": "fcc4aadc296a76b5ced8f382c21f59bd765ceede824de377a71568a726bc9423",
+            "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace": "ad5c86ac035fa66d1a0dde4c362fd78dc733688188a4d92134efd4943919c781",
+            "captured_context|normalized|unicode_nfkc,casefold,strip_punctuation": "ad5c86ac035fa66d1a0dde4c362fd78dc733688188a4d92134efd4943919c781",
+            "captured_context|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "fcc4aadc296a76b5ced8f382c21f59bd765ceede824de377a71568a726bc9423",
+            "captured_context|normalized|casefold,collapse_whitespace,strip_punctuation": "ad5c86ac035fa66d1a0dde4c362fd78dc733688188a4d92134efd4943919c781",
+            "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "ad5c86ac035fa66d1a0dde4c362fd78dc733688188a4d92134efd4943919c781"
+          },
+          "param_token_indices": {},
+          "rests_on_confusable_identifier": false
+        },
+        "identifier_crop": null,
+        "identifier_region": null,
+        "landmarks": [
+          {
+            "relation": "above",
+            "ocr_text": "Action",
+            "distance_px": 51,
+            "dx_px": 20,
+            "dy_px": 47
+          },
+          {
+            "relation": "below",
+            "ocr_text": "Open",
+            "distance_px": 58,
+            "dx_px": -2,
+            "dy_px": -58
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "key": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            0,
+            43,
+            968,
+            318
+          ],
+          "phash": "f8e083ffbc08383c",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0,
+          "template": "templates/step_000_expect.png"
+        },
+        {
+          "kind": "text_present",
+          "text": "JaneSample—MRNP1—DOB1980-01-01",
+          "region": null,
+          "phash": null,
+          "phash_tolerance": 8,
+          "timeout_s": 5.0,
+          "template": null
+        }
+      ],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": true,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": "structured identity (DOM/UIA/AX) owns this step's identity; no identifier pixels persisted at rest — mark the identifier field/region at record time (--identifier) to also arm the pixel tier for remote-display replays"
+    },
+    {
+      "id": "step_001",
+      "intent": "click 'New Encounter'",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_001.png",
+        "structural": {
+          "selector": "#new-encounter",
+          "frame_path": null,
+          "role": "button",
+          "name": "New Encounter",
+          "automation_id": null,
+          "window_name": null
+        },
+        "region": [
+          34,
+          127,
+          160,
+          64
+        ],
+        "click_point": [
+          114,
+          159
+        ],
+        "ocr_text": "New Encounter",
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": {
+          "schema_version": 1,
+          "salt": "c8887ea55d5a3781d3962e9dd6ef76d9",
+          "band_len": 0,
+          "tokens": [],
+          "concats": [],
+          "structured": "84fd8e01b2a61fc6",
+          "signal_hashes": {
+            "structured|exact|": "a96d2d91d99e56b48fe64448a9c4c81c3149044741ce8ecc50f53485f06a18f5",
+            "structured|normalized|unicode_nfkc": "a96d2d91d99e56b48fe64448a9c4c81c3149044741ce8ecc50f53485f06a18f5",
+            "structured|normalized|casefold": "84fd8e01b2a61fc6f88d628a537f0d505b224e57a183b313bb3835ec9e0119ab",
+            "structured|normalized|collapse_whitespace": "a96d2d91d99e56b48fe64448a9c4c81c3149044741ce8ecc50f53485f06a18f5",
+            "structured|normalized|strip_punctuation": "0c90cdae7be4d44b608e27c87798a6f135a8bbdb617b78bb6653cf800eff0e15",
+            "structured|normalized|unicode_nfkc,casefold": "84fd8e01b2a61fc6f88d628a537f0d505b224e57a183b313bb3835ec9e0119ab",
+            "structured|normalized|unicode_nfkc,collapse_whitespace": "a96d2d91d99e56b48fe64448a9c4c81c3149044741ce8ecc50f53485f06a18f5",
+            "structured|normalized|unicode_nfkc,strip_punctuation": "0c90cdae7be4d44b608e27c87798a6f135a8bbdb617b78bb6653cf800eff0e15",
+            "structured|normalized|casefold,collapse_whitespace": "84fd8e01b2a61fc6f88d628a537f0d505b224e57a183b313bb3835ec9e0119ab",
+            "structured|normalized|casefold,strip_punctuation": "c4b41bbaa931352a0585ea4400de10785f8fa138e2e0b713ec5c9b72c934d960",
+            "structured|normalized|collapse_whitespace,strip_punctuation": "0c90cdae7be4d44b608e27c87798a6f135a8bbdb617b78bb6653cf800eff0e15",
+            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "84fd8e01b2a61fc6f88d628a537f0d505b224e57a183b313bb3835ec9e0119ab",
+            "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "c4b41bbaa931352a0585ea4400de10785f8fa138e2e0b713ec5c9b72c934d960",
+            "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "0c90cdae7be4d44b608e27c87798a6f135a8bbdb617b78bb6653cf800eff0e15",
+            "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "c4b41bbaa931352a0585ea4400de10785f8fa138e2e0b713ec5c9b72c934d960",
+            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "c4b41bbaa931352a0585ea4400de10785f8fa138e2e0b713ec5c9b72c934d960"
+          },
+          "param_token_indices": {},
+          "rests_on_confusable_identifier": false
+        },
+        "identifier_crop": null,
+        "identifier_region": null,
+        "landmarks": [
+          {
+            "relation": "below",
+            "ocr_text": "Encounters",
+            "distance_px": 61,
+            "dx_px": 34,
+            "dy_px": -51
+          },
+          {
+            "relation": "below",
+            "ocr_text": "No encountersyet.",
+            "distance_px": 85,
+            "dx_px": 24,
+            "dy_px": -82
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "key": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            0,
+            101,
+            696,
+            350
+          ],
+          "phash": "fae0c01e950fc78e",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0,
+          "template": "templates/step_001_expect.png"
+        },
+        {
+          "kind": "text_present",
+          "text": "EncounterType",
+          "region": null,
+          "phash": null,
+          "phash_tolerance": 8,
+          "timeout_s": 5.0,
+          "template": null
+        }
+      ],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": true,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": "structured identity (DOM/UIA/AX) owns this step's identity; no identifier pixels persisted at rest — mark the identifier field/region at record time (--identifier) to also arm the pixel tier for remote-display replays"
+    },
+    {
+      "id": "step_002",
+      "intent": "click 'Triage'",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_002.png",
+        "structural": {
+          "selector": "#type-triage",
+          "frame_path": null,
+          "role": "button",
+          "name": "Triage",
+          "automation_id": null,
+          "window_name": null
+        },
+        "region": [
+          5,
+          182,
+          160,
+          64
+        ],
+        "click_point": [
+          85,
+          214
+        ],
+        "ocr_text": "Triage",
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": {
+          "schema_version": 1,
+          "salt": "c8887ea55d5a3781d3962e9dd6ef76d9",
+          "band_len": 0,
+          "tokens": [],
+          "concats": [],
+          "structured": "84fd8e01b2a61fc6",
+          "signal_hashes": {
+            "structured|exact|": "a96d2d91d99e56b48fe64448a9c4c81c3149044741ce8ecc50f53485f06a18f5",
+            "structured|normalized|unicode_nfkc": "a96d2d91d99e56b48fe64448a9c4c81c3149044741ce8ecc50f53485f06a18f5",
+            "structured|normalized|casefold": "84fd8e01b2a61fc6f88d628a537f0d505b224e57a183b313bb3835ec9e0119ab",
+            "structured|normalized|collapse_whitespace": "a96d2d91d99e56b48fe64448a9c4c81c3149044741ce8ecc50f53485f06a18f5",
+            "structured|normalized|strip_punctuation": "0c90cdae7be4d44b608e27c87798a6f135a8bbdb617b78bb6653cf800eff0e15",
+            "structured|normalized|unicode_nfkc,casefold": "84fd8e01b2a61fc6f88d628a537f0d505b224e57a183b313bb3835ec9e0119ab",
+            "structured|normalized|unicode_nfkc,collapse_whitespace": "a96d2d91d99e56b48fe64448a9c4c81c3149044741ce8ecc50f53485f06a18f5",
+            "structured|normalized|unicode_nfkc,strip_punctuation": "0c90cdae7be4d44b608e27c87798a6f135a8bbdb617b78bb6653cf800eff0e15",
+            "structured|normalized|casefold,collapse_whitespace": "84fd8e01b2a61fc6f88d628a537f0d505b224e57a183b313bb3835ec9e0119ab",
+            "structured|normalized|casefold,strip_punctuation": "c4b41bbaa931352a0585ea4400de10785f8fa138e2e0b713ec5c9b72c934d960",
+            "structured|normalized|collapse_whitespace,strip_punctuation": "0c90cdae7be4d44b608e27c87798a6f135a8bbdb617b78bb6653cf800eff0e15",
+            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "84fd8e01b2a61fc6f88d628a537f0d505b224e57a183b313bb3835ec9e0119ab",
+            "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "c4b41bbaa931352a0585ea4400de10785f8fa138e2e0b713ec5c9b72c934d960",
+            "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "0c90cdae7be4d44b608e27c87798a6f135a8bbdb617b78bb6653cf800eff0e15",
+            "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "c4b41bbaa931352a0585ea4400de10785f8fa138e2e0b713ec5c9b72c934d960",
+            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "c4b41bbaa931352a0585ea4400de10785f8fa138e2e0b713ec5c9b72c934d960"
+          },
+          "param_token_indices": {},
+          "rests_on_confusable_identifier": false
+        },
+        "identifier_crop": null,
+        "identifier_region": null,
+        "landmarks": [
+          {
+            "relation": "below",
+            "ocr_text": "Note",
+            "distance_px": 70,
+            "dx_px": 44,
+            "dy_px": -54
+          },
+          {
+            "relation": "above",
+            "ocr_text": "NewEncounter",
+            "distance_px": 77,
+            "dx_px": -26,
+            "dy_px": 72
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "key": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            0,
+            163,
+            177,
+            102
+          ],
+          "phash": "88c2f2295d2da73d",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0,
+          "template": "templates/step_002_expect.png"
+        }
+      ],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": true,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": "structured identity (DOM/UIA/AX) owns this step's identity; no identifier pixels persisted at rest — mark the identifier field/region at record time (--identifier) to also arm the pixel tier for remote-display replays"
+    },
+    {
+      "id": "step_003",
+      "intent": "click at (480, 268)",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_003.png",
+        "structural": {
+          "selector": "#note-label",
+          "frame_path": null,
+          "role": null,
+          "name": "Note",
+          "automation_id": null,
+          "window_name": null
+        },
+        "region": [
+          400,
+          236,
+          160,
+          64
+        ],
+        "click_point": [
+          480,
+          268
+        ],
+        "ocr_text": null,
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": {
+          "schema_version": 1,
+          "salt": "c8887ea55d5a3781d3962e9dd6ef76d9",
+          "band_len": 0,
+          "tokens": [],
+          "concats": [],
+          "structured": "84fd8e01b2a61fc6",
+          "signal_hashes": {
+            "structured|exact|": "a96d2d91d99e56b48fe64448a9c4c81c3149044741ce8ecc50f53485f06a18f5",
+            "structured|normalized|unicode_nfkc": "a96d2d91d99e56b48fe64448a9c4c81c3149044741ce8ecc50f53485f06a18f5",
+            "structured|normalized|casefold": "84fd8e01b2a61fc6f88d628a537f0d505b224e57a183b313bb3835ec9e0119ab",
+            "structured|normalized|collapse_whitespace": "a96d2d91d99e56b48fe64448a9c4c81c3149044741ce8ecc50f53485f06a18f5",
+            "structured|normalized|strip_punctuation": "0c90cdae7be4d44b608e27c87798a6f135a8bbdb617b78bb6653cf800eff0e15",
+            "structured|normalized|unicode_nfkc,casefold": "84fd8e01b2a61fc6f88d628a537f0d505b224e57a183b313bb3835ec9e0119ab",
+            "structured|normalized|unicode_nfkc,collapse_whitespace": "a96d2d91d99e56b48fe64448a9c4c81c3149044741ce8ecc50f53485f06a18f5",
+            "structured|normalized|unicode_nfkc,strip_punctuation": "0c90cdae7be4d44b608e27c87798a6f135a8bbdb617b78bb6653cf800eff0e15",
+            "structured|normalized|casefold,collapse_whitespace": "84fd8e01b2a61fc6f88d628a537f0d505b224e57a183b313bb3835ec9e0119ab",
+            "structured|normalized|casefold,strip_punctuation": "c4b41bbaa931352a0585ea4400de10785f8fa138e2e0b713ec5c9b72c934d960",
+            "structured|normalized|collapse_whitespace,strip_punctuation": "0c90cdae7be4d44b608e27c87798a6f135a8bbdb617b78bb6653cf800eff0e15",
+            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "84fd8e01b2a61fc6f88d628a537f0d505b224e57a183b313bb3835ec9e0119ab",
+            "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "c4b41bbaa931352a0585ea4400de10785f8fa138e2e0b713ec5c9b72c934d960",
+            "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "0c90cdae7be4d44b608e27c87798a6f135a8bbdb617b78bb6653cf800eff0e15",
+            "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "c4b41bbaa931352a0585ea4400de10785f8fa138e2e0b713ec5c9b72c934d960",
+            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "c4b41bbaa931352a0585ea4400de10785f8fa138e2e0b713ec5c9b72c934d960"
+          },
+          "param_token_indices": {},
+          "rests_on_confusable_identifier": false
+        },
+        "identifier_crop": null,
+        "identifier_region": null,
+        "landmarks": [
+          {
+            "relation": "left_of",
+            "ocr_text": "Consult",
+            "distance_px": 279,
+            "dx_px": 274,
+            "dy_px": 54
+          },
+          {
+            "relation": "left_of",
+            "ocr_text": "JaneSample—MRNP1—DOB1980-01-01",
+            "distance_px": 319,
+            "dx_px": 270,
+            "dy_px": 170
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "key": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            0,
+            249,
+            696,
+            202
+          ],
+          "phash": "ff3fd53f6a002a00",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0,
+          "template": "templates/step_003_expect.png"
+        }
+      ],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": true,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": "structured identity (DOM/UIA/AX) owns this step's identity; no identifier pixels persisted at rest — mark the identifier field/region at record time (--identifier) to also arm the pixel tier for remote-display replays"
+    },
+    {
+      "id": "step_004",
+      "intent": "type <note>",
+      "action": "type",
+      "anchor": null,
+      "text": "Synthetic follow-up in two weeks",
+      "param": "note",
+      "secret": false,
+      "key": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_005",
+      "intent": "click 'Save Encounter'",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_005.png",
+        "structural": {
+          "selector": "#save-encounter",
+          "frame_path": null,
+          "role": "button",
+          "name": "Save Encounter",
+          "automation_id": null,
+          "window_name": null
+        },
+        "region": [
+          54,
+          425,
+          160,
+          64
+        ],
+        "click_point": [
+          134,
+          457
+        ],
+        "ocr_text": "Save Encounter",
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": {
+          "schema_version": 1,
+          "salt": "c8887ea55d5a3781d3962e9dd6ef76d9",
+          "band_len": 0,
+          "tokens": [],
+          "concats": [],
+          "structured": "84fd8e01b2a61fc6",
+          "signal_hashes": {
+            "structured|exact|": "a96d2d91d99e56b48fe64448a9c4c81c3149044741ce8ecc50f53485f06a18f5",
+            "structured|normalized|unicode_nfkc": "a96d2d91d99e56b48fe64448a9c4c81c3149044741ce8ecc50f53485f06a18f5",
+            "structured|normalized|casefold": "84fd8e01b2a61fc6f88d628a537f0d505b224e57a183b313bb3835ec9e0119ab",
+            "structured|normalized|collapse_whitespace": "a96d2d91d99e56b48fe64448a9c4c81c3149044741ce8ecc50f53485f06a18f5",
+            "structured|normalized|strip_punctuation": "0c90cdae7be4d44b608e27c87798a6f135a8bbdb617b78bb6653cf800eff0e15",
+            "structured|normalized|unicode_nfkc,casefold": "84fd8e01b2a61fc6f88d628a537f0d505b224e57a183b313bb3835ec9e0119ab",
+            "structured|normalized|unicode_nfkc,collapse_whitespace": "a96d2d91d99e56b48fe64448a9c4c81c3149044741ce8ecc50f53485f06a18f5",
+            "structured|normalized|unicode_nfkc,strip_punctuation": "0c90cdae7be4d44b608e27c87798a6f135a8bbdb617b78bb6653cf800eff0e15",
+            "structured|normalized|casefold,collapse_whitespace": "84fd8e01b2a61fc6f88d628a537f0d505b224e57a183b313bb3835ec9e0119ab",
+            "structured|normalized|casefold,strip_punctuation": "c4b41bbaa931352a0585ea4400de10785f8fa138e2e0b713ec5c9b72c934d960",
+            "structured|normalized|collapse_whitespace,strip_punctuation": "0c90cdae7be4d44b608e27c87798a6f135a8bbdb617b78bb6653cf800eff0e15",
+            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "84fd8e01b2a61fc6f88d628a537f0d505b224e57a183b313bb3835ec9e0119ab",
+            "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "c4b41bbaa931352a0585ea4400de10785f8fa138e2e0b713ec5c9b72c934d960",
+            "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "0c90cdae7be4d44b608e27c87798a6f135a8bbdb617b78bb6653cf800eff0e15",
+            "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "c4b41bbaa931352a0585ea4400de10785f8fa138e2e0b713ec5c9b72c934d960",
+            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "c4b41bbaa931352a0585ea4400de10785f8fa138e2e0b713ec5c9b72c934d960"
+          },
+          "param_token_indices": {},
+          "rests_on_confusable_identifier": false
+        },
+        "identifier_crop": null,
+        "identifier_region": null,
+        "landmarks": [
+          {
+            "relation": "above",
+            "ocr_text": "Note",
+            "distance_px": 209,
+            "dx_px": 93,
+            "dy_px": 187
+          },
+          {
+            "relation": "above",
+            "ocr_text": "Triage",
+            "distance_px": 248,
+            "dx_px": 49,
+            "dy_px": 243
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "key": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            0,
+            228,
+            696,
+            223
+          ],
+          "phash": "e0e0b83b1f87c7c2",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0,
+          "template": "templates/step_005_expect.png"
+        },
+        {
+          "kind": "text_present",
+          "text": "Encounters",
+          "region": null,
+          "phash": null,
+          "phash_tolerance": 8,
+          "timeout_s": 5.0,
+          "template": null
+        }
+      ],
+      "effects": [
+        {
+          "kind": "record_written",
+          "match": {
+            "patient_id": {
+              "literal": "p1",
+              "param": null
+            },
+            "type": {
+              "literal": "Triage",
+              "param": null
+            },
+            "source": {
+              "literal": "replay",
+              "param": null
+            },
+            "key": {
+              "literal": "mockmed-triage-p1-v1",
+              "param": null
+            }
+          },
+          "field": null,
+          "value": null,
+          "expected_count": 1,
+          "idempotency_key": {
+            "literal": "mockmed-triage-p1-v1",
+            "param": null
+          },
+          "key_field": "key",
+          "count_new_only": false,
+          "forbid_collateral_loss": true,
+          "risk": "irreversible",
+          "probe": "a record matching patient_id='p1', type='Triage', source='replay', key='mockmed-triage-p1-v1' exists exactly once (mined from the demonstration's system-of-record delta)",
+          "timeout_s": 5.0,
+          "needs_operator_confirmation": false,
+          "readback": null
+        },
+        {
+          "kind": "field_equals",
+          "match": {
+            "patient_id": {
+              "literal": "p1",
+              "param": null
+            },
+            "type": {
+              "literal": "Triage",
+              "param": null
+            },
+            "source": {
+              "literal": "replay",
+              "param": null
+            },
+            "key": {
+              "literal": "mockmed-triage-p1-v1",
+              "param": null
+            }
+          },
+          "field": "note",
+          "value": {
+            "literal": "Synthetic follow-up in two weeks",
+            "param": null
+          },
+          "expected_count": 1,
+          "idempotency_key": null,
+          "key_field": "key",
+          "count_new_only": false,
+          "forbid_collateral_loss": true,
+          "risk": "irreversible",
+          "probe": "field 'note' of the written record equals the demonstrated value (mined; the value is the recorded example — substitute the run's parameter if this field is parameterized)",
+          "timeout_s": 5.0,
+          "needs_operator_confirmation": false,
+          "readback": null
+        }
+      ],
+      "api_binding": null,
+      "risk": "irreversible",
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": true,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": "structured identity (DOM/UIA/AX) owns this step's identity; no identifier pixels persisted at rest — mark the identifier field/region at record time (--identifier) to also arm the pixel tier for remote-display replays"
+    }
+  ],
+  "interstitials": [],
+  "program": null,
+  "subflows": {},
+  "data_sources": {},
+  "qualification": {
+    "schema_version": "openadapt.qualification-project/v1",
+    "project_id": "a7355d64-6635-4930-965e-fd1b975ececc",
+    "revision": 12,
+    "previous_revision_sha256": "bb4f26895f8d03914294e4ca03db90b852214834b03078a5c380028798a5f392",
+    "created_at": "2026-07-26T07:06:47.897989+00:00",
+    "updated_at": "2026-07-26T07:08:22.716689+00:00",
+    "environment": {
+      "target_kind": "web",
+      "application": "OpenAdapt MockMed synthetic reference",
+      "application_version": "sha256:1f4d59153fc6c797d626b27977fa6270ca8b2d9461b23171f9a2b2b571d2a0c1",
+      "environment_digest": "bbc33b0e8a54d33979f8ee271758685f907f8f81f5a7f0206d04e421e8a0ce82",
+      "runtime_version": "1.23.0",
+      "required_capabilities": [
+        "headless_chromium",
+        "independent_system_of_record",
+        "playwright_dom"
+      ]
+    },
+    "minimum_effect_tier": 1,
+    "action_classifications": {
+      "step_000": {
+        "step_id": "step_000",
+        "classification": "read_only",
+        "explanation": "reviewed as workflow preparation/navigation with no business-record effect",
+        "operator_confirmed": true
+      },
+      "step_001": {
+        "step_id": "step_001",
+        "classification": "read_only",
+        "explanation": "reviewed as workflow preparation/navigation with no business-record effect",
+        "operator_confirmed": true
+      },
+      "step_002": {
+        "step_id": "step_002",
+        "classification": "read_only",
+        "explanation": "reviewed as workflow preparation/navigation with no business-record effect",
+        "operator_confirmed": true
+      },
+      "step_003": {
+        "step_id": "step_003",
+        "classification": "read_only",
+        "explanation": "reviewed as workflow preparation/navigation with no business-record effect",
+        "operator_confirmed": true
+      },
+      "step_004": {
+        "step_id": "step_004",
+        "classification": "read_only",
+        "explanation": "reviewed as workflow preparation/navigation with no business-record effect",
+        "operator_confirmed": true
+      },
+      "step_005": {
+        "step_id": "step_005",
+        "classification": "irreversible",
+        "explanation": "compiler classified this as an irreversible system-of-record write",
+        "operator_confirmed": true
+      }
+    },
+    "identity_policies": {
+      "step_005": {
+        "step_id": "step_005",
+        "enforcement": "canonical_ladder",
+        "signals": [],
+        "quorum": 0
+      }
+    },
+    "effect_policies": [
+      {
+        "step_id": "step_005",
+        "effect_index": 0,
+        "effect_contract_hash": "sha256:de1ec3dd32c33b1683a590f55d45fea21a5a4290687eac7f350df7842e84815b",
+        "tier": 1
+      },
+      {
+        "step_id": "step_005",
+        "effect_index": 1,
+        "effect_contract_hash": "sha256:d267875f80a7e3d05ada9dbae3d761c300ed2c3526bb97266507ec8855d3c053",
+        "tier": 1
+      }
+    ],
+    "cases": [
+      {
+        "id": "fault-ambiguity",
+        "kind": "ambiguity",
+        "description": "Deterministic ambiguity refusal case",
+        "input_ref": null,
+        "expected_outcome": "halted",
+        "required": true,
+        "results": [
+          {
+            "case_id": "fault-ambiguity",
+            "project_id": "a7355d64-6635-4930-965e-fd1b975ececc",
+            "project_revision": 12,
+            "project_contract_sha256": "4148d3653bf47bb06ce61bbdc1873a87e0805334576be41b534a430beb2e0abf",
+            "workflow_contract_sha256": "1b94cfe9d2c90e373ad152f14cb9ebc0768a9ce2344d7f99d0f5f7bcb66bb50c",
+            "environment_contract_sha256": "b9625879c7aca502f246c91da64eed07ed08629f0e95a682831ae389f1282723",
+            "environment_digest": "bbc33b0e8a54d33979f8ee271758685f907f8f81f5a7f0206d04e421e8a0ce82",
+            "runtime_version": "1.23.0",
+            "runner_id": "openadapt-flow/public-demo-headless",
+            "runner_capabilities": [
+              "headless_chromium",
+              "independent_system_of_record",
+              "playwright_dom"
+            ],
+            "status": "passed",
+            "observed_outcome": "halted",
+            "evidence": [
+              {
+                "kind": "run_report",
+                "sha256": "0199fd3396cb1f38707f20bd1df878cccc6faaf73a362c95d022fca4cd9e504e",
+                "relative_path": "artifacts/cases/fault-ambiguity/trial-01/run/report.json"
+              },
+              {
+                "kind": "run_report",
+                "sha256": "a0b46dadd309c371099e0173c3e95e6c64783c6803c9236d29ad74670b6cc9fe",
+                "relative_path": "artifacts/cases/fault-ambiguity/trial-02/run/report.json"
+              },
+              {
+                "kind": "run_report",
+                "sha256": "389d3890f2e06e6dab6479e6edd960fa3a7fbbcf475131e9eb804de9e2ff8ba5",
+                "relative_path": "artifacts/cases/fault-ambiguity/trial-03/run/report.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f",
+                "relative_path": "artifacts/cases/fault-ambiguity/trial-01/oracle.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f",
+                "relative_path": "artifacts/cases/fault-ambiguity/trial-02/oracle.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f",
+                "relative_path": "artifacts/cases/fault-ambiguity/trial-03/oracle.json"
+              }
+            ],
+            "detail_code": "fault-ambiguity.three-trial-contract",
+            "completed_at": "2026-07-26T07:07:09.351773+00:00",
+            "attestation_key_id": "public-demo-headless-runner",
+            "attestation_signature": "3FxUdj1qDIf5M+v/u8dsoGhLqnAGTvlNwEKJtRNJAlbF0/nl7cG7/q4B+N8rdkbI+0UYyOMAJs1XBNze7QtJDA=="
+          }
+        ]
+      },
+      {
+        "id": "fault-wrong-identity",
+        "kind": "wrong_identity",
+        "description": "Deterministic wrong identity refusal case",
+        "input_ref": null,
+        "expected_outcome": "halted",
+        "required": true,
+        "results": [
+          {
+            "case_id": "fault-wrong-identity",
+            "project_id": "a7355d64-6635-4930-965e-fd1b975ececc",
+            "project_revision": 12,
+            "project_contract_sha256": "4148d3653bf47bb06ce61bbdc1873a87e0805334576be41b534a430beb2e0abf",
+            "workflow_contract_sha256": "1b94cfe9d2c90e373ad152f14cb9ebc0768a9ce2344d7f99d0f5f7bcb66bb50c",
+            "environment_contract_sha256": "b9625879c7aca502f246c91da64eed07ed08629f0e95a682831ae389f1282723",
+            "environment_digest": "bbc33b0e8a54d33979f8ee271758685f907f8f81f5a7f0206d04e421e8a0ce82",
+            "runtime_version": "1.23.0",
+            "runner_id": "openadapt-flow/public-demo-headless",
+            "runner_capabilities": [
+              "headless_chromium",
+              "independent_system_of_record",
+              "playwright_dom"
+            ],
+            "status": "passed",
+            "observed_outcome": "halted",
+            "evidence": [
+              {
+                "kind": "run_report",
+                "sha256": "e1c742fac9cde46d9ae25d950005f40af0e2b5957d0fce13f4cb26bc20a7ff9e",
+                "relative_path": "artifacts/cases/fault-wrong-identity/trial-01/run/report.json"
+              },
+              {
+                "kind": "run_report",
+                "sha256": "7ae08bb375505df852fee3594884bc27326f1eeafcdc2b48824bc6cc7e5934cd",
+                "relative_path": "artifacts/cases/fault-wrong-identity/trial-02/run/report.json"
+              },
+              {
+                "kind": "run_report",
+                "sha256": "f9f73d20c1c98fa7d03fef19e70089a0231a49cb06bb1cf764cc66c10e01c238",
+                "relative_path": "artifacts/cases/fault-wrong-identity/trial-03/run/report.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f",
+                "relative_path": "artifacts/cases/fault-wrong-identity/trial-01/oracle.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f",
+                "relative_path": "artifacts/cases/fault-wrong-identity/trial-02/oracle.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f",
+                "relative_path": "artifacts/cases/fault-wrong-identity/trial-03/oracle.json"
+              }
+            ],
+            "detail_code": "fault-wrong-identity.three-trial-contract",
+            "completed_at": "2026-07-26T07:07:13.536333+00:00",
+            "attestation_key_id": "public-demo-headless-runner",
+            "attestation_signature": "8fGOaHpgsPsyJCCjB2DYjAGfOcMKq/JAq4bfC98fqqZ672iDXprpUxDaQbv+x5kGK/9AGTpX33oUN+viE815BA=="
+          }
+        ]
+      },
+      {
+        "id": "fault-stale-identity",
+        "kind": "stale_identity",
+        "description": "Deterministic stale identity refusal case",
+        "input_ref": null,
+        "expected_outcome": "halted",
+        "required": true,
+        "results": [
+          {
+            "case_id": "fault-stale-identity",
+            "project_id": "a7355d64-6635-4930-965e-fd1b975ececc",
+            "project_revision": 12,
+            "project_contract_sha256": "4148d3653bf47bb06ce61bbdc1873a87e0805334576be41b534a430beb2e0abf",
+            "workflow_contract_sha256": "1b94cfe9d2c90e373ad152f14cb9ebc0768a9ce2344d7f99d0f5f7bcb66bb50c",
+            "environment_contract_sha256": "b9625879c7aca502f246c91da64eed07ed08629f0e95a682831ae389f1282723",
+            "environment_digest": "bbc33b0e8a54d33979f8ee271758685f907f8f81f5a7f0206d04e421e8a0ce82",
+            "runtime_version": "1.23.0",
+            "runner_id": "openadapt-flow/public-demo-headless",
+            "runner_capabilities": [
+              "headless_chromium",
+              "independent_system_of_record",
+              "playwright_dom"
+            ],
+            "status": "passed",
+            "observed_outcome": "halted",
+            "evidence": [
+              {
+                "kind": "run_report",
+                "sha256": "dca15bf16fe0195f5c3dc68873365c16fa09f45f9ca8ebf1e60dab82c284530e",
+                "relative_path": "artifacts/cases/fault-stale-identity/trial-01/run/report.json"
+              },
+              {
+                "kind": "run_report",
+                "sha256": "ee7aae31e2484417c9c0a2f14825e03373676e12e62300b839acbe45f2f66047",
+                "relative_path": "artifacts/cases/fault-stale-identity/trial-02/run/report.json"
+              },
+              {
+                "kind": "run_report",
+                "sha256": "631ff5e1da6d7e8378a57de74cefb99f1f69b355d1fd32bda2cbdc1c33b641a8",
+                "relative_path": "artifacts/cases/fault-stale-identity/trial-03/run/report.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f",
+                "relative_path": "artifacts/cases/fault-stale-identity/trial-01/oracle.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f",
+                "relative_path": "artifacts/cases/fault-stale-identity/trial-02/oracle.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f",
+                "relative_path": "artifacts/cases/fault-stale-identity/trial-03/oracle.json"
+              }
+            ],
+            "detail_code": "fault-stale-identity.three-trial-contract",
+            "completed_at": "2026-07-26T07:07:17.886852+00:00",
+            "attestation_key_id": "public-demo-headless-runner",
+            "attestation_signature": "5PiFmo+xxxXZEmqc2pTfSqyJ3mN0cQ/RFZwJ+0eKcF0rZq4VrSlUbdYkZvsBvFg6hH618Tr8XN4UEJ81JNpCBA=="
+          }
+        ]
+      },
+      {
+        "id": "fault-weak-effect",
+        "kind": "weak_effect",
+        "description": "Deterministic weak effect refusal case",
+        "input_ref": null,
+        "expected_outcome": "halted",
+        "required": true,
+        "results": [
+          {
+            "case_id": "fault-weak-effect",
+            "project_id": "a7355d64-6635-4930-965e-fd1b975ececc",
+            "project_revision": 12,
+            "project_contract_sha256": "4148d3653bf47bb06ce61bbdc1873a87e0805334576be41b534a430beb2e0abf",
+            "workflow_contract_sha256": "1b94cfe9d2c90e373ad152f14cb9ebc0768a9ce2344d7f99d0f5f7bcb66bb50c",
+            "environment_contract_sha256": "b9625879c7aca502f246c91da64eed07ed08629f0e95a682831ae389f1282723",
+            "environment_digest": "bbc33b0e8a54d33979f8ee271758685f907f8f81f5a7f0206d04e421e8a0ce82",
+            "runtime_version": "1.23.0",
+            "runner_id": "openadapt-flow/public-demo-headless",
+            "runner_capabilities": [
+              "headless_chromium",
+              "independent_system_of_record",
+              "playwright_dom"
+            ],
+            "status": "passed",
+            "observed_outcome": "halted",
+            "evidence": [
+              {
+                "kind": "run_report",
+                "sha256": "b4d5b9c01abc0d902f7a57afd89b32cae6574d42851372f6a4f4cad6f7807afa",
+                "relative_path": "artifacts/cases/fault-weak-effect/trial-01/run/report.json"
+              },
+              {
+                "kind": "run_report",
+                "sha256": "8143ef2f20bd6b42a00a8cd63827bf18ca99940745b7c435878e512cb2c8bf3f",
+                "relative_path": "artifacts/cases/fault-weak-effect/trial-02/run/report.json"
+              },
+              {
+                "kind": "run_report",
+                "sha256": "217acca2cdf139ff7e8b53cf8b69f7d704abe8da170e8d880adf6200b9c0d5ee",
+                "relative_path": "artifacts/cases/fault-weak-effect/trial-03/run/report.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "25ea4b0ab9a8225cef1a40b1b8fbec4a40b24e13303f2a44efa8848ebfc55af4",
+                "relative_path": "artifacts/cases/fault-weak-effect/trial-01/oracle.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "25ea4b0ab9a8225cef1a40b1b8fbec4a40b24e13303f2a44efa8848ebfc55af4",
+                "relative_path": "artifacts/cases/fault-weak-effect/trial-02/oracle.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "25ea4b0ab9a8225cef1a40b1b8fbec4a40b24e13303f2a44efa8848ebfc55af4",
+                "relative_path": "artifacts/cases/fault-weak-effect/trial-03/oracle.json"
+              }
+            ],
+            "detail_code": "fault-weak-effect.three-trial-contract",
+            "completed_at": "2026-07-26T07:07:50.021545+00:00",
+            "attestation_key_id": "public-demo-headless-runner",
+            "attestation_signature": "9IcpvCPGR1iSQhJ4T/yd2b6ZkAixxK6Nh7FaHMJyGCE9hruAgKNA4oV+ipjqs/7Xi9EPwDARE93afyrOCjM7DQ=="
+          }
+        ]
+      },
+      {
+        "id": "fault-missing-effect",
+        "kind": "missing_effect",
+        "description": "Deterministic missing effect refusal case",
+        "input_ref": null,
+        "expected_outcome": "halted",
+        "required": true,
+        "results": [
+          {
+            "case_id": "fault-missing-effect",
+            "project_id": "a7355d64-6635-4930-965e-fd1b975ececc",
+            "project_revision": 12,
+            "project_contract_sha256": "4148d3653bf47bb06ce61bbdc1873a87e0805334576be41b534a430beb2e0abf",
+            "workflow_contract_sha256": "1b94cfe9d2c90e373ad152f14cb9ebc0768a9ce2344d7f99d0f5f7bcb66bb50c",
+            "environment_contract_sha256": "b9625879c7aca502f246c91da64eed07ed08629f0e95a682831ae389f1282723",
+            "environment_digest": "bbc33b0e8a54d33979f8ee271758685f907f8f81f5a7f0206d04e421e8a0ce82",
+            "runtime_version": "1.23.0",
+            "runner_id": "openadapt-flow/public-demo-headless",
+            "runner_capabilities": [
+              "headless_chromium",
+              "independent_system_of_record",
+              "playwright_dom"
+            ],
+            "status": "passed",
+            "observed_outcome": "halted",
+            "evidence": [
+              {
+                "kind": "run_report",
+                "sha256": "9888ec067b7f7c05d4e67e638a29493b6e5e2f764d6f2eab363a6c607488b0ff",
+                "relative_path": "artifacts/cases/fault-missing-effect/trial-01/run/report.json"
+              },
+              {
+                "kind": "run_report",
+                "sha256": "eef8a4cb4c6efa841c5649d3328866f29265937aba3eab8306ab11d2e0b21626",
+                "relative_path": "artifacts/cases/fault-missing-effect/trial-02/run/report.json"
+              },
+              {
+                "kind": "run_report",
+                "sha256": "2a550f53de9c8c2a24e492574705fecf0cc5183718ebebada1f9e6333876a325",
+                "relative_path": "artifacts/cases/fault-missing-effect/trial-03/run/report.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "3a55ea754f1fd03b3393a6a3abf9570a7ebd0bd90c0a9fe8f92a5e7689b132ad",
+                "relative_path": "artifacts/cases/fault-missing-effect/trial-01/oracle.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "3a55ea754f1fd03b3393a6a3abf9570a7ebd0bd90c0a9fe8f92a5e7689b132ad",
+                "relative_path": "artifacts/cases/fault-missing-effect/trial-02/oracle.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "3a55ea754f1fd03b3393a6a3abf9570a7ebd0bd90c0a9fe8f92a5e7689b132ad",
+                "relative_path": "artifacts/cases/fault-missing-effect/trial-03/oracle.json"
+              }
+            ],
+            "detail_code": "fault-missing-effect.three-trial-contract",
+            "completed_at": "2026-07-26T07:08:22.706051+00:00",
+            "attestation_key_id": "public-demo-headless-runner",
+            "attestation_signature": "tXrlXALnWjNaOmiTvcXg+vYXhfAMYTwv61D9izyve9ou7rTNvXoDaNANxfziO+urVngZZHx+XDBO5dqSeTVqBQ=="
+          }
+        ]
+      },
+      {
+        "id": "representative",
+        "kind": "representative",
+        "description": "Recorded workflow under its qualified application boundary",
+        "input_ref": null,
+        "expected_outcome": "verified",
+        "required": true,
+        "results": [
+          {
+            "case_id": "representative",
+            "project_id": "a7355d64-6635-4930-965e-fd1b975ececc",
+            "project_revision": 12,
+            "project_contract_sha256": "4148d3653bf47bb06ce61bbdc1873a87e0805334576be41b534a430beb2e0abf",
+            "workflow_contract_sha256": "1b94cfe9d2c90e373ad152f14cb9ebc0768a9ce2344d7f99d0f5f7bcb66bb50c",
+            "environment_contract_sha256": "b9625879c7aca502f246c91da64eed07ed08629f0e95a682831ae389f1282723",
+            "environment_digest": "bbc33b0e8a54d33979f8ee271758685f907f8f81f5a7f0206d04e421e8a0ce82",
+            "runtime_version": "1.23.0",
+            "runner_id": "openadapt-flow/public-demo-headless",
+            "runner_capabilities": [
+              "headless_chromium",
+              "independent_system_of_record",
+              "playwright_dom"
+            ],
+            "status": "passed",
+            "observed_outcome": "verified",
+            "evidence": [
+              {
+                "kind": "run_report",
+                "sha256": "10d7e85225617c5ee98a357f5b2b9098b451373f6f0e367d7f84185c46806fcf",
+                "relative_path": "artifacts/cases/representative/trial-01/run/report.json"
+              },
+              {
+                "kind": "run_report",
+                "sha256": "74571ea3f509a07e570a3628325501e503e684a452bd14713121dd77bd7da5b7",
+                "relative_path": "artifacts/cases/representative/trial-02/run/report.json"
+              },
+              {
+                "kind": "run_report",
+                "sha256": "c2a3606345c3baffc881f4fcb5ff76d209278476787dbf65c6e92a2ff00bc68c",
+                "relative_path": "artifacts/cases/representative/trial-03/run/report.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "788c60eeecab7de31d5e90c0784d7eee1ac34a84862ec138f18a3178caa8f987",
+                "relative_path": "artifacts/cases/representative/trial-01/oracle.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "788c60eeecab7de31d5e90c0784d7eee1ac34a84862ec138f18a3178caa8f987",
+                "relative_path": "artifacts/cases/representative/trial-02/oracle.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "788c60eeecab7de31d5e90c0784d7eee1ac34a84862ec138f18a3178caa8f987",
+                "relative_path": "artifacts/cases/representative/trial-03/oracle.json"
+              }
+            ],
+            "detail_code": "representative.three-trial-contract",
+            "completed_at": "2026-07-26T07:07:04.683125+00:00",
+            "attestation_key_id": "public-demo-headless-runner",
+            "attestation_signature": "4soLZkZwxanR4v+IOFpB+j4BYrACmiRw65IytqbXfrP90ep4ckbpH0lyuqxd6W0eR7O//V8bWyob48ai7q6WCw=="
+          }
+        ]
+      }
+    ],
+    "exclusions": [],
+    "requalification_conditions": [],
+    "trusted_runner_keys": {
+      "public-demo-headless-runner": "dmz7CT1Jv+6Gl7W3yJZs+65RzGz5ysq4bZ27Rr3DW58="
+    },
+    "last_certification": {
+      "project_revision": 12,
+      "project_contract_sha256": "4148d3653bf47bb06ce61bbdc1873a87e0805334576be41b534a430beb2e0abf",
+      "workflow_contract_sha256": "1b94cfe9d2c90e373ad152f14cb9ebc0768a9ce2344d7f99d0f5f7bcb66bb50c",
+      "environment_contract_sha256": "b9625879c7aca502f246c91da64eed07ed08629f0e95a682831ae389f1282723",
+      "policy_name": "clinical-write",
+      "passed": true,
+      "report_sha256": "31b3f312109a6e9e8dd2cbffd318a4900433965434128ff6e869878b5eaf17f3",
+      "certified_at": "2026-07-26T07:08:22.726699+00:00"
+    }
+  },
+  "manifest": {
+    "schema_version": 2,
+    "content_digest": "c3f3e82732db5dd186289f71ce9f24c13452fa07fddcdfbe8d5d61e4b5281542",
+    "file_hashes": {
+      "templates/step_000.png": "46a75b5d63ceaad4bee942ccf2a6ca3d2b4f6327509df7eff2cc7ddb2c9fd389",
+      "templates/step_000_expect.png": "337e403fec476cc955bcf5f1d96902119d9c2fadc03e201c0c2fbc2475d03646",
+      "templates/step_001.png": "9d17fc905b1902add82cad885c72fe446a23e0334fc4db58592d2369e85f26a5",
+      "templates/step_001_expect.png": "ccbbb335c8160188198df18beb48bd88082b7bb1e5c1cd987d6766afb62c0773",
+      "templates/step_002.png": "e6a0e0718b00c26280e32928b744217d00a7e010ab9825da27724e2debc9b805",
+      "templates/step_002_expect.png": "f66608f19f3acf0ba8d86a39ecdd04781eb320787885039ab1eefee3835c83de",
+      "templates/step_003.png": "2cb01de3e45c7c6cd6526f1b6f9c1a4f86bee1a5e4f8e3f6fbf7150470cf5f2c",
+      "templates/step_003_expect.png": "68cd40d6bd0abdf81beb40dd4202bac784a4b55492f803cdd5fb1e7ab8f76941",
+      "templates/step_005.png": "5d8163520ba8355f44ffe0cd06a26be6bfe5d6660bcff1395dc82d4da3aa0ac1",
+      "templates/step_005_expect.png": "0919dca8fe883ad52eae6359f9da3494cb57c68e006ea4ba314d61e15787ea47"
+    },
+    "provenance": {
+      "compiler_version": "1.23.0",
+      "source_recording_sha256": null,
+      "compiler_config_sha256": "479f143ba6970af144553f82f66990463129ee6606852260478c9c2a79b7f91d",
+      "created_at": "2026-07-26T07:06:47.886463+00:00",
+      "policy_name": "clinical-write",
+      "certified": true,
+      "certification_status": "certified",
+      "certified_at": "2026-07-26T07:08:22.726707+00:00",
+      "expires_at": null,
+      "certification_invalidated_at": null,
+      "certification_invalidation_reason": null
+    },
+    "encrypted": false
+  }
+}

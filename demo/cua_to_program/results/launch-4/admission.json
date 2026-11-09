@@ -1,0 +1,19 @@
+{
+  "phase": "admission",
+  "reviewer": "demo-reviewer@example.invalid",
+  "steps_reviewed": 16,
+  "canary_values": {
+    "insurance_no": "999000109",
+    "claim_no": "CD999",
+    "explanation": "Child with fever, parent present (#999)"
+  },
+  "canary_status": "refused",
+  "canary_model_calls": null,
+  "canary_detail": "the standard run gate refused; nothing ran:\nREFUSE: workflow 'openimis.claim_entry' under 'standard' profile vs policy 'clinical-write'\n  [PASS] Execution profile: standard (production); durability required and enabled; settled-state detection required and enabled\n  [REFUSE] Certification: bundle is NOT certified under 'clinical-write': 5 policy violation(s) (e.g. require_reviewed_action_risk: write-shaped action risk has no current, bound operator classification \u2014 qualification must apply and certify an explicit risk override (special key may navigate, edit, or invoke an application shortcut))\n         steps: step_002, step_012, step_015\n  [PASS] Identity coverage: 8/8 entity-sensitive/consequential action(s) identity-armed\n  [PASS] Effect coverage: 1/1 consequential write(s) declare the required postcondition and confirmed system-of-record effect contracts\n  [PASS] Approval fallback: a verifier satisfying the required evidence tier is configured; 1 declared write(s) are covered\n  [PASS] Interstitial admission: no automatic interstitial actions declared\n  [WARN] Encrypted bundle: workflow.json plaintext (not required); WARNING: 22 template/screenshot asset(s) are unsealed (plaintext at rest) -- protect via disk encryption or run with --strict-templates to refuse\n         steps: templates/identifiers/step_015.png, templates/layout_fingerprint.json, templates/step_000.png, templates/step_000_expect.png, templates/step_001_expect.png, templates/step_002_expect.png, templates/step_003.png, templates/step_003_expect.png, ... (+14 more)\n  [PASS] Sealed manifest + version pin: integrity-sealed manifest re-verified (digest a2b2ac6e8798e347..., compiler 2.2.0) (version pin matches)\n  -> RUN REFUSED (fail-closed): Certification. Nothing was executed.",
+  "canary_halt_reason": null,
+  "canary_wall_s": 0.179,
+  "canary_rows": [],
+  "canary_video": null,
+  "admission_wall_s": 100.216,
+  "state": "BundleState.DRAFT"
+}

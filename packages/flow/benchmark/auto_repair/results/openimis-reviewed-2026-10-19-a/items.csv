@@ -1,0 +1,6 @@
+item,ui_change,repair_status,readback,cost_usd,wall_s,reason
+240,False,not_needed,correct,0,22.7,
+241,False,not_needed,correct,0,23.1,
+242,True,no_fix,missing,0.015346,24.6,the agent gave up
+243,True,no_fix,missing,0.019002,53.5,the agent gave up
+244,True,no_fix,missing,0.055066,45.7,the agent gave up

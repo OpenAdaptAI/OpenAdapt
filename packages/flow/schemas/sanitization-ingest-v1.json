@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openadapt.ai/schemas/sanitization-ingest-v1.json",
+  "title": "OpenAdapt sanitization ingest envelope v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "artifact", "scrubber", "coverage", "findings", "approval"],
+  "properties": {
+    "schema": { "const": "openadapt.sanitization/v1" },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "sha256", "size_bytes", "execution_semantics", "runtime_semantics_validated", "trusted_boundary_required_at_runtime"],
+      "properties": {
+        "kind": { "enum": ["recording", "bundle"] },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "size_bytes": { "type": "integer", "minimum": 1 },
+        "execution_semantics": { "enum": ["preserved", "requires-parameterization-validation", "not-preserved"] },
+        "runtime_semantics_validated": { "type": "boolean" },
+        "trusted_boundary_required_at_runtime": { "type": "boolean" }
+      }
+    },
+    "scrubber": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "policy"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "policy": { "type": "string", "minLength": 1 }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["complete", "media_types"],
+      "properties": {
+        "complete": { "const": true },
+        "media_types": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["text", "image"] }
+        }
+      }
+    },
+    "findings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["unresolved"],
+      "properties": { "unresolved": { "const": 0 } }
+    },
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "method", "artifact_sha256", "approved_at", "approved_by"],
+      "properties": {
+        "status": { "const": "approved" },
+        "method": { "enum": ["human", "policy"] },
+        "artifact_sha256": { "$ref": "#/$defs/sha256" },
+        "approved_at": { "type": "string", "format": "date-time" },
+        "approved_by": { "type": "string", "minLength": 1 },
+        "policy_key_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+-]{0,99}$" },
+        "policy_signature": { "$ref": "#/$defs/sha256" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "method": { "const": "policy" } } },
+          "then": { "required": ["policy_key_id", "policy_signature"] }
+        }
+      ]
+    }
+  },
+  "$defs": { "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" } }
+}

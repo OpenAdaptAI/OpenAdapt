@@ -1,0 +1,36 @@
+id: reviewed-judgment-cases-supported
+claim: >-
+  A qualification project can bind typed local facts, evidence hashes,
+  reviewer provenance, and the exact decision contract to reviewed examples
+  and counterfactuals. It can retain permanent human authority, record a
+  reviewed automatic-rule candidate, or refuse certification until more
+  evidence exists, without converting one historical choice into policy.
+surfaces: [docs]
+tier: supported
+evidence:
+  - path: tests/test_judgment_cases.py
+    proves: >-
+      Required CI covers closed fact schemas, exact workflow and decision
+      bindings, local-only evidence references, conflict refusal,
+      reciprocal contrast coverage for automatic-rule candidates, retained
+      human authority, unresolved-evidence refusal, and the invariant that
+      case evaluation never edits or synthesizes the executable rule.
+  - path: tests/test_qualification_project.py
+    proves: >-
+      Required CI binds the reviewed local evidence bytes and review note
+      into certification, reproduces that exact contract when a qualified
+      workflow is saved, and refuses changed case or evidence digests.
+  - path: docs/BUSINESS_DECISIONS.md
+    kind: doc
+    proves: >-
+      The public contract separates qualification-time judgment capture
+      from one live runtime answer and describes the scriptable authoring
+      and judgment-case interfaces.
+caveats:
+  - >-
+    An automatic-rule case names only a reviewed rule identifier and finite
+    option. Flow does not infer or generate executable policy from the case;
+    the rule must be authored and qualified through the normal program path.
+  - >-
+    A retained human-node case preserves runtime human authority. A
+    more-evidence-required case refuses certification instead of guessing.

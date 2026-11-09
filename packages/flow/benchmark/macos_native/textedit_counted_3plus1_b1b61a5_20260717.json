@@ -1,0 +1,126 @@
+{
+  "ambiguity_trial": {
+    "error": "ambiguous native macOS target: selector matched 2 windows (id=17037 pid=97178 title='oa-macos-0137586e5c-ambiguous-b.txt', id=17023 pid=97174 title='oa-macos-0137586e5c-ambiguous-a.txt'); provide a unique macos_window_title. Refusing first-match input.",
+    "matched_windows": 2,
+    "oracles": [
+      {
+        "expected_bytes": 22,
+        "observed_bytes": 22,
+        "status": "confirmed"
+      },
+      {
+        "expected_bytes": 22,
+        "observed_bytes": 22,
+        "status": "confirmed"
+      }
+    ],
+    "refused": true,
+    "status": "passed"
+  },
+  "automatic_retry": false,
+  "caveats": [
+    "TextEdit only; no AX structural resolution claim",
+    "synthetic local files; not a design-partner workflow",
+    "one macOS host and active keyboard/session state"
+  ],
+  "cleanup_errors": [
+    "window cleanup 'oa-macos-0137586e5c-trial-1': native physical-input target changed after foreground proof; bound id=16973 pid=97129 bounds=(326.0, 254.0, 646.0, 418.0) title='oa-macos-0137586e5c-trial-1.txt'. Refusing coordinate/global input against a stale window mapping",
+    "window cleanup 'oa-macos-0137586e5c-trial-2': native physical-input target changed after foreground proof; bound id=16991 pid=97156 bounds=(326.0, 254.0, 646.0, 418.0) title='oa-macos-0137586e5c-trial-2.txt'. Refusing coordinate/global input against a stale window mapping",
+    "window cleanup 'oa-macos-0137586e5c-trial-3': native physical-input target changed after foreground proof; bound id=17007 pid=97164 bounds=(326.0, 254.0, 646.0, 418.0) title='oa-macos-0137586e5c-trial-3.txt'. Refusing coordinate/global input against a stale window mapping",
+    "window cleanup 'oa-macos-0137586e5c-ambiguous-a': native physical-input target changed after foreground proof; bound id=17023 pid=97174 bounds=(326.0, 254.0, 646.0, 418.0) title='oa-macos-0137586e5c-ambiguous-a.txt'. Refusing coordinate/global input against a stale window mapping",
+    "window cleanup 'oa-macos-0137586e5c-ambiguous-b': native physical-input target changed after foreground proof; bound id=17037 pid=97178 bounds=(326.0, 254.0, 646.0, 418.0) title='oa-macos-0137586e5c-ambiguous-b.txt'. Refusing coordinate/global input against a stale window mapping"
+  ],
+  "environment": {
+    "candidate": {
+      "dirty_paths": [],
+      "flow_version": "1.9.1",
+      "git_dirty": false,
+      "git_sha": "b1b61a5152a3662f3fe0b4b44446f2a139a1ad83",
+      "qualification_config": {
+        "ambiguity_refusal_cases": 1,
+        "application": "TextEdit",
+        "automatic_retry": false,
+        "backend_kind": "macos",
+        "focused_application_proof": "system-wide AX focused application PID",
+        "normal_trials": 3,
+        "oracle": "exact target-file bytes",
+        "physical_fallback": false,
+        "text_delivery": "writable AX selected-text on exact focused element",
+        "window_proofs": [
+          "unique exact PID/title",
+          "exact topmost CoreGraphics window id",
+          "exact focused/main AX window"
+        ]
+      }
+    },
+    "permissions": {
+      "accessibility": true,
+      "screen_recording": true
+    },
+    "platform": "macOS-15.7.3-arm64-arm-64bit",
+    "python": "3.11.9"
+  },
+  "evidence_classification": "acceptance_candidate",
+  "failure_taxonomy": [
+    "permission_refusal",
+    "target_absent",
+    "target_ambiguous",
+    "wrong_foreground_window",
+    "capture_failure",
+    "input_delivery_failure",
+    "file_effect_refuted",
+    "file_effect_unverifiable",
+    "cleanup_failure"
+  ],
+  "oracle": "exact bytes read independently from the target file",
+  "over_halts": 0,
+  "run_count": {
+    "ambiguity_refusal_cases": 1,
+    "normal_trials": 3
+  },
+  "schema_version": 1,
+  "silent_incorrect_successes": 0,
+  "status": "failed",
+  "task": "replace and save a unique /tmp TextEdit document",
+  "timestamp_utc": "2026-07-17T20:43:28.828081+00:00",
+  "trials": [
+    {
+      "backend_sequence_reported_success": true,
+      "duration_s": 1.853,
+      "frame_bytes": 22113,
+      "oracle": {
+        "expected_bytes": 42,
+        "observed_bytes": 42,
+        "status": "confirmed"
+      },
+      "status": "passed",
+      "trial": 1
+    },
+    {
+      "backend_sequence_reported_success": true,
+      "duration_s": 1.523,
+      "frame_bytes": 22673,
+      "oracle": {
+        "expected_bytes": 42,
+        "observed_bytes": 42,
+        "status": "confirmed"
+      },
+      "status": "passed",
+      "trial": 2
+    },
+    {
+      "backend_sequence_reported_success": true,
+      "duration_s": 1.555,
+      "frame_bytes": 22431,
+      "oracle": {
+        "expected_bytes": 42,
+        "observed_bytes": 42,
+        "status": "confirmed"
+      },
+      "status": "passed",
+      "trial": 3
+    }
+  ],
+  "trials_completed": 3,
+  "trials_required": 3
+}

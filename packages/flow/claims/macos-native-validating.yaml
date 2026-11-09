@@ -1,0 +1,28 @@
+id: macos-native-validating
+claim: >-
+  Native macOS has scoped acceptance for exact-window-bound text delivery,
+  independent file effects, and ambiguity refusal on a fixed TextEdit task.
+surfaces: [README.md, docs, website]
+tier: validating
+reproducibility: field
+evidence:
+  - path: tests/test_macos_backend.py
+    proves: >-
+      CI covers unique-window binding, foreground/focus proof, exact-element
+      text delivery, and refusal before physical input when proof fails.
+  - path: tests/test_macos_qualification.py
+    proves: >-
+      CI validates the qualification oracle, failure taxonomy, evidence
+      hashes, cleanup adjudication, and ambiguity-refusal accounting.
+  - path: benchmark/macos_native/textedit_counted_3plus1_b1b61a5_20260717.adjudication.json
+    kind: benchmark
+    proves: >-
+      Candidate b1b61a5 completed 3/3 exact-byte TextEdit effects and
+      refused two ambiguous windows without modifying either file.
+caveats:
+  - >-
+    Acceptance covers TextEdit on one macOS 15.7.3 Apple Silicon host and
+    active user session; each customer application is qualified separately.
+  - >-
+    The original counted report remains failed. The hash-bound adjudication
+    accepts only its independently confirmed action/effect/refusal evidence.

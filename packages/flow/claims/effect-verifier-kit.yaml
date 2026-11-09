@@ -1,0 +1,62 @@
+id: effect-verifier-kit
+claim: >-
+  The effect-verifier kit makes declaring and wiring effect verification a
+  reviewed deployment-config exercise instead of bespoke per-deployment
+  code: declarative REST / FHIR / read-only-SQL / file-arrival /
+  document-hash verifier configs with secret-isolated auth references and
+  explicit run-parameter binding, a cross-substrate exactly-one-NEW-record
+  duplicate guard, per-consequential-step effect-coverage lint/certify
+  gates, and typed reconciliation tasks on halt. A deployment with multiple
+  reviewed read boundaries selects the strongest evidence tier before
+  actuation, retains that exact selection through durable resume, and never
+  downgrades to a weaker verifier after an action.
+surfaces: [docs]
+tier: validating
+evidence:
+  - path: tests/test_effect_sql.py
+    proves: >-
+      The read-only SQL verifier's whitelist (mutation/stacking/comment
+      smuggling refused at construction) and full verdict contract, plus
+      the exact table-delta audit promoted from the Frappe Lending
+      reference matrix — against LOCAL sqlite fixtures only.
+  - path: tests/test_effect_file_arrival.py
+    proves: >-
+      File-arrival verdicts (pattern / size>0 / mtime freshness / content
+      probe / duplicate export) against real temp directories, and the
+      SFTP path against an in-memory fake paramiko-shaped transport.
+  - path: tests/test_effect_kit_config.py
+    proves: >-
+      The declarative construction path: env-var auth references fail
+      loud when unset, run-parameter references resolve at build (and
+      refuse to construct unresolved), and pre-kit configs build
+      byte-identically.
+  - path: tests/test_effect_verifier_candidates.py
+    proves: >-
+      Required CI constructs and preflights all reviewed candidates before
+      input, pins the strongest verifier and its pre-state, preserves the
+      binding through durable resume, and refuses an unavailable selected
+      verifier rather than falling back after an action.
+  - path: tests/test_effect_coverage_lint.py
+    proves: >-
+      lint warns per consequential step lacking an effect contract and
+      reports coverage %; certify fails the same gap only when the policy
+      sets require_effects_for_irreversible (warn-vs-fail is
+      policy-configurable).
+  - path: tests/test_effect_reconciliation.py
+    proves: >-
+      Every escalated verification failure emits a typed
+      ReconciliationTask carrying the one-way contract hash and verdict
+      evidence — never the resolved selector values.
+  - path: docs/EFFECT_KIT.md
+    proves: >-
+      The operator-facing kit contract: config reference plus Frappe
+      (REST/SQL) and OpenEMR (FHIR/SQL) worked examples targeting the
+      reference fixtures.
+caveats:
+  - >-
+    CONTRACT-PROVEN, not live-proven: the SQL verifier is exercised
+    against sqlite fixtures (no production MariaDB/Postgres), the SFTP
+    arrival path against a fake transport (no real SFTP server), and the
+    worked-example configs are templates — only the FHIR substrate has an
+    additional opt-in live-OpenEMR test. Per-verifier claims are exactly
+    as strong as these tests.

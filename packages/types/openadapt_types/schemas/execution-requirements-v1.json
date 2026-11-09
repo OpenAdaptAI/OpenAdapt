@@ -1,0 +1,213 @@
+{
+  "$defs": {
+    "ExecutionMode": {
+      "enum": [
+        "in_session",
+        "external"
+      ],
+      "title": "ExecutionMode",
+      "type": "string"
+    },
+    "ExecutionProfile": {
+      "enum": [
+        "demo",
+        "standard",
+        "regulated"
+      ],
+      "title": "ExecutionProfile",
+      "type": "string"
+    },
+    "ExecutionSurface": {
+      "enum": [
+        "web",
+        "windows",
+        "macos",
+        "linux",
+        "rdp",
+        "citrix"
+      ],
+      "title": "ExecutionSurface",
+      "type": "string"
+    },
+    "RunnerCapability": {
+      "description": "Closed capabilities that admission can require from a runner.",
+      "enum": [
+        "pixel_observation",
+        "structural_observation",
+        "playwright_dom",
+        "structural_resolution",
+        "visual_resolution",
+        "ocr_relational_resolution",
+        "actuation",
+        "physical_input_actuation",
+        "structural_actuation",
+        "playwright_actuation",
+        "api_actuation",
+        "external_executor_actuation",
+        "application_identity",
+        "session_identity",
+        "workflow_state_identity",
+        "record_identity",
+        "identity_verification",
+        "governed_authorization",
+        "settled_state_detection",
+        "session_continuity",
+        "durable_resume",
+        "postcondition_verification",
+        "evidence_export",
+        "effect_verification",
+        "independent_system_of_record",
+        "independent_session",
+        "persisted_state_reacquisition",
+        "immediate_screen_confirmation",
+        "effect_tier_1",
+        "effect_tier_2",
+        "effect_tier_3",
+        "effect_tier_4",
+        "local_secret_resolution",
+        "parameter_by_reference",
+        "no_external_egress",
+        "policy_controlled_egress"
+      ],
+      "title": "RunnerCapability",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "The exact runner requirements selected for one qualified plan.",
+  "properties": {
+    "authorization_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Authorization Digest",
+      "type": "string"
+    },
+    "binding_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Binding Digest",
+      "type": "string"
+    },
+    "execution_mode": {
+      "$ref": "#/$defs/ExecutionMode"
+    },
+    "maximum_runtime_version": {
+      "maxLength": 64,
+      "minLength": 5,
+      "pattern": "^(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})$",
+      "title": "Maximum Runtime Version",
+      "type": "string"
+    },
+    "minimum_effect_tier": {
+      "maximum": 4,
+      "minimum": 1,
+      "title": "Minimum Effect Tier",
+      "type": "integer"
+    },
+    "minimum_runtime_version": {
+      "maxLength": 64,
+      "minLength": 5,
+      "pattern": "^(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})$",
+      "title": "Minimum Runtime Version",
+      "type": "string"
+    },
+    "permitted_executor_ids": {
+      "default": [],
+      "items": {
+        "maxLength": 128,
+        "minLength": 8,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+        "type": "string"
+      },
+      "maxItems": 128,
+      "title": "Permitted Executor Ids",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "permitted_runner_ids": {
+      "default": [],
+      "items": {
+        "maxLength": 128,
+        "minLength": 8,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+        "type": "string"
+      },
+      "maxItems": 128,
+      "title": "Permitted Runner Ids",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "plan_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Plan Digest",
+      "type": "string"
+    },
+    "portable_intent_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Portable Intent Digest",
+      "type": "string"
+    },
+    "profile": {
+      "$ref": "#/$defs/ExecutionProfile"
+    },
+    "qualification_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Qualification Digest",
+      "type": "string"
+    },
+    "required_capabilities": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/RunnerCapability"
+      },
+      "maxItems": 36,
+      "title": "Required Capabilities",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "runtime_input_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Runtime Input Digest",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "openadapt.execution-requirements/v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "selected_plan_id": {
+      "maxLength": 128,
+      "minLength": 8,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Selected Plan Id",
+      "type": "string"
+    },
+    "surface": {
+      "$ref": "#/$defs/ExecutionSurface"
+    },
+    "workflow_family_id": {
+      "maxLength": 128,
+      "minLength": 8,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Workflow Family Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "workflow_family_id",
+    "portable_intent_digest",
+    "selected_plan_id",
+    "plan_digest",
+    "qualification_digest",
+    "binding_digest",
+    "surface",
+    "execution_mode",
+    "profile",
+    "minimum_effect_tier",
+    "minimum_runtime_version",
+    "maximum_runtime_version",
+    "authorization_digest",
+    "runtime_input_digest"
+  ],
+  "title": "ExecutionRequirementsV1",
+  "type": "object"
+}

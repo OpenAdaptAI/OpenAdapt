@@ -1,0 +1,42 @@
+{
+  "$defs": {
+    "ClinicOutboxActionV1": {
+      "enum": [
+        "harvest",
+        "attach_fax",
+        "create_triage_task"
+      ],
+      "title": "ClinicOutboxActionV1",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Actuation intent. OpenAdapt types the template only after a human stamp.",
+  "properties": {
+    "action": {
+      "$ref": "#/$defs/ClinicOutboxActionV1"
+    },
+    "needs_human": {
+      "title": "Needs Human",
+      "type": "boolean"
+    },
+    "schema_version": {
+      "const": "openadapt.clinic-outbox/v1",
+      "default": "openadapt.clinic-outbox/v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "template": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Template",
+      "type": "string"
+    }
+  },
+  "required": [
+    "action",
+    "template",
+    "needs_human"
+  ],
+  "title": "ClinicOutboxV1",
+  "type": "object"
+}

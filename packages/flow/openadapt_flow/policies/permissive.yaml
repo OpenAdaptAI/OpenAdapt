@@ -1,0 +1,16 @@
+# Permissive default policy.
+#
+# Asserts the single floor that costs nothing to demand: a consequential,
+# IRREVERSIBLE write must at least verify SOMETHING happened (carry a
+# postcondition) rather than pass vacuously. Everything else is allowed —
+# unarmed clicks, low-confidence steps, and vacuous benign steps all pass.
+#
+# Use this as a smoke gate in CI, then graduate to a stricter policy
+# (e.g. clinical-write.yaml) for unattended production deployment.
+name: permissive
+description: >-
+  Minimal floor — only requires that auto-classified irreversible writes carry
+  an effect postcondition. Everything else passes.
+
+require_effect_verification_for:
+  - write            # any step auto-classified irreversible (write-shaped)

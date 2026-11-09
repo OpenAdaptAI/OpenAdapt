@@ -1,0 +1,76 @@
+{
+  "model": "claude-sonnet-5-5",
+  "agent_id": "agent:anthropic:claude-sonnet-5-5:scoreboard-repair",
+  "cost_usd": 0.035818,
+  "calls": [
+    {
+      "turn": 1,
+      "started_s": 1792438687.6002932,
+      "ended_s": 1792438689.768343,
+      "input_tokens": 5026,
+      "output_tokens": 180,
+      "cache_read_input_tokens": 0,
+      "cache_creation_input_tokens": 0,
+      "cost_usd": 0.011852,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              860,
+              159
+            ]
+          }
+        }
+      ],
+      "request_id": "req_011CgCAHJhzgUXSxQkHrt8az",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 2,
+      "started_s": 1792438689.791926,
+      "ended_s": 1792438692.5310788,
+      "input_tokens": 5050,
+      "output_tokens": 201,
+      "cache_read_input_tokens": 0,
+      "cache_creation_input_tokens": 0,
+      "cost_usd": 0.01211,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              860,
+              159
+            ]
+          }
+        }
+      ],
+      "request_id": "req_011CgCAHU1qGGW2yDn72DJdm",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 3,
+      "started_s": 1792438692.559978,
+      "ended_s": 1792438695.415861,
+      "input_tokens": 5063,
+      "output_tokens": 173,
+      "cache_read_input_tokens": 0,
+      "cache_creation_input_tokens": 0,
+      "cost_usd": 0.011856,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              860,
+              159
+            ]
+          }
+        }
+      ],
+      "request_id": "req_011CgCAHfpzkxMYEQoCXeGFC",
+      "stop_reason": "tool_use"
+    }
+  ]
+}

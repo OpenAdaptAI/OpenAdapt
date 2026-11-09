@@ -1,0 +1,4 @@
+title,fname,lname,DOB,sex,street,city,state_label,postal_code,phone_home,email,country_code
+Ms.,Elena,Marsh,1979-06-14,Female,42 HARBOR LANE,EXAMPLETON,Massachusetts,02139,555-0142,elena.marsh@example.invalid,USA
+Mr.,Owen,Tally,1985-02-03,Male,7 BIRCH ROW,EXAMPLETON,Massachusetts,02139,555-0187,owen.tally@example.invalid,USA
+Ms.,Rae,Quill,1992-11-21,Female,18 MILL STREET,SAMPLEFORD,Massachusetts,02140,555-0119,rae.quill@example.invalid,USA

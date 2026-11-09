@@ -1,0 +1,177 @@
+{
+  "n": 21,
+  "structural_ok": 21,
+  "visual_ok": 6,
+  "structural_ratio": "21/21",
+  "visual_ratio": "6/21",
+  "targets": [
+    {
+      "id": "open-p0",
+      "drifted": false,
+      "structural_ok": true,
+      "structural_rung": true,
+      "visual_ok": true,
+      "visual_rung": "template"
+    },
+    {
+      "id": "open-p1",
+      "drifted": true,
+      "structural_ok": true,
+      "structural_rung": true,
+      "visual_ok": false,
+      "visual_rung": "template"
+    },
+    {
+      "id": "open-p2",
+      "drifted": true,
+      "structural_ok": true,
+      "structural_rung": true,
+      "visual_ok": false,
+      "visual_rung": "template"
+    },
+    {
+      "id": "open-p3",
+      "drifted": true,
+      "structural_ok": true,
+      "structural_rung": true,
+      "visual_ok": false,
+      "visual_rung": "template"
+    },
+    {
+      "id": "open-p4",
+      "drifted": false,
+      "structural_ok": true,
+      "structural_rung": true,
+      "visual_ok": true,
+      "visual_rung": "template"
+    },
+    {
+      "id": "open-p5",
+      "drifted": true,
+      "structural_ok": true,
+      "structural_rung": true,
+      "visual_ok": false,
+      "visual_rung": "template"
+    },
+    {
+      "id": "open-p6",
+      "drifted": true,
+      "structural_ok": true,
+      "structural_rung": true,
+      "visual_ok": false,
+      "visual_rung": "template"
+    },
+    {
+      "id": "open-p7",
+      "drifted": true,
+      "structural_ok": true,
+      "structural_rung": true,
+      "visual_ok": false,
+      "visual_rung": "template"
+    },
+    {
+      "id": "open-p8",
+      "drifted": false,
+      "structural_ok": true,
+      "structural_rung": true,
+      "visual_ok": true,
+      "visual_rung": "template"
+    },
+    {
+      "id": "open-p9",
+      "drifted": true,
+      "structural_ok": true,
+      "structural_rung": true,
+      "visual_ok": false,
+      "visual_rung": "template"
+    },
+    {
+      "id": "open-p10",
+      "drifted": true,
+      "structural_ok": true,
+      "structural_rung": true,
+      "visual_ok": false,
+      "visual_rung": "template"
+    },
+    {
+      "id": "open-p11",
+      "drifted": true,
+      "structural_ok": true,
+      "structural_rung": true,
+      "visual_ok": false,
+      "visual_rung": "template"
+    },
+    {
+      "id": "open-p12",
+      "drifted": false,
+      "structural_ok": true,
+      "structural_rung": true,
+      "visual_ok": true,
+      "visual_rung": "template"
+    },
+    {
+      "id": "open-p13",
+      "drifted": true,
+      "structural_ok": true,
+      "structural_rung": true,
+      "visual_ok": false,
+      "visual_rung": "template"
+    },
+    {
+      "id": "open-p14",
+      "drifted": true,
+      "structural_ok": true,
+      "structural_rung": true,
+      "visual_ok": false,
+      "visual_rung": "template"
+    },
+    {
+      "id": "open-p15",
+      "drifted": true,
+      "structural_ok": true,
+      "structural_rung": true,
+      "visual_ok": false,
+      "visual_rung": "template"
+    },
+    {
+      "id": "open-p16",
+      "drifted": false,
+      "structural_ok": true,
+      "structural_rung": true,
+      "visual_ok": true,
+      "visual_rung": "template"
+    },
+    {
+      "id": "open-p17",
+      "drifted": true,
+      "structural_ok": true,
+      "structural_rung": true,
+      "visual_ok": false,
+      "visual_rung": "template"
+    },
+    {
+      "id": "open-p18",
+      "drifted": true,
+      "structural_ok": true,
+      "structural_rung": true,
+      "visual_ok": false,
+      "visual_rung": "template"
+    },
+    {
+      "id": "open-p19",
+      "drifted": true,
+      "structural_ok": true,
+      "structural_rung": true,
+      "visual_ok": false,
+      "visual_rung": "template"
+    },
+    {
+      "id": "open-p20",
+      "drifted": false,
+      "structural_ok": true,
+      "structural_rung": true,
+      "visual_ok": true,
+      "visual_rung": "template"
+    }
+  ]
+}

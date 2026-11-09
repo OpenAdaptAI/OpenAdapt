@@ -1,0 +1,67 @@
+mode,trial,stopped,route,repair_status,proposals,probe_passed,approved,resumed_outcome,readback,records,model_calls,cost_usd,wall_s,reason
+none,1,False,none,not_needed,0,False,,,correct,1,0,0,4.5,
+none,2,False,none,not_needed,0,False,,,correct,1,0,0,3.1,
+none,3,False,none,not_needed,0,False,,,correct,1,0,0,3.0,
+theme,1,False,none,not_needed,0,False,,,correct,1,0,0,3.0,
+theme,2,False,none,not_needed,0,False,,,correct,1,0,0,3.6,
+theme,3,False,none,not_needed,0,False,,,correct,1,0,0,3.8,
+move,1,False,none,not_needed,0,False,,,correct,1,0,0,3.2,
+move,2,False,none,not_needed,0,False,,,correct,1,0,0,3.3,
+move,3,False,none,not_needed,0,False,,,correct,1,0,0,2.6,
+font,1,True,repair,no_fix,0,False,,,safe_stop,0,0,0.013178,10.3,the agent gave up
+font,2,True,repair,no_fix,0,False,,,safe_stop,0,0,0.013088,9.5,the agent gave up
+font,3,True,repair,no_fix,0,False,,,safe_stop,0,0,0.012598,10.0,the agent gave up
+zoom,1,True,repair,no_fix,0,False,,,safe_stop,0,0,0.014252,9.5,the agent gave up
+zoom,2,True,repair,no_fix,0,False,,,safe_stop,0,0,0.013902,8.3,the agent gave up
+zoom,3,True,repair,no_fix,0,False,,,safe_stop,0,0,0.013812,8.6,the agent gave up
+slow,1,False,none,not_needed,0,False,,,correct,1,0,0.0,14.5,
+slow,2,False,none,not_needed,0,False,,,correct,1,0,0.0,14.5,
+slow,3,False,none,not_needed,0,False,,,correct,1,0,0.0,14.8,
+grow,1,False,none,not_needed,0,False,,,correct,1,0,0.0,2.5,
+grow,2,False,none,not_needed,0,False,,,correct,1,0,0.0,2.5,
+grow,3,False,none,not_needed,0,False,,,correct,1,0,0.0,2.6,
+sort,1,False,none,not_needed,0,False,,,correct,1,0,0.0,2.5,
+sort,2,False,none,not_needed,0,False,,,correct,1,0,0.0,2.5,
+sort,3,False,none,not_needed,0,False,,,correct,1,0,0.0,2.4,
+rename,1,False,none,not_needed,0,False,,,correct,1,0,0.0,2.4,
+rename,2,False,none,not_needed,0,False,,,correct,1,0,0.0,2.5,
+rename,3,False,none,not_needed,0,False,,,correct,1,0,0.0,2.4,
+relink,1,True,repair,resumed,1,True,person,VERIFIED,correct,1,1,0.012986,11.0,
+relink,2,True,repair,resumed,1,True,person,VERIFIED,correct,1,1,0.012866,8.5,
+relink,3,True,repair,resumed,1,True,person,VERIFIED,correct,1,1,0.012846,8.8,
+redesign,1,True,repair,resumed,1,True,person,VERIFIED,correct,1,1,0.014512,12.2,
+redesign,2,True,repair,resumed,1,True,person,VERIFIED,correct,1,1,0.013522,10.6,
+redesign,3,True,repair,resumed,1,True,person,VERIFIED,correct,1,1,0.014332,11.0,
+typelabel,1,False,none,not_needed,0,False,,,correct,1,0,0.0,2.7,
+typelabel,2,False,none,not_needed,0,False,,,correct,1,0,0.0,2.5,
+typelabel,3,False,none,not_needed,0,False,,,correct,1,0,0.0,2.5,
+menu,1,True,repair,no_fix,3,False,,,safe_stop,0,3,0.041458,11.4,"step_005 saves, but the proposed control 'Actions' does not read as a save; refusing a patch that would point a save at another kind of control"
+menu,2,True,repair,no_fix,3,False,,,safe_stop,0,3,0.041478,10.7,"step_005 saves, but the proposed control 'Actions' does not read as a save; refusing a patch that would point a save at another kind of control"
+menu,3,True,repair,no_fix,3,False,,,safe_stop,0,3,0.041658,11.2,"step_005 saves, but the proposed control 'Actions' does not read as a save; refusing a patch that would point a save at another kind of control"
+provider,1,True,repair,no_fix,0,False,,,safe_stop,0,0,0.01746,13.8,the agent gave up
+provider,2,True,repair,no_fix,0,False,,,safe_stop,0,0,0.01732,11.6,the agent gave up
+provider,3,True,repair,no_fix,0,False,,,safe_stop,0,0,0.01708,12.0,the agent gave up
+reqfield,1,False,none,not_needed,0,False,,,correct,1,0,0.0,2.4,
+reqfield,2,False,none,not_needed,0,False,,,correct,1,0,0.0,2.4,
+reqfield,3,False,none,not_needed,0,False,,,correct,1,0,0.0,2.5,
+notice,1,True,repair,no_fix,1,False,,,safe_stop,0,1,0.028846,16.8,the agent gave up
+notice,2,True,repair,no_fix,1,False,,,safe_stop,0,1,0.029076,18.3,the agent gave up
+notice,3,True,repair,no_fix,1,False,,,safe_stop,0,1,0.029376,18.5,the agent gave up
+modal-once,1,False,none,not_needed,0,False,,,correct,1,0,0.0,4.2,
+modal-once,2,False,none,not_needed,0,False,,,correct,1,0,0.0,3.3,
+modal-once,3,False,none,not_needed,0,False,,,correct,1,0,0.0,3.1,
+modal,1,False,none,not_needed,0,False,,,correct,1,0,0.0,2.6,
+modal,2,False,none,not_needed,0,False,,,correct,1,0,0.0,2.5,
+modal,3,False,none,not_needed,0,False,,,correct,1,0,0.0,2.6,
+lookalike,1,False,none,not_needed,0,False,,,correct,1,0,0.0,2.4,
+lookalike,2,False,none,not_needed,0,False,,,correct,1,0,0.0,2.4,
+lookalike,3,False,none,not_needed,0,False,,,correct,1,0,0.0,2.4,
+ambiguous,1,True,person,not_repairable,0,False,,,safe_stop,0,0,0.0,0.6,step_000 stopped before resolving its target for another reason; only a target the ladder could not find is repaired
+ambiguous,2,True,person,not_repairable,0,False,,,safe_stop,0,0,0.0,0.2,step_000 stopped before resolving its target for another reason; only a target the ladder could not find is repaired
+ambiguous,3,True,person,not_repairable,0,False,,,safe_stop,0,0,0.0,0.2,step_000 stopped before resolving its target for another reason; only a target the ladder could not find is repaired
+missing,1,True,person,not_repairable,0,False,,,safe_stop,0,0,0.0,0.4,the run ended REJECTED_POLICY; self-repair handles only a halt before any effect
+missing,2,True,person,not_repairable,0,False,,,safe_stop,0,0,0.0,0.4,the run ended REJECTED_POLICY; self-repair handles only a halt before any effect
+missing,3,True,person,not_repairable,0,False,,,safe_stop,0,0,0.0,0.4,the run ended REJECTED_POLICY; self-repair handles only a halt before any effect
+empty,1,True,person,not_repairable,0,False,,,safe_stop,0,0,0.0,1.2,the run ended REJECTED_POLICY; self-repair handles only a halt before any effect
+empty,2,True,person,not_repairable,0,False,,,safe_stop,0,0,0.0,0.4,the run ended REJECTED_POLICY; self-repair handles only a halt before any effect
+empty,3,True,person,not_repairable,0,False,,,safe_stop,0,0,0.0,0.4,the run ended REJECTED_POLICY; self-repair handles only a halt before any effect

@@ -1,0 +1,11 @@
+{"i": 0, "kind": "click", "x": 214, "y": 195, "t": 0.412}
+{"i": 1, "kind": "type", "text": "nurse.demo", "t": 0.595}
+{"i": 2, "kind": "click", "x": 214, "y": 264, "t": 0.785}
+{"i": 3, "kind": "type", "text": "mockmed-demo-pass", "t": 0.955}
+{"i": 4, "kind": "click", "x": 119, "y": 324, "t": 1.263}
+{"i": 5, "kind": "click", "x": 775, "y": 186, "t": 1.55}
+{"i": 6, "kind": "click", "x": 114, "y": 159, "t": 1.854}
+{"i": 7, "kind": "click", "x": 85, "y": 160, "t": 2.03}
+{"i": 8, "kind": "click", "x": 344, "y": 290, "t": 2.213}
+{"i": 9, "kind": "type", "text": "Showcase triage booking three months", "param": "note", "t": 2.405}
+{"i": 10, "kind": "click", "x": 134, "y": 391, "t": 2.709}

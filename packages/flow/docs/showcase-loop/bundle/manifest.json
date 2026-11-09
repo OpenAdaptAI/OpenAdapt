@@ -1,0 +1,40 @@
+{
+  "schema_version": 2,
+  "content_digest": "b3519d3a46f6bdc353b76fd5a5e84f3941b42663d5fdd9e10d9e43ab4e96f684",
+  "file_hashes": {
+    "templates/step_000.png": "f1828b7d1644fbe316c20d5e85904149f582bc851516a4f57ab87854e09d91f6",
+    "templates/step_000_expect.png": "a191ba28eaf2691ea2bdbde6043f87eeea0bda377ed1dbd92ed8f99e4645c38e",
+    "templates/step_001_expect.png": "a368fb929154c409069b8529c4159e95009de1cd90847ef8c9e6e7217383112e",
+    "templates/step_002.png": "edc6f6ff053c14c201f17cca8b46ae4b91b8e80858c203f8f47425552f4a2aea",
+    "templates/step_002_expect.png": "b588f9b3a2ac3c47e9f3b5482cb73e841bb1fceda2dcec1f25d76639c2d7885b",
+    "templates/step_003_expect.png": "5d0d7095f8556037dca2486a9f65b811afc778e56424c60596f2701e749d8d20",
+    "templates/step_004.png": "e92c4f9a9641f85ab09240761747f296a259514da6f0fa5dcb553f4cd24973c3",
+    "templates/step_004_expect.png": "518fb9deade19e00173d7c3898c41e5061269a7fd297da794445f02f33bd44f6",
+    "templates/step_005.png": "e21c6ca4622199cd03c4ec569d79992e275321dd633a532a8e95f9839692cd7c",
+    "templates/step_005_expect.png": "c5667abd0a4634138fe14c45fb9e9db24915730f9833b380a468c192b9705553",
+    "templates/step_006_expect.png": "f7e7bea1e80633fdfb6d59c0fe8a21e555258467771a4aae77e04e0ae5638237",
+    "templates/step_007_expect.png": "b00f01ef23bb84596f854e770197f88b4a573dc595dec10f4641d5853dfae8f6",
+    "templates/step_008.png": "daa4ed0af4be54f6c834124d428c3cc53782bf47f078e2aed3ac66b1821cc001",
+    "templates/step_008_expect.png": "eb616c03c24974233e5926db0ce325efd28ba09bf7d7294b2654182056a64001",
+    "templates/step_013.png": "44bcea01c29ffce089359a39defec0e9e54083af01410e9c4a3f7c0d25eb3cab",
+    "templates/step_013_expect.png": "49573416a7ebe7aff262d82ee44dd54ee21cb4a76ba99a07e666e46b5a721446",
+    "templates/step_014.png": "7feb81b1126ebf4da47b3d3cde66852d45df9c5c0de92271fd5967aa2191befb",
+    "templates/step_014_expect.png": "4b82d961d0ab7706325dc0aaae70e0432eb7f6130871cd9bbd48fe8b26a11774",
+    "templates/step_015.png": "a525c1b81d24176746463b435cfa870f27ae8851918ace8d667a91cbd429c58e",
+    "templates/step_015_expect.png": "5e7fba0ba58b1d27497f4a1148934be51886a92c94edaa50582ac3045642f74f",
+    "templates/step_017.png": "1952c2c78b8fbea7f97276e5ceb9a80a1f559deadca13ebb8e1526f272c8935f",
+    "templates/step_017_expect.png": "3bb8ad7cd2002f295c44a7d5e57a268d7dc2c712519bccb169cf8ca8f50392b7"
+  },
+  "provenance": {
+    "compiler_version": "1.19.0",
+    "source_recording_sha256": null,
+    "compiler_config_sha256": null,
+    "created_at": "2026-07-14T00:51:06.482608+00:00",
+    "policy_name": null,
+    "certified": false,
+    "certification_status": null,
+    "certified_at": null,
+    "expires_at": null
+  },
+  "encrypted": false
+}

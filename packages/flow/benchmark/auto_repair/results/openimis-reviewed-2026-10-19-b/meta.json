@@ -1,0 +1,17 @@
+{
+  "written_at": "2026-10-19T13:42:05-0400",
+  "engine_git_head": "4c4c158cb7c2859a1f8c712ccbb7320a552b9462",
+  "app": "openIMIS reference stack (pinned), synthetic data",
+  "program": "launch-4 claim-entry bundle (demo/cua_to_program)",
+  "bundle_label": "reviewed",
+  "risk_review": "step_002 and step_012 classified state_changing by a scripted reviewer (qualify set-risk), standing in for a person",
+  "ui_change": "icon-only Save relabelled 'Save claim' (#1331)",
+  "loop": "AutoRepair over SelfRepair; no fault probe; no policy",
+  "agent": "agent:anthropic:claude-sonnet-5-5:auto-repair-benchmark",
+  "approver": "benchmark:scripted-approver (stands in for a person; approves all)",
+  "items": {
+    "healthy": 2,
+    "changed": 3
+  },
+  "engine_note": "Engine: this PR's branch with #1337 merged locally and both fixes applied (measure/auto-repair-openimis 4c4c158c). Installed Chrome, as the program was recorded."
+}

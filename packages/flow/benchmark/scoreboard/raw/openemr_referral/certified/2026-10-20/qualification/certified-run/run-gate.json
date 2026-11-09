@@ -1,0 +1,207 @@
+{
+  "admitted_interstitials_digest": "ff77f46d5ee8239461a2cdfcdf12d1aca8660bd990cbcba69c01190e786ad2c9",
+  "api_actuator_configured": false,
+  "bundle_content_digest": "ec096afa2b614326b00ec3155f256041c19d86f3998761ce9d772cfd911460b6",
+  "effect_verifier_configured": true,
+  "execution_profile": "standard",
+  "gates": [
+    {
+      "detail": "standard (production); durability required and enabled; settled-state detection required and enabled",
+      "gate": "execution_profile",
+      "offenders": [],
+      "passed": true,
+      "title": "Execution profile",
+      "warning": false
+    },
+    {
+      "detail": "certified under 'clinical-write' (29 steps, 0 violations)",
+      "gate": "certification",
+      "offenders": [],
+      "passed": true,
+      "title": "Certification",
+      "warning": false
+    },
+    {
+      "detail": "15/15 entity-sensitive/consequential action(s) identity-armed",
+      "gate": "identity_coverage",
+      "offenders": [],
+      "passed": true,
+      "title": "Identity coverage",
+      "warning": false
+    },
+    {
+      "detail": "1/1 consequential write(s) declare the required postcondition and confirmed system-of-record effect contracts",
+      "gate": "effect_coverage",
+      "offenders": [],
+      "passed": true,
+      "title": "Effect coverage",
+      "warning": false
+    },
+    {
+      "detail": "a verifier satisfying the required evidence tier is configured; 1 declared write(s) are covered",
+      "gate": "approval_fallback",
+      "offenders": [],
+      "passed": true,
+      "title": "Approval fallback",
+      "warning": false
+    },
+    {
+      "detail": "no automatic interstitial actions declared",
+      "gate": "interstitial_admission",
+      "offenders": [],
+      "passed": true,
+      "title": "Interstitial admission",
+      "warning": false
+    },
+    {
+      "detail": "workflow.json plaintext (not required); WARNING: 32 template/screenshot asset(s) are unsealed (plaintext at rest) -- protect via disk encryption or run with --strict-templates to refuse",
+      "gate": "encryption",
+      "offenders": [
+        "templates/identifiers/step_016.png",
+        "templates/layout_fingerprint.json",
+        "templates/step_000.png",
+        "templates/step_000_expect.png",
+        "templates/step_003.png",
+        "templates/step_003_expect.png",
+        "templates/step_006.png",
+        "templates/step_006_expect.png",
+        "templates/step_009.png",
+        "templates/step_009_expect.png",
+        "templates/step_012.png",
+        "templates/step_012_expect.png",
+        "templates/step_016.png",
+        "templates/step_016_expect.png",
+        "templates/step_018.png",
+        "templates/step_018_expect.png",
+        "templates/step_021.png",
+        "templates/step_021_expect.png",
+        "templates/step_024.png",
+        "templates/step_024_expect.png",
+        "templates/step_027.png",
+        "templates/step_027_expect.png",
+        "templates/step_030.png",
+        "templates/step_030_expect.png",
+        "templates/step_033.png",
+        "templates/step_033_expect.png",
+        "templates/step_036.png",
+        "templates/step_036_expect.png",
+        "templates/step_039.png",
+        "templates/step_039_expect.png",
+        "templates/step_040.png",
+        "templates/step_040_expect.png"
+      ],
+      "passed": true,
+      "title": "Encrypted bundle",
+      "warning": true
+    },
+    {
+      "detail": "integrity-sealed manifest re-verified (digest ec096afa2b614326..., compiler 2.2.0)",
+      "gate": "manifest_integrity",
+      "offenders": [],
+      "passed": true,
+      "title": "Sealed manifest + version pin",
+      "warning": false
+    }
+  ],
+  "minimum_effect_tier": 1,
+  "policy_contract_sha256": "f35a6a94b3f2787165f071ce8571de07095169b9632d394e9df719b35da52c0f",
+  "policy_name": "clinical-write",
+  "qualified_effect_requirements": [
+    {
+      "actuation_path": "gui",
+      "effect_contract_hash": "sha256:f64985856097097954250be6523fa260daf9fc5db495671c2548ead9a388577b",
+      "effect_index": 0,
+      "minimum_tier": 1,
+      "step_id": "step_040"
+    },
+    {
+      "actuation_path": "gui",
+      "effect_contract_hash": "sha256:206d1d6fc27df6f24c02bb6b6f4419e0612e7935ec7e744fc8cc446f54558385",
+      "effect_index": 1,
+      "minimum_tier": 1,
+      "step_id": "step_040"
+    },
+    {
+      "actuation_path": "gui",
+      "effect_contract_hash": "sha256:8f295459bdd868daf117ca9f77dd948cdc2c8c034a65184cb5418ccfab7f60e7",
+      "effect_index": 2,
+      "minimum_tier": 1,
+      "step_id": "step_040"
+    },
+    {
+      "actuation_path": "gui",
+      "effect_contract_hash": "sha256:52c6884d06d82c4ccc14600150f2890bcd25d92cb7eb26bc53ef54033075ba3c",
+      "effect_index": 3,
+      "minimum_tier": 1,
+      "step_id": "step_040"
+    },
+    {
+      "actuation_path": "gui",
+      "effect_contract_hash": "sha256:7732675a6e6123c0c3f51512496f695fa4ce503ab989993c520fb8a469bbdc3d",
+      "effect_index": 4,
+      "minimum_tier": 1,
+      "step_id": "step_040"
+    },
+    {
+      "actuation_path": "gui",
+      "effect_contract_hash": "sha256:598fb97e12d3c0b537f0453e7fdaad453b969e249e888424e67fcd85a06741f0",
+      "effect_index": 5,
+      "minimum_tier": 1,
+      "step_id": "step_040"
+    },
+    {
+      "actuation_path": "gui",
+      "effect_contract_hash": "sha256:ba109cf90077d7b20a37c2848fa7bee8ea0039747a5ae47465617b2ea1039a2b",
+      "effect_index": 6,
+      "minimum_tier": 1,
+      "step_id": "step_040"
+    },
+    {
+      "actuation_path": "gui",
+      "effect_contract_hash": "sha256:f508b7fd1536726db75a0814fc439c65dbd6c0b637a7b619855c73a571bcfca9",
+      "effect_index": 7,
+      "minimum_tier": 1,
+      "step_id": "step_040"
+    },
+    {
+      "actuation_path": "gui",
+      "effect_contract_hash": "sha256:b311b51ece1670a60f793b29aa3d28d40da196ffbcd26f2fdd620e380dedf97a",
+      "effect_index": 8,
+      "minimum_tier": 1,
+      "step_id": "step_040"
+    },
+    {
+      "actuation_path": "gui",
+      "effect_contract_hash": "sha256:a33cf54165b96ce6d48014e6e68bac94cdc8f9c9176bae6f5c955123d20683c2",
+      "effect_index": 9,
+      "minimum_tier": 1,
+      "step_id": "step_040"
+    },
+    {
+      "actuation_path": "gui",
+      "effect_contract_hash": "sha256:d2516eb0f6aa365b812e84fd754127d053d8e0b1a4b349a0b8ce71936bcec199",
+      "effect_index": 10,
+      "minimum_tier": 1,
+      "step_id": "step_040"
+    }
+  ],
+  "required_identity_step_ids": [
+    "step_000",
+    "step_003",
+    "step_006",
+    "step_009",
+    "step_012",
+    "step_016",
+    "step_018",
+    "step_021",
+    "step_024",
+    "step_027",
+    "step_030",
+    "step_033",
+    "step_036",
+    "step_039",
+    "step_040"
+  ],
+  "unverified_write_approval_granted": false,
+  "workflow_name": "openemr-create-synthetic-patient"
+}

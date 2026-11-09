@@ -1,0 +1,894 @@
+{
+  "model": "mlx-community/Qwen3-VL-4B-Instruct-4bit",
+  "host": "Apple M2 Max (arm64, MLX)",
+  "model_load_seconds": 3.137787103652954,
+  "call_timeout_s": 60.0,
+  "health": {
+    "status": "ok"
+  },
+  "ready": {
+    "ready": true,
+    "backend": "mlx",
+    "model": "mlx-community/Qwen3-VL-4B-Instruct-4bit"
+  },
+  "identity": {
+    "n_wrong_patient": 12,
+    "n_same_patient": 36,
+    "false_accepts": 1,
+    "false_accept_rate": 0.08333333333333333,
+    "detection_rate": 0.9166666666666666,
+    "over_veto": 6,
+    "over_veto_rate": 0.16666666666666666,
+    "false_accept_cases": [
+      {
+        "suite": "wrong_patient",
+        "collision_class": "alpha_flanked_O0",
+        "code_a": "D0T99",
+        "code_b": "DOT99",
+        "truth": "different",
+        "verdict": "verify",
+        "sod": "same",
+        "latency_s": 0.6758179664611816,
+        "note": "0/O beside a letter"
+      }
+    ],
+    "over_veto_cases": [
+      {
+        "suite": "same_drift",
+        "collision_class": "drift_zoom_120",
+        "code_a": "AC5271",
+        "code_b": "AC5271",
+        "truth": "same",
+        "verdict": "mismatch",
+        "sod": "different",
+        "latency_s": 0.705988883972168,
+        "note": "same value under drift_zoom_120"
+      },
+      {
+        "suite": "same_drift",
+        "collision_class": "drift_serif_font",
+        "code_a": "AC5271",
+        "code_b": "AC5271",
+        "truth": "same",
+        "verdict": "mismatch",
+        "sod": "different",
+        "latency_s": 0.6368577480316162,
+        "note": "same value under drift_serif_font"
+      },
+      {
+        "suite": "same_drift",
+        "collision_class": "drift_zoom_120",
+        "code_a": "RT8093",
+        "code_b": "RT8093",
+        "truth": "same",
+        "verdict": "mismatch",
+        "sod": "different",
+        "latency_s": 0.7066030502319336,
+        "note": "same value under drift_zoom_120"
+      },
+      {
+        "suite": "same_drift",
+        "collision_class": "drift_serif_font",
+        "code_a": "RT8093",
+        "code_b": "RT8093",
+        "truth": "same",
+        "verdict": "mismatch",
+        "sod": "different",
+        "latency_s": 0.6423442363739014,
+        "note": "same value under drift_serif_font"
+      },
+      {
+        "suite": "same_drift",
+        "collision_class": "drift_serif_font",
+        "code_a": "LN6237",
+        "code_b": "LN6237",
+        "truth": "same",
+        "verdict": "mismatch",
+        "sod": "different",
+        "latency_s": 0.6856429576873779,
+        "note": "same value under drift_serif_font"
+      },
+      {
+        "suite": "same_drift",
+        "collision_class": "drift_serif_font",
+        "code_a": "PT9564",
+        "code_b": "PT9564",
+        "truth": "same",
+        "verdict": "mismatch",
+        "sod": "different",
+        "latency_s": 0.6346192359924316,
+        "note": "same value under drift_serif_font"
+      }
+    ],
+    "latency_s": {
+      "median": 0.6598172187805176,
+      "p95": 0.7519538402557373,
+      "max": 0.8173441886901855
+    },
+    "rows": [
+      {
+        "suite": "wrong_patient",
+        "collision_class": "digit_flanked_O0",
+        "code_a": "MG4408",
+        "code_b": "MG44O8",
+        "truth": "different",
+        "verdict": "mismatch",
+        "sod": "different",
+        "latency_s": 0.8032150268554688,
+        "note": "O/0 between digits (flagship)"
+      },
+      {
+        "suite": "wrong_patient",
+        "collision_class": "digit_flanked_O0",
+        "code_a": "AC50061",
+        "code_b": "AC5OO61",
+        "truth": "different",
+        "verdict": "mismatch",
+        "sod": "different",
+        "latency_s": 0.8173441886901855,
+        "note": "two O/0 between digits"
+      },
+      {
+        "suite": "wrong_patient",
+        "collision_class": "digit_flanked_O0",
+        "code_a": "RT8005",
+        "code_b": "RT8OO5",
+        "truth": "different",
+        "verdict": "mismatch",
+        "sod": "different",
+        "latency_s": 0.7432341575622559,
+        "note": "O/0 between digits"
+      },
+      {
+        "suite": "wrong_patient",
+        "collision_class": "digit_flanked_O0",
+        "code_a": "MG7008",
+        "code_b": "MG7O08",
+        "truth": "different",
+        "verdict": "mismatch",
+        "sod": "different",
+        "latency_s": 0.7756922245025635,
+        "note": "O/0 between digits"
+      },
+      {
+        "suite": "wrong_patient",
+        "collision_class": "digit_flanked_O0",
+        "code_a": "BX3040",
+        "code_b": "BX3O40",
+        "truth": "different",
+        "verdict": "mismatch",
+        "sod": "different",
+        "latency_s": 0.744621753692627,
+        "note": "O/0 between digits"
+      },
+      {
+        "suite": "wrong_patient",
+        "collision_class": "digit_flanked_O0",
+        "code_a": "LN6001",
+        "code_b": "LN6OO1",
+        "truth": "different",
+        "verdict": "mismatch",
+        "sod": "different",
+        "latency_s": 0.744642972946167,
+        "note": "O/0 between digits"
+      },
+      {
+        "suite": "wrong_patient",
+        "collision_class": "digit_flanked_O0",
+        "code_a": "PT9012",
+        "code_b": "PT9O12",
+        "truth": "different",
+        "verdict": "mismatch",
+        "sod": "different",
+        "latency_s": 0.7514650821685791,
+        "note": "O/0 between digits"
+      },
+      {
+        "suite": "wrong_patient",
+        "collision_class": "alpha_flanked_O0",
+        "code_a": "C0X3834",
+        "code_b": "COX3834",
+        "truth": "different",
+        "verdict": "mismatch",
+        "sod": "different",
+        "latency_s": 0.7519538402557373,
+        "note": "0/O beside a letter"
+      },
+      {
+        "suite": "wrong_patient",
+        "collision_class": "alpha_flanked_O0",
+        "code_a": "D0T99",
+        "code_b": "DOT99",
+        "truth": "different",
+        "verdict": "verify",
+        "sod": "same",
+        "latency_s": 0.6758179664611816,
+        "note": "0/O beside a letter"
+      },
+      {
+        "suite": "wrong_patient",
+        "collision_class": "letter_l_one",
+        "code_a": "PL13421",
+        "code_b": "PLl3421",
+        "truth": "different",
+        "verdict": "mismatch",
+        "sod": "different",
+        "latency_s": 0.7452280521392822,
+        "note": "l/1 confusion"
+      },
+      {
+        "suite": "wrong_patient",
+        "collision_class": "letter_l_one",
+        "code_a": "RC1105",
+        "code_b": "RCll05",
+        "truth": "different",
+        "verdict": "mismatch",
+        "sod": "different",
+        "latency_s": 0.7311182022094727,
+        "note": "l/1 confusion"
+      },
+      {
+        "suite": "wrong_patient",
+        "collision_class": "letter_l_one",
+        "code_a": "BK7011",
+        "code_b": "BK70ll",
+        "truth": "different",
+        "verdict": "mismatch",
+        "sod": "different",
+        "latency_s": 0.7429511547088623,
+        "note": "l/1 confusion"
+      },
+      {
+        "suite": "same_clean",
+        "collision_class": "identical",
+        "code_a": "MG4482",
+        "code_b": "MG4482",
+        "truth": "same",
+        "verdict": "verify",
+        "sod": "same",
+        "latency_s": 0.6157300472259521,
+        "note": "same value, clean re-render"
+      },
+      {
+        "suite": "same_clean",
+        "collision_class": "identical",
+        "code_a": "AC5271",
+        "code_b": "AC5271",
+        "truth": "same",
+        "verdict": "verify",
+        "sod": "same",
+        "latency_s": 0.6189627647399902,
+        "note": "same value, clean re-render"
+      },
+      {
+        "suite": "same_clean",
+        "collision_class": "identical",
+        "code_a": "RT8093",
+        "code_b": "RT8093",
+        "truth": "same",
+        "verdict": "verify",
+        "sod": "same",
+        "latency_s": 0.6250050067901611,
+        "note": "same value, clean re-render"
+      },
+      {
+        "suite": "same_clean",
+        "collision_class": "identical",
+        "code_a": "BX3149",
+        "code_b": "BX3149",
+        "truth": "same",
+        "verdict": "verify",
+        "sod": "same",
+        "latency_s": 0.6168258190155029,
+        "note": "same value, clean re-render"
+      },
+      {
+        "suite": "same_clean",
+        "collision_class": "identical",
+        "code_a": "LN6237",
+        "code_b": "LN6237",
+        "truth": "same",
+        "verdict": "verify",
+        "sod": "same",
+        "latency_s": 0.6147630214691162,
+        "note": "same value, clean re-render"
+      },
+      {
+        "suite": "same_clean",
+        "collision_class": "identical",
+        "code_a": "PT9564",
+        "code_b": "PT9564",
+        "truth": "same",
+        "verdict": "verify",
+        "sod": "same",
+        "latency_s": 0.6179683208465576,
+        "note": "same value, clean re-render"
+      },
+      {
+        "suite": "same_confusable",
+        "collision_class": "digit_flanked_O0",
+        "code_a": "MG4408",
+        "code_b": "MG4408",
+        "truth": "same",
+        "verdict": "verify",
+        "sod": "same",
+        "latency_s": 0.595268964767456,
+        "note": "confusable target vs identical re-render"
+      },
+      {
+        "suite": "same_confusable",
+        "collision_class": "digit_flanked_O0",
+        "code_a": "AC50061",
+        "code_b": "AC50061",
+        "truth": "same",
+        "verdict": "verify",
+        "sod": "same",
+        "latency_s": 0.6168718338012695,
+        "note": "confusable target vs identical re-render"
+      },
+      {
+        "suite": "same_confusable",
+        "collision_class": "digit_flanked_O0",
+        "code_a": "RT8005",
+        "code_b": "RT8005",
+        "truth": "same",
+        "verdict": "verify",
+        "sod": "same",
+        "latency_s": 0.6055021286010742,
+        "note": "confusable target vs identical re-render"
+      },
+      {
+        "suite": "same_confusable",
+        "collision_class": "digit_flanked_O0",
+        "code_a": "MG7008",
+        "code_b": "MG7008",
+        "truth": "same",
+        "verdict": "verify",
+        "sod": "same",
+        "latency_s": 0.6136829853057861,
+        "note": "confusable target vs identical re-render"
+      },
+      {
+        "suite": "same_confusable",
+        "collision_class": "digit_flanked_O0",
+        "code_a": "BX3040",
+        "code_b": "BX3040",
+        "truth": "same",
+        "verdict": "verify",
+        "sod": "same",
+        "latency_s": 0.6336677074432373,
+        "note": "confusable target vs identical re-render"
+      },
+      {
+        "suite": "same_confusable",
+        "collision_class": "digit_flanked_O0",
+        "code_a": "LN6001",
+        "code_b": "LN6001",
+        "truth": "same",
+        "verdict": "verify",
+        "sod": "same",
+        "latency_s": 0.6654520034790039,
+        "note": "confusable target vs identical re-render"
+      },
+      {
+        "suite": "same_confusable",
+        "collision_class": "digit_flanked_O0",
+        "code_a": "PT9012",
+        "code_b": "PT9012",
+        "truth": "same",
+        "verdict": "verify",
+        "sod": "same",
+        "latency_s": 0.6592226028442383,
+        "note": "confusable target vs identical re-render"
+      },
+      {
+        "suite": "same_confusable",
+        "collision_class": "alpha_flanked_O0",
+        "code_a": "C0X3834",
+        "code_b": "C0X3834",
+        "truth": "same",
+        "verdict": "verify",
+        "sod": "same",
+        "latency_s": 0.6799740791320801,
+        "note": "confusable target vs identical re-render"
+      },
+      {
+        "suite": "same_confusable",
+        "collision_class": "alpha_flanked_O0",
+        "code_a": "D0T99",
+        "code_b": "D0T99",
+        "truth": "same",
+        "verdict": "verify",
+        "sod": "same",
+        "latency_s": 0.6001992225646973,
+        "note": "confusable target vs identical re-render"
+      },
+      {
+        "suite": "same_confusable",
+        "collision_class": "letter_l_one",
+        "code_a": "PL13421",
+        "code_b": "PL13421",
+        "truth": "same",
+        "verdict": "verify",
+        "sod": "same",
+        "latency_s": 0.6730480194091797,
+        "note": "confusable target vs identical re-render"
+      },
+      {
+        "suite": "same_confusable",
+        "collision_class": "letter_l_one",
+        "code_a": "RC1105",
+        "code_b": "RC1105",
+        "truth": "same",
+        "verdict": "verify",
+        "sod": "same",
+        "latency_s": 0.6604118347167969,
+        "note": "confusable target vs identical re-render"
+      },
+      {
+        "suite": "same_confusable",
+        "collision_class": "letter_l_one",
+        "code_a": "BK7011",
+        "code_b": "BK7011",
+        "truth": "same",
+        "verdict": "verify",
+        "sod": "same",
+        "latency_s": 0.6964221000671387,
+        "note": "confusable target vs identical re-render"
+      },
+      {
+        "suite": "same_drift",
+        "collision_class": "drift_dark_theme",
+        "code_a": "MG4482",
+        "code_b": "MG4482",
+        "truth": "same",
+        "verdict": "verify",
+        "sod": "same",
+        "latency_s": 0.618664026260376,
+        "note": "same value under drift_dark_theme"
+      },
+      {
+        "suite": "same_drift",
+        "collision_class": "drift_zoom_120",
+        "code_a": "MG4482",
+        "code_b": "MG4482",
+        "truth": "same",
+        "verdict": "verify",
+        "sod": "same",
+        "latency_s": 0.7085800170898438,
+        "note": "same value under drift_zoom_120"
+      },
+      {
+        "suite": "same_drift",
+        "collision_class": "drift_serif_font",
+        "code_a": "MG4482",
+        "code_b": "MG4482",
+        "truth": "same",
+        "verdict": "verify",
+        "sod": "same",
+        "latency_s": 0.6318747997283936,
+        "note": "same value under drift_serif_font"
+      },
+      {
+        "suite": "same_drift",
+        "collision_class": "drift_dark_theme",
+        "code_a": "AC5271",
+        "code_b": "AC5271",
+        "truth": "same",
+        "verdict": "verify",
+        "sod": "same",
+        "latency_s": 0.6185238361358643,
+        "note": "same value under drift_dark_theme"
+      },
+      {
+        "suite": "same_drift",
+        "collision_class": "drift_zoom_120",
+        "code_a": "AC5271",
+        "code_b": "AC5271",
+        "truth": "same",
+        "verdict": "mismatch",
+        "sod": "different",
+        "latency_s": 0.705988883972168,
+        "note": "same value under drift_zoom_120"
+      },
+      {
+        "suite": "same_drift",
+        "collision_class": "drift_serif_font",
+        "code_a": "AC5271",
+        "code_b": "AC5271",
+        "truth": "same",
+        "verdict": "mismatch",
+        "sod": "different",
+        "latency_s": 0.6368577480316162,
+        "note": "same value under drift_serif_font"
+      },
+      {
+        "suite": "same_drift",
+        "collision_class": "drift_dark_theme",
+        "code_a": "RT8093",
+        "code_b": "RT8093",
+        "truth": "same",
+        "verdict": "verify",
+        "sod": "same",
+        "latency_s": 0.6182007789611816,
+        "note": "same value under drift_dark_theme"
+      },
+      {
+        "suite": "same_drift",
+        "collision_class": "drift_zoom_120",
+        "code_a": "RT8093",
+        "code_b": "RT8093",
+        "truth": "same",
+        "verdict": "mismatch",
+        "sod": "different",
+        "latency_s": 0.7066030502319336,
+        "note": "same value under drift_zoom_120"
+      },
+      {
+        "suite": "same_drift",
+        "collision_class": "drift_serif_font",
+        "code_a": "RT8093",
+        "code_b": "RT8093",
+        "truth": "same",
+        "verdict": "mismatch",
+        "sod": "different",
+        "latency_s": 0.6423442363739014,
+        "note": "same value under drift_serif_font"
+      },
+      {
+        "suite": "same_drift",
+        "collision_class": "drift_dark_theme",
+        "code_a": "BX3149",
+        "code_b": "BX3149",
+        "truth": "same",
+        "verdict": "verify",
+        "sod": "same",
+        "latency_s": 0.6178200244903564,
+        "note": "same value under drift_dark_theme"
+      },
+      {
+        "suite": "same_drift",
+        "collision_class": "drift_zoom_120",
+        "code_a": "BX3149",
+        "code_b": "BX3149",
+        "truth": "same",
+        "verdict": "verify",
+        "sod": "same",
+        "latency_s": 0.6906700134277344,
+        "note": "same value under drift_zoom_120"
+      },
+      {
+        "suite": "same_drift",
+        "collision_class": "drift_serif_font",
+        "code_a": "BX3149",
+        "code_b": "BX3149",
+        "truth": "same",
+        "verdict": "verify",
+        "sod": "same",
+        "latency_s": 0.619917631149292,
+        "note": "same value under drift_serif_font"
+      },
+      {
+        "suite": "same_drift",
+        "collision_class": "drift_dark_theme",
+        "code_a": "LN6237",
+        "code_b": "LN6237",
+        "truth": "same",
+        "verdict": "verify",
+        "sod": "same",
+        "latency_s": 0.6227242946624756,
+        "note": "same value under drift_dark_theme"
+      },
+      {
+        "suite": "same_drift",
+        "collision_class": "drift_zoom_120",
+        "code_a": "LN6237",
+        "code_b": "LN6237",
+        "truth": "same",
+        "verdict": "verify",
+        "sod": "same",
+        "latency_s": 0.6910490989685059,
+        "note": "same value under drift_zoom_120"
+      },
+      {
+        "suite": "same_drift",
+        "collision_class": "drift_serif_font",
+        "code_a": "LN6237",
+        "code_b": "LN6237",
+        "truth": "same",
+        "verdict": "mismatch",
+        "sod": "different",
+        "latency_s": 0.6856429576873779,
+        "note": "same value under drift_serif_font"
+      },
+      {
+        "suite": "same_drift",
+        "collision_class": "drift_dark_theme",
+        "code_a": "PT9564",
+        "code_b": "PT9564",
+        "truth": "same",
+        "verdict": "verify",
+        "sod": "same",
+        "latency_s": 0.6215128898620605,
+        "note": "same value under drift_dark_theme"
+      },
+      {
+        "suite": "same_drift",
+        "collision_class": "drift_zoom_120",
+        "code_a": "PT9564",
+        "code_b": "PT9564",
+        "truth": "same",
+        "verdict": "verify",
+        "sod": "same",
+        "latency_s": 0.6895778179168701,
+        "note": "same value under drift_zoom_120"
+      },
+      {
+        "suite": "same_drift",
+        "collision_class": "drift_serif_font",
+        "code_a": "PT9564",
+        "code_b": "PT9564",
+        "truth": "same",
+        "verdict": "mismatch",
+        "sod": "different",
+        "latency_s": 0.6346192359924316,
+        "note": "same value under drift_serif_font"
+      }
+    ]
+  },
+  "state": {
+    "n_true_cases": 6,
+    "n_false_cases": 8,
+    "true_rescue_rate": 0.0,
+    "false_rescue_rate": 0.0,
+    "false_rescue_cases": [],
+    "latency_s": {
+      "median": 5.466461539268494,
+      "max": 5.683231830596924
+    },
+    "rows": [
+      {
+        "fid": "tr_saved_dark",
+        "kind": "true_rescue",
+        "truth": "yes",
+        "expected_state": "the patient record was saved successfully",
+        "answer": "uncertain",
+        "holds": false,
+        "latency_s": 5.30166482925415,
+        "note": "dark theme, green success banner"
+      },
+      {
+        "fid": "tr_appt_serif_scaled",
+        "kind": "true_rescue",
+        "truth": "yes",
+        "expected_state": "an appointment was successfully booked",
+        "answer": "uncertain",
+        "holds": false,
+        "latency_s": 5.358141899108887,
+        "note": "serif font, scaled title, booking confirmation"
+      },
+      {
+        "fid": "tr_order_lowcontrast",
+        "kind": "true_rescue",
+        "truth": "yes",
+        "expected_state": "the lab order was submitted successfully",
+        "answer": "uncertain",
+        "holds": false,
+        "latency_s": 5.377254962921143,
+        "note": "low-contrast grey-on-grey success"
+      },
+      {
+        "fid": "tr_rx_dark_italic",
+        "kind": "true_rescue",
+        "truth": "yes",
+        "expected_state": "the prescription was sent to the pharmacy",
+        "answer": "uncertain",
+        "holds": false,
+        "latency_s": 5.402618885040283,
+        "note": "dark, italic, e-prescribe confirmation"
+      },
+      {
+        "fid": "tr_changes_toast",
+        "kind": "true_rescue",
+        "truth": "yes",
+        "expected_state": "the changes were saved",
+        "answer": "uncertain",
+        "holds": false,
+        "latency_s": 5.425325155258179,
+        "note": "small dark toast (OCR-hostile size)"
+      },
+      {
+        "fid": "tr_signed_scaled",
+        "kind": "true_rescue",
+        "truth": "yes",
+        "expected_state": "the encounter note was signed",
+        "answer": "uncertain",
+        "holds": false,
+        "latency_s": 5.460297107696533,
+        "note": "large serif, sign-off confirmation"
+      },
+      {
+        "fid": "fr_save_failed",
+        "kind": "false_rescue",
+        "truth": "no",
+        "expected_state": "the patient record was saved successfully",
+        "answer": "uncertain",
+        "holds": false,
+        "latency_s": 5.420932769775391,
+        "note": "error banner in the same card layout as success"
+      },
+      {
+        "fid": "fr_blank_form",
+        "kind": "false_rescue",
+        "truth": "no",
+        "expected_state": "the patient record was saved successfully",
+        "answer": "uncertain",
+        "holds": false,
+        "latency_s": 5.683231830596924,
+        "note": "blank edit form; nothing was saved"
+      },
+      {
+        "fid": "fr_saving_spinner",
+        "kind": "false_rescue",
+        "truth": "no",
+        "expected_state": "the patient record was saved successfully",
+        "answer": "uncertain",
+        "holds": false,
+        "latency_s": 5.5190269947052,
+        "note": "in-progress/partial state, not yet saved"
+      },
+      {
+        "fid": "fr_appt_cancelled",
+        "kind": "false_rescue",
+        "truth": "no",
+        "expected_state": "an appointment was successfully booked",
+        "answer": "uncertain",
+        "holds": false,
+        "latency_s": 5.6831817626953125,
+        "note": "opposite action confirmed (cancel, not book)"
+      },
+      {
+        "fid": "fr_wrong_record",
+        "kind": "false_rescue",
+        "truth": "no",
+        "expected_state": "the record for Jane Doe was saved",
+        "answer": "uncertain",
+        "holds": false,
+        "latency_s": 5.504771709442139,
+        "note": "success, but for a DIFFERENT patient than expected"
+      },
+      {
+        "fid": "fr_logged_out",
+        "kind": "false_rescue",
+        "truth": "no",
+        "expected_state": "the patient record was saved successfully",
+        "answer": "uncertain",
+        "holds": false,
+        "latency_s": 5.525217056274414,
+        "note": "green success banner for an unrelated action (logout)"
+      },
+      {
+        "fid": "fr_validation_error",
+        "kind": "false_rescue",
+        "truth": "no",
+        "expected_state": "the intake form was submitted successfully",
+        "answer": "uncertain",
+        "holds": false,
+        "latency_s": 5.472625970840454,
+        "note": "validation error in a banner-shaped layout; not submitted"
+      },
+      {
+        "fid": "fr_stale_dashboard",
+        "kind": "false_rescue",
+        "truth": "no",
+        "expected_state": "the lab order was submitted successfully",
+        "answer": "uncertain",
+        "holds": false,
+        "latency_s": 5.508198976516724,
+        "note": "stale/neutral screen; the order was never placed"
+      }
+    ]
+  },
+  "grounder": {
+    "viewport": [
+      2240,
+      3726
+    ],
+    "tol_px": 60,
+    "n_targets": 6,
+    "hit_rate": 0.0,
+    "median_error_px": null,
+    "returned_proposal_rate": 0.0,
+    "latency_s": {
+      "median": 34.89800810813904,
+      "max": 35.5665237903595
+    },
+    "rows": [
+      {
+        "row": 0,
+        "name": "Halloran, Karen",
+        "mrn": "MG584224",
+        "intent": "the blue 'Open' button in the row for patient Halloran, Karen (MRN MG584224)",
+        "proposed": null,
+        "truth": [
+          2059,
+          251
+        ],
+        "error_px": null,
+        "hit": false,
+        "latency_s": 35.5665237903595
+      },
+      {
+        "row": 8,
+        "name": "Ngyuen, Anh",
+        "mrn": "MG129724",
+        "intent": "the blue 'Open' button in the row for patient Ngyuen, Anh (MRN MG129724)",
+        "proposed": null,
+        "truth": [
+          2059,
+          795
+        ],
+        "error_px": null,
+        "hit": false,
+        "latency_s": 35.18667483329773
+      },
+      {
+        "row": 16,
+        "name": "Okafor, Janet",
+        "mrn": "MG499721",
+        "intent": "the blue 'Open' button in the row for patient Okafor, Janet (MRN MG499721)",
+        "proposed": null,
+        "truth": [
+          2059,
+          1339
+        ],
+        "error_px": null,
+        "hit": false,
+        "latency_s": 35.04089021682739
+      },
+      {
+        "row": 24,
+        "name": "Fitzgerald, Gregory",
+        "mrn": "MG536396",
+        "intent": "the blue 'Open' button in the row for patient Fitzgerald, Gregory (MRN MG536396)",
+        "proposed": null,
+        "truth": [
+          2059,
+          1883
+        ],
+        "error_px": null,
+        "hit": false,
+        "latency_s": 34.755125999450684
+      },
+      {
+        "row": 32,
+        "name": "Whitfield, Daniel",
+        "mrn": "PLl9181",
+        "intent": "the blue 'Open' button in the row for patient Whitfield, Daniel (MRN PLl9181)",
+        "proposed": null,
+        "truth": [
+          2059,
+          2427
+        ],
+        "error_px": null,
+        "hit": false,
+        "latency_s": 34.7508659362793
+      },
+      {
+        "row": 40,
+        "name": "Bianchi, Gregory",
+        "mrn": "2OO633",
+        "intent": "the blue 'Open' button in the row for patient Bianchi, Gregory (MRN 2OO633)",
+        "proposed": null,
+        "truth": [
+          2059,
+          2971
+        ],
+        "error_px": null,
+        "hit": false,
+        "latency_s": 34.70842123031616
+      }
+    ]
+  },
+  "peak_rss_mb": 4625.765625
+}

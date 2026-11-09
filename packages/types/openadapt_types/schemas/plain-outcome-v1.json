@@ -1,0 +1,233 @@
+{
+  "$defs": {
+    "PlainOutcomeInputsV1": {
+      "additionalProperties": false,
+      "description": "The exact values a plain result was derived from.\n\nSurfaces show these one level deeper, for example in a Technical details\ndisclosure, next to the plain result.",
+      "properties": {
+        "agent_status": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Agent Status"
+        },
+        "clinic_tool_status": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Clinic Tool Status"
+        },
+        "connector_status": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Connector Status"
+        },
+        "delivery_uncertain": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Delivery Uncertain"
+        },
+        "dispatched": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dispatched"
+        },
+        "execute_state": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Execute State"
+        },
+        "execute_terminal_outcome": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Execute Terminal Outcome"
+        },
+        "execution_outcome": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Execution Outcome"
+        },
+        "overlay_phase": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Overlay Phase"
+        },
+        "program_terminal_state": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Program Terminal State"
+        },
+        "transaction_outcome": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Transaction Outcome"
+        }
+      },
+      "title": "PlainOutcomeInputsV1",
+      "type": "object"
+    },
+    "PlainProofV1": {
+      "description": "What backs the result. Separate from the result itself.\n\n``sealed`` is a signed OpenAdapt receipt whose signature the caller\nchecked. ``local`` is a run report on the computer that ran it. ``none``\nmeans only the status value backs the result.",
+      "enum": [
+        "sealed",
+        "local",
+        "none"
+      ],
+      "title": "PlainProofV1",
+      "type": "string"
+    },
+    "PlainResultV1": {
+      "description": "How a run ended, in the words a person reads.",
+      "enum": [
+        "done",
+        "stopped_before_change",
+        "check_the_record",
+        "finished_not_checked",
+        "did_not_finish",
+        "refused"
+      ],
+      "title": "PlainResultV1",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One run's result in plain words, with the exact values behind it.\n\nThe model refuses any combination that breaks the safety rule, so a\nhand-built or deserialized result can't claim more than the table allows.",
+  "properties": {
+    "exact": {
+      "$ref": "#/$defs/PlainOutcomeInputsV1"
+    },
+    "label": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Label",
+      "type": "string"
+    },
+    "may_have_changed": {
+      "title": "May Have Changed",
+      "type": "boolean"
+    },
+    "next_action": {
+      "maxLength": 300,
+      "minLength": 1,
+      "title": "Next Action",
+      "type": "string"
+    },
+    "proof": {
+      "$ref": "#/$defs/PlainProofV1"
+    },
+    "result": {
+      "$ref": "#/$defs/PlainResultV1"
+    },
+    "safe_to_retry": {
+      "title": "Safe To Retry",
+      "type": "boolean"
+    },
+    "schema_version": {
+      "const": "openadapt.plain-outcome/v1",
+      "default": "openadapt.plain-outcome/v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "technical_code": {
+      "pattern": "^(transaction_outcome|execute_terminal_outcome|execute_state|execution_outcome|agent_status|connector_status|clinic_tool_status|program_terminal_state|overlay_phase|fallback)=[A-Za-z][A-Za-z0-9_]{0,63}$",
+      "title": "Technical Code",
+      "type": "string"
+    }
+  },
+  "required": [
+    "result",
+    "label",
+    "may_have_changed",
+    "safe_to_retry",
+    "proof",
+    "next_action",
+    "technical_code",
+    "exact"
+  ],
+  "title": "PlainOutcomeV1",
+  "type": "object",
+  "x-openadapt-safety-rule": "Only an outcome that proves no effect sets may_have_changed=false and safe_to_retry=true. A coarse HALTED alone never does."
+}

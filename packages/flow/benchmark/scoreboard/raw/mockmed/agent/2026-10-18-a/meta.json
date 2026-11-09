@@ -1,0 +1,56 @@
+{
+  "protocol_version": "2026-10-18.1",
+  "written_at": "2026-10-18T15:50:35-0400",
+  "machine": "arm64 Darwin 24.6.0",
+  "cpu_count": 12,
+  "python": "3.12.13",
+  "engine": {
+    "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+    "git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2"
+  },
+  "benchmark_git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2",
+  "task": "mockmed",
+  "arm": "agent",
+  "model": "claude-sonnet-5-5",
+  "n": 100,
+  "faults": true,
+  "max_cost_per_item": 0.5,
+  "sessions": [
+    {
+      "protocol_version": "2026-10-18.1",
+      "written_at": "2026-10-18T17:30:48-0400",
+      "machine": "arm64 Darwin 24.6.0",
+      "cpu_count": 12,
+      "python": "3.12.13",
+      "engine": {
+        "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+        "git_head": "46eb17d6c7ae53229fe77dd8f8fc578c88cfea9f"
+      },
+      "benchmark_git_head": "46eb17d6c7ae53229fe77dd8f8fc578c88cfea9f",
+      "task": "mockmed",
+      "arm": "agent",
+      "model": "claude-sonnet-5-5",
+      "n": 100,
+      "faults": true,
+      "max_cost_per_item": 0.5
+    },
+    {
+      "protocol_version": "2026-10-18.1",
+      "written_at": "2026-10-18T20:21:13-0400",
+      "machine": "arm64 Darwin 24.6.0",
+      "cpu_count": 12,
+      "python": "3.12.13",
+      "engine": {
+        "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+        "git_head": "79d1b1b68a57c4e1f111caacb0789f55fa79ab04"
+      },
+      "benchmark_git_head": "79d1b1b68a57c4e1f111caacb0789f55fa79ab04",
+      "task": "mockmed",
+      "arm": "agent",
+      "model": "claude-sonnet-5-5",
+      "n": 100,
+      "faults": true,
+      "max_cost_per_item": 0.5
+    }
+  ]
+}

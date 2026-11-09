@@ -1,0 +1,115 @@
+{
+  "schema_version": "openadapt.records-interchange/v0",
+  "exchange_id": "ex-ref-0009-r",
+  "direction": "from_executor",
+  "workflow": "example.referral_triage",
+  "session_id": "fax-2026-10-29",
+  "in_reply_to": "ex-ref-0009",
+  "artifacts": [
+    {
+      "artifact_id": "chart",
+      "kind": "structured_observation",
+      "source_type": "rdp_screen",
+      "file_number": "TEST-0009",
+      "date": "2026-10-29",
+      "doctype": "triage-entry"
+    }
+  ],
+  "fields": [
+    {
+      "name": "chart_id",
+      "type": "code",
+      "value": "REC-100001",
+      "confidence": 1.0,
+      "reads": [
+        {
+          "channel": "clipboard",
+          "value": "REC-100001",
+          "artifact_id": "chart",
+          "session": "acting"
+        }
+      ]
+    },
+    {
+      "name": "triage_entries",
+      "type": "integer",
+      "value": 1,
+      "confidence": 1.0,
+      "grade": "reopened",
+      "reads": [
+        {
+          "channel": "clipboard",
+          "value": "1",
+          "artifact_id": "chart",
+          "session": "acting",
+          "observed_at": "2026-10-29T14:11:00+00:00"
+        },
+        {
+          "channel": "clipboard",
+          "value": "1",
+          "artifact_id": "chart",
+          "session": "reopened",
+          "observed_at": "2026-10-29T14:13:00+00:00"
+        },
+        {
+          "channel": "ocr",
+          "value": "1",
+          "artifact_id": "chart",
+          "session": "reopened",
+          "observed_at": "2026-10-29T14:13:00+00:00"
+        }
+      ]
+    }
+  ],
+  "identities": [
+    {
+      "identity_id": "subject",
+      "role": "subject",
+      "fields": [
+        "chart_id"
+      ],
+      "match": {
+        "status": "existing",
+        "record_ref": "REC-100001",
+        "candidates": 1,
+        "checked_by": {
+          "kind": "executor",
+          "id": "openadapt-flow@site-runner-1"
+        }
+      }
+    }
+  ],
+  "outcome": "no_action",
+  "no_action": {
+    "decided_by": {
+      "kind": "human",
+      "id": "physician:p-1",
+      "role": "physician"
+    },
+    "reason_code": "declined",
+    "decision_id": "triage",
+    "decided_at": "2026-10-29T14:12:00+00:00",
+    "required_grade": "same_screen",
+    "evidence": [
+      "triage_entries"
+    ]
+  },
+  "provenance": {
+    "tool_name": "fixture-generator",
+    "tool_version": "0",
+    "producer": {
+      "kind": "executor",
+      "id": "openadapt-flow@site-runner-1"
+    },
+    "captured_at": "2026-10-29T14:00:00+00:00",
+    "checksum": "sha256:48aea3f12c37b75c530b151241df7be768213ace3c9c6c2fb3183c23ce4f1987"
+  },
+  "seals": [
+    {
+      "kind": "openadapt.seal/offline-ed25519",
+      "covers": "sha256:48aea3f12c37b75c530b151241df7be768213ace3c9c6c2fb3183c23ce4f1987",
+      "key_id": "site-key-1",
+      "uri": "seals/run-0001.seal.json"
+    }
+  ]
+}

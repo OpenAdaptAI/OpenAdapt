@@ -1,0 +1,331 @@
+"""Authenticated encryption at rest for bundles and durable checkpoints.
+
+A compiled bundle (``workflow.json`` + its manifest) and the durable
+checkpoints written during a run are **persistent records** produced from a
+recording of a real (in a healthcare deployment, patient) screen. The at-rest
+posture doc (``docs/phi_at_rest.md``) called for a real cryptographic control
+on top of the salted-hash identity template and the governance guards; this
+module is that control's substrate.
+
+Design (see ``docs/phi_at_rest.md`` "Target design"):
+
+* **AEAD, not home-rolled crypto.** Payloads are sealed with AES-256-GCM
+  (authenticated encryption) from the audited :mod:`cryptography` library. The
+  GCM tag makes a *wrong key* and a *tampered ciphertext* indistinguishable and
+  both fail LOUDLY (:class:`DecryptionError`) -- there is no partial / silent
+  decrypt.
+* **Key from a passphrase.** The caller supplies a passphrase (an explicit
+  argument or the ``OPENADAPT_BUNDLE_KEY`` environment variable); a per-payload
+  random salt + scrypt KDF stretches it into the 256-bit data key. The salt is
+  stored in the container (it is not secret); the passphrase never is.
+* **Self-describing container.** The ciphertext is wrapped in a small JSON
+  envelope carrying the format tag, cipher/KDF parameters, salt and nonce, so a
+  reader needs only the passphrase to decrypt. The envelope's ``format`` tag
+  lets :func:`is_encrypted` cheaply tell an encrypted payload from a plaintext
+  one, so the *unencrypted default path is untouched*.
+* **Domain separation.** A caller passes a domain label as the GCM associated
+  data (``BUNDLE_AAD`` / ``CHECKPOINT_AAD``) so a ciphertext sealed for one
+  purpose cannot be substituted for another even under the same key.
+
+This module is deliberately import-light (stdlib + :mod:`cryptography`) and
+brings in no OCR / cv2 / model dependencies, so it is safe to import on every
+bundle load. When no key is configured, :func:`resolve_key` returns the local
+key from :mod:`openadapt_flow.at_rest`, so callers that encrypt whenever a key
+resolves encrypt by default; ``OPENADAPT_FLOW_PLAINTEXT_AT_REST`` restores the
+plaintext default, loudly.
+"""
+
+from __future__ import annotations
+
+import base64
+import json
+import os
+import secrets
+from typing import Final, Optional
+
+from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
+
+#: Environment variable holding the at-rest passphrase (a fallback for an
+#: explicit ``key`` argument). Empty / unset means "no key configured".
+ENV_KEY: Final[str] = "OPENADAPT_BUNDLE_KEY"
+
+#: Format tag stamped into every container; also the marker :func:`is_encrypted`
+#: keys on to distinguish an encrypted payload from plaintext JSON.
+_MAGIC: Final[str] = "openadapt-flow-enc"
+_FORMAT_VERSION: Final[int] = 1
+
+# scrypt work factors (RFC 7914). N=2**15 is a strong interactive setting
+# (~32 MiB, tens of ms) that keeps a low-entropy passphrase expensive to brute
+# force. Stored in the container so a future hardening can raise them without
+# breaking old bundles.
+_SCRYPT_N: Final[int] = 2**15
+_SCRYPT_R: Final[int] = 8
+_SCRYPT_P: Final[int] = 1
+
+_KEY_LEN: Final[int] = 32  # AES-256
+_SALT_LEN: Final[int] = 16
+_NONCE_LEN: Final[int] = 12  # 96-bit GCM nonce (recommended)
+
+#: Domain-separation associated data. Passed as the AEAD associated data so a
+#: bundle ciphertext cannot be swapped for a checkpoint ciphertext (or vice
+#: versa) even when both were sealed with the same passphrase.
+BUNDLE_AAD: Final[bytes] = b"openadapt-flow/bundle"
+CHECKPOINT_AAD: Final[bytes] = b"openadapt-flow/checkpoint"
+
+
+class CryptoError(Exception):
+    """Base class for at-rest encryption failures."""
+
+
+class MissingKeyError(CryptoError):
+    """Encryption/decryption was requested but no passphrase is configured.
+
+    Raised when neither an explicit ``key`` nor the ``OPENADAPT_BUNDLE_KEY``
+    environment variable is set. Fails LOUDLY and safely -- an encrypted bundle
+    is never partially loaded, and an encrypt request never silently falls back
+    to writing plaintext.
+    """
+
+
+class DecryptionError(CryptoError):
+    """A container could not be authentically decrypted.
+
+    Covers a WRONG passphrase and a TAMPERED / corrupted ciphertext alike: AEAD
+    makes them indistinguishable, and both must fail closed with no partial
+    plaintext returned.
+    """
+
+
+def resolve_key(key: Optional[str]) -> Optional[str]:
+    """Return the effective passphrase: the explicit ``key`` if non-empty, else
+    the ``OPENADAPT_BUNDLE_KEY`` environment variable, else this machine's
+    local at-rest key (:func:`openadapt_flow.at_rest.default_key`, created on
+    first use). ``None`` only under ``OPENADAPT_FLOW_PLAINTEXT_AT_REST``, the
+    recorded plaintext opt-out."""
+    if key:
+        return key
+    env = os.environ.get(ENV_KEY)
+    if env:
+        return env
+    from openadapt_flow import at_rest
+
+    return at_rest.default_key()
+
+
+def require_key(key: Optional[str]) -> str:
+    """Resolve the passphrase or raise :class:`MissingKeyError`.
+
+    Used on the encrypt / decrypt paths where a key is mandatory: an encrypted
+    bundle cannot be read, and an encrypt request cannot proceed, without one.
+    """
+    resolved = resolve_key(key)
+    if resolved is None:
+        raise MissingKeyError(
+            "no encryption passphrase configured: pass an explicit key or set "
+            f"the {ENV_KEY} environment variable. An encrypted bundle/checkpoint "
+            "cannot be read (and encryption cannot proceed) without it."
+        )
+    return resolved
+
+
+def resolve_read_key(key: Optional[str]) -> Optional[str]:
+    """Like :func:`resolve_key`, for read-only paths: the explicit key, else
+    ``OPENADAPT_BUNDLE_KEY``, else the local key only if it already exists.
+    Creates no key and adds no ledger line."""
+    if key:
+        return key
+    env = os.environ.get(ENV_KEY)
+    if env:
+        return env
+    from openadapt_flow import at_rest
+
+    return at_rest.existing_key()
+
+
+def require_configured_key(key: Optional[str] = None) -> str:
+    """The explicit ``key`` or ``OPENADAPT_BUNDLE_KEY``, never the local key.
+
+    For commands whose contract is the deployment key (``seal``, a record
+    check bound to an encrypted bundle): a missing key raises
+    :class:`MissingKeyError` instead of silently using this machine's key.
+    """
+    resolved = key or os.environ.get(ENV_KEY)
+    if not resolved:
+        raise MissingKeyError(
+            f"no encryption key configured: set the {ENV_KEY} environment "
+            "variable to the deployment key."
+        )
+    return resolved
+
+
+def is_encrypted(data: bytes) -> bool:
+    """Whether ``data`` is one of this module's encrypted containers.
+
+    A cheap check: either a sealed-set file (it starts with
+    :data:`SET_FILE_MAGIC`) or a JSON object whose ``format`` field is the
+    module magic. Plaintext ``workflow.json`` / a checkpoint JSON fails this,
+    so the unencrypted path is never misrouted.
+    """
+    if data[: len(SET_FILE_MAGIC)] == SET_FILE_MAGIC:
+        return True
+    if data[: len(SALTED_FILE_MAGIC)] == SALTED_FILE_MAGIC:
+        return True
+    try:
+        obj = json.loads(data)
+    except (ValueError, TypeError):
+        return False
+    return isinstance(obj, dict) and obj.get("format") == _MAGIC
+
+
+def _derive(passphrase: str, salt: bytes, *, n: int, r: int, p: int) -> bytes:
+    kdf = Scrypt(salt=salt, length=_KEY_LEN, n=n, r=r, p=p)
+    return kdf.derive(passphrase.encode("utf-8"))
+
+
+def encrypt_bytes(plaintext: bytes, key: Optional[str], *, aad: bytes) -> bytes:
+    """Seal ``plaintext`` into a self-describing AES-256-GCM container.
+
+    ``key`` is the passphrase (or ``None`` to fall back to the environment
+    variable; a missing key raises :class:`MissingKeyError`). ``aad`` is the
+    domain-separation associated data (:data:`BUNDLE_AAD` /
+    :data:`CHECKPOINT_AAD`) authenticated -- but not encrypted -- alongside the
+    ciphertext. Returns the serialized JSON container as bytes.
+    """
+    passphrase = require_key(key)
+    salt = secrets.token_bytes(_SALT_LEN)
+    nonce = secrets.token_bytes(_NONCE_LEN)
+    dek = _derive(passphrase, salt, n=_SCRYPT_N, r=_SCRYPT_R, p=_SCRYPT_P)
+    ciphertext = AESGCM(dek).encrypt(nonce, plaintext, aad)
+    container = {
+        "format": _MAGIC,
+        "version": _FORMAT_VERSION,
+        "cipher": "AES-256-GCM",
+        "kdf": "scrypt",
+        "kdf_n": _SCRYPT_N,
+        "kdf_r": _SCRYPT_R,
+        "kdf_p": _SCRYPT_P,
+        "salt": base64.b64encode(salt).decode("ascii"),
+        "nonce": base64.b64encode(nonce).decode("ascii"),
+        "aad": aad.decode("ascii"),
+        "ciphertext": base64.b64encode(ciphertext).decode("ascii"),
+    }
+    return json.dumps(container, indent=2).encode("utf-8")
+
+
+def decrypt_bytes(container: bytes, key: Optional[str], *, aad: bytes) -> bytes:
+    """Authenticate and decrypt a container produced by :func:`encrypt_bytes`.
+
+    Raises :class:`MissingKeyError` when no passphrase is configured,
+    :class:`DecryptionError` when the passphrase is wrong or the ciphertext /
+    container was tampered with. Never returns partial plaintext.
+    """
+    passphrase = require_key(key)
+    try:
+        obj = json.loads(container)
+        if not (isinstance(obj, dict) and obj.get("format") == _MAGIC):
+            raise DecryptionError("not an openadapt-flow encrypted container")
+        salt = base64.b64decode(obj["salt"])
+        nonce = base64.b64decode(obj["nonce"])
+        ciphertext = base64.b64decode(obj["ciphertext"])
+        n = int(obj.get("kdf_n", _SCRYPT_N))
+        r = int(obj.get("kdf_r", _SCRYPT_R))
+        p = int(obj.get("kdf_p", _SCRYPT_P))
+    except DecryptionError:
+        raise
+    except (ValueError, TypeError, KeyError) as exc:
+        raise DecryptionError(f"malformed encrypted container: {exc}") from exc
+    dek = _derive(passphrase, salt, n=n, r=r, p=p)
+    try:
+        return AESGCM(dek).decrypt(nonce, ciphertext, aad)
+    except InvalidTag as exc:
+        raise DecryptionError(
+            "decryption failed: wrong key or the ciphertext was tampered with "
+            "(authentication tag mismatch). The payload was NOT loaded."
+        ) from exc
+
+
+# -- one derived key for a whole sealed set ----------------------------------
+#
+# ``encrypt_bytes`` runs scrypt for every payload, which is right for one
+# workflow.json and wrong for a recording that writes a frame every few hundred
+# milliseconds. A sealed set (a sealed bundle or an encrypted recording; see
+# :mod:`openadapt_flow.sealed_set`) runs scrypt ONCE over a per-set random salt
+# and then seals each file with AES-256-GCM under that key, a fresh random
+# 96-bit nonce per file, and the file's set-relative path in the associated
+# data. Nothing here is a new primitive: the KDF and the AEAD are the same
+# :mod:`cryptography` objects used above.
+
+#: Prefix of a per-file container sealed under a :class:`SetKey`.
+SET_FILE_MAGIC: Final[bytes] = b"OAFLOW-SEALED-1\n"
+
+
+class SetKey:
+    """An AES-256-GCM key derived once from a passphrase and a set salt."""
+
+    __slots__ = ("_aead",)
+
+    def __init__(self, data_key: bytes) -> None:
+        if len(data_key) != _KEY_LEN:
+            raise CryptoError("a set key must be 32 bytes")
+        self._aead = AESGCM(data_key)
+
+    @classmethod
+    def derive(
+        cls,
+        passphrase: str,
+        salt: bytes,
+        *,
+        n: int = _SCRYPT_N,
+        r: int = _SCRYPT_R,
+        p: int = _SCRYPT_P,
+    ) -> "SetKey":
+        return cls(_derive(passphrase, salt, n=n, r=r, p=p))
+
+    @staticmethod
+    def new_salt() -> bytes:
+        return secrets.token_bytes(_SALT_LEN)
+
+    def seal(self, plaintext: bytes, *, aad: bytes) -> bytes:
+        nonce = secrets.token_bytes(_NONCE_LEN)
+        return SET_FILE_MAGIC + nonce + self._aead.encrypt(nonce, plaintext, aad)
+
+    def open(self, container: bytes, *, aad: bytes) -> bytes:
+        if not container.startswith(SET_FILE_MAGIC):
+            raise DecryptionError("not an openadapt-flow sealed-set file")
+        body = container[len(SET_FILE_MAGIC) :]
+        nonce, ciphertext = body[:_NONCE_LEN], body[_NONCE_LEN:]
+        if len(nonce) != _NONCE_LEN:
+            raise DecryptionError("truncated sealed-set file")
+        try:
+            return self._aead.decrypt(nonce, ciphertext, aad)
+        except InvalidTag as exc:
+            raise DecryptionError(
+                "decryption failed: wrong key, or the file was tampered with, "
+                "renamed or moved from another sealed set. Nothing was loaded."
+            ) from exc
+
+
+#: Prefix of a container sealed under a key derived once per run (see
+#: :mod:`openadapt_flow.runtime.durable.attended_state`): this prefix, the
+#: run's 16-byte salt, a random 96-bit nonce, then the AES-256-GCM ciphertext.
+SALTED_FILE_MAGIC: Final[bytes] = b"OAFLOW-SALTED-1\n"
+SALT_LEN: Final[int] = _SALT_LEN
+NONCE_LEN: Final[int] = _NONCE_LEN
+
+
+def derive_data_key(passphrase: str, salt: bytes) -> bytes:
+    """The 256-bit scrypt key for ``passphrase`` and ``salt``, at the work
+    factors new containers record. A caller that derives once and caches the
+    key must keep it in memory only."""
+    if not passphrase:
+        raise MissingKeyError("no encryption passphrase configured")
+    if len(salt) != _SALT_LEN:
+        raise CryptoError("a data-key salt must be 16 bytes")
+    return _derive(passphrase, salt, n=_SCRYPT_N, r=_SCRYPT_R, p=_SCRYPT_P)
+
+
+def kdf_parameters() -> dict[str, int]:
+    """The scrypt work factors new containers record."""
+    return {"kdf_n": _SCRYPT_N, "kdf_r": _SCRYPT_R, "kdf_p": _SCRYPT_P}

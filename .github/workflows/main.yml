@@ -1,0 +1,239 @@
+name: Python CI
+
+on:
+  # Pull requests and the merge queue reach this through ci.yml, the one
+  # required check; nightly.yml calls it on the scheduled tier.
+  push:
+    branches:
+      - main
+  # Runs the post-merge tier (every Python on Linux and macOS) on demand.
+  workflow_dispatch:
+  workflow_call:
+
+concurrency:
+  # A pull request's newer push cancels its older run. Every other event (the
+  # merge queue, main, schedules, dispatches) gets a group of its own, so it
+  # is never cancelled or replaced.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  run-ci:
+    if: github.event.pull_request.draft != true
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+
+    strategy:
+      matrix:
+        # PR and queue tiers: one lane, the required run-ci (ubuntu-latest,
+        # 3.12), which the queue needs to report. A push to main and a
+        # dispatch run every supported Python on Linux and macOS.
+        os: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["ubuntu-latest"]' || '["ubuntu-latest", "macos-latest"]') }}
+        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.10", "3.11", "3.12"]') }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
+      # PR tier: a change confined to packages/flow, agent, types or desktop
+      # is tested by the Packages workflow, so this job reports success without
+      # running its suite. The job itself always runs, because a skipped matrix
+      # job never reports its required check name. The merge queue and main
+      # always run the suite.
+      - name: Scope (skip the suite for package-only pull requests)
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" != pull_request ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          # The checkout is the PR merge commit; its first parent is the base tip.
+          changed="$(git diff --name-only HEAD^1 HEAD)"
+          # Root tests also read each package's README and source policy.
+          outside="$(grep -vE '^packages/(flow|agent|types|desktop)/' <<<"$changed" || true)"
+          shared="$(grep -E '^packages/[^/]+/(README\.md|source-policy[^/]*)$' <<<"$changed" || true)"
+          if [ -n "$outside$shared" ]; then run=true; else run=false; fi
+          echo "run=$run" | tee -a "$GITHUB_OUTPUT"
+
+      - name: Set up Python ${{ matrix.python-version }}
+        if: steps.scope.outputs.run == 'true'
+        uses: actions/setup-python@v7.1.0
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv
+        if: steps.scope.outputs.run == 'true'
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            uv.lock
+            packages/capture/uv.lock
+            packages/privacy/uv.lock
+          cache-suffix: run-ci-${{ matrix.os }}-py${{ matrix.python-version }}
+
+      - name: Install dependencies
+        if: steps.scope.outputs.run == 'true'
+        run: |
+          # Everything comes from the launcher's lock, then Capture's and
+          # Privacy's for the in-tree copies of those two (their own
+          # dependencies can be newer than the published ones the launcher's
+          # lock names). Sibling packages are installed explicitly so the
+          # cross-package seam tests (tests/test_import_integrity.py and
+          # the cmd_serve contract in tests/test_cli_smoke.py) run
+          # instead of skipping. Issue #999 shipped because the
+          # openadapt-ml seam was never tested in CI; the lazy
+          # __getattr__ in openadapt/__init__.py imports from all of
+          # these.
+          # openadapt-capture and openadapt-privacy are in-tree
+          # (packages/capture, packages/privacy), so the seam is tested
+          # against the source that will ship.
+          python scripts/ci/locked_install.py \
+            --lock '.[dev,ml,evals,viewer,grounding,retrieval]' \
+            --lock packages/capture --lock packages/privacy \
+            --editable . --editable packages/capture --editable packages/privacy
+
+      - name: Lint with ruff
+        if: steps.scope.outputs.run == 'true'
+        run: |
+          ruff check openadapt/
+          ruff format --check openadapt/
+
+      - name: Verify package imports
+        if: steps.scope.outputs.run == 'true'
+        run: |
+          python -c "from openadapt.cli import main; print('CLI import OK')"
+          python -c "from openadapt.version import __version__; print(f'Version: {__version__}')"
+
+      - name: Run tests
+        if: steps.scope.outputs.run == 'true'
+        run: pytest tests/ -v
+
+      - name: Build release artifacts and reject workstation state
+        if: steps.scope.outputs.run == 'true'
+        run: |
+          python -m build
+          python scripts/verify_release_artifacts.py
+          tar -tzf dist/*.tar.gz > /tmp/openadapt-sdist-files.txt
+          ! grep -E '/(\.env|\.cache/|[^/]+\.db$|output\.png$|\.claude/|\.worktrees/)' /tmp/openadapt-sdist-files.txt
+          unzip -l dist/*.whl > /tmp/openadapt-wheel-files.txt
+          ! grep -E '(\.env|\.cache/|[^/]+\.db$|output\.png$|\.claude/|\.worktrees/)' /tmp/openadapt-wheel-files.txt
+
+  # pip on Python 3.13 and 3.14 used to skip every current launcher (all
+  # capped below 3.13) and silently install openadapt 1.3.0, an unrelated
+  # pre-compiler CLI. The launcher now installs on any Python >=3.10 and keeps
+  # the engine behind a version marker. This job proves, on the first
+  # unsupported interpreters, that the built wheel installs without the engine
+  # and that each engine command prints the Python 3.12 install fix.
+  unsupported-python-guard:
+    # Post-merge tier (main and dispatch); a pull request and the queue run
+    # one lane. tests/test_python_support.py runs in that lane on every tier.
+    if: github.event_name != 'pull_request' && github.event_name != 'merge_group'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      matrix:
+        python-version: ['3.13', '3.14']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: true
+          cache-dependency-glob: .github/ci-tools/uv.lock
+          cache-suffix: python-support-py${{ matrix.python-version }}
+
+      # pip and build come from the CI tools lock. The launcher itself is the
+      # subject here: it resolves from PyPI below, as a user's pip would.
+      - name: Build the launcher wheel
+        run: |
+          python scripts/ci/locked_install.py --lock .github/ci-tools:build
+          python -m build --wheel
+
+      # Installing dist/*.whl directly would hide the original bug, which was
+      # pip choosing an older release by name. Resolve by name with PyPI in
+      # view: if this launcher didn't install here, an old release that allows
+      # this Python (1.3.0 did) would win and the version check would fail.
+      - name: Resolve openadapt by name and confirm pip picks this launcher
+        run: |
+          for spec in openadapt 'openadapt[browser]' 'openadapt[capture]'; do
+            python -m pip install --dry-run --quiet --find-links dist \
+              --report resolution.json "$spec"
+            python - "$spec" <<'PY'
+          import json
+          import pathlib
+          import sys
+          import tomllib
+
+          spec = sys.argv[1]
+          project = tomllib.loads(pathlib.Path("pyproject.toml").read_text())
+          expected = project["project"]["version"]
+          report = json.loads(pathlib.Path("resolution.json").read_text())
+          chosen = {
+              item["metadata"]["name"]: item["metadata"]["version"]
+              for item in report["install"]
+          }
+          assert chosen.get("openadapt") == expected, (spec, chosen.get("openadapt"))
+          for name in ("openadapt-flow", "openadapt-agent"):
+              assert name not in chosen, (spec, name, chosen[name])
+          print(f"{spec}: pip chose openadapt {expected} with no engine")
+          PY
+          done
+
+      - name: Install the wheel and confirm it brings no engine
+        run: |
+          python -m pip install dist/*.whl
+          python - <<'PY'
+          import pathlib
+          import tomllib
+          from importlib.metadata import PackageNotFoundError, version
+
+          project = tomllib.loads(pathlib.Path("pyproject.toml").read_text())
+          expected = project["project"]["version"]
+          assert version("openadapt") == expected, version("openadapt")
+          for name in ("openadapt-flow", "openadapt-agent"):
+              try:
+                  found = version(name)
+              except PackageNotFoundError:
+                  continue
+              raise SystemExit(f"{name} {found} must not install on this Python")
+          print(f"openadapt {expected} installed alone, as intended")
+          PY
+
+      - name: Engine commands print the install fix
+        run: |
+          for command in "quickstart --break-it" "flow tutorial" "doctor"; do
+            read -ra args <<<"$command"
+            set +e
+            output=$(openadapt "${args[@]}" 2>&1)
+            status=$?
+            set -e
+            echo "$output"
+            test "$status" -eq 1
+            grep -q "uv tool install --python 3.12 openadapt" <<<"$output"
+          done
+          help_text=$(openadapt --help)
+          grep -q "OpenAdapt needs Python 3.10" <<<"$help_text"
+
+      - name: Run the Python support tests
+        run: |
+          python scripts/ci/locked_install.py --lock .github/ci-tools:test
+          pytest tests/test_python_support.py -v

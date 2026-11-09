@@ -1,0 +1,25 @@
+{
+  "note": "REGION_STABLE postconditions dropped because the changed region rendered a demonstrated parameter value. These steps carry no pixel-region invariant; add an effect assertion if the step needs one. Matched text is masked.",
+  "dropped_region_stable": [
+    {
+      "step_id": "step_026",
+      "region": [
+        885,
+        228,
+        265,
+        99
+      ],
+      "matched_text": "Ma****************************dd"
+    },
+    {
+      "step_id": "step_035",
+      "region": [
+        885,
+        415,
+        302,
+        99
+      ],
+      "matched_text": "el***********************id"
+    }
+  ]
+}

@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "workflow_name": "mockmed-triage",
+  "step_index": 5,
+  "step_id": "step_005",
+  "intent": "click 'Save Encounter'",
+  "state_id": null,
+  "next_step_index": 6,
+  "params": {
+    "note": "Synthetic follow-up in two weeks"
+  },
+  "effect_verified": true,
+  "effect_approved_unverified": false,
+  "effect_contract_hashes": [
+    "sha256:de1ec3dd32c33b1683a590f55d45fea21a5a4290687eac7f350df7842e84815b",
+    "sha256:d267875f80a7e3d05ada9dbae3d761c300ed2c3526bb97266507ec8855d3c053"
+  ],
+  "effect_evidence": [
+    {
+      "effect_contract_hash": "sha256:de1ec3dd32c33b1683a590f55d45fea21a5a4290687eac7f350df7842e84815b",
+      "substrate": "rest",
+      "verification_tier": 1,
+      "initial_verdict": "confirmed",
+      "final_verdict": "confirmed",
+      "reconciliation_completed": false,
+      "reconciliation_actions": 0
+    },
+    {
+      "effect_contract_hash": "sha256:d267875f80a7e3d05ada9dbae3d761c300ed2c3526bb97266507ec8855d3c053",
+      "substrate": "rest",
+      "verification_tier": 1,
+      "initial_verdict": "confirmed",
+      "final_verdict": "confirmed",
+      "reconciliation_completed": false,
+      "reconciliation_actions": 0
+    }
+  ],
+  "identity": {
+    "status": "verified",
+    "mode": "structured",
+    "coverage": 1.0,
+    "expected": "<structured identity template>",
+    "observed": "Jane Sample — MRN P1 — DOB 1980-01-01New EncounterEncounter TypeTriageConsultNote",
+    "param": null,
+    "signal_evidence": [],
+    "quorum_required": null,
+    "quorum_verified": null
+  },
+  "governed_authorization_id": "79d32158c138404c8ac93592e81d16aa",
+  "governed_approval_source": "public-demo-qualified-campaign",
+  "postconditions_ok": true,
+  "skipped": false,
+  "actuation": "dom",
+  "resolution": {
+    "rung": "structural",
+    "point": [
+      134,
+      457
+    ],
+    "confidence": 1.0,
+    "elapsed_ms": 5.473749944940209,
+    "structural_handle": {
+      "point": [
+        134,
+        457
+      ],
+      "confidence": 1.0,
+      "region": [
+        24,
+        437,
+        220,
+        40
+      ],
+      "target_fingerprint": "ae81ce0f9c11dbec3d294a88448f8377b1d90fb342448a657fe1c124c2078b9a",
+      "candidate_count": 1,
+      "supported_operations": [
+        "dom_click",
+        "dom_double_click"
+      ]
+    }
+  },
+  "drift_oracle_calls": 0,
+  "heal": null,
+  "created_at": "2026-07-25T17:47:02.308413+00:00"
+}

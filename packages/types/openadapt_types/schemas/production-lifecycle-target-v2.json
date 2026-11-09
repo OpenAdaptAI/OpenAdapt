@@ -1,0 +1,150 @@
+{
+  "$defs": {
+    "ProductionArtifactAuthoritiesV2": {
+      "additionalProperties": false,
+      "description": "The closed authority map for the supported artifact kinds.",
+      "properties": {
+        "deployment-manifest": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProductionArtifactAuthorityV2"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "python-sdist": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProductionArtifactAuthorityV2"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "python-wheel": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProductionArtifactAuthorityV2"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "ProductionArtifactAuthoritiesV2",
+      "type": "object"
+    },
+    "ProductionArtifactAuthorityV2": {
+      "enum": [
+        "pypi",
+        "github_release",
+        "managed_evidence"
+      ],
+      "title": "ProductionArtifactAuthorityV2",
+      "type": "string"
+    },
+    "ProductionArtifactKindV2": {
+      "enum": [
+        "python-sdist",
+        "python-wheel",
+        "deployment-manifest"
+      ],
+      "title": "ProductionArtifactKindV2",
+      "type": "string"
+    },
+    "ProductionReleaseKindV2": {
+      "enum": [
+        "package",
+        "deployment",
+        "hybrid"
+      ],
+      "title": "ProductionReleaseKindV2",
+      "type": "string"
+    },
+    "ProductionTargetIdV2": {
+      "enum": [
+        "agent",
+        "capture",
+        "cloud",
+        "desktop",
+        "docs",
+        "flow",
+        "openadapt"
+      ],
+      "title": "ProductionTargetIdV2",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One exact policy-native Production target.",
+  "properties": {
+    "artifact_authority_by_kind": {
+      "$ref": "#/$defs/ProductionArtifactAuthoritiesV2"
+    },
+    "claim_scope": {
+      "pattern": "^production_[a-z]+$",
+      "title": "Claim Scope",
+      "type": "string"
+    },
+    "id": {
+      "$ref": "#/$defs/ProductionTargetIdV2"
+    },
+    "package_index_project": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Package Index Project"
+    },
+    "release_kind": {
+      "$ref": "#/$defs/ProductionReleaseKindV2"
+    },
+    "required_artifact_kinds": {
+      "items": {
+        "$ref": "#/$defs/ProductionArtifactKindV2"
+      },
+      "minItems": 1,
+      "title": "Required Artifact Kinds",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "openadapt.production-lifecycle-target/v2",
+      "default": "openadapt.production-lifecycle-target/v2",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source_repository": {
+      "pattern": "^OpenAdaptAI/[A-Za-z0-9._-]+$",
+      "title": "Source Repository",
+      "type": "string"
+    },
+    "source_repository_id": {
+      "pattern": "^[1-9][0-9]*$",
+      "title": "Source Repository Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "source_repository",
+    "source_repository_id",
+    "release_kind",
+    "claim_scope",
+    "required_artifact_kinds",
+    "package_index_project",
+    "artifact_authority_by_kind"
+  ],
+  "title": "ProductionLifecycleTargetV2",
+  "type": "object"
+}

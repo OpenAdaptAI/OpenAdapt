@@ -1,0 +1,843 @@
+{
+ "schema": "openadapt.spike.session_form/1",
+ "login": {
+  "method": "POST",
+  "path": "/interface/main/main_screen.php",
+  "query": "auth=login&site=default",
+  "body": [
+   [
+    "new_login_session_management",
+    "1"
+   ],
+   [
+    "languageChoice",
+    "1"
+   ],
+   [
+    "authUser",
+    "{__secret_username}"
+   ],
+   [
+    "clearPass",
+    "{__secret_password}"
+   ],
+   [
+    "languageChoice",
+    "1"
+   ]
+  ],
+  "expect_status": 302,
+  "expect_location_path": "/interface/main/tabs/main.php"
+ },
+ "form_page": {
+  "path": "/interface/new/new_comprehensive.php",
+  "action": "new_comprehensive_save.php",
+  "controls": [
+   "csrf_token_form",
+   "form_DOB",
+   "form_additional_addresses[__A-INDEX__][addresses_id]",
+   "form_additional_addresses[__A-INDEX__][city]",
+   "form_additional_addresses[__A-INDEX__][contact_address_id]",
+   "form_additional_addresses[__A-INDEX__][contact_id]",
+   "form_additional_addresses[__A-INDEX__][country]",
+   "form_additional_addresses[__A-INDEX__][data_action]",
+   "form_additional_addresses[__A-INDEX__][district]",
+   "form_additional_addresses[__A-INDEX__][line_1]",
+   "form_additional_addresses[__A-INDEX__][line_2]",
+   "form_additional_addresses[__A-INDEX__][notes]",
+   "form_additional_addresses[__A-INDEX__][period_end]",
+   "form_additional_addresses[__A-INDEX__][period_start]",
+   "form_additional_addresses[__A-INDEX__][priority]",
+   "form_additional_addresses[__A-INDEX__][state]",
+   "form_additional_addresses[__A-INDEX__][status]",
+   "form_additional_addresses[__A-INDEX__][type]",
+   "form_additional_addresses[__A-INDEX__][use]",
+   "form_additional_addresses[__A-INDEX__][zip]",
+   "form_allow_health_info_ex",
+   "form_allow_imm_info_share",
+   "form_allow_imm_reg_use",
+   "form_allow_patient_portal",
+   "form_billing_note",
+   "form_birth_fname",
+   "form_birth_lname",
+   "form_birth_mname",
+   "form_care_team_facility[]",
+   "form_care_team_provider[]",
+   "form_care_team_status",
+   "form_city",
+   "form_cmsportal_login",
+   "form_contact_relationship",
+   "form_country_code",
+   "form_county",
+   "form_deceased_date",
+   "form_deceased_reason",
+   "form_drivers_license",
+   "form_em_city",
+   "form_em_country",
+   "form_em_end_date",
+   "form_em_name",
+   "form_em_postal_code",
+   "form_em_start_date",
+   "form_em_state",
+   "form_em_street",
+   "form_em_street_line_2",
+   "form_email",
+   "form_email_direct",
+   "form_ethnicity[]",
+   "form_family_size",
+   "form_financial_review",
+   "form_fname",
+   "form_gender_identity",
+   "form_genericname1",
+   "form_genericname2",
+   "form_genericval1",
+   "form_genericval2",
+   "form_guardianaddress",
+   "form_guardiancity",
+   "form_guardiancountry",
+   "form_guardianemail",
+   "form_guardianphone",
+   "form_guardianpostalcode",
+   "form_guardianrelationship",
+   "form_guardiansex",
+   "form_guardiansname",
+   "form_guardianstate",
+   "form_guardianworkphone",
+   "form_hipaa_allowemail",
+   "form_hipaa_allowsms",
+   "form_hipaa_mail",
+   "form_hipaa_message",
+   "form_hipaa_notice",
+   "form_hipaa_voice",
+   "form_homeless",
+   "form_imm_reg_stat_effdate",
+   "form_imm_reg_status",
+   "form_industry",
+   "form_interpreter_needed",
+   "form_interpretter",
+   "form_language",
+   "form_lname",
+   "form_migrantseasonal",
+   "form_mname",
+   "form_monthly_income",
+   "form_mothersname",
+   "form_name_history[]",
+   "form_nationality_country",
+   "form_occupation",
+   "form_patient_groups[]",
+   "form_person_gender",
+   "form_pharmacy_id",
+   "form_phone_biz",
+   "form_phone_cell",
+   "form_phone_contact",
+   "form_phone_home",
+   "form_postal_code",
+   "form_preferred_name",
+   "form_prevent_portal_apps",
+   "form_pronoun",
+   "form_prot_indi_effdate",
+   "form_protect_indicator",
+   "form_providerID",
+   "form_provider_since_date",
+   "form_publ_code_eff_date",
+   "form_publicity_code",
+   "form_pubpid",
+   "form_race[]",
+   "form_ref_providerID",
+   "form_referral_source",
+   "form_related_persons[__RP-INDEX__][active]",
+   "form_related_persons[__RP-INDEX__][addresses][__A-INDEX__][addresses_id]",
+   "form_related_persons[__RP-INDEX__][addresses][__A-INDEX__][city]",
+   "form_related_persons[__RP-INDEX__][addresses][__A-INDEX__][contact_address_id]",
+   "form_related_persons[__RP-INDEX__][addresses][__A-INDEX__][contact_id]",
+   "form_related_persons[__RP-INDEX__][addresses][__A-INDEX__][country]",
+   "form_related_persons[__RP-INDEX__][addresses][__A-INDEX__][data_action]",
+   "form_related_persons[__RP-INDEX__][addresses][__A-INDEX__][district]",
+   "form_related_persons[__RP-INDEX__][addresses][__A-INDEX__][line_1]",
+   "form_related_persons[__RP-INDEX__][addresses][__A-INDEX__][line_2]",
+   "form_related_persons[__RP-INDEX__][addresses][__A-INDEX__][notes]",
+   "form_related_persons[__RP-INDEX__][addresses][__A-INDEX__][period_end]",
+   "form_related_persons[__RP-INDEX__][addresses][__A-INDEX__][period_start]",
+   "form_related_persons[__RP-INDEX__][addresses][__A-INDEX__][priority]",
+   "form_related_persons[__RP-INDEX__][addresses][__A-INDEX__][state]",
+   "form_related_persons[__RP-INDEX__][addresses][__A-INDEX__][status]",
+   "form_related_persons[__RP-INDEX__][addresses][__A-INDEX__][type]",
+   "form_related_persons[__RP-INDEX__][addresses][__A-INDEX__][use]",
+   "form_related_persons[__RP-INDEX__][addresses][__A-INDEX__][zip]",
+   "form_related_persons[__RP-INDEX__][birth_date]",
+   "form_related_persons[__RP-INDEX__][can_make_medical_decisions]",
+   "form_related_persons[__RP-INDEX__][can_receive_medical_info]",
+   "form_related_persons[__RP-INDEX__][contact_priority]",
+   "form_related_persons[__RP-INDEX__][data_action]",
+   "form_related_persons[__RP-INDEX__][end_date]",
+   "form_related_persons[__RP-INDEX__][first_name]",
+   "form_related_persons[__RP-INDEX__][gender]",
+   "form_related_persons[__RP-INDEX__][is_emergency_contact]",
+   "form_related_persons[__RP-INDEX__][is_primary_contact]",
+   "form_related_persons[__RP-INDEX__][last_name]",
+   "form_related_persons[__RP-INDEX__][middle_name]",
+   "form_related_persons[__RP-INDEX__][notes]",
+   "form_related_persons[__RP-INDEX__][owner_contact_id]",
+   "form_related_persons[__RP-INDEX__][owner_contact_relation_id]",
+   "form_related_persons[__RP-INDEX__][relationship]",
+   "form_related_persons[__RP-INDEX__][role]",
+   "form_related_persons[__RP-INDEX__][start_date]",
+   "form_related_persons[__RP-INDEX__][target_id]",
+   "form_related_persons[__RP-INDEX__][target_table]",
+   "form_related_persons[__RP-INDEX__][telecoms][__T-INDEX__][contact_id]",
+   "form_related_persons[__RP-INDEX__][telecoms][__T-INDEX__][data_action]",
+   "form_related_persons[__RP-INDEX__][telecoms][__T-INDEX__][id]",
+   "form_related_persons[__RP-INDEX__][telecoms][__T-INDEX__][is_primary]",
+   "form_related_persons[__RP-INDEX__][telecoms][__T-INDEX__][notes]",
+   "form_related_persons[__RP-INDEX__][telecoms][__T-INDEX__][period_start]",
+   "form_related_persons[__RP-INDEX__][telecoms][__T-INDEX__][rank]",
+   "form_related_persons[__RP-INDEX__][telecoms][__T-INDEX__][status]",
+   "form_related_persons[__RP-INDEX__][telecoms][__T-INDEX__][system]",
+   "form_related_persons[__RP-INDEX__][telecoms][__T-INDEX__][use]",
+   "form_related_persons[__RP-INDEX__][telecoms][__T-INDEX__][value]",
+   "form_religion",
+   "form_sex",
+   "form_sex_identified",
+   "form_sexual_orientation",
+   "form_ss",
+   "form_state",
+   "form_status",
+   "form_street",
+   "form_street_line_2",
+   "form_suffix",
+   "form_text_gender_identity",
+   "form_text_sexual_orientation",
+   "form_title",
+   "form_tribal_affiliations",
+   "form_vfc"
+  ],
+  "client_rules": {
+   "form_fname": {
+    "presence": true
+   },
+   "form_lname": {
+    "presence": true
+   },
+   "form_DOB": {
+    "presence": true,
+    "pastDate": {
+     "message": "must be past date"
+    }
+   },
+   "form_sex": {
+    "presence": true
+   }
+  }
+ },
+ "precheck": {
+  "method": "GET",
+  "path": "/interface/new/new_search_popup.php",
+  "query": [
+   [
+    "mf_fname",
+    "{fname}"
+   ],
+   [
+    "mf_lname",
+    "{lname}"
+   ],
+   [
+    "mf_DOB",
+    "{DOB}"
+   ],
+   [
+    "close",
+    ""
+   ]
+  ],
+  "require_text": [
+   "Confirm Create New Patient",
+   "No matches were found."
+  ],
+  "from_gui_step": "step_039"
+ },
+ "success_regex": "set_pid=(\\d+)",
+ "fields": [
+  {
+   "name": "csrf_token_form",
+   "recorded": "<session value, not stored>",
+   "source": "session"
+  },
+  {
+   "name": "form_title",
+   "recorded": "Ms.",
+   "source": "param",
+   "param": "title"
+  },
+  {
+   "name": "form_fname",
+   "recorded": "Nadia",
+   "source": "param",
+   "param": "fname"
+  },
+  {
+   "name": "form_mname",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_lname",
+   "recorded": "Brennan",
+   "source": "param",
+   "param": "lname"
+  },
+  {
+   "name": "form_suffix",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_preferred_name",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_birth_fname",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_birth_mname",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_birth_lname",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_DOB",
+   "recorded": "1971-04-19",
+   "source": "param",
+   "param": "DOB"
+  },
+  {
+   "name": "form_sex",
+   "recorded": "Female",
+   "source": "param",
+   "param": "sex"
+  },
+  {
+   "name": "form_gender_identity",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_text_gender_identity",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_sex_identified",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_sexual_orientation",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_text_sexual_orientation",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_pronoun",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_pubpid",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_ss",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_drivers_license",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_status",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_genericname1",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_genericval1",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_genericname2",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_genericval2",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_billing_note",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_street",
+   "recorded": "27 WILLOW BEND ROAD",
+   "source": "param",
+   "param": "street"
+  },
+  {
+   "name": "form_street_line_2",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_city",
+   "recorded": "EXAMPLETON",
+   "source": "param",
+   "param": "city"
+  },
+  {
+   "name": "form_state",
+   "recorded": "MA",
+   "source": "select_label",
+   "param": "state_label",
+   "label": "Massachusetts"
+  },
+  {
+   "name": "form_postal_code",
+   "recorded": "02139",
+   "source": "param",
+   "param": "postal_code"
+  },
+  {
+   "name": "form_country_code",
+   "recorded": "USA",
+   "source": "param",
+   "param": "country_code"
+  },
+  {
+   "name": "form_county",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_mothersname",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_contact_relationship",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_phone_contact",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_phone_home",
+   "recorded": "555-0121",
+   "source": "param",
+   "param": "phone_home"
+  },
+  {
+   "name": "form_phone_biz",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_phone_cell",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_email",
+   "recorded": "nadia.brennan@example.invalid",
+   "source": "param",
+   "param": "email"
+  },
+  {
+   "name": "form_email_direct",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_providerID",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_provider_since_date",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_ref_providerID",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_pharmacy_id",
+   "recorded": "0",
+   "source": "form_default"
+  },
+  {
+   "name": "form_hipaa_notice",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_hipaa_voice",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_hipaa_message",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_hipaa_mail",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_hipaa_allowsms",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_hipaa_allowemail",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_allow_imm_reg_use",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_allow_imm_info_share",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_allow_health_info_ex",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_allow_patient_portal",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_cmsportal_login",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_imm_reg_status",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_imm_reg_stat_effdate",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_publicity_code",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_publ_code_eff_date",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_protect_indicator",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_prot_indi_effdate",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_care_team_status",
+   "recorded": "active",
+   "source": "form_default"
+  },
+  {
+   "name": "form_patient_groups[]",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_occupation",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_industry",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_em_name",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_em_street",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_em_street_line_2",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_em_city",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_em_state",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_em_postal_code",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_em_country",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_em_start_date",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_em_end_date",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_language",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_ethnicity[]",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_race[]",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_nationality_country",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_financial_review",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_family_size",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_monthly_income",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_homeless",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_interpreter_needed",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_interpretter",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_migrantseasonal",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_referral_source",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_vfc",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_religion",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_tribal_affiliations",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_deceased_date",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_deceased_reason",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_guardiansname",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_guardianrelationship",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_guardiansex",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_guardianaddress",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_guardiancity",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_guardianstate",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_guardianpostalcode",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_guardiancountry",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_guardianphone",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_guardianworkphone",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_guardianemail",
+   "recorded": "",
+   "source": "form_default"
+  },
+  {
+   "name": "form_person_gender",
+   "recorded": "",
+   "source": "form_default"
+  }
+ ],
+ "folded_gui_steps": [
+  "step_000",
+  "step_001",
+  "step_002",
+  "step_003",
+  "step_004",
+  "step_005",
+  "step_006",
+  "step_007",
+  "step_008",
+  "step_009",
+  "step_010",
+  "step_011",
+  "step_012",
+  "step_013",
+  "step_014",
+  "step_015",
+  "step_016",
+  "step_017",
+  "step_018",
+  "step_019",
+  "step_020",
+  "step_021",
+  "step_022",
+  "step_023",
+  "step_024",
+  "step_025",
+  "step_026",
+  "step_027",
+  "step_028",
+  "step_029",
+  "step_030",
+  "step_031",
+  "step_032",
+  "step_033",
+  "step_034",
+  "step_035",
+  "step_036",
+  "step_037",
+  "step_038",
+  "step_039",
+  "step_040"
+ ]
+}

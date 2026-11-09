@@ -1,0 +1,17 @@
+{
+  "schema_version": 2,
+  "content_digest": "71c9b3814d9d84d7c7a25dc03acd9f9533fa3b04b080aea5220693c975f1d723",
+  "file_hashes": {},
+  "provenance": {
+    "compiler_version": "1.19.0",
+    "source_recording_sha256": null,
+    "compiler_config_sha256": null,
+    "created_at": "2026-07-21T00:00:00+00:00",
+    "policy_name": null,
+    "certified": false,
+    "certification_status": null,
+    "certified_at": null,
+    "expires_at": null
+  },
+  "encrypted": false
+}

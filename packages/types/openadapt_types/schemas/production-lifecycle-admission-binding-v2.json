@@ -1,0 +1,166 @@
+{
+  "$defs": {
+    "ProductionArtifactAuthorityV2": {
+      "enum": [
+        "pypi",
+        "github_release",
+        "managed_evidence"
+      ],
+      "title": "ProductionArtifactAuthorityV2",
+      "type": "string"
+    },
+    "ProductionArtifactKindV2": {
+      "enum": [
+        "python-sdist",
+        "python-wheel",
+        "deployment-manifest"
+      ],
+      "title": "ProductionArtifactKindV2",
+      "type": "string"
+    },
+    "ProductionReleaseArtifactBindingV2": {
+      "additionalProperties": false,
+      "description": "One exact artifact and its verification authority.",
+      "properties": {
+        "authority": {
+          "$ref": "#/$defs/ProductionArtifactAuthorityV2"
+        },
+        "kind": {
+          "$ref": "#/$defs/ProductionArtifactKindV2"
+        },
+        "name": {
+          "pattern": "^[^/\\\\]{1,255}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 1,
+          "title": "Size Bytes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "kind",
+        "sha256",
+        "size_bytes",
+        "authority"
+      ],
+      "title": "ProductionReleaseArtifactBindingV2",
+      "type": "object"
+    },
+    "ProductionReleaseKindV2": {
+      "enum": [
+        "package",
+        "deployment",
+        "hybrid"
+      ],
+      "title": "ProductionReleaseKindV2",
+      "type": "string"
+    },
+    "ProductionTargetIdV2": {
+      "enum": [
+        "agent",
+        "capture",
+        "cloud",
+        "desktop",
+        "docs",
+        "flow",
+        "openadapt"
+      ],
+      "title": "ProductionTargetIdV2",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Fields read only after an admission object passes its digest check.",
+  "properties": {
+    "artifact_inventory_sha256": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Artifact Inventory Sha256",
+      "type": "string"
+    },
+    "artifacts": {
+      "items": {
+        "$ref": "#/$defs/ProductionReleaseArtifactBindingV2"
+      },
+      "minItems": 1,
+      "title": "Artifacts",
+      "type": "array"
+    },
+    "claim_scope": {
+      "pattern": "^production_[a-z]+$",
+      "title": "Claim Scope",
+      "type": "string"
+    },
+    "expires_at": {
+      "anyOf": [
+        {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expires At"
+    },
+    "issued_at": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+      "title": "Issued At",
+      "type": "string"
+    },
+    "not_before": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+      "title": "Not Before",
+      "type": "string"
+    },
+    "release_kind": {
+      "$ref": "#/$defs/ProductionReleaseKindV2"
+    },
+    "release_sha256": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Release Sha256",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "openadapt.production-lifecycle-admission-binding/v2",
+      "default": "openadapt.production-lifecycle-admission-binding/v2",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source_repository": {
+      "pattern": "^OpenAdaptAI/[A-Za-z0-9._-]+$",
+      "title": "Source Repository",
+      "type": "string"
+    },
+    "target": {
+      "$ref": "#/$defs/ProductionTargetIdV2"
+    },
+    "verdict": {
+      "const": "accepted",
+      "default": "accepted",
+      "title": "Verdict",
+      "type": "string"
+    }
+  },
+  "required": [
+    "target",
+    "source_repository",
+    "release_kind",
+    "claim_scope",
+    "release_sha256",
+    "artifact_inventory_sha256",
+    "artifacts",
+    "issued_at",
+    "not_before"
+  ],
+  "title": "ProductionLifecycleAdmissionBindingV2",
+  "type": "object"
+}

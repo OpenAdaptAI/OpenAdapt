@@ -1,0 +1,94 @@
+{
+  "machine": "Darwin arm64",
+  "python": "3.12.13",
+  "commands": {
+    "before": "flow tutorial --break-it --out",
+    "after": "quickstart --headless --out"
+  },
+  "runs": [
+    {
+      "command": "before",
+      "round": 0,
+      "exit_code": 0,
+      "wall_s": 21.6,
+      "load_1m": 9.3,
+      "lines": 54
+    },
+    {
+      "command": "after",
+      "round": 0,
+      "exit_code": 0,
+      "wall_s": 22.58,
+      "load_1m": 10.0,
+      "lines": 39
+    },
+    {
+      "command": "before",
+      "round": 1,
+      "exit_code": 0,
+      "wall_s": 21.02,
+      "load_1m": 9.8,
+      "lines": 54
+    },
+    {
+      "command": "after",
+      "round": 1,
+      "exit_code": 0,
+      "wall_s": 22.09,
+      "load_1m": 9.7,
+      "lines": 39
+    },
+    {
+      "command": "before",
+      "round": 2,
+      "exit_code": 0,
+      "wall_s": 22.26,
+      "load_1m": 10.3,
+      "lines": 54
+    },
+    {
+      "command": "after",
+      "round": 2,
+      "exit_code": 0,
+      "wall_s": 22.31,
+      "load_1m": 30.5,
+      "lines": 39
+    },
+    {
+      "command": "before",
+      "round": 3,
+      "exit_code": 0,
+      "wall_s": 21.45,
+      "load_1m": 25.8,
+      "lines": 54
+    },
+    {
+      "command": "after",
+      "round": 3,
+      "exit_code": 0,
+      "wall_s": 21.56,
+      "load_1m": 28.4,
+      "lines": 39
+    },
+    {
+      "command": "before",
+      "round": 4,
+      "exit_code": 0,
+      "wall_s": 22.95,
+      "load_1m": 33.9,
+      "lines": 54
+    },
+    {
+      "command": "after",
+      "round": 4,
+      "exit_code": 0,
+      "wall_s": 24.19,
+      "load_1m": 35.9,
+      "lines": 39
+    }
+  ],
+  "median_wall_s": {
+    "before": 21.6,
+    "after": 22.31
+  }
+}

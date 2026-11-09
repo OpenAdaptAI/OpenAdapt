@@ -1,0 +1,179 @@
+{
+  "variant": "agent",
+  "app": "MockMed (openadapt_flow.mockmed.fault_server, ?fault=ok)",
+  "workflow": "Add a triage note",
+  "seconds": 664,
+  "counts": {
+    "navigation": 1,
+    "confirmation": 1,
+    "decision": 1
+  },
+  "total": 3,
+  "setup_inputs": 2,
+  "first_item_inputs": 0,
+  "navigation": 1,
+  "reached_checked_run": true,
+  "blocked": null,
+  "inputs": [
+    {
+      "screen": "Workflows",
+      "kind": "navigation",
+      "label": "Check it",
+      "shot": "01-workflows.png",
+      "note": ""
+    },
+    {
+      "screen": "Approval dialog",
+      "kind": "confirmation",
+      "label": "Approve and save (the practice item's save)",
+      "shot": "02-practice-approve-save.png",
+      "note": ""
+    },
+    {
+      "screen": "Check it: question 3",
+      "kind": "decision",
+      "label": "Approve? Approve this workflow",
+      "shot": "03-q3-approve.png",
+      "note": ""
+    }
+  ],
+  "engine_commands": [
+    "compile_recording",
+    "shadow_status",
+    "get_auth_status",
+    "get_auth_status",
+    "shadow_status",
+    "get_first_workflow_state",
+    "get_workflows",
+    "get_first_workflow_state",
+    "get_first_workflow_state",
+    "get_workflows",
+    "get_needs_attention",
+    "get_needs_attention",
+    "get_sync_state",
+    "get_sync_state",
+    "authoring_status",
+    "authoring_status",
+    "get_workflows",
+    "get_workflows",
+    "get_results_summary",
+    "get_results_summary",
+    "get_workflows",
+    "get_task_inputs",
+    "get_qualification",
+    "get_check_setup",
+    "get_workflows",
+    "get_task_inputs",
+    "get_qualification",
+    "get_check_setup",
+    "propose_qualification_from_demo",
+    "get_capabilities",
+    "get_capabilities",
+    "propose_qualification_from_demo",
+    "get_workflows",
+    "get_task_inputs",
+    "get_qualification",
+    "get_check_setup",
+    "get_workflows",
+    "get_qualification",
+    "get_task_inputs",
+    "get_check_setup",
+    "get_workflows",
+    "get_task_inputs",
+    "get_item_approval",
+    "get_item_approval",
+    "get_item_approval",
+    "get_item_approval",
+    "get_item_approval",
+    "get_item_approval",
+    "get_item_approval",
+    "get_item_approval",
+    "get_item_approval",
+    "get_item_approval",
+    "get_item_approval",
+    "get_item_approval",
+    "get_item_approval",
+    "get_item_approval",
+    "get_item_approval",
+    "get_item_approval",
+    "get_item_approval",
+    "get_item_approval",
+    "answer_item_approval",
+    "get_item_approval",
+    "get_item_approval",
+    "get_item_approval",
+    "get_item_approval",
+    "get_item_approval",
+    "get_item_approval",
+    "get_item_approval",
+    "get_item_approval",
+    "get_item_approval",
+    "get_item_approval",
+    "get_item_approval",
+    "get_item_approval",
+    "get_item_approval",
+    "get_item_approval",
+    "get_qualification",
+    "get_check_setup",
+    "shadow_status",
+    "shadow_status",
+    "shadow_status",
+    "shadow_status",
+    "shadow_status",
+    "shadow_status",
+    "shadow_status",
+    "shadow_status",
+    "shadow_status",
+    "shadow_status",
+    "shadow_status",
+    "shadow_status",
+    "shadow_status",
+    "shadow_status",
+    "shadow_status",
+    "shadow_status",
+    "shadow_status",
+    "shadow_status",
+    "shadow_status",
+    "shadow_status",
+    "get_workflows",
+    "get_task_inputs",
+    "get_qualification",
+    "get_check_setup",
+    "shadow_status",
+    "certify_qualification",
+    "shadow_status"
+  ],
+  "agent_calls": [
+    {
+      "tool": "list_workflows",
+      "arguments": {}
+    },
+    {
+      "tool": "get_check_setup",
+      "arguments": {
+        "workflow_id": "24ad4eda"
+      }
+    },
+    {
+      "tool": "answer_record_check",
+      "arguments": {
+        "workflow_id": "24ad4eda"
+      }
+    },
+    {
+      "tool": "answer_values",
+      "arguments": {
+        "workflow_id": "24ad4eda",
+        "changes": [
+          "note"
+        ]
+      }
+    },
+    {
+      "tool": "run_checks",
+      "arguments": {
+        "workflow_id": "24ad4eda"
+      }
+    }
+  ]
+}

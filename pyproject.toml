@@ -1,0 +1,237 @@
+[project]
+name = "openadapt"
+version = "1.20.0"
+description = "Enters approved information into the apps your team already uses, checks that it saved, and stops for a person when something doesn't match."
+# The package description is README.md with its lifecycle block swapped for a
+# link to the live record; see hatch_build.py.
+dynamic = ["readme"]
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    {name = "Richard Abrich", email = "richard@openadapt.ai"}
+]
+keywords = [
+    "gui",
+    "automation",
+    "workflow",
+    "verification",
+    "desktop",
+    "rdp",
+    "citrix",
+    "emr",
+    "data-entry",
+]
+classifiers = [
+    "Intended Audience :: Developers",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Intended Audience :: Healthcare Industry",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+# Base install: the CLI, the flagship demonstration compiler, and the browser
+# driver used by the bundled tutorial. `pip install openadapt` must make the
+# public `openadapt quickstart` command work without a second package install.
+# OpenAdapt asks Playwright to download Chromium on the first browser action.
+# Linux system libraries remain host prerequisites; `openadapt doctor` and Flow
+# check them before the browser download. All other capabilities (capture, ml,
+# evals, ...) remain opt-in extras.
+#
+# Python 3.13 and newer: the engine (openadapt-flow), the agent bridge, and
+# Flow's OCR dependency (rapidocr-onnxruntime) all publish Requires-Python
+# <3.13. When this launcher also capped Requires-Python at <3.13, pip on 3.13
+# and 3.14 backtracked to openadapt 1.3.0, the newest release with no cap and
+# no engine dependency, and installed an unrelated pre-compiler CLI with no
+# error. The launcher itself runs on any Python >=3.10, so it now installs
+# everywhere and gates every engine dependency behind the marker below. On an
+# unsupported interpreter the CLI prints how to install with Python 3.12
+# instead of running. Widen the marker (and the classifiers, the CI guard
+# matrix, and `_SUPPORTED_PYTHON` in openadapt/cli.py) together, and only
+# after Flow and the agent bridge publish releases that support it.
+# tests/test_python_support.py keeps these in step.
+dependencies = [
+    "click>=8.0.0",
+    # The quickstart's terminal view (MIT). Pure Python; the engine doesn't
+    # depend on it. Gated like the engine: without it the quickstart can't run.
+    "rich>=13.0.0; python_version < '3.13'",
+    # Every Flow floor is 2.6.0: ledger listing uses its persistent owed-recheck
+    # API (tests/test_flow_floor.py).
+    "openadapt-flow[browser,hosted]>=2.6.0,<3.0.0; python_version < '3.13'",
+    # Day-1 partner kit: `pip install openadapt` must expose the
+    # `openadapt-agent` command without a second package. 2.1.0 adds Seal checks;
+    # `--bundles`; the bundle-free tutorial `serve --allow-run` needs a later
+    # agent release (see `_AGENT_TUTORIAL_SERVE_MINIMUM` in openadapt/cli.py).
+    "openadapt-agent>=2.1.0,<3; python_version < '3.13'",
+]
+
+[project.optional-dependencies]
+# Individual packages
+browser = [
+    # Kept as a compatibility alias for existing install commands. The base
+    # launcher now selects this Flow contract because the bundled quickstart
+    # uses the browser. OpenAdapt requests Chromium on first browser use after
+    # the host dependency check passes.
+    "openadapt-flow[browser]>=2.6.0,<3.0.0; python_version < '3.13'",
+]
+# Local human desktop recording. Flow owns the supported capture adapter
+# contract; the direct floor prevents an already-installed pre-1.0 Capture
+# from satisfying the launcher's public recording path. FFmpeg remains a
+# separately provisioned executable, not a Python-package dependency.
+capture = [
+    "openadapt-capture>=1.2.0,<2.0.0",
+    "openadapt-flow[capture]>=2.6.0,<3.0.0; python_version < '3.13'",
+]
+# Replay substrate dependencies stay separate from capture: recording observes
+# the human on the local interactive desktop, while replay may target a WAA
+# agent, a native app, or a remote framebuffer.
+windows = [
+    "openadapt-flow[windows]>=2.6.0,<3.0.0; python_version < '3.13'",
+]
+macos = [
+    "openadapt-flow[macos]>=2.6.0,<3.0.0; sys_platform == 'darwin' and python_version < '3.13'",
+]
+linux = [
+    "openadapt-flow[linux]>=2.6.0,<3.0.0; sys_platform == 'linux' and python_version < '3.13'",
+]
+rdp = [
+    "openadapt-flow[rdp]>=2.6.0,<3.0.0; python_version < '3.13'",
+]
+ml = [
+    "openadapt-ml>=0.2.0",
+]
+evals = [
+    "openadapt-evals>=0.1.0",
+]
+viewer = [
+    "openadapt-viewer>=0.1.0",
+]
+grounding = [
+    "openadapt-grounding>=0.1.0",
+]
+retrieval = [
+    "openadapt-retrieval>=0.1.0",
+]
+privacy = [
+    "openadapt-flow[privacy]>=2.6.0,<3.0.0; python_version < '3.13'",
+]
+# `flow` now ships in the base install (see `dependencies` above). This
+# extra is kept for backward compatibility so `pip install openadapt[flow]`
+# and the `all` bundle still resolve.
+flow = [
+    "openadapt-flow>=2.6.0,<3.0.0; python_version < '3.13'",
+]
+# `openadapt-agent` also ships in the base install. Keep the extra so
+# `pip install openadapt[agent]` still resolves.
+agent = [
+    "openadapt-agent>=2.1.0,<3; python_version < '3.13'",
+]
+# Bundles
+core = [
+    "openadapt[capture,ml,evals,viewer]",
+]
+all = [
+    # Cross-platform clients are always safe to resolve. Native bindings remain
+    # conditional so `openadapt[all]` never pulls PyObjC onto Linux/Windows or
+    # PyGObject onto macOS/Windows.
+    "openadapt[browser,core,grounding,retrieval,privacy,flow,windows,rdp,agent]",
+    "openadapt[macos]; sys_platform == 'darwin'",
+    "openadapt[linux]; sys_platform == 'linux'",
+]
+dev = [
+    "build>=1.2.0",
+    "pytest>=8.0.0",
+    "ruff>=0.1.0",
+]
+
+[project.scripts]
+openadapt = "openadapt.cli:main"
+
+[project.urls]
+Homepage = "https://openadapt.ai"
+Documentation = "https://docs.openadapt.ai"
+Repository = "https://github.com/OpenAdaptAI/OpenAdapt"
+"Canonical Engine" = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow"
+"Bug Tracker" = "https://github.com/OpenAdaptAI/OpenAdapt/issues"
+
+[build-system]
+requires = ["hatchling==1.32.4"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata.hooks.custom]
+
+[tool.hatch.build.targets.wheel]
+packages = ["openadapt"]
+
+# Keep the public source archive as narrow as the launcher package. Hatch's
+# broad default selection otherwise picks up ignored workstation artifacts
+# such as `.env`, local databases, screenshots, and model-call caches.
+[tool.hatch.build.targets.sdist]
+include = [
+    "/openadapt",
+    "/hatch_build.py",
+    "/README.md",
+    "/LICENSE",
+    "/CHANGELOG.md",
+    "/pyproject.toml",
+]
+exclude = [
+    "/.cache",
+    "/.claude",
+    "/.env",
+    "/.worktrees",
+    "/build",
+    "/dist",
+    "/docs",
+    "/legacy",
+    "/openadapt.db",
+    "/output.png",
+]
+
+[tool.uv]
+# Wheel-only dependencies drop old Pythons (onnxruntime 1.24 has no cp310
+# wheel and no sdist), and a universal lock does not notice: it locked 1.24.3
+# for Python 3.10, which no 3.10 interpreter can install. These environments
+# make the resolver keep a version with a wheel for the oldest supported
+# Python on each platform CI runs.
+required-environments = [
+    "python_version == '3.10' and sys_platform == 'linux'",
+    "python_version == '3.10' and sys_platform == 'darwin'",
+    "python_version == '3.10' and sys_platform == 'win32'",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+branch = "main"
+commit_message = "{version}\n\nAutomatically generated by python-semantic-release"
+# Dependencies are reviewed and locked before merge; semantic-release changes
+# only the project version. Refresh that editable root in place with a
+# dependency-free, offline script, then stage it in the generated version
+# commit before the separate publish step builds it.
+build_command = """
+python scripts/verify_release_lock.py --write
+git add uv.lock
+"""
+
+[tool.semantic_release.commit_parser_options]
+allowed_tags = ["build", "chore", "ci", "docs", "feat", "fix", "perf", "refactor", "style", "test"]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf"]

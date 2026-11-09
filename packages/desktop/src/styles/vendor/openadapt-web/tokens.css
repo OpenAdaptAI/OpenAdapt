@@ -1,0 +1,110 @@
+/* CANONICAL design tokens for every OpenAdapt surface.
+ *
+ * styles/tokens.json holds the same values in machine-readable form and is the
+ * artifact other repositories vendor and hash-check. tests/designTokens.test.js
+ * fails when this file and that one disagree, so edit both together.
+ *
+ * Palette rules:
+ *   - Neutrals are cool. --ink is a near-black slate; surfaces are white and
+ *     very light cool grey; secondary text is slate.
+ *   - One brand accent: --accent-verified.
+ *   - --accent-halt and --accent-danger are reserved for halt and refusal
+ *     states. They never carry decoration.
+ *   - --focus-ring is a system affordance, deliberately outside the brand hue
+ *     so keyboard focus never reads as a verified state.
+ *   - Every text colour clears WCAG AA (4.5:1) on --surface and
+ *     --surface-raised; tests/linkStyles.test.js measures it.
+ */
+
+:root {
+    /* ── Colour ─────────────────────────────────────────────────────────── */
+    --ink: #0B1220;
+    --text-secondary: #414E63;
+    --text-tertiary: #5A697F;
+    --surface: #F5F7FA;
+    --surface-raised: #FFFFFF;
+    --surface-sunken: #EDF1F6;
+    --hairline: #DEE4EC;
+    --hairline-strong: #C6D0DC;
+    --accent-verified: #0B7A5A;
+    --accent-verified-hover: #07553E;
+    --accent-halt: #9A5B0A;
+    --accent-danger: #B3261E;
+    --link-visited: #574FB0;
+    --focus-ring: #2563EB;
+    --inset-bg: #0B1220;
+    --inset-raised: #131C2C;
+    --inset-text: #E2E8F0;
+    --inset-ok: #34D399;
+    --inset-warn: #FBBF24;
+    --inset-border: #1E293B;
+
+    /* ── Font ───────────────────────────────────────────────────────────── */
+    --font-display: 'Avenir Next', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+
+    /* ── Type scale (1.25 ratio on a 16px base) ─────────────────────────── */
+    --text-2xs: 0.6875rem;
+    --text-xs: 0.8125rem;
+    --text-sm: 0.875rem;
+    --text-base: 1rem;
+    --text-lg: 1.25rem;
+    --text-xl: 1.5625rem;
+    --text-2xl: 1.953rem;
+    --text-3xl: 2.441rem;
+    --text-4xl: 3.052rem;
+    --text-5xl: 3.815rem;
+    --leading-tight: 1.12;
+    --leading-snug: 1.3;
+    --leading-body: 1.6;
+    --tracking-tight: -0.02em;
+    --tracking-wide: 0.14em;
+    --measure: 68ch;
+
+    /* ── Spacing ────────────────────────────────────────────────────────── */
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-5: 1.5rem;
+    --space-6: 2rem;
+    --space-7: 2.5rem;
+    --space-8: 3rem;
+    --space-9: 4rem;
+    --space-10: 5rem;
+    --space-section: clamp(4.5rem, 9vw, 7.5rem);
+
+    /* ── Radii ──────────────────────────────────────────────────────────── */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 18px;
+    --radius-pill: 9999px;
+
+    /* ── Elevation: hairline first, shadow only to lift a surface ───────── */
+    --elevation-1: 0 1px 2px rgba(11, 18, 32, 0.05);
+    --elevation-2: 0 8px 24px rgba(11, 18, 32, 0.07);
+
+    /* ── Motion: one ease, three durations, transform/opacity only ──────── */
+    --dur-1: 150ms;
+    --dur-2: 200ms;
+    --dur-3: 250ms;
+    --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+/* ── Compatibility aliases ───────────────────────────────────────────────
+   Existing components address the palette by its older names. Each alias
+   points at a canonical token above, so there is still exactly one place to
+   change a value. Prefer the canonical name in new code.                  */
+:root {
+    --ground: var(--surface);
+    --panel: var(--surface-raised);
+    --ink-2: var(--text-secondary);
+    --ink-3: var(--text-tertiary);
+    --rule: var(--ink);
+    --hairline-dotted: var(--hairline-strong);
+    --accent: var(--accent-verified);
+    --accent-hover: var(--accent-verified-hover);
+    --link-underline: color-mix(in srgb, var(--accent-verified) 58%, transparent);
+    --link-visited-underline: color-mix(in srgb, var(--link-visited) 58%, transparent);
+}

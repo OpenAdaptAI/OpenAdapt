@@ -1,0 +1,72 @@
+{
+  "name": "silent-saves",
+  "version": "1.0.0",
+  "protocol": "silent-saves/2026-10-19.1",
+  "app": "mockmed",
+  "task": {
+    "id": "mockmed.add_triage_note",
+    "instruction": "Open the first referral, start a Triage encounter, and save this note: {note}",
+    "target": {"patient_id": "p1", "type": "Triage"},
+    "note": "Synthetic follow-up note {item}: recheck in {days} days",
+    "days": "7 + item % 14"
+  },
+  "per_fault_default": 5,
+  "order": "round robin: item i gets faults[(i - 1) % len(faults)]",
+  "faults": [
+    {
+      "kind": "ok",
+      "server": "stores the note normally",
+      "screen": "Encounter saved",
+      "store_after": "correct",
+      "published_in": ["EFFECT_E2E.md (ok)", "scoreboard claims (ok)"]
+    },
+    {
+      "kind": "no_persist",
+      "server": "answers 200 and stores nothing",
+      "screen": "Encounter saved",
+      "store_after": "missing",
+      "published_in": ["EFFECT_E2E.md (no_persist)", "scoreboard claims (no_persist)"]
+    },
+    {
+      "kind": "partial",
+      "server": "stores the encounter without its note",
+      "screen": "Encounter saved",
+      "store_after": "partial",
+      "published_in": ["EFFECT_E2E.md (partial)", "scoreboard claims (partial)"]
+    },
+    {
+      "kind": "duplicate",
+      "server": "accepts the save every time; the app sends it twice and two rows land",
+      "screen": "Encounter saved",
+      "store_after": "duplicate",
+      "published_in": ["EFFECT_E2E.md (duplicate)", "scoreboard claims (duplicate)"]
+    },
+    {
+      "kind": "wrong_record",
+      "server": "stores the note on another patient (p2)",
+      "screen": "Encounter saved",
+      "store_after": "wrong_record",
+      "published_in": ["EFFECT_E2E.md (wrong_record)", "scoreboard claims (wrong_record)"]
+    },
+    {
+      "kind": "stale",
+      "server": "last write wins: another clinician's earlier encounter on the same patient is deleted",
+      "screen": "Encounter saved",
+      "store_after": "collateral_loss",
+      "seed": "one concurrent Consult encounter on p1 before the item starts",
+      "published_in": ["EFFECT_E2E.md (stale)", "scoreboard claims (stale)"]
+    },
+    {
+      "kind": "optimistic",
+      "server": "rejects the save (409); the app has already shown it as saved",
+      "screen": "Encounter saved",
+      "store_after": "missing",
+      "published_in": ["EFFECT_E2E.md (optimistic)", "scoreboard claims (optimistic)"]
+    }
+  ],
+  "not_in_this_version": {
+    "collateral_unaudited": "EFFECT_E2E.md only; MockMed has no second table to write to",
+    "session": "EFFECT_E2E.md only; the screen shows the failure, so it does not test silent saves",
+    "timeout": "EFFECT_E2E.md only; the row lands but the screen shows an error (a false failure, not a silent save)"
+  }
+}

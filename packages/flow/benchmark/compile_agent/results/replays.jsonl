@@ -1,0 +1,10 @@
+{"host_load_1m": 481.9, "model_calls": 0, "model_tokens": 0, "program_from": "selective", "receipt_outcome": "VERIFIED", "replay": 1, "seconds": 36.265, "status": "VERIFIED", "verified": true}
+{"host_load_1m": 481.4, "model_calls": 0, "model_tokens": 0, "program_from": "selective", "receipt_outcome": "VERIFIED", "replay": 2, "seconds": 37.299, "status": "VERIFIED", "verified": true}
+{"host_load_1m": 461.1, "model_calls": 0, "model_tokens": 0, "program_from": "selective", "receipt_outcome": "VERIFIED", "replay": 3, "seconds": 36.045, "status": "VERIFIED", "verified": true}
+{"host_load_1m": 443.6, "model_calls": 0, "model_tokens": 0, "program_from": "selective", "receipt_outcome": "VERIFIED", "replay": 4, "seconds": 36.021, "status": "VERIFIED", "verified": true}
+{"host_load_1m": 413.9, "model_calls": 0, "model_tokens": 0, "program_from": "selective", "receipt_outcome": "VERIFIED", "replay": 5, "seconds": 36.821, "status": "VERIFIED", "verified": true}
+{"host_load_1m": 441.3, "model_calls": 0, "model_tokens": 0, "program_from": "every_turn", "receipt_outcome": "VERIFIED", "replay": 1, "seconds": 36.6, "status": "VERIFIED", "verified": true}
+{"host_load_1m": 435.1, "model_calls": 0, "model_tokens": 0, "program_from": "every_turn", "receipt_outcome": "VERIFIED", "replay": 2, "seconds": 26.609, "status": "VERIFIED", "verified": true}
+{"host_load_1m": 409.0, "model_calls": 0, "model_tokens": 0, "program_from": "every_turn", "receipt_outcome": "VERIFIED", "replay": 3, "seconds": 15.867, "status": "VERIFIED", "verified": true}
+{"host_load_1m": 391.0, "model_calls": 0, "model_tokens": 0, "program_from": "every_turn", "receipt_outcome": "VERIFIED", "replay": 4, "seconds": 19.247, "status": "VERIFIED", "verified": true}
+{"host_load_1m": 392.9, "model_calls": 0, "model_tokens": 0, "program_from": "every_turn", "receipt_outcome": "VERIFIED", "replay": 5, "seconds": 30.113, "status": "VERIFIED", "verified": true}

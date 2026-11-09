@@ -1,0 +1,1144 @@
+{
+  "trace_version": 1,
+  "outcome": "halted",
+  "label": "4 referrals, recorded",
+  "total_ms": 77623,
+  "events": [
+    {
+      "node": "for_each",
+      "status": "ok",
+      "iteration": 1,
+      "at_ms": 0,
+      "duration_ms": 0
+    },
+    {
+      "node": "for_each::s::step_000",
+      "status": "ok",
+      "iteration": 1,
+      "at_ms": 0,
+      "duration_ms": 870,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed",
+      "frame": "run/r1/step_000.webp"
+    },
+    {
+      "node": "for_each::s::step_001",
+      "status": "ok",
+      "iteration": 1,
+      "at_ms": 870,
+      "duration_ms": 351,
+      "frame": "run/r1/step_001.webp"
+    },
+    {
+      "node": "for_each::s::step_003",
+      "status": "ok",
+      "iteration": 1,
+      "at_ms": 1221,
+      "duration_ms": 601,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed",
+      "frame": "run/r1/step_003.webp"
+    },
+    {
+      "node": "for_each::s::step_005",
+      "status": "ok",
+      "iteration": 1,
+      "at_ms": 1822,
+      "duration_ms": 349,
+      "frame": "run/r1/step_005.webp"
+    },
+    {
+      "node": "for_each::s::step_006",
+      "status": "ok",
+      "iteration": 1,
+      "at_ms": 2171,
+      "duration_ms": 578,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed",
+      "frame": "run/r1/step_006.webp"
+    },
+    {
+      "node": "for_each::s::step_008",
+      "status": "ok",
+      "iteration": 1,
+      "at_ms": 2748,
+      "duration_ms": 349,
+      "frame": "run/r1/step_008.webp"
+    },
+    {
+      "node": "for_each::s::step_009",
+      "status": "ok",
+      "iteration": 1,
+      "at_ms": 3098,
+      "duration_ms": 2290,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed",
+      "frame": "run/r1/step_009.webp"
+    },
+    {
+      "node": "for_each::s::step_011",
+      "status": "ok",
+      "iteration": 1,
+      "at_ms": 5388,
+      "duration_ms": 340,
+      "frame": "run/r1/step_011.webp"
+    },
+    {
+      "node": "for_each::s::step_012",
+      "status": "ok",
+      "iteration": 1,
+      "at_ms": 5728,
+      "duration_ms": 624,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed",
+      "frame": "run/r1/step_012.webp"
+    },
+    {
+      "node": "for_each::s::step_013",
+      "status": "ok",
+      "iteration": 1,
+      "at_ms": 6352,
+      "duration_ms": 358,
+      "frame": "run/r1/step_013.webp"
+    },
+    {
+      "node": "for_each::s::step_015",
+      "status": "ok",
+      "iteration": 1,
+      "at_ms": 6710,
+      "duration_ms": 654,
+      "frame": "run/r1/step_015.webp"
+    },
+    {
+      "node": "for_each::s::step_016",
+      "status": "ok",
+      "iteration": 1,
+      "at_ms": 7364,
+      "duration_ms": 1023,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed",
+      "frame": "run/r1/step_016.webp"
+    },
+    {
+      "node": "for_each::s::step_017",
+      "status": "ok",
+      "iteration": 1,
+      "at_ms": 8387,
+      "duration_ms": 445,
+      "frame": "run/r1/step_017.webp"
+    },
+    {
+      "node": "for_each::s::step_018",
+      "status": "ok",
+      "iteration": 1,
+      "at_ms": 8832,
+      "duration_ms": 645,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed",
+      "frame": "run/r1/step_018.webp"
+    },
+    {
+      "node": "for_each::s::step_020",
+      "status": "ok",
+      "iteration": 1,
+      "at_ms": 9477,
+      "duration_ms": 349,
+      "frame": "run/r1/step_020.webp"
+    },
+    {
+      "node": "for_each::s::step_021",
+      "status": "ok",
+      "iteration": 1,
+      "at_ms": 9827,
+      "duration_ms": 605,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed",
+      "frame": "run/r1/step_021.webp"
+    },
+    {
+      "node": "for_each::s::step_023",
+      "status": "ok",
+      "iteration": 1,
+      "at_ms": 10431,
+      "duration_ms": 349,
+      "frame": "run/r1/step_023.webp"
+    },
+    {
+      "node": "for_each::s::step_024",
+      "status": "ok",
+      "iteration": 1,
+      "at_ms": 10781,
+      "duration_ms": 569,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed",
+      "frame": "run/r1/step_024.webp"
+    },
+    {
+      "node": "for_each::s::step_025",
+      "status": "ok",
+      "iteration": 1,
+      "at_ms": 11350,
+      "duration_ms": 354,
+      "frame": "run/r1/step_025.webp"
+    },
+    {
+      "node": "for_each::s::step_027",
+      "status": "ok",
+      "iteration": 1,
+      "at_ms": 11704,
+      "duration_ms": 601,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed",
+      "frame": "run/r1/step_027.webp"
+    },
+    {
+      "node": "for_each::s::step_029",
+      "status": "ok",
+      "iteration": 1,
+      "at_ms": 12305,
+      "duration_ms": 331,
+      "frame": "run/r1/step_029.webp"
+    },
+    {
+      "node": "for_each::s::step_030",
+      "status": "ok",
+      "iteration": 1,
+      "at_ms": 12636,
+      "duration_ms": 585,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed",
+      "frame": "run/r1/step_030.webp"
+    },
+    {
+      "node": "for_each::s::step_032",
+      "status": "ok",
+      "iteration": 1,
+      "at_ms": 13221,
+      "duration_ms": 326,
+      "frame": "run/r1/step_032.webp"
+    },
+    {
+      "node": "for_each::s::step_033",
+      "status": "ok",
+      "iteration": 1,
+      "at_ms": 13547,
+      "duration_ms": 583,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed",
+      "frame": "run/r1/step_033.webp"
+    },
+    {
+      "node": "for_each::s::step_035",
+      "status": "ok",
+      "iteration": 1,
+      "at_ms": 14130,
+      "duration_ms": 328,
+      "frame": "run/r1/step_035.webp"
+    },
+    {
+      "node": "for_each::s::step_036",
+      "status": "ok",
+      "iteration": 1,
+      "at_ms": 14458,
+      "duration_ms": 597,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed",
+      "frame": "run/r1/step_036.webp"
+    },
+    {
+      "node": "for_each::s::step_037",
+      "status": "ok",
+      "iteration": 1,
+      "at_ms": 15056,
+      "duration_ms": 345,
+      "frame": "run/r1/step_037.webp"
+    },
+    {
+      "node": "for_each::s::step_039",
+      "status": "ok",
+      "iteration": 1,
+      "at_ms": 15400,
+      "duration_ms": 1091,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed",
+      "frame": "run/r1/step_039.webp"
+    },
+    {
+      "node": "for_each::s::step_040",
+      "status": "ok",
+      "iteration": 1,
+      "at_ms": 16491,
+      "duration_ms": 1908,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed",
+      "effect": "confirmed",
+      "effect_checks": {
+        "confirmed": 11,
+        "total": 11
+      },
+      "frame": "run/r1/step_040.webp"
+    },
+    {
+      "node": "for_each",
+      "status": "ok",
+      "iteration": 2,
+      "at_ms": 18399,
+      "duration_ms": 0
+    },
+    {
+      "node": "for_each::s::step_000",
+      "status": "ok",
+      "iteration": 2,
+      "at_ms": 18399,
+      "duration_ms": 641,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed"
+    },
+    {
+      "node": "for_each::s::step_001",
+      "status": "ok",
+      "iteration": 2,
+      "at_ms": 19041,
+      "duration_ms": 359
+    },
+    {
+      "node": "for_each::s::step_003",
+      "status": "ok",
+      "iteration": 2,
+      "at_ms": 19400,
+      "duration_ms": 557,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed"
+    },
+    {
+      "node": "for_each::s::step_005",
+      "status": "ok",
+      "iteration": 2,
+      "at_ms": 19958,
+      "duration_ms": 333
+    },
+    {
+      "node": "for_each::s::step_006",
+      "status": "ok",
+      "iteration": 2,
+      "at_ms": 20290,
+      "duration_ms": 556,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed"
+    },
+    {
+      "node": "for_each::s::step_008",
+      "status": "ok",
+      "iteration": 2,
+      "at_ms": 20847,
+      "duration_ms": 332
+    },
+    {
+      "node": "for_each::s::step_009",
+      "status": "ok",
+      "iteration": 2,
+      "at_ms": 21179,
+      "duration_ms": 1691,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed"
+    },
+    {
+      "node": "for_each::s::step_011",
+      "status": "ok",
+      "iteration": 2,
+      "at_ms": 22870,
+      "duration_ms": 331
+    },
+    {
+      "node": "for_each::s::step_012",
+      "status": "ok",
+      "iteration": 2,
+      "at_ms": 23201,
+      "duration_ms": 609,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed"
+    },
+    {
+      "node": "for_each::s::step_013",
+      "status": "ok",
+      "iteration": 2,
+      "at_ms": 23810,
+      "duration_ms": 323
+    },
+    {
+      "node": "for_each::s::step_015",
+      "status": "ok",
+      "iteration": 2,
+      "at_ms": 24132,
+      "duration_ms": 439
+    },
+    {
+      "node": "for_each::s::step_016",
+      "status": "ok",
+      "iteration": 2,
+      "at_ms": 24571,
+      "duration_ms": 1012,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed"
+    },
+    {
+      "node": "for_each::s::step_017",
+      "status": "ok",
+      "iteration": 2,
+      "at_ms": 25584,
+      "duration_ms": 522
+    },
+    {
+      "node": "for_each::s::step_018",
+      "status": "ok",
+      "iteration": 2,
+      "at_ms": 26106,
+      "duration_ms": 584,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed"
+    },
+    {
+      "node": "for_each::s::step_020",
+      "status": "ok",
+      "iteration": 2,
+      "at_ms": 26689,
+      "duration_ms": 344
+    },
+    {
+      "node": "for_each::s::step_021",
+      "status": "ok",
+      "iteration": 2,
+      "at_ms": 27034,
+      "duration_ms": 555,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed"
+    },
+    {
+      "node": "for_each::s::step_023",
+      "status": "ok",
+      "iteration": 2,
+      "at_ms": 27588,
+      "duration_ms": 330
+    },
+    {
+      "node": "for_each::s::step_024",
+      "status": "ok",
+      "iteration": 2,
+      "at_ms": 27919,
+      "duration_ms": 550,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed"
+    },
+    {
+      "node": "for_each::s::step_025",
+      "status": "ok",
+      "iteration": 2,
+      "at_ms": 28468,
+      "duration_ms": 345
+    },
+    {
+      "node": "for_each::s::step_027",
+      "status": "ok",
+      "iteration": 2,
+      "at_ms": 28814,
+      "duration_ms": 583,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed"
+    },
+    {
+      "node": "for_each::s::step_029",
+      "status": "ok",
+      "iteration": 2,
+      "at_ms": 29397,
+      "duration_ms": 346
+    },
+    {
+      "node": "for_each::s::step_030",
+      "status": "ok",
+      "iteration": 2,
+      "at_ms": 29743,
+      "duration_ms": 562,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed"
+    },
+    {
+      "node": "for_each::s::step_032",
+      "status": "ok",
+      "iteration": 2,
+      "at_ms": 30306,
+      "duration_ms": 333
+    },
+    {
+      "node": "for_each::s::step_033",
+      "status": "ok",
+      "iteration": 2,
+      "at_ms": 30639,
+      "duration_ms": 588,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed"
+    },
+    {
+      "node": "for_each::s::step_035",
+      "status": "ok",
+      "iteration": 2,
+      "at_ms": 31227,
+      "duration_ms": 341
+    },
+    {
+      "node": "for_each::s::step_036",
+      "status": "ok",
+      "iteration": 2,
+      "at_ms": 31568,
+      "duration_ms": 585,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed"
+    },
+    {
+      "node": "for_each::s::step_037",
+      "status": "ok",
+      "iteration": 2,
+      "at_ms": 32153,
+      "duration_ms": 344
+    },
+    {
+      "node": "for_each::s::step_039",
+      "status": "ok",
+      "iteration": 2,
+      "at_ms": 32497,
+      "duration_ms": 1091,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed"
+    },
+    {
+      "node": "for_each::s::step_040",
+      "status": "ok",
+      "iteration": 2,
+      "at_ms": 33588,
+      "duration_ms": 1834,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed",
+      "effect": "confirmed",
+      "effect_checks": {
+        "confirmed": 11,
+        "total": 11
+      }
+    },
+    {
+      "node": "for_each",
+      "status": "ok",
+      "iteration": 3,
+      "at_ms": 35421,
+      "duration_ms": 0
+    },
+    {
+      "node": "for_each::s::step_000",
+      "status": "ok",
+      "iteration": 3,
+      "at_ms": 35421,
+      "duration_ms": 679,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed"
+    },
+    {
+      "node": "for_each::s::step_001",
+      "status": "ok",
+      "iteration": 3,
+      "at_ms": 36101,
+      "duration_ms": 377
+    },
+    {
+      "node": "for_each::s::step_003",
+      "status": "ok",
+      "iteration": 3,
+      "at_ms": 36478,
+      "duration_ms": 619,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed"
+    },
+    {
+      "node": "for_each::s::step_005",
+      "status": "ok",
+      "iteration": 3,
+      "at_ms": 37096,
+      "duration_ms": 333
+    },
+    {
+      "node": "for_each::s::step_006",
+      "status": "ok",
+      "iteration": 3,
+      "at_ms": 37430,
+      "duration_ms": 589,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed"
+    },
+    {
+      "node": "for_each::s::step_008",
+      "status": "ok",
+      "iteration": 3,
+      "at_ms": 38018,
+      "duration_ms": 349
+    },
+    {
+      "node": "for_each::s::step_009",
+      "status": "ok",
+      "iteration": 3,
+      "at_ms": 38367,
+      "duration_ms": 1548,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed"
+    },
+    {
+      "node": "for_each::s::step_011",
+      "status": "ok",
+      "iteration": 3,
+      "at_ms": 39915,
+      "duration_ms": 324
+    },
+    {
+      "node": "for_each::s::step_012",
+      "status": "ok",
+      "iteration": 3,
+      "at_ms": 40240,
+      "duration_ms": 590,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed"
+    },
+    {
+      "node": "for_each::s::step_013",
+      "status": "ok",
+      "iteration": 3,
+      "at_ms": 40829,
+      "duration_ms": 343
+    },
+    {
+      "node": "for_each::s::step_015",
+      "status": "ok",
+      "iteration": 3,
+      "at_ms": 41172,
+      "duration_ms": 437
+    },
+    {
+      "node": "for_each::s::step_016",
+      "status": "ok",
+      "iteration": 3,
+      "at_ms": 41609,
+      "duration_ms": 1026,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed"
+    },
+    {
+      "node": "for_each::s::step_017",
+      "status": "ok",
+      "iteration": 3,
+      "at_ms": 42635,
+      "duration_ms": 591
+    },
+    {
+      "node": "for_each::s::step_018",
+      "status": "ok",
+      "iteration": 3,
+      "at_ms": 43226,
+      "duration_ms": 649,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed"
+    },
+    {
+      "node": "for_each::s::step_020",
+      "status": "ok",
+      "iteration": 3,
+      "at_ms": 43874,
+      "duration_ms": 346
+    },
+    {
+      "node": "for_each::s::step_021",
+      "status": "ok",
+      "iteration": 3,
+      "at_ms": 44221,
+      "duration_ms": 568,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed"
+    },
+    {
+      "node": "for_each::s::step_023",
+      "status": "ok",
+      "iteration": 3,
+      "at_ms": 44789,
+      "duration_ms": 328
+    },
+    {
+      "node": "for_each::s::step_024",
+      "status": "ok",
+      "iteration": 3,
+      "at_ms": 45117,
+      "duration_ms": 588,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed"
+    },
+    {
+      "node": "for_each::s::step_025",
+      "status": "ok",
+      "iteration": 3,
+      "at_ms": 45705,
+      "duration_ms": 326
+    },
+    {
+      "node": "for_each::s::step_027",
+      "status": "ok",
+      "iteration": 3,
+      "at_ms": 46032,
+      "duration_ms": 555,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed"
+    },
+    {
+      "node": "for_each::s::step_029",
+      "status": "ok",
+      "iteration": 3,
+      "at_ms": 46586,
+      "duration_ms": 328
+    },
+    {
+      "node": "for_each::s::step_030",
+      "status": "ok",
+      "iteration": 3,
+      "at_ms": 46915,
+      "duration_ms": 568,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed"
+    },
+    {
+      "node": "for_each::s::step_032",
+      "status": "ok",
+      "iteration": 3,
+      "at_ms": 47482,
+      "duration_ms": 329
+    },
+    {
+      "node": "for_each::s::step_033",
+      "status": "ok",
+      "iteration": 3,
+      "at_ms": 47811,
+      "duration_ms": 603,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed"
+    },
+    {
+      "node": "for_each::s::step_035",
+      "status": "ok",
+      "iteration": 3,
+      "at_ms": 48414,
+      "duration_ms": 342
+    },
+    {
+      "node": "for_each::s::step_036",
+      "status": "ok",
+      "iteration": 3,
+      "at_ms": 48756,
+      "duration_ms": 552,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed"
+    },
+    {
+      "node": "for_each::s::step_037",
+      "status": "ok",
+      "iteration": 3,
+      "at_ms": 49308,
+      "duration_ms": 342
+    },
+    {
+      "node": "for_each::s::step_039",
+      "status": "ok",
+      "iteration": 3,
+      "at_ms": 49650,
+      "duration_ms": 1058,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed"
+    },
+    {
+      "node": "for_each::s::step_040",
+      "status": "ok",
+      "iteration": 3,
+      "at_ms": 50707,
+      "duration_ms": 1771,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed",
+      "effect": "confirmed",
+      "effect_checks": {
+        "confirmed": 11,
+        "total": 11
+      }
+    },
+    {
+      "node": "for_each",
+      "status": "ok",
+      "iteration": 4,
+      "at_ms": 52479,
+      "duration_ms": 0
+    },
+    {
+      "node": "for_each::s::step_000",
+      "status": "ok",
+      "iteration": 4,
+      "at_ms": 52479,
+      "duration_ms": 661,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed",
+      "frame": "run/r4/step_000.webp"
+    },
+    {
+      "node": "for_each::s::step_001",
+      "status": "ok",
+      "iteration": 4,
+      "at_ms": 53140,
+      "duration_ms": 343,
+      "frame": "run/r4/step_001.webp"
+    },
+    {
+      "node": "for_each::s::step_003",
+      "status": "ok",
+      "iteration": 4,
+      "at_ms": 53483,
+      "duration_ms": 555,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed",
+      "frame": "run/r4/step_003.webp"
+    },
+    {
+      "node": "for_each::s::step_005",
+      "status": "ok",
+      "iteration": 4,
+      "at_ms": 54038,
+      "duration_ms": 334,
+      "frame": "run/r4/step_005.webp"
+    },
+    {
+      "node": "for_each::s::step_006",
+      "status": "ok",
+      "iteration": 4,
+      "at_ms": 54372,
+      "duration_ms": 558,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed",
+      "frame": "run/r4/step_006.webp"
+    },
+    {
+      "node": "for_each::s::step_008",
+      "status": "ok",
+      "iteration": 4,
+      "at_ms": 54930,
+      "duration_ms": 329,
+      "frame": "run/r4/step_008.webp"
+    },
+    {
+      "node": "for_each::s::step_009",
+      "status": "ok",
+      "iteration": 4,
+      "at_ms": 55259,
+      "duration_ms": 1518,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed",
+      "frame": "run/r4/step_009.webp"
+    },
+    {
+      "node": "for_each::s::step_011",
+      "status": "ok",
+      "iteration": 4,
+      "at_ms": 56777,
+      "duration_ms": 338,
+      "frame": "run/r4/step_011.webp"
+    },
+    {
+      "node": "for_each::s::step_012",
+      "status": "ok",
+      "iteration": 4,
+      "at_ms": 57115,
+      "duration_ms": 607,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed",
+      "frame": "run/r4/step_012.webp"
+    },
+    {
+      "node": "for_each::s::step_013",
+      "status": "ok",
+      "iteration": 4,
+      "at_ms": 57722,
+      "duration_ms": 344,
+      "frame": "run/r4/step_013.webp"
+    },
+    {
+      "node": "for_each::s::step_015",
+      "status": "ok",
+      "iteration": 4,
+      "at_ms": 58065,
+      "duration_ms": 455,
+      "frame": "run/r4/step_015.webp"
+    },
+    {
+      "node": "for_each::s::step_016",
+      "status": "ok",
+      "iteration": 4,
+      "at_ms": 58520,
+      "duration_ms": 1007,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed",
+      "frame": "run/r4/step_016.webp"
+    },
+    {
+      "node": "for_each::s::step_017",
+      "status": "ok",
+      "iteration": 4,
+      "at_ms": 59527,
+      "duration_ms": 512,
+      "frame": "run/r4/step_017.webp"
+    },
+    {
+      "node": "for_each::s::step_018",
+      "status": "ok",
+      "iteration": 4,
+      "at_ms": 60039,
+      "duration_ms": 583,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed",
+      "frame": "run/r4/step_018.webp"
+    },
+    {
+      "node": "for_each::s::step_020",
+      "status": "ok",
+      "iteration": 4,
+      "at_ms": 60622,
+      "duration_ms": 330,
+      "frame": "run/r4/step_020.webp"
+    },
+    {
+      "node": "for_each::s::step_021",
+      "status": "ok",
+      "iteration": 4,
+      "at_ms": 60952,
+      "duration_ms": 568,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed",
+      "frame": "run/r4/step_021.webp"
+    },
+    {
+      "node": "for_each::s::step_023",
+      "status": "ok",
+      "iteration": 4,
+      "at_ms": 61520,
+      "duration_ms": 344,
+      "frame": "run/r4/step_023.webp"
+    },
+    {
+      "node": "for_each::s::step_024",
+      "status": "ok",
+      "iteration": 4,
+      "at_ms": 61864,
+      "duration_ms": 572,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed",
+      "frame": "run/r4/step_024.webp"
+    },
+    {
+      "node": "for_each::s::step_025",
+      "status": "ok",
+      "iteration": 4,
+      "at_ms": 62435,
+      "duration_ms": 342,
+      "frame": "run/r4/step_025.webp"
+    },
+    {
+      "node": "for_each::s::step_027",
+      "status": "ok",
+      "iteration": 4,
+      "at_ms": 62778,
+      "duration_ms": 565,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed",
+      "frame": "run/r4/step_027.webp"
+    },
+    {
+      "node": "for_each::s::step_029",
+      "status": "ok",
+      "iteration": 4,
+      "at_ms": 63343,
+      "duration_ms": 348,
+      "frame": "run/r4/step_029.webp"
+    },
+    {
+      "node": "for_each::s::step_030",
+      "status": "ok",
+      "iteration": 4,
+      "at_ms": 63691,
+      "duration_ms": 551,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed",
+      "frame": "run/r4/step_030.webp"
+    },
+    {
+      "node": "for_each::s::step_032",
+      "status": "ok",
+      "iteration": 4,
+      "at_ms": 64242,
+      "duration_ms": 342,
+      "frame": "run/r4/step_032.webp"
+    },
+    {
+      "node": "for_each::s::step_033",
+      "status": "ok",
+      "iteration": 4,
+      "at_ms": 64583,
+      "duration_ms": 551,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed",
+      "frame": "run/r4/step_033.webp"
+    },
+    {
+      "node": "for_each::s::step_035",
+      "status": "ok",
+      "iteration": 4,
+      "at_ms": 65134,
+      "duration_ms": 348,
+      "frame": "run/r4/step_035.webp"
+    },
+    {
+      "node": "for_each::s::step_036",
+      "status": "ok",
+      "iteration": 4,
+      "at_ms": 65483,
+      "duration_ms": 563,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "passed",
+      "frame": "run/r4/step_036.webp"
+    },
+    {
+      "node": "for_each::s::step_037",
+      "status": "ok",
+      "iteration": 4,
+      "at_ms": 66046,
+      "duration_ms": 344,
+      "frame": "run/r4/step_037.webp"
+    },
+    {
+      "node": "for_each::s::step_039",
+      "status": "halted",
+      "iteration": 4,
+      "at_ms": 66390,
+      "duration_ms": 11233,
+      "rung": "structural",
+      "identity": "verified",
+      "screen_check": "failed",
+      "frame": "run/r4/step_039.webp",
+      "reason": "The screen check after this step failed: OpenEMR found a matching chart instead of showing that no match exists. The run stopped before it saved anything, so it created no duplicate."
+    }
+  ],
+  "receipt": {
+    "kind": "seal",
+    "status": "HALTED_BEFORE_EFFECT",
+    "label": "Seal",
+    "summary": "Referral 4 stopped before it saved anything (HALTED_BEFORE_EFFECT): OpenEMR showed a matching chart, so no duplicate was created. Referrals 1 to 3 each have a VERIFIED Seal: a separate read of OpenEMR confirmed all 11 saved fields. Each Seal signs its run's report with the demo key.",
+    "href": "https://github.com/OpenAdaptAI/OpenAdapt/blob/d23eeb6a6/packages/flow/benchmark/scoreboard/raw/openemr_referral/certified/2026-10-20/4-r6-rosa-delgado/engine/seal.json"
+  },
+  "source": {
+    "runs_path": "packages/flow/benchmark/scoreboard/raw/openemr_referral/certified/2026-10-20",
+    "commit": "d23eeb6a6",
+    "bundle_content_digest": "ec096afa2b614326b00ec3155f256041c19d86f3998761ce9d772cfd911460b6",
+    "profile": "standard",
+    "model_calls": 0,
+    "runs": [
+      {
+        "referral": 1,
+        "execution_outcome": "VERIFIED",
+        "transaction_outcome": "VERIFIED",
+        "new_charts": 1,
+        "report_sha256": "b628324b985a16b605a89a550bc443742afa0f864dc2ff37606636a3739f67a1",
+        "seal": "https://github.com/OpenAdaptAI/OpenAdapt/blob/d23eeb6a6/packages/flow/benchmark/scoreboard/raw/openemr_referral/certified/2026-10-20/1-r3-ines-carvalho/engine/seal.json",
+        "seal_outcome": "VERIFIED"
+      },
+      {
+        "referral": 2,
+        "execution_outcome": "VERIFIED",
+        "transaction_outcome": "VERIFIED",
+        "new_charts": 1,
+        "report_sha256": "cb728b2c1369f4ad345362ee12555553350d5fbc5f7884f4d6e5f58ebf824b0f",
+        "seal": "https://github.com/OpenAdaptAI/OpenAdapt/blob/d23eeb6a6/packages/flow/benchmark/scoreboard/raw/openemr_referral/certified/2026-10-20/2-r4-theo-lindqvist/engine/seal.json",
+        "seal_outcome": "VERIFIED"
+      },
+      {
+        "referral": 3,
+        "execution_outcome": "VERIFIED",
+        "transaction_outcome": "VERIFIED",
+        "new_charts": 1,
+        "report_sha256": "b2903e39262209af1dcb24ae0bee152f53d286230009e1d466ea18ef47ed89b0",
+        "seal": "https://github.com/OpenAdaptAI/OpenAdapt/blob/d23eeb6a6/packages/flow/benchmark/scoreboard/raw/openemr_referral/certified/2026-10-20/3-r5-grace-adeyemi/engine/seal.json",
+        "seal_outcome": "VERIFIED"
+      },
+      {
+        "referral": 4,
+        "execution_outcome": "HALTED",
+        "transaction_outcome": "HALTED_BEFORE_EFFECT",
+        "new_charts": 0,
+        "report_sha256": "1c1806e1bab3792b4b7295e75df231d1434a9f94a97c788a85a5cf5c68bf273e",
+        "seal": "https://github.com/OpenAdaptAI/OpenAdapt/blob/d23eeb6a6/packages/flow/benchmark/scoreboard/raw/openemr_referral/certified/2026-10-20/4-r6-rosa-delgado/engine/seal.json",
+        "seal_outcome": "HALTED"
+      }
+    ],
+    "note": "Each iteration is one certified engine run of the referral body, in run order. The trace ends with the referral that stopped."
+  }
+}

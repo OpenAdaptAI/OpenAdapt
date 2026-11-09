@@ -1,0 +1,36 @@
+id: windows-desktop-validating
+claim: >-
+  Windows UIA has scoped acceptance: the deterministic structural rung
+  delivered native actions in a fixed WinForms workflow with independent
+  effects and fail-closed stale/ambiguity refusal.
+surfaces: [README.md, docs, website]
+tier: validating
+evidence:
+  - path: tests/e2e/test_parallels_desktop_e2e.py
+    proves: >-
+      OPT-IN live proof on a real Win11-ARM VM: record->compile->replay
+      through WindowsBackend with the structural rung resolving every click
+      by AutomationId (armed_coverage == 1.0).
+  - path: tests/test_windows_backend.py
+    proves: >-
+      The 4-method Backend protocol on Windows against a MOCKED WAA server
+      (runs in CI post-merge; proves the wire, not a live desktop).
+  - path: benchmark/structural_action/STRUCTURAL_ACTION.md
+    kind: benchmark
+    proves: >-
+      Desktop drift benchmark: the structural rung resolved 21/21 targets
+      where visual replay alone managed 6/21.
+  - path: benchmark/windows_uia/results.json
+    kind: benchmark
+    proves: >-
+      Accepted candidate 20260717-candidate-56759c8-v2: 3/3 exact task and
+      SQLite effects, 12 UIA receipts, and 3/3 stale plus 3/3 ambiguity
+      refusals with zero silent incorrect success, over-halt, or model calls.
+caveats:
+  - >-
+    The live desktop e2e is OPT-IN and infra-gated (needs a Parallels
+    Win11-ARM VM; `OAFLOW_PARALLELS_E2E=1`); it never runs on default CI.
+    Only the mocked backend protocol runs in CI.
+  - >-
+    Acceptance covers the named in-tree workflow and exact Windows VM.
+    Third-party applications require workflow-specific qualification.

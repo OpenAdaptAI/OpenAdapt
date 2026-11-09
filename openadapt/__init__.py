@@ -1,0 +1,139 @@
+"""OpenAdapt launcher and compatibility meta-package.
+
+The active product engine is ``openadapt-flow`` and ships in the base install.
+Use ``openadapt flow ...`` for record, compile, replay, lint, and certification.
+The lazy exports below preserve compatibility with optional supporting and
+research packages:
+
+    pip install openadapt              # launcher + openadapt-flow
+    pip install openadapt[capture]     # native capture
+    pip install openadapt[privacy]     # privacy scrubbing
+    pip install openadapt[ml,evals]    # research toolkits
+"""
+
+# Single source of truth: derived from installed distribution metadata
+# (see openadapt/version.py) so it never drifts from pyproject.toml.
+from openadapt.version import __version__  # noqa: E402,F401
+
+# Lazy imports to avoid pulling in heavy dependencies unless needed
+
+
+def __getattr__(name: str):
+    """Lazy import handler for optional packages."""
+    # Capture package
+    if name in (
+        "Capture",
+        "CaptureSession",
+        "Recorder",
+        "Action",
+        "EventType",
+        "MouseButton",
+    ):
+        from openadapt_capture import (  # noqa: F401
+            Action,
+            Capture,
+            CaptureSession,
+            EventType,
+            MouseButton,
+            Recorder,
+        )
+
+        return locals()[name]
+
+    # Evals package
+    if name in (
+        "BenchmarkAdapter",
+        "BenchmarkTask",
+        "ApiAgent",
+        "evaluate_agent_on_benchmark",
+    ):
+        from openadapt_evals import (  # noqa: F401
+            ApiAgent,
+            BenchmarkAdapter,
+            BenchmarkTask,
+            evaluate_agent_on_benchmark,
+        )
+
+        return locals()[name]
+
+    # Viewer package
+    if name in ("PageBuilder", "HTMLBuilder"):
+        from openadapt_viewer import HTMLBuilder, PageBuilder  # noqa: F401
+
+        return locals()[name]
+
+    # ML package (heavy - only import if explicitly requested)
+    if name == "QwenVLAdapter":
+        from openadapt_ml.models.qwen_vl import QwenVLAdapter  # noqa: F401
+
+        return QwenVLAdapter
+
+    # Grounding package (optional)
+    if name in ("ElementLocator", "OmniParserClient"):
+        try:
+            from openadapt_grounding import (  # noqa: F401
+                ElementLocator,
+                OmniParserClient,
+            )
+
+            return locals()[name]
+        except ImportError:
+            raise ImportError(
+                f"{name} requires openadapt-grounding. "
+                "Install with: pip install openadapt[grounding]"
+            )
+
+    # Retrieval package (optional)
+    if name == "MultimodalDemoRetriever":
+        try:
+            from openadapt_retrieval import MultimodalDemoRetriever  # noqa: F401
+
+            return MultimodalDemoRetriever
+        except ImportError:
+            raise ImportError(
+                f"{name} requires openadapt-retrieval. "
+                "Install with: pip install openadapt[retrieval]"
+            )
+
+    # Demo library lives in openadapt-evals
+    if name == "DemoLibrary":
+        try:
+            from openadapt_evals import DemoLibrary  # noqa: F401
+
+            return DemoLibrary
+        except ImportError:
+            raise ImportError(
+                f"{name} requires openadapt-evals. "
+                "Install with: pip install openadapt[evals]"
+            )
+
+    raise AttributeError(f"module 'openadapt' has no attribute '{name}'")
+
+
+__all__ = [
+    "__version__",
+    # From capture
+    "Capture",
+    "CaptureSession",
+    "Recorder",
+    "Action",
+    "EventType",
+    "MouseButton",
+    # From evals
+    "BenchmarkAdapter",
+    "BenchmarkTask",
+    "ApiAgent",
+    "evaluate_agent_on_benchmark",
+    # From viewer
+    "PageBuilder",
+    "HTMLBuilder",
+    # From ml
+    "QwenVLAdapter",
+    # From grounding (optional)
+    "ElementLocator",
+    "OmniParserClient",
+    # From retrieval (optional)
+    "MultimodalDemoRetriever",
+    # From evals
+    "DemoLibrary",
+]

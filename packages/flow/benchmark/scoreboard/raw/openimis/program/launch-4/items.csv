@@ -1,0 +1,103 @@
+task,arm,run_id,item,attempt,fault,reported_success,readback,outcome,model_calls,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,cost_usd,item_s,wall_s,approvals_asked,host_load_1m,timed,detail
+openimis,program,launch-4,1,1,none,True,correct,correct,0,0,0,0,0,0.0,16.604,24.331,0,66.0,False,4/4 confirmed
+openimis,program,launch-4,2,1,none,True,correct,correct,0,0,0,0,0,0.0,14.382,21.461,0,59.0,False,4/4 confirmed
+openimis,program,launch-4,3,1,none,True,correct,correct,0,0,0,0,0,0.0,12.907,19.694,0,61.0,False,4/4 confirmed
+openimis,program,launch-4,4,1,none,True,correct,correct,0,0,0,0,0,0.0,15.177,21.975,0,104.1,False,4/4 confirmed
+openimis,program,launch-4,5,1,none,True,correct,correct,0,0,0,0,0,0.0,14.654,21.72,0,113.8,False,4/4 confirmed
+openimis,program,launch-4,6,1,none,True,correct,correct,0,0,0,0,0,0.0,18.257,25.014,0,166.9,False,4/4 confirmed
+openimis,program,launch-4,7,1,none,True,correct,correct,0,0,0,0,0,0.0,12.576,19.947,0,204.1,False,4/4 confirmed
+openimis,program,launch-4,8,1,none,True,correct,correct,0,0,0,0,0,0.0,12.437,18.976,0,178.3,False,4/4 confirmed
+openimis,program,launch-4,9,1,none,True,correct,correct,0,0,0,0,0,0.0,13.021,20.186,0,139.2,False,4/4 confirmed
+openimis,program,launch-4,10,1,none,True,correct,correct,0,0,0,0,0,0.0,16.595,23.758,0,161.8,False,4/4 confirmed
+openimis,program,launch-4,11,1,none,True,correct,correct,0,0,0,0,0,0.0,12.568,19.592,0,168.9,False,4/4 confirmed
+openimis,program,launch-4,12,1,none,True,correct,correct,0,0,0,0,0,0.0,12.638,36.262,0,143.9,False,4/4 confirmed
+openimis,program,launch-4,13,1,none,True,correct,correct,0,0,0,0,0,0.0,14.502,21.221,0,167.3,False,4/4 confirmed
+openimis,program,launch-4,14,1,none,True,correct,correct,0,0,0,0,0,0.0,12.393,18.963,0,167.4,False,4/4 confirmed
+openimis,program,launch-4,15,1,none,True,correct,correct,0,0,0,0,0,0.0,12.62,19.306,0,178.9,False,4/4 confirmed
+openimis,program,launch-4,16,1,none,True,correct,correct,0,0,0,0,0,0.0,12.372,19.084,0,165.6,False,4/4 confirmed
+openimis,program,launch-4,17,1,none,True,correct,correct,0,0,0,0,0,0.0,12.591,19.086,0,150.4,False,4/4 confirmed
+openimis,program,launch-4,18,1,none,True,correct,correct,0,0,0,0,0,0.0,12.465,19.504,0,144.0,False,4/4 confirmed
+openimis,program,launch-4,19,1,none,True,correct,correct,0,0,0,0,0,0.0,12.387,19.054,0,160.3,False,4/4 confirmed
+openimis,program,launch-4,20,1,none,True,correct,correct,0,0,0,0,0,0.0,12.863,19.391,0,137.3,False,4/4 confirmed
+openimis,program,launch-4,21,1,none,True,correct,correct,0,0,0,0,0,0.0,10.87,17.762,0,126.3,False,4/4 confirmed
+openimis,program,launch-4,22,1,none,True,correct,correct,0,0,0,0,0,0.0,12.677,19.381,0,135.4,False,4/4 confirmed
+openimis,program,launch-4,23,1,none,True,correct,correct,0,0,0,0,0,0.0,15.292,39.211,0,134.0,False,4/4 confirmed
+openimis,program,launch-4,24,1,none,True,correct,correct,0,0,0,0,0,0.0,16.675,23.552,0,139.7,False,4/4 confirmed
+openimis,program,launch-4,25,1,none,True,correct,correct,0,0,0,0,0,0.0,26.161,33.62,0,256.3,False,4/4 confirmed
+openimis,program,launch-4,26,1,none,True,correct,correct,0,0,0,0,0,0.0,22.197,30.174,0,321.1,False,4/4 confirmed
+openimis,program,launch-4,27,1,none,True,correct,correct,0,0,0,0,0,0.0,31.246,39.626,0,459.5,False,4/4 confirmed
+openimis,program,launch-4,28,1,none,True,correct,correct,0,0,0,0,0,0.0,18.705,26.985,0,508.7,False,4/4 confirmed
+openimis,program,launch-4,29,1,none,True,correct,correct,0,0,0,0,0,0.0,13.335,20.957,0,530.0,False,4/4 confirmed
+openimis,program,launch-4,30,1,none,True,correct,correct,0,0,0,0,0,0.0,35.37,43.756,0,591.2,False,4/4 confirmed
+openimis,program,launch-4,31,1,none,True,correct,correct,0,0,0,0,0,0.0,12.742,21.693,0,596.9,False,4/4 confirmed
+openimis,program,launch-4,32,1,none,True,correct,correct,0,0,0,0,0,0.0,10.669,19.126,0,619.5,False,4/4 confirmed
+openimis,program,launch-4,33,1,none,True,correct,correct,0,0,0,0,0,0.0,12.818,19.483,0,552.5,False,4/4 confirmed
+openimis,program,launch-4,34,1,none,True,correct,correct,0,0,0,0,0,0.0,20.723,27.188,0,456.9,False,4/4 confirmed
+openimis,program,launch-4,35,1,none,True,correct,correct,0,0,0,0,0,0.0,18.689,25.838,0,458.1,False,4/4 confirmed
+openimis,program,launch-4,36,1,none,True,correct,correct,0,0,0,0,0,0.0,13.467,21.037,0,465.4,False,4/4 confirmed
+openimis,program,launch-4,37,1,none,True,correct,correct,0,0,0,0,0,0.0,14.979,21.865,0,435.2,False,4/4 confirmed
+openimis,program,launch-4,38,1,none,True,correct,correct,0,0,0,0,0,0.0,12.986,19.489,0,392.7,False,4/4 confirmed
+openimis,program,launch-4,39,1,none,True,correct,correct,0,0,0,0,0,0.0,10.669,17.548,0,293.9,False,4/4 confirmed
+openimis,program,launch-4,40,1,none,True,correct,correct,0,0,0,0,0,0.0,12.516,19.057,0,217.4,False,4/4 confirmed
+openimis,program,launch-4,41,1,none,True,correct,correct,0,0,0,0,0,0.0,18.56,25.116,0,202.6,False,4/4 confirmed
+openimis,program,launch-4,42,1,none,True,correct,correct,0,0,0,0,0,0.0,24.49,31.762,0,305.6,False,4/4 confirmed
+openimis,program,launch-4,43,1,none,True,correct,correct,0,0,0,0,0,0.0,19.957,27.344,0,280.3,False,4/4 confirmed
+openimis,program,launch-4,44,1,none,True,correct,correct,0,0,0,0,0,0.0,33.944,42.543,0,396.6,False,4/4 confirmed
+openimis,program,launch-4,45,1,none,True,correct,correct,0,0,0,0,0,0.0,25.015,32.464,0,417.9,False,4/4 confirmed
+openimis,program,launch-4,46,1,none,True,correct,correct,0,0,0,0,0,0.0,13.964,21.604,0,407.8,False,4/4 confirmed
+openimis,program,launch-4,47,1,none,True,correct,correct,0,0,0,0,0,0.0,14.524,21.72,0,367.2,False,4/4 confirmed
+openimis,program,launch-4,48,1,none,True,correct,correct,0,0,0,0,0,0.0,15.497,22.93,0,281.7,False,4/4 confirmed
+openimis,program,launch-4,49,1,none,True,correct,correct,0,0,0,0,0,0.0,19.061,27.169,0,241.9,False,4/4 confirmed
+openimis,program,launch-4,50,1,ui_change,False,missing,safe_stop,0,0,0,0,0,0.0,22.013,29.372,0,285.9,False,"Step 'step_014' (scroll by (0, -600)): closed-loop scroll exhausted its budget (1200px of 1500px allowed, 2.5x the recorded distance) without the anchor of step 'step_015' (click recorded visual target) resolving — target never came into view; run aborted"
+openimis,program,launch-4,50,2,ui_change,False,missing,safe_stop,0,0,0,0,0,0.0,20.173,29.064,0,296.5,False,"Step 'step_014' (scroll by (0, -600)): closed-loop scroll exhausted its budget (1200px of 1500px allowed, 2.5x the recorded distance) without the anchor of step 'step_015' (click recorded visual target) resolving — target never came into view; run aborted"
+openimis,program,launch-4,50,3,ui_change,False,missing,safe_stop,0,0,0,0,0,0.0,19.631,27.637,0,307.8,False,"Step 'step_014' (scroll by (0, -600)): closed-loop scroll exhausted its budget (1200px of 1500px allowed, 2.5x the recorded distance) without the anchor of step 'step_015' (click recorded visual target) resolving — target never came into view; run aborted"
+openimis,program,launch-4,51,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,52,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,53,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,54,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,55,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,56,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,57,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,58,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,59,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,60,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,61,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,62,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,63,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,64,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,65,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,66,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,67,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,68,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,69,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,70,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,71,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,72,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,73,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,74,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,75,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,76,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,77,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,78,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,79,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,80,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,81,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,82,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,83,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,84,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,85,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,86,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,87,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,88,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,89,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,90,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,91,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,92,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,93,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,94,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,95,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,96,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,97,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,98,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,99,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program,launch-4,100,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50

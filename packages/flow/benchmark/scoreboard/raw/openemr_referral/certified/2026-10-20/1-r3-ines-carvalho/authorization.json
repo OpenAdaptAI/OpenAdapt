@@ -1,0 +1,7 @@
+{
+  "authorized_by": "the founder (Richard Abrich), typed in this Claude Code session: 'Yes: run r3 to r6 on the qual10 certified bundle against the local OpenEMR test fixture under the standard profile, seal them with the demo key, and record me as the authorizing person.' Path A: Standard run gate on the bundle certified in qual10 (clinical-write, with the real-duplicate check).",
+  "how": "Standard run gate on the certified bundle, evaluated per run; governed authorization built from that gate",
+  "policy": "clinical-write",
+  "bundle_content_digest": "ec096afa2b614326b00ec3155f256041c19d86f3998761ce9d772cfd911460b6",
+  "existing_chart_seed_status": 201
+}

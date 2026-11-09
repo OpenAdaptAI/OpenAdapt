@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenAdapt Flow — Operator Console</title>
+<link rel="stylesheet" href="/static/console.css">
+</head>
+<body>
+<header>
+  <h1>OpenAdapt Flow — Operator Console</h1>
+  <nav>
+    <a href="#/attention" data-nav="attention">Needs Attention</a>
+    <a href="#/workflows" data-nav="workflows">Workflows</a>
+    <a href="#/runs" data-nav="runs">Runs</a>
+    <a href="#/skills" data-nav="skills">Skills</a>
+  </nav>
+  <span id="mode"></span>
+</header>
+<main id="main">Loading…</main>
+
+<div id="modal" hidden><div class="box">
+  <h3 id="modal-title">Confirm action</h3>
+  <p id="modal-desc" class="muted"></p>
+  <p class="modal-command-label">This will run:</p>
+  <pre class="cmd" id="modal-cmd"></pre>
+  <div id="modal-inputs"></div>
+  <div class="row">
+    <button id="modal-cancel">Cancel</button>
+    <button class="danger" id="modal-go">Run it</button>
+  </div>
+</div></div>
+
+<script src="/static/console.js" defer></script>
+</body>
+</html>

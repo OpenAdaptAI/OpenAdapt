@@ -1,0 +1,110 @@
+name: Release health
+
+# Visibility only: publishing remains a deliberate release.yml dispatch from
+# protected main. This check reads Capture release state and maintains one issue.
+on:
+  schedule:
+    # Two lightweight checks per day, plus immediate non-success release events.
+    - cron: '23 */12 * * *'
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["Release and PyPI Publish"]
+    types: [completed]
+  pull_request:
+    paths:
+      - 'scripts/check_release_health.py'
+      - '.github/workflows/release-health.yml'
+
+concurrency:
+  # PR self-tests must not cancel (or be cancelled by) the singleton live check.
+  group: capture-release-health-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'main' }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  self-test:
+    name: Prove the release-gap decisions
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: python3 scripts/check_release_health.py --self-test
+
+  check:
+    name: Check Capture release state
+    if: >-
+      github.event_name != 'pull_request' &&
+      (github.event_name != 'workflow_run' ||
+       github.event.workflow_run.conclusion != 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Evaluate release state
+        id: health
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          python3 scripts/check_release_health.py
+          --markdown release-health.md
+          --github-output "${GITHUB_OUTPUT}"
+
+      - name: Find the single release-health issue
+        id: issue
+        if: steps.health.outputs.evaluated == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: "Release health - unreleased work or an incomplete publish"
+        shell: bash
+        run: |
+          set -euo pipefail
+          record="$(gh api --paginate --slurp --method GET \
+              "repos/${GITHUB_REPOSITORY}/issues" -f state=all -f per_page=100 |
+            jq -c --arg title "${TITLE}" \
+              '[.[][] | select(has("pull_request") | not) | select(.title == $title)]
+               | sort_by(.number) | last // {}')"
+          {
+            echo "number=$(jq -r '.number // empty' <<<"${record}")"
+            echo "state=$(jq -r '.state // empty' <<<"${record}")"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Open, reopen, or update the release-health issue
+        if: steps.health.outputs.alert == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: "Release health - unreleased work or an incomplete publish"
+          ISSUE: ${{ steps.issue.outputs.number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${ISSUE}" ]; then
+            jq -n --rawfile body release-health.md '{body: $body, state: "open"}' |
+              gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/${ISSUE}" \
+                --input - >/dev/null
+          else
+            jq -n --arg title "${TITLE}" --rawfile body release-health.md \
+              '{title: $title, body: $body}' |
+              gh api --method POST "repos/${GITHUB_REPOSITORY}/issues" \
+                --input - >/dev/null
+          fi
+
+      - name: Close the issue when the gap is resolved
+        if: >-
+          steps.health.outputs.close == 'true' &&
+          steps.issue.outputs.state == 'open'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE: ${{ steps.issue.outputs.number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -n --rawfile body release-health.md \
+            '{body: $body, state: "closed", state_reason: "completed"}' |
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/${ISSUE}" \
+              --input - >/dev/null

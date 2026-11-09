@@ -1,0 +1,14 @@
+{
+  "checked_at": "2026-10-19",
+  "rule": "PROTOCOL.md, Outcome of an item: hand check of every agent row that is not correct",
+  "items": [
+    {
+      "item": 50,
+      "attempt": 1,
+      "fault": "ui_change",
+      "row_outcome": "safe_stop",
+      "confirmed": true,
+      "evidence": "Harness failure, not the agent's: the item process was killed at 600 s with 0 model calls (ItemTimeout), and the insuree's claim count did not change. Attempt 2 saved claim 50 correctly with the relabelled Save."
+    }
+  ]
+}

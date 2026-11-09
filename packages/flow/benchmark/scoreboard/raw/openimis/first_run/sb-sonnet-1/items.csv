@@ -1,0 +1,2 @@
+task,arm,run_id,item,attempt,fault,reported_success,readback,outcome,model_calls,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,cost_usd,item_s,wall_s,approvals_asked,host_load_1m,timed,detail
+openimis,first_run,sb-sonnet-1,0,1,none,True,correct,correct,7,16,920,54626,14486,0.056372,33.326,131.901,0,-1.0,False,model claude-sonnet-5-5; compiled; not admitted: standard gate refused (REFUSE: workflow 'openimis.claim_entry' under 'standard' profile vs policy 'clinical-write')

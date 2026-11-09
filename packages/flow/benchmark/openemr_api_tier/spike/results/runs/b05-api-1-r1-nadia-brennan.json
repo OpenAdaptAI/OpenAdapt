@@ -1,0 +1,126 @@
+{
+ "arm": "api",
+ "ref": "r1-nadia-brennan",
+ "mismatch": false,
+ "error": null,
+ "api_marks": {
+  "signed_in": 0.403,
+  "form_read": 0.583,
+  "prechecked": 0.623,
+  "save_sent": 0.623,
+  "save_done": 0.687
+ },
+ "api_log": [
+  {
+   "stage": "sign_in",
+   "status": 302,
+   "location_path": "/interface/main/tabs/main.php"
+  },
+  {
+   "stage": "read_form",
+   "status": 200,
+   "bytes": 341515
+  },
+  {
+   "stage": "precheck",
+   "status": 200,
+   "missing": []
+  },
+  {
+   "stage": "save",
+   "status": 200,
+   "success_signature": true
+  }
+ ],
+ "engine_success": true,
+ "outcome": "COMPLETED_UNVERIFIED",
+ "steps": 1,
+ "step_errors": [],
+ "actuation": [
+  "api"
+ ],
+ "effect_verified": [
+  true
+ ],
+ "new_charts": 1,
+ "readback": "12/12",
+ "correct": true,
+ "field_check": [
+  {
+   "field": "title",
+   "want": "Ms.",
+   "got": "Ms.",
+   "match": true
+  },
+  {
+   "field": "fname",
+   "want": "Nadia",
+   "got": "Nadia",
+   "match": true
+  },
+  {
+   "field": "lname",
+   "want": "Brennan",
+   "got": "Brennan",
+   "match": true
+  },
+  {
+   "field": "DOB",
+   "want": "1971-04-19",
+   "got": "1971-04-19",
+   "match": true
+  },
+  {
+   "field": "sex",
+   "want": "Female",
+   "got": "Female",
+   "match": true
+  },
+  {
+   "field": "street",
+   "want": "27 WILLOW BEND ROAD",
+   "got": "27 WILLOW BEND ROAD",
+   "match": true
+  },
+  {
+   "field": "city",
+   "want": "EXAMPLETON",
+   "got": "EXAMPLETON",
+   "match": true
+  },
+  {
+   "field": "state",
+   "want": "MA",
+   "got": "MA",
+   "match": true
+  },
+  {
+   "field": "postal_code",
+   "want": "02139",
+   "got": "02139",
+   "match": true
+  },
+  {
+   "field": "phone_home",
+   "want": "555-0121",
+   "got": "555-0121",
+   "match": true
+  },
+  {
+   "field": "email",
+   "want": "nadia.brennan@example.invalid",
+   "got": "nadia.brennan@example.invalid",
+   "match": true
+  },
+  {
+   "field": "country_code",
+   "want": "USA",
+   "got": "USA",
+   "match": true
+  }
+ ],
+ "wall_s": 2.331,
+ "setup_s": 0.583,
+ "task_s": 1.051,
+ "readback_s": 1.28
+}

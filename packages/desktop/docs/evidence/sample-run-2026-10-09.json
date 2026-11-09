@@ -1,0 +1,108 @@
+{
+  "schema": "openadapt-desktop.sample-run-evidence/v1",
+  "recorded_on": "2026-10-09",
+  "label": "Measured on synthetic data",
+  "what": "The engine's run_sample command, called through EngineDispatcher in a source checkout, ran the bundled openadapt-flow 1.35.1 tutorial twice on its synthetic clinic app in a headless browser.",
+  "host": {
+    "os": "macOS",
+    "arch": "arm64"
+  },
+  "conditions": "No account, no recording, and no operating-system permission prompt. Chromium was already in the Playwright cache.",
+  "wall_seconds": 25.4,
+  "runs": [
+    {
+      "kind": "normal",
+      "result": "done_checked",
+      "nothing_written": false,
+      "execution_outcome": "VERIFIED",
+      "transaction_outcome": "VERIFIED",
+      "steps": [
+        {
+          "intent": "click 'Open'",
+          "ok": true,
+          "saves": false
+        },
+        {
+          "intent": "click 'New Encounter'",
+          "ok": true,
+          "saves": false
+        },
+        {
+          "intent": "click 'Triage'",
+          "ok": true,
+          "saves": false
+        },
+        {
+          "intent": "click recorded visual target",
+          "ok": true,
+          "saves": false
+        },
+        {
+          "intent": "type <note>",
+          "ok": true,
+          "saves": false
+        },
+        {
+          "intent": "click 'Save Encounter'",
+          "ok": true,
+          "saves": true
+        }
+      ],
+      "right_record_checks": 5,
+      "record_checks_confirmed": 2,
+      "record_checks_failed": 0,
+      "model_calls": 0,
+      "screen_returned": true
+    },
+    {
+      "kind": "save_dropped",
+      "result": "check_record",
+      "nothing_written": false,
+      "execution_outcome": "HALTED",
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
+      "steps": [
+        {
+          "intent": "click 'Open'",
+          "ok": true,
+          "saves": false
+        },
+        {
+          "intent": "click 'New Encounter'",
+          "ok": true,
+          "saves": false
+        },
+        {
+          "intent": "click 'Triage'",
+          "ok": true,
+          "saves": false
+        },
+        {
+          "intent": "click recorded visual target",
+          "ok": true,
+          "saves": false
+        },
+        {
+          "intent": "type <note>",
+          "ok": true,
+          "saves": false
+        },
+        {
+          "intent": "click 'Save Encounter'",
+          "ok": false,
+          "saves": true
+        }
+      ],
+      "right_record_checks": 5,
+      "record_checks_confirmed": 0,
+      "record_checks_failed": 1,
+      "model_calls": 0,
+      "screen_returned": true
+    }
+  ],
+  "events": [
+    "browser",
+    "browser",
+    "running",
+    "done"
+  ]
+}

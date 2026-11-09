@@ -1,0 +1,760 @@
+{
+  "backend_under_test": "CitrixWorkspaceBackend (RemoteDisplayBackend preset)",
+  "condition_count": 16,
+  "deterministic_standin_accepted": true,
+  "enforcement_verified": [
+    "every actuation uses a fresh frame (frame-freshness lease)",
+    "actuation stays bound to the authorized window and session",
+    "target re-resolved immediately before acting",
+    "one-shot actuation lease consumed exactly once (no double-fire)",
+    "DPI/scale calibration refused when anisotropic/uncalibrated",
+    "focus/occlusion binding enforced before every input edge",
+    "readiness + identity gating on the fresh actuation frame",
+    "out-of-band effect verification (never the on-screen banner)",
+    "zero model calls on every path (healthy and refusal)"
+  ],
+  "evidence_scope": "deterministic_synthetic_ica_hdx_standin",
+  "failure_taxonomy": [
+    "healthy_over_halt",
+    "silent_incorrect_success",
+    "silent_write",
+    "unsafe_completion",
+    "volatile_mask_covers_protected_region"
+  ],
+  "generated_at": "2026-07-26T18:13:53.666190+00:00",
+  "halt_expectations": 20,
+  "healthy_over_halts": 0,
+  "ica_hdx_accepted": false,
+  "ica_hdx_status": "pending_real_environment_customer_lane",
+  "is_real_ica_hdx": false,
+  "label": "DETERMINISTIC STAND-IN reproducing ICA/HDX conditions -- NOT real Citrix ICA/HDX. No HDX codecs, no ICA compression, no real Workspace-client transport. Real-protocol evidence pending the customer-environment (Accuro) lane.",
+  "model_calls": 0,
+  "oracle": "in-process FaultDB read out of band (never the screen banner)",
+  "pass_expectations": 9,
+  "scenarios_passed": 29,
+  "schema_version": "openadapt.citrix-ica-hdx-standin-qualification.v1",
+  "section10_conditions_covered": [
+    "DPI + scaling changes",
+    "ambiguous visual identity",
+    "clipboard restrictions",
+    "display compression / codec artifacts",
+    "duplicate prevention",
+    "focus theft",
+    "keyboard-layout / IME",
+    "latency / jitter / packet-loss / delayed-frames",
+    "persisted-state readback (out-of-band effect verification)",
+    "reconnect / roaming",
+    "session launch + application readiness",
+    "session lock / unlock",
+    "single and multimonitor geometry",
+    "uncertain submission (no blind retry)",
+    "unexpected dialogs / overlays",
+    "window minimize / occlusion / move / resize"
+  ],
+  "silent_incorrect_successes": 0,
+  "silent_writes": 0,
+  "status_dimensions": {
+    "backend_shipped": {
+      "detail": "CitrixWorkspaceBackend (RemoteDisplayBackend preset) is in the package and qualified against the deterministic stand-in.",
+      "status": "shipped"
+    },
+    "customer_controlled_execution_available": {
+      "detail": "Customer-controlled on-prem execution is the target of the real-ICA release gate; not asserted by this stand-in.",
+      "status": "pending"
+    },
+    "deterministic_standin_qualification": {
+      "detail": "The Section 10 ICA/HDX condition matrix is qualified against a DETERMINISTIC SYNTHETIC STAND-IN (this campaign) -- NOT real ICA/HDX.",
+      "status": "qualified"
+    },
+    "exact_application_qualification_available": {
+      "detail": "Exact published-application qualification (e.g. Accuro) is performed in the customer's exact environment; not asserted here.",
+      "status": "pending"
+    },
+    "installed_driver_available": {
+      "detail": "MacWindowClient (Quartz) and Win32WindowClient host drivers ship; live capture/input requires per-host Screen-Recording / Accessibility / integrity trust granted at deployment.",
+      "status": "shipped_host_clients"
+    },
+    "managed_execution_available": {
+      "detail": "Hosted/managed execution of this workflow is not asserted by this stand-in.",
+      "status": "pending"
+    },
+    "real_protocol_environment_evidence": {
+      "detail": "No real Citrix ICA/HDX acceptance. Pending the customer-environment (Accuro) lane: HDX codecs, ICA compression, and the real Workspace-client transport are NOT exercised here.",
+      "status": "pending"
+    }
+  },
+  "substrate": "citrix-workspace-backend-over-deterministic-ica-hdx-standin",
+  "trial_count": 29,
+  "trials": [
+    {
+      "effect_expected": [
+        "A1001",
+        "followup in two weeks"
+      ],
+      "effect_observed": [
+        "A1001",
+        "followup in two weeks"
+      ],
+      "effect_verified": true,
+      "expectation": "pass",
+      "halt_reason": null,
+      "healthy_over_halt": false,
+      "id": "session_launch_ready",
+      "kind": "write",
+      "model_calls": 0,
+      "oracle_write_count": 1,
+      "outcome": "completed",
+      "passed": true,
+      "section10_condition": "session launch + application readiness",
+      "silent_incorrect_success": false,
+      "silent_write": false
+    },
+    {
+      "effect_expected": [
+        "A1001",
+        "followup in two weeks"
+      ],
+      "effect_observed": null,
+      "effect_verified": false,
+      "expectation": "halt",
+      "halt_reason": "remote-display readiness probe rejected the current frame (locked, disconnected, or unexpected session); refusing input",
+      "healthy_over_halt": false,
+      "id": "application_not_ready",
+      "kind": "write",
+      "model_calls": 0,
+      "oracle_write_count": 0,
+      "outcome": "halted",
+      "passed": true,
+      "section10_condition": "session launch + application readiness",
+      "silent_incorrect_success": false,
+      "silent_write": false
+    },
+    {
+      "effect_expected": [
+        "A1001",
+        "followup in two weeks"
+      ],
+      "effect_observed": null,
+      "effect_verified": false,
+      "expectation": "halt",
+      "halt_reason": "remote session identity changed or became unverifiable after capture; refusing input",
+      "healthy_over_halt": false,
+      "id": "reconnect_roaming_identity_change",
+      "kind": "write",
+      "model_calls": 0,
+      "oracle_write_count": 0,
+      "outcome": "halted",
+      "passed": true,
+      "section10_condition": "reconnect / roaming",
+      "silent_incorrect_success": false,
+      "silent_write": false
+    },
+    {
+      "effect_expected": [
+        "A1001",
+        "followup in two weeks"
+      ],
+      "effect_observed": null,
+      "effect_verified": false,
+      "expectation": "halt",
+      "halt_reason": "remote-display readiness probe rejected the current frame (locked, disconnected, or unexpected session); refusing input",
+      "healthy_over_halt": false,
+      "id": "session_lock",
+      "kind": "write",
+      "model_calls": 0,
+      "oracle_write_count": 0,
+      "outcome": "halted",
+      "passed": true,
+      "section10_condition": "session lock / unlock",
+      "silent_incorrect_success": false,
+      "silent_write": false
+    },
+    {
+      "effect_expected": [
+        "A1001",
+        "followup in two weeks"
+      ],
+      "effect_observed": [
+        "A1001",
+        "followup in two weeks"
+      ],
+      "effect_verified": true,
+      "expectation": "pass",
+      "halt_reason": null,
+      "healthy_over_halt": false,
+      "id": "session_unlock_recovery",
+      "kind": "write",
+      "locked_attempt_refused": true,
+      "model_calls": 0,
+      "oracle_write_count": 1,
+      "outcome": "completed",
+      "passed": true,
+      "section10_condition": "session lock / unlock",
+      "silent_incorrect_success": false,
+      "silent_write": false
+    },
+    {
+      "effect_expected": [
+        "A1001",
+        "followup in two weeks"
+      ],
+      "effect_observed": null,
+      "effect_verified": false,
+      "expectation": "halt",
+      "halt_reason": "the exact remote-display window is not visible, app-frontmost, and keyboard-frontmost after activation; refusing input",
+      "healthy_over_halt": false,
+      "id": "window_minimize",
+      "kind": "write",
+      "model_calls": 0,
+      "oracle_write_count": 0,
+      "outcome": "halted",
+      "passed": true,
+      "section10_condition": "window minimize / occlusion / move / resize",
+      "silent_incorrect_success": false,
+      "silent_write": false
+    },
+    {
+      "effect_expected": [
+        "A1001",
+        "followup in two weeks"
+      ],
+      "effect_observed": null,
+      "effect_verified": false,
+      "expectation": "halt",
+      "halt_reason": "screen point (115.0, 72.0) is covered by window 9999, not the leased remote-display window 4101; refusing a click that could hit an occluder",
+      "healthy_over_halt": false,
+      "id": "window_occlusion",
+      "kind": "write",
+      "model_calls": 0,
+      "oracle_write_count": 0,
+      "outcome": "halted",
+      "passed": true,
+      "section10_condition": "window minimize / occlusion / move / resize",
+      "silent_incorrect_success": false,
+      "silent_write": false
+    },
+    {
+      "effect_expected": [
+        "A1001",
+        "followup in two weeks"
+      ],
+      "effect_observed": null,
+      "effect_verified": false,
+      "expectation": "halt",
+      "halt_reason": "remote-display window identity or geometry changed since capture; capture and re-resolve before input",
+      "healthy_over_halt": false,
+      "id": "window_move_after_acquire",
+      "kind": "write",
+      "model_calls": 0,
+      "oracle_write_count": 0,
+      "outcome": "halted",
+      "passed": true,
+      "section10_condition": "window minimize / occlusion / move / resize",
+      "silent_incorrect_success": false,
+      "silent_write": false
+    },
+    {
+      "effect_expected": [
+        "A1001",
+        "followup in two weeks"
+      ],
+      "effect_observed": null,
+      "effect_verified": false,
+      "expectation": "halt",
+      "halt_reason": "remote-display window identity or geometry changed since capture; capture and re-resolve before input",
+      "healthy_over_halt": false,
+      "id": "window_resize_after_acquire",
+      "kind": "write",
+      "model_calls": 0,
+      "oracle_write_count": 0,
+      "outcome": "halted",
+      "passed": true,
+      "section10_condition": "window minimize / occlusion / move / resize",
+      "silent_incorrect_success": false,
+      "silent_write": false
+    },
+    {
+      "effect_expected": [
+        "A1001",
+        "followup in two weeks"
+      ],
+      "effect_observed": [
+        "A1001",
+        "followup in two weeks"
+      ],
+      "effect_verified": true,
+      "expectation": "pass",
+      "halt_reason": null,
+      "healthy_over_halt": false,
+      "id": "dpi_scale_consistent",
+      "kind": "write",
+      "model_calls": 0,
+      "oracle_write_count": 1,
+      "outcome": "completed",
+      "passed": true,
+      "scale": 2.0,
+      "section10_condition": "DPI + scaling changes",
+      "silent_incorrect_success": false,
+      "silent_write": false
+    },
+    {
+      "effect_expected": [
+        "A1001",
+        "followup in two weeks"
+      ],
+      "effect_observed": null,
+      "effect_verified": false,
+      "expectation": "halt",
+      "halt_reason": "captured frame and client bounds have inconsistent DPI scale (1.8667x vs 2.0000y); refusing uncalibrated input",
+      "healthy_over_halt": false,
+      "id": "dpi_anisotropic_uncalibrated",
+      "kind": "write",
+      "model_calls": 0,
+      "oracle_write_count": 0,
+      "outcome": "halted",
+      "passed": true,
+      "section10_condition": "DPI + scaling changes",
+      "silent_incorrect_success": false,
+      "silent_write": false
+    },
+    {
+      "effect_expected": [
+        "A1001",
+        "followup in two weeks"
+      ],
+      "effect_observed": [
+        "A1001",
+        "followup in two weeks"
+      ],
+      "effect_verified": true,
+      "expectation": "pass",
+      "halt_reason": null,
+      "healthy_over_halt": false,
+      "id": "single_monitor_geometry",
+      "kind": "write",
+      "model_calls": 0,
+      "oracle_write_count": 1,
+      "outcome": "completed",
+      "passed": true,
+      "section10_condition": "single and multimonitor geometry",
+      "silent_incorrect_success": false,
+      "silent_write": false
+    },
+    {
+      "effect_expected": [
+        "A1001",
+        "followup in two weeks"
+      ],
+      "effect_observed": [
+        "A1001",
+        "followup in two weeks"
+      ],
+      "effect_verified": true,
+      "expectation": "pass",
+      "halt_reason": null,
+      "healthy_over_halt": false,
+      "id": "multimonitor_secondary_offset",
+      "kind": "write",
+      "model_calls": 0,
+      "oracle_write_count": 1,
+      "outcome": "completed",
+      "passed": true,
+      "section10_condition": "single and multimonitor geometry",
+      "silent_incorrect_success": false,
+      "silent_write": false
+    },
+    {
+      "effect_expected": [
+        "A1001",
+        "followup in two weeks"
+      ],
+      "effect_observed": null,
+      "effect_verified": false,
+      "expectation": "halt",
+      "halt_reason": "ambiguous remote-display target: expected one exact owner/title match, found 2; target identities are withheld because window titles can contain sensitive record data",
+      "healthy_over_halt": false,
+      "id": "multimonitor_ambiguous_window",
+      "kind": "write",
+      "model_calls": 0,
+      "oracle_write_count": 0,
+      "outcome": "halted",
+      "passed": true,
+      "section10_condition": "single and multimonitor geometry",
+      "silent_incorrect_success": false,
+      "silent_write": false
+    },
+    {
+      "effect_expected": [
+        "A1001",
+        "followup in two weeks"
+      ],
+      "effect_observed": [
+        "A1001",
+        "followup in two weeks"
+      ],
+      "effect_verified": true,
+      "expectation": "pass",
+      "halt_reason": null,
+      "healthy_over_halt": false,
+      "id": "codec_artifacts_mild_legible",
+      "kind": "write",
+      "model_calls": 0,
+      "oracle_write_count": 1,
+      "outcome": "completed",
+      "passed": true,
+      "section10_condition": "display compression / codec artifacts",
+      "silent_incorrect_success": false,
+      "silent_write": false
+    },
+    {
+      "effect_expected": [
+        "A1001",
+        "followup in two weeks"
+      ],
+      "effect_observed": null,
+      "effect_verified": false,
+      "expectation": "halt",
+      "halt_reason": "remote-display readiness probe rejected the current frame (locked, disconnected, or unexpected session); refusing input",
+      "healthy_over_halt": false,
+      "id": "codec_artifacts_severe_illegible",
+      "kind": "write",
+      "model_calls": 0,
+      "oracle_write_count": 0,
+      "outcome": "halted",
+      "passed": true,
+      "section10_condition": "display compression / codec artifacts",
+      "silent_incorrect_success": false,
+      "silent_write": false
+    },
+    {
+      "effect_expected": [
+        "A1001",
+        "followup in two weeks"
+      ],
+      "effect_observed": null,
+      "effect_verified": false,
+      "expectation": "halt",
+      "halt_reason": "remote-display frame is stale (0.001s > 0.000s); halting intentionally so the runtime can capture, re-resolve, and re-check identity",
+      "healthy_over_halt": false,
+      "id": "stale_frame_latency",
+      "kind": "write",
+      "model_calls": 0,
+      "oracle_write_count": 0,
+      "outcome": "halted",
+      "passed": true,
+      "section10_condition": "latency / jitter / packet-loss / delayed-frames",
+      "silent_incorrect_success": false,
+      "silent_write": false
+    },
+    {
+      "effect_expected": [
+        "A1001",
+        "followup in two weeks"
+      ],
+      "effect_observed": [
+        "A1001",
+        "followup in two weeks"
+      ],
+      "effect_verified": true,
+      "expectation": "pass",
+      "halt_reason": null,
+      "healthy_over_halt": false,
+      "id": "delayed_frame_settles",
+      "kind": "write",
+      "model_calls": 0,
+      "oracle_write_count": 1,
+      "outcome": "completed",
+      "passed": true,
+      "section10_condition": "latency / jitter / packet-loss / delayed-frames",
+      "silent_incorrect_success": false,
+      "silent_write": false
+    },
+    {
+      "effect_expected": [
+        "A1001",
+        "followup in two weeks"
+      ],
+      "effect_observed": null,
+      "effect_verified": false,
+      "expectation": "halt",
+      "halt_reason": "remote-display pixels did not settle after pointer positioning; refusing to acquire a consequential actuation frame",
+      "healthy_over_halt": false,
+      "id": "frame_never_settles",
+      "kind": "write",
+      "model_calls": 0,
+      "oracle_write_count": 0,
+      "outcome": "halted",
+      "passed": true,
+      "section10_condition": "latency / jitter / packet-loss / delayed-frames",
+      "silent_incorrect_success": false,
+      "silent_write": false
+    },
+    {
+      "effect_expected": null,
+      "effect_observed": null,
+      "effect_verified": null,
+      "expectation": "pass",
+      "halt_reason": null,
+      "healthy_over_halt": false,
+      "id": "keyboard_named_key_ok",
+      "kind": "input",
+      "model_calls": 0,
+      "oracle_write_count": 0,
+      "outcome": "completed",
+      "passed": true,
+      "section10_condition": "keyboard-layout / IME",
+      "silent_incorrect_success": false,
+      "silent_write": false
+    },
+    {
+      "effect_expected": null,
+      "effect_observed": null,
+      "effect_verified": null,
+      "expectation": "halt",
+      "halt_reason": "no key mapping for 'compose' in 'compose'",
+      "healthy_over_halt": false,
+      "id": "ime_unmapped_key",
+      "kind": "input",
+      "model_calls": 0,
+      "oracle_write_count": 0,
+      "outcome": "halted",
+      "passed": true,
+      "section10_condition": "keyboard-layout / IME",
+      "silent_incorrect_success": false,
+      "silent_write": false
+    },
+    {
+      "effect_expected": null,
+      "effect_observed": null,
+      "effect_verified": null,
+      "expectation": "halt",
+      "halt_reason": "clipboard redirection is disabled by session policy; paste was not delivered (refusing to let a no-op look like success)",
+      "healthy_over_halt": false,
+      "id": "clipboard_restricted_paste",
+      "kind": "input",
+      "model_calls": 0,
+      "oracle_write_count": 0,
+      "outcome": "halted",
+      "passed": true,
+      "section10_condition": "clipboard restrictions",
+      "silent_incorrect_success": false,
+      "silent_write": false
+    },
+    {
+      "effect_expected": [
+        "A1001",
+        "followup in two weeks"
+      ],
+      "effect_observed": null,
+      "effect_verified": false,
+      "expectation": "halt",
+      "halt_reason": "the exact remote-display window is not visible, app-frontmost, and keyboard-frontmost after activation; refusing input",
+      "healthy_over_halt": false,
+      "id": "focus_theft_after_acquire",
+      "kind": "write",
+      "model_calls": 0,
+      "oracle_write_count": 0,
+      "outcome": "halted",
+      "passed": true,
+      "section10_condition": "focus theft",
+      "silent_incorrect_success": false,
+      "silent_write": false
+    },
+    {
+      "effect_expected": [
+        "A1001",
+        "followup in two weeks"
+      ],
+      "effect_observed": null,
+      "effect_verified": false,
+      "expectation": "halt",
+      "halt_reason": "remote-display frame content changed after target and identity resolution; refusing input and requiring a fresh actuation lease",
+      "healthy_over_halt": false,
+      "id": "unexpected_dialog_overlay",
+      "kind": "write",
+      "model_calls": 0,
+      "oracle_write_count": 0,
+      "outcome": "halted",
+      "passed": true,
+      "section10_condition": "unexpected dialogs / overlays",
+      "silent_incorrect_success": false,
+      "silent_write": false
+    },
+    {
+      "effect_expected": [
+        "A1001",
+        "followup in two weeks"
+      ],
+      "effect_observed": null,
+      "effect_verified": false,
+      "expectation": "halt",
+      "halt_reason": "remote-display actuation lease was invalidated by another observation; refusing input and requiring a fresh lease",
+      "healthy_over_halt": false,
+      "id": "unverifiable_application_identity",
+      "kind": "write",
+      "model_calls": 0,
+      "oracle_write_count": 0,
+      "outcome": "halted",
+      "passed": true,
+      "section10_condition": "ambiguous visual identity",
+      "silent_incorrect_success": false,
+      "silent_write": false
+    },
+    {
+      "effect_expected": [
+        "A1001",
+        "followup in two weeks"
+      ],
+      "effect_observed": null,
+      "effect_verified": false,
+      "expectation": "halt",
+      "halt_reason": "remote-display actuation lease was invalidated by another observation; refusing input and requiring a fresh lease",
+      "healthy_over_halt": false,
+      "id": "uncertain_submission_no_blind_retry",
+      "kind": "write",
+      "model_calls": 0,
+      "oracle_write_count": 0,
+      "outcome": "halted",
+      "passed": true,
+      "section10_condition": "uncertain submission (no blind retry)",
+      "silent_incorrect_success": false,
+      "silent_write": false
+    },
+    {
+      "effect_expected": [
+        "A1001",
+        "followup in two weeks"
+      ],
+      "effect_observed": [
+        "A1001",
+        "followup in two weeks"
+      ],
+      "effect_verified": true,
+      "expectation": "halt",
+      "halt_reason": "consequential remote click was not pre-positioned at the freshly resolved target; refusing pointer delivery",
+      "healthy_over_halt": false,
+      "id": "duplicate_write_prevention_one_shot",
+      "kind": "write",
+      "model_calls": 0,
+      "oracle_write_count": 1,
+      "outcome": "halted",
+      "passed": true,
+      "section10_condition": "duplicate prevention",
+      "silent_incorrect_success": false,
+      "silent_write": false
+    },
+    {
+      "banner_shown": true,
+      "effect_expected": [
+        "A1001",
+        "followup in two weeks"
+      ],
+      "effect_observed": [
+        "A1001",
+        "followup in two weeks"
+      ],
+      "effect_verified": true,
+      "expectation": "pass",
+      "halt_reason": null,
+      "healthy_over_halt": false,
+      "id": "persisted_state_readback",
+      "kind": "write",
+      "model_calls": 0,
+      "oracle_write_count": 1,
+      "outcome": "completed",
+      "passed": true,
+      "section10_condition": "persisted-state readback (out-of-band effect verification)",
+      "silent_incorrect_success": false,
+      "silent_write": false,
+      "verified_via": "out_of_band_oracle"
+    },
+    {
+      "banner_shown": true,
+      "effect_expected": [
+        "A1001",
+        "followup in two weeks"
+      ],
+      "effect_observed": null,
+      "effect_verified": false,
+      "expectation": "effect_refused",
+      "halt_reason": null,
+      "healthy_over_halt": false,
+      "id": "optimistic_banner_effect_refused",
+      "independent_record_present": false,
+      "kind": "write",
+      "model_calls": 0,
+      "oracle_write_count": 0,
+      "outcome": "completed",
+      "passed": true,
+      "section10_condition": "persisted-state readback (out-of-band effect verification)",
+      "silent_incorrect_success": false,
+      "silent_write": false
+    }
+  ],
+  "volatile_mask_review": {
+    "note": "Volatile-region masks must never cover target, actionability, identity, workflow-state, or effect-relevant regions.",
+    "reviewable_and_safe": true,
+    "spec": {
+      "protected": {
+        "actionability_save_label": [
+          432,
+          294,
+          500,
+          306
+        ],
+        "effect_saved_banner": [
+          330,
+          336,
+          400,
+          352
+        ],
+        "identity_application": [
+          48,
+          8,
+          80,
+          24
+        ],
+        "identity_readiness": [
+          8,
+          8,
+          40,
+          24
+        ],
+        "target_note_field": [
+          40,
+          280,
+          300,
+          320
+        ],
+        "target_roster_row": [
+          40,
+          78,
+          560,
+          116
+        ],
+        "target_save_button": [
+          420,
+          280,
+          520,
+          320
+        ],
+        "workflow_state": [
+          88,
+          8,
+          120,
+          24
+        ]
+      },
+      "volatile": {
+        "remote_clock_chrome": [
+          520,
+          4,
+          596,
+          26
+        ]
+      }
+    },
+    "violations": []
+  },
+  "window_client": "SyntheticIcaWindowClient (in-process deterministic frames)"
+}

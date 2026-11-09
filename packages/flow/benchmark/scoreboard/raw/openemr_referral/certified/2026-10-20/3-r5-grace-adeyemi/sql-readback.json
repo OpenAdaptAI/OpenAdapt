@@ -1,0 +1,20 @@
+{
+  "new_charts": 1,
+  "changed_charts": 0,
+  "new_chart_fields": {
+    "id": "2",
+    "pid": "2",
+    "title": "Ms.",
+    "fname": "Grace",
+    "lname": "Adeyemi",
+    "DOB": "1990-02-08",
+    "sex": "Female",
+    "street": "402 CEDAR ROW",
+    "city": "EXAMPLETON",
+    "state": "MA",
+    "postal_code": "02139",
+    "phone_home": "555-0145",
+    "email": "grace.adeyemi@example.invalid",
+    "country_code": "USA"
+  }
+}

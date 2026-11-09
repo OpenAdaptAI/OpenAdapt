@@ -1,0 +1,33 @@
+# Reading records: library-level example
+
+This example calls the records library directly against a fake screen
+(`fake_screen.py`), a test double with three synthetic accounts. It is not a
+second demo app. For a full run against a desktop app, use the shared mock
+ledger in `examples/legacy_records/`.
+`demo.py` reads each account into a typed record. Proof is opt-in; the demo
+turns all of it on with `ReadProof(double_read=True, committed_readback=True,
+seal=True)` and shows each step:
+
+1. Double read: clipboard and OCR of each field in the same session.
+2. Committed-record read-back: close each account, reopen it by account
+   number and read it again.
+3. Independent read: compare with the app's report export.
+4. Review queue: one field is drawn wrong on screen (the clipboard and the
+   export are right). It goes to review, and a person settles it with a signed
+   decision.
+5. Write gate: a step that needs `reopened` for `balance`
+   halts for the account whose balance a person had to settle.
+6. Export to CSV and SQLite with provenance columns.
+
+Run from `packages/flow`:
+
+```bash
+python examples/records/demo.py --out /tmp/records-demo
+python examples/records/demo.py --out /tmp/records-demo --simulated-ocr  # fast, no OCR engine
+```
+
+Agreeing fields reach `system_of_record`. A field a person settled is
+`unchecked`: a decision is not a read. The export needs `reopened`, so it
+skips that record and says why.
+
+`templates/omop/` holds an OMOP CDM template, kept outside the core.

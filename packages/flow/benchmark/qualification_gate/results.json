@@ -1,0 +1,3728 @@
+{
+  "accepted_subset": true,
+  "blind_retries": 0,
+  "campaign_contract": "benchmark/qualification_gate/campaign.json",
+  "campaign_id": "qualification-gate-campaign-v1",
+  "condition_trial_counts": {
+    "duplicate_save_control": 3,
+    "healthy": 3,
+    "moderate_display_drift": 3,
+    "partial_render": 3,
+    "row_reordered": 3,
+    "severe_display_drift": 3,
+    "stale_identity_before_write": 3,
+    "uncertain_delivery_oracle_unreachable": 3,
+    "uncertain_delivery_write_kept_timeout": 3,
+    "uncertain_delivery_write_lost": 3,
+    "wrong_record_before_write": 3
+  },
+  "configured_conditions": [
+    "healthy",
+    "row_reordered",
+    "moderate_display_drift",
+    "severe_display_drift",
+    "duplicate_save_control",
+    "partial_render",
+    "wrong_record_before_write",
+    "stale_identity_before_write",
+    "uncertain_delivery_write_lost",
+    "uncertain_delivery_write_kept_timeout",
+    "uncertain_delivery_oracle_unreachable"
+  ],
+  "duplicate_effects": 0,
+  "full_campaign_complete": true,
+  "full_campaign_pending_conditions": [],
+  "model_calls": 0,
+  "over_halts": 0,
+  "p50_runtime_s": 15.616,
+  "reconciliation_required_outcomes": 18,
+  "replay_dispatches": 0,
+  "required_metrics": [
+    "verified_outcomes",
+    "safe_halts",
+    "reconciliation_required_outcomes",
+    "silent_incorrect_successes",
+    "over_halts",
+    "wrong_record_writes",
+    "duplicate_effects",
+    "model_calls",
+    "blind_retries",
+    "replay_dispatches"
+  ],
+  "run_count": 33,
+  "safe_halts": 15,
+  "schema_version": "openadapt.qualification-gate-results.v1",
+  "silent_incorrect_successes": 0,
+  "stopped_early": false,
+  "trials": [
+    {
+      "condition": "healthy",
+      "delivery_uncertainty": [],
+      "errors": [],
+      "expectation": "verified",
+      "model_calls": 0,
+      "oracle": {
+        "duplicate_effect": false,
+        "events": [
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0001-1c40de5d",
+            "kind": "select_record",
+            "run_key": "gate-select_record-once",
+            "seq": 1
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0002-c52a4594",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 2
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0003-396e878b",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 3
+          },
+          {
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-569b7116",
+            "kind": "type_note",
+            "run_key": "gate-type_note-once",
+            "seq": 4
+          },
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0005-5d74a0e5",
+            "kind": "save_note",
+            "run_key": "gate-save_note-once",
+            "seq": 5
+          }
+        ],
+        "exact_single_write": true,
+        "ledger": [
+          {
+            "action": "select_record",
+            "detail": "REC-200",
+            "event_id": "evt-0001-1c40de5d"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 120,
+            "y": 248
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0002-c52a4594"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 760,
+            "y": 352
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0003-396e878b"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 752,
+            "y": 358
+          },
+          {
+            "action": "type_note",
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-569b7116"
+          },
+          {
+            "action": "save_note",
+            "detail": "REC-200",
+            "event_id": "evt-0005-5d74a0e5"
+          }
+        ],
+        "no_consequential_input": false,
+        "rows": [
+          {
+            "note": "Follow-up scheduled",
+            "record_id": "REC-200"
+          }
+        ],
+        "save_entries": 1,
+        "wrong_record_write": false
+      },
+      "over_halt": false,
+      "passed": true,
+      "resolution_rungs": [
+        "template",
+        "template",
+        "ocr",
+        "template"
+      ],
+      "run_id": "healthy-trial-01",
+      "runtime_s": 15.075,
+      "runtime_success": true,
+      "safety_refusals": [],
+      "save_delivery_attempts": 1,
+      "silent_incorrect_success": false,
+      "transaction_outcome": "VERIFIED",
+      "trial": 1,
+      "uncertainty_events": []
+    },
+    {
+      "condition": "healthy",
+      "delivery_uncertainty": [],
+      "errors": [],
+      "expectation": "verified",
+      "model_calls": 0,
+      "oracle": {
+        "duplicate_effect": false,
+        "events": [
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0001-e0526484",
+            "kind": "select_record",
+            "run_key": "gate-select_record-once",
+            "seq": 1
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0002-e2f63a09",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 2
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0003-64a4e2ba",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 3
+          },
+          {
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-c776ca5f",
+            "kind": "type_note",
+            "run_key": "gate-type_note-once",
+            "seq": 4
+          },
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0005-1c0da6f6",
+            "kind": "save_note",
+            "run_key": "gate-save_note-once",
+            "seq": 5
+          }
+        ],
+        "exact_single_write": true,
+        "ledger": [
+          {
+            "action": "select_record",
+            "detail": "REC-200",
+            "event_id": "evt-0001-e0526484"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 120,
+            "y": 248
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0002-e2f63a09"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 760,
+            "y": 352
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0003-64a4e2ba"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 752,
+            "y": 358
+          },
+          {
+            "action": "type_note",
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-c776ca5f"
+          },
+          {
+            "action": "save_note",
+            "detail": "REC-200",
+            "event_id": "evt-0005-1c0da6f6"
+          }
+        ],
+        "no_consequential_input": false,
+        "rows": [
+          {
+            "note": "Follow-up scheduled",
+            "record_id": "REC-200"
+          }
+        ],
+        "save_entries": 1,
+        "wrong_record_write": false
+      },
+      "over_halt": false,
+      "passed": true,
+      "resolution_rungs": [
+        "template",
+        "template",
+        "ocr",
+        "template"
+      ],
+      "run_id": "healthy-trial-02",
+      "runtime_s": 14.912,
+      "runtime_success": true,
+      "safety_refusals": [],
+      "save_delivery_attempts": 1,
+      "silent_incorrect_success": false,
+      "transaction_outcome": "VERIFIED",
+      "trial": 2,
+      "uncertainty_events": []
+    },
+    {
+      "condition": "healthy",
+      "delivery_uncertainty": [],
+      "errors": [],
+      "expectation": "verified",
+      "model_calls": 0,
+      "oracle": {
+        "duplicate_effect": false,
+        "events": [
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0001-cbcf7cf9",
+            "kind": "select_record",
+            "run_key": "gate-select_record-once",
+            "seq": 1
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0002-4dabcd0a",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 2
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0003-86cda461",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 3
+          },
+          {
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-14d66373",
+            "kind": "type_note",
+            "run_key": "gate-type_note-once",
+            "seq": 4
+          },
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0005-1663a955",
+            "kind": "save_note",
+            "run_key": "gate-save_note-once",
+            "seq": 5
+          }
+        ],
+        "exact_single_write": true,
+        "ledger": [
+          {
+            "action": "select_record",
+            "detail": "REC-200",
+            "event_id": "evt-0001-cbcf7cf9"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 120,
+            "y": 248
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0002-4dabcd0a"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 760,
+            "y": 352
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0003-86cda461"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 752,
+            "y": 358
+          },
+          {
+            "action": "type_note",
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-14d66373"
+          },
+          {
+            "action": "save_note",
+            "detail": "REC-200",
+            "event_id": "evt-0005-1663a955"
+          }
+        ],
+        "no_consequential_input": false,
+        "rows": [
+          {
+            "note": "Follow-up scheduled",
+            "record_id": "REC-200"
+          }
+        ],
+        "save_entries": 1,
+        "wrong_record_write": false
+      },
+      "over_halt": false,
+      "passed": true,
+      "resolution_rungs": [
+        "template",
+        "template",
+        "ocr",
+        "template"
+      ],
+      "run_id": "healthy-trial-03",
+      "runtime_s": 15.08,
+      "runtime_success": true,
+      "safety_refusals": [],
+      "save_delivery_attempts": 1,
+      "silent_incorrect_success": false,
+      "transaction_outcome": "VERIFIED",
+      "trial": 3,
+      "uncertainty_events": []
+    },
+    {
+      "condition": "row_reordered",
+      "delivery_uncertainty": [],
+      "errors": [],
+      "expectation": "verified",
+      "model_calls": 0,
+      "oracle": {
+        "duplicate_effect": false,
+        "events": [
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0001-936b9836",
+            "kind": "select_record",
+            "run_key": "gate-select_record-once",
+            "seq": 1
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0002-d0bfb935",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 2
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0003-abf99c23",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 3
+          },
+          {
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-1f4aeaf8",
+            "kind": "type_note",
+            "run_key": "gate-type_note-once",
+            "seq": 4
+          },
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0005-fa809d60",
+            "kind": "save_note",
+            "run_key": "gate-save_note-once",
+            "seq": 5
+          }
+        ],
+        "exact_single_write": true,
+        "ledger": [
+          {
+            "action": "select_record",
+            "detail": "REC-200",
+            "event_id": "evt-0001-936b9836"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 115,
+            "y": 153
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0002-d0bfb935"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 760,
+            "y": 352
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0003-abf99c23"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 752,
+            "y": 358
+          },
+          {
+            "action": "type_note",
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-1f4aeaf8"
+          },
+          {
+            "action": "save_note",
+            "detail": "REC-200",
+            "event_id": "evt-0005-fa809d60"
+          }
+        ],
+        "no_consequential_input": false,
+        "rows": [
+          {
+            "note": "Follow-up scheduled",
+            "record_id": "REC-200"
+          }
+        ],
+        "save_entries": 1,
+        "wrong_record_write": false
+      },
+      "over_halt": false,
+      "passed": true,
+      "resolution_rungs": [
+        "ocr",
+        "template",
+        "ocr",
+        "template"
+      ],
+      "run_id": "row_reordered-trial-01",
+      "runtime_s": 15.762,
+      "runtime_success": true,
+      "safety_refusals": [],
+      "save_delivery_attempts": 1,
+      "silent_incorrect_success": false,
+      "transaction_outcome": "VERIFIED",
+      "trial": 1,
+      "uncertainty_events": []
+    },
+    {
+      "condition": "row_reordered",
+      "delivery_uncertainty": [],
+      "errors": [],
+      "expectation": "verified",
+      "model_calls": 0,
+      "oracle": {
+        "duplicate_effect": false,
+        "events": [
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0001-3ed9b4f2",
+            "kind": "select_record",
+            "run_key": "gate-select_record-once",
+            "seq": 1
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0002-fe04bd26",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 2
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0003-6edb27a7",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 3
+          },
+          {
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-348d2e9a",
+            "kind": "type_note",
+            "run_key": "gate-type_note-once",
+            "seq": 4
+          },
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0005-03d717f4",
+            "kind": "save_note",
+            "run_key": "gate-save_note-once",
+            "seq": 5
+          }
+        ],
+        "exact_single_write": true,
+        "ledger": [
+          {
+            "action": "select_record",
+            "detail": "REC-200",
+            "event_id": "evt-0001-3ed9b4f2"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 115,
+            "y": 153
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0002-fe04bd26"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 760,
+            "y": 352
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0003-6edb27a7"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 752,
+            "y": 358
+          },
+          {
+            "action": "type_note",
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-348d2e9a"
+          },
+          {
+            "action": "save_note",
+            "detail": "REC-200",
+            "event_id": "evt-0005-03d717f4"
+          }
+        ],
+        "no_consequential_input": false,
+        "rows": [
+          {
+            "note": "Follow-up scheduled",
+            "record_id": "REC-200"
+          }
+        ],
+        "save_entries": 1,
+        "wrong_record_write": false
+      },
+      "over_halt": false,
+      "passed": true,
+      "resolution_rungs": [
+        "ocr",
+        "template",
+        "ocr",
+        "template"
+      ],
+      "run_id": "row_reordered-trial-02",
+      "runtime_s": 15.725,
+      "runtime_success": true,
+      "safety_refusals": [],
+      "save_delivery_attempts": 1,
+      "silent_incorrect_success": false,
+      "transaction_outcome": "VERIFIED",
+      "trial": 2,
+      "uncertainty_events": []
+    },
+    {
+      "condition": "row_reordered",
+      "delivery_uncertainty": [],
+      "errors": [],
+      "expectation": "verified",
+      "model_calls": 0,
+      "oracle": {
+        "duplicate_effect": false,
+        "events": [
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0001-7fd024bd",
+            "kind": "select_record",
+            "run_key": "gate-select_record-once",
+            "seq": 1
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0002-339d0ac0",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 2
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0003-d112deae",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 3
+          },
+          {
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-91e9ba00",
+            "kind": "type_note",
+            "run_key": "gate-type_note-once",
+            "seq": 4
+          },
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0005-30c93e2c",
+            "kind": "save_note",
+            "run_key": "gate-save_note-once",
+            "seq": 5
+          }
+        ],
+        "exact_single_write": true,
+        "ledger": [
+          {
+            "action": "select_record",
+            "detail": "REC-200",
+            "event_id": "evt-0001-7fd024bd"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 115,
+            "y": 153
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0002-339d0ac0"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 760,
+            "y": 352
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0003-d112deae"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 752,
+            "y": 358
+          },
+          {
+            "action": "type_note",
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-91e9ba00"
+          },
+          {
+            "action": "save_note",
+            "detail": "REC-200",
+            "event_id": "evt-0005-30c93e2c"
+          }
+        ],
+        "no_consequential_input": false,
+        "rows": [
+          {
+            "note": "Follow-up scheduled",
+            "record_id": "REC-200"
+          }
+        ],
+        "save_entries": 1,
+        "wrong_record_write": false
+      },
+      "over_halt": false,
+      "passed": true,
+      "resolution_rungs": [
+        "ocr",
+        "template",
+        "ocr",
+        "template"
+      ],
+      "run_id": "row_reordered-trial-03",
+      "runtime_s": 15.537,
+      "runtime_success": true,
+      "safety_refusals": [],
+      "save_delivery_attempts": 1,
+      "silent_incorrect_success": false,
+      "transaction_outcome": "VERIFIED",
+      "trial": 3,
+      "uncertainty_events": []
+    },
+    {
+      "condition": "moderate_display_drift",
+      "delivery_uncertainty": [],
+      "errors": [],
+      "expectation": "verified_or_safe_halt",
+      "model_calls": 0,
+      "oracle": {
+        "duplicate_effect": false,
+        "events": [
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0001-5928d51d",
+            "kind": "select_record",
+            "run_key": "gate-select_record-once",
+            "seq": 1
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0002-60ca880e",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 2
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0003-375fb3f9",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 3
+          },
+          {
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-350ef1c8",
+            "kind": "type_note",
+            "run_key": "gate-type_note-once",
+            "seq": 4
+          },
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0005-cb5af3c0",
+            "kind": "save_note",
+            "run_key": "gate-save_note-once",
+            "seq": 5
+          }
+        ],
+        "exact_single_write": true,
+        "ledger": [
+          {
+            "action": "select_record",
+            "detail": "REC-200",
+            "event_id": "evt-0001-5928d51d"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 115,
+            "y": 252
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0002-60ca880e"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 752,
+            "y": 358
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0003-375fb3f9"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 752,
+            "y": 358
+          },
+          {
+            "action": "type_note",
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-350ef1c8"
+          },
+          {
+            "action": "save_note",
+            "detail": "REC-200",
+            "event_id": "evt-0005-cb5af3c0"
+          }
+        ],
+        "no_consequential_input": false,
+        "rows": [
+          {
+            "note": "Follow-up scheduled",
+            "record_id": "REC-200"
+          }
+        ],
+        "save_entries": 1,
+        "wrong_record_write": false
+      },
+      "over_halt": false,
+      "passed": true,
+      "resolution_rungs": [
+        "ocr",
+        "ocr",
+        "ocr",
+        "ocr"
+      ],
+      "run_id": "moderate_display_drift-trial-01",
+      "runtime_s": 18.742,
+      "runtime_success": true,
+      "safety_refusals": [],
+      "save_delivery_attempts": 1,
+      "silent_incorrect_success": false,
+      "transaction_outcome": "VERIFIED",
+      "trial": 1,
+      "uncertainty_events": []
+    },
+    {
+      "condition": "moderate_display_drift",
+      "delivery_uncertainty": [],
+      "errors": [],
+      "expectation": "verified_or_safe_halt",
+      "model_calls": 0,
+      "oracle": {
+        "duplicate_effect": false,
+        "events": [
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0001-4715e433",
+            "kind": "select_record",
+            "run_key": "gate-select_record-once",
+            "seq": 1
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0002-90176b4b",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 2
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0003-c6d5e2b7",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 3
+          },
+          {
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-44eb3a1b",
+            "kind": "type_note",
+            "run_key": "gate-type_note-once",
+            "seq": 4
+          },
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0005-f77ed758",
+            "kind": "save_note",
+            "run_key": "gate-save_note-once",
+            "seq": 5
+          }
+        ],
+        "exact_single_write": true,
+        "ledger": [
+          {
+            "action": "select_record",
+            "detail": "REC-200",
+            "event_id": "evt-0001-4715e433"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 115,
+            "y": 252
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0002-90176b4b"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 752,
+            "y": 358
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0003-c6d5e2b7"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 752,
+            "y": 358
+          },
+          {
+            "action": "type_note",
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-44eb3a1b"
+          },
+          {
+            "action": "save_note",
+            "detail": "REC-200",
+            "event_id": "evt-0005-f77ed758"
+          }
+        ],
+        "no_consequential_input": false,
+        "rows": [
+          {
+            "note": "Follow-up scheduled",
+            "record_id": "REC-200"
+          }
+        ],
+        "save_entries": 1,
+        "wrong_record_write": false
+      },
+      "over_halt": false,
+      "passed": true,
+      "resolution_rungs": [
+        "ocr",
+        "ocr",
+        "ocr",
+        "ocr"
+      ],
+      "run_id": "moderate_display_drift-trial-02",
+      "runtime_s": 18.245,
+      "runtime_success": true,
+      "safety_refusals": [],
+      "save_delivery_attempts": 1,
+      "silent_incorrect_success": false,
+      "transaction_outcome": "VERIFIED",
+      "trial": 2,
+      "uncertainty_events": []
+    },
+    {
+      "condition": "moderate_display_drift",
+      "delivery_uncertainty": [],
+      "errors": [],
+      "expectation": "verified_or_safe_halt",
+      "model_calls": 0,
+      "oracle": {
+        "duplicate_effect": false,
+        "events": [
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0001-455df02e",
+            "kind": "select_record",
+            "run_key": "gate-select_record-once",
+            "seq": 1
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0002-28ff6135",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 2
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0003-372512df",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 3
+          },
+          {
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-ac65e286",
+            "kind": "type_note",
+            "run_key": "gate-type_note-once",
+            "seq": 4
+          },
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0005-5f947a36",
+            "kind": "save_note",
+            "run_key": "gate-save_note-once",
+            "seq": 5
+          }
+        ],
+        "exact_single_write": true,
+        "ledger": [
+          {
+            "action": "select_record",
+            "detail": "REC-200",
+            "event_id": "evt-0001-455df02e"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 115,
+            "y": 252
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0002-28ff6135"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 752,
+            "y": 358
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0003-372512df"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 752,
+            "y": 358
+          },
+          {
+            "action": "type_note",
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-ac65e286"
+          },
+          {
+            "action": "save_note",
+            "detail": "REC-200",
+            "event_id": "evt-0005-5f947a36"
+          }
+        ],
+        "no_consequential_input": false,
+        "rows": [
+          {
+            "note": "Follow-up scheduled",
+            "record_id": "REC-200"
+          }
+        ],
+        "save_entries": 1,
+        "wrong_record_write": false
+      },
+      "over_halt": false,
+      "passed": true,
+      "resolution_rungs": [
+        "ocr",
+        "ocr",
+        "ocr",
+        "ocr"
+      ],
+      "run_id": "moderate_display_drift-trial-03",
+      "runtime_s": 18.341,
+      "runtime_success": true,
+      "safety_refusals": [],
+      "save_delivery_attempts": 1,
+      "silent_incorrect_success": false,
+      "transaction_outcome": "VERIFIED",
+      "trial": 3,
+      "uncertainty_events": []
+    },
+    {
+      "condition": "severe_display_drift",
+      "delivery_uncertainty": [],
+      "errors": [
+        "Could not resolve target for step 'step_000' (click 'REC-200'): all resolution rungs failed"
+      ],
+      "expectation": "safe_halt",
+      "model_calls": 0,
+      "oracle": {
+        "duplicate_effect": false,
+        "events": [],
+        "exact_single_write": false,
+        "ledger": [],
+        "no_consequential_input": true,
+        "rows": [],
+        "save_entries": 0,
+        "wrong_record_write": false
+      },
+      "over_halt": false,
+      "passed": true,
+      "resolution_rungs": [],
+      "run_id": "severe_display_drift-trial-01",
+      "runtime_s": 13.176,
+      "runtime_success": false,
+      "safety_refusals": [],
+      "save_delivery_attempts": 0,
+      "silent_incorrect_success": false,
+      "transaction_outcome": "HALTED_BEFORE_EFFECT",
+      "trial": 1,
+      "uncertainty_events": []
+    },
+    {
+      "condition": "severe_display_drift",
+      "delivery_uncertainty": [],
+      "errors": [
+        "Could not resolve target for step 'step_000' (click 'REC-200'): all resolution rungs failed"
+      ],
+      "expectation": "safe_halt",
+      "model_calls": 0,
+      "oracle": {
+        "duplicate_effect": false,
+        "events": [],
+        "exact_single_write": false,
+        "ledger": [],
+        "no_consequential_input": true,
+        "rows": [],
+        "save_entries": 0,
+        "wrong_record_write": false
+      },
+      "over_halt": false,
+      "passed": true,
+      "resolution_rungs": [],
+      "run_id": "severe_display_drift-trial-02",
+      "runtime_s": 13.163,
+      "runtime_success": false,
+      "safety_refusals": [],
+      "save_delivery_attempts": 0,
+      "silent_incorrect_success": false,
+      "transaction_outcome": "HALTED_BEFORE_EFFECT",
+      "trial": 2,
+      "uncertainty_events": []
+    },
+    {
+      "condition": "severe_display_drift",
+      "delivery_uncertainty": [],
+      "errors": [
+        "Could not resolve target for step 'step_000' (click 'REC-200'): all resolution rungs failed"
+      ],
+      "expectation": "safe_halt",
+      "model_calls": 0,
+      "oracle": {
+        "duplicate_effect": false,
+        "events": [],
+        "exact_single_write": false,
+        "ledger": [],
+        "no_consequential_input": true,
+        "rows": [],
+        "save_entries": 0,
+        "wrong_record_write": false
+      },
+      "over_halt": false,
+      "passed": true,
+      "resolution_rungs": [],
+      "run_id": "severe_display_drift-trial-03",
+      "runtime_s": 13.286,
+      "runtime_success": false,
+      "safety_refusals": [],
+      "save_delivery_attempts": 0,
+      "silent_incorrect_success": false,
+      "transaction_outcome": "HALTED_BEFORE_EFFECT",
+      "trial": 3,
+      "uncertainty_events": []
+    },
+    {
+      "condition": "duplicate_save_control",
+      "delivery_uncertainty": [],
+      "errors": [
+        "OCR safety refusal for step 'step_003' (click 'Save'): 2 OCR target candidates remain after retained-evidence disambiguation \u2014 no action was admitted"
+      ],
+      "expectation": "safe_halt",
+      "model_calls": 0,
+      "oracle": {
+        "duplicate_effect": false,
+        "events": [
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0001-28c67e4c",
+            "kind": "select_record",
+            "run_key": "gate-select_record-once",
+            "seq": 1
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0002-2c3fca51",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 2
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0003-785a3c78",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 3
+          },
+          {
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-b63c502b",
+            "kind": "type_note",
+            "run_key": "gate-type_note-once",
+            "seq": 4
+          }
+        ],
+        "exact_single_write": false,
+        "ledger": [
+          {
+            "action": "select_record",
+            "detail": "REC-200",
+            "event_id": "evt-0001-28c67e4c"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 120,
+            "y": 248
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0002-2c3fca51"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 760,
+            "y": 352
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0003-785a3c78"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 752,
+            "y": 358
+          },
+          {
+            "action": "type_note",
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-b63c502b"
+          }
+        ],
+        "no_consequential_input": true,
+        "rows": [],
+        "save_entries": 0,
+        "wrong_record_write": false
+      },
+      "over_halt": false,
+      "passed": true,
+      "resolution_rungs": [
+        "template",
+        "template",
+        "ocr"
+      ],
+      "run_id": "duplicate_save_control-trial-01",
+      "runtime_s": 15.616,
+      "runtime_success": false,
+      "safety_refusals": [
+        {
+          "code": "target_ambiguous",
+          "delivery_attempted": false,
+          "stage": "target_resolution",
+          "step_id": "step_003"
+        }
+      ],
+      "save_delivery_attempts": 0,
+      "silent_incorrect_success": false,
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
+      "trial": 1,
+      "uncertainty_events": []
+    },
+    {
+      "condition": "duplicate_save_control",
+      "delivery_uncertainty": [],
+      "errors": [
+        "OCR safety refusal for step 'step_003' (click 'Save'): 2 OCR target candidates remain after retained-evidence disambiguation \u2014 no action was admitted"
+      ],
+      "expectation": "safe_halt",
+      "model_calls": 0,
+      "oracle": {
+        "duplicate_effect": false,
+        "events": [
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0001-f8276616",
+            "kind": "select_record",
+            "run_key": "gate-select_record-once",
+            "seq": 1
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0002-31315034",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 2
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0003-5a8f8e08",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 3
+          },
+          {
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-c5b15702",
+            "kind": "type_note",
+            "run_key": "gate-type_note-once",
+            "seq": 4
+          }
+        ],
+        "exact_single_write": false,
+        "ledger": [
+          {
+            "action": "select_record",
+            "detail": "REC-200",
+            "event_id": "evt-0001-f8276616"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 120,
+            "y": 248
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0002-31315034"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 760,
+            "y": 352
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0003-5a8f8e08"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 752,
+            "y": 358
+          },
+          {
+            "action": "type_note",
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-c5b15702"
+          }
+        ],
+        "no_consequential_input": true,
+        "rows": [],
+        "save_entries": 0,
+        "wrong_record_write": false
+      },
+      "over_halt": false,
+      "passed": true,
+      "resolution_rungs": [
+        "template",
+        "template",
+        "ocr"
+      ],
+      "run_id": "duplicate_save_control-trial-02",
+      "runtime_s": 15.524,
+      "runtime_success": false,
+      "safety_refusals": [
+        {
+          "code": "target_ambiguous",
+          "delivery_attempted": false,
+          "stage": "target_resolution",
+          "step_id": "step_003"
+        }
+      ],
+      "save_delivery_attempts": 0,
+      "silent_incorrect_success": false,
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
+      "trial": 2,
+      "uncertainty_events": []
+    },
+    {
+      "condition": "duplicate_save_control",
+      "delivery_uncertainty": [],
+      "errors": [
+        "OCR safety refusal for step 'step_003' (click 'Save'): 2 OCR target candidates remain after retained-evidence disambiguation \u2014 no action was admitted"
+      ],
+      "expectation": "safe_halt",
+      "model_calls": 0,
+      "oracle": {
+        "duplicate_effect": false,
+        "events": [
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0001-3d1bbd59",
+            "kind": "select_record",
+            "run_key": "gate-select_record-once",
+            "seq": 1
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0002-1160f939",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 2
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0003-049d08ca",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 3
+          },
+          {
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-e02fe0d6",
+            "kind": "type_note",
+            "run_key": "gate-type_note-once",
+            "seq": 4
+          }
+        ],
+        "exact_single_write": false,
+        "ledger": [
+          {
+            "action": "select_record",
+            "detail": "REC-200",
+            "event_id": "evt-0001-3d1bbd59"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 120,
+            "y": 248
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0002-1160f939"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 760,
+            "y": 352
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0003-049d08ca"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 752,
+            "y": 358
+          },
+          {
+            "action": "type_note",
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-e02fe0d6"
+          }
+        ],
+        "no_consequential_input": true,
+        "rows": [],
+        "save_entries": 0,
+        "wrong_record_write": false
+      },
+      "over_halt": false,
+      "passed": true,
+      "resolution_rungs": [
+        "template",
+        "template",
+        "ocr"
+      ],
+      "run_id": "duplicate_save_control-trial-03",
+      "runtime_s": 15.67,
+      "runtime_success": false,
+      "safety_refusals": [
+        {
+          "code": "target_ambiguous",
+          "delivery_attempted": false,
+          "stage": "target_resolution",
+          "step_id": "step_003"
+        }
+      ],
+      "save_delivery_attempts": 0,
+      "silent_incorrect_success": false,
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
+      "trial": 3,
+      "uncertainty_events": []
+    },
+    {
+      "condition": "partial_render",
+      "delivery_uncertainty": [],
+      "errors": [
+        "Could not resolve target for step 'step_003' (click 'Save'): all resolution rungs failed"
+      ],
+      "expectation": "safe_halt",
+      "model_calls": 0,
+      "oracle": {
+        "duplicate_effect": false,
+        "events": [
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0001-c74fbe9d",
+            "kind": "select_record",
+            "run_key": "gate-select_record-once",
+            "seq": 1
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0002-f216ed13",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 2
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0003-331f5312",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 3
+          },
+          {
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-a3c4912b",
+            "kind": "type_note",
+            "run_key": "gate-type_note-once",
+            "seq": 4
+          }
+        ],
+        "exact_single_write": false,
+        "ledger": [
+          {
+            "action": "select_record",
+            "detail": "REC-200",
+            "event_id": "evt-0001-c74fbe9d"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 120,
+            "y": 248
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0002-f216ed13"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 760,
+            "y": 352
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0003-331f5312"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 752,
+            "y": 358
+          },
+          {
+            "action": "type_note",
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-a3c4912b"
+          }
+        ],
+        "no_consequential_input": true,
+        "rows": [],
+        "save_entries": 0,
+        "wrong_record_write": false
+      },
+      "over_halt": false,
+      "passed": true,
+      "resolution_rungs": [
+        "template",
+        "template",
+        "ocr"
+      ],
+      "run_id": "partial_render-trial-01",
+      "runtime_s": 25.525,
+      "runtime_success": false,
+      "safety_refusals": [],
+      "save_delivery_attempts": 0,
+      "silent_incorrect_success": false,
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
+      "trial": 1,
+      "uncertainty_events": []
+    },
+    {
+      "condition": "partial_render",
+      "delivery_uncertainty": [],
+      "errors": [
+        "Could not resolve target for step 'step_003' (click 'Save'): all resolution rungs failed"
+      ],
+      "expectation": "safe_halt",
+      "model_calls": 0,
+      "oracle": {
+        "duplicate_effect": false,
+        "events": [
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0001-d138d9dd",
+            "kind": "select_record",
+            "run_key": "gate-select_record-once",
+            "seq": 1
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0002-fd63e264",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 2
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0003-5890fdde",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 3
+          },
+          {
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-30bedbf5",
+            "kind": "type_note",
+            "run_key": "gate-type_note-once",
+            "seq": 4
+          }
+        ],
+        "exact_single_write": false,
+        "ledger": [
+          {
+            "action": "select_record",
+            "detail": "REC-200",
+            "event_id": "evt-0001-d138d9dd"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 120,
+            "y": 248
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0002-fd63e264"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 760,
+            "y": 352
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0003-5890fdde"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 752,
+            "y": 358
+          },
+          {
+            "action": "type_note",
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-30bedbf5"
+          }
+        ],
+        "no_consequential_input": true,
+        "rows": [],
+        "save_entries": 0,
+        "wrong_record_write": false
+      },
+      "over_halt": false,
+      "passed": true,
+      "resolution_rungs": [
+        "template",
+        "template",
+        "ocr"
+      ],
+      "run_id": "partial_render-trial-02",
+      "runtime_s": 25.412,
+      "runtime_success": false,
+      "safety_refusals": [],
+      "save_delivery_attempts": 0,
+      "silent_incorrect_success": false,
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
+      "trial": 2,
+      "uncertainty_events": []
+    },
+    {
+      "condition": "partial_render",
+      "delivery_uncertainty": [],
+      "errors": [
+        "Could not resolve target for step 'step_003' (click 'Save'): all resolution rungs failed"
+      ],
+      "expectation": "safe_halt",
+      "model_calls": 0,
+      "oracle": {
+        "duplicate_effect": false,
+        "events": [
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0001-e8e1fee9",
+            "kind": "select_record",
+            "run_key": "gate-select_record-once",
+            "seq": 1
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0002-1f672db2",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 2
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0003-0257c5b4",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 3
+          },
+          {
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-9a7496c3",
+            "kind": "type_note",
+            "run_key": "gate-type_note-once",
+            "seq": 4
+          }
+        ],
+        "exact_single_write": false,
+        "ledger": [
+          {
+            "action": "select_record",
+            "detail": "REC-200",
+            "event_id": "evt-0001-e8e1fee9"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 120,
+            "y": 248
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0002-1f672db2"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 760,
+            "y": 352
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0003-0257c5b4"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 752,
+            "y": 358
+          },
+          {
+            "action": "type_note",
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-9a7496c3"
+          }
+        ],
+        "no_consequential_input": true,
+        "rows": [],
+        "save_entries": 0,
+        "wrong_record_write": false
+      },
+      "over_halt": false,
+      "passed": true,
+      "resolution_rungs": [
+        "template",
+        "template",
+        "ocr"
+      ],
+      "run_id": "partial_render-trial-03",
+      "runtime_s": 25.219,
+      "runtime_success": false,
+      "safety_refusals": [],
+      "save_delivery_attempts": 0,
+      "silent_incorrect_success": false,
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
+      "trial": 3,
+      "uncertainty_events": []
+    },
+    {
+      "condition": "wrong_record_before_write",
+      "delivery_uncertainty": [],
+      "errors": [
+        "Identity check failed for step 'step_003' (click 'Save'): a target was found positionally (rung 'template', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Alice Adams Neurology selected for triage note' (coverage 0.50) \u2014 refusing to act; run aborted"
+      ],
+      "expectation": "safe_halt",
+      "model_calls": 0,
+      "oracle": {
+        "duplicate_effect": false,
+        "events": [
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0001-84ad606b",
+            "kind": "select_record",
+            "run_key": "gate-select_record-once",
+            "seq": 1
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0002-00cacf12",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 2
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0003-c4939c77",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 3
+          },
+          {
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-aaafc492",
+            "kind": "type_note",
+            "run_key": "gate-type_note-once",
+            "seq": 4
+          }
+        ],
+        "exact_single_write": false,
+        "ledger": [
+          {
+            "action": "select_record",
+            "detail": "REC-200",
+            "event_id": "evt-0001-84ad606b"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 120,
+            "y": 248
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0002-00cacf12"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 760,
+            "y": 352
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0003-c4939c77"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-100",
+            "x": 752,
+            "y": 358
+          },
+          {
+            "action": "type_note",
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-aaafc492"
+          }
+        ],
+        "no_consequential_input": true,
+        "rows": [],
+        "save_entries": 0,
+        "wrong_record_write": false
+      },
+      "over_halt": false,
+      "passed": true,
+      "resolution_rungs": [
+        "template",
+        "template",
+        "ocr",
+        "template"
+      ],
+      "run_id": "wrong_record_before_write-trial-01",
+      "runtime_s": 15.9,
+      "runtime_success": false,
+      "safety_refusals": [
+        {
+          "code": "identity_conflict",
+          "delivery_attempted": false,
+          "stage": "identity_verification",
+          "step_id": "step_003"
+        }
+      ],
+      "save_delivery_attempts": 0,
+      "silent_incorrect_success": false,
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
+      "trial": 1,
+      "uncertainty_events": []
+    },
+    {
+      "condition": "wrong_record_before_write",
+      "delivery_uncertainty": [],
+      "errors": [
+        "Identity check failed for step 'step_003' (click 'Save'): a target was found positionally (rung 'template', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Alice Adams Neurology selected for triage note' (coverage 0.50) \u2014 refusing to act; run aborted"
+      ],
+      "expectation": "safe_halt",
+      "model_calls": 0,
+      "oracle": {
+        "duplicate_effect": false,
+        "events": [
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0001-0355880b",
+            "kind": "select_record",
+            "run_key": "gate-select_record-once",
+            "seq": 1
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0002-81e346fb",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 2
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0003-10674eec",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 3
+          },
+          {
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-ae5d09d4",
+            "kind": "type_note",
+            "run_key": "gate-type_note-once",
+            "seq": 4
+          }
+        ],
+        "exact_single_write": false,
+        "ledger": [
+          {
+            "action": "select_record",
+            "detail": "REC-200",
+            "event_id": "evt-0001-0355880b"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 120,
+            "y": 248
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0002-81e346fb"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 760,
+            "y": 352
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0003-10674eec"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-100",
+            "x": 752,
+            "y": 358
+          },
+          {
+            "action": "type_note",
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-ae5d09d4"
+          }
+        ],
+        "no_consequential_input": true,
+        "rows": [],
+        "save_entries": 0,
+        "wrong_record_write": false
+      },
+      "over_halt": false,
+      "passed": true,
+      "resolution_rungs": [
+        "template",
+        "template",
+        "ocr",
+        "template"
+      ],
+      "run_id": "wrong_record_before_write-trial-02",
+      "runtime_s": 15.366,
+      "runtime_success": false,
+      "safety_refusals": [
+        {
+          "code": "identity_conflict",
+          "delivery_attempted": false,
+          "stage": "identity_verification",
+          "step_id": "step_003"
+        }
+      ],
+      "save_delivery_attempts": 0,
+      "silent_incorrect_success": false,
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
+      "trial": 2,
+      "uncertainty_events": []
+    },
+    {
+      "condition": "wrong_record_before_write",
+      "delivery_uncertainty": [],
+      "errors": [
+        "Identity check failed for step 'step_003' (click 'Save'): a target was found positionally (rung 'template', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Alice Adams Neurology selected for triage note' (coverage 0.50) \u2014 refusing to act; run aborted"
+      ],
+      "expectation": "safe_halt",
+      "model_calls": 0,
+      "oracle": {
+        "duplicate_effect": false,
+        "events": [
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0001-df1ddea8",
+            "kind": "select_record",
+            "run_key": "gate-select_record-once",
+            "seq": 1
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0002-d66c4572",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 2
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0003-104a0562",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 3
+          },
+          {
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-3aa39d15",
+            "kind": "type_note",
+            "run_key": "gate-type_note-once",
+            "seq": 4
+          }
+        ],
+        "exact_single_write": false,
+        "ledger": [
+          {
+            "action": "select_record",
+            "detail": "REC-200",
+            "event_id": "evt-0001-df1ddea8"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 120,
+            "y": 248
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0002-d66c4572"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 760,
+            "y": 352
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0003-104a0562"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-100",
+            "x": 752,
+            "y": 358
+          },
+          {
+            "action": "type_note",
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-3aa39d15"
+          }
+        ],
+        "no_consequential_input": true,
+        "rows": [],
+        "save_entries": 0,
+        "wrong_record_write": false
+      },
+      "over_halt": false,
+      "passed": true,
+      "resolution_rungs": [
+        "template",
+        "template",
+        "ocr",
+        "template"
+      ],
+      "run_id": "wrong_record_before_write-trial-03",
+      "runtime_s": 15.251,
+      "runtime_success": false,
+      "safety_refusals": [
+        {
+          "code": "identity_conflict",
+          "delivery_attempted": false,
+          "stage": "identity_verification",
+          "step_id": "step_003"
+        }
+      ],
+      "save_delivery_attempts": 0,
+      "silent_incorrect_success": false,
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
+      "trial": 3,
+      "uncertainty_events": []
+    },
+    {
+      "condition": "stale_identity_before_write",
+      "delivery_uncertainty": [],
+      "errors": [
+        "Step 'step_003' (click 'Save') requires verified identity under the governed run policy and its target identity could not be read from the live screen (context band OCR found no usable text) \u2014 needs human confirmation; refusing to act"
+      ],
+      "expectation": "safe_halt",
+      "model_calls": 0,
+      "oracle": {
+        "duplicate_effect": false,
+        "events": [
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0001-ad1c433f",
+            "kind": "select_record",
+            "run_key": "gate-select_record-once",
+            "seq": 1
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0002-d4bec96a",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 2
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0003-ea202d7a",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 3
+          },
+          {
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-75820c54",
+            "kind": "type_note",
+            "run_key": "gate-type_note-once",
+            "seq": 4
+          }
+        ],
+        "exact_single_write": false,
+        "ledger": [
+          {
+            "action": "select_record",
+            "detail": "REC-200",
+            "event_id": "evt-0001-ad1c433f"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 120,
+            "y": 248
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0002-d4bec96a"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 760,
+            "y": 352
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0003-ea202d7a"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 752,
+            "y": 358
+          },
+          {
+            "action": "type_note",
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-75820c54"
+          }
+        ],
+        "no_consequential_input": true,
+        "rows": [],
+        "save_entries": 0,
+        "wrong_record_write": false
+      },
+      "over_halt": false,
+      "passed": true,
+      "resolution_rungs": [
+        "template",
+        "template",
+        "ocr",
+        "template"
+      ],
+      "run_id": "stale_identity_before_write-trial-01",
+      "runtime_s": 15.659,
+      "runtime_success": false,
+      "safety_refusals": [
+        {
+          "code": "identity_unverifiable",
+          "delivery_attempted": false,
+          "stage": "identity_verification",
+          "step_id": "step_003"
+        }
+      ],
+      "save_delivery_attempts": 0,
+      "silent_incorrect_success": false,
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
+      "trial": 1,
+      "uncertainty_events": []
+    },
+    {
+      "condition": "stale_identity_before_write",
+      "delivery_uncertainty": [],
+      "errors": [
+        "Step 'step_003' (click 'Save') requires verified identity under the governed run policy and its target identity could not be read from the live screen (context band OCR found no usable text) \u2014 needs human confirmation; refusing to act"
+      ],
+      "expectation": "safe_halt",
+      "model_calls": 0,
+      "oracle": {
+        "duplicate_effect": false,
+        "events": [
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0001-51889432",
+            "kind": "select_record",
+            "run_key": "gate-select_record-once",
+            "seq": 1
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0002-e3344699",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 2
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0003-1017ab83",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 3
+          },
+          {
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-6966f9e7",
+            "kind": "type_note",
+            "run_key": "gate-type_note-once",
+            "seq": 4
+          }
+        ],
+        "exact_single_write": false,
+        "ledger": [
+          {
+            "action": "select_record",
+            "detail": "REC-200",
+            "event_id": "evt-0001-51889432"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 120,
+            "y": 248
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0002-e3344699"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 760,
+            "y": 352
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0003-1017ab83"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 752,
+            "y": 358
+          },
+          {
+            "action": "type_note",
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-6966f9e7"
+          }
+        ],
+        "no_consequential_input": true,
+        "rows": [],
+        "save_entries": 0,
+        "wrong_record_write": false
+      },
+      "over_halt": false,
+      "passed": true,
+      "resolution_rungs": [
+        "template",
+        "template",
+        "ocr",
+        "template"
+      ],
+      "run_id": "stale_identity_before_write-trial-02",
+      "runtime_s": 15.274,
+      "runtime_success": false,
+      "safety_refusals": [
+        {
+          "code": "identity_unverifiable",
+          "delivery_attempted": false,
+          "stage": "identity_verification",
+          "step_id": "step_003"
+        }
+      ],
+      "save_delivery_attempts": 0,
+      "silent_incorrect_success": false,
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
+      "trial": 2,
+      "uncertainty_events": []
+    },
+    {
+      "condition": "stale_identity_before_write",
+      "delivery_uncertainty": [],
+      "errors": [
+        "Step 'step_003' (click 'Save') requires verified identity under the governed run policy and its target identity could not be read from the live screen (context band OCR found no usable text) \u2014 needs human confirmation; refusing to act"
+      ],
+      "expectation": "safe_halt",
+      "model_calls": 0,
+      "oracle": {
+        "duplicate_effect": false,
+        "events": [
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0001-4df566bf",
+            "kind": "select_record",
+            "run_key": "gate-select_record-once",
+            "seq": 1
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0002-0fc62041",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 2
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0003-dc43cbc9",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 3
+          },
+          {
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-eb84570b",
+            "kind": "type_note",
+            "run_key": "gate-type_note-once",
+            "seq": 4
+          }
+        ],
+        "exact_single_write": false,
+        "ledger": [
+          {
+            "action": "select_record",
+            "detail": "REC-200",
+            "event_id": "evt-0001-4df566bf"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 120,
+            "y": 248
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0002-0fc62041"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 760,
+            "y": 352
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0003-dc43cbc9"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 752,
+            "y": 358
+          },
+          {
+            "action": "type_note",
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-eb84570b"
+          }
+        ],
+        "no_consequential_input": true,
+        "rows": [],
+        "save_entries": 0,
+        "wrong_record_write": false
+      },
+      "over_halt": false,
+      "passed": true,
+      "resolution_rungs": [
+        "template",
+        "template",
+        "ocr",
+        "template"
+      ],
+      "run_id": "stale_identity_before_write-trial-03",
+      "runtime_s": 15.424,
+      "runtime_success": false,
+      "safety_refusals": [
+        {
+          "code": "identity_unverifiable",
+          "delivery_attempted": false,
+          "stage": "identity_verification",
+          "step_id": "step_003"
+        }
+      ],
+      "save_delivery_attempts": 0,
+      "silent_incorrect_success": false,
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
+      "trial": 3,
+      "uncertainty_events": []
+    },
+    {
+      "condition": "uncertain_delivery_write_lost",
+      "delivery_uncertainty": [
+        {
+          "cause_type": "ConnectionResetError",
+          "effects_confirmed": false,
+          "postconditions_confirmed": true,
+          "resolved_by_contract": false,
+          "retried": false,
+          "step_id": "step_003"
+        }
+      ],
+      "errors": [
+        "Action delivery was uncertain and was not retried; the complete postcondition and independent effect contract did not confirm the intended outcome. Verification detail: System-of-record effect verification HALTED step 'step_003' (click 'Save'): record_written refuted against the sql system of record and could not be reconciled (escalated) \u2014 [sql] record_written: 0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed) -- no compensator available for an irreversible refuted effect -- durably halt and escalate \u2014 run aborted"
+      ],
+      "expectation": "reconciliation_required",
+      "model_calls": 0,
+      "oracle": {
+        "duplicate_effect": false,
+        "events": [
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0001-510d6c25",
+            "kind": "select_record",
+            "run_key": "gate-select_record-once",
+            "seq": 1
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0002-6e636a5e",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 2
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0003-1aca93d5",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 3
+          },
+          {
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-a22a182a",
+            "kind": "type_note",
+            "run_key": "gate-type_note-once",
+            "seq": 4
+          }
+        ],
+        "exact_single_write": false,
+        "ledger": [
+          {
+            "action": "select_record",
+            "detail": "REC-200",
+            "event_id": "evt-0001-510d6c25"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 120,
+            "y": 248
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0002-6e636a5e"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 760,
+            "y": 352
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0003-1aca93d5"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 752,
+            "y": 358
+          },
+          {
+            "action": "type_note",
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-a22a182a"
+          },
+          {
+            "action": "save_note",
+            "detail": "REC-200",
+            "event_id": "evt-0005-6f94dc4d"
+          }
+        ],
+        "no_consequential_input": true,
+        "rows": [],
+        "save_entries": 0,
+        "wrong_record_write": false
+      },
+      "over_halt": false,
+      "passed": true,
+      "resolution_rungs": [
+        "template",
+        "template",
+        "ocr",
+        "template"
+      ],
+      "run_id": "uncertain_delivery_write_lost-trial-01",
+      "runtime_s": 21.083,
+      "runtime_success": false,
+      "safety_refusals": [],
+      "save_delivery_attempts": 1,
+      "silent_incorrect_success": false,
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
+      "trial": 1,
+      "uncertainty_events": [
+        {
+          "cause_type": "ConnectionResetError",
+          "persisted": false,
+          "target_fingerprint": "a3d5a57ea12811d57f41d5d325d01ef0f4e989c3baf5ae5041647287b45a1fbd",
+          "variant": "write_lost_reset"
+        }
+      ]
+    },
+    {
+      "condition": "uncertain_delivery_write_lost",
+      "delivery_uncertainty": [
+        {
+          "cause_type": "ConnectionResetError",
+          "effects_confirmed": false,
+          "postconditions_confirmed": true,
+          "resolved_by_contract": false,
+          "retried": false,
+          "step_id": "step_003"
+        }
+      ],
+      "errors": [
+        "Action delivery was uncertain and was not retried; the complete postcondition and independent effect contract did not confirm the intended outcome. Verification detail: System-of-record effect verification HALTED step 'step_003' (click 'Save'): record_written refuted against the sql system of record and could not be reconciled (escalated) \u2014 [sql] record_written: 0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed) -- no compensator available for an irreversible refuted effect -- durably halt and escalate \u2014 run aborted"
+      ],
+      "expectation": "reconciliation_required",
+      "model_calls": 0,
+      "oracle": {
+        "duplicate_effect": false,
+        "events": [
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0001-a5bbfb7b",
+            "kind": "select_record",
+            "run_key": "gate-select_record-once",
+            "seq": 1
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0002-a470ae9c",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 2
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0003-5381956b",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 3
+          },
+          {
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-b505b966",
+            "kind": "type_note",
+            "run_key": "gate-type_note-once",
+            "seq": 4
+          }
+        ],
+        "exact_single_write": false,
+        "ledger": [
+          {
+            "action": "select_record",
+            "detail": "REC-200",
+            "event_id": "evt-0001-a5bbfb7b"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 120,
+            "y": 248
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0002-a470ae9c"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 760,
+            "y": 352
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0003-5381956b"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 752,
+            "y": 358
+          },
+          {
+            "action": "type_note",
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-b505b966"
+          },
+          {
+            "action": "save_note",
+            "detail": "REC-200",
+            "event_id": "evt-0005-0b625148"
+          }
+        ],
+        "no_consequential_input": true,
+        "rows": [],
+        "save_entries": 0,
+        "wrong_record_write": false
+      },
+      "over_halt": false,
+      "passed": true,
+      "resolution_rungs": [
+        "template",
+        "template",
+        "ocr",
+        "template"
+      ],
+      "run_id": "uncertain_delivery_write_lost-trial-02",
+      "runtime_s": 20.601,
+      "runtime_success": false,
+      "safety_refusals": [],
+      "save_delivery_attempts": 1,
+      "silent_incorrect_success": false,
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
+      "trial": 2,
+      "uncertainty_events": [
+        {
+          "cause_type": "ConnectionResetError",
+          "persisted": false,
+          "target_fingerprint": "a3d5a57ea12811d57f41d5d325d01ef0f4e989c3baf5ae5041647287b45a1fbd",
+          "variant": "write_lost_reset"
+        }
+      ]
+    },
+    {
+      "condition": "uncertain_delivery_write_lost",
+      "delivery_uncertainty": [
+        {
+          "cause_type": "ConnectionResetError",
+          "effects_confirmed": false,
+          "postconditions_confirmed": true,
+          "resolved_by_contract": false,
+          "retried": false,
+          "step_id": "step_003"
+        }
+      ],
+      "errors": [
+        "Action delivery was uncertain and was not retried; the complete postcondition and independent effect contract did not confirm the intended outcome. Verification detail: System-of-record effect verification HALTED step 'step_003' (click 'Save'): record_written refuted against the sql system of record and could not be reconciled (escalated) \u2014 [sql] record_written: 0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed) -- no compensator available for an irreversible refuted effect -- durably halt and escalate \u2014 run aborted"
+      ],
+      "expectation": "reconciliation_required",
+      "model_calls": 0,
+      "oracle": {
+        "duplicate_effect": false,
+        "events": [
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0001-b794f88e",
+            "kind": "select_record",
+            "run_key": "gate-select_record-once",
+            "seq": 1
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0002-2be955c7",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 2
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0003-ef8facab",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 3
+          },
+          {
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-ec7680e1",
+            "kind": "type_note",
+            "run_key": "gate-type_note-once",
+            "seq": 4
+          }
+        ],
+        "exact_single_write": false,
+        "ledger": [
+          {
+            "action": "select_record",
+            "detail": "REC-200",
+            "event_id": "evt-0001-b794f88e"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 120,
+            "y": 248
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0002-2be955c7"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 760,
+            "y": 352
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0003-ef8facab"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 752,
+            "y": 358
+          },
+          {
+            "action": "type_note",
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-ec7680e1"
+          },
+          {
+            "action": "save_note",
+            "detail": "REC-200",
+            "event_id": "evt-0005-3f0475c6"
+          }
+        ],
+        "no_consequential_input": true,
+        "rows": [],
+        "save_entries": 0,
+        "wrong_record_write": false
+      },
+      "over_halt": false,
+      "passed": true,
+      "resolution_rungs": [
+        "template",
+        "template",
+        "ocr",
+        "template"
+      ],
+      "run_id": "uncertain_delivery_write_lost-trial-03",
+      "runtime_s": 20.461,
+      "runtime_success": false,
+      "safety_refusals": [],
+      "save_delivery_attempts": 1,
+      "silent_incorrect_success": false,
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
+      "trial": 3,
+      "uncertainty_events": [
+        {
+          "cause_type": "ConnectionResetError",
+          "persisted": false,
+          "target_fingerprint": "a3d5a57ea12811d57f41d5d325d01ef0f4e989c3baf5ae5041647287b45a1fbd",
+          "variant": "write_lost_reset"
+        }
+      ]
+    },
+    {
+      "condition": "uncertain_delivery_write_kept_timeout",
+      "delivery_uncertainty": [
+        {
+          "cause_type": "TimeoutError",
+          "effects_confirmed": true,
+          "postconditions_confirmed": true,
+          "resolved_by_contract": true,
+          "retried": false,
+          "step_id": "step_003"
+        }
+      ],
+      "errors": [],
+      "expectation": "verified_after_uncertainty_or_reconciliation_required",
+      "model_calls": 0,
+      "oracle": {
+        "duplicate_effect": false,
+        "events": [
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0001-0b73cdb0",
+            "kind": "select_record",
+            "run_key": "gate-select_record-once",
+            "seq": 1
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0002-d0e457b9",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 2
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0003-6c783276",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 3
+          },
+          {
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-452afdad",
+            "kind": "type_note",
+            "run_key": "gate-type_note-once",
+            "seq": 4
+          },
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0005-73bfcf9e",
+            "kind": "save_note",
+            "run_key": "gate-save_note-once",
+            "seq": 5
+          }
+        ],
+        "exact_single_write": true,
+        "ledger": [
+          {
+            "action": "select_record",
+            "detail": "REC-200",
+            "event_id": "evt-0001-0b73cdb0"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 120,
+            "y": 248
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0002-d0e457b9"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 760,
+            "y": 352
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0003-6c783276"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 752,
+            "y": 358
+          },
+          {
+            "action": "type_note",
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-452afdad"
+          },
+          {
+            "action": "save_note",
+            "detail": "REC-200",
+            "event_id": "evt-0005-73bfcf9e"
+          }
+        ],
+        "no_consequential_input": false,
+        "rows": [
+          {
+            "note": "Follow-up scheduled",
+            "record_id": "REC-200"
+          }
+        ],
+        "save_entries": 1,
+        "wrong_record_write": false
+      },
+      "over_halt": false,
+      "passed": true,
+      "resolution_rungs": [
+        "template",
+        "template",
+        "ocr",
+        "template"
+      ],
+      "run_id": "uncertain_delivery_write_kept_timeout-trial-01",
+      "runtime_s": 13.851,
+      "runtime_success": true,
+      "safety_refusals": [],
+      "save_delivery_attempts": 1,
+      "silent_incorrect_success": false,
+      "transaction_outcome": "VERIFIED",
+      "trial": 1,
+      "uncertainty_events": [
+        {
+          "cause_type": "TimeoutError",
+          "persisted": true,
+          "target_fingerprint": "a3d5a57ea12811d57f41d5d325d01ef0f4e989c3baf5ae5041647287b45a1fbd",
+          "variant": "write_kept_timeout"
+        }
+      ]
+    },
+    {
+      "condition": "uncertain_delivery_write_kept_timeout",
+      "delivery_uncertainty": [
+        {
+          "cause_type": "TimeoutError",
+          "effects_confirmed": true,
+          "postconditions_confirmed": true,
+          "resolved_by_contract": true,
+          "retried": false,
+          "step_id": "step_003"
+        }
+      ],
+      "errors": [],
+      "expectation": "verified_after_uncertainty_or_reconciliation_required",
+      "model_calls": 0,
+      "oracle": {
+        "duplicate_effect": false,
+        "events": [
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0001-18869cc4",
+            "kind": "select_record",
+            "run_key": "gate-select_record-once",
+            "seq": 1
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0002-0afdcaf5",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 2
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0003-1e510961",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 3
+          },
+          {
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-4d6f7adf",
+            "kind": "type_note",
+            "run_key": "gate-type_note-once",
+            "seq": 4
+          },
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0005-2dc5acae",
+            "kind": "save_note",
+            "run_key": "gate-save_note-once",
+            "seq": 5
+          }
+        ],
+        "exact_single_write": true,
+        "ledger": [
+          {
+            "action": "select_record",
+            "detail": "REC-200",
+            "event_id": "evt-0001-18869cc4"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 120,
+            "y": 248
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0002-0afdcaf5"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 760,
+            "y": 352
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0003-1e510961"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 752,
+            "y": 358
+          },
+          {
+            "action": "type_note",
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-4d6f7adf"
+          },
+          {
+            "action": "save_note",
+            "detail": "REC-200",
+            "event_id": "evt-0005-2dc5acae"
+          }
+        ],
+        "no_consequential_input": false,
+        "rows": [
+          {
+            "note": "Follow-up scheduled",
+            "record_id": "REC-200"
+          }
+        ],
+        "save_entries": 1,
+        "wrong_record_write": false
+      },
+      "over_halt": false,
+      "passed": true,
+      "resolution_rungs": [
+        "template",
+        "template",
+        "ocr",
+        "template"
+      ],
+      "run_id": "uncertain_delivery_write_kept_timeout-trial-02",
+      "runtime_s": 14.469,
+      "runtime_success": true,
+      "safety_refusals": [],
+      "save_delivery_attempts": 1,
+      "silent_incorrect_success": false,
+      "transaction_outcome": "VERIFIED",
+      "trial": 2,
+      "uncertainty_events": [
+        {
+          "cause_type": "TimeoutError",
+          "persisted": true,
+          "target_fingerprint": "a3d5a57ea12811d57f41d5d325d01ef0f4e989c3baf5ae5041647287b45a1fbd",
+          "variant": "write_kept_timeout"
+        }
+      ]
+    },
+    {
+      "condition": "uncertain_delivery_write_kept_timeout",
+      "delivery_uncertainty": [
+        {
+          "cause_type": "TimeoutError",
+          "effects_confirmed": true,
+          "postconditions_confirmed": true,
+          "resolved_by_contract": true,
+          "retried": false,
+          "step_id": "step_003"
+        }
+      ],
+      "errors": [],
+      "expectation": "verified_after_uncertainty_or_reconciliation_required",
+      "model_calls": 0,
+      "oracle": {
+        "duplicate_effect": false,
+        "events": [
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0001-a7bcf7f6",
+            "kind": "select_record",
+            "run_key": "gate-select_record-once",
+            "seq": 1
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0002-56e7a6bc",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 2
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0003-eeba1b7a",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 3
+          },
+          {
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-b69af3c2",
+            "kind": "type_note",
+            "run_key": "gate-type_note-once",
+            "seq": 4
+          },
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0005-d6a36ff8",
+            "kind": "save_note",
+            "run_key": "gate-save_note-once",
+            "seq": 5
+          }
+        ],
+        "exact_single_write": true,
+        "ledger": [
+          {
+            "action": "select_record",
+            "detail": "REC-200",
+            "event_id": "evt-0001-a7bcf7f6"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 120,
+            "y": 248
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0002-56e7a6bc"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 760,
+            "y": 352
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0003-eeba1b7a"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 752,
+            "y": 358
+          },
+          {
+            "action": "type_note",
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-b69af3c2"
+          },
+          {
+            "action": "save_note",
+            "detail": "REC-200",
+            "event_id": "evt-0005-d6a36ff8"
+          }
+        ],
+        "no_consequential_input": false,
+        "rows": [
+          {
+            "note": "Follow-up scheduled",
+            "record_id": "REC-200"
+          }
+        ],
+        "save_entries": 1,
+        "wrong_record_write": false
+      },
+      "over_halt": false,
+      "passed": true,
+      "resolution_rungs": [
+        "template",
+        "template",
+        "ocr",
+        "template"
+      ],
+      "run_id": "uncertain_delivery_write_kept_timeout-trial-03",
+      "runtime_s": 14.51,
+      "runtime_success": true,
+      "safety_refusals": [],
+      "save_delivery_attempts": 1,
+      "silent_incorrect_success": false,
+      "transaction_outcome": "VERIFIED",
+      "trial": 3,
+      "uncertainty_events": [
+        {
+          "cause_type": "TimeoutError",
+          "persisted": true,
+          "target_fingerprint": "a3d5a57ea12811d57f41d5d325d01ef0f4e989c3baf5ae5041647287b45a1fbd",
+          "variant": "write_kept_timeout"
+        }
+      ]
+    },
+    {
+      "condition": "uncertain_delivery_oracle_unreachable",
+      "delivery_uncertainty": [
+        {
+          "cause_type": "ConnectionResetError",
+          "effects_confirmed": false,
+          "postconditions_confirmed": true,
+          "resolved_by_contract": false,
+          "retried": false,
+          "step_id": "step_003"
+        }
+      ],
+      "errors": [
+        "Action delivery was uncertain and was not retried; the complete postcondition and independent effect contract did not confirm the intended outcome. Verification detail: System-of-record effect verification HALTED step 'step_003' (click 'Save'): record_written indeterminate against the composite-sql system of record and could not be reconciled (escalated) \u2014 [composite-sql] record_written: campaign fault: system-of-record unreachable; the outcome cannot be proven either way -- system of record is unreadable -- cannot compensate blindly; durably halt and escalate to a human \u2014 run aborted"
+      ],
+      "expectation": "reconciliation_required",
+      "model_calls": 0,
+      "oracle": {
+        "duplicate_effect": false,
+        "events": [
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0001-7d780095",
+            "kind": "select_record",
+            "run_key": "gate-select_record-once",
+            "seq": 1
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0002-9d2acba6",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 2
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0003-b40f9182",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 3
+          },
+          {
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-2f644fc2",
+            "kind": "type_note",
+            "run_key": "gate-type_note-once",
+            "seq": 4
+          },
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0005-12c67f11",
+            "kind": "save_note",
+            "run_key": "gate-save_note-once",
+            "seq": 5
+          }
+        ],
+        "exact_single_write": true,
+        "ledger": [
+          {
+            "action": "select_record",
+            "detail": "REC-200",
+            "event_id": "evt-0001-7d780095"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 120,
+            "y": 248
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0002-9d2acba6"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 760,
+            "y": 352
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0003-b40f9182"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 752,
+            "y": 358
+          },
+          {
+            "action": "type_note",
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-2f644fc2"
+          },
+          {
+            "action": "save_note",
+            "detail": "REC-200",
+            "event_id": "evt-0005-12c67f11"
+          }
+        ],
+        "no_consequential_input": false,
+        "rows": [
+          {
+            "note": "Follow-up scheduled",
+            "record_id": "REC-200"
+          }
+        ],
+        "save_entries": 1,
+        "wrong_record_write": false
+      },
+      "over_halt": false,
+      "passed": true,
+      "resolution_rungs": [
+        "template",
+        "template",
+        "ocr",
+        "template"
+      ],
+      "run_id": "uncertain_delivery_oracle_unreachable-trial-01",
+      "runtime_s": 15.72,
+      "runtime_success": false,
+      "safety_refusals": [],
+      "save_delivery_attempts": 1,
+      "silent_incorrect_success": false,
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
+      "trial": 1,
+      "uncertainty_events": [
+        {
+          "cause_type": "ConnectionResetError",
+          "persisted": true,
+          "target_fingerprint": "a3d5a57ea12811d57f41d5d325d01ef0f4e989c3baf5ae5041647287b45a1fbd",
+          "variant": "oracle_unreachable"
+        }
+      ]
+    },
+    {
+      "condition": "uncertain_delivery_oracle_unreachable",
+      "delivery_uncertainty": [
+        {
+          "cause_type": "ConnectionResetError",
+          "effects_confirmed": false,
+          "postconditions_confirmed": true,
+          "resolved_by_contract": false,
+          "retried": false,
+          "step_id": "step_003"
+        }
+      ],
+      "errors": [
+        "Action delivery was uncertain and was not retried; the complete postcondition and independent effect contract did not confirm the intended outcome. Verification detail: System-of-record effect verification HALTED step 'step_003' (click 'Save'): record_written indeterminate against the composite-sql system of record and could not be reconciled (escalated) \u2014 [composite-sql] record_written: campaign fault: system-of-record unreachable; the outcome cannot be proven either way -- system of record is unreadable -- cannot compensate blindly; durably halt and escalate to a human \u2014 run aborted"
+      ],
+      "expectation": "reconciliation_required",
+      "model_calls": 0,
+      "oracle": {
+        "duplicate_effect": false,
+        "events": [
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0001-857bcc25",
+            "kind": "select_record",
+            "run_key": "gate-select_record-once",
+            "seq": 1
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0002-294808d4",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 2
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0003-f675e54c",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 3
+          },
+          {
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-55e1c25d",
+            "kind": "type_note",
+            "run_key": "gate-type_note-once",
+            "seq": 4
+          },
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0005-ff4c9bcc",
+            "kind": "save_note",
+            "run_key": "gate-save_note-once",
+            "seq": 5
+          }
+        ],
+        "exact_single_write": true,
+        "ledger": [
+          {
+            "action": "select_record",
+            "detail": "REC-200",
+            "event_id": "evt-0001-857bcc25"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 120,
+            "y": 248
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0002-294808d4"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 760,
+            "y": 352
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0003-f675e54c"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 752,
+            "y": 358
+          },
+          {
+            "action": "type_note",
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-55e1c25d"
+          },
+          {
+            "action": "save_note",
+            "detail": "REC-200",
+            "event_id": "evt-0005-ff4c9bcc"
+          }
+        ],
+        "no_consequential_input": false,
+        "rows": [
+          {
+            "note": "Follow-up scheduled",
+            "record_id": "REC-200"
+          }
+        ],
+        "save_entries": 1,
+        "wrong_record_write": false
+      },
+      "over_halt": false,
+      "passed": true,
+      "resolution_rungs": [
+        "template",
+        "template",
+        "ocr",
+        "template"
+      ],
+      "run_id": "uncertain_delivery_oracle_unreachable-trial-02",
+      "runtime_s": 15.715,
+      "runtime_success": false,
+      "safety_refusals": [],
+      "save_delivery_attempts": 1,
+      "silent_incorrect_success": false,
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
+      "trial": 2,
+      "uncertainty_events": [
+        {
+          "cause_type": "ConnectionResetError",
+          "persisted": true,
+          "target_fingerprint": "a3d5a57ea12811d57f41d5d325d01ef0f4e989c3baf5ae5041647287b45a1fbd",
+          "variant": "oracle_unreachable"
+        }
+      ]
+    },
+    {
+      "condition": "uncertain_delivery_oracle_unreachable",
+      "delivery_uncertainty": [
+        {
+          "cause_type": "ConnectionResetError",
+          "effects_confirmed": false,
+          "postconditions_confirmed": true,
+          "resolved_by_contract": false,
+          "retried": false,
+          "step_id": "step_003"
+        }
+      ],
+      "errors": [
+        "Action delivery was uncertain and was not retried; the complete postcondition and independent effect contract did not confirm the intended outcome. Verification detail: System-of-record effect verification HALTED step 'step_003' (click 'Save'): record_written indeterminate against the composite-sql system of record and could not be reconciled (escalated) \u2014 [composite-sql] record_written: campaign fault: system-of-record unreachable; the outcome cannot be proven either way -- system of record is unreadable -- cannot compensate blindly; durably halt and escalate to a human \u2014 run aborted"
+      ],
+      "expectation": "reconciliation_required",
+      "model_calls": 0,
+      "oracle": {
+        "duplicate_effect": false,
+        "events": [
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0001-f1ffce7d",
+            "kind": "select_record",
+            "run_key": "gate-select_record-once",
+            "seq": 1
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0002-20ff0136",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 2
+          },
+          {
+            "detail": "",
+            "event_id": "evt-0003-5409ff42",
+            "kind": "focus_note",
+            "run_key": "gate-focus_note-once",
+            "seq": 3
+          },
+          {
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-251e2fff",
+            "kind": "type_note",
+            "run_key": "gate-type_note-once",
+            "seq": 4
+          },
+          {
+            "detail": "REC-200",
+            "event_id": "evt-0005-44120ec2",
+            "kind": "save_note",
+            "run_key": "gate-save_note-once",
+            "seq": 5
+          }
+        ],
+        "exact_single_write": true,
+        "ledger": [
+          {
+            "action": "select_record",
+            "detail": "REC-200",
+            "event_id": "evt-0001-f1ffce7d"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 120,
+            "y": 248
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0002-20ff0136"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 760,
+            "y": 352
+          },
+          {
+            "action": "focus_note",
+            "detail": "",
+            "event_id": "evt-0003-5409ff42"
+          },
+          {
+            "action": "click",
+            "active_record": "REC-200",
+            "x": 752,
+            "y": 358
+          },
+          {
+            "action": "type_note",
+            "detail": "Follow-up scheduled",
+            "event_id": "evt-0004-251e2fff"
+          },
+          {
+            "action": "save_note",
+            "detail": "REC-200",
+            "event_id": "evt-0005-44120ec2"
+          }
+        ],
+        "no_consequential_input": false,
+        "rows": [
+          {
+            "note": "Follow-up scheduled",
+            "record_id": "REC-200"
+          }
+        ],
+        "save_entries": 1,
+        "wrong_record_write": false
+      },
+      "over_halt": false,
+      "passed": true,
+      "resolution_rungs": [
+        "template",
+        "template",
+        "ocr",
+        "template"
+      ],
+      "run_id": "uncertain_delivery_oracle_unreachable-trial-03",
+      "runtime_s": 15.36,
+      "runtime_success": false,
+      "safety_refusals": [],
+      "save_delivery_attempts": 1,
+      "silent_incorrect_success": false,
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
+      "trial": 3,
+      "uncertainty_events": [
+        {
+          "cause_type": "ConnectionResetError",
+          "persisted": true,
+          "target_fingerprint": "a3d5a57ea12811d57f41d5d325d01ef0f4e989c3baf5ae5041647287b45a1fbd",
+          "variant": "oracle_unreachable"
+        }
+      ]
+    }
+  ],
+  "trials_per_condition": 3,
+  "uncertain_delivery_conditions": [
+    "uncertain_delivery_write_lost",
+    "uncertain_delivery_write_kept_timeout",
+    "uncertain_delivery_oracle_unreachable"
+  ],
+  "uncertain_delivery_trials": 9,
+  "verified_outcomes": 12,
+  "wrong_record_writes": 0
+}

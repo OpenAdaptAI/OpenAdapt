@@ -1,0 +1,105 @@
+{
+  "$defs": {
+    "AuthoringAllowStateV1": {
+      "enum": [
+        "none",
+        "pending",
+        "granted"
+      ],
+      "title": "AuthoringAllowStateV1",
+      "type": "string"
+    },
+    "AuthoringBackendV1": {
+      "enum": [
+        "macos",
+        "linux",
+        "windows",
+        "web",
+        "rdp",
+        "citrix"
+      ],
+      "title": "AuthoringBackendV1",
+      "type": "string"
+    },
+    "AuthoringClientDisplayV1": {
+      "enum": [
+        "ChatGPT",
+        "Claude"
+      ],
+      "title": "AuthoringClientDisplayV1",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "``bind_status`` body. No token, lease secret, tree, hint, or command args.",
+  "properties": {
+    "allow": {
+      "$ref": "#/$defs/AuthoringAllowStateV1"
+    },
+    "backend": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AuthoringBackendV1"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "bound": {
+      "title": "Bound",
+      "type": "boolean"
+    },
+    "client_display": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AuthoringClientDisplayV1"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "coach_only": {
+      "title": "Coach Only",
+      "type": "boolean"
+    },
+    "halted": {
+      "default": false,
+      "title": "Halted",
+      "type": "boolean"
+    },
+    "pack_id": {
+      "pattern": "^(p\\.[A-Za-z0-9_-]{12}|v1\\.[A-Za-z0-9_-]{38,512})$",
+      "title": "Pack Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "openadapt.authoring.bind/v1",
+      "default": "openadapt.authoring.bind/v1",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "pack_id",
+    "bound",
+    "allow",
+    "coach_only"
+  ],
+  "title": "AuthoringBindV1",
+  "type": "object",
+  "x-openadapt-bind-token-pattern": "^oab_[A-Za-z0-9_-]{43}$",
+  "x-openadapt-bind-token-rejects-hex-body": true,
+  "x-openadapt-deep-link-scheme": "openadapt://runner",
+  "x-openadapt-lease-s": 900,
+  "x-openadapt-lease-secret-pattern": "^oals_[a-f0-9]{64}$",
+  "x-openadapt-lease-secret-rejects-base64url-body": true,
+  "x-openadapt-origin": "https://openadapt.ai",
+  "x-openadapt-rejected-token-patterns": [
+    "^oar_[a-f0-9]{64}$",
+    "^oap_[A-Za-z0-9_-]{43}$"
+  ]
+}

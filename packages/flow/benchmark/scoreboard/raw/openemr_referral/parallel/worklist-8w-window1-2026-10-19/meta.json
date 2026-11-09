@@ -1,0 +1,62 @@
+{
+  "protocol_version": "2026-10-18.1",
+  "written_at": "2026-10-19T11:26:07-0400",
+  "machine": "arm64 Darwin 24.6.0",
+  "cpu_count": 12,
+  "python": "3.12.13",
+  "engine": {
+    "path": "/Users/abrichr/oa/worktrees/scoreboard-arm46/packages/flow/openadapt_flow",
+    "git_head": "b82131e51f52d6a365e910cc0818ea92e4c10a1a"
+  },
+  "benchmark_git_head": "97effbd5379dd4242128e6d90e4ada2b8d1e9650",
+  "task": "openemr_referral",
+  "arm": "parallel",
+  "imported_from": "/Users/abrichr/oa/scratch/scoreboard-runs/openemr/par8w1b",
+  "source_sha256": {
+    "summary.json": "06b21d9d35ffd39a1098953584ba0a29dcbb65c5ec97ee58d436f8254cf9117c",
+    "items.json": "f734cf13bf05eb3edfe5a769ab80e07518953277ccaad6dfc9280334598b95be"
+  },
+  "workers": 8,
+  "readback_window": 1,
+  "processes": true,
+  "speed": {
+    "speed_profile": "fast",
+    "native_fill": true,
+    "page_quiet_ms": 50,
+    "ocr_threads": 2
+  },
+  "harness_engine_sha": "b82131e51f52d6a365e910cc0818ea92e4c10a1a",
+  "wall_s": 152.739,
+  "sign_in_s": {
+    "oa_clerk1": 10.0,
+    "oa_clerk2": 11.06,
+    "oa_clerk3": 10.03,
+    "oa_clerk4": 11.05,
+    "oa_clerk5": 11.05,
+    "oa_clerk6": 9.98,
+    "oa_clerk7": 9.96,
+    "oa_clerk8": 9.96
+  },
+  "stop": {
+    "reason": "Postconditions failed for step 'step_040' (click 'Confirm Create New Patient'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(0, 308, 1280, 451); text_present 'TreatmentInterventionPreferences?' \u2014 run aborted",
+    "worker": "oa_clerk2",
+    "idx": 9,
+    "at": 1792423517.869507
+  },
+  "load1_mean": 171.36,
+  "gate": {
+    "threshold": 12.0,
+    "waited_s": 1030.6,
+    "gave_up": false,
+    "load_at_start": [
+      11.13232421875,
+      45.1162109375,
+      45.62890625
+    ]
+  },
+  "load1_max": 251.62,
+  "saved_correct": 21,
+  "items_run": 23,
+  "note_gate": "gate, load1_max, saved_correct and items_run copied from the harness summary.json named in source_sha256",
+  "profile": "GUI, worklist harness (#1296), speed fast, 8 worker processes, read-back window 1, plain Replayer: no approval gate, not durable, no named execution profile; record check: OpenEMR REST read-back"
+}

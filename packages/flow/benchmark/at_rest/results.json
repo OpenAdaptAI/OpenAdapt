@@ -1,0 +1,82 @@
+{
+  "schema": "openadapt.at-rest-benchmark/v1",
+  "measured_at": "2026-10-19T11:29:36-0400",
+  "host": {
+    "platform": "macOS-15.7.3-arm64-arm-64bit",
+    "python": "3.12.7",
+    "cpu_count": 12,
+    "load_average_1m": 11.08
+  },
+  "frame_png_kb": {
+    "median": 86.7,
+    "min": 82.3,
+    "max": 89.5
+  },
+  "actions": 150,
+  "key_derivation_scrypt": {
+    "median_ms": 183.076,
+    "p95_ms": 185.445,
+    "mean_ms": 184.129,
+    "n": 5
+  },
+  "persist_one_frame": {
+    "plaintext": {
+      "median_ms": 0.118,
+      "p95_ms": 0.505,
+      "mean_ms": 0.212,
+      "n": 200
+    },
+    "sealed": {
+      "median_ms": 0.254,
+      "p95_ms": 0.551,
+      "mean_ms": 0.309,
+      "n": 200
+    }
+  },
+  "record_one_action": {
+    "plaintext": {
+      "median_ms": 5.241,
+      "p95_ms": 5.957,
+      "mean_ms": 5.88,
+      "n": 150
+    },
+    "sealed": {
+      "median_ms": 5.815,
+      "p95_ms": 6.356,
+      "mean_ms": 5.825,
+      "n": 150
+    },
+    "note": "two frames plus one event line per action; settle wait disabled"
+  },
+  "record_one_action_last_10pct": {
+    "plaintext": {
+      "median_ms": 5.13,
+      "p95_ms": 5.486,
+      "mean_ms": 5.194,
+      "n": 15
+    },
+    "sealed": {
+      "median_ms": 6.059,
+      "p95_ms": 6.407,
+      "mean_ms": 6.059,
+      "n": 15
+    },
+    "note": "the sealed event log is resealed whole on each append"
+  },
+  "open_and_verify_sealed_recording_ms": 221.4,
+  "disk": {
+    "plaintext_recording": {
+      "files": 302,
+      "bytes": 25978012
+    },
+    "sealed_recording": {
+      "files": 303,
+      "bytes": 26040619
+    },
+    "sealed_plaintext_content_bytes": 25978024,
+    "overhead_bytes": 62595,
+    "overhead_percent": 0.241,
+    "header_bytes": 49307,
+    "per_file_overhead_bytes": 44
+  }
+}

@@ -1,0 +1,678 @@
+{
+  "schema_version": "openadapt.plain-outcome-vectors/v1",
+  "_about": [
+    "Conformance cases for any code that applies outcomes.json. Each case names the merge rule it exercises.",
+    "input holds outcome values by source, plus dispatched, delivery_uncertain, and proof when the case sets them.",
+    "expect lists the fields the result must have. proof is none unless expect says otherwise.",
+    "expect_progress means the run hasn't ended and has no result. expect_error means the input must be refused."
+  ],
+  "cases": [
+    {
+      "name": "verified write",
+      "rule": "row",
+      "input": {
+        "transaction_outcome": "VERIFIED",
+        "execution_outcome": "VERIFIED"
+      },
+      "expect": {
+        "result": "done",
+        "may_have_changed": true,
+        "safe_to_retry": false,
+        "technical_code": "transaction_outcome=VERIFIED"
+      }
+    },
+    {
+      "name": "halt before any write",
+      "rule": "row",
+      "input": {
+        "transaction_outcome": "HALTED_BEFORE_EFFECT",
+        "execution_outcome": "HALTED"
+      },
+      "expect": {
+        "result": "stopped_before_change",
+        "may_have_changed": false,
+        "safe_to_retry": true,
+        "technical_code": "transaction_outcome=HALTED_BEFORE_EFFECT"
+      }
+    },
+    {
+      "name": "halt after a possible write (the break-it tutorial)",
+      "rule": "row",
+      "input": {
+        "transaction_outcome": "RECONCILIATION_REQUIRED",
+        "execution_outcome": "HALTED"
+      },
+      "expect": {
+        "result": "check_the_record",
+        "may_have_changed": true,
+        "safe_to_retry": false,
+        "technical_code": "transaction_outcome=RECONCILIATION_REQUIRED"
+      }
+    },
+    {
+      "name": "production completion without a record check",
+      "rule": "row",
+      "input": {
+        "transaction_outcome": "RECONCILIATION_REQUIRED",
+        "execution_outcome": "COMPLETED_UNVERIFIED"
+      },
+      "expect": {
+        "result": "check_the_record",
+        "may_have_changed": true,
+        "safe_to_retry": false,
+        "technical_code": "transaction_outcome=RECONCILIATION_REQUIRED"
+      }
+    },
+    {
+      "name": "practice run",
+      "rule": "row",
+      "input": {
+        "transaction_outcome": "COMPLETED_UNVERIFIED",
+        "execution_outcome": "COMPLETED_UNVERIFIED"
+      },
+      "expect": {
+        "result": "finished_not_checked",
+        "may_have_changed": true,
+        "safe_to_retry": false,
+        "technical_code": "transaction_outcome=COMPLETED_UNVERIFIED"
+      }
+    },
+    {
+      "name": "platform fault before any write",
+      "rule": "row",
+      "input": {
+        "transaction_outcome": "FAILED_PLATFORM",
+        "execution_outcome": "FAILED"
+      },
+      "expect": {
+        "result": "did_not_finish",
+        "may_have_changed": false,
+        "safe_to_retry": true,
+        "technical_code": "transaction_outcome=FAILED_PLATFORM"
+      }
+    },
+    {
+      "name": "canceled before any write",
+      "rule": "row",
+      "input": {
+        "transaction_outcome": "CANCELED",
+        "execution_outcome": "HALTED"
+      },
+      "expect": {
+        "result": "stopped_before_change",
+        "may_have_changed": false,
+        "safe_to_retry": true,
+        "technical_code": "transaction_outcome=CANCELED"
+      }
+    },
+    {
+      "name": "policy refusal",
+      "rule": "row",
+      "input": {
+        "transaction_outcome": "REJECTED_POLICY",
+        "execution_outcome": "FAILED"
+      },
+      "expect": {
+        "result": "refused",
+        "may_have_changed": false,
+        "safe_to_retry": true,
+        "technical_code": "transaction_outcome=REJECTED_POLICY"
+      }
+    },
+    {
+      "name": "extra change undone",
+      "rule": "row",
+      "input": {
+        "transaction_outcome": "ROLLED_BACK",
+        "execution_outcome": "ROLLED_BACK"
+      },
+      "expect": {
+        "result": "check_the_record",
+        "may_have_changed": true,
+        "safe_to_retry": false,
+        "technical_code": "transaction_outcome=ROLLED_BACK"
+      }
+    },
+    {
+      "name": "coarse HALTED alone reads check the record",
+      "rule": "row",
+      "input": {
+        "execution_outcome": "HALTED"
+      },
+      "expect": {
+        "result": "check_the_record",
+        "may_have_changed": true,
+        "safe_to_retry": false,
+        "technical_code": "execution_outcome=HALTED"
+      }
+    },
+    {
+      "name": "coarse FAILED alone",
+      "rule": "row",
+      "input": {
+        "execution_outcome": "FAILED"
+      },
+      "expect": {
+        "result": "did_not_finish",
+        "may_have_changed": true,
+        "safe_to_retry": false,
+        "technical_code": "execution_outcome=FAILED"
+      }
+    },
+    {
+      "name": "coarse VERIFIED alone",
+      "rule": "row",
+      "input": {
+        "execution_outcome": "VERIFIED"
+      },
+      "expect": {
+        "result": "done",
+        "may_have_changed": true,
+        "safe_to_retry": false,
+        "technical_code": "execution_outcome=VERIFIED"
+      }
+    },
+    {
+      "name": "Execute verified receipt",
+      "rule": "row",
+      "input": {
+        "execute_terminal_outcome": "verified",
+        "proof": "sealed"
+      },
+      "expect": {
+        "result": "done",
+        "may_have_changed": true,
+        "safe_to_retry": false,
+        "technical_code": "execute_terminal_outcome=verified",
+        "proof": "sealed"
+      }
+    },
+    {
+      "name": "Execute halted before effect",
+      "rule": "row",
+      "input": {
+        "execute_terminal_outcome": "halted_before_effect"
+      },
+      "expect": {
+        "result": "stopped_before_change",
+        "may_have_changed": false,
+        "safe_to_retry": true,
+        "technical_code": "execute_terminal_outcome=halted_before_effect"
+      }
+    },
+    {
+      "name": "Execute reconciliation required",
+      "rule": "row",
+      "input": {
+        "execute_terminal_outcome": "reconciliation_required",
+        "delivery_uncertain": true
+      },
+      "expect": {
+        "result": "check_the_record",
+        "may_have_changed": true,
+        "safe_to_retry": false,
+        "technical_code": "execute_terminal_outcome=reconciliation_required"
+      }
+    },
+    {
+      "name": "Execute rolled back and verified",
+      "rule": "row",
+      "input": {
+        "execute_terminal_outcome": "rolled_back_verified"
+      },
+      "expect": {
+        "result": "check_the_record",
+        "may_have_changed": true,
+        "safe_to_retry": false,
+        "technical_code": "execute_terminal_outcome=rolled_back_verified"
+      }
+    },
+    {
+      "name": "Execute waiting for reconciliation",
+      "rule": "row",
+      "input": {
+        "execute_state": "waiting_for_reconciliation"
+      },
+      "expect": {
+        "result": "check_the_record",
+        "may_have_changed": true,
+        "safe_to_retry": false,
+        "technical_code": "execute_state=waiting_for_reconciliation"
+      }
+    },
+    {
+      "name": "Execute terminal state adds nothing",
+      "rule": "1",
+      "input": {
+        "execute_state": "terminal",
+        "execute_terminal_outcome": "failed_platform"
+      },
+      "expect": {
+        "result": "did_not_finish",
+        "may_have_changed": false,
+        "safe_to_retry": true,
+        "technical_code": "execute_terminal_outcome=failed_platform"
+      }
+    },
+    {
+      "name": "Execute terminal state alone",
+      "rule": "1",
+      "input": {
+        "execute_state": "terminal"
+      },
+      "expect": {
+        "result": "check_the_record",
+        "may_have_changed": true,
+        "safe_to_retry": false,
+        "technical_code": "fallback=missing"
+      }
+    },
+    {
+      "name": "Execute running",
+      "rule": "6",
+      "input": {
+        "execute_state": "running"
+      },
+      "expect_progress": "running"
+    },
+    {
+      "name": "Execute waiting for a person",
+      "rule": "6",
+      "input": {
+        "execute_state": "decision_required"
+      },
+      "expect_progress": "decision_required"
+    },
+    {
+      "name": "running but a terminal outcome too",
+      "rule": "6",
+      "input": {
+        "execute_state": "running",
+        "execute_terminal_outcome": "verified"
+      },
+      "expect": {
+        "result": "check_the_record",
+        "may_have_changed": true,
+        "safe_to_retry": false,
+        "technical_code": "fallback=conflict"
+      }
+    },
+    {
+      "name": "precise outcome beats the coarse agent status",
+      "rule": "2",
+      "input": {
+        "transaction_outcome": "HALTED_BEFORE_EFFECT",
+        "agent_status": "error"
+      },
+      "expect": {
+        "result": "stopped_before_change",
+        "may_have_changed": false,
+        "safe_to_retry": true,
+        "technical_code": "transaction_outcome=HALTED_BEFORE_EFFECT"
+      }
+    },
+    {
+      "name": "production verified run the local bridge calls error",
+      "rule": "2",
+      "input": {
+        "execution_outcome": "VERIFIED",
+        "agent_status": "error"
+      },
+      "expect": {
+        "result": "done",
+        "may_have_changed": true,
+        "safe_to_retry": false,
+        "technical_code": "execution_outcome=VERIFIED"
+      }
+    },
+    {
+      "name": "agent halt alone",
+      "rule": "row",
+      "input": {
+        "agent_status": "halt"
+      },
+      "expect": {
+        "result": "check_the_record",
+        "may_have_changed": true,
+        "safe_to_retry": false,
+        "technical_code": "agent_status=halt"
+      }
+    },
+    {
+      "name": "agent success alone was not checked",
+      "rule": "row",
+      "input": {
+        "agent_status": "success"
+      },
+      "expect": {
+        "result": "finished_not_checked",
+        "may_have_changed": true,
+        "safe_to_retry": false,
+        "technical_code": "agent_status=success"
+      }
+    },
+    {
+      "name": "agent refused before running",
+      "rule": "row",
+      "input": {
+        "agent_status": "refused"
+      },
+      "expect": {
+        "result": "refused",
+        "may_have_changed": false,
+        "safe_to_retry": true,
+        "technical_code": "agent_status=refused"
+      }
+    },
+    {
+      "name": "agent timeout after the run started",
+      "rule": "row",
+      "input": {
+        "agent_status": "timeout"
+      },
+      "expect": {
+        "result": "check_the_record",
+        "may_have_changed": true,
+        "safe_to_retry": false,
+        "technical_code": "agent_status=timeout"
+      }
+    },
+    {
+      "name": "agent timeout before dispatch",
+      "rule": "5",
+      "input": {
+        "agent_status": "timeout",
+        "dispatched": false
+      },
+      "expect": {
+        "result": "did_not_finish",
+        "may_have_changed": false,
+        "safe_to_retry": true,
+        "technical_code": "agent_status=timeout"
+      }
+    },
+    {
+      "name": "dispatched true changes nothing",
+      "rule": "5",
+      "input": {
+        "agent_status": "timeout",
+        "dispatched": true
+      },
+      "expect": {
+        "result": "check_the_record",
+        "may_have_changed": true,
+        "safe_to_retry": false,
+        "technical_code": "agent_status=timeout"
+      }
+    },
+    {
+      "name": "connector failure before dispatch",
+      "rule": "5",
+      "input": {
+        "connector_status": "failed",
+        "dispatched": false
+      },
+      "expect": {
+        "result": "did_not_finish",
+        "may_have_changed": false,
+        "safe_to_retry": true,
+        "technical_code": "connector_status=failed"
+      }
+    },
+    {
+      "name": "clinic tool halt is coarse",
+      "rule": "row",
+      "input": {
+        "clinic_tool_status": "HALTED"
+      },
+      "expect": {
+        "result": "check_the_record",
+        "may_have_changed": true,
+        "safe_to_retry": false,
+        "technical_code": "clinic_tool_status=HALTED"
+      }
+    },
+    {
+      "name": "program graph success is not a record check",
+      "rule": "row",
+      "input": {
+        "program_terminal_state": "success"
+      },
+      "expect": {
+        "result": "finished_not_checked",
+        "may_have_changed": true,
+        "safe_to_retry": false,
+        "technical_code": "program_terminal_state=success"
+      }
+    },
+    {
+      "name": "program graph escalate",
+      "rule": "row",
+      "input": {
+        "program_terminal_state": "escalate"
+      },
+      "expect": {
+        "result": "check_the_record",
+        "may_have_changed": true,
+        "safe_to_retry": false,
+        "technical_code": "program_terminal_state=escalate"
+      }
+    },
+    {
+      "name": "coarse outcome the transaction outcome can't have",
+      "rule": "4",
+      "input": {
+        "transaction_outcome": "HALTED_BEFORE_EFFECT",
+        "execution_outcome": "VERIFIED"
+      },
+      "expect": {
+        "result": "check_the_record",
+        "may_have_changed": true,
+        "safe_to_retry": false,
+        "technical_code": "fallback=conflict"
+      }
+    },
+    {
+      "name": "two no-change outcomes that differ",
+      "rule": "8",
+      "input": {
+        "transaction_outcome": "CANCELED",
+        "execute_terminal_outcome": "failed_platform"
+      },
+      "expect": {
+        "result": "stopped_before_change",
+        "may_have_changed": false,
+        "safe_to_retry": true,
+        "technical_code": "transaction_outcome=CANCELED"
+      }
+    },
+    {
+      "name": "results that disagree",
+      "rule": "8",
+      "input": {
+        "transaction_outcome": "COMPLETED_UNVERIFIED",
+        "execute_terminal_outcome": "rejected_policy"
+      },
+      "expect": {
+        "result": "check_the_record",
+        "may_have_changed": true,
+        "safe_to_retry": false,
+        "technical_code": "fallback=conflict"
+      }
+    },
+    {
+      "name": "agreeing rows use the first in precedence order",
+      "rule": "7",
+      "input": {
+        "agent_status": "halt",
+        "clinic_tool_status": "RECONCILIATION_REQUIRED"
+      },
+      "expect": {
+        "result": "check_the_record",
+        "may_have_changed": true,
+        "safe_to_retry": false,
+        "technical_code": "agent_status=halt"
+      }
+    },
+    {
+      "name": "agreeing rows before dispatch",
+      "rule": "7",
+      "input": {
+        "agent_status": "error",
+        "connector_status": "failed",
+        "dispatched": false
+      },
+      "expect": {
+        "result": "did_not_finish",
+        "may_have_changed": false,
+        "safe_to_retry": true,
+        "technical_code": "agent_status=error"
+      }
+    },
+    {
+      "name": "coarse rows that disagree",
+      "rule": "8",
+      "input": {
+        "agent_status": "refused",
+        "connector_status": "halt"
+      },
+      "expect": {
+        "result": "check_the_record",
+        "may_have_changed": true,
+        "safe_to_retry": false,
+        "technical_code": "fallback=conflict"
+      }
+    },
+    {
+      "name": "uncertain delivery beats a no-change outcome",
+      "rule": "9",
+      "input": {
+        "transaction_outcome": "HALTED_BEFORE_EFFECT",
+        "delivery_uncertain": true
+      },
+      "expect": {
+        "result": "check_the_record",
+        "may_have_changed": true,
+        "safe_to_retry": false,
+        "technical_code": "fallback=delivery_uncertain"
+      }
+    },
+    {
+      "name": "uncertain delivery beats done",
+      "rule": "9",
+      "input": {
+        "execute_terminal_outcome": "verified",
+        "delivery_uncertain": true
+      },
+      "expect": {
+        "result": "check_the_record",
+        "may_have_changed": true,
+        "safe_to_retry": false,
+        "technical_code": "fallback=delivery_uncertain"
+      }
+    },
+    {
+      "name": "value nobody mapped yet",
+      "rule": "3",
+      "input": {
+        "transaction_outcome": "PARTIALLY_COMPLETED"
+      },
+      "expect": {
+        "result": "check_the_record",
+        "may_have_changed": true,
+        "safe_to_retry": false,
+        "technical_code": "fallback=unrecognized"
+      }
+    },
+    {
+      "name": "free text is never an outcome",
+      "rule": "3",
+      "input": {
+        "agent_status": "the record did not change"
+      },
+      "expect": {
+        "result": "check_the_record",
+        "may_have_changed": true,
+        "safe_to_retry": false,
+        "technical_code": "fallback=unrecognized"
+      }
+    },
+    {
+      "name": "nothing came back",
+      "rule": "10",
+      "input": {},
+      "expect": {
+        "result": "check_the_record",
+        "may_have_changed": true,
+        "safe_to_retry": false,
+        "technical_code": "fallback=missing"
+      }
+    },
+    {
+      "name": "overlay shows a halt and nothing more precise came back",
+      "rule": "row",
+      "input": {
+        "overlay_phase": "halted"
+      },
+      "expect": {
+        "result": "check_the_record",
+        "may_have_changed": true,
+        "safe_to_retry": false,
+        "technical_code": "overlay_phase=halted"
+      }
+    },
+    {
+      "name": "overlay mid-run reads as Execute running",
+      "rule": "6",
+      "input": {
+        "overlay_phase": "executing"
+      },
+      "expect_progress": "running"
+    },
+    {
+      "name": "overlay paused reads as waiting for a person",
+      "rule": "6",
+      "input": {
+        "overlay_phase": "paused"
+      },
+      "expect_progress": "decision_required"
+    },
+    {
+      "name": "overlay idle is not a run",
+      "rule": "1",
+      "input": {
+        "overlay_phase": "idle"
+      },
+      "expect": {
+        "result": "check_the_record",
+        "may_have_changed": true,
+        "safe_to_retry": false,
+        "technical_code": "fallback=missing"
+      }
+    },
+    {
+      "name": "the transaction outcome decides over the overlay",
+      "rule": "2",
+      "input": {
+        "transaction_outcome": "HALTED_BEFORE_EFFECT",
+        "execution_outcome": "HALTED",
+        "overlay_phase": "halted"
+      },
+      "expect": {
+        "result": "stopped_before_change",
+        "may_have_changed": false,
+        "safe_to_retry": true,
+        "technical_code": "transaction_outcome=HALTED_BEFORE_EFFECT"
+      }
+    },
+    {
+      "name": "sealed needs an Execute outcome",
+      "rule": "11",
+      "input": {
+        "transaction_outcome": "VERIFIED",
+        "proof": "sealed"
+      },
+      "expect_error": "proof=sealed needs an execute_terminal_outcome"
+    }
+  ]
+}

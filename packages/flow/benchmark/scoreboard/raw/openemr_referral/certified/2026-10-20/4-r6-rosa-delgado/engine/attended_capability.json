@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "event_sequence": 1,
+  "pause_id": "ecad7da1ae38893de43f5b54c717f938",
+  "run_id": "openemr-referral-r6-rosa-delgado-1792465480",
+  "workflow_name": "openemr-create-synthetic-patient",
+  "bundle_version": "sha256:ec096afa2b614326b00ec3155f256041c19d86f3998761ce9d772cfd911460b6",
+  "step_index": 27,
+  "step_id": "step_039",
+  "state_id": null,
+  "resume_from_index": 27,
+  "resume_from_step_id": "step_037",
+  "pause_digest": "sha256:62721468d694ef279cb3a137a6e9af59f5ea6a302ca0e9c433cac8652e3f5b7c",
+  "expected_next_transition": "step_040",
+  "expected_transition_digest": "sha256:3e949cc07584a0a284fa2666dfe5cd40bec2dc0d1e9d5d2acc1ce3c7d5af20dc",
+  "program_cursor_digest": null,
+  "transition_baseline": {
+    "schema_version": 1,
+    "url_digest": "hmac-sha256:e991f22ccd6f1adc9950b38552e60ab46043956eaeb1edbf18b9ba0aae1b39e6",
+    "title_digest": "hmac-sha256:e829113c02e5374a050f9c30ac834c591e9241adc4b4e3d71f8a57ee8c246f7f",
+    "page_count": 1
+  },
+  "delivery_state": "delivered",
+  "source_identity_required": true,
+  "source_identity": {
+    "status": "verified",
+    "mode": "structured",
+    "coverage": 1.0,
+    "expected": "<structured identity template>",
+    "observed": "{\"form_path\":\"/interface/new/new_comprehensive.php\",\"target_id\":\"open_duplicate_check\",\"target_kind\":\"action\"}",
+    "param": null,
+    "signal_evidence": [],
+    "quorum_required": null,
+    "quorum_verified": null,
+    "pixel_evidence": null,
+    "abstain_reason": null,
+    "known_id_evidence": null,
+    "known_id_halt": null,
+    "hover": null,
+    "looks": [],
+    "look_halt": null
+  },
+  "issued_at": "2026-10-20T03:05:10.841112+00:00",
+  "expires_at": "2026-10-21T03:05:10.841112+00:00",
+  "allowed_actions": [
+    "continue",
+    "reject",
+    "teach",
+    "escalate"
+  ],
+  "signature": "hmac-sha256:fbb1743653b0a914eba5d3820f41f2cba49984505033fa7bc72b70cb229f12d6"
+}

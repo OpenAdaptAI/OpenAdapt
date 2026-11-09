@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Runs once per boot, before anyone signs in, as the service account
+  (a LaunchDaemon with UserName). It records the restart, waits for the
+  service account's session and, if none appears within
+  reboot.alert_after_s, opens a notice and sends the configured alerts.
+  install-macos.sh fills the @...@ placeholders.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>ai.openadapt.flow-boot-check</string>
+  <key>UserName</key>
+  <string>@SERVICE_USER@</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>@OPENADAPT_FLOW@</string>
+    <string>service</string>
+    <string>boot-check</string>
+    <string>--root</string>
+    <string>@STORAGE_ROOT@</string>
+    <string>--account</string>
+    <string>@SERVICE_USER@</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>OPENADAPT_NO_OUTBOUND</key>
+    <string>1</string>
+    <key>OPENADAPT_NO_OUTBOUND_LOG</key>
+    <string>@STORAGE_ROOT@/audit/outbound-blocked.jsonl</string>
+    <key>OPENADAPT_NO_OUTBOUND_ALLOW_FILE</key>
+    <string>@STORAGE_ROOT@/no-outbound-allow.json</string>
+    <key>PATH</key>
+    <string>@VENV_BIN@:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <false/>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>StandardOutPath</key>
+  <string>@STORAGE_ROOT@/service/boot-check.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>@STORAGE_ROOT@/service/boot-check.err.log</string>
+</dict>
+</plist>

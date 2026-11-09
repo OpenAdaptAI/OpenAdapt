@@ -1,0 +1,21 @@
+{
+  "task_id": "mockmed.add_note",
+  "inputs": {
+    "note": "Synthetic follow-up in two weeks"
+  },
+  "dialect": "playwright_mcp",
+  "source": "Playwright MCP tool calls with snapshot refs (unsupported)",
+  "actions": [
+    {
+      "name": "browser_snapshot",
+      "arguments": {}
+    },
+    {
+      "name": "browser_click",
+      "arguments": {
+        "element": "Open button, first referral",
+        "target": "e12"
+      }
+    }
+  ]
+}

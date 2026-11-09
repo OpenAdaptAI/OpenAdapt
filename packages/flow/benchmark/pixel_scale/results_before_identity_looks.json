@@ -1,0 +1,3892 @@
+{
+  "commit": "426d08f2d7c176ea189640879e984d4d5aa73b4b",
+  "font": {
+    "bold": "/opt/homebrew/anaconda3/lib/python3.12/site-packages/matplotlib/mpl-data/fonts/ttf/DejaVuSans-Bold.ttf",
+    "regular": "/opt/homebrew/anaconda3/lib/python3.12/site-packages/matplotlib/mpl-data/fonts/ttf/DejaVuSans.ttf"
+  },
+  "generated_at": "2026-10-19T13:49:04+00:00",
+  "layout_drift_check": true,
+  "platform": "Darwin arm64 py3.12.7",
+  "points": [
+    {
+      "campaign": "healthy",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 3.19,
+      "font_scale": 1.0,
+      "kiosk": "canvas_notes",
+      "label": "100% ClearType on",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "pass",
+      "render_scale": {
+        "status": "recorded_geometry"
+      },
+      "rows_written": 1,
+      "rung_counts": {
+        "template": 3
+      },
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_000"
+        },
+        {
+          "identity": null,
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <note>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "intent": "click 'Save Note'",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_003"
+        }
+      ],
+      "stopped_at": null
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 2.92,
+      "font_scale": 1.0,
+      "kiosk": "canvas_notes",
+      "label": "100% ClearType on",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "status": "recorded_geometry"
+      },
+      "rows_written": 0,
+      "rung_counts": {
+        "template": 2
+      },
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_000"
+        },
+        {
+          "identity": null,
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <note>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click 'Save Note'",
+          "ok": false,
+          "rung": "template",
+          "step_id": "step_003"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_003' (click 'Save Note'): a target was found positionally (rung 'template', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active: Grace Hopper MRN 73594' (coverage 0.00) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'Save Note'",
+        "rung": "template",
+        "step_id": "step_003"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 7.15,
+      "font_scale": 1.0,
+      "kiosk": "canvas_notes",
+      "label": "100% ClearType off",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "pass",
+      "render_scale": {
+        "status": "recorded_geometry"
+      },
+      "rows_written": 1,
+      "rung_counts": {
+        "ocr": 2,
+        "template": 1
+      },
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": null,
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <note>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "intent": "click 'Save Note'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_003"
+        }
+      ],
+      "stopped_at": null
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 3.11,
+      "font_scale": 1.0,
+      "kiosk": "canvas_notes",
+      "label": "100% ClearType off",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "status": "recorded_geometry"
+      },
+      "rows_written": 0,
+      "rung_counts": {
+        "ocr": 1,
+        "template": 1
+      },
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": null,
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <note>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click 'Save Note'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_003"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_003' (click 'Save Note'): a target was found positionally (rung 'ocr', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active: Grace Hopper MRN 73594' (coverage 0.00) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'Save Note'",
+        "rung": "ocr",
+        "step_id": "step_003"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 9.02,
+      "font_scale": 1.0,
+      "kiosk": "canvas_notes",
+      "label": "125% ClearType on",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "pass",
+      "render_scale": {
+        "landmarks_located": 9,
+        "landmarks_used": 9,
+        "live_viewport": [
+          1600,
+          1000
+        ],
+        "max_residual_px": 7.14,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.25,
+        "status": "normalized"
+      },
+      "rows_written": 1,
+      "rung_counts": {
+        "geometry": 1,
+        "ocr": 2
+      },
+      "scale": 1.25,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": null,
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <note>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "intent": "click 'Save Note'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_003"
+        }
+      ],
+      "stopped_at": null
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 6.67,
+      "font_scale": 1.0,
+      "kiosk": "canvas_notes",
+      "label": "125% ClearType on",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 9,
+        "landmarks_used": 9,
+        "live_viewport": [
+          1600,
+          1000
+        ],
+        "max_residual_px": 7.14,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.25,
+        "status": "normalized"
+      },
+      "rows_written": 0,
+      "rung_counts": {
+        "geometry": 1,
+        "ocr": 1
+      },
+      "scale": 1.25,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": null,
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <note>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click 'Save Note'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_003"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_003' (click 'Save Note'): a target was found positionally (rung 'ocr', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active: Grace Hopper MRN 73594' (coverage 0.00) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'Save Note'",
+        "rung": "ocr",
+        "step_id": "step_003"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 13.54,
+      "font_scale": 1.0,
+      "kiosk": "canvas_notes",
+      "label": "125% ClearType off",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "pass",
+      "render_scale": {
+        "landmarks_located": 9,
+        "landmarks_used": 9,
+        "live_viewport": [
+          1600,
+          1000
+        ],
+        "max_residual_px": 5.16,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.25,
+        "status": "normalized"
+      },
+      "rows_written": 1,
+      "rung_counts": {
+        "geometry": 1,
+        "ocr": 2
+      },
+      "scale": 1.25,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": null,
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <note>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "intent": "click 'Save Note'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_003"
+        }
+      ],
+      "stopped_at": null
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 5.01,
+      "font_scale": 1.0,
+      "kiosk": "canvas_notes",
+      "label": "125% ClearType off",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 9,
+        "landmarks_used": 9,
+        "live_viewport": [
+          1600,
+          1000
+        ],
+        "max_residual_px": 5.16,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.25,
+        "status": "normalized"
+      },
+      "rows_written": 0,
+      "rung_counts": {
+        "geometry": 1,
+        "ocr": 1
+      },
+      "scale": 1.25,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": null,
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <note>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click 'Save Note'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_003"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_003' (click 'Save Note'): a target was found positionally (rung 'ocr', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active: Grace Hopper MRN 73594' (coverage 0.00) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'Save Note'",
+        "rung": "ocr",
+        "step_id": "step_003"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 12.78,
+      "font_scale": 1.0,
+      "kiosk": "canvas_notes",
+      "label": "150% ClearType on",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "pass",
+      "render_scale": {
+        "landmarks_located": 9,
+        "landmarks_used": 9,
+        "live_viewport": [
+          1920,
+          1200
+        ],
+        "max_residual_px": 4.55,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.5,
+        "status": "normalized"
+      },
+      "rows_written": 1,
+      "rung_counts": {
+        "geometry": 1,
+        "ocr": 2
+      },
+      "scale": 1.5,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": null,
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <note>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "intent": "click 'Save Note'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_003"
+        }
+      ],
+      "stopped_at": null
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 6.61,
+      "font_scale": 1.0,
+      "kiosk": "canvas_notes",
+      "label": "150% ClearType on",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 9,
+        "landmarks_used": 9,
+        "live_viewport": [
+          1920,
+          1200
+        ],
+        "max_residual_px": 4.55,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.5,
+        "status": "normalized"
+      },
+      "rows_written": 0,
+      "rung_counts": {
+        "geometry": 1,
+        "ocr": 1
+      },
+      "scale": 1.5,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": null,
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <note>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click 'Save Note'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_003"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_003' (click 'Save Note'): a target was found positionally (rung 'ocr', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active: Grace Hopper MRN 73594' (coverage 0.00) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'Save Note'",
+        "rung": "ocr",
+        "step_id": "step_003"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 14.49,
+      "font_scale": 1.0,
+      "kiosk": "canvas_notes",
+      "label": "150% ClearType off",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "pass",
+      "render_scale": {
+        "landmarks_located": 9,
+        "landmarks_used": 9,
+        "live_viewport": [
+          1920,
+          1200
+        ],
+        "max_residual_px": 3.85,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.5,
+        "status": "normalized"
+      },
+      "rows_written": 1,
+      "rung_counts": {
+        "geometry": 1,
+        "ocr": 2
+      },
+      "scale": 1.5,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": null,
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <note>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "intent": "click 'Save Note'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_003"
+        }
+      ],
+      "stopped_at": null
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 4.17,
+      "font_scale": 1.0,
+      "kiosk": "canvas_notes",
+      "label": "150% ClearType off",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 9,
+        "landmarks_used": 9,
+        "live_viewport": [
+          1920,
+          1200
+        ],
+        "max_residual_px": 3.85,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.5,
+        "status": "normalized"
+      },
+      "rows_written": 0,
+      "rung_counts": {
+        "geometry": 1,
+        "ocr": 1
+      },
+      "scale": 1.5,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": null,
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <note>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click 'Save Note'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_003"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_003' (click 'Save Note'): a target was found positionally (rung 'ocr', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active: Grace Hopper MRN 73594' (coverage 0.00) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'Save Note'",
+        "rung": "ocr",
+        "step_id": "step_003"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 10.36,
+      "font_scale": 1.0,
+      "kiosk": "canvas_notes",
+      "label": "175% ClearType on",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "pass",
+      "render_scale": {
+        "landmarks_located": 9,
+        "landmarks_used": 9,
+        "live_viewport": [
+          2240,
+          1400
+        ],
+        "max_residual_px": 2.43,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.75,
+        "status": "normalized"
+      },
+      "rows_written": 1,
+      "rung_counts": {
+        "geometry": 1,
+        "ocr": 2
+      },
+      "scale": 1.75,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": null,
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <note>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "intent": "click 'Save Note'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_003"
+        }
+      ],
+      "stopped_at": null
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 5.34,
+      "font_scale": 1.0,
+      "kiosk": "canvas_notes",
+      "label": "175% ClearType on",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 9,
+        "landmarks_used": 9,
+        "live_viewport": [
+          2240,
+          1400
+        ],
+        "max_residual_px": 2.43,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.75,
+        "status": "normalized"
+      },
+      "rows_written": 0,
+      "rung_counts": {
+        "geometry": 1,
+        "ocr": 1
+      },
+      "scale": 1.75,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": null,
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <note>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click 'Save Note'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_003"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_003' (click 'Save Note'): a target was found positionally (rung 'ocr', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active: Grace Hopper MRN 73594' (coverage 0.00) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'Save Note'",
+        "rung": "ocr",
+        "step_id": "step_003"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 11.24,
+      "font_scale": 1.0,
+      "kiosk": "canvas_notes",
+      "label": "175% ClearType off",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "pass",
+      "render_scale": {
+        "landmarks_located": 9,
+        "landmarks_used": 9,
+        "live_viewport": [
+          2240,
+          1400
+        ],
+        "max_residual_px": 3.05,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.75,
+        "status": "normalized"
+      },
+      "rows_written": 1,
+      "rung_counts": {
+        "geometry": 1,
+        "ocr": 2
+      },
+      "scale": 1.75,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": null,
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <note>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "intent": "click 'Save Note'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_003"
+        }
+      ],
+      "stopped_at": null
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 5.85,
+      "font_scale": 1.0,
+      "kiosk": "canvas_notes",
+      "label": "175% ClearType off",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 9,
+        "landmarks_used": 9,
+        "live_viewport": [
+          2240,
+          1400
+        ],
+        "max_residual_px": 3.05,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.75,
+        "status": "normalized"
+      },
+      "rows_written": 0,
+      "rung_counts": {
+        "geometry": 1,
+        "ocr": 1
+      },
+      "scale": 1.75,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": null,
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <note>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click 'Save Note'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_003"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_003' (click 'Save Note'): a target was found positionally (rung 'ocr', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active: Grace Hopper MRN 73594' (coverage 0.00) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'Save Note'",
+        "rung": "ocr",
+        "step_id": "step_003"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": true,
+      "control": true,
+      "crash": null,
+      "elapsed_s": 0.95,
+      "font_scale": 1.25,
+      "kiosk": "canvas_notes",
+      "label": "100% ClearType on, fonts 125%",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "drift": [
+          "font_size_changed"
+        ],
+        "reason": "5 of 9 labels agree on one scale",
+        "status": "no_estimate"
+      },
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": false,
+          "rung": null,
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Layout drift before step 'step_000' (click 'MRN 24682'): font_size_changed: text is 1.22x the recorded height \u2014 the screen no longer matches the recording; refusing to act.",
+        "gate": "layout_drift",
+        "identity": null,
+        "intent": "click 'MRN 24682'",
+        "rung": null,
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": true,
+      "control": true,
+      "crash": null,
+      "elapsed_s": 0.29,
+      "font_scale": 1.25,
+      "kiosk": "canvas_notes",
+      "label": "100% ClearType on, fonts 125%",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "drift": [
+          "font_size_changed"
+        ],
+        "reason": "5 of 9 labels agree on one scale",
+        "status": "no_estimate"
+      },
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": false,
+          "rung": null,
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Layout drift before step 'step_000' (click 'MRN 24682'): font_size_changed: text is 1.22x the recorded height \u2014 the screen no longer matches the recording; refusing to act.",
+        "gate": "layout_drift",
+        "identity": null,
+        "intent": "click 'MRN 24682'",
+        "rung": null,
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 10.65,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments",
+      "label": "100% ClearType on",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "pass",
+      "render_scale": {
+        "status": "recorded_geometry"
+      },
+      "rows_written": 1,
+      "rung_counts": {
+        "template": 5
+      },
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": "verified",
+          "intent": "click 'MRN A1001'",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <appointment_slot>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_003"
+        },
+        {
+          "identity": null,
+          "intent": "type <visit_type>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_005"
+        },
+        {
+          "identity": null,
+          "intent": "type <request_id>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_006"
+        },
+        {
+          "identity": "verified",
+          "intent": "click 'Save appointment'",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_007"
+        }
+      ],
+      "stopped_at": null
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 3.89,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments",
+      "label": "100% ClearType on",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "status": "recorded_geometry"
+      },
+      "rows_written": 0,
+      "rung_counts": {
+        "template": 4
+      },
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": "verified",
+          "intent": "click 'MRN A1001'",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <appointment_slot>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_003"
+        },
+        {
+          "identity": null,
+          "intent": "type <visit_type>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_005"
+        },
+        {
+          "identity": null,
+          "intent": "type <request_id>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_006"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click 'Save appointment'",
+          "ok": false,
+          "rung": "template",
+          "step_id": "step_007"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_007' (click 'Save appointment'): a target was found positionally (rung 'template', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active record: Grace Hopper MRN B2002' (coverage 0.41) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'Save appointment'",
+        "rung": "template",
+        "step_id": "step_007"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 5.51,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments",
+      "label": "100% ClearType off",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "status": "recorded_geometry"
+      },
+      "rows_written": 0,
+      "rung_counts": {
+        "ocr": 1
+      },
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": "abstain",
+          "intent": "click 'MRN A1001'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click recorded visual target",
+          "ok": false,
+          "rung": "template",
+          "step_id": "step_001"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_001' (click recorded visual target): a target was found positionally (rung 'template', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active record: Ada Lovelace MRN Al001' (coverage 1.00) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click recorded visual target",
+        "rung": "template",
+        "step_id": "step_001"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 0.63,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments",
+      "label": "100% ClearType off",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "status": "recorded_geometry"
+      },
+      "rows_written": 0,
+      "rung_counts": {
+        "ocr": 1
+      },
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": "abstain",
+          "intent": "click 'MRN A1001'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click recorded visual target",
+          "ok": false,
+          "rung": "template",
+          "step_id": "step_001"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_001' (click recorded visual target): a target was found positionally (rung 'template', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active record: Ada Lovelace MRN Al001' (coverage 1.00) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click recorded visual target",
+        "rung": "template",
+        "step_id": "step_001"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 7.62,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments",
+      "label": "125% ClearType on",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 11,
+        "landmarks_used": 11,
+        "live_viewport": [
+          1600,
+          1000
+        ],
+        "max_residual_px": 7.78,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.25,
+        "status": "normalized"
+      },
+      "rows_written": 0,
+      "rung_counts": {
+        "ocr": 1
+      },
+      "scale": 1.25,
+      "steps": [
+        {
+          "identity": "abstain",
+          "intent": "click 'MRN A1001'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click recorded visual target",
+          "ok": false,
+          "rung": "geometry",
+          "step_id": "step_001"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_001' (click recorded visual target): a target was found positionally (rung 'geometry', confidence 0.89) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active record: Ada Lovelace MRNA1001' (coverage 0.50) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click recorded visual target",
+        "rung": "geometry",
+        "step_id": "step_001"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 1.37,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments",
+      "label": "125% ClearType on",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 11,
+        "landmarks_used": 11,
+        "live_viewport": [
+          1600,
+          1000
+        ],
+        "max_residual_px": 7.78,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.25,
+        "status": "normalized"
+      },
+      "rows_written": 0,
+      "rung_counts": {
+        "ocr": 1
+      },
+      "scale": 1.25,
+      "steps": [
+        {
+          "identity": "abstain",
+          "intent": "click 'MRN A1001'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click recorded visual target",
+          "ok": false,
+          "rung": "geometry",
+          "step_id": "step_001"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_001' (click recorded visual target): a target was found positionally (rung 'geometry', confidence 0.89) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active record: Ada Lovelace MRNA1001' (coverage 0.50) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click recorded visual target",
+        "rung": "geometry",
+        "step_id": "step_001"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 5.75,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments",
+      "label": "125% ClearType off",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 11,
+        "landmarks_used": 11,
+        "live_viewport": [
+          1600,
+          1000
+        ],
+        "max_residual_px": 4.91,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.25,
+        "status": "normalized"
+      },
+      "rows_written": 0,
+      "rung_counts": {
+        "ocr": 1
+      },
+      "scale": 1.25,
+      "steps": [
+        {
+          "identity": "abstain",
+          "intent": "click 'MRN A1001'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click recorded visual target",
+          "ok": false,
+          "rung": "geometry",
+          "step_id": "step_001"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_001' (click recorded visual target): a target was found positionally (rung 'geometry', confidence 0.87) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active record: Ada Lovelace MRN A1001' (coverage 1.00) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click recorded visual target",
+        "rung": "geometry",
+        "step_id": "step_001"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 1.2,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments",
+      "label": "125% ClearType off",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 11,
+        "landmarks_used": 11,
+        "live_viewport": [
+          1600,
+          1000
+        ],
+        "max_residual_px": 4.91,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.25,
+        "status": "normalized"
+      },
+      "rows_written": 0,
+      "rung_counts": {
+        "ocr": 1
+      },
+      "scale": 1.25,
+      "steps": [
+        {
+          "identity": "abstain",
+          "intent": "click 'MRN A1001'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click recorded visual target",
+          "ok": false,
+          "rung": "geometry",
+          "step_id": "step_001"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_001' (click recorded visual target): a target was found positionally (rung 'geometry', confidence 0.87) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active record: Ada Lovelace MRN A1001' (coverage 1.00) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click recorded visual target",
+        "rung": "geometry",
+        "step_id": "step_001"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 7.14,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments",
+      "label": "150% ClearType on",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 11,
+        "landmarks_used": 11,
+        "live_viewport": [
+          1920,
+          1200
+        ],
+        "max_residual_px": 5.23,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.5,
+        "status": "normalized"
+      },
+      "rows_written": 0,
+      "rung_counts": {
+        "ocr": 1
+      },
+      "scale": 1.5,
+      "steps": [
+        {
+          "identity": "abstain",
+          "intent": "click 'MRN A1001'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click recorded visual target",
+          "ok": false,
+          "rung": "geometry",
+          "step_id": "step_001"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_001' (click recorded visual target): a target was found positionally (rung 'geometry', confidence 0.89) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'MRNA1001 Active record: Ada Lovelace' (coverage 0.50) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click recorded visual target",
+        "rung": "geometry",
+        "step_id": "step_001"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 1.55,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments",
+      "label": "150% ClearType on",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 11,
+        "landmarks_used": 11,
+        "live_viewport": [
+          1920,
+          1200
+        ],
+        "max_residual_px": 5.23,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.5,
+        "status": "normalized"
+      },
+      "rows_written": 0,
+      "rung_counts": {
+        "ocr": 1
+      },
+      "scale": 1.5,
+      "steps": [
+        {
+          "identity": "abstain",
+          "intent": "click 'MRN A1001'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click recorded visual target",
+          "ok": false,
+          "rung": "geometry",
+          "step_id": "step_001"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_001' (click recorded visual target): a target was found positionally (rung 'geometry', confidence 0.89) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'MRNA1001 Active record: Ada Lovelace' (coverage 0.50) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click recorded visual target",
+        "rung": "geometry",
+        "step_id": "step_001"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 7.0,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments",
+      "label": "150% ClearType off",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 11,
+        "landmarks_used": 11,
+        "live_viewport": [
+          1920,
+          1200
+        ],
+        "max_residual_px": 4.25,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.5,
+        "status": "normalized"
+      },
+      "rows_written": 0,
+      "rung_counts": {
+        "ocr": 1
+      },
+      "scale": 1.5,
+      "steps": [
+        {
+          "identity": "abstain",
+          "intent": "click 'MRN A1001'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click recorded visual target",
+          "ok": false,
+          "rung": "geometry",
+          "step_id": "step_001"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_001' (click recorded visual target): a target was found positionally (rung 'geometry', confidence 0.88) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active record: Ada Lovelace MRN A1o01' (coverage 1.00) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click recorded visual target",
+        "rung": "geometry",
+        "step_id": "step_001"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 1.19,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments",
+      "label": "150% ClearType off",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 11,
+        "landmarks_used": 11,
+        "live_viewport": [
+          1920,
+          1200
+        ],
+        "max_residual_px": 4.25,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.5,
+        "status": "normalized"
+      },
+      "rows_written": 0,
+      "rung_counts": {
+        "ocr": 1
+      },
+      "scale": 1.5,
+      "steps": [
+        {
+          "identity": "abstain",
+          "intent": "click 'MRN A1001'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click recorded visual target",
+          "ok": false,
+          "rung": "geometry",
+          "step_id": "step_001"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_001' (click recorded visual target): a target was found positionally (rung 'geometry', confidence 0.88) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active record: Ada Lovelace MRN A1o01' (coverage 1.00) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click recorded visual target",
+        "rung": "geometry",
+        "step_id": "step_001"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 9.39,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments",
+      "label": "175% ClearType on",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 11,
+        "landmarks_used": 11,
+        "live_viewport": [
+          2240,
+          1400
+        ],
+        "max_residual_px": 3.01,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.75,
+        "status": "normalized"
+      },
+      "rows_written": 0,
+      "rung_counts": {
+        "ocr": 1
+      },
+      "scale": 1.75,
+      "steps": [
+        {
+          "identity": "abstain",
+          "intent": "click 'MRN A1001'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click recorded visual target",
+          "ok": false,
+          "rung": "geometry",
+          "step_id": "step_001"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_001' (click recorded visual target): a target was found positionally (rung 'geometry', confidence 0.89) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active record: Ada Lovelace MRNA1001' (coverage 0.50) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click recorded visual target",
+        "rung": "geometry",
+        "step_id": "step_001"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 3.07,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments",
+      "label": "175% ClearType on",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 11,
+        "landmarks_used": 11,
+        "live_viewport": [
+          2240,
+          1400
+        ],
+        "max_residual_px": 3.01,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.75,
+        "status": "normalized"
+      },
+      "rows_written": 0,
+      "rung_counts": {
+        "ocr": 1
+      },
+      "scale": 1.75,
+      "steps": [
+        {
+          "identity": "abstain",
+          "intent": "click 'MRN A1001'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click recorded visual target",
+          "ok": false,
+          "rung": "geometry",
+          "step_id": "step_001"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_001' (click recorded visual target): a target was found positionally (rung 'geometry', confidence 0.89) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active record: Ada Lovelace MRNA1001' (coverage 0.50) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click recorded visual target",
+        "rung": "geometry",
+        "step_id": "step_001"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 10.19,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments",
+      "label": "175% ClearType off",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 11,
+        "landmarks_used": 11,
+        "live_viewport": [
+          2240,
+          1400
+        ],
+        "max_residual_px": 4.13,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.75,
+        "status": "normalized"
+      },
+      "rows_written": 0,
+      "rung_counts": {
+        "ocr": 1
+      },
+      "scale": 1.75,
+      "steps": [
+        {
+          "identity": "abstain",
+          "intent": "click 'MRN A1001'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click recorded visual target",
+          "ok": false,
+          "rung": "geometry",
+          "step_id": "step_001"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_001' (click recorded visual target): a target was found positionally (rung 'geometry', confidence 0.89) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active record: Ada Lovelace MRNA1001' (coverage 0.50) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click recorded visual target",
+        "rung": "geometry",
+        "step_id": "step_001"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 1.19,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments",
+      "label": "175% ClearType off",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 11,
+        "landmarks_used": 11,
+        "live_viewport": [
+          2240,
+          1400
+        ],
+        "max_residual_px": 4.13,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.75,
+        "status": "normalized"
+      },
+      "rows_written": 0,
+      "rung_counts": {
+        "ocr": 1
+      },
+      "scale": 1.75,
+      "steps": [
+        {
+          "identity": "abstain",
+          "intent": "click 'MRN A1001'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click recorded visual target",
+          "ok": false,
+          "rung": "geometry",
+          "step_id": "step_001"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_001' (click recorded visual target): a target was found positionally (rung 'geometry', confidence 0.89) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active record: Ada Lovelace MRNA1001' (coverage 0.50) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click recorded visual target",
+        "rung": "geometry",
+        "step_id": "step_001"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": true,
+      "control": true,
+      "crash": null,
+      "elapsed_s": 1.02,
+      "font_scale": 1.25,
+      "kiosk": "rdp_appointments",
+      "label": "100% ClearType on, fonts 125%",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "drift": [
+          "font_size_changed"
+        ],
+        "reason": "6 of 11 labels agree on one scale",
+        "status": "no_estimate"
+      },
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN A1001'",
+          "ok": false,
+          "rung": null,
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Layout drift before step 'step_000' (click 'MRN A1001'): font_size_changed: text is 1.14x the recorded height \u2014 the screen no longer matches the recording; refusing to act.",
+        "gate": "layout_drift",
+        "identity": null,
+        "intent": "click 'MRN A1001'",
+        "rung": null,
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": true,
+      "control": true,
+      "crash": null,
+      "elapsed_s": 0.25,
+      "font_scale": 1.25,
+      "kiosk": "rdp_appointments",
+      "label": "100% ClearType on, fonts 125%",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "drift": [
+          "font_size_changed"
+        ],
+        "reason": "6 of 11 labels agree on one scale",
+        "status": "no_estimate"
+      },
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN A1001'",
+          "ok": false,
+          "rung": null,
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Layout drift before step 'step_000' (click 'MRN A1001'): font_size_changed: text is 1.14x the recorded height \u2014 the screen no longer matches the recording; refusing to act.",
+        "gate": "layout_drift",
+        "identity": null,
+        "intent": "click 'MRN A1001'",
+        "rung": null,
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 10.75,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "100% ClearType on",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "pass",
+      "render_scale": {
+        "status": "recorded_geometry"
+      },
+      "rows_written": 1,
+      "rung_counts": {
+        "template": 5
+      },
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": "verified",
+          "intent": "click 'MRN A3467'",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <appointment_slot>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_003"
+        },
+        {
+          "identity": null,
+          "intent": "type <visit_type>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_005"
+        },
+        {
+          "identity": null,
+          "intent": "type <request_id>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_006"
+        },
+        {
+          "identity": "verified",
+          "intent": "click 'Save appointment'",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_007"
+        }
+      ],
+      "stopped_at": null
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 5.27,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "100% ClearType on",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "status": "recorded_geometry"
+      },
+      "rows_written": 0,
+      "rung_counts": {
+        "template": 4
+      },
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": "verified",
+          "intent": "click 'MRN A3467'",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <appointment_slot>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_003"
+        },
+        {
+          "identity": null,
+          "intent": "type <visit_type>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_005"
+        },
+        {
+          "identity": null,
+          "intent": "type <request_id>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_006"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click 'Save appointment'",
+          "ok": false,
+          "rung": "template",
+          "step_id": "step_007"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_007' (click 'Save appointment'): a target was found positionally (rung 'template', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active record: Grace Hopper MRN B7346' (coverage 0.41) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'Save appointment'",
+        "rung": "template",
+        "step_id": "step_007"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 20.68,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "100% ClearType off",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "pass",
+      "render_scale": {
+        "status": "recorded_geometry"
+      },
+      "rows_written": 1,
+      "rung_counts": {
+        "ocr": 2,
+        "template": 3
+      },
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": "verified",
+          "intent": "click 'MRN A3467'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <appointment_slot>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_003"
+        },
+        {
+          "identity": null,
+          "intent": "type <visit_type>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_005"
+        },
+        {
+          "identity": null,
+          "intent": "type <request_id>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_006"
+        },
+        {
+          "identity": "verified",
+          "intent": "click 'Save appointment'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_007"
+        }
+      ],
+      "stopped_at": null
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 5.14,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "100% ClearType off",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "status": "recorded_geometry"
+      },
+      "rows_written": 0,
+      "rung_counts": {
+        "ocr": 1,
+        "template": 3
+      },
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": "verified",
+          "intent": "click 'MRN A3467'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <appointment_slot>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_003"
+        },
+        {
+          "identity": null,
+          "intent": "type <visit_type>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_005"
+        },
+        {
+          "identity": null,
+          "intent": "type <request_id>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_006"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click 'Save appointment'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_007"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_007' (click 'Save appointment'): a target was found positionally (rung 'ocr', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active record: Grace Hopper MRN B7346' (coverage 0.41) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'Save appointment'",
+        "rung": "ocr",
+        "step_id": "step_007"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 16.78,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "125% ClearType on",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "pass",
+      "render_scale": {
+        "landmarks_located": 11,
+        "landmarks_used": 11,
+        "live_viewport": [
+          1600,
+          1000
+        ],
+        "max_residual_px": 7.78,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.25,
+        "status": "normalized"
+      },
+      "rows_written": 1,
+      "rung_counts": {
+        "geometry": 3,
+        "ocr": 2
+      },
+      "scale": 1.25,
+      "steps": [
+        {
+          "identity": "verified",
+          "intent": "click 'MRN A3467'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <appointment_slot>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_003"
+        },
+        {
+          "identity": null,
+          "intent": "type <visit_type>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_005"
+        },
+        {
+          "identity": null,
+          "intent": "type <request_id>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_006"
+        },
+        {
+          "identity": "verified",
+          "intent": "click 'Save appointment'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_007"
+        }
+      ],
+      "stopped_at": null
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 15.06,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "125% ClearType on",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 11,
+        "landmarks_used": 11,
+        "live_viewport": [
+          1600,
+          1000
+        ],
+        "max_residual_px": 7.78,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.25,
+        "status": "normalized"
+      },
+      "rows_written": 0,
+      "rung_counts": {
+        "geometry": 3,
+        "ocr": 1
+      },
+      "scale": 1.25,
+      "steps": [
+        {
+          "identity": "verified",
+          "intent": "click 'MRN A3467'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <appointment_slot>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_003"
+        },
+        {
+          "identity": null,
+          "intent": "type <visit_type>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_005"
+        },
+        {
+          "identity": null,
+          "intent": "type <request_id>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_006"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click 'Save appointment'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_007"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_007' (click 'Save appointment'): a target was found positionally (rung 'ocr', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active record: Grace Hopper MRN B7346' (coverage 0.41) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'Save appointment'",
+        "rung": "ocr",
+        "step_id": "step_007"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 20.34,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "125% ClearType off",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "pass",
+      "render_scale": {
+        "landmarks_located": 11,
+        "landmarks_used": 11,
+        "live_viewport": [
+          1600,
+          1000
+        ],
+        "max_residual_px": 4.91,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.25,
+        "status": "normalized"
+      },
+      "rows_written": 1,
+      "rung_counts": {
+        "geometry": 3,
+        "ocr": 2
+      },
+      "scale": 1.25,
+      "steps": [
+        {
+          "identity": "verified",
+          "intent": "click 'MRN A3467'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <appointment_slot>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_003"
+        },
+        {
+          "identity": null,
+          "intent": "type <visit_type>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_005"
+        },
+        {
+          "identity": null,
+          "intent": "type <request_id>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_006"
+        },
+        {
+          "identity": "verified",
+          "intent": "click 'Save appointment'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_007"
+        }
+      ],
+      "stopped_at": null
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 15.1,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "125% ClearType off",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 11,
+        "landmarks_used": 11,
+        "live_viewport": [
+          1600,
+          1000
+        ],
+        "max_residual_px": 4.91,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.25,
+        "status": "normalized"
+      },
+      "rows_written": 0,
+      "rung_counts": {
+        "geometry": 3,
+        "ocr": 1
+      },
+      "scale": 1.25,
+      "steps": [
+        {
+          "identity": "verified",
+          "intent": "click 'MRN A3467'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <appointment_slot>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_003"
+        },
+        {
+          "identity": null,
+          "intent": "type <visit_type>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_005"
+        },
+        {
+          "identity": null,
+          "intent": "type <request_id>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_006"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click 'Save appointment'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_007"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_007' (click 'Save appointment'): a target was found positionally (rung 'ocr', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active record: Grace Hopper MRN B7346' (coverage 0.41) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'Save appointment'",
+        "rung": "ocr",
+        "step_id": "step_007"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 26.4,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "150% ClearType on",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "pass",
+      "render_scale": {
+        "landmarks_located": 11,
+        "landmarks_used": 11,
+        "live_viewport": [
+          1920,
+          1200
+        ],
+        "max_residual_px": 5.23,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.5,
+        "status": "normalized"
+      },
+      "rows_written": 1,
+      "rung_counts": {
+        "geometry": 3,
+        "ocr": 2
+      },
+      "scale": 1.5,
+      "steps": [
+        {
+          "identity": "verified",
+          "intent": "click 'MRN A3467'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <appointment_slot>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_003"
+        },
+        {
+          "identity": null,
+          "intent": "type <visit_type>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_005"
+        },
+        {
+          "identity": null,
+          "intent": "type <request_id>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_006"
+        },
+        {
+          "identity": "verified",
+          "intent": "click 'Save appointment'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_007"
+        }
+      ],
+      "stopped_at": null
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 18.39,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "150% ClearType on",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 11,
+        "landmarks_used": 11,
+        "live_viewport": [
+          1920,
+          1200
+        ],
+        "max_residual_px": 5.23,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.5,
+        "status": "normalized"
+      },
+      "rows_written": 0,
+      "rung_counts": {
+        "geometry": 3,
+        "ocr": 1
+      },
+      "scale": 1.5,
+      "steps": [
+        {
+          "identity": "verified",
+          "intent": "click 'MRN A3467'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <appointment_slot>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_003"
+        },
+        {
+          "identity": null,
+          "intent": "type <visit_type>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_005"
+        },
+        {
+          "identity": null,
+          "intent": "type <request_id>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_006"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click 'Save appointment'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_007"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_007' (click 'Save appointment'): a target was found positionally (rung 'ocr', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active record: Grace Hopper MRN B7346' (coverage 0.41) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'Save appointment'",
+        "rung": "ocr",
+        "step_id": "step_007"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 23.92,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "150% ClearType off",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "pass",
+      "render_scale": {
+        "landmarks_located": 11,
+        "landmarks_used": 11,
+        "live_viewport": [
+          1920,
+          1200
+        ],
+        "max_residual_px": 4.25,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.5,
+        "status": "normalized"
+      },
+      "rows_written": 1,
+      "rung_counts": {
+        "geometry": 3,
+        "ocr": 2
+      },
+      "scale": 1.5,
+      "steps": [
+        {
+          "identity": "verified",
+          "intent": "click 'MRN A3467'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <appointment_slot>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_003"
+        },
+        {
+          "identity": null,
+          "intent": "type <visit_type>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_005"
+        },
+        {
+          "identity": null,
+          "intent": "type <request_id>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_006"
+        },
+        {
+          "identity": "verified",
+          "intent": "click 'Save appointment'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_007"
+        }
+      ],
+      "stopped_at": null
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 17.73,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "150% ClearType off",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 11,
+        "landmarks_used": 11,
+        "live_viewport": [
+          1920,
+          1200
+        ],
+        "max_residual_px": 4.25,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.5,
+        "status": "normalized"
+      },
+      "rows_written": 0,
+      "rung_counts": {
+        "geometry": 3,
+        "ocr": 1
+      },
+      "scale": 1.5,
+      "steps": [
+        {
+          "identity": "verified",
+          "intent": "click 'MRN A3467'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <appointment_slot>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_003"
+        },
+        {
+          "identity": null,
+          "intent": "type <visit_type>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_005"
+        },
+        {
+          "identity": null,
+          "intent": "type <request_id>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_006"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click 'Save appointment'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_007"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_007' (click 'Save appointment'): a target was found positionally (rung 'ocr', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active record: Grace Hopper MRN B7346' (coverage 0.41) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'Save appointment'",
+        "rung": "ocr",
+        "step_id": "step_007"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 30.69,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "175% ClearType on",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "pass",
+      "render_scale": {
+        "landmarks_located": 11,
+        "landmarks_used": 11,
+        "live_viewport": [
+          2240,
+          1400
+        ],
+        "max_residual_px": 3.01,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.75,
+        "status": "normalized"
+      },
+      "rows_written": 1,
+      "rung_counts": {
+        "geometry": 3,
+        "ocr": 2
+      },
+      "scale": 1.75,
+      "steps": [
+        {
+          "identity": "verified",
+          "intent": "click 'MRN A3467'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <appointment_slot>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_003"
+        },
+        {
+          "identity": null,
+          "intent": "type <visit_type>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_005"
+        },
+        {
+          "identity": null,
+          "intent": "type <request_id>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_006"
+        },
+        {
+          "identity": "verified",
+          "intent": "click 'Save appointment'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_007"
+        }
+      ],
+      "stopped_at": null
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 21.4,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "175% ClearType on",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 11,
+        "landmarks_used": 11,
+        "live_viewport": [
+          2240,
+          1400
+        ],
+        "max_residual_px": 3.01,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.75,
+        "status": "normalized"
+      },
+      "rows_written": 0,
+      "rung_counts": {
+        "geometry": 3,
+        "ocr": 1
+      },
+      "scale": 1.75,
+      "steps": [
+        {
+          "identity": "verified",
+          "intent": "click 'MRN A3467'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <appointment_slot>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_003"
+        },
+        {
+          "identity": null,
+          "intent": "type <visit_type>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_005"
+        },
+        {
+          "identity": null,
+          "intent": "type <request_id>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_006"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click 'Save appointment'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_007"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_007' (click 'Save appointment'): a target was found positionally (rung 'ocr', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active record: Grace Hopper MRN B7346' (coverage 0.41) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'Save appointment'",
+        "rung": "ocr",
+        "step_id": "step_007"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 29.55,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "175% ClearType off",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "pass",
+      "render_scale": {
+        "landmarks_located": 11,
+        "landmarks_used": 11,
+        "live_viewport": [
+          2240,
+          1400
+        ],
+        "max_residual_px": 4.13,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.75,
+        "status": "normalized"
+      },
+      "rows_written": 1,
+      "rung_counts": {
+        "geometry": 3,
+        "ocr": 2
+      },
+      "scale": 1.75,
+      "steps": [
+        {
+          "identity": "verified",
+          "intent": "click 'MRN A3467'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <appointment_slot>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_003"
+        },
+        {
+          "identity": null,
+          "intent": "type <visit_type>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_005"
+        },
+        {
+          "identity": null,
+          "intent": "type <request_id>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_006"
+        },
+        {
+          "identity": "verified",
+          "intent": "click 'Save appointment'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_007"
+        }
+      ],
+      "stopped_at": null
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 24.35,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "175% ClearType off",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 11,
+        "landmarks_used": 11,
+        "live_viewport": [
+          2240,
+          1400
+        ],
+        "max_residual_px": 4.13,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.75,
+        "status": "normalized"
+      },
+      "rows_written": 0,
+      "rung_counts": {
+        "geometry": 3,
+        "ocr": 1
+      },
+      "scale": 1.75,
+      "steps": [
+        {
+          "identity": "verified",
+          "intent": "click 'MRN A3467'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <appointment_slot>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_003"
+        },
+        {
+          "identity": null,
+          "intent": "type <visit_type>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_005"
+        },
+        {
+          "identity": null,
+          "intent": "type <request_id>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_006"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click 'Save appointment'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_007"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_007' (click 'Save appointment'): a target was found positionally (rung 'ocr', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active record: Grace Hopper MRN B7346' (coverage 0.41) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'Save appointment'",
+        "rung": "ocr",
+        "step_id": "step_007"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": true,
+      "control": true,
+      "crash": null,
+      "elapsed_s": 2.13,
+      "font_scale": 1.25,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "100% ClearType on, fonts 125%",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "drift": [
+          "font_size_changed"
+        ],
+        "reason": "6 of 11 labels agree on one scale",
+        "status": "no_estimate"
+      },
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN A3467'",
+          "ok": false,
+          "rung": null,
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Layout drift before step 'step_000' (click 'MRN A3467'): font_size_changed: text is 1.14x the recorded height \u2014 the screen no longer matches the recording; refusing to act.",
+        "gate": "layout_drift",
+        "identity": null,
+        "intent": "click 'MRN A3467'",
+        "rung": null,
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": true,
+      "control": true,
+      "crash": null,
+      "elapsed_s": 0.23,
+      "font_scale": 1.25,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "100% ClearType on, fonts 125%",
+      "layout_drift_check": true,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "drift": [
+          "font_size_changed"
+        ],
+        "reason": "6 of 11 labels agree on one scale",
+        "status": "no_estimate"
+      },
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN A3467'",
+          "ok": false,
+          "rung": null,
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Layout drift before step 'step_000' (click 'MRN A3467'): font_size_changed: text is 1.14x the recorded height \u2014 the screen no longer matches the recording; refusing to act.",
+        "gate": "layout_drift",
+        "identity": null,
+        "intent": "click 'MRN A3467'",
+        "rung": null,
+        "step_id": "step_000"
+      }
+    }
+  ],
+  "record_profile": "100% ClearType on",
+  "schema_version": "openadapt.pixel-scale-sweep.v1",
+  "summary": {
+    "crashes": 0,
+    "false_completions": 0,
+    "font_only_controls": 6,
+    "font_only_controls_halted": 6,
+    "healthy_halted": 7,
+    "healthy_passed": 17,
+    "healthy_points": 24,
+    "model_calls": 0,
+    "wrong_record_halted": 24,
+    "wrong_record_points": 24,
+    "wrong_writes": 0
+  }
+}

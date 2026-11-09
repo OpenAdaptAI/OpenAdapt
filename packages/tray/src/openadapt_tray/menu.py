@@ -1,0 +1,361 @@
+"""Menu construction and actions for OpenAdapt Tray."""
+
+import shutil
+import subprocess
+import sys
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from functools import partial
+from typing import TYPE_CHECKING
+
+from pystray import Menu
+from pystray import MenuItem as Item
+
+if TYPE_CHECKING:
+    from openadapt_tray.app import TrayApplication
+
+from openadapt_tray.platform.base import DialogUnavailableError
+from openadapt_tray.shortcuts import format_hotkey
+from openadapt_tray.state import CredentialState, TrayState
+
+
+@dataclass
+class CaptureInfo:
+    """Information about a capture."""
+
+    name: str
+    path: str
+    timestamp: str
+
+
+class MenuBuilder:
+    """Builds the system tray context menu."""
+
+    def __init__(self, app: "TrayApplication"):
+        """Initialize the menu builder.
+
+        Args:
+            app: The parent TrayApplication instance.
+        """
+        self.app = app
+
+    def build(self) -> Menu:
+        """Build the current menu based on application state.
+
+        Returns:
+            pystray Menu instance.
+        """
+        state = self.app.state.current
+
+        items = [
+            self._build_recording_item(state),
+            Menu.SEPARATOR,
+            self._build_captures_submenu(),
+        ]
+
+        # Break/needs-attention entry (only when there are open breaks).
+        break_item = self._build_break_item(state)
+        if break_item is not None:
+            items.append(break_item)
+
+        items += [
+            Menu.SEPARATOR,
+            Item("Open Desktop App", self._open_desktop_app),
+            Item("Open Cloud Dashboard", self._open_cloud_dashboard),
+            self._build_account_item(state),
+            self._build_sync_item(state),
+            Item("Settings...", self._open_settings),
+            Menu.SEPARATOR,
+            Item("Quit", self._quit),
+        ]
+
+        return Menu(*items)
+
+    def _build_break_item(self, state) -> Item | None:
+        """Build the needs-attention entry when breaks are present.
+
+        Args:
+            state: Current application state.
+
+        Returns:
+            A menu item, or ``None`` when there are no open breaks.
+        """
+        if not state.has_breaks():
+            return None
+        count = state.break_count
+        noun = "automation" if count == 1 else "automations"
+        return Item(
+            f"⚠ {count} {noun} need attention",
+            lambda: self.app.open_needs_attention(),
+        )
+
+    def _build_account_item(self, state) -> Item:
+        """Build the hosted account status and renewal action."""
+        credential = state.credential
+        if credential.state == CredentialState.NOT_CHECKED:
+            return Item("Account: checking status...", None, enabled=False)
+        if credential.state == CredentialState.SIGNED_OUT:
+            return Item("Account: sign in", self._login)
+        if credential.state == CredentialState.UNKNOWN:
+            return Item("Account: status unavailable", self._login)
+        if credential.state == CredentialState.LEGACY:
+            return Item("Account: connected · renew credential", self._login)
+        if credential.state == CredentialState.EXPIRING:
+            days = credential.expires_in_days
+            if days == 0:
+                label = "Account: sign-in expires today"
+            else:
+                noun = "day" if days == 1 else "days"
+                label = f"Account: sign-in expires in {days} {noun}"
+            return Item(label, self._login)
+        days = credential.expires_in_days
+        if days is None:
+            return Item("Account: connected", self._login)
+        noun = "day" if days == 1 else "days"
+        return Item(f"Account: connected · {days} {noun} left", self._login)
+
+    def _build_sync_item(self, state) -> Item:
+        """Build the pause/resume-sync toggle.
+
+        Args:
+            state: Current application state.
+
+        Returns:
+            Menu item toggling the upload/sync queue.
+        """
+        if state.is_offline():
+            return Item("Sync (offline)", None, enabled=False)
+        if state.is_sync_paused():
+            return Item("Resume Sync", lambda: self.app.resume_sync())
+        return Item("Pause Sync", lambda: self.app.pause_sync())
+
+    def _build_recording_item(self, state) -> Item:
+        """Build record/stop recording menu item.
+
+        Args:
+            state: Current application state.
+
+        Returns:
+            Menu item for recording control.
+        """
+        if state.state == TrayState.RECORDING:
+            label = f"Stop Recording ({state.current_capture})"
+            return Item(label, lambda: self.app.stop_recording())
+        elif state.state == TrayState.RECORDING_STARTING:
+            return Item("Starting...", None, enabled=False)
+        elif state.state == TrayState.RECORDING_STOPPING:
+            return Item("Stopping...", None, enabled=False)
+        elif state.state == TrayState.COMPILING:
+            return Item("Compiling...", None, enabled=False)
+        else:
+            # The raw pynput string stays in the config and in the hotkey
+            # registration; only the label is formatted for people.
+            hotkey = format_hotkey(self.app.config.hotkeys.toggle_recording)
+            label = f"Start Recording ({hotkey})"
+            return Item(
+                label,
+                lambda: self.app.start_recording(),
+                enabled=state.can_start_recording(),
+            )
+
+    def _build_captures_submenu(self) -> Item:
+        """Build captures submenu.
+
+        Returns:
+            Menu item with captures submenu.
+        """
+        try:
+            captures = self._get_recent_captures()
+        except OSError as e:
+            # "We could not look" must not render as "there is nothing there".
+            # An unreadable captures directory now says so in the menu.
+            print(f"Could not read the captures directory: {e}")
+            return Item(
+                "Recent Captures",
+                Menu(Item("Could not read captures", None, enabled=False)),
+            )
+
+        if not captures:
+            return Item(
+                "Recent Captures",
+                Menu(Item("No captures", None, enabled=False)),
+            )
+
+        capture_items = []
+        for c in captures[:10]:  # Limit to 10 most recent
+            capture_items.append(
+                Item(
+                    f"{c.name} ({c.timestamp})",
+                    Menu(
+                        Item("View", partial(self._view_capture, c.path)),
+                        Item("Delete", partial(self._delete_capture, c.path, c.name)),
+                    ),
+                )
+            )
+
+        capture_items.append(Menu.SEPARATOR)
+        capture_items.append(Item("View All...", self._open_captures_list))
+
+        return Item("Recent Captures", Menu(*capture_items))
+
+    def _get_recent_captures(self) -> list[CaptureInfo]:
+        """Get list of recent captures.
+
+        An empty list means the directory was read and held no captures. It
+        never means the directory could not be read -- that raises, so the
+        caller can render the two outcomes differently.
+
+        Returns:
+            List of CaptureInfo objects, newest first (at most 10).
+
+        Raises:
+            OSError: The captures directory exists but could not be listed or
+                stat'ed (permissions, a dead mount, a broken symlink).
+        """
+        captures_dir = self.app.config.get_captures_path()
+        if not captures_dir.exists():
+            return []
+
+        captures = []
+        for d in sorted(
+            captures_dir.iterdir(),
+            key=lambda x: x.stat().st_mtime,
+            reverse=True,
+        ):
+            if d.is_dir():
+                # Check for metadata.json (formal capture)
+                # or just any directory (simpler check)
+                # Displayed to the user, so render in LOCAL time --
+                # parse the epoch as UTC and convert, rather than
+                # relying on an implicit naive-local conversion.
+                mtime = datetime.fromtimestamp(
+                    d.stat().st_mtime, tz=timezone.utc
+                ).astimezone()
+                captures.append(
+                    CaptureInfo(
+                        name=d.name,
+                        path=str(d),
+                        timestamp=mtime.strftime("%Y-%m-%d %H:%M"),
+                    )
+                )
+
+        return captures[:10]  # Limit to 10 most recent
+
+    def _open_desktop_app(self) -> None:
+        """Open (or focus) the local desktop app cockpit."""
+        self.app.open_desktop_app()
+
+    def _open_cloud_dashboard(self) -> None:
+        """Open the hosted cloud dashboard in the browser."""
+        self.app.open_cloud_dashboard()
+
+    def _login(self) -> None:
+        """Start the hosted login flow."""
+        self.app.login()
+
+    def _open_settings(self) -> None:
+        """Open ``tray.json``, the file the tray reads its settings from."""
+        try:
+            opened = self.app.platform.open_settings_dialog(self.app.config)
+        except OSError as e:
+            print(f"Could not open settings: {e}")
+            opened = False
+        if not opened:
+            self.app.notifications.show(
+                "Could not open settings",
+                f"Edit {self.app.config.config_path()} in a text editor, "
+                "then restart the tray.",
+            )
+
+    def _quit(self) -> None:
+        """Quit the application."""
+        self.app.quit()
+
+    def _view_capture(self, path: str) -> None:
+        """Open a capture's folder in the system file browser.
+
+        View used to run ``openadapt visualize`` first. The current
+        ``openadapt`` launcher has no such command, so every click waited for
+        that command to fail before the folder opened.
+
+        Args:
+            path: Path to capture directory.
+        """
+        self._open_in_file_browser(path)
+
+    def _delete_capture(self, path: str, name: str) -> None:
+        """Delete a capture after confirmation.
+
+        Args:
+            path: Path to capture directory.
+            name: Capture name for display.
+        """
+        try:
+            confirmed = self.app.platform.confirm_dialog(
+                "Delete Capture",
+                f"Are you sure you want to delete this capture?\n\n{name}",
+            )
+        except DialogUnavailableError as e:
+            # Not asking is not the same as being told no. Deleting nothing is
+            # still the right action here, but the user gets told why their
+            # click did nothing instead of watching it vanish.
+            print(f"Could not show the delete confirmation: {e}")
+            self.app.notifications.show(
+                "Could not confirm deletion",
+                f"No confirmation dialog could be shown, so '{name}' was NOT "
+                "deleted.",
+            )
+            return
+
+        if confirmed:
+            try:
+                shutil.rmtree(path)
+                self.app.notifications.show(
+                    "Capture Deleted",
+                    f"'{name}' has been removed.",
+                )
+                # Update menu
+                self.app.icon.menu = self.build()
+            except Exception as e:
+                self.app.notifications.show(
+                    "Delete Failed",
+                    f"Could not delete capture: {e}",
+                )
+
+    def _open_captures_list(self) -> None:
+        """Open the local workflow library in the desktop app."""
+        self.app.open_desktop_app()
+
+    def _open_in_file_browser(self, path: str) -> bool:
+        """Open a path in the system file browser.
+
+        Args:
+            path: Path to open.
+
+        Returns:
+            True if the file browser accepted the path. When it did not, the
+            user is told where the capture is.
+        """
+        if sys.platform == "darwin":
+            command = ["open", path]
+        elif sys.platform == "win32":
+            command = ["explorer", path]
+        else:
+            command = ["xdg-open", path]
+        try:
+            result = subprocess.run(command, check=False, capture_output=True)
+        except OSError as e:
+            print(f"Could not start {command[0]}: {e}")
+            opened = False
+        else:
+            # explorer.exe exits 1 even after it opens the folder, so its exit
+            # status says nothing; `open` and xdg-open exit 0 on success.
+            opened = sys.platform == "win32" or result.returncode == 0
+            if not opened:
+                print(f"{command[0]} exited {result.returncode}: {result.stderr}")
+        if not opened:
+            self.app.notifications.show(
+                "Could not open the capture",
+                f"No file browser opened it. The capture is at {path}.",
+            )
+        return opened

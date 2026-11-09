@@ -1,0 +1,31 @@
+item,drift,fault,expect,repair_status,claimed_success,store_verdict,outcome,ran_repaired_program,cost_usd,wall_s,reason
+26,zoom,ok,save,not_needed,True,correct,correct,False,0,6.6,
+27,zoom,ok,save,not_needed,True,correct,correct,False,0,6.1,
+28,zoom,ok,save,not_needed,True,correct,correct,False,0,6.1,
+29,zoom,ok,save,not_needed,True,correct,correct,False,0,6.1,
+30,zoom,wrong_record,save,not_repairable,False,wrong_record,flagged_wrong,False,0,12.0,the run ended RECONCILIATION_REQUIRED; self-repair handles only a halt before any effect
+31,zoom,ok,save,not_needed,True,correct,correct,False,0,6.1,
+32,zoom,ok,save,not_needed,True,correct,correct,False,0,6.2,
+33,zoom,ok,save,not_needed,True,correct,correct,False,0,6.1,
+34,zoom,ok,save,not_needed,True,correct,correct,False,0,6.1,
+35,zoom,ok,save,not_needed,True,correct,correct,False,0,6.2,
+46,notice,ok,save,no_fix,False,missing,safe_stop,False,0.03018,20.2,the agent gave up
+47,notice,ok,save,no_fix,False,missing,safe_stop,False,0.02971,17.9,the agent gave up
+48,notice,ok,save,no_fix,False,missing,safe_stop,False,0.02975,17.7,the agent gave up
+49,notice,ok,save,no_fix,False,missing,safe_stop,False,0.0297,18.2,the agent gave up
+50,notice,ok,save,no_fix,False,missing,safe_stop,False,0.02979,18.1,the agent gave up
+51,notice,ok,save,no_fix,False,missing,safe_stop,False,0.0301,18.8,the agent gave up
+52,notice,ok,save,no_fix,False,missing,safe_stop,False,0.0297,17.6,the agent gave up
+53,notice,ok,save,no_fix,False,missing,safe_stop,False,0.02992,17.5,the agent gave up
+54,notice,ok,save,no_fix,False,missing,safe_stop,False,0.02989,17.8,the agent gave up
+55,notice,ok,save,no_fix,False,missing,safe_stop,False,0.0297,18.0,the agent gave up
+76,relink,ok,save,resumed,True,correct,correct,True,0.013288,14.3,
+77,relink,ok,save,not_needed,True,correct,correct,True,0.0,5.9,
+78,relink,ok,save,not_needed,True,correct,correct,True,0.0,5.9,
+79,relink,ok,save,not_needed,True,correct,correct,True,0.0,5.8,
+80,relink,optimistic,save,not_repairable,False,missing,safe_stop,True,0.0,11.4,the run ended RECONCILIATION_REQUIRED; self-repair handles only a halt before any effect
+81,relink,ok,save,not_needed,True,correct,correct,True,0.0,5.9,
+82,relink,ok,save,not_needed,True,correct,correct,True,0.0,5.9,
+83,relink,ok,save,not_needed,True,correct,correct,True,0.0,5.7,
+84,relink,ok,save,not_needed,True,correct,correct,True,0.0,5.9,
+85,relink,ok,save,not_needed,True,correct,correct,True,0.0,5.9,

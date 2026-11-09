@@ -1,0 +1,304 @@
+{
+  "$defs": {
+    "AuthoringBackendV1": {
+      "enum": [
+        "macos",
+        "linux",
+        "windows",
+        "web",
+        "rdp",
+        "citrix"
+      ],
+      "title": "AuthoringBackendV1",
+      "type": "string"
+    },
+    "AuthoringEmptyProjectionReason": {
+      "enum": [
+        "empty_projection"
+      ],
+      "title": "AuthoringEmptyProjectionReason",
+      "type": "string"
+    },
+    "AuthoringNodeV1": {
+      "additionalProperties": false,
+      "properties": {
+        "automation_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9 ._-]{0,79}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Automation Id"
+        },
+        "bounds": {
+          "$ref": "#/$defs/AuthoringNormalizedBoundsV1"
+        },
+        "class_name": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9 ._-]{0,79}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Class Name"
+        },
+        "control_type": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9 ._-]{0,79}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Control Type"
+        },
+        "enabled": {
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "focused": {
+          "title": "Focused",
+          "type": "boolean"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9 ._-]{0,79}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "node_id": {
+          "pattern": "^n_[0-9a-f]{8}$",
+          "title": "Node Id",
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/$defs/ElementRole"
+        }
+      },
+      "required": [
+        "node_id",
+        "role",
+        "enabled",
+        "focused",
+        "bounds"
+      ],
+      "title": "AuthoringNodeV1",
+      "type": "object"
+    },
+    "AuthoringNormalizedBoundsV1": {
+      "additionalProperties": false,
+      "description": "Viewport-normalized overlay coordinates. Not backend pixels.",
+      "properties": {
+        "h": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "H",
+          "type": "number"
+        },
+        "w": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "W",
+          "type": "number"
+        },
+        "x": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "w",
+        "h"
+      ],
+      "title": "AuthoringNormalizedBoundsV1",
+      "type": "object"
+    },
+    "AuthoringProviderV1": {
+      "enum": [
+        "playwright_ax",
+        "macos_ax",
+        "windows_uia",
+        "linux_atspi",
+        "none"
+      ],
+      "title": "AuthoringProviderV1",
+      "type": "string"
+    },
+    "AuthoringWindowV1": {
+      "additionalProperties": false,
+      "properties": {
+        "bounds": {
+          "$ref": "#/$defs/AuthoringNormalizedBoundsV1"
+        },
+        "process_name": {
+          "pattern": "^[A-Za-z0-9 ._-]{1,64}$",
+          "title": "Process Name",
+          "type": "string"
+        },
+        "role": {
+          "const": "window",
+          "default": "window",
+          "title": "Role",
+          "type": "string"
+        }
+      },
+      "required": [
+        "process_name",
+        "bounds"
+      ],
+      "title": "AuthoringWindowV1",
+      "type": "object"
+    },
+    "ElementRole": {
+      "description": "Normalized UI element roles across platforms.\n\nCovers Windows UIA, macOS AX, web ARIA, and OCR-detected elements.",
+      "enum": [
+        "button",
+        "text_input",
+        "text_static",
+        "label",
+        "link",
+        "checkbox",
+        "radio",
+        "combobox",
+        "list_item",
+        "menu",
+        "menu_item",
+        "tab",
+        "tree_item",
+        "image",
+        "icon",
+        "toolbar",
+        "scrollbar",
+        "slider",
+        "window",
+        "dialog",
+        "group",
+        "table",
+        "table_cell",
+        "table_row",
+        "heading",
+        "paragraph",
+        "unknown"
+      ],
+      "title": "ElementRole",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "PHI-safe projected tree. No screenshots, titles, or field values.",
+  "properties": {
+    "agent_drive": {
+      "title": "Agent Drive",
+      "type": "boolean"
+    },
+    "backend": {
+      "$ref": "#/$defs/AuthoringBackendV1"
+    },
+    "coach_only": {
+      "title": "Coach Only",
+      "type": "boolean"
+    },
+    "mode": {
+      "const": "authoring",
+      "default": "authoring",
+      "title": "Mode",
+      "type": "string"
+    },
+    "node_count": {
+      "maximum": 200,
+      "minimum": 0,
+      "title": "Node Count",
+      "type": "integer"
+    },
+    "provider": {
+      "$ref": "#/$defs/AuthoringProviderV1"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AuthoringEmptyProjectionReason"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "recording": {
+      "title": "Recording",
+      "type": "boolean"
+    },
+    "schema_version": {
+      "const": "openadapt.authoring.observe/v1",
+      "default": "openadapt.authoring.observe/v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "tree": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/AuthoringNodeV1"
+      },
+      "maxItems": 200,
+      "title": "Tree",
+      "type": "array"
+    },
+    "truncated": {
+      "title": "Truncated",
+      "type": "boolean"
+    },
+    "window": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AuthoringWindowV1"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "backend",
+    "provider",
+    "agent_drive",
+    "coach_only",
+    "recording",
+    "truncated",
+    "node_count"
+  ],
+  "title": "AuthoringObserveV1",
+  "type": "object",
+  "x-openadapt-max-bytes": 32768,
+  "x-openadapt-max-nodes": 200
+}

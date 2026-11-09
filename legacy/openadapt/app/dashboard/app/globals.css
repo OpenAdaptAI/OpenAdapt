@@ -1,0 +1,9 @@
+@layer mantine tailwind;
+
+@import '@mantine/core/styles.layer.css';
+@import '@mantine/notifications/styles.layer.css';
+@import '@mantine/carousel/styles.layer.css';
+
+@layer tailwind {
+    @tailwind utilities;
+}

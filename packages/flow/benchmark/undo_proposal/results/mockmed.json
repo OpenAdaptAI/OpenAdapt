@@ -1,0 +1,61 @@
+{
+  "saving_steps": [
+    {
+      "candidates": [
+        {
+          "basis": "the save's JSON POST /api/encounter returned a record id; REST convention gives DELETE /api/encounter/{undo_record_id}",
+          "candidate_id": "undo-step_010-network-1",
+          "evidence": {
+            "after_save": {
+              "records": 1,
+              "sha256": "eae6bf27bdbcf517433491073d4db11940df07d3b676748dd033fa32bd475a83"
+            },
+            "after_undo": {
+              "records": 0,
+              "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+            },
+            "basis": "the save's JSON POST /api/encounter returned a record id; REST convention gives DELETE /api/encounter/{undo_record_id}",
+            "before": {
+              "records": 0,
+              "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+            },
+            "candidate_id": "undo-step_010-network-1",
+            "earlier_saves": 0,
+            "finished_at": "2026-10-19T17:24:59.181507+00:00",
+            "ignored_fields": [],
+            "reason": "the undo ran, its record read-back confirmed it, and every record matches the read-back from before the save",
+            "save": "completed",
+            "save_model_calls": 0,
+            "schema": "openadapt.undo-verification/v1",
+            "source": "network",
+            "started_at": "2026-10-19T17:24:52.054561+00:00",
+            "test_copy": "mockmed-test-copy",
+            "undo": "completed",
+            "undo_digest": "63ea229c780a1d0135ee28e957bb792ce8263caee254b959260876238dfdfdca",
+            "undo_judgement": "every undo step ran and an independent read of the system of record confirmed its declared effects",
+            "undo_model_calls": 0,
+            "undoes": "step_010",
+            "verdict": "verified"
+          },
+          "reason": "the undo ran, its record read-back confirmed it, and every record matches the read-back from before the save",
+          "source": "network",
+          "status": "verified"
+        }
+      ],
+      "intent": "click 'Save Encounter'",
+      "reason": "",
+      "step_id": "step_010",
+      "to_close_the_gap": "",
+      "verified_undo": "undo-step_010-network-1"
+    }
+  ],
+  "schema": "openadapt.undo-propose-report/v1",
+  "summary": {
+    "no_verified_undo": 0,
+    "saving_steps": 1,
+    "verified_undo": 1
+  },
+  "test_copy": "mockmed-test-copy",
+  "workflow_name": "mockmed-demo",
+  "written": true
+}

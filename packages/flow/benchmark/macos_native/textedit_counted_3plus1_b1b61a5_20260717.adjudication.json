@@ -1,0 +1,159 @@
+{
+  "schema_version": 1,
+  "adjudication_timestamp_utc": "2026-07-17T20:50:32Z",
+  "adjudication_kind": "independent_scoped_offline_review",
+  "original_evidence": {
+    "path": "benchmark/macos_native/textedit_counted_3plus1_b1b61a5_20260717.json",
+    "sha256": "19c62cd4b1a8ba55001925cc129af80d22cec94cf6d5c7d9f56c2b5d71c79075",
+    "bytes": 4809,
+    "status": "failed",
+    "preserved_byte_for_byte": true,
+    "status_is_not_rewritten_or_superseded": true
+  },
+  "candidate": {
+    "git_sha": "b1b61a5152a3662f3fe0b4b44446f2a139a1ad83",
+    "git_dirty_during_counted_run": false,
+    "flow_version": "1.9.1"
+  },
+  "counted_run": {
+    "automatic_retry": false,
+    "normal_trials_required": 3,
+    "normal_trials_completed": 3,
+    "normal_trials": [
+      {
+        "trial": 1,
+        "backend_sequence_reported_success": true,
+        "oracle_status": "confirmed",
+        "expected_bytes": 42,
+        "observed_bytes": 42
+      },
+      {
+        "trial": 2,
+        "backend_sequence_reported_success": true,
+        "oracle_status": "confirmed",
+        "expected_bytes": 42,
+        "observed_bytes": 42
+      },
+      {
+        "trial": 3,
+        "backend_sequence_reported_success": true,
+        "oracle_status": "confirmed",
+        "expected_bytes": 42,
+        "observed_bytes": 42
+      }
+    ],
+    "ambiguity_refusal": {
+      "matched_windows": 2,
+      "refused": true,
+      "status": "passed",
+      "unchanged_oracles": [
+        {
+          "status": "confirmed",
+          "expected_bytes": 22,
+          "observed_bytes": 22
+        },
+        {
+          "status": "confirmed",
+          "expected_bytes": 22,
+          "observed_bytes": 22
+        }
+      ]
+    },
+    "silent_incorrect_successes": 0,
+    "over_halts": 0,
+    "follow_on_gui_rerun_performed": false
+  },
+  "original_graceful_close_warnings": [
+    {
+      "pid": 97129,
+      "title": "oa-macos-0137586e5c-trial-1",
+      "original_text": "window cleanup 'oa-macos-0137586e5c-trial-1': native physical-input target changed after foreground proof; bound id=16973 pid=97129 bounds=(326.0, 254.0, 646.0, 418.0) title='oa-macos-0137586e5c-trial-1.txt'. Refusing coordinate/global input against a stale window mapping"
+    },
+    {
+      "pid": 97156,
+      "title": "oa-macos-0137586e5c-trial-2",
+      "original_text": "window cleanup 'oa-macos-0137586e5c-trial-2': native physical-input target changed after foreground proof; bound id=16991 pid=97156 bounds=(326.0, 254.0, 646.0, 418.0) title='oa-macos-0137586e5c-trial-2.txt'. Refusing coordinate/global input against a stale window mapping"
+    },
+    {
+      "pid": 97164,
+      "title": "oa-macos-0137586e5c-trial-3",
+      "original_text": "window cleanup 'oa-macos-0137586e5c-trial-3': native physical-input target changed after foreground proof; bound id=17007 pid=97164 bounds=(326.0, 254.0, 646.0, 418.0) title='oa-macos-0137586e5c-trial-3.txt'. Refusing coordinate/global input against a stale window mapping"
+    },
+    {
+      "pid": 97174,
+      "title": "oa-macos-0137586e5c-ambiguous-a",
+      "original_text": "window cleanup 'oa-macos-0137586e5c-ambiguous-a': native physical-input target changed after foreground proof; bound id=17023 pid=97174 bounds=(326.0, 254.0, 646.0, 418.0) title='oa-macos-0137586e5c-ambiguous-a.txt'. Refusing coordinate/global input against a stale window mapping"
+    },
+    {
+      "pid": 97178,
+      "title": "oa-macos-0137586e5c-ambiguous-b",
+      "original_text": "window cleanup 'oa-macos-0137586e5c-ambiguous-b': native physical-input target changed after foreground proof; bound id=17037 pid=97178 bounds=(326.0, 254.0, 646.0, 418.0) title='oa-macos-0137586e5c-ambiguous-b.txt'. Refusing coordinate/global input against a stale window mapping"
+    }
+  ],
+  "post_run_cleanup_audit": {
+    "timestamp_utc": "2026-07-17T20:50:32Z",
+    "method": "exact PID process-table query plus run-id temp-root search",
+    "harness_processes": [
+      {
+        "pid": 97129,
+        "present": false
+      },
+      {
+        "pid": 97156,
+        "present": false
+      },
+      {
+        "pid": 97164,
+        "present": false
+      },
+      {
+        "pid": 97174,
+        "present": false
+      },
+      {
+        "pid": 97178,
+        "present": false
+      }
+    ],
+    "all_harness_pids_absent": true,
+    "temporary_root_audit": {
+      "run_id": "0137586e5c",
+      "glob": "openadapt-macos-0137586e5c-*",
+      "searched_roots": [
+        "/var/folders/35/pqjnmmwx24d2mtf4frt5dhcc0000gn/T",
+        "/private/tmp",
+        "/tmp"
+      ],
+      "matches": [],
+      "verified_absent": true
+    },
+    "unrelated_textedit": {
+      "pid": 1206,
+      "preexisting_at_counted_run_start": true,
+      "present_after_counted_run": true,
+      "preserved": true,
+      "command": "/System/Applications/TextEdit.app/Contents/MacOS/TextEdit"
+    }
+  },
+  "adjudication": {
+    "original_batch_status": "failed",
+    "graceful_close_observations_classification": "cleanup_warnings",
+    "authoritative_cleanup_observation": "all exact harness PIDs and the run-id temporary root were absent; the pre-existing unrelated TextEdit PID was unchanged",
+    "normal_action_effect_evidence": "accepted",
+    "ambiguity_refusal_evidence": "accepted",
+    "full_batch_acceptance": "not_reclassified",
+    "reason": "the counted report remains failed; this separate adjudication accepts only the 3/3 independently confirmed file effects and the fail-closed two-match ambiguity refusal"
+  },
+  "scope": {
+    "accepted_claim": "On one macOS 15.7.3 host, candidate b1b61a5 completed three isolated TextEdit replace-and-save trials with exact file-byte effects and refused a two-window ambiguous selector without changing either file.",
+    "limitations": [
+      "TextEdit only",
+      "synthetic local files",
+      "one host and active user session",
+      "no AX structural resolution claim",
+      "not a design-partner workflow",
+      "not production readiness evidence",
+      "the revised cleanup harness has offline adversarial coverage but was not validated by another GUI run"
+    ]
+  }
+}

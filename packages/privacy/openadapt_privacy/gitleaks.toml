@@ -1,0 +1,68 @@
+title = "openadapt-privacy git scan"
+
+[extend]
+useDefault = true
+
+# Keywords are omitted on purpose. A keyword prefilter would skip a CSV that
+# contains an OHIP-shaped number and no "ohip" token.
+
+[[rules]]
+id = "ohip-dashed"
+description = "OHIP-shaped number (four-three-three, optional version letters)"
+regex = '''\b\d{4}-\d{3}-\d{3}(?:-[A-Za-z]{1,2})?\b'''
+
+[[rules]]
+id = "ohip-spaced"
+description = "OHIP-shaped number with spaces"
+regex = '''\b\d{4} \d{3} \d{3}\b'''
+
+[[rules]]
+id = "ohip-dotted"
+description = "OHIP-shaped number with dots"
+regex = '''\b\d{4}\.\d{3}\.\d{3}\b'''
+
+[[rules]]
+id = "ohip-labeled-digits"
+description = "OHIP label followed by a 10-digit number"
+regex = '''(?i)\bohip\b.{0,24}\d{10}\b'''
+
+[[rules]]
+id = "chart-id-assigned"
+description = "Chart id / number with a value"
+regex = '''(?i)\bchart[_ -]?(?:id|no|num|number)\s*[:=#]\s*[A-Za-z0-9]'''
+
+[[rules]]
+id = "chart-hash"
+description = "Chart hash identifier"
+regex = '''(?i)\bchart\s*#\s*[A-Za-z0-9]'''
+
+[[rules]]
+id = "mrn-assigned"
+description = "MRN with a value"
+regex = '''(?i)\bmrn\s*[:=#]\s*[A-Za-z0-9]'''
+
+[[rules]]
+id = "unc-path"
+description = "Windows UNC path"
+regex = '''\\\\[A-Za-z0-9._-]+\\[A-Za-z0-9]'''
+
+[[rules]]
+id = "rdp-full-address"
+description = "RDP full address / gateway hostname key"
+regex = '''(?i)(?:full address|alternate full address|gatewayhostname)\s*:\s*s\s*:'''
+
+[[rules]]
+id = "rdp-env-host"
+description = "RDP hostname environment key"
+regex = '''(?i)\b(?:RDP_HOST|RDP_HOSTNAME|RDP_SERVER|MSTSC_HOST)\s*='''
+
+[[rules]]
+id = "mstsc-host"
+description = "mstsc /v hostname"
+regex = '''(?i)mstsc(?:\.exe)?\s+/v:'''
+
+[[rules]]
+id = "rdp-file"
+description = "Remote Desktop connection file"
+path = '''(?i)\.rdp$'''
+regex = '''(?s).{0,}'''

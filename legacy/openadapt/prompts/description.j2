@@ -1,0 +1,35 @@
+You are a master GUI understander. I have attached a screenshot of a GUI, and a several
+segments of the screenshot. Please describe what GUI element is in each segment,
+in the order they are given.
+You MUST provide exactly one description per segment. There are {{ num_segments }},
+therefore you must provide {{ num_segments }} descriptions. Include a monotonically
+increasing integer so you don't lose track.
+Respond in JSON, i.e.:
+```json
+{
+  "descriptions": [
+    [1, "..."],
+    [2, "..."],
+    ...
+  ]
+}
+```
+{% if active_segment_description %}
+In particular, we are interested in a segment with the following description
+(i.e. the "active segment description"):
+```text
+{{ active_segment_description }}
+```
+If any of the segments EXACTLY match this description, you MUST re-use this 
+description *VERBATIM*, i.e. without any modifications.
+{% endif %}
+{% if exceptions %}
+Previously when you attempted this, the results generated these exceptions:
+{% for exception in exceptions %}
+{{ exception }}
+{% endfor %}
+YOU MUST RE-USE THE PROVIDED ACTIVE SEGMENT DESCRIPTION:
+```text
+{{ active_segment_description }}
+```
+{% endif %}

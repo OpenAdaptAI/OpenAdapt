@@ -1,0 +1,69 @@
+{
+  "step_id": "step_010",
+  "kind": "anchor_refresh",
+  "rung_used": "ocr",
+  "old_anchor": {
+    "template": "templates/step_010.png",
+    "region": [
+      54,
+      359,
+      160,
+      64
+    ],
+    "click_point": [
+      134,
+      391
+    ],
+    "ocr_text": "Save Encounter",
+    "landmarks": [
+      {
+        "relation": "above",
+        "ocr_text": "Showcase triage booking three months",
+        "distance_px": 162,
+        "dx_px": -71,
+        "dy_px": 146
+      },
+      {
+        "relation": "above",
+        "ocr_text": "Note",
+        "distance_px": 199,
+        "dx_px": 93,
+        "dy_px": 176
+      }
+    ],
+    "search_pad": 80
+  },
+  "new_anchor": {
+    "template": "templates/step_010.png",
+    "region": [
+      53,
+      359,
+      160,
+      64
+    ],
+    "click_point": [
+      133,
+      391
+    ],
+    "ocr_text": "Save Encounter",
+    "landmarks": [
+      {
+        "relation": "above",
+        "ocr_text": "Showcase triage booking three months",
+        "distance_px": 162,
+        "dx_px": -71,
+        "dy_px": 146
+      },
+      {
+        "relation": "above",
+        "ocr_text": "Note",
+        "distance_px": 199,
+        "dx_px": 93,
+        "dy_px": 176
+      }
+    ],
+    "search_pad": 80
+  },
+  "screenshot": "heals/step_010/screen.png",
+  "applied": true
+}

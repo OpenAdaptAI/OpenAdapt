@@ -1,0 +1,65 @@
+# Strict policy for clinical / system-of-record write workflows.
+#
+# Refuses any bundle that could take an unverified or misdirected write action
+# unattended. Intended for the healthcare/EMR flagship surface, where a
+# wrong-patient or phantom write is the catastrophic failure. Expect a freshly
+# compiled real-app bundle to FAIL this until its gaps are closed (that is the
+# point — "compiled" must not be mistaken for "certified safe").
+name: clinical-write
+description: >-
+  Strict gate for irreversible writes against a system of record: no unarmed
+  clicks, no vacuous steps, identity required on every entity-navigation and
+  write step, a real SYSTEM-OF-RECORD effect (not just a screen assertion) plus
+  an idempotency key required on every write, no unconfirmed effect bindings,
+  and human sign-off for any thinly-evidenced step.
+
+# No click may act without a verified target identity.
+prohibit_unarmed_clicks: true
+
+# Every effect-expecting step must carry outcome evidence (TYPE has an
+# intrinsic fail-closed input read-back and is not a vacuous pass).
+prohibit_vacuous_postconditions: true
+
+# Belt-and-braces over prohibit_unarmed_clicks: the wrong-entity surface
+# (navigational data clicks) and every write MUST be identity-armed.
+require_identity_for:
+  - entity_navigation
+  - write
+
+# Every consequential write must verify its effect against the SYSTEM OF
+# RECORD (step.effects), not merely the screen. A TEXT_PRESENT assertion on the
+# frame is the exact weak oracle the effect layer replaced — it cannot see a
+# partial, phantom, duplicate, or lost-update write. So a clinical write is
+# certified only when it declares a real system-of-record effect.
+require_system_effects_for:
+  - write
+
+# ...AND that irreversible write must carry an idempotency / at-most-once key,
+# so a retried or double-delivered submission collapses to a single record
+# instead of a silent duplicate.
+require_idempotency_key_for:
+  - write
+
+# A placeholder effect whose system-of-record binding was not derivable from
+# the demonstration (needs_operator_confirmation) must never be certified — an
+# operator has to complete the binding first.
+prohibit_unconfirmed_effect_bindings: true
+
+# Screen postconditions are still required, as an ADDITIONAL (not substitute)
+# check on top of the system-of-record effect above.
+require_screen_postconditions_for:
+  - write
+  - save
+  - submit
+  - create
+  - update
+  - delete
+  - confirm
+  - send
+
+# Zero tolerance for steps that assert nothing.
+max_unverified_steps: 0
+
+# Any step resolving on thin evidence (below template+label) needs human
+# sign-off before it runs unattended.
+require_human_approval_below_confidence: 0.8

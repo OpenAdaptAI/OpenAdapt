@@ -1,0 +1,159 @@
+{
+  "schema_version": "openadapt.records-interchange/v0",
+  "exchange_id": "ex-inv-0001",
+  "direction": "to_executor",
+  "workflow": "ap.post_invoice",
+  "session_id": "batch-2026-10-29",
+  "artifacts": [
+    {
+      "artifact_id": "a1",
+      "kind": "source_document",
+      "source_type": "pdf_scan",
+      "file_number": "V-0042",
+      "date": "2026-10-29",
+      "doctype": "invoice",
+      "payload": {
+        "path": "..\\..\\x",
+        "sha256": "f08370b52af688de721c0f673bb759449f5690b8836dc032dff4548f829432c3",
+        "mime": "text/plain",
+        "bytes": 95
+      }
+    }
+  ],
+  "fields": [
+    {
+      "name": "vendor_id",
+      "type": "code",
+      "value": "V-0042",
+      "confidence": 0.97,
+      "reads": [
+        {
+          "channel": "document_parse",
+          "value": "V-0042",
+          "artifact_id": "a1",
+          "locator": {
+            "page": 1,
+            "line": 2
+          }
+        }
+      ]
+    },
+    {
+      "name": "invoice_number",
+      "type": "code",
+      "value": "INV-20417",
+      "confidence": 0.95,
+      "reads": [
+        {
+          "channel": "document_parse",
+          "value": "INV-20417",
+          "artifact_id": "a1",
+          "locator": {
+            "page": 1,
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "name": "amount",
+      "type": "decimal",
+      "unit": "CAD",
+      "value": "1249.50",
+      "confidence": 0.62,
+      "status": "corrected",
+      "confirmed_by": {
+        "kind": "human",
+        "id": "clerk:ap-2",
+        "role": "ap_clerk"
+      },
+      "reads": [
+        {
+          "channel": "document_parse",
+          "value": "1249.5O",
+          "artifact_id": "a1",
+          "locator": {
+            "page": 1,
+            "line": 4
+          }
+        },
+        {
+          "channel": "human",
+          "value": "1249.50"
+        }
+      ]
+    },
+    {
+      "name": "due_date",
+      "type": "date",
+      "value": "2026-11-15",
+      "confidence": 0.93,
+      "reads": [
+        {
+          "channel": "document_parse",
+          "value": "2026-11-15",
+          "artifact_id": "a1"
+        }
+      ]
+    },
+    {
+      "name": "approval",
+      "type": "enum",
+      "value": "approve",
+      "confidence": 1.0,
+      "reads": [
+        {
+          "channel": "human",
+          "value": "approve"
+        }
+      ]
+    }
+  ],
+  "identities": [
+    {
+      "identity_id": "vendor",
+      "role": "counterparty",
+      "fields": [
+        "vendor_id"
+      ],
+      "match": {
+        "status": "existing",
+        "record_ref": "V-0042",
+        "candidates": 1
+      }
+    }
+  ],
+  "decisions": [
+    {
+      "decision_id": "d1",
+      "question": "Approve this invoice for payment?",
+      "options": [
+        "approve",
+        "hold",
+        "reject"
+      ],
+      "choice": "approve",
+      "output_field": "approval",
+      "authorized_roles": [
+        "controller"
+      ],
+      "decided_by": {
+        "kind": "human",
+        "id": "controller:c-1",
+        "role": "controller"
+      },
+      "decided_at": "2026-10-29T14:05:00+00:00"
+    }
+  ],
+  "outcome": "pending",
+  "provenance": {
+    "tool_name": "fixture-generator",
+    "tool_version": "0",
+    "producer": {
+      "kind": "system",
+      "id": "document-side@site"
+    },
+    "captured_at": "2026-10-29T14:00:00+00:00",
+    "checksum": "sha256:fdf8bce52a0714d08f09cdf23902361696c14581988bb4b925b8d55ce5dc7448"
+  }
+}

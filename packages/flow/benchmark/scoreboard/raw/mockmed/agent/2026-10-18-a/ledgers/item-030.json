@@ -1,0 +1,174 @@
+{
+  "model": "claude-sonnet-5-5",
+  "effort": "medium",
+  "tool": "computer_toolset_20260801",
+  "price_per_mtok_usd": {
+    "input": 2.0,
+    "output": 10.0,
+    "cache_read": 0.2,
+    "cache_write": 2.5
+  },
+  "started_at": 1792353980.215044,
+  "finished_at": 1792353996.5325499,
+  "model_calls": 5,
+  "actions": 13,
+  "cost_usd": 0.038568,
+  "final_text": "I opened Jane Sample's referral, started a Triage encounter, and saved the note \"Synthetic follow-up note 30: recheck in 9 days\". The encounter list shows it in full. The green confirmation banner cuts the text off after \"recheck in\".",
+  "refused_actions": [],
+  "calls": [
+    {
+      "turn": 1,
+      "started_s": 1792353980.2150478,
+      "ended_s": 1792353981.596354,
+      "input_tokens": 4,
+      "output_tokens": 92,
+      "cache_read_input_tokens": 0,
+      "cache_creation_input_tokens": 5005,
+      "cost_usd": 0.0134405,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              775,
+              186
+            ]
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 1
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgAJdYRj1kf73uaskBKFK",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 2,
+      "started_s": 1792353983.642974,
+      "ended_s": 1792353984.95769,
+      "input_tokens": 2,
+      "output_tokens": 98,
+      "cache_read_input_tokens": 5005,
+      "cache_creation_input_tokens": 1498,
+      "cost_usd": 0.00573,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              113,
+              159
+            ]
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 1
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgAJdnvMyfFUmfc46aoaj",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 3,
+      "started_s": 1792353987.01657,
+      "ended_s": 1792353989.02272,
+      "input_tokens": 2,
+      "output_tokens": 140,
+      "cache_read_input_tokens": 6503,
+      "cache_creation_input_tokens": 1496,
+      "cost_usd": 0.0064446,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              85,
+              213
+            ]
+          }
+        },
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              343,
+              350
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "Synthetic follow-up note 30: recheck in 9 days"
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgAJe3P1GRC6DutwnGTqu",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 4,
+      "started_s": 1792353990.502763,
+      "ended_s": 1792353992.484019,
+      "input_tokens": 2,
+      "output_tokens": 98,
+      "cache_read_input_tokens": 7999,
+      "cache_creation_input_tokens": 1550,
+      "cost_usd": 0.0064588,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              133,
+              457
+            ]
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 1
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgAJeJFTrbVeHyMkuq1DT",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 5,
+      "started_s": 1792353994.4762292,
+      "ended_s": 1792353996.532018,
+      "input_tokens": 2,
+      "output_tokens": 84,
+      "cache_read_input_tokens": 9549,
+      "cache_creation_input_tokens": 1496,
+      "cost_usd": 0.0064938,
+      "actions": [],
+      "request_id": "req_011CgAJebFfSWcn1oNefR3bi",
+      "stop_reason": "end_turn"
+    }
+  ]
+}

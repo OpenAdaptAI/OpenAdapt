@@ -1,0 +1,60 @@
+# openadapt-flow on-prem local runner (systemd).
+#
+# Watches the local job inbox and runs compiled bundles through the
+# deterministic engine. NO network egress is required or granted: the sandbox
+# directives below deny it at the kernel level as defence-in-depth on top of the
+# site firewall. Placeholders (@STORAGE_ROOT@ etc.) are filled by install.sh.
+#
+# This unit is Type=oneshot and is triggered by openadapt-flow-runner.path when
+# a job appears (event-driven). For continuous polling instead, change ExecStart
+# to `run-queue.sh watch` and use Type=simple + Restart=always.
+
+[Unit]
+Description=openadapt-flow on-prem local run queue (air-gapped)
+After=local-fs.target
+# No After=network-online.target on purpose — this service needs no network.
+
+[Service]
+Type=oneshot
+User=@SERVICE_USER@
+WorkingDirectory=@STORAGE_ROOT@
+
+# Fail-closed PHI scrubbing + local storage/audit wiring.
+Environment=OPENADAPT_FLOW_SCRUB=on
+Environment=OPENADAPT_FLOW_SCRUB_IMAGES=1
+Environment=OPENADAPT_ONPREM_ROOT=@STORAGE_ROOT@
+Environment=OPENADAPT_ONPREM_CONFIG=@STORAGE_ROOT@/deployment.yaml
+Environment=OPENADAPT_ONPREM_AUDIT_LOG=@STORAGE_ROOT@/audit/audit.log
+# Put the ACTIVE release's venv on PATH so `openadapt-flow` resolves. This goes
+# through the `current` symlink (releases/<version>/venv), so an atomic
+# `install.sh --update` flip or `--rollback` changes which engine runs on the
+# NEXT job with no unit edit and no daemon-reload.
+Environment=PATH=@STORAGE_ROOT@/current/venv/bin:/usr/local/bin:/usr/bin:/bin
+
+ExecStart=@HERE@/bin/run-queue.sh once
+
+# --- Egress denial + hardening (defence-in-depth; the firewall is primary) ---
+# IPAddressDeny=any drops ALL outbound/inbound IP traffic for this unit. A
+# LAN-only VLM appliance or EMR API, if used, must be allow-listed here
+# explicitly (e.g. IPAddressAllow=192.168.10.0/24) — otherwise the runner is
+# fully offline.
+IPAddressDeny=any
+RestrictAddressFamilies=AF_UNIX
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+# The runner may write operational data, never release code or activation
+# pointers. POSIX ownership enforces the same boundary outside systemd.
+ReadWritePaths=@STORAGE_ROOT@/runs @STORAGE_ROOT@/jobs @STORAGE_ROOT@/audit
+ReadOnlyPaths=@STORAGE_ROOT@/bundles @STORAGE_ROOT@/keys @STORAGE_ROOT@/releases
+ReadOnlyPaths=@STORAGE_ROOT@/current -@STORAGE_ROOT@/previous @STORAGE_ROOT@/venv
+ReadOnlyPaths=@STORAGE_ROOT@/deployment.yaml
+UMask=0077
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target

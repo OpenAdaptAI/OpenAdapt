@@ -1,0 +1,52 @@
+{
+  "additionalProperties": false,
+  "description": "A run that hasn't ended yet. There's no result to show.",
+  "properties": {
+    "label": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Label",
+      "type": "string"
+    },
+    "next_action": {
+      "maxLength": 300,
+      "minLength": 1,
+      "title": "Next Action",
+      "type": "string"
+    },
+    "safe_to_retry": {
+      "const": false,
+      "default": false,
+      "title": "Safe To Retry",
+      "type": "boolean"
+    },
+    "schema_version": {
+      "const": "openadapt.plain-progress/v1",
+      "default": "openadapt.plain-progress/v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "state": {
+      "enum": [
+        "queued",
+        "running",
+        "decision_required"
+      ],
+      "title": "State",
+      "type": "string"
+    },
+    "technical_code": {
+      "pattern": "^(transaction_outcome|execute_terminal_outcome|execute_state|execution_outcome|agent_status|connector_status|clinic_tool_status|program_terminal_state|overlay_phase|fallback)=[A-Za-z][A-Za-z0-9_]{0,63}$",
+      "title": "Technical Code",
+      "type": "string"
+    }
+  },
+  "required": [
+    "state",
+    "label",
+    "next_action",
+    "technical_code"
+  ],
+  "title": "PlainProgressV1",
+  "type": "object"
+}

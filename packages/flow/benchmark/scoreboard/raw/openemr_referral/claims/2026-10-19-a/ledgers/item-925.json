@@ -1,0 +1,469 @@
+{
+  "model": "claude-sonnet-5-5",
+  "effort": "medium",
+  "tool": "computer_toolset_20260801",
+  "price_per_mtok_usd": {
+    "input": 2.0,
+    "output": 10.0,
+    "cache_read": 0.2,
+    "cache_write": 2.5
+  },
+  "started_at": 1792433275.530891,
+  "finished_at": 1792433326.3338208,
+  "model_calls": 9,
+  "actions": 47,
+  "cost_usd": 0.076484,
+  "final_text": "I created and saved the patient Barnaby ScoreboardP925 with all the values you gave. OpenEMR found no matching patients, and the new patient's dashboard opened afterward.",
+  "refused_actions": [],
+  "calls": [
+    {
+      "turn": 1,
+      "started_s": 1792433275.530897,
+      "ended_s": 1792433277.439852,
+      "input_tokens": 4,
+      "output_tokens": 79,
+      "cache_read_input_tokens": 0,
+      "cache_creation_input_tokens": 5221,
+      "cost_usd": 0.0138505,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              433,
+              283
+            ]
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgC3Qt2LxCPoMhb7yUq22",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 2,
+      "started_s": 1792433278.112237,
+      "ended_s": 1792433280.888025,
+      "input_tokens": 2,
+      "output_tokens": 351,
+      "cache_read_input_tokens": 5221,
+      "cache_creation_input_tokens": 1470,
+      "cost_usd": 0.008233200000000001,
+      "actions": [
+        {
+          "name": "type",
+          "input": {
+            "text": "Mr."
+          }
+        },
+        {
+          "name": "key",
+          "input": {
+            "text": "Return"
+          }
+        },
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              444,
+              318
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "Barnaby"
+          }
+        },
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              670,
+              318
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "ScoreboardP925"
+          }
+        },
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              426,
+              431
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "1975-02-08"
+          }
+        },
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              1037,
+              466
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "Male"
+          }
+        },
+        {
+          "name": "key",
+          "input": {
+            "text": "Return"
+          }
+        },
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              972,
+              431
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "Male"
+          }
+        },
+        {
+          "name": "key",
+          "input": {
+            "text": "Return"
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgC3R4hnadbQjjR8KNphK",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 3,
+      "started_s": 1792433285.8946931,
+      "ended_s": 1792433287.71161,
+      "input_tokens": 2,
+      "output_tokens": 103,
+      "cache_read_input_tokens": 6691,
+      "cache_creation_input_tokens": 1888,
+      "cost_usd": 0.0070922,
+      "actions": [
+        {
+          "name": "scroll",
+          "input": {
+            "coordinate": [
+              972,
+              431
+            ],
+            "scroll_direction": "down",
+            "scroll_amount": 10
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgC3ReCfuQ9DhbdrB4RfS",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 4,
+      "started_s": 1792433288.4095519,
+      "ended_s": 1792433289.955057,
+      "input_tokens": 2,
+      "output_tokens": 98,
+      "cache_read_input_tokens": 8579,
+      "cache_creation_input_tokens": 1489,
+      "cost_usd": 0.006422300000000001,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              131,
+              506
+            ]
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 1
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgC3RpkApyP2fGvc65fAG",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 5,
+      "started_s": 1792433291.9625652,
+      "ended_s": 1792433294.872538,
+      "input_tokens": 2,
+      "output_tokens": 406,
+      "cache_read_input_tokens": 10068,
+      "cache_creation_input_tokens": 1496,
+      "cost_usd": 0.009817600000000001,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              479,
+              562
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "935 SYNTHETIC WAY"
+          }
+        },
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              444,
+              597
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "EXAMPLETON"
+          }
+        },
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              419,
+              636
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "02139"
+          }
+        },
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              461,
+              749
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "555-0125"
+          }
+        },
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              1035,
+              783
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "barnaby.scoreboard.925@example.invalid"
+          }
+        },
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              1015,
+              597
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "Massachusetts"
+          }
+        },
+        {
+          "name": "key",
+          "input": {
+            "text": "Return"
+          }
+        },
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              1015,
+              636
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "USA"
+          }
+        },
+        {
+          "name": "key",
+          "input": {
+            "text": "Return"
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgC3S6LXqQyrGZGzLUroF",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 6,
+      "started_s": 1792433300.630495,
+      "ended_s": 1792433302.3308458,
+      "input_tokens": 2,
+      "output_tokens": 103,
+      "cache_read_input_tokens": 11564,
+      "cache_creation_input_tokens": 1969,
+      "cost_usd": 0.008269299999999999,
+      "actions": [
+        {
+          "name": "scroll",
+          "input": {
+            "coordinate": [
+              700,
+              450
+            ],
+            "scroll_direction": "down",
+            "scroll_amount": 30
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgC3SjDp7gRRk7pS7LbaN",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 7,
+      "started_s": 1792433303.029346,
+      "ended_s": 1792433304.6448581,
+      "input_tokens": 2,
+      "output_tokens": 98,
+      "cache_read_input_tokens": 13533,
+      "cache_creation_input_tokens": 1489,
+      "cost_usd": 0.007413100000000001,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              284,
+              772
+            ]
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 2
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgC3SuP1EDFewhTPMTDsY",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 8,
+      "started_s": 1792433316.661949,
+      "ended_s": 1792433318.401852,
+      "input_tokens": 2,
+      "output_tokens": 98,
+      "cache_read_input_tokens": 15022,
+      "cache_creation_input_tokens": 1496,
+      "cost_usd": 0.0077284,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              599,
+              280
+            ]
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 3
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgC3Tur4gpZukdbFAnHWw",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 9,
+      "started_s": 1792433324.4956748,
+      "ended_s": 1792433326.3329148,
+      "input_tokens": 2,
+      "output_tokens": 61,
+      "cache_read_input_tokens": 16518,
+      "cache_creation_input_tokens": 1496,
+      "cost_usd": 0.0076576000000000005,
+      "actions": [],
+      "request_id": "req_011CgC3UVEzaEN1Kh3EL9fYF",
+      "stop_reason": "end_turn"
+    }
+  ]
+}

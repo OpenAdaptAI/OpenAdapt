@@ -1,0 +1,269 @@
+{
+  "$defs": {
+    "BusinessDecisionContextCardV1": {
+      "additionalProperties": false,
+      "description": "One reviewed static context item; no runtime observation belongs here.",
+      "properties": {
+        "context_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+          "title": "Context Id",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/BusinessDecisionContextKind"
+        },
+        "label": {
+          "$ref": "#/$defs/BusinessDecisionPresentationTextV1"
+        },
+        "value": {
+          "$ref": "#/$defs/BusinessDecisionPresentationTextV1"
+        }
+      },
+      "required": [
+        "context_id",
+        "kind",
+        "label",
+        "value"
+      ],
+      "title": "BusinessDecisionContextCardV1",
+      "type": "object"
+    },
+    "BusinessDecisionContextKind": {
+      "description": "Closed kinds for reviewed institutional context.",
+      "enum": [
+        "policy",
+        "precedent",
+        "relationship",
+        "capacity",
+        "timing",
+        "risk",
+        "other_reviewed"
+      ],
+      "title": "BusinessDecisionContextKind",
+      "type": "string"
+    },
+    "BusinessDecisionJudgmentReason": {
+      "description": "Finite reasons why the qualified workflow retains human authority.",
+      "enum": [
+        "institutional_knowledge_required",
+        "policy_exception",
+        "competing_priorities",
+        "relationship_context",
+        "capacity_constraint",
+        "temporal_context",
+        "risk_acceptance",
+        "other_reviewed"
+      ],
+      "title": "BusinessDecisionJudgmentReason",
+      "type": "string"
+    },
+    "BusinessDecisionPresentationClassification": {
+      "description": "The reviewed egress class for one static presentation field.",
+      "enum": [
+        "local_only",
+        "reviewed_remote_safe"
+      ],
+      "title": "BusinessDecisionPresentationClassification",
+      "type": "string"
+    },
+    "BusinessDecisionPresentationOptionV1": {
+      "additionalProperties": false,
+      "description": "One exact option label from the reviewed workflow contract.",
+      "properties": {
+        "consequence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BusinessDecisionPresentationTextV1"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BusinessDecisionPresentationTextV1"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "label": {
+          "$ref": "#/$defs/BusinessDecisionPresentationTextV1"
+        },
+        "option_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+          "title": "Option Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "option_id",
+        "label"
+      ],
+      "title": "BusinessDecisionPresentationOptionV1",
+      "type": "object"
+    },
+    "BusinessDecisionPresentationTextV1": {
+      "additionalProperties": false,
+      "description": "One static text field and its positive egress-review binding.",
+      "properties": {
+        "classification": {
+          "$ref": "#/$defs/BusinessDecisionPresentationClassification"
+        },
+        "egress_review_digest": {
+          "anyOf": [
+            {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Egress Review Digest"
+        },
+        "text": {
+          "maxLength": 500,
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1f\\x7f]{1,500}$",
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "classification"
+      ],
+      "title": "BusinessDecisionPresentationTextV1",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Reviewed presentation artifact for one business decision.\n\nThis artifact is separate from the Cloud-safe task.  The signed delivery\npolicy binds its exact digest and the positive egress review before a\nremote route can show it.",
+  "properties": {
+    "category": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/BusinessDecisionPresentationTextV1"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "context_cards": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/BusinessDecisionContextCardV1"
+      },
+      "maxItems": 16,
+      "title": "Context Cards",
+      "type": "array"
+    },
+    "decision_contract_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Decision Contract Digest",
+      "type": "string"
+    },
+    "decision_contract_revision": {
+      "maximum": 2147483647,
+      "minimum": 1,
+      "title": "Decision Contract Revision",
+      "type": "integer"
+    },
+    "options": {
+      "items": {
+        "$ref": "#/$defs/BusinessDecisionPresentationOptionV1"
+      },
+      "maxItems": 32,
+      "minItems": 2,
+      "title": "Options",
+      "type": "array"
+    },
+    "presentation_ref": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Presentation Ref",
+      "type": "string"
+    },
+    "presentation_revision": {
+      "maximum": 2147483647,
+      "minimum": 1,
+      "title": "Presentation Revision",
+      "type": "integer"
+    },
+    "question": {
+      "$ref": "#/$defs/BusinessDecisionPresentationTextV1"
+    },
+    "reason_codes": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/BusinessDecisionJudgmentReason"
+      },
+      "maxItems": 8,
+      "title": "Reason Codes",
+      "type": "array"
+    },
+    "review_contract_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Review Contract Digest",
+      "type": "string"
+    },
+    "role_label": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/BusinessDecisionPresentationTextV1"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "schema_version": {
+      "const": "openadapt.business-decision-presentation/v1",
+      "default": "openadapt.business-decision-presentation/v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "title": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/BusinessDecisionPresentationTextV1"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "why_judgment_needed": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/BusinessDecisionPresentationTextV1"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "presentation_ref",
+    "presentation_revision",
+    "decision_contract_digest",
+    "decision_contract_revision",
+    "question",
+    "options",
+    "review_contract_digest"
+  ],
+  "title": "BusinessDecisionPresentationV1",
+  "type": "object"
+}

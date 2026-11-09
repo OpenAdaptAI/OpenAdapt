@@ -1,0 +1,87 @@
+{
+  "$defs": {
+    "ClinicMcpToolNameV1": {
+      "enum": [
+        "run_harvest",
+        "run_attach_fax",
+        "run_create_triage_task"
+      ],
+      "title": "ClinicMcpToolNameV1",
+      "type": "string"
+    },
+    "ClinicMcpToolSpecV1": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/ClinicOutboxActionV1"
+        },
+        "destructive": {
+          "const": true,
+          "default": true,
+          "title": "Destructive",
+          "type": "boolean"
+        },
+        "name": {
+          "$ref": "#/$defs/ClinicMcpToolNameV1"
+        },
+        "read_only": {
+          "const": false,
+          "default": false,
+          "title": "Read Only",
+          "type": "boolean"
+        },
+        "requires_outbox": {
+          "title": "Requires Outbox",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "action",
+        "requires_outbox"
+      ],
+      "title": "ClinicMcpToolSpecV1",
+      "type": "object"
+    },
+    "ClinicOutboxActionV1": {
+      "enum": [
+        "harvest",
+        "attach_fax",
+        "create_triage_task"
+      ],
+      "title": "ClinicOutboxActionV1",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "openadapt.clinic-mcp-tools/v1",
+      "default": "openadapt.clinic-mcp-tools/v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "tools": {
+      "maxItems": 3,
+      "minItems": 3,
+      "prefixItems": [
+        {
+          "$ref": "#/$defs/ClinicMcpToolSpecV1"
+        },
+        {
+          "$ref": "#/$defs/ClinicMcpToolSpecV1"
+        },
+        {
+          "$ref": "#/$defs/ClinicMcpToolSpecV1"
+        }
+      ],
+      "title": "Tools",
+      "type": "array"
+    }
+  },
+  "required": [
+    "tools"
+  ],
+  "title": "ClinicMcpToolCatalogV1",
+  "type": "object"
+}

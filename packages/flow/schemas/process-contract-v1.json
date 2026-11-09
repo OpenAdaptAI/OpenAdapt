@@ -1,0 +1,392 @@
+{
+  "$defs": {
+    "AdmittedChildSpec": {
+      "additionalProperties": false,
+      "description": "One independently admitted capability named by the parent.",
+      "properties": {
+        "name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "admission_id": {
+          "title": "Admission Id",
+          "type": "string"
+        },
+        "workflow_version_id": {
+          "title": "Workflow Version Id",
+          "type": "string"
+        },
+        "bundle_content_digest": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Bundle Content Digest",
+          "type": "string"
+        },
+        "envelope": {
+          "description": "Pointer to the child's QualificationAdmissionEnvelope file",
+          "minLength": 1,
+          "title": "Envelope",
+          "type": "string"
+        },
+        "bundle": {
+          "description": "Pointer to the admitted bundle directory (not a copy)",
+          "minLength": 1,
+          "title": "Bundle",
+          "type": "string"
+        },
+        "surface": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Recorded surface of the admitted bundle, if known",
+          "title": "Surface"
+        }
+      },
+      "required": [
+        "name",
+        "admission_id",
+        "workflow_version_id",
+        "bundle_content_digest",
+        "envelope",
+        "bundle"
+      ],
+      "title": "AdmittedChildSpec",
+      "type": "object"
+    },
+    "ArtifactEdgeV1": {
+      "additionalProperties": false,
+      "description": "A verified, content-addressed artifact transfer between capabilities.",
+      "properties": {
+        "from_child": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "From Child",
+          "type": "string"
+        },
+        "from_output": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "From Output",
+          "type": "string"
+        },
+        "to_child": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "To Child",
+          "type": "string"
+        },
+        "to_input": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "To Input",
+          "type": "string"
+        },
+        "verifier_child": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Verifier Child",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from_child",
+        "from_output",
+        "to_child",
+        "to_input",
+        "verifier_child"
+      ],
+      "title": "ArtifactEdgeV1",
+      "type": "object"
+    },
+    "CodeChildSpec": {
+      "additionalProperties": false,
+      "description": "One sealed code capability admitted outside the ProcessContract.",
+      "properties": {
+        "name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "kind": {
+          "const": "code",
+          "default": "code",
+          "title": "Kind",
+          "type": "string"
+        },
+        "manifest": {
+          "minLength": 1,
+          "title": "Manifest",
+          "type": "string"
+        },
+        "admission": {
+          "minLength": 1,
+          "title": "Admission",
+          "type": "string"
+        },
+        "source_archive": {
+          "minLength": 1,
+          "title": "Source Archive",
+          "type": "string"
+        },
+        "role": {
+          "default": "transform",
+          "enum": [
+            "transform",
+            "verifier"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "storage_boundary": {
+          "default": "local_protected",
+          "enum": [
+            "local_protected",
+            "customer_controlled",
+            "hosted_private"
+          ],
+          "title": "Storage Boundary",
+          "type": "string"
+        },
+        "data_classification": {
+          "default": "regulated",
+          "enum": [
+            "public",
+            "internal",
+            "sensitive",
+            "regulated"
+          ],
+          "title": "Data Classification",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "manifest",
+        "admission",
+        "source_archive"
+      ],
+      "title": "CodeChildSpec",
+      "type": "object"
+    },
+    "HandoffBinding": {
+      "additionalProperties": false,
+      "description": "One verified fact that a predecessor must supply to a successor.\n\n``source`` names a parameter that ``from_child`` binds in a declared\neffect contract. After that child ends VERIFIED, the bound value becomes\n``to_child``'s ``target`` parameter. The value is not read from a window\ntitle, a URL, or OCR.",
+      "properties": {
+        "from_child": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "From Child",
+          "type": "string"
+        },
+        "source": {
+          "description": "Effect-bound parameter name on the predecessor",
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "title": "Source",
+          "type": "string"
+        },
+        "to_child": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "To Child",
+          "type": "string"
+        },
+        "target": {
+          "description": "Parameter name on the successor that receives the fact",
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "title": "Target",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from_child",
+        "source",
+        "to_child",
+        "target"
+      ],
+      "title": "HandoffBinding",
+      "type": "object"
+    },
+    "HumanChildSpec": {
+      "additionalProperties": false,
+      "description": "One typed human task issued by the existing attended-task contract.",
+      "properties": {
+        "name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "kind": {
+          "const": "human",
+          "default": "human",
+          "title": "Kind",
+          "type": "string"
+        },
+        "task_kind": {
+          "enum": [
+            "authenticate",
+            "actuate",
+            "decide",
+            "review"
+          ],
+          "title": "Task Kind",
+          "type": "string"
+        },
+        "substrate": {
+          "enum": [
+            "browser",
+            "windows",
+            "macos",
+            "linux",
+            "rdp",
+            "citrix",
+            "mixed"
+          ],
+          "title": "Substrate",
+          "type": "string"
+        },
+        "risk_class": {
+          "enum": [
+            "read_only",
+            "state_changing",
+            "consequential",
+            "irreversible"
+          ],
+          "title": "Risk Class",
+          "type": "string"
+        },
+        "required_authn": {
+          "enum": [
+            "local_session",
+            "aal2",
+            "webauthn"
+          ],
+          "title": "Required Authn",
+          "type": "string"
+        },
+        "authentication_template": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Authentication Template"
+        }
+      },
+      "required": [
+        "name",
+        "task_kind",
+        "substrate",
+        "risk_class",
+        "required_authn"
+      ],
+      "title": "HumanChildSpec",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Schema-specific projection for portable v1 consumers.",
+  "properties": {
+    "schema_version": {
+      "const": "openadapt.process-contract/v1",
+      "default": "openadapt.process-contract/v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "name": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "children": {
+      "items": {
+        "$ref": "#/$defs/AdmittedChildSpec"
+      },
+      "title": "Children",
+      "type": "array"
+    },
+    "code_children": {
+      "items": {
+        "$ref": "#/$defs/CodeChildSpec"
+      },
+      "title": "Code Children",
+      "type": "array"
+    },
+    "human_children": {
+      "items": {
+        "$ref": "#/$defs/HumanChildSpec"
+      },
+      "title": "Human Children",
+      "type": "array"
+    },
+    "after": {
+      "additionalProperties": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "title": "After",
+      "type": "object"
+    },
+    "handoffs": {
+      "items": {
+        "$ref": "#/$defs/HandoffBinding"
+      },
+      "title": "Handoffs",
+      "type": "array"
+    },
+    "artifact_edges": {
+      "items": {
+        "$ref": "#/$defs/ArtifactEdgeV1"
+      },
+      "title": "Artifact Edges",
+      "type": "array"
+    },
+    "allow_halt": {
+      "additionalProperties": {
+        "items": {
+          "enum": [
+            "VERIFIED",
+            "COMPLETED_UNVERIFIED",
+            "HALTED",
+            "FAILED",
+            "ROLLED_BACK"
+          ],
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "title": "Allow Halt",
+      "type": "object"
+    },
+    "inputs": {
+      "description": "Parent-level parameter names. Values arrive at run time.",
+      "items": {
+        "type": "string"
+      },
+      "title": "Inputs",
+      "type": "array"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "title": "ProcessContractV1",
+  "type": "object"
+}

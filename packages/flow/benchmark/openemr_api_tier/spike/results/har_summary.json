@@ -1,0 +1,955 @@
+{
+ "requests": [
+  {
+   "started": "16:03:47.203",
+   "ms": 13.8,
+   "method": "GET",
+   "path": "/",
+   "query": [],
+   "status": 302,
+   "request_type": "",
+   "request_bytes": 0,
+   "response_type": "text/html",
+   "response_bytes": -1,
+   "body": null
+  },
+  {
+   "started": "16:03:47.215",
+   "ms": 150.6,
+   "method": "GET",
+   "path": "/interface/login/login.php",
+   "query": [
+    [
+     "site",
+     "default"
+    ]
+   ],
+   "status": 200,
+   "request_type": "",
+   "request_bytes": 0,
+   "response_type": "text/html",
+   "response_bytes": 7909,
+   "body": null
+  },
+  {
+   "started": "16:03:47.510",
+   "ms": 1.6,
+   "method": "GET",
+   "path": "/",
+   "query": [],
+   "status": 302,
+   "request_type": "",
+   "request_bytes": 0,
+   "response_type": "text/html",
+   "response_bytes": -1,
+   "body": null
+  },
+  {
+   "started": "16:03:47.511",
+   "ms": 40.1,
+   "method": "GET",
+   "path": "/interface/login/login.php",
+   "query": [
+    [
+     "site",
+     "default"
+    ]
+   ],
+   "status": 200,
+   "request_type": "",
+   "request_bytes": 0,
+   "response_type": "text/html",
+   "response_bytes": 7909,
+   "body": null
+  },
+  {
+   "started": "16:03:47.724",
+   "ms": 276.7,
+   "method": "POST",
+   "path": "/interface/main/main_screen.php",
+   "query": [
+    [
+     "auth",
+     "login"
+    ],
+    [
+     "site",
+     "default"
+    ]
+   ],
+   "status": 302,
+   "request_type": "application/x-www-form-urlencoded",
+   "request_bytes": 143,
+   "response_type": "text/html",
+   "response_bytes": -1,
+   "body": [
+    [
+     "new_login_session_management",
+     "<redacted>"
+    ],
+    [
+     "languageChoice",
+     "1"
+    ],
+    [
+     "authUser",
+     "<redacted>"
+    ],
+    [
+     "clearPass",
+     "<redacted>"
+    ],
+    [
+     "languageChoice",
+     "1"
+    ]
+   ]
+  },
+  {
+   "started": "16:03:48.001",
+   "ms": 429.6,
+   "method": "GET",
+   "path": "/interface/main/tabs/main.php",
+   "query": [
+    [
+     "token_main",
+     "<redacted>"
+    ]
+   ],
+   "status": 200,
+   "request_type": "",
+   "request_bytes": 0,
+   "response_type": "text/html",
+   "response_bytes": 66566,
+   "body": null
+  },
+  {
+   "started": "16:03:48.136",
+   "ms": 320.8,
+   "method": "GET",
+   "path": "/library/ajax/i18n_generator.php",
+   "query": [
+    [
+     "lang_id",
+     "1"
+    ],
+    [
+     "csrf_token_form",
+     "<redacted>"
+    ]
+   ],
+   "status": 200,
+   "request_type": "",
+   "request_bytes": 0,
+   "response_type": "text/html",
+   "response_bytes": 2,
+   "body": null
+  },
+  {
+   "started": "16:03:48.454",
+   "ms": 26.9,
+   "method": "GET",
+   "path": "/interface/main/main_info.php",
+   "query": [],
+   "status": 302,
+   "request_type": "",
+   "request_bytes": 0,
+   "response_type": "text/html",
+   "response_bytes": -1,
+   "body": null
+  },
+  {
+   "started": "16:03:48.455",
+   "ms": 216.4,
+   "method": "GET",
+   "path": "/interface/main/messages/messages.php",
+   "query": [
+    [
+     "form_active",
+     "1"
+    ]
+   ],
+   "status": 200,
+   "request_type": "",
+   "request_bytes": 0,
+   "response_type": "text/html",
+   "response_bytes": 50368,
+   "body": null
+  },
+  {
+   "started": "16:03:48.473",
+   "ms": 25.4,
+   "method": "GET",
+   "path": "/interface/product_registration/product_registration_controller.php",
+   "query": [],
+   "status": 200,
+   "request_type": "",
+   "request_bytes": 0,
+   "response_type": "application/json",
+   "response_bytes": 25,
+   "body": null
+  },
+  {
+   "started": "16:03:48.476",
+   "ms": 21.9,
+   "method": "POST",
+   "path": "/library/ajax/dated_reminders_counter.php",
+   "query": [],
+   "status": 200,
+   "request_type": "multipart/form-data",
+   "request_bytes": 674,
+   "response_type": "text/html",
+   "response_bytes": 19,
+   "body": null
+  },
+  {
+   "started": "16:03:48.480",
+   "ms": 277.0,
+   "method": "GET",
+   "path": "/interface/main/calendar/index.php",
+   "query": [
+    [
+     "module",
+     "PostCalendar"
+    ],
+    [
+     "viewtype",
+     "day"
+    ],
+    [
+     "func",
+     "view"
+    ],
+    [
+     "pc_username",
+     "openadapt_actor"
+    ]
+   ],
+   "status": 200,
+   "request_type": "",
+   "request_bytes": 0,
+   "response_type": "text/html",
+   "response_bytes": 24057,
+   "body": null
+  },
+  {
+   "started": "16:03:48.668",
+   "ms": 65.9,
+   "method": "GET",
+   "path": "/Documentation/help_files/message_center_help.php",
+   "query": [],
+   "status": 200,
+   "request_type": "",
+   "request_bytes": 0,
+   "response_type": "text/html",
+   "response_bytes": 21830,
+   "body": null
+  },
+  {
+   "started": "16:03:48.679",
+   "ms": 27.6,
+   "method": "POST",
+   "path": "/interface/main/dated_reminders/dated_reminders.php",
+   "query": [],
+   "status": 200,
+   "request_type": "application/x-www-form-urlencoded",
+   "request_bytes": 83,
+   "response_type": "text/html",
+   "response_bytes": 78,
+   "body": [
+    [
+     "drR",
+     "0"
+    ],
+    [
+     "skip_timeout_reset",
+     "1"
+    ],
+    [
+     "csrf_token_form",
+     "<redacted>"
+    ]
+   ]
+  },
+  {
+   "started": "16:03:48.859",
+   "ms": 186.2,
+   "method": "GET",
+   "path": "/interface/new/new_comprehensive.php",
+   "query": [],
+   "status": 200,
+   "request_type": "",
+   "request_bytes": 0,
+   "response_type": "text/html",
+   "response_bytes": 341515,
+   "body": null
+  },
+  {
+   "started": "16:03:58.477",
+   "ms": 66.8,
+   "method": "POST",
+   "path": "/library/ajax/execute_background_services.php",
+   "query": [],
+   "status": 200,
+   "request_type": "multipart/form-data",
+   "request_bytes": 384,
+   "response_type": "text/html",
+   "response_bytes": -1,
+   "body": null
+  },
+  {
+   "started": "16:04:08.637",
+   "ms": 44.5,
+   "method": "GET",
+   "path": "/interface/new/new_search_popup.php",
+   "query": [
+    [
+     "mf_fname",
+     "Nadia"
+    ],
+    [
+     "mf_lname",
+     "Brennan"
+    ],
+    [
+     "mf_DOB",
+     "1971-04-19"
+    ],
+    [
+     "close",
+     ""
+    ]
+   ],
+   "status": 200,
+   "request_type": "",
+   "request_bytes": 0,
+   "response_type": "text/html",
+   "response_bytes": 4703,
+   "body": null
+  },
+  {
+   "started": "16:04:10.908",
+   "ms": 42.8,
+   "method": "POST",
+   "path": "/interface/new/new_comprehensive_save.php",
+   "query": [],
+   "status": 200,
+   "request_type": "application/x-www-form-urlencoded",
+   "request_bytes": 2173,
+   "response_type": "text/html",
+   "response_bytes": 137,
+   "body": [
+    [
+     "csrf_token_form",
+     "<redacted>"
+    ],
+    [
+     "form_title",
+     "Ms."
+    ],
+    [
+     "form_fname",
+     "Nadia"
+    ],
+    [
+     "form_mname",
+     ""
+    ],
+    [
+     "form_lname",
+     "Brennan"
+    ],
+    [
+     "form_suffix",
+     ""
+    ],
+    [
+     "form_preferred_name",
+     ""
+    ],
+    [
+     "form_birth_fname",
+     ""
+    ],
+    [
+     "form_birth_mname",
+     ""
+    ],
+    [
+     "form_birth_lname",
+     ""
+    ],
+    [
+     "form_DOB",
+     "1971-04-19"
+    ],
+    [
+     "form_sex",
+     "Female"
+    ],
+    [
+     "form_gender_identity",
+     ""
+    ],
+    [
+     "form_text_gender_identity",
+     ""
+    ],
+    [
+     "form_sex_identified",
+     ""
+    ],
+    [
+     "form_sexual_orientation",
+     ""
+    ],
+    [
+     "form_text_sexual_orientation",
+     ""
+    ],
+    [
+     "form_pronoun",
+     ""
+    ],
+    [
+     "form_pubpid",
+     ""
+    ],
+    [
+     "form_ss",
+     ""
+    ],
+    [
+     "form_drivers_license",
+     ""
+    ],
+    [
+     "form_status",
+     ""
+    ],
+    [
+     "form_genericname1",
+     ""
+    ],
+    [
+     "form_genericval1",
+     ""
+    ],
+    [
+     "form_genericname2",
+     ""
+    ],
+    [
+     "form_genericval2",
+     ""
+    ],
+    [
+     "form_billing_note",
+     ""
+    ],
+    [
+     "form_street",
+     "27 WILLOW BEND ROAD"
+    ],
+    [
+     "form_street_line_2",
+     ""
+    ],
+    [
+     "form_city",
+     "EXAMPLETON"
+    ],
+    [
+     "form_state",
+     "MA"
+    ],
+    [
+     "form_postal_code",
+     "02139"
+    ],
+    [
+     "form_country_code",
+     "USA"
+    ],
+    [
+     "form_county",
+     ""
+    ],
+    [
+     "form_mothersname",
+     ""
+    ],
+    [
+     "form_contact_relationship",
+     ""
+    ],
+    [
+     "form_phone_contact",
+     ""
+    ],
+    [
+     "form_phone_home",
+     "555-0121"
+    ],
+    [
+     "form_phone_biz",
+     ""
+    ],
+    [
+     "form_phone_cell",
+     ""
+    ],
+    [
+     "form_email",
+     "nadia.brennan@example.invalid"
+    ],
+    [
+     "form_email_direct",
+     ""
+    ],
+    [
+     "form_providerID",
+     ""
+    ],
+    [
+     "form_provider_since_date",
+     ""
+    ],
+    [
+     "form_ref_providerID",
+     ""
+    ],
+    [
+     "form_pharmacy_id",
+     "0"
+    ],
+    [
+     "form_hipaa_notice",
+     ""
+    ],
+    [
+     "form_hipaa_voice",
+     ""
+    ],
+    [
+     "form_hipaa_message",
+     ""
+    ],
+    [
+     "form_hipaa_mail",
+     ""
+    ],
+    [
+     "form_hipaa_allowsms",
+     ""
+    ],
+    [
+     "form_hipaa_allowemail",
+     ""
+    ],
+    [
+     "form_allow_imm_reg_use",
+     ""
+    ],
+    [
+     "form_allow_imm_info_share",
+     ""
+    ],
+    [
+     "form_allow_health_info_ex",
+     ""
+    ],
+    [
+     "form_allow_patient_portal",
+     ""
+    ],
+    [
+     "form_cmsportal_login",
+     ""
+    ],
+    [
+     "form_imm_reg_status",
+     ""
+    ],
+    [
+     "form_imm_reg_stat_effdate",
+     ""
+    ],
+    [
+     "form_publicity_code",
+     ""
+    ],
+    [
+     "form_publ_code_eff_date",
+     ""
+    ],
+    [
+     "form_protect_indicator",
+     ""
+    ],
+    [
+     "form_prot_indi_effdate",
+     ""
+    ],
+    [
+     "form_care_team_status",
+     "active"
+    ],
+    [
+     "form_patient_groups[]",
+     ""
+    ],
+    [
+     "form_occupation",
+     ""
+    ],
+    [
+     "form_industry",
+     ""
+    ],
+    [
+     "form_em_name",
+     ""
+    ],
+    [
+     "form_em_street",
+     ""
+    ],
+    [
+     "form_em_street_line_2",
+     ""
+    ],
+    [
+     "form_em_city",
+     ""
+    ],
+    [
+     "form_em_state",
+     ""
+    ],
+    [
+     "form_em_postal_code",
+     ""
+    ],
+    [
+     "form_em_country",
+     ""
+    ],
+    [
+     "form_em_start_date",
+     ""
+    ],
+    [
+     "form_em_end_date",
+     ""
+    ],
+    [
+     "form_language",
+     ""
+    ],
+    [
+     "form_ethnicity[]",
+     ""
+    ],
+    [
+     "form_race[]",
+     ""
+    ],
+    [
+     "form_nationality_country",
+     ""
+    ],
+    [
+     "form_financial_review",
+     ""
+    ],
+    [
+     "form_family_size",
+     ""
+    ],
+    [
+     "form_monthly_income",
+     ""
+    ],
+    [
+     "form_homeless",
+     ""
+    ],
+    [
+     "form_interpreter_needed",
+     ""
+    ],
+    [
+     "form_interpretter",
+     ""
+    ],
+    [
+     "form_migrantseasonal",
+     ""
+    ],
+    [
+     "form_referral_source",
+     ""
+    ],
+    [
+     "form_vfc",
+     ""
+    ],
+    [
+     "form_religion",
+     ""
+    ],
+    [
+     "form_tribal_affiliations",
+     ""
+    ],
+    [
+     "form_deceased_date",
+     ""
+    ],
+    [
+     "form_deceased_reason",
+     ""
+    ],
+    [
+     "form_guardiansname",
+     ""
+    ],
+    [
+     "form_guardianrelationship",
+     ""
+    ],
+    [
+     "form_guardiansex",
+     ""
+    ],
+    [
+     "form_guardianaddress",
+     ""
+    ],
+    [
+     "form_guardiancity",
+     ""
+    ],
+    [
+     "form_guardianstate",
+     ""
+    ],
+    [
+     "form_guardianpostalcode",
+     ""
+    ],
+    [
+     "form_guardiancountry",
+     ""
+    ],
+    [
+     "form_guardianphone",
+     ""
+    ],
+    [
+     "form_guardianworkphone",
+     ""
+    ],
+    [
+     "form_guardianemail",
+     ""
+    ],
+    [
+     "form_person_gender",
+     ""
+    ]
+   ]
+  },
+  {
+   "started": "16:04:10.954",
+   "ms": 466.7,
+   "method": "GET",
+   "path": "/interface/patient_file/summary/demographics.php",
+   "query": [
+    [
+     "set_pid",
+     "2"
+    ],
+    [
+     "is_new",
+     "1"
+    ]
+   ],
+   "status": 200,
+   "request_type": "",
+   "request_bytes": 0,
+   "response_type": "text/html",
+   "response_bytes": 148505,
+   "body": null
+  },
+  {
+   "started": "16:04:11.422",
+   "ms": 31.8,
+   "method": "GET",
+   "path": "/Documentation/help_files/medical_dashboard_help.php",
+   "query": [],
+   "status": 200,
+   "request_type": "",
+   "request_bytes": 0,
+   "response_type": "text/html",
+   "response_bytes": 17495,
+   "body": null
+  },
+  {
+   "started": "16:04:11.423",
+   "ms": 52.3,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/stats.php",
+   "query": [],
+   "status": 200,
+   "request_type": "multipart/form-data",
+   "request_bytes": 291,
+   "response_type": "text/html",
+   "response_bytes": 2244,
+   "body": null
+  },
+  {
+   "started": "16:04:11.424",
+   "ms": 45.9,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/pnotes_fragment.php",
+   "query": [],
+   "status": 200,
+   "request_type": "multipart/form-data",
+   "request_bytes": 186,
+   "response_type": "text/html",
+   "response_bytes": 397,
+   "body": null
+  },
+  {
+   "started": "16:04:11.424",
+   "ms": 36.6,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/disc_fragment.php",
+   "query": [],
+   "status": 200,
+   "request_type": "multipart/form-data",
+   "request_bytes": 186,
+   "response_type": "text/html",
+   "response_bytes": 548,
+   "body": null
+  },
+  {
+   "started": "16:04:11.424",
+   "ms": 23.1,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/labdata_fragment.php",
+   "query": [],
+   "status": 200,
+   "request_type": "multipart/form-data",
+   "request_bytes": 186,
+   "response_type": "text/html",
+   "response_bytes": 185,
+   "body": null
+  },
+  {
+   "started": "16:04:11.424",
+   "ms": 28.1,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/vitals_fragment.php",
+   "query": [],
+   "status": 200,
+   "request_type": "multipart/form-data",
+   "request_bytes": 186,
+   "response_type": "text/html",
+   "response_bytes": 109,
+   "body": null
+  },
+  {
+   "started": "16:04:11.425",
+   "ms": 383.6,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/clinical_reminders_fragment.php",
+   "query": [],
+   "status": 200,
+   "request_type": "multipart/form-data",
+   "request_bytes": 291,
+   "response_type": "text/html",
+   "response_bytes": 4312,
+   "body": null
+  },
+  {
+   "started": "16:04:11.425",
+   "ms": 30.7,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/patient_reminders_fragment.php",
+   "query": [],
+   "status": 200,
+   "request_type": "multipart/form-data",
+   "request_bytes": 186,
+   "response_type": "text/html",
+   "response_bytes": 28,
+   "body": null
+  },
+  {
+   "started": "16:04:11.505",
+   "ms": 47.2,
+   "method": "GET",
+   "path": "/interface/patient_file/history/encounters.php",
+   "query": [],
+   "status": 200,
+   "request_type": "",
+   "request_bytes": 0,
+   "response_type": "text/html",
+   "response_bytes": 8800,
+   "body": null
+  },
+  {
+   "started": "16:04:11.490",
+   "ms": 56.2,
+   "method": "GET",
+   "path": "/controller.php",
+   "query": [
+    [
+     "document",
+     ""
+    ],
+    [
+     "retrieve",
+     ""
+    ],
+    [
+     "patient_id",
+     "2"
+    ],
+    [
+     "document_id",
+     "-1"
+    ],
+    [
+     "as_file",
+     "false"
+    ],
+    [
+     "original_file",
+     "true"
+    ],
+    [
+     "disable_exit",
+     "false"
+    ],
+    [
+     "show_original",
+     "true"
+    ],
+    [
+     "context",
+     "patient_picture"
+    ]
+   ],
+   "status": 403,
+   "request_type": "",
+   "request_bytes": 0,
+   "response_type": "text/html",
+   "response_bytes": 37,
+   "body": null
+  }
+ ],
+ "static_requests_dropped": 135
+}

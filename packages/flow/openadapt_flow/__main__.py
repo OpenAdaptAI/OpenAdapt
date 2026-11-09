@@ -1,0 +1,13654 @@
+"""openadapt-flow CLI.
+
+Subcommands (thin wrappers over the module APIs; sibling modules are
+imported lazily inside each handler so ``--help`` always works):
+
+- ``record`` — record a demonstration into the format ``compile`` consumes.
+  With no ``--backend`` and no ``--url``, capture the desktop on this OS.
+  ``--url`` without ``--backend`` still records the browser.
+- ``demo-record`` — serve MockMed locally and record the canonical demo.
+- ``compile`` — compile a recording directory into a workflow bundle.
+- ``induce`` — induce a parameterized PROGRAM bundle from MULTIPLE recordings
+  (multi-trace induction); refuses (nonzero exit) when intent is
+  underdetermined rather than guessing a branch, and prints a ``record-next:``
+  worklist of missing demonstrations.
+- ``for-each`` — author a DATA-DRIVEN LOOP bundle: wrap a single-demonstration
+  bundle's linear body in a LOOP that runs once per record of a worklist
+  (CSV/JSON), binding each record's columns to the workflow's parameters.
+  Emits a program:true bundle; fails loudly on a column/parameter mismatch.
+- ``compose`` — author a parent sequencer from named, already-compiled child
+  bundles plus a handoff contract. Each child keeps its recorded surface.
+  ``certify`` / ``run`` execute the parent. The launcher form is
+  ``openadapt flow compose``.
+- ``process`` — author a ProcessContract parent over independently admitted
+  capabilities (each child a ``QualificationAdmissionEnvelope``). Not compose.
+  ``certify`` / ``run`` execute the parent; ``replay`` refuses it. The
+  launcher form is ``openadapt flow process``.
+- ``replay`` — replay a bundle; serves the bundled MockMed demo app when no
+  ``--url`` is given (with optional ``--drift`` to demonstrate healing).
+  ``--worklist`` drives a program's loop over a CLI-supplied relation; effect
+  verification and API actuation are wired from ``--config`` / flags.
+- ``run`` — execute a bundle under a deployment config (``--config``): the
+  same replay path, wired for a real deployment (backend / effects / actuation
+  / durable runtime / policy) instead of the demo.
+- ``resume`` — resume a durably-paused run from its last verified checkpoint.
+- ``teach`` runs self-serve HALT -> LEARN: resolve a halted run from a fix
+  demonstration (induce + gate + validate the correction, promote only a
+  verified revision), writing an updated bundle. Refuses bad fixes.
+- ``approve`` — mark a durably-paused run's pending escalation approved.
+- ``bench`` — replay a bundle N times against MockMed and aggregate.
+- ``visualize`` — SEE what a demonstration compiled into: emit a program-graph
+  view of a bundle or a composed parent (child bundles, --after DAG,
+  effect-bound handoffs) as self-contained HTML, Mermaid, or the shared JSON
+  graph spec that the cloud and desktop surfaces render.
+- ``seal`` — copy a bundle to a new path and atomically seal its workflow and
+  template evidence with ``OPENADAPT_BUNDLE_KEY``.
+- ``lint`` — report a bundle's coverage gaps (advice; exit code by severity).
+- ``certify`` — enforce a safety policy on a bundle (refuse it if it fails).
+- ``qualify`` — create and edit the versioned qualification project, import
+  customer-controlled case results, explain refusals, and persist certification.
+  ``qualify propose`` (also ``propose-qualification``) fills application,
+  environment, identity, and effect pins from the demo; ``qualify accept``
+  runs the proposed oracle against a ``--break-it`` fault before it can
+  succeed; refusing a pin HALTs.
+- ``scaffold-verifier`` — build a record check from the reads the app made
+  after the save and fault-test it (``record_check.proposed.yaml``), or, with
+  no read, draft an effect-oracle contract (``effect_contract.yaml``); never
+  approves; refuses demonstrations with no consequential step.
+- ``explain`` — plain-language, read-only read of a completed run directory:
+  what happened, why the outcome is the safe one, and the next suggested
+  command.
+- ``console`` — serve the localhost-only operator console (a read-first web
+  UI over bundles / runs / skill libraries; requires the ``console`` extra).
+- ``serve-execute`` — host the public Execute HTTP+MCP contract on this
+  machine (self-signed local receipts; not an OpenAdapt production Seal).
+- ``serve-reward`` — score training episodes by reading the system of
+  record through an independent oracle (self-signed reward receipts; not
+  an Execute Seal).
+- ``emit-skill`` — emit an Agent Skills folder for a bundle.
+- ``emit-mcp`` — emit a standalone MCP ``server.py`` for a bundle.
+- ``connector`` — the BYOC (bring-your-own-cloud) outbound-pull daemon:
+  ``enroll`` this machine with OpenAdapt Cloud, then ``run`` governed jobs
+  LOCALLY inside the customer perimeter (PHI stays on this side). See
+  ``docs/BYOC_CONNECTOR.md`` and :mod:`openadapt_flow.connector`.
+
+A single ``deployment.yaml`` (``--config``; see
+``docs/deployment.example.yaml`` and :mod:`openadapt_flow.deployment`)
+configures backend / actuation / effects / runtime / policy for ``record`` /
+``compile`` / ``certify`` / ``replay`` / ``run`` / ``resume``.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from contextlib import contextmanager
+from pathlib import Path
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Iterator,
+    Literal,
+    Mapping,
+    Optional,
+    Sequence,
+    cast,
+)
+from urllib.parse import urlsplit
+from uuid import UUID
+
+if TYPE_CHECKING:  # pragma: no cover
+    from openadapt_flow.backend import Backend
+    from openadapt_flow.ir import ExecutionTargetKind, RunReport
+    from openadapt_flow.runtime.authorization import RuntimeParamScalar
+    from openadapt_flow.tutorial import BreakItResult
+
+_VIEWPORT = {"width": 1280, "height": 800}
+
+
+def _parse_params(pairs: Sequence[str] | None) -> dict[str, str]:
+    """Parse repeated ``--param k=v`` flags into a dict."""
+    params: dict[str, str] = {}
+    for pair in pairs or []:
+        if "=" not in pair:
+            raise SystemExit(f"--param expects k=v, got {pair!r}")
+        key, value = pair.split("=", 1)
+        params[key] = value
+    return params
+
+
+def _parse_identifier_region_arg(
+    values: Sequence[str], *, backend: str
+) -> tuple[int, int, int, int] | None:
+    """Parse a desktop ``record --identifier X,Y,W,H`` region (fail-loud).
+
+    A pixel capture has no field identity, so ``--identifier`` on a desktop
+    backend takes the record-identifying REGION itself, once. A field-name
+    argument (the web syntax) or a repeated/malformed region is refused
+    rather than silently recording an unmarked session.
+    """
+    if not values:
+        return None
+    if len(values) > 1:
+        raise SystemExit(
+            f"record --backend {backend}: --identifier takes ONE region "
+            f"(X,Y,W,H) on the pixel/desktop substrate, got {len(values)}."
+        )
+    parts = values[0].split(",")
+    try:
+        region = tuple(int(p.strip()) for p in parts)
+    except ValueError:
+        region = ()
+    if len(region) != 4 or region[2] <= 0 or region[3] <= 0:
+        raise SystemExit(
+            f"record --backend {backend}: --identifier expects X,Y,W,H "
+            "(recording pixels, positive size) on the pixel/desktop "
+            f"substrate — field names only apply to --backend web. Got "
+            f"{values[0]!r}."
+        )
+    return (region[0], region[1], region[2], region[3])
+
+
+_RECORD_TARGET_FLAGS: tuple[tuple[str, str], ...] = (
+    ("agent_url", "--agent-url"),
+    ("macos_app", "--macos-app"),
+    ("macos_window_title", "--macos-window-title"),
+    ("linux_app", "--linux-app"),
+    ("linux_window_title", "--linux-window-title"),
+    ("linux_allow_physical_input", "--linux-allow-physical-input"),
+    ("rdp_host", "--rdp-host"),
+    ("rdp_window", "--rdp-window"),
+    ("rdp_window_title", "--rdp-window-title"),
+    ("rdp_readiness_text", "--rdp-readiness-text"),
+)
+
+
+def _record_flag_is_set(args: argparse.Namespace, attr: str) -> bool:
+    value = getattr(args, attr, None)
+    if isinstance(value, bool):
+        return value
+    return value is not None
+
+
+def _reject_unbound_record_target_flags(args: argparse.Namespace, backend: str) -> None:
+    """Refuse target flags that cannot affect this capture session.
+
+    The backend flags are shared with replay/run.  A record command must not
+    accept one unless it either scopes the live Capture session or is retained
+    by the existing recording schema as a replay binding.  Otherwise the CLI
+    would appear to record the named app/host while actually recording an
+    unrelated local desktop.
+    """
+    allowed: dict[str, set[str]] = {
+        "web": set(),
+        "windows": set(),
+        "macos": {"macos_app", "macos_window_title"},
+        "linux": set(),
+        "rdp": {"rdp_window", "rdp_window_title", "rdp_readiness_text"},
+        "citrix": {"rdp_window", "rdp_window_title", "rdp_readiness_text"},
+    }
+    for attr, flag in _RECORD_TARGET_FLAGS:
+        if not _record_flag_is_set(args, attr) or attr in allowed[backend]:
+            continue
+        if backend == "windows" and attr == "agent_url":
+            reason = (
+                "the local Capture session cannot bind to a WAA endpoint. "
+                "Scope the local recording with --window/--window-title, then "
+                "pass --agent-url to replay or run"
+            )
+        elif backend == "linux" and attr in {
+            "linux_app",
+            "linux_window_title",
+            "linux_allow_physical_input",
+        }:
+            reason = (
+                "the current Capture component has no Linux window-scoping "
+                "primitive. Record the local Linux desktop without this flag, "
+                "then pass it to replay or run"
+            )
+        elif backend == "rdp" and attr == "rdp_host":
+            reason = (
+                "Capture cannot connect to a network RDP endpoint. Record "
+                "inside the remote session, or scope a local client with "
+                "--window/--rdp-window, then pass --rdp-host to replay or run"
+            )
+        else:
+            reason = f"this target flag does not apply to the {backend} recorder"
+        raise SystemExit(
+            f"record --backend {backend}: {flag} was not applied: {reason}. "
+            "Nothing was recorded."
+        )
+
+
+def _merge_record_window_selector(
+    generic_value: Optional[str],
+    target_value: Optional[str],
+    *,
+    generic_flag: str,
+    target_flag: str,
+    backend: str,
+) -> Optional[str]:
+    """Merge generic and surface-specific Capture selectors without guessing."""
+    if generic_value is None:
+        return target_value
+    if target_value is None:
+        return generic_value
+    if generic_value.strip().casefold() != target_value.strip().casefold():
+        raise SystemExit(
+            f"record --backend {backend}: {generic_flag} and {target_flag} "
+            "name different capture targets. Give one target, or give the "
+            "same value to both. Nothing was recorded."
+        )
+    return generic_value
+
+
+def _resolve_record_capture_window(
+    args: argparse.Namespace, backend: str
+) -> Optional[dict[str, Optional[str]]]:
+    """Resolve the exact window that the local Capture session will record."""
+    _reject_unbound_record_target_flags(args, backend)
+
+    owner = getattr(args, "window", None)
+    title = getattr(args, "window_title", None)
+    if backend == "linux" and (owner is not None or title is not None):
+        raise SystemExit(
+            "record --backend linux: --window/--window-title cannot be applied "
+            "because the current Capture component has no Linux "
+            "window-scoping primitive. Record the local Linux desktop without "
+            "these flags. Nothing was recorded."
+        )
+    if backend == "macos":
+        owner = _merge_record_window_selector(
+            owner,
+            getattr(args, "macos_app", None),
+            generic_flag="--window",
+            target_flag="--macos-app",
+            backend=backend,
+        )
+        title = _merge_record_window_selector(
+            title,
+            getattr(args, "macos_window_title", None),
+            generic_flag="--window-title",
+            target_flag="--macos-window-title",
+            backend=backend,
+        )
+    elif backend in ("rdp", "citrix"):
+        # The capture selector is a local owner/title substring. The replay
+        # selector can be an exact process identity (for example ``wfica32``),
+        # so the two values can legitimately differ. A dedicated --window
+        # value controls Capture; otherwise the replay selector also scopes it.
+        owner = owner or getattr(args, "rdp_window", None)
+        title = title or getattr(args, "rdp_window_title", None)
+    if owner is None and title is None:
+        return None
+    return {"owner": owner, "title": title}
+
+
+def _replay_params(
+    pairs: Sequence[str] | None,
+    params_file: str | None = None,
+) -> dict[str, "RuntimeParamScalar"]:
+    """Load replay bindings without requiring sensitive values in argv.
+
+    ``--params-file`` is intended for managed runners: the file can be staged
+    inside the per-run boundary while process listings contain only its path.
+    Explicit ``--param`` flags remain supported and override file values.
+    """
+    import json
+
+    from openadapt_flow.runtime.authorization import is_runtime_param_scalar
+
+    params: dict[str, RuntimeParamScalar] = {}
+    if params_file:
+        path = Path(params_file)
+        try:
+            from openadapt_flow import sealed_set
+
+            raw = json.loads(sealed_set.read_text(path))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise SystemExit(f"--params-file could not be read as JSON: {exc}") from exc
+        if not isinstance(raw, dict):
+            raise SystemExit("--params-file must contain one JSON object")
+        if len(raw) > 100:
+            raise SystemExit("--params-file may contain at most 100 parameters")
+        for key, value in raw.items():
+            if not isinstance(key, str) or not key:
+                raise SystemExit("--params-file keys must be non-empty strings")
+            if not is_runtime_param_scalar(value):
+                raise SystemExit(f"--params-file value for {key!r} must be a scalar")
+            params[key] = value
+    params.update(_parse_params(pairs))
+    return params
+
+
+def _with_drift(url: str, drift: str | None) -> str:
+    """Append a ``?drift=...`` query to a MockMed base URL."""
+    if not drift:
+        return url
+    return f"{url.rstrip('/')}/?drift={drift}"
+
+
+def _load_worklist_file(path: Path) -> list[dict[str, str]]:
+    """Load a CLI worklist file (``.csv`` or ``.json``) into param rows.
+
+    CSV: the header row names the parameters; each subsequent row is one loop
+    iteration's bindings. JSON: either a list of ``{param: value}`` row objects,
+    or a single ``{param: value}`` object (one row). Every value is coerced to a
+    string (the IR's worklist rows are ``dict[str, str]``).
+    """
+    import csv
+    import json
+
+    path = Path(path)
+    if not path.is_file():
+        raise SystemExit(f"--worklist file not found: {path}")
+    suffix = path.suffix.lower()
+    if suffix == ".json":
+        data = json.loads(path.read_text())
+        if isinstance(data, dict):
+            data = [data]
+        if not isinstance(data, list) or not all(isinstance(r, dict) for r in data):
+            raise SystemExit(
+                f"--worklist JSON {path} must be a list of row objects (or one "
+                "row object)"
+            )
+        return [{str(k): str(v) for k, v in row.items()} for row in data]
+    if suffix == ".csv":
+        with path.open(newline="") as fh:
+            reader = csv.DictReader(fh)
+            return [
+                {str(k): str(v) for k, v in row.items() if k is not None}
+                for row in reader
+            ]
+    raise SystemExit(f"--worklist file {path} must be .csv or .json (got {suffix!r})")
+
+
+def _resolve_worklists(
+    specs: Sequence[str] | None, workflow
+) -> dict[str, list[dict[str, str]]]:
+    """Turn ``--worklist`` specs into run-time worklists keyed by relation name.
+
+    Each spec is ``RELATION=path`` (bind the file to that loop relation) or a
+    bare ``path`` (bind to the workflow's SOLE loop relation; an error if the
+    program has zero or several). Program-mode only — a linear bundle ignores
+    worklists, so passing one there is refused loudly.
+    """
+    if not specs:
+        return {}
+    if workflow.program is None:
+        raise SystemExit(
+            "--worklist applies only to a PROGRAM bundle (with a loop over a "
+            "relation); this bundle is linear."
+        )
+    relations = sorted(workflow.data_sources.keys())
+    worklists: dict[str, list[dict[str, str]]] = {}
+    for spec in specs:
+        if "=" in spec:
+            name, _, raw = spec.partition("=")
+            name = name.strip()
+        else:
+            if len(relations) != 1:
+                raise SystemExit(
+                    "bare --worklist <file> needs exactly one loop relation to "
+                    f"bind to; this program declares {relations or 'none'}. Use "
+                    "--worklist RELATION=<file>."
+                )
+            name, raw = relations[0], spec
+        if relations and name not in relations:
+            raise SystemExit(
+                f"--worklist relation {name!r} is not one of this program's "
+                f"relations {relations}"
+            )
+        worklists[name] = _load_worklist_file(Path(raw))
+    return worklists
+
+
+def _deployment_sections(args: argparse.Namespace):
+    """Snapshot deployment config plus direct effects/actuation overrides."""
+    from openadapt_flow.deployment import DeploymentConfig, load_deployment
+
+    cfg = (
+        load_deployment(args.config)
+        if getattr(args, "config", None)
+        else DeploymentConfig()
+    )
+
+    effects = cfg.effects
+    if getattr(args, "effects_kind", None):
+        effects = effects.model_copy(update={"kind": args.effects_kind})
+    if getattr(args, "effects_base_url", None):
+        effects = effects.model_copy(update={"base_url": args.effects_base_url})
+    if getattr(args, "effects_records_path", None):
+        effects = effects.model_copy(update={"records_path": args.effects_records_path})
+    if getattr(args, "effects_root", None):
+        effects = effects.model_copy(update={"root": args.effects_root})
+
+    actuation = cfg.actuation
+    if getattr(args, "api_base_url", None):
+        actuation = actuation.model_copy(
+            update={"api": True, "base_url": args.api_base_url}
+        )
+    elif getattr(args, "api_actuator", False):
+        actuation = actuation.model_copy(update={"api": True})
+    return cfg, effects, actuation
+
+
+def _deployment_runtime(
+    args: argparse.Namespace,
+    params: Mapping[str, "RuntimeParamScalar"] | None = None,
+):
+    """Resolve the deployment wiring for a replay/run from ``--config`` + flags.
+
+    Returns ``(cfg, effect_verifier, api_actuator, durable, allow_egress)``.
+    A ``--config`` deployment YAML supplies the full surface (records paths,
+    FHIR search params, ...); direct flags override the common fields. With
+    neither, everything is default: no verifier, no actuator, non-durable, and
+    egress only if ``--allow-model-grounding`` was passed (fully back-compatible).
+
+    ``params`` (the governed ``--params-file`` / ``--param`` values) binds an
+    effect-verifier config's explicit ``{param: ...}`` references
+    (``effects.path_params`` / ``search_param_exprs`` / ``sql_query_params``)
+    at construction — see ``docs/EFFECT_KIT.md``. A config with no references
+    ignores it.
+    """
+    from openadapt_flow.deployment import build_api_actuator, build_effect_verifier
+    from openadapt_flow.runtime.authorization import runtime_params_for_gui
+
+    cfg, effects, actuation = _deployment_sections(args)
+    try:
+        effect_verifier = build_effect_verifier(
+            effects,
+            params=runtime_params_for_gui(params or {}),
+        )
+        api_actuator = build_api_actuator(actuation)
+    except ValueError as e:
+        raise SystemExit(str(e))
+
+    durable = bool(cfg.runtime.durable or getattr(args, "durable", False))
+    selected_profile = getattr(args, "_execution_profile", None)
+    if selected_profile is not None:
+        from openadapt_flow.execution_profiles import execution_profile_contract
+
+        durable = bool(
+            durable or execution_profile_contract(selected_profile).require_durable
+        )
+    allow_egress = bool(
+        cfg.runtime.allow_model_grounding
+        or getattr(args, "allow_model_grounding", False)
+    )
+    if getattr(args, "local_grounding", False):
+        cfg.runtime = cfg.runtime.model_copy(update={"local_grounding": True})
+    return cfg, effect_verifier, api_actuator, durable, allow_egress
+
+
+def _resolve_backend_config(args: argparse.Namespace, cfg, workflow=None):
+    """Merge the ``--backend`` family of CLI flags over ``cfg.backend``.
+
+    A deployment ``--config`` supplies the backend section; direct flags
+    (``--backend`` / ``--agent-url`` / ``--macos-app`` / ``--linux-app`` /
+    ``--rdp-host`` / ``--rdp-window`` / ``--rdp-window-title`` /
+    ``--rdp-readiness-text``) override individual fields, exactly as the
+    effects/actuation flags override their sections. A compiled window-scoped
+    RDP/Citrix workflow may contribute the exact target recorded with the
+    demonstration; explicit config/flags remain authoritative.
+    """
+    backend = cfg.backend
+    hints = getattr(workflow, "backend_hints", None)
+    configured = set(getattr(backend, "model_fields_set", set()))
+    explicit_kind = getattr(args, "backend", None)
+    configured_kind = backend.kind if "kind" in configured else None
+    selected_kind = explicit_kind or configured_kind
+    # Surface binding (Section 5): a surface-bound workflow supplies its own
+    # target when neither a flag nor the config selects one. There is no
+    # implicit browser default for a bound bundle; the browser is chosen only
+    # when the workflow was actually recorded on it.
+    bound_surface = getattr(workflow, "surface", None)
+    if selected_kind is None and hints is None and bound_surface is not None:
+        backend = backend.model_copy(update={"kind": bound_surface})
+    if hints is not None and (
+        selected_kind is None or _report_backend_kind(selected_kind) == hints.backend
+    ):
+        updates: dict[str, object] = {}
+        if selected_kind is None:
+            updates["kind"] = hints.backend
+        for field in ("rdp_window", "rdp_window_title", "rdp_readiness_text"):
+            if field not in configured:
+                value = getattr(hints, field)
+                if value is not None:
+                    updates[field] = value
+        if updates:
+            backend = backend.model_copy(update=updates)
+    if getattr(args, "backend", None):
+        backend = backend.model_copy(update={"kind": args.backend})
+    if getattr(args, "agent_url", None):
+        backend = backend.model_copy(update={"agent_url": args.agent_url})
+    if getattr(args, "macos_app", None):
+        backend = backend.model_copy(update={"macos_app": args.macos_app})
+    if getattr(args, "macos_window_title", None):
+        backend = backend.model_copy(
+            update={"macos_window_title": args.macos_window_title}
+        )
+    if getattr(args, "linux_app", None):
+        backend = backend.model_copy(update={"linux_app": args.linux_app})
+    if getattr(args, "linux_window_title", None):
+        backend = backend.model_copy(
+            update={"linux_window_title": args.linux_window_title}
+        )
+    if getattr(args, "linux_allow_physical_input", False):
+        backend = backend.model_copy(update={"linux_allow_physical_input": True})
+    if getattr(args, "rdp_host", None):
+        backend = backend.model_copy(update={"rdp_host": args.rdp_host})
+    if getattr(args, "rdp_window", None):
+        backend = backend.model_copy(update={"rdp_window": args.rdp_window})
+    if getattr(args, "rdp_window_title", None):
+        backend = backend.model_copy(update={"rdp_window_title": args.rdp_window_title})
+    if getattr(args, "rdp_readiness_text", None):
+        backend = backend.model_copy(
+            update={"rdp_readiness_text": args.rdp_readiness_text}
+        )
+    if getattr(args, "browser_cdp_endpoint", None):
+        backend = backend.model_copy(
+            update={"browser_cdp_endpoint": args.browser_cdp_endpoint}
+        )
+    if getattr(args, "browser_page_url", None):
+        backend = backend.model_copy(update={"browser_page_url": args.browser_page_url})
+    return backend
+
+
+def _surface_selection_gate(
+    args: argparse.Namespace, cfg, workflow, *, operation: str
+) -> Optional[int]:
+    """Enforce explicit surface selection (Section 5) before backend resolve.
+
+    Returns an exit code to refuse with, or None to proceed. Production
+    profiles (Standard/Regulated) require an explicit target: a ``--backend``
+    flag, a configured ``backend.kind``, or a surface-bound workflow. The
+    Demo/permissive posture may default to the browser (or the operator's
+    last-used Demo target from the CLI state file) but says so visibly.
+    Idempotent across the ``run`` -> ``_cmd_replay`` delegation.
+    """
+    if getattr(args, "_surface_selection_done", False):
+        return None
+    args._surface_selection_done = True
+    from openadapt_flow.surface_selection import (
+        demo_default_notice,
+        explicit_surface_refusal,
+        load_last_surface,
+        store_last_surface,
+    )
+
+    profile = getattr(args, "_execution_profile", None)
+    user_backend = getattr(args, "backend", None)
+    explicitly_selected = bool(
+        user_backend
+        or "kind" in set(getattr(cfg.backend, "model_fields_set", set()))
+        or getattr(workflow, "backend_hints", None) is not None
+        or getattr(workflow, "surface", None) is not None
+    )
+    if profile == "demo" and user_backend:
+        # The last-used target is a Demo-only CLI convenience, persisted in
+        # the per-user state file and NEVER written into a workflow bundle.
+        store_last_surface(_report_backend_kind(user_backend))
+    if explicitly_selected:
+        return None
+    if profile in ("standard", "regulated"):
+        print(explicit_surface_refusal(operation, profile))
+        return 2
+    last = load_last_surface() if profile == "demo" else None
+    if last is not None:
+        args.backend = last
+    print(demo_default_notice(last or "web", from_last_used=last is not None))
+    return None
+
+
+def _enforce_surface_binding(
+    args: argparse.Namespace, workflow, backend_cfg, *, operation: str
+) -> Optional[int]:
+    """Refuse a cross-surface run unless explicitly overridden (Section 5).
+
+    A workflow recorded/qualified on one surface must not silently run on
+    another. ``--allow-surface-override`` proceeds anyway and records itself
+    in the run report (``surface_override``) as compatibility evidence; the
+    executed override is threaded via ``args._surface_override``. Idempotent
+    across the ``run`` -> ``_cmd_replay`` delegation.
+    """
+    if getattr(args, "_surface_binding_done", False):
+        return None
+    args._surface_binding_done = True
+    recorded = getattr(workflow, "surface", None)
+    if recorded is None:
+        return None
+    requested = _report_backend_kind(backend_cfg.kind)
+    if requested == recorded:
+        return None
+    from openadapt_flow.surface_selection import (
+        surface_mismatch_refusal,
+        surface_override_notice,
+    )
+
+    if not getattr(args, "allow_surface_override", False):
+        print(
+            surface_mismatch_refusal(
+                operation,
+                recorded=recorded,
+                requested=requested,
+                execution_mode=getattr(workflow, "execution_mode", None),
+            )
+        )
+        return 2
+    args._surface_override = True
+    print(surface_override_notice(recorded, requested))
+    return None
+
+
+def _recording_encryption_key(args: argparse.Namespace, backend: str) -> Optional[str]:
+    """The passphrase that encrypts this recording, or ``None`` for plaintext.
+
+    The web recorder encrypts every file from the first frame under
+    ``OPENADAPT_RECORDING_KEY`` or ``OPENADAPT_BUNDLE_KEY``, and under the
+    local key in strict mode (:mod:`openadapt_flow.at_rest`); otherwise the
+    plaintext recording is logged. ``--no-encrypt`` and
+    ``OPENADAPT_FLOW_PLAINTEXT_AT_REST`` opt out, with a warning and a ledger
+    line. The desktop recorders write a raw capture session through
+    openadapt-capture that Flow cannot encrypt yet: by default they record in
+    plaintext and name the directory on stderr and in the ledger;
+    ``OPENADAPT_FLOW_AT_REST=strict`` and a configured recording key refuse.
+    """
+    import os
+
+    from openadapt_flow import at_rest, crypto, sealed_set
+
+    out = getattr(args, "out", None) or "the recording directory"
+    try:
+        if getattr(args, "no_encrypt", False):
+            if at_rest.strict():
+                at_rest.unsealed_write("a recording (--no-encrypt)", out)
+            at_rest.record_plaintext(f"a recording at {out}", "record --no-encrypt")
+            return None
+        explicit = os.environ.get(sealed_set.RECORDING_ENV_KEY) or None
+        if backend != "web":
+            if explicit:
+                raise SystemExit(
+                    f"record: {sealed_set.RECORDING_ENV_KEY} is set, but the "
+                    f"{backend} recorder writes its raw capture session "
+                    "(database, video) through openadapt-capture, which Flow "
+                    "cannot encrypt yet. Nothing was recorded. Record on an "
+                    "encrypted volume and pass --no-encrypt, or use --backend web."
+                )
+            if not at_rest.plaintext_allowed(f"a desktop recording at {out}"):
+                at_rest.unsealed_write(f"a {backend} recording", out)
+            return None
+    except at_rest.AtRestRefused as exc:
+        raise SystemExit(f"record: {exc}") from exc
+    if explicit or os.environ.get(crypto.ENV_KEY):
+        return explicit or crypto.resolve_key(None)
+    try:
+        return (
+            crypto.resolve_key(None) if at_rest.seal_new("a recording", out) else None
+        )
+    except at_rest.AtRestRefused as exc:
+        raise SystemExit(f"record: {exc}") from exc
+
+
+def _stamp_recording_surface(recording_dir: Path, surface: str) -> None:
+    """Stamp the recorded surface into ``meta.json`` (additive, Section 5).
+
+    The compiler binds the compiled bundle to this exact surface. Best-effort
+    by design: a recording written by an older converter without ``meta.json``
+    simply compiles to a legacy, surface-unbound bundle.
+
+    A recorder that stamps the surface itself before it publishes the
+    recording leaves nothing to do here. This function then writes nothing, so
+    a complete recording is never modified after its atomic publish.
+    """
+    import json
+
+    from openadapt_flow import sealed_set
+
+    meta_path = Path(recording_dir) / "meta.json"
+    try:
+        meta = json.loads(sealed_set.read_text(meta_path))
+    except sealed_set.SealedSetError:
+        raise
+    except (OSError, ValueError):
+        return
+    if meta.get("surface") == surface:
+        return
+    meta["surface"] = surface
+    sealed_set.write_text(meta_path, json.dumps(meta, indent=2))
+
+
+def _report_backend_kind(kind: object) -> "ExecutionTargetKind":
+    """Return the closed hosted-summary token for a resolved backend kind.
+
+    Execution accepts ``remote-display`` / ``remote_display`` as RDP aliases.
+    Hosted summaries use a closed enum, so fold those aliases without
+    collapsing the distinct Citrix product token to generic RDP.
+    """
+    token = str(kind).strip().lower()
+    if token in ("remote-display", "remote_display"):
+        return "rdp"
+    if token not in {"web", "windows", "macos", "linux", "rdp", "citrix"}:
+        raise ValueError(f"unsupported execution target kind: {kind!r}")
+    return cast("ExecutionTargetKind", token)
+
+
+def _refuse_missing_citrix_readiness(backend_cfg: object, *, operation: str) -> bool:
+    """Refuse governed Citrix actuation without a nonblank frame marker."""
+    kind = str(getattr(backend_cfg, "kind", "")).strip().lower()
+    marker = str(getattr(backend_cfg, "rdp_readiness_text", "") or "").strip()
+    if kind != "citrix" or marker:
+        return False
+    print(
+        f"{operation} REFUSED: governed Citrix execution requires a stable "
+        "current-frame readiness marker before any action. Set "
+        "backend.rdp_readiness_text in --config or pass "
+        "--rdp-readiness-text. Nothing was executed."
+    )
+    return True
+
+
+def _refuse_shared_readback_session(
+    cfg: object,
+    backend_cfg: object,
+    *,
+    operation: str,
+    surfaces: Optional[dict] = None,
+) -> bool:
+    """Refuse a desktop read-back session that is the session that types.
+
+    The deployment loader checks this too, but ``--backend``, ``--agent-url``,
+    ``--rdp-host`` and the bundle's recorded target can change the typing
+    backend after loading. This checks the backend the run will really use.
+    """
+    from openadapt_flow.deployment import desktop_readback_session_overlap
+
+    effects = getattr(cfg, "effects", None)
+    if effects is None:
+        return False
+    for section in [effects, *getattr(effects, "candidates", [])]:
+        spec = getattr(section, "desktop_readback", None)
+        if spec is None:
+            continue
+        problem = desktop_readback_session_overlap(
+            spec, [backend_cfg, *(surfaces or {}).values()]
+        )
+        if problem is not None:
+            print(
+                f"{operation} REFUSED: effects.desktop_readback.session {problem}. "
+                "Nothing was executed."
+            )
+            return True
+    return False
+
+
+_SAFE_BUNDLE_LOAD_GUIDANCE = (
+    "Verify the bundle path and integrity; for a sealed bundle, set "
+    "OPENADAPT_BUNDLE_KEY."
+)
+
+
+def _configured_replayer(
+    backend,
+    *,
+    workflow,
+    allow_egress: bool,
+    effect_verifier,
+    api_actuator,
+    durable: bool,
+    use_structural: bool,
+    pixel_verify_enabled: bool = False,
+    governed_authorization=None,
+    delivery_authority_kind: Literal[
+        "customer_local", "cloud_runner"
+    ] = "customer_local",
+    remote_delivery_run_id: Optional[str] = None,
+    managed_dispatch_binding=None,
+    production_qualification_guard=None,
+    qualification_campaign_guard=None,
+    runtime_config=None,
+    checkpoint_key: Optional[str] = None,
+    approval_gate=None,
+    qualification_fault_driver=None,
+    surface_backends=None,
+    deployment_surface: Optional[str] = None,
+):
+    """Wire the grounding, verification, and actuation layers into a Replayer.
+
+    Backend-agnostic: the on-prem VLM appliance (opt-in, egress-guarded), the
+    operator-selected model grounder (opt-in, PHI-allowlisted), the OCR
+    grounding rung, and the deployment wiring (effect verifier / API actuator /
+    durable runtime) are identical for browser, Windows, macOS, and
+    RDP/remote-display sessions. The caller owns the backend lifecycle.
+    """
+    from openadapt_flow import crypto
+    from openadapt_flow.deployment import build_replayer
+
+    profile_name = getattr(governed_authorization, "execution_profile", None)
+    if checkpoint_key is None and profile_name is not None:
+        from openadapt_flow.execution_profiles import execution_profile_contract
+
+        contract = execution_profile_contract(profile_name)
+        if contract.production and (
+            contract.require_encryption or bool(getattr(workflow, "encrypted", False))
+        ):
+            checkpoint_key = crypto.require_key(None)
+
+    replayer = build_replayer(
+        backend,
+        allow_egress=allow_egress,
+        effect_verifier=effect_verifier,
+        api_actuator=api_actuator,
+        durable=durable,
+        use_structural=use_structural,
+        pixel_verify_enabled=pixel_verify_enabled,
+        governed_authorization=governed_authorization,
+        delivery_authority_kind=delivery_authority_kind,
+        remote_delivery_run_id=remote_delivery_run_id,
+        managed_dispatch_binding=managed_dispatch_binding,
+        production_qualification_guard=production_qualification_guard,
+        qualification_campaign_guard=qualification_campaign_guard,
+        runtime_config=runtime_config,
+        checkpoint_key=checkpoint_key,
+        approval_gate=approval_gate,
+        qualification_fault_driver=qualification_fault_driver,
+        deployment_surface=deployment_surface,
+    )
+    if surface_backends:
+        # Backend surfaces of a multi-surface bundle (docs/MULTI_SURFACE.md),
+        # bound by --surface / the config's surfaces: map.
+        replayer.surface_backends = dict(surface_backends)
+    return replayer
+
+
+def _build_and_run_replayer(
+    backend,
+    *,
+    workflow,
+    params: dict[str, str],
+    worklists: dict[str, list[dict[str, str]]],
+    bundle: Path,
+    run_dir: Path,
+    save_healed_to: Optional[Path],
+    allow_egress: bool,
+    effect_verifier,
+    api_actuator,
+    durable: bool,
+    use_structural: bool,
+    pixel_verify_enabled: bool = False,
+    governed_authorization=None,
+    delivery_authority_kind: Literal[
+        "customer_local", "cloud_runner"
+    ] = "customer_local",
+    remote_delivery_run_id: Optional[str] = None,
+    managed_dispatch_binding=None,
+    production_qualification_guard=None,
+    qualification_campaign_guard=None,
+    runtime_config=None,
+    execution_target_kind: Optional["ExecutionTargetKind"] = None,
+    surface_override: bool = False,
+    execution_origin: Optional[str] = None,
+    execution_entry_url: Optional[str] = None,
+    execution_target_origin: Optional[str] = None,
+    run_id: Optional[str] = None,
+    approval_gate=None,
+    qualification_fault_driver=None,
+    surface_backends=None,
+    deployment_surface: Optional[str] = None,
+    readback_pipeline=None,
+    secret_env_overrides: Optional[Mapping[str, str]] = None,
+    api_steps_off_reason: Optional[str] = None,
+    rollback_plan=None,
+    fresh_session=None,
+    gui_undo_counts: Optional[bool] = None,
+):
+    """Build the shared Replayer configuration and execute one workflow.
+
+    ``api_steps_off_reason`` turns API steps off for this run and says why.
+    ``rollback_plan`` (``openadapt_flow.rollback``) reads the system of
+    record before the run and, after a stop, runs the approved
+    compensations and proves the store is back; ``fresh_session`` returns
+    the backend to a start for a GUI compensation. ``gui_undo_counts``
+    False: a GUI compensation runs after a stop, but doesn't count as an
+    undo for the undo-or-person rule (a desktop screen with no qualified
+    cleanup), so each save goes to a person first.
+    """
+    replayer = _configured_replayer(
+        backend,
+        workflow=workflow,
+        allow_egress=allow_egress,
+        effect_verifier=effect_verifier,
+        api_actuator=api_actuator,
+        durable=durable,
+        use_structural=use_structural,
+        pixel_verify_enabled=pixel_verify_enabled,
+        governed_authorization=governed_authorization,
+        delivery_authority_kind=delivery_authority_kind,
+        remote_delivery_run_id=remote_delivery_run_id,
+        managed_dispatch_binding=managed_dispatch_binding,
+        production_qualification_guard=production_qualification_guard,
+        qualification_campaign_guard=qualification_campaign_guard,
+        runtime_config=runtime_config,
+        approval_gate=approval_gate,
+        qualification_fault_driver=qualification_fault_driver,
+        surface_backends=surface_backends,
+        deployment_surface=deployment_surface,
+    )
+    # Worklist workers (cli_worklist_pool): a per-worker read-back pipeline
+    # and per-account secret sources. Both default to the serial behavior.
+    replayer.readback_pipeline = readback_pipeline
+    replayer.secret_env_overrides = dict(secret_env_overrides or {})
+    if api_steps_off_reason is not None:
+        replayer.api_steps = False
+        replayer.api_steps_off_reason = api_steps_off_reason
+    sealed = _rollback_seal(rollback_plan, durable, Path(run_dir))
+    if rollback_plan is not None:
+        _require_undo_or_person(
+            workflow,
+            rollback_plan,
+            approval_gate,
+            api_only=fresh_session is None or gui_undo_counts is False,
+        )
+    before = rollback_plan.arm(dict(params)) if rollback_plan is not None else None
+    if rollback_plan is not None and before is None:
+        # Without the first read nothing after a stop can be proven, and the
+        # undo-or-person rule let undoable saves run without a person.
+        raise SystemExit(
+            "REFUSED before the run: rollback is on, but the system of record, "
+            "its audit log, or the run's own user for attribution couldn't be "
+            "read before the run, so a stop couldn't be rolled back. Nothing ran."
+        )
+    if sealed is not None and before is not None:
+        try:
+            from openadapt_flow.runtime.durable.program_checkpoint import (
+                bundle_version,
+            )
+
+            rollback_plan.seal(
+                sealed, before, dict(params), bundle_version=bundle_version(bundle)
+            )
+        except Exception as exc:  # noqa: BLE001 - unkept state can't be rolled back later
+            raise SystemExit(
+                "REFUSED before the run: rollback is on, but the read from before "
+                f"the run couldn't be kept encrypted ({type(exc).__name__}). "
+                "Nothing ran."
+            )
+    report = replayer.run(
+        workflow,
+        params=params,
+        worklists=worklists,
+        bundle_dir=bundle,
+        run_dir=run_dir,
+        save_healed_to=save_healed_to,
+        execution_target_kind=execution_target_kind,
+        surface_override=surface_override,
+        execution_origin=execution_origin,
+        execution_entry_url=execution_entry_url,
+        execution_target_origin=execution_target_origin,
+        run_id=(
+            remote_delivery_run_id
+            if delivery_authority_kind == "cloud_runner"
+            else run_id
+        ),
+    )
+    if sealed is not None and report.success:
+        sealed.clear()
+    if rollback_plan is not None and not report.success and durable:
+        if _paused_for_a_person(Path(run_dir)):
+            # A person resumes the paused run or rolls it back; the read from
+            # before the run waits for either, sealed and bound to this run.
+            _bind_sealed_run(sealed, Path(run_dir))
+            from openadapt_flow.cli_hints import command
+
+            print(
+                "Rollback is armed for this paused run. Resume it, or roll it "
+                f"back: {command(f'resume {run_dir} --roll-back')}",
+                file=sys.stderr,
+            )
+            return report
+    if rollback_plan is not None and not report.success:
+        from openadapt_flow.rollback import ReplayerRunner
+
+        run_item = getattr(approval_gate, "_item", None)
+        if approval_gate is not None:
+            # A compensation is the undo a person approved: it doesn't need
+            # an undo of its own.
+            approval_gate.undo_or_person = False
+
+        def make_compensation_replayer():
+            if approval_gate is not None and run_item is not None:
+                # It acts on the run's own item, so the save gate checks the
+                # same record the run's save did.
+                approval_gate.next_item(run_item)
+            # The run's backend, verifier, API actuator and approval gate. No
+            # governed authorization or qualification guard: those bind the
+            # run's own workflow, and a compensation is its own approved undo.
+            return _configured_replayer(
+                backend,
+                workflow=workflow,
+                allow_egress=allow_egress,
+                effect_verifier=effect_verifier,
+                api_actuator=api_actuator,
+                durable=False,
+                use_structural=use_structural,
+                pixel_verify_enabled=pixel_verify_enabled,
+                runtime_config=runtime_config,
+                approval_gate=approval_gate,
+            )
+
+        import contextlib
+
+        if sealed is not None:
+            # A crash during this rollback is continued by --roll-back, which
+            # needs the state bound to the run.
+            _bind_sealed_run(sealed, Path(run_dir))
+        with sealed.lock() if sealed is not None else contextlib.nullcontext():
+            report = rollback_plan.finish(
+                report,
+                workflow,
+                before=before,
+                run_dir=Path(run_dir),
+                bundle_dir=Path(bundle),
+                runner=ReplayerRunner(make_compensation_replayer, fresh_session),
+                journal=sealed,
+            )
+    return report
+
+
+def _bind_sealed_run(sealed, run_dir: Path) -> None:
+    """Bind the sealed rollback state to the run id the durable manifest
+    names; a roll back of the pause checks it. Unbound state is refused."""
+    from openadapt_flow import crypto
+    from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
+
+    try:
+        manifest = CheckpointStore(
+            run_dir, key=crypto.resolve_key(None)
+        ).read_manifest()
+        if manifest is not None:
+            sealed.bind_run(manifest.run_id)
+    except Exception:  # noqa: BLE001 - unbound state is refused by --roll-back
+        pass
+
+
+def _rollback_seal(rollback_plan, durable: bool, run_dir: Path):
+    """Where the rollback keeps its state for a later process: the read from
+    before the run, encrypted with the deployment's key
+    (``rollback_durable.SealedRollback``). Only a durable run keeps it: the
+    run can pause and be resumed or rolled back later. Without a key, a
+    durable run with rollback is refused; another run keeps its state in
+    memory."""
+    if rollback_plan is None or not durable:
+        return None
+    from openadapt_flow import crypto
+    from openadapt_flow.rollback_durable import SealedRollback
+
+    if not hasattr(rollback_plan.reader, "key"):
+        raise SystemExit(
+            "REFUSED before the run: rollback on a durable (pausable) run keeps "
+            "the read from before the run for later, and this deployment's read "
+            "of the system of record can't be kept. Nothing ran."
+        )
+    key = crypto.resolve_key(None)
+    if key is None:
+        raise SystemExit(
+            "REFUSED before the run: rollback on a durable (pausable) run keeps "
+            "the read from before the run encrypted until the run is resumed or "
+            "rolled back, and no key is set (OPENADAPT_BUNDLE_KEY). Nothing ran."
+        )
+    return SealedRollback(run_dir, key)
+
+
+def _paused_for_a_person(run_dir: Path) -> bool:
+    """The durable run paused, and a person can still resume it."""
+    from openadapt_flow import crypto
+    from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
+
+    try:
+        pending = CheckpointStore(run_dir, key=crypto.resolve_key(None)).read_pending()
+    except Exception:  # noqa: BLE001 - an unreadable pause isn't resumable
+        return False
+    if pending is None:
+        return False
+    return not (
+        pending.category == "item_declined"
+        or (pending.category == "item_approval" and pending.status == "rejected")
+    )
+
+
+def _refuse_rollback_unwired(cfg, where: str) -> None:
+    """Rollback runs only on a single web run; refuse rather than run without it."""
+    section = getattr(cfg, "rollback", None)
+    if section is not None and section.enabled:
+        raise SystemExit(
+            f"REFUSED before the run: rollback is on, and it doesn't run on {where} "
+            "yet. Turn rollback off for this deployment, or run a single web "
+            "item. Nothing ran."
+        )
+
+
+def _require_undo_or_person(
+    workflow, rollback_plan, approval_gate, *, api_only: bool = False
+) -> None:
+    """With rollback on, every save is either undoable or approved by a person
+    before it runs (docs/ROLLBACK.md).
+
+    A gate that can ask a person checks each save (``undo_or_person``); with
+    no such gate, a run that holds a save no approved compensation can undo
+    is refused before it starts.
+    """
+    from openadapt_flow.approval_mode.model import ApprovalMode
+    from openadapt_flow.rollback import saves_without_undo
+
+    if approval_gate is not None:
+        approval_gate.undo_or_person = True
+        approval_gate.undo_allows_delete = bool(rollback_plan.allow_delete)
+        approval_gate.undo_api_only = api_only
+        if getattr(approval_gate, "mode", None) is not ApprovalMode.NOT_GATED:
+            return
+    missing = saves_without_undo(
+        workflow, allow_delete=rollback_plan.allow_delete, api_only=api_only
+    )
+    if missing:
+        raise SystemExit(
+            "REFUSED before the run: rollback is on, and these saves have no "
+            "compensation a person approved (or only a delete this deployment "
+            "doesn't allow): "
+            + ", ".join(missing)
+            + ". A write that can't be undone needs a person's approval first: "
+            "qualify and approve a compensation (rollback qualify, undo accept), "
+            "or run with an approval mode that asks a person. Nothing ran."
+        )
+
+
+def _replay_outcome_epilogue(
+    report,
+    outcome: str,
+    run_dir: Path,
+) -> Optional[str]:
+    """Three-line epilogue after a non-VERIFIED replay (presentation only).
+
+    What happened / why this is the safe behavior / the exact next command.
+    Fail-closed semantics are untouched: this only explains an ending that
+    already happened.
+    """
+    from openadapt_flow.cli_hints import command
+    from openadapt_flow.tutorial import outcome_epilogue_lines
+
+    halt = getattr(report, "halt", None)
+    halted_step = next(
+        (
+            result.step_id
+            for result in report.results
+            if not result.skipped
+            and (
+                result.effect_verified is False
+                or result.safety_halt
+                or (
+                    result.identity is not None and result.identity.status == "mismatch"
+                )
+            )
+        ),
+        None,
+    )
+    if outcome == "HALTED":
+        where = f" at step `{halted_step}`" if halted_step else ""
+        what = f"the run stopped{where} and ended {outcome}" + (
+            f" ({halt.reason})" if halt is not None and halt.reason else ""
+        )
+        why_safe = (
+            "the engine halts instead of acting on unproven state; nothing "
+            "further was executed once the check failed"
+        )
+        return "\n".join(
+            outcome_epilogue_lines(
+                what=what,
+                why_safe=why_safe,
+                next_command=command(f"explain {run_dir}"),
+            )
+        )
+    if outcome == "COMPLETED_UNVERIFIED":
+        return "\n".join(
+            outcome_epilogue_lines(
+                what=(
+                    "every executed step finished on screen, but nothing "
+                    f"independently proved the writes landed ({outcome})"
+                ),
+                why_safe=("screen-only completion can never claim success under Flow"),
+                next_command=(
+                    command("scaffold-verifier <recording-or-bundle>")
+                    + "  # draft an oracle, wire effects:, re-run"
+                ),
+            )
+        )
+    return "\n".join(
+        outcome_epilogue_lines(
+            what=f"the run ended {outcome} and reported the failure loudly",
+            why_safe="a failure is never guessed into a success",
+            next_command=command(f"explain {run_dir}"),
+        )
+    )
+
+
+def _change_ledger_epilogue(
+    report, run_dir: Path, args: Optional[argparse.Namespace]
+) -> Optional[str]:
+    """What may need undoing after a stop (presentation only).
+
+    Reads the run's change ledger (``openadapt_flow.after_stop``). Offering an
+    undo runs nothing: a person must approve it first.
+    """
+    import shlex
+
+    from openadapt_flow.after_stop import change_ledger_lines
+    from openadapt_flow.cli_hints import command
+
+    bundle = getattr(args, "bundle", None) if args is not None else None
+    hint = command(
+        f"undo list {shlex.quote(str(run_dir))} --bundle "
+        + (shlex.quote(str(bundle)) if bundle else "<bundle-dir>")
+    )
+    lines = change_ledger_lines(report, undo_hint=hint)
+    return "\n".join(lines) if lines else None
+
+
+def _undo_run_target_problem(args: argparse.Namespace, workflow) -> Optional[str]:
+    """Why ``undo run`` has no real application to act on, or None.
+
+    Resolves ``--config`` and the backend flags the way replay does. A web
+    target with no URL and no attached browser would start the bundled
+    MockMed demo, so the undo would act on the demo and use up its approval.
+    """
+    from openadapt_flow.backends.factory import _normalize_kind
+
+    cfg, _effects, _actuation = _deployment_sections(args)
+    backend = _resolve_backend_config(args, cfg, workflow)
+    if _normalize_kind(backend.kind) != "web":
+        return None
+    if (
+        getattr(args, "url", None)
+        or backend.url
+        or backend.browser_cdp_endpoint
+        or backend.browser_page_url
+    ):
+        return None
+    return (
+        "name the application to undo in: --url, a --config whose backend has "
+        "a url, an attached browser, or a non-web --backend"
+    )
+
+
+def _finish_replay(
+    run_dir: Path,
+    report,
+    args: Optional[argparse.Namespace] = None,
+    *,
+    backend_kind: Optional[str] = None,
+) -> int:
+    """Render the run report, print the outcome, and map it to an exit code.
+
+    Exit codes are unchanged and documented in the README: under the Demo
+    profile a completed run exits 0 even when it ends ``COMPLETED_UNVERIFIED``
+    (finished, not checked). The printed result line says so, so a person
+    never reads exit 0 as a confirmed save; scripts that need a checked result
+    read ``transaction_outcome`` from ``report.json`` or use ``run`` under the
+    Standard profile.
+    """
+    from openadapt_flow.plain_outcome import plain_result
+    from openadapt_flow.report import render_run_report
+
+    report_md = render_run_report(run_dir)
+    outcome = getattr(report, "execution_outcome", None) or (
+        "success" if report.success else "FAILED"
+    )
+    plain = plain_result(getattr(report, "transaction_outcome", None), outcome)
+    print(f"Result: {plain.label}. {plain.meaning}")
+    print(f"Replay {outcome}: {report_md}")
+    if report.screenshots_may_leave_box:
+        print(
+            "NOTE: a model-grounding component was wired for this run — "
+            "screenshots could have left the box (see REPORT.md)."
+        )
+    if outcome not in {"VERIFIED", "success"}:
+        epilogue = _replay_outcome_epilogue(report, outcome, run_dir)
+        if epilogue:
+            print(f"\n{epilogue}")
+        ledger = _change_ledger_epilogue(report, run_dir, args)
+        if ledger:
+            print(f"\n{ledger}")
+        from openadapt_flow.rollback import rollback_lines
+
+        rolled = rollback_lines(report)
+        if rolled:
+            print("\n" + "\n".join(rolled))
+    _maybe_report_break(run_dir, report)
+    _maybe_report_run(run_dir, report, args, backend_kind=backend_kind)
+    _maybe_attest_run(run_dir, report, args)
+    if getattr(report, "execution_profile", None) in {"standard", "regulated"}:
+        return 0 if outcome == "VERIFIED" else 1
+    if report.success and outcome != "VERIFIED":
+        print(
+            "\nExit code 0 here means the steps finished, not that the save was "
+            "checked.\nFor a checked result, read transaction_outcome in "
+            "report.json or use run under the standard profile."
+        )
+    return 0 if report.success else 1
+
+
+def _replay_desktop(
+    args: argparse.Namespace,
+    backend_cfg,
+    *,
+    workflow,
+    params: dict[str, str],
+    worklists: dict[str, list[dict[str, str]]],
+    bundle: Path,
+    run_dir: Path,
+    allow_egress: bool,
+    effect_verifier,
+    api_actuator,
+    durable: bool,
+    pixel_verify_enabled: bool = False,
+    governed_authorization=None,
+    delivery_authority_kind: Literal[
+        "customer_local", "cloud_runner"
+    ] = "customer_local",
+    remote_delivery_run_id: Optional[str] = None,
+    managed_dispatch_binding=None,
+    production_qualification_guard=None,
+    qualification_campaign_guard=None,
+    runtime_config=None,
+    run_id: Optional[str] = None,
+    approval_gate=None,
+    qualification_fault_driver=None,
+    surface_cfgs=None,
+    rollback_plan=None,
+) -> int:
+    """Replay against a non-browser native/remote backend built by the factory.
+
+    No Playwright browser, no bundled MockMed, no session video — those are
+    web-only. ``--drift`` (a MockMed teaching aid) is refused. The backend is
+    built from the resolved ``BackendConfig`` and the shared replayer wiring runs
+    exactly as it does for the web path. With ``rollback_plan``, a GUI
+    compensation starts from the run's start screen (the halt cleanup and its
+    start check, ``rollback.screen_fresh_session``); the whole-store reads
+    prove it either way.
+    """
+    from openadapt_flow.backends.factory import build_backend
+    from openadapt_flow.rollback import screen_fresh_session, screen_undo_counts
+
+    if args.drift:
+        raise SystemExit(
+            "--drift only demonstrates healing on the bundled MockMed web demo; "
+            f"it does not apply to the {backend_cfg.kind!r} backend."
+        )
+    try:
+        backend = build_backend(backend_cfg)
+    except ValueError as e:
+        raise SystemExit(str(e))
+    surface_backends = _build_surface_backends(surface_cfgs or {}, page=None)
+
+    try:
+        report = _build_and_run_replayer(
+            backend,
+            workflow=workflow,
+            params=params,
+            worklists=worklists,
+            bundle=bundle,
+            run_dir=run_dir,
+            save_healed_to=(Path(args.save_healed_to) if args.save_healed_to else None),
+            allow_egress=allow_egress,
+            effect_verifier=effect_verifier,
+            api_actuator=api_actuator,
+            durable=durable,
+            # No MockMed drift here, so the deterministic structural rung is
+            # preferred exactly as in a non-drift web replay.
+            use_structural=True,
+            pixel_verify_enabled=pixel_verify_enabled,
+            governed_authorization=governed_authorization,
+            delivery_authority_kind=delivery_authority_kind,
+            remote_delivery_run_id=remote_delivery_run_id,
+            managed_dispatch_binding=managed_dispatch_binding,
+            production_qualification_guard=production_qualification_guard,
+            qualification_campaign_guard=qualification_campaign_guard,
+            runtime_config=runtime_config,
+            execution_target_kind=_report_backend_kind(backend_cfg.kind),
+            execution_target_origin=_surface_target_origin_or_none(backend_cfg),
+            surface_override=bool(getattr(args, "_surface_override", False)),
+            run_id=run_id,
+            approval_gate=approval_gate,
+            qualification_fault_driver=qualification_fault_driver,
+            surface_backends=surface_backends,
+            deployment_surface=backend_cfg.deployment_surface,
+            rollback_plan=rollback_plan,
+            fresh_session=(
+                screen_fresh_session(
+                    backend, workflow, bundle_dir=bundle, run_dir=run_dir
+                )
+                if rollback_plan is not None
+                else None
+            ),
+            gui_undo_counts=(
+                screen_undo_counts(workflow) if rollback_plan is not None else None
+            ),
+        )
+    finally:
+        for owned in (backend, *surface_backends.values()):
+            close = getattr(owned, "close", None)
+            if callable(close):
+                close()  # RDP transports hold a live socket; browsers/agents don't
+    return _finish_replay(
+        run_dir, report, args, backend_kind=_report_backend_kind(backend_cfg.kind)
+    )
+
+
+def _surface_target_origin_or_none(backend_cfg) -> Optional[str]:
+    """The non-web app's ``<kind>://<target>``, for an admitted JIT program's
+    canary match. A section that can't name one gives None, which that match
+    refuses; every other bundle ignores it."""
+    from openadapt_flow.surface_selection import surface_target_origin
+
+    try:
+        return surface_target_origin(backend_cfg)
+    except ValueError:
+        return None
+
+
+def _record_until_stop(args: argparse.Namespace):
+    """Poll ``--until-cmd`` until it exits 0. Ctrl-C remains the fallback."""
+
+    raw = getattr(args, "until_cmd", None)
+    if not raw:
+        return None
+    from openadapt_flow.desktop_record import UntilCommand, parse_until_cmd
+
+    print("Recording until the check succeeds. Ctrl-C still stops.")
+    return UntilCommand(parse_until_cmd(raw))
+
+
+def _cmd_record(args: argparse.Namespace) -> int:
+    """Record, then (with ``--with-check``) ask for the demonstrated check."""
+    with_check = bool(getattr(args, "with_check", False))
+    observation = None
+    verify_path = getattr(args, "verify", None)
+    # A bare --verify needs no file: the look-up the person records after
+    # the save becomes the check.
+    from_lookup = verify_path == ""
+    if from_lookup:
+        from openadapt_flow.compiler.lookup_detect import LOOKUP_GUIDANCE
+
+        print(LOOKUP_GUIDANCE)
+    if verify_path:
+        from openadapt_flow.record_sor import RecordingObservation, RecordSorError
+
+        try:
+            observation = RecordingObservation.start(verify_path)
+        except RecordSorError as exc:
+            print(f"record --verify: {exc}. Nothing was recorded.", file=sys.stderr)
+            return 2
+        print(
+            f"Read {len(observation.before)} record(s) through the "
+            f"{observation.observer.kind} verifier. Flow reads them again when "
+            "the recording ends."
+        )
+    if with_check:
+        from openadapt_flow.cli_check import RECORD_GUIDANCE
+
+        print(RECORD_GUIDANCE)
+    code = _cmd_record_capture(args)
+    if observation is not None and code == 0:
+        from openadapt_flow.record_sor import summary_lines
+
+        contract, proposal, diff = observation.finish(Path(args.out))
+        for line in summary_lines(contract, proposal, diff):
+            print(line)
+    if code == 0 and (Path(args.out) / "events.jsonl").is_file():
+        _propose_lookup_check(args, from_lookup=from_lookup)
+    if code == 0 and with_check:
+        from openadapt_flow import artifacts
+        from openadapt_flow.cli_check import guided_check
+        from openadapt_flow.cli_hints import command
+
+        recording = Path(args.out)
+        if not artifacts.is_file(recording / "events.jsonl"):
+            print("record: no events.jsonl to mark a check in; skipped")
+        elif not sys.stdin.isatty():
+            mark = command(
+                f"check mark {recording} --start-event N --field PARAM=X,Y,W,H"
+            )
+            print(f"Mark the check with '{mark}'.")
+        else:
+            guided_check(recording)
+    return code
+
+
+def _recorded_surface(recording: Path) -> Optional[str]:
+    """The surface stamped into the recording's ``meta.json``, if any."""
+
+    import json
+
+    try:
+        from openadapt_flow import sealed_set
+
+        surface = json.loads(sealed_set.read_text(recording / "meta.json")).get(
+            "surface"
+        )
+    except (OSError, ValueError, AttributeError):
+        return None
+    return str(surface) if surface else None
+
+
+def _propose_lookup_check(args: argparse.Namespace, *, from_lookup: bool) -> None:
+    """Find a look-up after the save and propose it as the record check."""
+
+    from openadapt_flow.cli_hints import command
+    from openadapt_flow.compiler.lookup_detect import (
+        LOOKUP_GUIDANCE,
+        READBACK_PROPOSAL_FILE,
+        propose_from_recording,
+    )
+
+    recording = Path(args.out)
+    kind = _recorded_surface(recording) or str(getattr(args, "backend", None) or "")
+    proposal, written, lines = propose_from_recording(recording, session_kind=kind)
+    for line in lines:
+        if line == LOOKUP_GUIDANCE and getattr(args, "with_check", False):
+            continue  # the guided check asks for the check next
+        print(line)
+    if proposal is None:
+        return
+    print(
+        "Accept the same-session check with "
+        f"'{command(f'check accept {recording}')}'; a person still admits it."
+    )
+    readback = recording / READBACK_PROPOSAL_FILE
+    if readback in written:
+        print(
+            f"{readback.name} checks from a separate session: fill in its "
+            "UNRESOLVED values and review each effect."
+        )
+        if from_lookup:
+            from openadapt_flow.record_sor import PROPOSED_CONTRACT_NAME, _write_private
+
+            target = recording / PROPOSED_CONTRACT_NAME
+            try:
+                _write_private(target, readback.read_text())
+            except OSError as exc:
+                print(f"record --verify: could not write {target.name} ({exc})")
+            else:
+                print(f"Proposed contract: {target}")
+    elif from_lookup:
+        print(
+            "record --verify: a web recording's look-up becomes the same-session "
+            "check only; a separate-session check needs effects.kind ui_readback."
+        )
+
+
+def _cmd_record_capture(args: argparse.Namespace) -> int:
+    # The interactive (web) recorder installs in-page DOM listeners against a
+    # headed Playwright page. The DESKTOP recorder (--backend windows) captures
+    # the operator's native OS input over the win_agent contract; both emit the
+    # SAME compile-ready recording format. Selection is fail-loud (a missing
+    # target for the chosen backend raises rather than silently record web).
+    #
+    # Surface-selection neutrality (Section 5): a production posture
+    # (--profile standard/regulated) requires an explicit --backend. The
+    # Demo/permissive posture may omit --backend: capture on this OS unless
+    # --url selected the browser, and say so visibly. The last-used target is
+    # a Demo-only convenience from the CLI state file, and only when it is
+    # this OS.
+    from openadapt_flow.surface_selection import (
+        demo_default_notice,
+        explicit_surface_refusal,
+        implicit_record_surface,
+        load_last_surface,
+        store_last_surface,
+    )
+
+    profile = getattr(args, "profile", None)
+    backend = getattr(args, "backend", None)
+    if backend is None:
+        if profile in ("standard", "regulated"):
+            print(explicit_surface_refusal("record", profile))
+            return 2
+        last = load_last_surface() if profile == "demo" else None
+        try:
+            backend, from_last = implicit_record_surface(
+                url=getattr(args, "url", None),
+                last_used=last,
+            )
+        except ValueError as exc:
+            raise SystemExit(f"record: {exc}") from exc
+        print(demo_default_notice(backend, from_last_used=from_last))
+    elif profile == "demo":
+        store_last_surface(_report_backend_kind(backend))
+    browser_attach_requested = bool(
+        getattr(args, "browser_cdp_endpoint", None)
+        or getattr(args, "browser_page_url", None)
+    )
+    recording_key = _recording_encryption_key(args, backend)
+    if backend in ("windows", "macos", "linux", "rdp", "citrix"):
+        if getattr(args, "capture_network", False):
+            raise SystemExit(
+                "record: --capture-network applies only to --backend web; a "
+                "desktop, RDP or Citrix session has no page requests to capture"
+            )
+        if browser_attach_requested:
+            raise SystemExit(
+                "record: --browser-cdp-endpoint and --browser-page-url apply "
+                "only to --backend web"
+            )
+        return _cmd_record_desktop(args, backend)
+
+    if (
+        getattr(args, "window", None)
+        or getattr(args, "window_title", None)
+        or getattr(args, "rdp_window", None)
+        or getattr(args, "rdp_window_title", None)
+        or getattr(args, "rdp_readiness_text", None)
+    ):
+        # --window scopes a pixel/desktop capture to one on-screen window; the
+        # web recorder drives a Playwright page and has no such notion. Refuse
+        # rather than silently ignore the operator's requested scope.
+        raise SystemExit(
+            "record: --window/--window-title and --rdp-window/"
+            "--rdp-window-title/--rdp-readiness-text apply only to the desktop "
+            "backends (--backend windows/macos/linux/rdp/citrix); --backend web "
+            "records the Playwright page given by --url."
+        )
+    _reject_unbound_record_target_flags(args, "web")
+
+    if not args.url:
+        raise SystemExit(
+            "record --backend web requires --url (the app to record against)."
+        )
+    if getattr(args, "browser_page_url", None) and not getattr(
+        args, "browser_cdp_endpoint", None
+    ):
+        raise SystemExit("record: --browser-page-url requires --browser-cdp-endpoint")
+    if getattr(args, "browser_cdp_endpoint", None) and args.headless:
+        raise SystemExit(
+            "record: --headless cannot be combined with "
+            "--browser-cdp-endpoint; the attached browser controls its own "
+            "display mode"
+        )
+
+    from openadapt_flow.interactive_recorder import (
+        BrowserAttachError,
+        record_interactive,
+    )
+
+    try:
+        out = record_interactive(
+            args.url,
+            Path(args.out),
+            secret_fields=tuple(args.secret or ()),
+            param_fields=tuple(args.param or ()),
+            identifier_fields=tuple(getattr(args, "identifier", None) or ()),
+            headless=args.headless,
+            cdp_endpoint=getattr(args, "browser_cdp_endpoint", None),
+            browser_page_url=getattr(args, "browser_page_url", None),
+            stop_when=_record_until_stop(args),
+            surface="web",
+            capture_network=bool(getattr(args, "capture_network", False)),
+            encryption_key=recording_key,
+        )
+    except BrowserAttachError as exc:
+        raise SystemExit(f"record: browser attachment refused: {exc}") from exc
+    _stamp_recording_surface(out, "web")
+    print(f"Recording written to {out}")
+    if recording_key:
+        print(
+            "Encrypted at rest: frames, events, metadata and network capture "
+            "were sealed with AES-256-GCM before they reached the disk."
+        )
+    secrets = sorted(args.secret or ())
+    if secrets:
+        print(
+            "Secret field(s) recorded (no value stored, and each value is "
+            "redacted from the recorded URL, title, label, and structural "
+            "text): "
+            + ", ".join(secrets)
+            + ". At replay, export "
+            + ", ".join(f"OPENADAPT_FLOW_SECRET_{name.upper()}" for name in secrets)
+        )
+    for notice in _recording_privacy_notices(out):
+        print(notice)
+    return 0
+
+
+def _recording_privacy_notices(recording_dir: Path) -> list[str]:
+    """Report exactly what the recorder had to withhold, or nothing.
+
+    The claim that a secret value is not stored is the claim the operator uses
+    to decide whether a recording is safe to keep or to share. Where the
+    recorder had to drop evidence to keep that claim true, say so here.
+    """
+    import json
+
+    from openadapt_flow import sealed_set
+
+    try:
+        meta = json.loads(sealed_set.read_text(Path(recording_dir) / "meta.json"))
+    except (OSError, ValueError):
+        return []
+    notices: list[str] = []
+    raw_withheld = meta.get("structural_text_withheld")
+    if raw_withheld:
+        explained = {
+            "secret-value-left-its-document": (
+                "a declared secret value left its document (for example a form "
+                "submit that reflects the value into the next URL), and the new "
+                "document builds a page closure that never saw that value"
+            ),
+            "reflected-text-changed-after-a-secret-value": (
+                "the page URL or title changed after a declared secret field "
+                "held a value, so Flow could not prove the new text was not a "
+                "reflection of that value"
+            ),
+            "title-changed-after-a-secret-value": (
+                "the page title changed after a declared secret field held a "
+                "value. A title has no structure to reduce, so Flow withholds "
+                "it rather than guess whether it reflects the value"
+            ),
+            "declared-value-in-url": (
+                "the page URL held a declared secret value that no parameter "
+                "name identified, so structure alone could not remove it"
+            ),
+            "declared-value-in-title": ("the page title held a declared secret value"),
+            "url-cannot-be-parsed": (
+                "the page reported a URL that is not an HTTP or HTTPS URL, so "
+                "Flow could not reduce it by structure"
+            ),
+            "opaque-secret-boundary": (
+                "a declared secret field sits behind a closed shadow root, "
+                "which exposes its value to no check at all"
+            ),
+        }
+        for reason in [
+            part.strip() for part in str(raw_withheld).split(",") if part.strip()
+        ]:
+            notices.append(
+                "Flow withheld the page URL and title because "
+                f"{explained.get(reason, reason)}. Those actions carry an "
+                "origin-only URL and an empty title. Flow reports page text "
+                "exactly or not at all and never rewrites it, so the recording "
+                "holds no secret value and no altered text."
+            )
+    dropped = meta.get("url_dropped_params")
+    if isinstance(dropped, list) and dropped:
+        names = sorted(
+            {str(entry.get("name")) for entry in dropped if isinstance(entry, dict)}
+        )
+        notices.append(
+            "Flow removed the value of these URL parameters and kept their "
+            f"names: {', '.join(names)}. A parameter named after a declared "
+            "secret field loses its value in every recorded URL, whatever the "
+            "value is. The rest of each URL -- origin, path and other "
+            "parameters -- is exact."
+        )
+    if meta.get("application_placed_secret_in_url") or meta.get(
+        "application_placed_secret_in_title"
+    ):
+        notices.append(
+            "WARNING: the application put a declared secret value into its own "
+            "page URL or title. Flow withheld that text, but this is an "
+            "application defect that exists with or without Flow: OWASP lists "
+            "browser history, server logs, proxies, CDNs and the Referer "
+            "header as places such a value is already exposed. Report it to "
+            "the application owner."
+        )
+    withheld_identity = meta.get("identity_withheld_events")
+    if isinstance(withheld_identity, int) and withheld_identity > 0:
+        notices.append(
+            f"{withheld_identity} action(s) carry no DOM selector: the element "
+            "identity contained a declared secret value, so Flow refused to "
+            "record it. Replay uses the remaining identity tiers for those "
+            "actions."
+        )
+    return notices
+
+
+def _cmd_record_desktop(args: argparse.Namespace, backend: str) -> int:
+    """Record a live desktop demonstration for a native/pixel desktop backend.
+
+    Reuses the tested capture stack: an ``openadapt-capture`` session captures
+    the operator's real demonstration, then
+    :func:`openadapt_flow.adapters.capture.convert_capture` emits the same
+    compile-ready recording format the browser recorder produces — closing
+    ``record -> compile -> replay`` on the desktop substrate through the CLI.
+
+    The recording is substrate-agnostic (pixel frames + coordinates); the
+    ``--backend`` selects intent and REPLAY wiring. For ``rdp`` (a remote
+    display painted in a client WINDOW), capture must happen in the SAME pixel
+    space the rdp backend replays in — record inside the remote session (or
+    full-screen the client) so coordinates align; a cross-machine coordinate
+    remap is a documented follow-up (docs/desktop/RECORDING.md).
+    """
+    if getattr(args, "url", None) is not None:
+        raise SystemExit(
+            f"record --backend {backend}: --url applies only to --backend web. "
+            "Nothing was recorded."
+        )
+    if getattr(args, "headless", False):
+        raise SystemExit(
+            f"record --backend {backend}: --headless applies only to --backend "
+            "web. Nothing was recorded."
+        )
+
+    # Resolve and validate every target flag before importing or starting
+    # Capture. Surface-specific flags either scope this exact recording (macOS
+    # and local RDP/Citrix windows), enter the existing remote-display binding
+    # schema, or fail loud. None can be accepted and then ignored.
+    window = _resolve_record_capture_window(args, backend)
+
+    if args.secret:
+        # Field-level secret redaction relies on DOM field geometry (the
+        # browser recorder blacks out the field rect). A pixel/desktop capture
+        # has no such geometry, so we refuse rather than persist an unredacted
+        # secret frame — a silent PHI leak. Deferred (docs/desktop/RECORDING.md).
+        raise SystemExit(
+            f"record --backend {backend}: --secret is not yet supported on the "
+            "pixel/desktop substrate (no field geometry to redact the typed "
+            "value from the captured frames). Use a masked/password field, or "
+            "see docs/desktop/RECORDING.md for the deferred design."
+        )
+
+    # On the desktop substrate there is no field identity, so a parameter is
+    # keyed by its demonstrated VALUE: --param NAME=VALUE (mirrors
+    # convert_capture / the replay --param contract).
+    params = _parse_params(args.param)
+
+    # Record-identifying region: a pixel capture has no field identity, so
+    # --identifier takes the region itself (X,Y,W,H, recording pixels), marked
+    # once per recording. Fail loud on field-name syntax rather than silently
+    # record an unmarked session.
+    identifier_region = _parse_identifier_region_arg(
+        getattr(args, "identifier", None) or (), backend=backend
+    )
+
+    from openadapt_flow.desktop_record import record_desktop_capture
+
+    task = args.task or f"openadapt-flow {backend} recording"
+    out = record_desktop_capture(
+        Path(args.out),
+        task_description=task,
+        params=params,
+        identifier_region=identifier_region,
+        window=window,
+        backend_kind=backend if backend in ("rdp", "citrix") else None,
+        replay_window=getattr(args, "rdp_window", None),
+        replay_window_title=getattr(args, "rdp_window_title", None),
+        readiness_text=getattr(args, "rdp_readiness_text", None),
+        stop=_record_until_stop(args),
+    )
+    _stamp_recording_surface(out, backend)
+    print(f"Recording written to {out}")
+    if window is not None:
+        print(
+            "Window-scoped recording completed (frames are that window's own "
+            "pixels; sensitive target identity is stored only in local "
+            "recording metadata for the pixel replay surface)."
+        )
+    if params:
+        print(
+            "Recorded parameter(s): "
+            + ", ".join(f"{k}={v!r}" for k, v in params.items())
+            + ". Override at replay with --param NAME=VALUE."
+        )
+    from openadapt_flow.cli_hints import command
+
+    print(
+        f"Compile it:  {command('compile')} "
+        f"{out} --out <bundle> --name <workflow>\n"
+        f"Then replay: {command('replay')} <bundle> --backend {backend} …"
+    )
+    return 0
+
+
+def _cmd_demo_record(args: argparse.Namespace) -> int:
+    from openadapt_flow.demo_driver import record_triage_demo
+    from openadapt_flow.mockmed.server import serve
+
+    url, stop = serve(port=0)
+    try:
+        url = _with_drift(url, args.drift)
+        out = record_triage_demo(
+            url,
+            Path(args.out),
+            note_text=args.note_text,
+            param_name=args.param_name,
+            headed=args.headed,
+            record_video_dir=args.record_video,
+        )
+        print(f"Recording written to {out}")
+    finally:
+        stop()
+    return 0
+
+
+def _cmd_tutorial(args: argparse.Namespace) -> int:
+    """Run the bundled tutorial end to end and emit its local receipt.
+
+    The free path, composed: record -> compile -> certify -> governed run under
+    the Standard profile with independent effect verification -> receipt.
+    Unlike ``replay`` (Demo profile, which can only ever report
+    ``COMPLETED_UNVERIFIED``), this path carries the evidence the Standard
+    profile requires, so the run terminates ``VERIFIED`` because the write was
+    confirmed in a system of record -- never because a gate was relaxed.
+    """
+    from datetime import datetime, timezone
+
+    from openadapt_flow.tutorial import (
+        GUIDED_PRESENTATION_DELAY_S,
+        TUTORIAL_WORKFLOW_NAME,
+        TutorialError,
+        _next_steps_block,
+        run_tutorial,
+        tutorial_epilogue,
+    )
+
+    out = (
+        Path(args.out)
+        if args.out
+        else Path("tutorials")
+        / ("tutorial-" + datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S"))
+    )
+    interactive_record = bool(args.interactive_record or args.guided)
+    presentation_delay_s = args.presentation_delay
+    if presentation_delay_s is None:
+        presentation_delay_s = GUIDED_PRESENTATION_DELAY_S if args.guided else 0.0
+    try:
+        result = run_tutorial(
+            out,
+            headed=bool(args.headed or args.guided),
+            name=args.name or TUTORIAL_WORKFLOW_NAME,
+            emit_receipt=not args.no_receipt,
+            interactive_record=interactive_record,
+            presentation_delay_s=presentation_delay_s,
+            echo=print,
+            break_it=args.break_it,
+        )
+    except TutorialError as e:
+        print(f"\nTutorial REFUSED: {e}")
+        return 2
+
+    from openadapt_flow.cli_hints import command
+    from openadapt_flow.plain_outcome import plain_result
+
+    if result.break_it is not None:
+        print("\n--- clean run: the certified bundle, against an honest backend ---")
+    plain = plain_result(result.transaction_outcome, result.execution_outcome)
+    print(f"\nResult: {plain.label}. {plain.meaning}")
+    print(f"{result.execution_outcome}: {result.run_dir / 'REPORT.md'}")
+    print(f"  transaction     {result.transaction_outcome}")
+    metering_class = "billable" if result.transaction_billable else "not billable"
+    local_charge = (
+        "reported"
+        if result.reported_to_metering
+        else "this local tutorial was not reported or charged"
+    )
+    print(f"  metering class  {metering_class} ({local_charge})")
+    print(f"  profile         {result.execution_profile}")
+    print(f"  model calls     {result.model_calls}")
+    from openadapt_flow.verification import oracle_tier_from_verification_tier
+
+    effect_summary = (
+        "no qualifying independent proof"
+        if result.effect_tier is None
+        else (
+            "confirmed by an independent system-of-record read "
+            f"(Seal Oracle tier "
+            f"{oracle_tier_from_verification_tier(result.effect_tier)})"
+        )
+    )
+    print(
+        f"  effects         {result.effects_confirmed}/{result.effects_required} "
+        f"{effect_summary}"
+    )
+    print(f"  bundle digest   {result.bundle_digest}")
+    if result.receipt_paths:
+        print(f"\nShareable receipt: {result.receipt_paths['png']}")
+        print(f"                   {result.receipt_paths['json']}")
+
+    if result.break_it is not None:
+        _print_break_it_narrative(result.break_it)
+    elif result.execution_outcome == "VERIFIED":
+        print(
+            "\nNext: rerun this same bundle with the save set to fail -- and "
+            f"watch the engine halt:\n  {command('tutorial --break-it')}\n"
+            "Or see both runs side by side on one page:\n"
+            f"  {command('demo')}"
+        )
+        print(f"\n{_next_steps_block()}")
+    else:
+        # Presentation-only epilogue for the non-VERIFIED endings: what
+        # happened, why this is the safe behavior, the exact next command.
+        print("\n" + "\n".join(tutorial_epilogue(result)))
+    if result.execution_outcome != "VERIFIED":
+        return 1
+    return 0
+
+
+def _print_break_it_narrative(broken: "BreakItResult") -> None:
+    """Tell the caught-fault story from the halted run's own evidence.
+
+    Every fact printed here was read back from the broken run's report or the
+    fault server's ground-truth store by ``run_tutorial``; nothing is scripted.
+    """
+    claim = (
+        "every on-screen check passed, including the saved message"
+        if broken.screen_claimed_success
+        else "the saved message did not appear"
+    )
+    if broken.screen_claim_text:
+        claim += f'\n                       (observed on screen: "{broken.screen_claim_text}")'
+    print("\n--- break-it: the same certified bundle, with the save set to fail ---")
+    print(f"\n  Injected fault:      {broken.fault!r} -- the server rejects the write")
+    print(f"  On screen:           {claim}")
+    print(
+        "  The verifier found:  "
+        f"{broken.effects_refuted}/{broken.effects_required} declared effect(s) "
+        "REFUTED by an independent\n"
+        "                       read of the system of record, which holds "
+        f"{broken.system_of_record_records} record(s)"
+    )
+    print(
+        f"  The engine did:      {broken.execution_outcome} at the consequential "
+        "step instead of claiming\n"
+        f"                       success (transaction: {broken.transaction_outcome}, "
+        f"billable: {'yes' if broken.transaction_billable else 'no'})"
+    )
+    from openadapt_flow.plain_outcome import plain_result
+
+    plain = plain_result(broken.transaction_outcome, broken.execution_outcome)
+    print(f"  Result:              {plain.label}. {plain.meaning}")
+    print(
+        "\n  The screen looked the same as a good save. The record check found "
+        "no new note,\n  so the engine stopped instead of reporting done."
+    )
+    print(f"\n  Engine's own words:  {broken.halt_reason}")
+    print(
+        "\nCaught-fault evidence (local report, NOT a success receipt):\n"
+        f"  {broken.report_path}"
+    )
+    print(
+        "\nNo shareable receipt for the halted run: only VERIFIED runs may use "
+        "the\nsuccess rail. The halt itself is the demonstration."
+    )
+    from openadapt_flow.cli_hints import command
+
+    print(
+        "\nSee both runs side by side on one page:\n"
+        f"  {command('demo')}\n"
+        "\nNext: record your own workflow:\n"
+        f"  {command('record --backend web --url https://your-test-app.example --out my-task')}"
+    )
+
+
+def _demo_progress() -> Optional[Callable[[str], None]]:
+    """Show the current demo stage on one terminal line that rewrites itself.
+
+    Returns None when stdout is not a terminal, so piped output keeps only the
+    short summary. The line is cleared before the summary prints.
+    """
+    import re
+
+    if not sys.stdout.isatty():
+        return None
+    stage = re.compile(r"^\[(\d)/5\] (.+)$")
+
+    def echo(message: str) -> None:
+        match = stage.match(message)
+        if match:
+            text = f"Run 1, step {match.group(1)} of 5: {match.group(2)}"
+        elif message.startswith("[break-it]"):
+            text = "Run 2: the same task, with the save set to fail"
+        else:
+            return
+        sys.stdout.write("\r\033[K" + text[:100])
+        sys.stdout.flush()
+
+    return echo
+
+
+def _clear_progress_line() -> None:
+    if sys.stdout.isatty():
+        sys.stdout.write("\r\033[K")
+        sys.stdout.flush()
+
+
+def _cmd_demo(args: argparse.Namespace) -> int:
+    """Run the checked run and the failed-save run, then write one proof page.
+
+    Composes the unchanged tutorial path (``run_tutorial(..., break_it=True)``):
+    the same record, compile, certify, and Standard-profile run, then the same
+    bundle against the ``optimistic`` fault. Presentation only: the page and
+    the short summary read each run's ``transaction_outcome`` and artifacts.
+
+    Exit codes: 0 when the pair showed the difference (the first run ended
+    Done and checked, the second stopped); 1 when both runs finished but the
+    pair didn't show it (the page still reports each run as it ended); 2 when
+    the demo refused to start or a stage lacked the evidence it needs.
+    """
+    import os
+
+    from openadapt_flow import demo_proof
+    from openadapt_flow.runtime.durable.authority import DurableAuthorityBusy
+    from openadapt_flow.tutorial import TutorialError, run_tutorial
+
+    try:
+        out_dir = demo_proof.choose_output_dir(args.out)
+    except demo_proof.DemoError as exc:
+        print(f"Demo not started: {exc}")
+        return 2
+
+    print(
+        "OpenAdapt demo: one task, run twice on a fake clinic app on this "
+        "computer. No AI calls."
+    )
+    from openadapt_flow._browser_setup import BROWSER_ENV, installed_browser_channel
+
+    channel = installed_browser_channel()
+    if channel and (os.environ.get(BROWSER_ENV) or "auto").lower() in ("auto", channel):
+        name = "Chrome" if channel == "chrome" else "Edge"
+        print(f"Using your installed {name}, so nothing needs downloading.")
+    else:
+        print("The first run downloads a small browser (about 90 MB) once.")
+
+    # The bundled demo app holds only fixed synthetic data. Keep an installed
+    # but unconfigured privacy provider from blocking it, exactly as the
+    # launcher's quickstart does, then restore the operator's setting.
+    scrub = os.environ.get("OPENADAPT_FLOW_SCRUB")
+    if scrub in (None, "auto"):
+        os.environ["OPENADAPT_FLOW_SCRUB"] = "off"
+    try:
+        result = run_tutorial(
+            out_dir,
+            headed=bool(args.headed),
+            echo=print if args.verbose else _demo_progress(),
+            break_it=True,
+        )
+    except TutorialError as exc:
+        print(f"\nThe demo stopped before it could show a fair result: {exc}")
+        print(f"Anything it wrote is in {out_dir}")
+        return 2
+    except DurableAuthorityBusy as exc:
+        # The engine reserves each run path for good. choose_output_dir skips
+        # reserved names it can see; this covers a registry it couldn't read.
+        print(f"\nThe demo didn't run: the engine refused {out_dir} ({exc}).")
+        print(
+            "OpenAdapt never reuses a run folder, even after it's deleted. Run "
+            "it again with --out and a new folder."
+        )
+        return 2
+    finally:
+        _clear_progress_line()
+        if scrub is None:
+            os.environ.pop("OPENADAPT_FLOW_SCRUB", None)
+        elif scrub == "auto":
+            os.environ["OPENADAPT_FLOW_SCRUB"] = scrub
+
+    try:
+        evidence = demo_proof.collect_evidence(result, out_dir)
+    except demo_proof.DemoError as exc:
+        print(f"\nThe demo couldn't build its proof page: {exc}")
+        print(f"Both runs' evidence is in {out_dir}")
+        return 2
+    page = demo_proof.write_demo_page(evidence)
+    opened = False
+    if not args.no_open and demo_proof.display_available():
+        opened = demo_proof.open_page(page)
+    for line in demo_proof.summary_lines(evidence, page, opened):
+        print(line)
+    return 0 if evidence.showed_the_difference else 1
+
+
+def _cmd_compile(args: argparse.Namespace) -> int:
+    import json
+
+    from openadapt_flow.compiler import compile_recording
+    from openadapt_flow.compiler import param_confirm as pc
+
+    workflow = compile_recording(
+        Path(args.recording),
+        Path(args.out),
+        name=args.name,
+        pixel_verify_enabled=bool(getattr(args, "pixel_verify_enabled", False)),
+    )
+    print(
+        f"Compiled {len(workflow.steps)} steps into {args.out} "
+        f"(workflow: {workflow.name!r})"
+    )
+
+    # One-shot confirm pass for flagged field-label parameter proposals.
+    # Fail-closed: with no decision channel (no flags, no TTY) every proposal
+    # stays a demonstrated constant and the bundle above is final.
+    if args.params_from and args.accept_params:
+        raise SystemExit("use --params-from or --accept-params, not both")
+    proposals = pc.load_proposals(Path(args.out))
+    if not proposals:
+        return 0
+    decisions: list[pc.ParamDecision] = []
+    if args.params_from:
+        decisions_json = json.loads(Path(args.params_from).read_text())
+        if not isinstance(decisions_json, dict):
+            raise SystemExit("--params-from: file must be a JSON object")
+        decisions = pc.decisions_from_file(proposals, decisions_json)
+    elif args.accept_params:
+        names = [n.strip() for n in args.accept_params.split(",") if n.strip()]
+        decisions = pc.decisions_from_accept_list(proposals, names)
+    elif sys.stdin.isatty() and sys.stdout.isatty() and not args.no_confirm_params:
+        decisions = pc.decisions_interactive(proposals)
+    else:
+        print(
+            f"{len(proposals)} field-label parameter proposal(s) left "
+            "unconfirmed (kept as demonstrated constants). Review "
+            f"{Path(args.out) / pc.PROPOSALS_FILENAME} and re-run with "
+            "--accept-params or --params-from to confirm."
+        )
+        return 0
+    if not decisions:
+        print("No parameter proposals confirmed; bundle unchanged.")
+        return 0
+    pc.apply_decisions(
+        Path(args.recording), Path(args.out), name=args.name, decisions=decisions
+    )
+    for d in decisions:
+        kind = "secret parameter" if d.secret else "parameter"
+        print(f"  confirmed {kind} {d.name!r} ({d.step_id})")
+        if d.secret:
+            print(
+                f"    note: supply OPENADAPT_FLOW_SECRET_{d.name.upper()} at "
+                "replay; the bundle carries no literal, but the RECORDING "
+                "still does (re-record with --secret for full at-rest "
+                "secrecy)."
+            )
+    print(f"Recompiled with {len(decisions)} confirmed parameter(s).")
+    return 0
+
+
+def _cmd_induce(args: argparse.Namespace) -> int:
+    # Accept both RECORDING directories (compiled via the single-trace
+    # bootstrap by induce_program) and already-compiled BUNDLE directories
+    # (a dir containing workflow.json -> loaded as a Workflow). Detecting the
+    # bundle case CLI-side keeps induce usable on artifacts the operator
+    # already has, without touching the library API.
+    from openadapt_flow import sealed_set
+    from openadapt_flow.compiler.fixup_passes import read_compile_notes
+    from openadapt_flow.compiler.induction import induce_program, validate_held_out
+    from openadapt_flow.ir import Workflow
+
+    traces: list = []
+    notes: list = []
+    sealed_inputs = False
+    for d in args.recording:
+        path = Path(d)
+        sealed_inputs = sealed_inputs or sealed_set.is_sealed(path)
+        if (path / "workflow.json").is_file() or (path / "workflow.json.enc").is_file():
+            traces.append(Workflow.load(path))
+            notes.append(read_compile_notes(path))
+        else:
+            traces.append(path)
+            notes.append(None)
+    from openadapt_flow import at_rest
+
+    # Encrypted demonstrations induce an encrypted program, and so do
+    # plaintext ones unless plaintext at rest is explicitly allowed.
+    seal_output = sealed_inputs or at_rest.seal_new("an induced program", args.out)
+    if seal_output and (args.report or args.probe_on):
+        # Both write the induced program (or probe bundles) outside any
+        # sealed set; refuse rather than write plaintext.
+        print(
+            "induce REFUSED: --report and --probe-on write outside an "
+            "encrypted bundle, so they are not available while Flow encrypts "
+            f"at rest. Set {at_rest.OPT_OUT_ENV}='<reason>' to allow plaintext. "
+            "Nothing was written."
+        )
+        return 2
+
+    spoken = _induce_narration_args(args)
+    if isinstance(spoken, int):
+        return spoken
+    if args.probe_on:
+        probed = _induce_with_probes(args, traces, spoken)
+        if isinstance(probed, int):
+            return probed
+        result = probed
+    else:
+        result = induce_program(traces, compile_notes=notes, **spoken)
+    print(result.render())
+    if args.report:
+        report_path = Path(args.report)
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(result.model_dump_json(indent=2) + "\n")
+        print(f"Induction report written to {report_path}")
+
+    if args.held_out and len(traces) >= 2:
+        print(validate_held_out(traces).render())
+
+    if not result.certified or result.workflow is None:
+        # Refuse rather than guess: surface the uncertainties honestly and exit
+        # nonzero so a CI / deploy gate refuses the underdetermined program.
+        print(
+            "\nNOT CERTIFIED — no program bundle written. See record-next: for "
+            "the missing demonstration(s)."
+        )
+        return 2
+
+    workflow = result.workflow
+    if args.name:
+        workflow = workflow.model_copy(update={"name": args.name})
+    out = Path(args.out)
+    if seal_output:
+        passphrase = sealed_set.output_bundle_key()
+        assert passphrase is not None  # resolves to the local key by default
+        with sealed_set.writing(out, "bundle", passphrase):
+            workflow.save(out)
+    else:
+        workflow.save(out)
+    print(
+        f"\nCERTIFIED — induced program bundle written to {out} "
+        f"(workflow: {workflow.name!r}, "
+        f"{len(result.param_specs)} param(s), "
+        f"{len(result.column_decisions)} column decision(s))."
+    )
+    return 0
+
+
+def _induce_narration_args(args: argparse.Namespace) -> Any:
+    """Narration arguments for induce: each trace's narration.json, the
+    narrated guards a person accepted, and the opt-in compile-time model."""
+    from openadapt_flow.compiler.narration_rules import (
+        AnthropicNarrationInterpreter,
+        recording_screen_texts,
+    )
+    from openadapt_flow.narration import NarrationRefused, load_narration
+
+    narration = []
+    for d in args.recording:
+        try:
+            narration.append(load_narration(Path(d)))
+        except (NarrationRefused, ValueError) as exc:
+            print(f"Narration not used for {d}: {exc}")
+            narration.append(None)
+    accepted = {}
+    if args.accept_narrated:
+        if not (args.accepted_by or "").strip():
+            print("--accept-narrated needs --accepted-by NAME (who accepted it)")
+            return 2
+        unpinned = [loc for loc in args.accept_narrated if "@" not in loc]
+        if unpinned:
+            print(
+                "--accept-narrated takes LOCATION@GUARD_ID as the report prints "
+                f"it (got {', '.join(unpinned)}), so it accepts that exact guard"
+            )
+            return 2
+        accepted = {loc: args.accepted_by.strip() for loc in args.accept_narrated}
+    frames = {
+        i: Path(d)
+        for i, d in enumerate(args.recording)
+        if (Path(d) / "frames").is_dir()
+    }
+    return {
+        "narration": narration,
+        "screen_texts": recording_screen_texts(frames) if frames else None,
+        "interpreter": AnthropicNarrationInterpreter()
+        if args.narration_model
+        else None,
+        "accepted_narration": accepted or None,
+    }
+
+
+def _induce_with_probes(
+    args: argparse.Namespace, traces: list, spoken: Optional[dict] = None
+) -> Any:
+    """``induce --probe-on``: refuse a non-test target, else probe and induce.
+
+    Returns the InductionResult, or an exit code when the target is refused.
+    """
+    import tempfile
+
+    from openadapt_flow.compiler import probing
+    from openadapt_flow.deployment import load_deployment
+
+    deployment = Path(args.probe_on)
+    try:
+        cfg = load_deployment(deployment)
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"PROBE REFUSED: {exc}")
+        return 3
+    reasons = probing.probe_target_refusals(cfg)
+    if reasons:
+        print("PROBE REFUSED: nothing was reset or replayed.")
+        for reason in reasons:
+            print(f"  - {reason}")
+        return 3
+    contract = Path(str(cfg.test_copy.reward_contract)).expanduser()
+    if not contract.is_absolute():
+        contract = deployment.parent / contract
+
+    def _run(work: Path) -> Any:
+        from openadapt_flow.compiler.compile import compile_recording
+        from openadapt_flow.ir import Workflow
+
+        probe_traces = []
+        seen: set[str] = set()
+        for i, (arg, trace) in enumerate(zip(args.recording, traces)):
+            path = Path(arg)
+            label = path.name if path.name not in seen else f"{path.name}#{i}"
+            seen.add(label)
+            if isinstance(trace, Workflow):
+                bundle = path
+            else:
+                bundle = work / "compiled" / f"{i}-{path.name}"
+                trace = compile_recording(path, bundle, name=path.name)
+            probe_traces.append(
+                probing.ProbeTrace(workflow=trace, bundle_dir=bundle, label=label)
+            )
+        target = probing.DeploymentProbeTarget(cfg)
+        print(f"Probing on declared test copy {cfg.name!r} (read-back: {contract})")
+        return probing.probe_and_induce(
+            probe_traces,
+            target=target,
+            reward_contract=contract,
+            work_dir=work,
+            **(spoken or {}),
+        )
+
+    if args.probe_work_dir:
+        work = Path(args.probe_work_dir)
+        work.mkdir(parents=True, exist_ok=True)
+        return _run(work)
+    with tempfile.TemporaryDirectory(prefix="induce-probe-") as tmp:
+        return _run(Path(tmp))
+
+
+def _cmd_narration_attach(args: argparse.Namespace) -> int:
+    import json
+
+    from openadapt_flow.narration import (
+        NarrationRefused,
+        attach_narration,
+        sentences_from_transcript,
+        transcribe_audio,
+    )
+
+    recording = Path(args.recording)
+    try:
+        from openadapt_flow.narration import require_scrubber
+
+        scrubber = require_scrubber()  # refuse before any transcription
+        if args.audio:
+            result = transcribe_audio(
+                args.audio, model=args.model, backend=args.backend
+            )
+        else:
+            result = json.loads(Path(args.transcript).read_text(encoding="utf-8"))
+        path = attach_narration(
+            recording,
+            sentences_from_transcript(result, offset=args.offset),
+            scrubber=scrubber,
+        )
+    except (NarrationRefused, FileNotFoundError, ValueError, ImportError) as exc:
+        print(f"Narration not written: {exc}")
+        return 2
+    print(f"Scrubbed narration written to {path}")
+    return _cmd_narration_show(args)
+
+
+def _cmd_narration_show(args: argparse.Namespace) -> int:
+    from openadapt_flow.narration import NarrationRefused, load_narration
+
+    try:
+        narration = load_narration(Path(args.recording))
+    except NarrationRefused as exc:
+        print(str(exc))
+        return 2
+    if narration is None:
+        print(f"No narration.json in {args.recording}")
+        return 1
+    for line in narration.lines:
+        print(f"[{line.t_start:7.2f}s] {line.step_id or '-':>9}  {line.text}")
+    return 0
+
+
+def _cmd_for_each(args: argparse.Namespace) -> int:
+    import os
+
+    from openadapt_flow import artifacts, sealed_set
+    from openadapt_flow.compiler.loop_authoring import (
+        LoopAuthoringError,
+        author_data_driven_loop,
+    )
+    from openadapt_flow.ir import Workflow
+
+    src = Path(args.bundle)
+    if not artifacts.is_file(src / "workflow.json") and not artifacts.is_file(
+        src / "workflow.json.enc"
+    ):
+        raise SystemExit(f"{src} is not a workflow bundle (no workflow.json)")
+    body = Workflow.load(src)
+
+    records = _load_worklist_file(Path(args.records))
+
+    # Parse --map col=param entries into an explicit column -> param mapping.
+    column_map: dict[str, str] = {}
+    for raw in args.map or []:
+        if "=" not in raw:
+            raise SystemExit(f"--map expects COLUMN=PARAM, got {raw!r}")
+        col, param = raw.split("=", 1)
+        col, param = col.strip(), param.strip()
+        if not col or not param:
+            raise SystemExit(f"--map expects COLUMN=PARAM, got {raw!r}")
+        if col in column_map:
+            raise SystemExit(f"--map column {col!r} given more than once")
+        column_map[col] = param
+
+    try:
+        looped = author_data_driven_loop(
+            body,
+            records,
+            column_map=column_map or None,
+            relation=args.relation,
+            max_iterations=args.max_iterations,
+            loop_var=args.loop_var or "",
+            name=args.name,
+        )
+    except LoopAuthoringError as exc:
+        # Fail loudly on any param/column mismatch -- never emit a bundle.
+        raise SystemExit(str(exc))
+
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    from openadapt_flow import sections as program_sections
+
+    body_sections = program_sections.load(src, body)
+
+    def write_looped() -> None:
+        # Copy the demonstrated body's templates so the looped bundle is a
+        # complete, self-verifying artifact (the loop body reuses its crops).
+        templates = Path(os.path.abspath(src / "templates"))
+        for template in artifacts.list_files(templates):
+            target = out / "templates" / template.relative_to(templates)
+            if not sealed_set.is_sealed_path(out):
+                target.parent.mkdir(parents=True, exist_ok=True)
+            sealed_set.write_bytes(target, artifacts.open_read(template))
+        looped.save(out)
+        # The body's named sections (display metadata) follow it into the
+        # loop: its recorded form structure and review edits apply to the
+        # same steps.
+        program_sections.write(
+            out,
+            program_sections.build(
+                looped, context=body_sections.context, edits=body_sections.edits
+            ),
+        )
+
+    if artifacts.is_sealed(src):
+        # A sealed body makes a sealed loop: nothing it holds lands in plaintext.
+        passphrase = sealed_set.output_bundle_key()
+        assert passphrase is not None  # resolves to the local key by default
+        with sealed_set.writing(out, "bundle", passphrase):
+            write_looped()
+    else:
+        write_looped()
+
+    relation = args.relation
+    rel = looped.data_sources[relation]
+    print(
+        f"Authored data-driven LOOP bundle at {out} (workflow: "
+        f"{looped.name!r}): {len(rel.rows)} record(s) over relation "
+        f"{relation!r}, body = {len(body.steps)} demonstrated step(s), "
+        f"program: true."
+    )
+    return 0
+
+
+def _cmd_compose(args: argparse.Namespace) -> int:
+    from openadapt_flow.cli_compose import cmd_compose
+
+    return cmd_compose(args)
+
+
+def _cmd_process(args: argparse.Namespace) -> int:
+    from openadapt_flow.cli_process import cmd_process
+
+    return cmd_process(args)
+
+
+def _cmd_variants(args: argparse.Namespace) -> int:
+    from openadapt_flow.cli_variants import cmd_variants
+
+    return cmd_variants(args)
+
+
+def _cmd_route(args: argparse.Namespace) -> int:
+    from openadapt_flow.cli_variants import cmd_route
+
+    return cmd_route(args)
+
+
+@contextmanager
+def _attached_web_page(backend_cfg, *, url: Optional[str], workflow=None):
+    """Bind the signed-in tab of a running local Chromium for one run.
+
+    A practice run, a drill, and a production run of a task that starts on a
+    signed-in screen cannot start from a new browser: it opens on the
+    application's sign-in page and step 1 never matches. Attaching to the
+    browser the task was recorded in starts the run from that same signed-in
+    session, with no credential in the program, the recording, or the config.
+
+    The contract is the recorder's attach contract: a loopback DevTools
+    endpoint with an explicit port, exactly one open tab on the ``url`` origin
+    (or the exact ``browser_page_url``), and no launch, navigation, or close.
+    The run starts from the screen that tab shows, so the operator opens the
+    task's first screen before starting it; any other screen fails step 1's
+    checks before input. Leaving the context only drops the DevTools
+    connection. Every refusal raises :class:`SystemExit` before any input.
+
+    The tab was opened before this run attached, so its page loaded before
+    the WebSocket guard (:func:`~openadapt_flow.backends.playwright_backend.prepare_ws_guard`)
+    and a create-form save on it refuses to hold. The guard is installed on
+    attach: a document the tab loads after that (reload it) can hold one.
+    """
+
+    from openadapt_flow.interactive_recorder import (
+        BrowserAttachError,
+        select_attached_page,
+        validate_browser_cdp_endpoint,
+    )
+
+    endpoint = backend_cfg.browser_cdp_endpoint
+    if not endpoint:
+        raise SystemExit(
+            "REFUSED: browser_page_url requires browser_cdp_endpoint (the "
+            "signed-in browser to attach to). Nothing was executed."
+        )
+    if not url:
+        raise SystemExit(
+            "REFUSED: an attached-browser run needs the application URL "
+            "(--url or backend.url) to select the signed-in tab. Nothing was "
+            "executed."
+        )
+    try:
+        validate_browser_cdp_endpoint(endpoint)
+    except BrowserAttachError as exc:
+        raise SystemExit(f"REFUSED: {exc}. Nothing was executed.") from None
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as playwright:
+        try:
+            browser = playwright.chromium.connect_over_cdp(endpoint)
+        except Exception:
+            raise SystemExit(
+                "REFUSED: could not connect to the local Chromium DevTools "
+                "endpoint. Start the signed-in browser with remote debugging "
+                "and retry. Nothing was executed."
+            ) from None
+        try:
+            page = select_attached_page(
+                browser,
+                app_url=url,
+                page_url=backend_cfg.browser_page_url,
+            )
+        except BrowserAttachError as exc:
+            raise SystemExit(f"REFUSED: {exc}. Nothing was executed.") from None
+        from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+        # Documents the tab loads from now on are guarded from their start.
+        prepare_ws_guard(page)
+        recorded = getattr(workflow, "viewport", None)
+        if recorded:
+            try:
+                live = page.evaluate("() => [window.innerWidth, window.innerHeight]")
+                live_size: Optional[tuple[int, int]] = (int(live[0]), int(live[1]))
+            except Exception:
+                live_size = None
+            expected = f"{int(recorded[0])}x{int(recorded[1])}"
+            if live_size is None:
+                raise SystemExit(
+                    "REFUSED: could not read the size of the signed-in tab (it "
+                    "may still be loading). Wait until the task's first screen "
+                    f"has loaded at {expected} CSS pixels and retry. Nothing was "
+                    "executed."
+                )
+            if live_size != (int(recorded[0]), int(recorded[1])):
+                raise SystemExit(
+                    "REFUSED: the signed-in tab shows the application at "
+                    f"{live_size[0]}x{live_size[1]} CSS pixels, but the task was "
+                    f"recorded at {expected}. Resize the browser window to match "
+                    "and retry. Nothing was executed."
+                )
+        yield page
+    # Leaving sync_playwright() drops the DevTools connection. The operator's
+    # browser, its tabs, and its signed-in session stay as they are.
+
+
+def _attached_entry_url(page, url: Optional[str]) -> Optional[str]:
+    """The entry URL an attached run may report: ``url`` only if the tab is on it.
+
+    A launched browser loads ``url`` before replay, so its report names that
+    entry. An attached run loads nothing: it starts from whatever the
+    signed-in tab shows. Reporting the configured URL for a tab on another
+    page would let hosted validation, which binds the report's entry URL to
+    the attested one, accept a run that never started there. Any difference
+    other than the fragment reports no entry URL, which that validation
+    refuses.
+    """
+
+    if not url:
+        return None
+    try:
+        current = urlsplit(str(page.url))
+        wanted = urlsplit(url)
+    except Exception:
+        return None
+
+    def comparable(parts) -> tuple[str, str, str, str]:
+        return (
+            parts.scheme.lower(),
+            parts.netloc.lower(),
+            parts.path or "/",
+            parts.query,
+        )
+
+    return url if comparable(current) == comparable(wanted) else None
+
+
+def _default_run_dir() -> Path:
+    """Timestamped default run directory under ``runs/``."""
+    from datetime import datetime, timezone
+
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    return Path("runs") / f"replay-{stamp}"
+
+
+def _resolve_surface_bindings(args: argparse.Namespace, cfg, workflow) -> dict:
+    """Resolve ``--surface`` flags and ``surfaces:`` config for this bundle.
+
+    Refuses (before anything runs) a binding the bundle cannot use. Names
+    every backend surface left unbound; the run halts at the switch to it.
+    """
+
+    from openadapt_flow.surface_bindings import (
+        SurfaceBindingError,
+        resolve_surface_configs,
+        unbound_backend_surfaces,
+    )
+
+    flags = list(getattr(args, "surface", None) or [])
+    configured = dict(getattr(cfg, "surfaces", {}) or {})
+    if not getattr(workflow, "surfaces", None):
+        if flags or configured:
+            raise SystemExit(
+                "REFUSED: --surface / surfaces: were given, but this bundle "
+                "declares no surfaces. Nothing was executed."
+            )
+        return {}
+    try:
+        resolved = resolve_surface_configs(workflow, flags, configured)
+    except SurfaceBindingError as exc:
+        raise SystemExit(f"REFUSED: {exc}. Nothing was executed.")
+    unbound = unbound_backend_surfaces(workflow, resolved)
+    if unbound:
+        print(
+            "NOTE: no backend is bound for surface(s) "
+            + ", ".join(unbound)
+            + "; the run halts at the switch to it. Bind one with "
+            "--surface NAME=KIND[:TARGET] or the config's surfaces: map.",
+            file=sys.stderr,
+        )
+    return resolved
+
+
+def _build_surface_backends(surface_cfgs, *, page) -> dict:
+    """Build bound backend surfaces; a web one opens in the run's browser."""
+
+    from openadapt_flow.surface_bindings import (
+        SurfaceBindingError,
+        build_surface_backends,
+    )
+
+    new_page = None
+    if page is not None:
+
+        def new_page(url: str):
+            # A second app is its own browser page in the run's browser: a new
+            # page in the run's context when the context allows one, else a
+            # page of its own context (Playwright's browser.new_page()).
+            try:
+                opened = page.context.new_page()
+            except Exception:
+                browser = page.context.browser
+                if browser is None:
+                    raise
+                opened = browser.new_page(viewport=page.viewport_size)
+            from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+            # Guard the page's WebSockets from its first document (wire check).
+            prepare_ws_guard(opened)
+            opened.goto(url)
+            try:
+                opened.wait_for_load_state("load")
+            except Exception:
+                pass
+            # The run starts on the primary page.
+            page.bring_to_front()
+            return opened
+
+    try:
+        return build_surface_backends(surface_cfgs or {}, new_page=new_page)
+    except (SurfaceBindingError, ValueError) as exc:
+        raise SystemExit(f"REFUSED: {exc}. Nothing was executed.")
+
+
+def _cmd_replay(args: argparse.Namespace) -> int:
+    from openadapt_flow.backends.factory import _normalize_kind, build_backend
+    from openadapt_flow.cli_compose import refuse_replay_composition
+    from openadapt_flow.cli_process import refuse_replay_process
+    from openadapt_flow.ir import Workflow
+
+    bundle = Path(args.bundle)
+    from openadapt_flow.skills import refuse_unqualified_skill
+
+    refuse_unqualified_skill(bundle, target_url=getattr(args, "url", None))
+    refuse_replay_composition(bundle)
+    refuse_replay_process(bundle)
+    from openadapt_flow.cli_variants import refuse_replay_variants
+
+    refuse_replay_variants(bundle)
+    from openadapt_flow.jit.lifecycle import refuse_unadmitted_draft
+
+    refuse_unadmitted_draft(bundle)
+    run_dir = Path(args.run_dir) if args.run_dir else _default_run_dir()
+    workflow = Workflow.load(bundle)
+    # `undo run` only: the person-approved undo steps of this same bundle
+    # (openadapt_flow.cli_undo), run through the normal replay path.
+    workflow = getattr(args, "_undo_workflow", None) or workflow
+    qualification_case = getattr(args, "_qualification_case_execution", None)
+    params = (
+        qualification_case["params"]
+        if qualification_case is not None
+        else _replay_params(args.param, getattr(args, "params_file", None))
+    )
+
+    # Deployment wiring (from --config and/or direct flags): a system-of-record
+    # EffectVerifier, an ApiActuator, durable-runtime, and the egress opt-in.
+    # All default to off, so an unconfigured replay behaves exactly as before.
+    (
+        cfg,
+        effect_verifier,
+        api_actuator,
+        durable,
+        allow_egress,
+    ) = _deployment_runtime(args, params=params)
+    # Qualification cases are always Standard and must keep their durable
+    # evidence/recovery contract through this second deployment resolution.
+    # ``_cmd_run`` already checked this; retain it here so a future replay
+    # wiring change cannot silently construct a non-durable Replayer.
+    if qualification_case is not None:
+        durable = True
+    worklists = (
+        qualification_case["worklists"]
+        if qualification_case is not None
+        else _resolve_worklists(getattr(args, "worklist", None), workflow)
+    )
+
+    # Backend selection (web/native/remote, overriding --config). A
+    # non-web backend drives a native desktop / RDP / remote-display session with
+    # no browser: delegate to the desktop path.
+    #
+    # Section 5: production profiles refuse an implicit target; the permissive
+    # posture defaults visibly. A surface-bound workflow then supplies its own
+    # target and refuses to run cross-surface without a recorded override.
+    operation = "run" if getattr(args, "command", None) == "run" else "replay"
+    refused = _surface_selection_gate(args, cfg, workflow, operation=operation)
+    if refused is not None:
+        return refused
+    backend_cfg = _resolve_backend_config(args, cfg, workflow)
+    refused = _enforce_surface_binding(args, workflow, backend_cfg, operation=operation)
+    if refused is not None:
+        return refused
+    surface_cfgs = _resolve_surface_bindings(args, cfg, workflow)
+    if _refuse_shared_readback_session(
+        cfg, backend_cfg, operation=operation, surfaces=surface_cfgs
+    ):
+        return 2
+    # Opt-in attest pre-state snapshot: the earliest point where the run is
+    # ADMITTED (every gate above passed) and the run directory is final, but
+    # NO actuation has begun on either the desktop or the web path below.
+    _maybe_attest_pre_state(run_dir, args)
+    approval_gate = _approval_gate_for_run(
+        args,
+        run_dir,
+        policy_name=getattr(args, "policy", None) or cfg.policy.policy,
+    )
+    fault_driver = getattr(args, "_qualification_fault_driver", None)
+    from openadapt_flow.cli_worklist_pool import requested_pool
+
+    pool_policy = requested_pool(args, cfg)
+    if pool_policy is not None:
+        _refuse_rollback_unwired(cfg, "a worklist pool")
+        return _replay_worklist_pool(
+            args,
+            cfg,
+            backend_cfg,
+            pool_policy,
+            workflow=workflow,
+            params=params,
+            worklists=worklists,
+            bundle=bundle,
+            run_dir=run_dir,
+            allow_egress=allow_egress,
+            durable=durable,
+            fault_driver=fault_driver,
+            surface_cfgs=surface_cfgs,
+        )
+    if _normalize_kind(backend_cfg.kind) != "web":
+        from openadapt_flow.rollback import plan_from_deployment
+
+        return _replay_desktop(
+            args,
+            backend_cfg,
+            workflow=workflow,
+            params=params,
+            worklists=worklists,
+            bundle=bundle,
+            run_dir=run_dir,
+            allow_egress=allow_egress,
+            effect_verifier=effect_verifier,
+            api_actuator=api_actuator,
+            durable=durable,
+            pixel_verify_enabled=cfg.runtime.pixel_verify_enabled,
+            governed_authorization=getattr(args, "_governed_run_authorization", None),
+            delivery_authority_kind=getattr(
+                args, "_delivery_authority_kind", "customer_local"
+            ),
+            remote_delivery_run_id=getattr(args, "_remote_delivery_run_id", None),
+            managed_dispatch_binding=getattr(args, "_managed_dispatch_binding", None),
+            production_qualification_guard=getattr(
+                args, "_production_qualification_guard", None
+            ),
+            qualification_campaign_guard=getattr(
+                args, "_qualification_campaign_guard", None
+            ),
+            runtime_config=cfg.runtime,
+            run_id=getattr(args, "_qualification_run_id", None),
+            approval_gate=approval_gate,
+            qualification_fault_driver=fault_driver,
+            surface_cfgs=surface_cfgs,
+            rollback_plan=plan_from_deployment(cfg, effect_verifier),
+        )
+
+    headed = args.headed or cfg.backend.headed
+    url = args.url or cfg.backend.url
+    demo_app = bool(getattr(args, "demo_app", False))
+    if demo_app and (
+        url or backend_cfg.browser_cdp_endpoint or backend_cfg.browser_page_url
+    ):
+        raise SystemExit(
+            "--demo-app serves its own app; drop --url, backend.url or the "
+            "attached browser."
+        )
+    if args.drift and not demo_app:
+        raise SystemExit(
+            "--drift only applies to the bundled MockMed demo app (--demo-app); "
+            "drift your own app for real."
+        )
+    if (
+        url is None
+        and not demo_app
+        and not (backend_cfg.browser_cdp_endpoint or backend_cfg.browser_page_url)
+    ):
+        raise SystemExit(
+            "replay needs a target: pass --url, set backend.url in --config, or "
+            "pass --demo-app to replay against the bundled MockMed demo app."
+        )
+    refuse_unqualified_skill(bundle, target_url=url)
+
+    held_backend: list = []
+    hold_s = min(max(float(getattr(args, "hold_on_halt", 0.0) or 0.0), 0.0), 1800.0)
+    held_exit: list[int] = []
+
+    def run_on_page(page, *, entry_url: Optional[str]):
+        # The browser backend is built through the same factory as the
+        # desktop backends; the grounding / identity / deployment wiring and
+        # the run are shared (see _build_and_run_replayer). ``--drift`` (a
+        # MockMed teaching aid) forces the visual floor so the healing ladder
+        # is exercised instead of the structural rung resolving it.
+        backend = build_backend(backend_cfg, page=page)
+        held_backend.append(backend)
+        surface_backends = _build_surface_backends(surface_cfgs, page=page)
+        from openadapt_flow.rollback import plan_from_deployment, web_fresh_session
+
+        rollback_plan = plan_from_deployment(cfg, effect_verifier)
+        return _build_and_run_replayer(
+            backend,
+            workflow=workflow,
+            params=params,
+            worklists=worklists,
+            bundle=bundle,
+            run_dir=run_dir,
+            save_healed_to=(Path(args.save_healed_to) if args.save_healed_to else None),
+            allow_egress=allow_egress,
+            effect_verifier=effect_verifier,
+            api_actuator=api_actuator,
+            durable=durable,
+            use_structural=not bool(args.drift),
+            pixel_verify_enabled=cfg.runtime.pixel_verify_enabled,
+            governed_authorization=getattr(args, "_governed_run_authorization", None),
+            delivery_authority_kind=getattr(
+                args, "_delivery_authority_kind", "customer_local"
+            ),
+            remote_delivery_run_id=getattr(args, "_remote_delivery_run_id", None),
+            managed_dispatch_binding=getattr(args, "_managed_dispatch_binding", None),
+            production_qualification_guard=getattr(
+                args, "_production_qualification_guard", None
+            ),
+            qualification_campaign_guard=getattr(
+                args, "_qualification_campaign_guard", None
+            ),
+            runtime_config=cfg.runtime,
+            execution_target_kind="web",
+            surface_override=bool(getattr(args, "_surface_override", False)),
+            execution_origin=(
+                f"{urlsplit(page.url).scheme}://{urlsplit(page.url).netloc}"
+            ),
+            execution_entry_url=entry_url,
+            run_id=getattr(args, "_qualification_run_id", None),
+            approval_gate=approval_gate,
+            qualification_fault_driver=fault_driver,
+            surface_backends=surface_backends,
+            deployment_surface=backend_cfg.deployment_surface,
+            rollback_plan=rollback_plan,
+            # Never reset the operator's own attached browser: that would
+            # sign them out. Only API-only compensations run there.
+            fresh_session=(
+                web_fresh_session(page, entry_url or page.url)
+                if rollback_plan is not None
+                and not (
+                    backend_cfg.browser_cdp_endpoint or backend_cfg.browser_page_url
+                )
+                else None
+            ),
+        )
+
+    if backend_cfg.browser_cdp_endpoint or backend_cfg.browser_page_url:
+        # Start from the signed-in session the task uses: bind the open tab of
+        # the operator's running browser instead of launching a new, signed-out
+        # one. Nothing navigates or closes that browser.
+        if args.drift or getattr(args, "record_video", None) is not None:
+            raise SystemExit(
+                "REFUSED: --drift and --record-video apply only to a browser "
+                "that Flow launches, not to an attached signed-in browser. "
+                "Nothing was executed."
+            )
+        with _attached_web_page(backend_cfg, url=url, workflow=workflow) as page:
+            report = run_on_page(page, entry_url=_attached_entry_url(page, url))
+        return _finish_replay(
+            run_dir, report, args, backend_kind=_report_backend_kind(backend_cfg.kind)
+        )
+
+    stop = None
+    if url is None and demo_app:
+        from openadapt_flow.mockmed.server import serve
+
+        url, stop = serve(port=0)
+        url = _with_drift(url, args.drift)
+        drift_note = f" (drift: {args.drift})" if args.drift else ""
+        print(f"--demo-app: replaying against bundled MockMed{drift_note}")
+
+    video_dir = getattr(args, "record_video", None)
+    from playwright.sync_api import sync_playwright
+
+    from openadapt_flow._browser_setup import launch_chromium
+
+    try:
+        with sync_playwright() as p:
+            browser = launch_chromium(p.chromium, headless=not headed)
+            # OPT-IN session video (default off): a recorded replay lives in a
+            # context so Playwright can attach the recorder; None keeps the old
+            # direct-page path with zero effect.
+            context = None
+            if video_dir is not None:
+                context = browser.new_context(
+                    viewport=_VIEWPORT,
+                    record_video_dir=video_dir,
+                    record_video_size=_VIEWPORT,
+                    service_workers="block",
+                )
+                page = context.new_page()
+            else:
+                page = browser.new_page(viewport=_VIEWPORT, service_workers="block")
+            from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+            # Guard the page's WebSockets from its first document (wire check).
+            prepare_ws_guard(page)
+            page.goto(url)
+            try:
+                report = run_on_page(page, entry_url=url)
+                if hold_s > 0 and not report.success and held_backend:
+                    # Report first, so the caller can act on the halt while
+                    # the page stays open for a repair demonstration.
+                    held_exit.append(
+                        _finish_replay(
+                            run_dir,
+                            report,
+                            args,
+                            backend_kind=_report_backend_kind(backend_cfg.kind),
+                        )
+                    )
+                    sys.stdout.flush()
+                    from openadapt_flow.repair.hold import hold_for_repair
+
+                    hold_for_repair(
+                        held_backend[-1], run_dir, hold_s, exit_code=held_exit[0]
+                    )
+            finally:
+                video_path = None
+                if context is not None:
+                    try:
+                        video_path = page.video.path() if page.video else None
+                    except Exception:
+                        video_path = None
+                    context.close()  # flush the recorded video to disk
+                browser.close()
+                if video_path is not None:
+                    print(f"Session video written to {video_path}")
+    finally:
+        if stop is not None:
+            stop()
+
+    if held_exit:
+        return held_exit[0]
+    return _finish_replay(
+        run_dir, report, args, backend_kind=_report_backend_kind(backend_cfg.kind)
+    )
+
+
+def _pinned_lineage(args: argparse.Namespace, cfg: Any) -> Any:
+    from openadapt_flow.cli_self_repair import pinned_lineage
+
+    return pinned_lineage(args, cfg)
+
+
+#: The run-authorization fields a managed dispatch must agree on with the
+#: authorization this runner builds for the same bundle and inputs.
+MANAGED_SAFETY_FIELDS = (
+    "bundle_content_digest",
+    "runtime_inputs_digest",
+    "admitted_policy_name",
+    "admitted_policy_contract_sha256",
+    "execution_profile",
+    "minimum_effect_tier",
+    "qualified_effect_requirements",
+    "required_identity_step_ids",
+    "unverified_write_approvals",
+)
+
+
+def managed_authorization_mismatch(authorization: Any, local: Any) -> bool:
+    """Whether Cloud's run authorization disagrees with the local one.
+
+    Cloud may admit only API steps the bundle itself admits. An API step Cloud
+    doesn't name runs on the GUI, so naming fewer is allowed.
+    """
+
+    return any(
+        getattr(authorization, field) != getattr(local, field)
+        for field in MANAGED_SAFETY_FIELDS
+    ) or any(row not in local.api_steps for row in authorization.api_steps)
+
+
+def _replay_worklist_pool(
+    args: argparse.Namespace,
+    cfg,
+    backend_cfg,
+    policy,
+    *,
+    workflow,
+    params,
+    worklists,
+    bundle: Path,
+    run_dir: Path,
+    allow_egress: bool,
+    durable: bool,
+    fault_driver,
+    surface_cfgs,
+) -> int:
+    """Run a worklist program's items on N workers (docs/THROUGHPUT.md)."""
+    import hashlib
+    import os
+    from functools import partial
+
+    from openadapt_flow import cli_worklist_pool as cwp
+    from openadapt_flow.backends.factory import _normalize_kind, build_backend
+    from openadapt_flow.runtime.worklist_pool import PoolRefusal
+
+    kind = _normalize_kind(backend_cfg.kind)
+    url = args.url or cfg.backend.url
+    try:
+        if (
+            fault_driver is not None
+            or getattr(args, "_qualification_case_execution", None) is not None
+        ):
+            raise PoolRefusal("qualification runs are serial")
+        if surface_cfgs:
+            raise PoolRefusal("multi-surface bundles run on one session")
+        if (
+            getattr(args, "drift", None)
+            or getattr(args, "record_video", None) is not None
+            or float(getattr(args, "hold_on_halt", 0.0) or 0.0) > 0
+            or getattr(args, "save_healed_to", None)
+        ):
+            raise PoolRefusal(
+                "--drift, --record-video, --hold-on-halt and --save-healed-to "
+                "apply to a single session"
+            )
+        if kind not in ("web", "rdp"):
+            raise PoolRefusal(f"--workers supports web and RDP sessions, not {kind}")
+        if kind == "web" and not url:
+            raise PoolRefusal("--workers needs --url or backend.url")
+        if kind == "rdp" and not backend_cfg.rdp_host:
+            raise PoolRefusal("--workers over RDP needs backend.rdp_host")
+        if policy.refusal() is not None:
+            raise PoolRefusal(policy.refusal())
+        relation = cwp.loop_relation(workflow)
+        rows = cwp.pool_rows(workflow, worklists, relation)
+        accounts = cwp.check_accounts(policy, cfg.worklist, kind)
+        entry_workflow = (
+            cwp.load_entry_bundle(Path(cfg.worklist.entry_bundle))
+            if cfg.worklist.entry_bundle and kind == "web"
+            else None
+        )
+    except PoolRefusal as exc:
+        print(f"REFUSED: {exc}. Nothing was executed.")
+        return 2
+
+    item_authorization = getattr(args, "_item_authorization", None)
+    policy_name = getattr(args, "policy", None) or cfg.policy.policy
+    entry_url = cfg.worklist.entry_url or url
+
+    def run_item(wiring, source, idx, row, item_dir, pipeline, *, page_mode: bool):
+        _cfg, effect_verifier, api_actuator, _durable, _egress = wiring
+        backend = build_backend(backend_cfg, page=source) if page_mode else source
+        item_dir.mkdir(parents=True, exist_ok=True)
+        origin = None
+        if page_mode:
+            origin = f"{urlsplit(source.url).scheme}://{urlsplit(source.url).netloc}"
+        return _build_and_run_replayer(
+            backend,
+            workflow=workflow,
+            params=params,
+            worklists={relation: [dict(row)]},
+            bundle=bundle,
+            run_dir=item_dir,
+            save_healed_to=None,
+            allow_egress=allow_egress,
+            effect_verifier=effect_verifier,
+            api_actuator=api_actuator,
+            durable=durable,
+            use_structural=True,
+            pixel_verify_enabled=cfg.runtime.pixel_verify_enabled,
+            governed_authorization=(
+                item_authorization([dict(row)]) if item_authorization else None
+            ),
+            production_qualification_guard=getattr(
+                args, "_production_qualification_guard", None
+            ),
+            runtime_config=cfg.runtime,
+            execution_target_kind=(
+                "web" if page_mode else _report_backend_kind(backend_cfg.kind)
+            ),
+            surface_override=bool(getattr(args, "_surface_override", False)),
+            execution_origin=origin,
+            execution_entry_url=entry_url if page_mode else None,
+            approval_gate=_approval_gate_for_run(
+                args, item_dir, policy_name=policy_name
+            ),
+            deployment_surface=backend_cfg.deployment_surface,
+            readback_pipeline=pipeline,
+        )
+
+    # One effect verifier / API actuator per worker: they hold HTTP sessions
+    # and are not shared across threads.
+    wirings = [_deployment_runtime(args, params=params) for _ in accounts]
+    salt = getattr(getattr(workflow, "manifest", None), "content_digest", "") or ""
+
+    # After an item that halted before any write, when the session takes the
+    # next one, clean the screen, confirm the start screen and read the
+    # records back (docs/HALT_CLEANUP.md). Without a qualified halt_cleanup,
+    # the default only re-enters and checks.
+    from openadapt_flow import halt_cleanup as _hc
+    from openadapt_flow.after_stop import records_reader as _records_reader
+    from openadapt_flow.runtime import Replayer as _Replayer
+
+    item_cleanup = _hc.runnable_cleanup(workflow)
+
+    def _reenter(source, open_entry):
+        def reenter() -> None:
+            if open_entry is not None:
+                open_entry(source)
+            else:
+                source.goto(entry_url)
+
+        return reenter
+
+    def clean_session(source, cleanup_dir, *, wiring, page_mode: bool, open_entry=None):
+        if item_cleanup is None:
+            return None
+        read_records = _records_reader(wiring[1])
+        if read_records is None:
+            # Without a read-back, a cleanup that saves (autosave on leave)
+            # would go unseen and the item would count as unwritten.
+            return _hc.CleanupResult(
+                dirty="the deployment's effect verifier can't read the records "
+                "back, so a cleanup can't be shown to save nothing"
+            )
+        backend = build_backend(backend_cfg, page=source) if page_mode else source
+        return _hc.run_cleanup(
+            lambda: _Replayer(backend),
+            workflow,
+            item_cleanup,
+            bundle_dir=bundle,
+            run_dir=cleanup_dir,
+            reenter=_reenter(source, open_entry) if page_mode else None,
+            read_records=read_records,
+        )
+
+    def start_check(source, check_dir, *, page_mode: bool, open_entry=None):
+        if item_cleanup is None:
+            return None
+        backend = build_backend(backend_cfg, page=source) if page_mode else source
+        return _hc.check_start(
+            lambda: _Replayer(backend),
+            workflow,
+            item_cleanup,
+            bundle_dir=bundle,
+            run_dir=check_dir,
+            reenter=_reenter(source, open_entry) if page_mode else None,
+        )
+
+    if kind == "web":
+        workers = []
+        for i, account in enumerate(accounts):
+            name = account.name if account is not None else "worker-1"
+            sign_in = None
+            if account is None:
+                sign_in = partial(lambda page, u: page.goto(u), u=url)
+            elif not account.browser_cdp_endpoint:
+                sign_in = partial(
+                    cwp.sign_in_with_bundle,
+                    bundle=Path(cfg.worklist.sign_in_bundle),
+                    account=account,
+                    backend_factory=lambda page: build_backend(backend_cfg, page=page),
+                    url=url,
+                    run_dir=run_dir / "sign-in" / name,
+                )
+            open_entry = None
+            if entry_workflow is not None:
+                open_entry = partial(
+                    cwp.entry_with_bundle,
+                    url=entry_url,
+                    workflow=entry_workflow,
+                    bundle=Path(cfg.worklist.entry_bundle),
+                    backend_factory=lambda page: build_backend(backend_cfg, page=page),
+                    run_dir=run_dir / "entry" / name,
+                )
+            workers.append(
+                cwp.WebPoolWorker(
+                    name=name,
+                    entry_url=entry_url,
+                    run_item_on_page=partial(run_item, wirings[i], page_mode=True),
+                    sign_in=sign_in,
+                    open_entry=open_entry,
+                    clean=partial(
+                        clean_session,
+                        wiring=wirings[i],
+                        page_mode=True,
+                        open_entry=open_entry,
+                    ),
+                    start_check=partial(
+                        start_check, page_mode=True, open_entry=open_entry
+                    ),
+                    cdp_endpoint=account.browser_cdp_endpoint if account else None,
+                    headed=bool(args.headed or cfg.backend.headed),
+                    readback_window=policy.readback_window,
+                )
+            )
+        return cwp.run_pool(rows, workers, run_dir=run_dir, policy=policy, salt=salt)
+
+    # RDP: one FreeRDP session per account, connected together by the pool.
+    from openadapt_flow.backends.xfreerdp import (
+        RdpTarget,
+        SessionPool,
+        XFreeRDPTransport,
+    )
+
+    transports = [
+        XFreeRDPTransport(
+            RdpTarget(
+                host=backend_cfg.rdp_host,
+                port=backend_cfg.rdp_port,
+                username=account.rdp_username,
+                domain=backend_cfg.rdp_domain,
+            ),
+            password=(lambda env=account.rdp_password_env: os.environ[env]),
+        )
+        for account in accounts
+    ]
+    with SessionPool(transports) as session_pool:
+        workers = [
+            cwp.BackendPoolWorker(
+                name=account.name,
+                backend=build_backend(
+                    backend_cfg, rdp_transport=session, rdp_connect=False
+                ),
+                run_item_on_backend=partial(run_item, wirings[i], page_mode=False),
+                clean=partial(clean_session, wiring=wirings[i], page_mode=False),
+                start_check=partial(start_check, page_mode=False),
+                fingerprint=hashlib.sha256(
+                    f"{backend_cfg.rdp_host}|{account.rdp_username}".encode()
+                ).hexdigest(),
+                readback_window=policy.readback_window,
+            )
+            for i, (account, session) in enumerate(zip(accounts, session_pool.sessions))
+        ]
+        return cwp.run_pool(rows, workers, run_dir=run_dir, policy=policy, salt=salt)
+
+
+def _refuse_unverified_managed_qualification_admission(
+    authorization: object,
+    workflow: object | None = None,
+) -> int | None:
+    """Verify the signed admission already bound on a Cloud authorization."""
+
+    from openadapt_flow.production_qualification import (
+        managed_qualification_edge_refusal,
+    )
+
+    admission = getattr(authorization, "qualification_admission", None)
+    if admission is None:
+        print(
+            "run REFUSED: Standard and Regulated actuation requires a signed "
+            "qualification admission. Nothing was executed."
+        )
+        return 2
+    refusal = managed_qualification_edge_refusal(authorization, workflow)
+    if refusal is not None:
+        print(
+            "run REFUSED: the Production qualification authority is invalid, "
+            "expired, revoked, or does not match this exact run. Nothing was "
+            "executed."
+        )
+        return 2
+    return None
+
+
+def _resolve_run_approval_mode(args: argparse.Namespace, cfg, profile_value):
+    """The approval mode a ``run`` uses, or ``None`` for an ungated run.
+
+    A direct ``--approval-mode`` wins over ``runtime.approval_mode``. Every
+    run is gated by default: a missing or unknown value means ``each_item``,
+    so a person approves each save whatever the profile. The only way to turn
+    the gate off is to name ``not_gated``, and the report records that choice.
+    """
+    from openadapt_flow.approval_mode.model import resolve_approval_mode
+
+    requested = getattr(args, "approval_mode", None)
+    if requested is None:
+        requested = getattr(getattr(cfg, "runtime", None), "approval_mode", None)
+    if requested is None:
+        requested = _admitted_approval_mode(args)
+    return resolve_approval_mode(requested)
+
+
+def _admitted_approval_mode(args: argparse.Namespace) -> Optional[str]:
+    """The approval mode the bundle's admission gives it, or ``None``.
+
+    An accepted ``openadapt-flow admit`` sets ``problems_only`` for that exact
+    bundle. A flag or ``runtime.approval_mode`` still wins. A bundle changed
+    since admission, or an agent's admission whose person-signed grant no
+    longer verifies, falls back to the default (a person approves each save)
+    and says why.
+    """
+
+    bundle = getattr(args, "bundle", None)
+    if not bundle:
+        return None
+    from openadapt_flow.admit_pipeline import admitted_approval_mode
+
+    admitted = admitted_approval_mode(Path(bundle))
+    if admitted.refusal is not None:
+        print(
+            f"admission approval mode not used ({admitted.refusal}): a person "
+            "approves each save."
+        )
+        return None
+    if admitted.approval_mode is not None and admitted.admitted_by is not None:
+        print(
+            f"Admitted by {admitted.admitted_by.label()}: this workflow uses "
+            f"{admitted.approval_mode}."
+        )
+    return admitted.approval_mode
+
+
+def _approval_wait_seconds(args: argparse.Namespace) -> float:
+    from openadapt_flow.approval_mode.item_approval import (
+        DEFAULT_APPROVAL_WAIT_S,
+        MAX_APPROVAL_WAIT_S,
+    )
+
+    raw = getattr(args, "approval_wait", None)
+    if raw is None:
+        return DEFAULT_APPROVAL_WAIT_S
+    return max(0.0, min(float(raw), MAX_APPROVAL_WAIT_S))
+
+
+def _deployment_approvers(args: argparse.Namespace) -> Any:
+    """The deployment config's ``approvers`` section, or ``None``.
+
+    Parsed once per command: every later reader in this process sees the
+    same pin, even if the file is swapped while the run goes on.
+    """
+
+    if hasattr(args, "_approvers_section"):
+        return args._approvers_section
+    args._approvers_section = _load_deployment_approvers(args)
+    return args._approvers_section
+
+
+def _load_deployment_approvers(args: argparse.Namespace) -> Any:
+    config = getattr(args, "config", None)
+    if not config:
+        return None
+    from openadapt_flow.deployment import load_deployment
+
+    try:
+        return load_deployment(config, allow_unresolved=True).approvers
+    except (OSError, ValueError) as exc:
+        # A config that can't be read must not quietly drop its pin and let
+        # a caller-set root count instead.
+        raise SystemExit(
+            f"REFUSED (deployment_config_unreadable): {config} can't be read, so "
+            f"its approver pin can't be checked ({exc}). Nothing was executed."
+        ) from None
+
+
+def _args_key_dir(args: argparse.Namespace) -> Optional[Path]:
+    """The ``--key-dir`` the operator chose, or ``None`` for the default.
+
+    Never read from a run directory: the approval files there are writable by
+    any process, so a path stored in them would let a forger pick the registry.
+    A deployment config that pins ``approvers.key_dir`` names the only key
+    directory a run accepts: ``--key-dir`` elsewhere is refused.
+    """
+
+    key_dir = getattr(args, "key_dir", None)
+    pinned = _deployment_approvers(args)
+    if pinned is not None and pinned.key_dir:
+        want = Path(pinned.key_dir).expanduser().resolve()
+        if key_dir and Path(key_dir).expanduser().resolve() != want:
+            raise SystemExit(
+                f"REFUSED (approver_key_dir_mismatch): the deployment config pins "
+                f"the approver key directory {want}; --key-dir names another. "
+                "Nothing was executed."
+            )
+        return want
+    return Path(key_dir) if key_dir else None
+
+
+def _approver_pin(args: argparse.Namespace, *, config_only: bool) -> dict[str, Any]:
+    """The pin a run's item-approval store checks answers against.
+
+    ``config_only`` (a governed run, or one an agent started): only the
+    deployment config's ``approvers.root_public_key`` counts; ``--approver-root``
+    and ``OPENADAPT_APPROVER_ROOT`` are ignored, since whoever starts the run
+    sets them. Without a config pin such a run refuses every person's answer.
+    """
+
+    pinned = _deployment_approvers(args)
+    return {
+        "approver_root": getattr(args, "approver_root", None),
+        "config_root": pinned.root_public_key if pinned is not None else None,
+        "config_only": config_only,
+        "config_head": tuple(pinned.head)
+        if pinned is not None and pinned.head
+        else None,
+    }
+
+
+def _run_is_config_pinned(args: argparse.Namespace) -> bool:
+    """A governed run (or its resume), or one an agent started."""
+
+    return (
+        bool(getattr(args, "started_by", None))
+        or getattr(args, "_governed_run_authorization", None) is not None
+        or bool(getattr(args, "_resume_governed", False))
+    )
+
+
+def _args_approver_root(args: argparse.Namespace) -> Optional[str]:
+    """The approver root this command pins (approval_mode/approver_roster).
+
+    The deployment config's ``approvers.root_public_key``, ``--approver-root``
+    and ``OPENADAPT_APPROVER_ROOT``; two that disagree are refused.
+    """
+
+    from openadapt_flow.approval_mode.approver_roster import RosterError, pinned_root
+
+    pinned = _deployment_approvers(args)
+    try:
+        return pinned_root(
+            getattr(args, "approver_root", None),
+            config_root=pinned.root_public_key if pinned is not None else None,
+        )
+    except RosterError as exc:
+        raise SystemExit(
+            f"REFUSED ({exc.code}): {exc}. Nothing was executed."
+        ) from None
+
+
+def _approver_settings(args: argparse.Namespace):
+    """The run's approver grant and delegated approver, from its flags.
+
+    ``--approver-policy`` is a person-signed grant
+    (``openadapt-flow approver-grant sign``) or a person-only policy. An
+    unsigned policy that admits an agent, or a grant that doesn't verify
+    against the signer registry, gives no authority: the run stays
+    person-only and says why.
+    """
+
+    import os
+    import sys
+
+    from openadapt_flow.approval_mode.approver import (
+        ApproverAuth,
+        ApproverIdentityV1,
+        ApproverKind,
+        WebhookApprover,
+    )
+    from openadapt_flow.approval_mode.signed_policy import load_approver_policy
+    from openadapt_flow.jit.lifecycle import default_key_dir
+
+    loaded = None
+    path = getattr(args, "approver_policy", None)
+    if path:
+        loaded = load_approver_policy(path, _args_key_dir(args) or default_key_dir())
+        if loaded.refusal is not None:
+            from openadapt_flow.cli_hints import command
+
+            print(
+                f"approver policy not used ({loaded.refusal}): only a person "
+                "answers this run's saves. A delegate needs a grant a "
+                f"registered person signed ({command('approver-grant sign')}).",
+                file=sys.stderr,
+            )
+    approver = None
+    url = getattr(args, "approver_webhook", None)
+    if url:
+        secret = os.environ.get("OPENADAPT_APPROVER_WEBHOOK_SECRET", "").encode()
+        approver = WebhookApprover(
+            url,
+            secret,
+            ApproverIdentityV1(
+                kind=ApproverKind(getattr(args, "approver_webhook_kind", "system")),
+                auth=ApproverAuth.SIGNED_WEBHOOK,
+                id=getattr(args, "approver_webhook_id", None),
+            ),
+        )
+    return loaded, approver
+
+
+def _prepare_approval_store(
+    args: argparse.Namespace, run_dir: Path, *, record_initiator: bool
+):
+    """The run's item-approval store with its grant and initiator recorded."""
+
+    from openadapt_flow.approval_mode.item_approval import (
+        ItemApprovalRefused,
+        ItemApprovalStore,
+    )
+
+    store = ItemApprovalStore(
+        run_dir,
+        key_dir=_args_key_dir(args),
+        **_approver_pin(args, config_only=_run_is_config_pinned(args)),
+    )
+    loaded, approver = _approver_settings(args)
+    try:
+        if record_initiator:
+            store.write_approver_root()
+        if loaded is not None and loaded.signed is not None:
+            store.write_grant(loaded.signed)
+        elif loaded is not None and loaded.refusal is None:
+            store.write_policy(loaded.policy)
+        if record_initiator:
+            store.write_initiator(getattr(args, "started_by", None))
+    except ItemApprovalRefused as exc:
+        raise SystemExit(
+            f"run REFUSED: {exc} ({exc.code}). Nothing was executed."
+        ) from None
+    return store, approver
+
+
+def _record_approver_pin(args: argparse.Namespace, run_dir: Path) -> None:
+    from openadapt_flow.approval_mode.item_approval import (
+        ItemApprovalRefused,
+        ItemApprovalStore,
+    )
+
+    store = ItemApprovalStore(
+        run_dir,
+        key_dir=_args_key_dir(args),
+        **_approver_pin(args, config_only=True),
+    )
+    try:
+        store.write_approver_root()
+    except ItemApprovalRefused as exc:
+        raise SystemExit(
+            f"run REFUSED: {exc} ({exc.code}). Nothing was executed."
+        ) from None
+
+
+def _approval_gate_for_run(
+    args: argparse.Namespace,
+    run_dir: Path,
+    *,
+    policy_name: Optional[str] = None,
+):
+    """Build the run's approval gate from the mode ``run`` resolved, if any."""
+
+    mode = getattr(args, "_approval_mode", None)
+    if mode is None:
+        if _run_is_config_pinned(args):
+            # No gate, but a durable stop may still need a person's signed
+            # approval later: record the pin a resume will check now.
+            _record_approver_pin(args, run_dir)
+        return None
+    from openadapt_flow.approval_mode.gate import ApprovalGate
+
+    store, approver = _prepare_approval_store(args, run_dir, record_initiator=True)
+    return ApprovalGate(
+        mode,
+        approval_store=store,
+        approval_wait_s=_approval_wait_seconds(args),
+        approver=approver,
+        policy_name=policy_name,
+    )
+
+
+def _bind_approval_mode(args: argparse.Namespace) -> Optional[int]:
+    """Bind the resolved approval mode into the run's authorization.
+
+    The mode is then part of the authorization the run checks at every input
+    edge and retains for a resume. A Cloud dispatch keeps its binding digest:
+    the mode is a runner-local field.
+    """
+    mode = getattr(args, "_approval_mode", None)
+    authorization = getattr(args, "_governed_run_authorization", None)
+    if mode is None or authorization is None:
+        return None
+    existing = getattr(authorization, "approval_mode", None)
+    if existing is not None and existing != mode.value:
+        print(
+            f"run REFUSED: this run's authorization names the {existing} approval "
+            f"mode, not {mode.value}. Nothing was executed."
+        )
+        return 2
+    bound = authorization.model_copy(update={"approval_mode": mode.value})
+    binding = getattr(args, "_managed_dispatch_binding", None)
+    if binding is not None:
+        from openadapt_flow.runner.dispatch_envelope import (
+            ManagedDispatchEnvelopeError,
+            with_runner_local_authorization,
+        )
+
+        try:
+            args._managed_dispatch_binding = with_runner_local_authorization(
+                binding, bound
+            )
+        except ManagedDispatchEnvelopeError:
+            print(
+                "run REFUSED: managed dispatch binding is invalid. Nothing was "
+                "executed."
+            )
+            return 2
+    args._governed_run_authorization = bound
+    labels = {
+        "each_item": "a person approves each save",
+        "problems_only": "only problems go to a person",
+        "not_gated": "no per-item pause",
+    }
+    print(f"Approval mode: {mode.value} ({labels[mode.value]}).")
+    return None
+
+
+def _attach_cloud_seal(args: argparse.Namespace) -> None:
+    """After a run connected to Cloud Execute, attach Cloud's signed receipt.
+
+    Only a VERIFIED report with an explicit Cloud execution id is touched;
+    any failure leaves the report and the exit code exactly as they were.
+    """
+    import os
+
+    execution_id = (
+        getattr(args, "cloud_execution_id", None)
+        or os.environ.get("OPENADAPT_CLOUD_EXECUTION_ID", "").strip()
+    )
+    run_dir = getattr(args, "run_dir", None)
+    if not execution_id or not run_dir or getattr(args, "dry_run", False):
+        return
+    from openadapt_flow.cloud_seal import attach_from_cloud
+
+    result = attach_from_cloud(Path(run_dir), execution_id=execution_id)
+    if result.attached:
+        print(
+            f"Cloud Seal attached for execution {execution_id} (report.json execute_receipt)."
+        )
+    elif result.code != "local_not_verified":
+        print(
+            f"Cloud Seal not attached ({result.code}); the run result is unchanged.",
+            file=sys.stderr,
+        )
+
+
+def _cmd_attach_seal(args: argparse.Namespace) -> int:
+    """``attach-seal``: fetch Cloud's signed receipt into a VERIFIED run report."""
+    from openadapt_flow.cloud_seal import attach_from_cloud
+
+    result = attach_from_cloud(
+        Path(args.run_dir),
+        execution_id=args.execution_id,
+        cloud_url=args.cloud_url,
+    )
+    if result.attached:
+        print(
+            f"attached: report.json now carries the Cloud receipt for {result.execution_id}"
+        )
+        print(
+            "Check it with: openadapt-agent seal verify "
+            + str(Path(args.run_dir) / "report.json")
+        )
+        return 0
+    print(f"not attached: {result.code}", file=sys.stderr)
+    return 1
+
+
+def _verify_run_sources(args: argparse.Namespace) -> dict[str, Any]:
+    """``--provenance`` and ``--source`` for verify-run's round trip."""
+
+    from openadapt_flow.verify_run import VerifyRunError
+
+    path = getattr(args, "provenance", None)
+    sources = list(getattr(args, "source", None) or [])
+    if not path:
+        if sources:
+            raise VerifyRunError("--source needs --provenance")
+        return {}
+    from openadapt_flow.provenance import load_provenance, read_sources
+
+    try:
+        provenance = load_provenance(path)
+        documents = read_sources([Path(p) for p in sources])
+    except (OSError, ValueError) as exc:
+        raise VerifyRunError(f"cannot read the provenance or a source: {exc}") from exc
+    return {"provenance": provenance, "documents": documents}
+
+
+def _cmd_verify_run(args: argparse.Namespace) -> int:
+    """``verify-run``: judge an effect another executor claims, from the store."""
+    from openadapt_flow.verify_run import (
+        VerifyRunError,
+        capture_baseline,
+        check_effect_receipt,
+        load_verify_config,
+        verify_run,
+        write_result,
+    )
+
+    def _json(path: str) -> Any:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+
+    if args.check:
+        if not args.keys:
+            print(
+                "verify-run --check needs --keys (a pinned Seal key registry)",
+                file=sys.stderr,
+            )
+            return 2
+        registry = _json(args.keys)
+        if isinstance(registry, dict):
+            registry = registry.get("keys", [])
+        result = check_effect_receipt(
+            _json(args.check), registry, accept_outcomes=args.accept_outcome or ()
+        )
+        print(json.dumps(result, indent=2, sort_keys=True))
+        if result.get("verified") and not result.get("verified_outcome"):
+            print(
+                "The signature is genuine, but the outcome is not verified.",
+                file=sys.stderr,
+            )
+        return 0 if result.get("ok") else 1
+    if not args.verify:
+        print("verify-run needs --verify verify.yaml", file=sys.stderr)
+        return 2
+    try:
+        cfg = load_verify_config(args.verify)
+        params = _json(args.params) if args.params else {}
+        if not isinstance(params, dict):
+            raise VerifyRunError("--params must be a JSON object")
+        if args.capture_baseline:
+            capture_baseline(cfg, params, Path(args.capture_baseline))
+            print(
+                f"baseline written: {args.capture_baseline} (private; holds raw records)"
+            )
+            return 0
+        if not args.run_record or not args.authorization_ref or not args.out:
+            raise VerifyRunError(
+                "verify-run needs --run-record, --authorization-ref, and --out"
+            )
+        result = verify_run(
+            cfg,
+            params=params,
+            run_record=_json(args.run_record),
+            authorization_ref=args.authorization_ref,
+            baseline_path=Path(args.baseline) if args.baseline else None,
+            private_dir=Path(args.out),
+            approver=_json(args.approver) if args.approver else None,
+            remediates=args.remediates,
+            correlation_id=args.correlation_id,
+            **_verify_run_sources(args),
+        )
+    except VerifyRunError as exc:
+        print(f"verify-run REFUSED: {exc}", file=sys.stderr)
+        return 2
+    out = write_result(result, Path(args.out))
+    receipt = result["receipt"]
+    print(f"effect verdict: {receipt['effect_verdict']}")
+    print(f"outcome: {receipt['outcome']}  executor: {receipt['executor_kind']}")
+    print(f"receipt (unsigned): {out}")
+    return 0 if receipt["outcome"] == "verified" else 1
+
+
+def _cmd_run(args: argparse.Namespace) -> int:
+    """Execute a bundle under a named deployment profile -- FAIL-CLOSED.
+
+    ``run`` selects Demo, Standard, or Regulated over the same admission gate,
+    authorization, and replayer. An omitted profile retains the pre-profile
+    compatibility contract. On any refusal it prints the coverage report naming
+    the failing gate and exits nonzero WITHOUT executing.
+    ``--dry-run`` / ``--explain`` print the coverage report and stop before
+    execution. Once admitted, it delegates to the shared executor (the same
+    backend / effect / actuation / durable runtime as ``replay``), with
+    ``--drift`` (a MockMed-only teaching aid) forced off.
+    """
+    from openadapt_flow.composition import is_composition_artifact
+    from openadapt_flow.execution_profiles import (
+        execution_profile_contract,
+        requires_signed_qualification_admission,
+        resolve_execution_profile,
+    )
+    from openadapt_flow.ir import Workflow
+    from openadapt_flow.production_qualification import (
+        ProductionQualificationAuthorityError,
+        ProductionQualificationGuard,
+    )
+    from openadapt_flow.qualification_campaign_authority import (
+        QualificationCampaignAuthorityError,
+        QualificationCampaignGuard,
+    )
+    from openadapt_flow.run_gate import (
+        build_qualification_case_authorization,
+        build_runtime_authorization,
+        evaluate_run_gate,
+    )
+    from openadapt_flow.runner.dispatch_envelope import (
+        ManagedDispatchEnvelopeError,
+        read_managed_dispatch_envelope,
+    )
+    from openadapt_flow.runtime.authorization import runtime_inputs_digest
+
+    bundle = Path(args.bundle)
+    from openadapt_flow.skills import refuse_unqualified_skill
+
+    refuse_unqualified_skill(bundle)
+    if is_composition_artifact(bundle):
+        from openadapt_flow.cli_compose import cmd_run_composition
+
+        return cmd_run_composition(args, run_child=_cmd_run)
+    from openadapt_flow.admitted_composition import is_process_contract_artifact
+
+    if is_process_contract_artifact(bundle):
+        from openadapt_flow.cli_process import cmd_run_process
+
+        return cmd_run_process(args, run_child=_cmd_run)
+    from openadapt_flow.variants import is_variant_set_artifact
+
+    if is_variant_set_artifact(bundle):
+        from openadapt_flow.cli_variants import cmd_run_variants
+
+        return cmd_run_variants(args, run_child=_cmd_run)
+    # Load the bundle first (decrypting if encrypted -- the key comes from
+    # --config/env via OPENADAPT_BUNDLE_KEY); a missing/wrong key fails LOUDLY.
+    try:
+        workflow = Workflow.load(bundle)
+    except Exception:  # crypto / integrity / structural errors -> fail closed
+        # Never echo a provider/Pydantic error here. A malformed local bundle
+        # can contain PHI-bearing target metadata and validation errors may
+        # repeat the rejected input verbatim.
+        print(
+            "run REFUSED: bundle could not be loaded safely. "
+            f"{_SAFE_BUNDLE_LOAD_GUIDANCE} Nothing was executed."
+        )
+        return 2
+
+    qualification_case = getattr(args, "_qualification_case_execution", None)
+    gate_params = (
+        qualification_case["params"]
+        if qualification_case is not None
+        else _replay_params(args.param, getattr(args, "params_file", None))
+    )
+    cfg, effect_verifier, api_actuator, configured_durable, _egress = (
+        _deployment_runtime(args, params=gate_params)
+    )
+    profile_name = getattr(args, "profile", None) or cfg.runtime.profile
+    selected_profile = None
+    profile = None
+    if profile_name is not None:
+        try:
+            selected_profile = resolve_execution_profile(profile_name)
+        except ValueError as exc:
+            print(f"run REFUSED: {exc}. Nothing was executed.")
+            return 2
+        profile = execution_profile_contract(selected_profile)
+        args._execution_profile = selected_profile.value
+    args._approval_mode = _resolve_run_approval_mode(
+        args, cfg, selected_profile.value if selected_profile is not None else None
+    )
+    if qualification_case is not None and selected_profile is None:
+        print(
+            "run REFUSED: qualification evidence requires the Standard profile. "
+            "Nothing was executed."
+        )
+        return 2
+    if qualification_case is not None and selected_profile.value != "standard":
+        print(
+            "run REFUSED: qualification evidence can run only under the Standard "
+            "profile. Nothing was executed."
+        )
+        return 2
+    effective_durable = bool(
+        configured_durable or (profile is not None and profile.require_durable)
+    )
+    effective_require_settled = bool(
+        cfg.runtime.require_settled or (profile is not None and profile.require_settled)
+    )
+    if (
+        profile is not None
+        and profile.require_encryption
+        and bool(getattr(args, "allow_unencrypted", False))
+    ):
+        assert selected_profile is not None
+        print(
+            f"run REFUSED: the {selected_profile.value} profile requires "
+            "encrypted bundles; --allow-unencrypted cannot weaken a named "
+            "profile. Select Standard or Demo only when the qualified storage "
+            "boundary protects plaintext artifacts. Nothing was executed."
+        )
+        return 2
+    # Section 5: a production profile requires an explicit execution surface
+    # BEFORE authorization; the Demo posture may default visibly. A
+    # surface-bound bundle then refuses a cross-surface run without the
+    # report-recorded override.
+    refused = _surface_selection_gate(args, cfg, workflow, operation="run")
+    if refused is not None:
+        return refused
+    backend_cfg = _resolve_backend_config(args, cfg, workflow)
+    refused = _enforce_surface_binding(args, workflow, backend_cfg, operation="run")
+    if refused is not None:
+        return refused
+    if _refuse_shared_readback_session(cfg, backend_cfg, operation="run"):
+        return 2
+    if _refuse_missing_citrix_readiness(backend_cfg, operation="run"):
+        return 2
+    # A pulled skill runs only on the instance it was qualified on: the
+    # deployment's app address, not only an explicit --url.
+    refuse_unqualified_skill(
+        bundle,
+        target_url=getattr(args, "url", None) or getattr(backend_cfg, "url", None),
+    )
+    will_actuate = not bool(getattr(args, "dry_run", False))
+    authority_file = getattr(args, "qualification_authority_file", None)
+    dispatch_file = getattr(args, "managed_dispatch_file", None)
+    managed_binding = None
+    authorization = None
+    if dispatch_file:
+        try:
+            managed_binding = read_managed_dispatch_envelope(Path(dispatch_file))
+            authorization = managed_binding.authorization
+        except ManagedDispatchEnvelopeError:
+            print(
+                "run REFUSED: managed dispatch binding is invalid. Nothing was executed."
+            )
+            return 2
+    if (
+        requires_signed_qualification_admission(
+            selected_profile, will_actuate=will_actuate
+        )
+        and qualification_case is None
+    ):
+        dispatch_admission = (
+            None if authorization is None else authorization.qualification_admission
+        )
+        if not authority_file and dispatch_admission is None:
+            print(
+                "run REFUSED: Standard and Regulated actuation requires a signed "
+                "qualification admission. Nothing was executed."
+            )
+            return 2
+        if authority_file:
+            try:
+                ProductionQualificationGuard(
+                    authority_file,
+                    remote_permit_revalidation=bool(dispatch_file),
+                ).verify(workflow, for_actuation=False)
+            except ProductionQualificationAuthorityError:
+                print(
+                    "run REFUSED: the Production qualification authority is invalid, "
+                    "expired, revoked, or does not match this exact run. Nothing was "
+                    "executed."
+                )
+                return 2
+        elif dispatch_admission is not None:
+            refused = _refuse_unverified_managed_qualification_admission(
+                authorization, workflow
+            )
+            if refused is not None:
+                return refused
+    policy_source = args.policy or cfg.policy.policy
+
+    report = evaluate_run_gate(
+        workflow,
+        bundle_dir=bundle,
+        deployment=cfg,
+        effect_verifier=effect_verifier,
+        api_actuator=api_actuator,
+        policy_source=policy_source,
+        approval_available=bool(getattr(args, "approve_unverified_writes", False)),
+        strict_templates=bool(getattr(args, "strict_templates", False)),
+        require_encryption=not bool(getattr(args, "allow_unencrypted", False)),
+        pinned_content_digest=getattr(args, "pin_digest", None),
+        pinned_compiler_version=getattr(args, "pin_version", None),
+        pinned_lineage=_pinned_lineage(args, cfg),
+        profile_contract=profile,
+        effective_durable=effective_durable if profile is not None else None,
+        effective_require_settled=(
+            effective_require_settled if profile is not None else None
+        ),
+        qualification_evidence_only=qualification_case is not None,
+    )
+    print(report.render())
+
+    if not report.passed:
+        # The local admission gate is always first. A dispatch envelope cannot
+        # turn a locally refused bundle into an admitted one.
+        return 2
+
+    if qualification_case is not None and dispatch_file:
+        print(
+            "run REFUSED: a qualification evidence run cannot accept a managed "
+            "dispatch. Nothing was executed."
+        )
+        return 2
+    runtime_params = _replay_params(args.param, getattr(args, "params_file", None))
+    runtime_worklists = (
+        qualification_case["worklists"]
+        if qualification_case is not None
+        else _resolve_worklists(getattr(args, "worklist", None), workflow)
+    )
+    local_authorization = None
+    if dispatch_file:
+        assert managed_binding is not None
+        assert authorization is not None
+        local_authorization = build_runtime_authorization(
+            workflow,
+            report,
+            params=runtime_params,
+            worklists=runtime_worklists,
+        )
+        if (
+            selected_profile is None
+            or selected_profile.value not in {"standard", "regulated"}
+            or workflow.manifest is None
+            or managed_authorization_mismatch(authorization, local_authorization)
+            or (
+                authorization.bundle_content_digest != workflow.manifest.content_digest
+                or authorization.validate_workflow(workflow) is not None
+                or runtime_inputs_digest(workflow, runtime_params, runtime_worklists)
+                != authorization.runtime_inputs_digest
+            )
+        ):
+            print(
+                "run REFUSED: managed dispatch does not match this exact run. Nothing was executed."
+            )
+            return 2
+
+    if getattr(args, "dry_run", False) or getattr(args, "explain", False):
+        # Report-only paths retain the complete local gate and, when supplied,
+        # the exact managed-dispatch check above. They do not require an
+        # actuation authority because they never cross an input edge.
+        return 0 if report.passed else 2
+
+    production_guard = None
+    campaign_guard = None
+    campaign_permit_binding = None
+    if qualification_case is not None:
+        authority_file = getattr(args, "qualification_campaign_authority_file", None)
+        if authority_file:
+            try:
+                campaign_guard = QualificationCampaignGuard(
+                    authority_file,
+                    workflow=workflow,
+                    case_id=qualification_case["case"].id,
+                    input_digest=runtime_inputs_digest(
+                        workflow, gate_params, runtime_worklists
+                    ),
+                    campaign_id=qualification_case["campaign_id"],
+                    run_id=qualification_case["run_id"],
+                )
+                campaign_permit_binding = campaign_guard.authorization_binding(workflow)
+            except QualificationCampaignAuthorityError:
+                print(
+                    "run REFUSED: the non-production qualification campaign permit "
+                    "is invalid, expired, consumed, or does not match this exact "
+                    "trial. Nothing was executed."
+                )
+                return 2
+            args._qualification_campaign_guard = campaign_guard
+        if campaign_permit_binding is not None and local_authorization is not None:
+            local_authorization = local_authorization.model_copy(
+                update=campaign_permit_binding
+            )
+    authority_file = getattr(args, "qualification_authority_file", None)
+    if authority_file:
+        try:
+            production_guard = ProductionQualificationGuard(
+                authority_file,
+                remote_permit_revalidation=bool(dispatch_file),
+            )
+            production_binding = production_guard.authorization_binding(workflow)
+        except ProductionQualificationAuthorityError:
+            print(
+                "run REFUSED: the Production qualification authority is invalid, "
+                "expired, revoked, or does not match this exact run. Nothing was "
+                "executed."
+            )
+            return 2
+        args._production_qualification_guard = production_guard
+        if local_authorization is None:
+            local_authorization = build_runtime_authorization(
+                workflow,
+                report,
+                params=runtime_params,
+                worklists=runtime_worklists,
+            )
+        local_authorization = local_authorization.model_copy(update=production_binding)
+
+    if dispatch_file:
+        assert managed_binding is not None
+        assert authorization is not None
+        assert local_authorization is not None
+        production_fields = tuple(
+            field
+            for field in local_authorization.model_fields
+            if field.startswith("production_qualification_")
+        )
+        if any(
+            getattr(authorization, field) != getattr(local_authorization, field)
+            for field in production_fields
+        ):
+            print(
+                "run REFUSED: managed dispatch does not bind the active Production "
+                "qualification authority. Nothing was executed."
+            )
+            return 2
+        args._governed_run_authorization = authorization
+        args._managed_dispatch_binding = managed_binding
+        args._delivery_authority_kind = "cloud_runner"
+        args._remote_delivery_run_id = managed_binding.run_id
+
+    if qualification_case is not None:
+        runtime_worklists = qualification_case["worklists"]
+        try:
+            authorization = build_qualification_case_authorization(
+                workflow,
+                report,
+                case_id=qualification_case["case"].id,
+                params=gate_params,
+                worklists=runtime_worklists,
+                campaign_id=qualification_case["campaign_id"],
+                run_id=qualification_case["run_id"],
+                campaign_permit_binding=campaign_permit_binding,
+                fault_driver=qualification_case.get("fault_driver"),
+            )
+        except ValueError:
+            print(
+                "run REFUSED: qualification evidence does not match this exact "
+                "case. Nothing was executed."
+            )
+            return 2
+        args._qualification_fault_driver = qualification_case.get("fault_driver")
+        args._governed_run_authorization = authorization
+        args._delivery_authority_kind = "customer_local"
+        args._remote_delivery_run_id = None
+        args._qualification_run_id = qualification_case["run_id"]
+
+    if not dispatch_file and qualification_case is None:
+        args._governed_run_authorization = local_authorization or (
+            build_runtime_authorization(
+                workflow,
+                report,
+                params=runtime_params,
+                worklists=runtime_worklists,
+            )
+        )
+        args._delivery_authority_kind = "customer_local"
+        args._remote_delivery_run_id = None
+
+    refused = _bind_approval_mode(args)
+    if refused is not None:
+        return refused
+
+    from openadapt_flow.cli_worklist_pool import loop_relation, requested_pool
+    from openadapt_flow.runtime.worklist_pool import PoolRefusal
+
+    if requested_pool(args, cfg) is not None:
+        # Parallel worklist (docs/THROUGHPUT.md): every item gets its own
+        # single-use authorization, bound to that item's one-row worklist and
+        # otherwise identical to the run's (same gate, policy, approvals).
+        from openadapt_flow.cli_worklist_pool import pool_profile_refusal
+
+        pool_refused = pool_profile_refusal(
+            managed=bool(dispatch_file),
+            qualification_case=qualification_case is not None,
+        )
+        if pool_refused is not None:
+            print(f"run REFUSED: {pool_refused}. Nothing was executed.")
+            return 2
+        try:
+            relation = loop_relation(workflow)
+        except PoolRefusal as exc:
+            print(f"run REFUSED: {exc}. Nothing was executed.")
+            return 2
+        base_authorization = args._governed_run_authorization
+
+        def _item_authorization(rows, base=base_authorization):
+            fresh = build_runtime_authorization(
+                workflow,
+                report,
+                params=runtime_params,
+                worklists={relation: rows},
+            )
+            keep = {"authorization_id", "created_at", "runtime_inputs_digest"}
+            return fresh.model_copy(
+                update={
+                    name: getattr(base, name)
+                    for name in type(base).model_fields
+                    if name not in keep
+                }
+            )
+
+        args._item_authorization = _item_authorization
+
+    if qualification_case is not None and not _claim_qualification_case_attempt(args):
+        return 2
+
+    # Admitted. A deployment run is not the drift-demo; force it off and delegate
+    # to the shared replay executor (which reads all deployment wiring itself).
+    args.drift = None
+    from openadapt_flow.cli_self_repair import resolve_auto_repair
+
+    repair_mode = resolve_auto_repair(args, cfg)
+    if repair_mode != "off":
+        from openadapt_flow.cli_self_repair import cmd_run_self_repair
+
+        exit_code = cmd_run_self_repair(
+            args,
+            workflow=workflow,
+            bundle=bundle,
+            cfg=cfg,
+            backend_cfg=backend_cfg,
+            gate_kwargs={
+                "deployment": cfg,
+                "effect_verifier": effect_verifier,
+                "api_actuator": api_actuator,
+                "policy_source": policy_source,
+                "approval_available": bool(
+                    getattr(args, "approve_unverified_writes", False)
+                ),
+                "strict_templates": bool(getattr(args, "strict_templates", False)),
+                "require_encryption": not bool(
+                    getattr(args, "allow_unencrypted", False)
+                ),
+                "pinned_compiler_version": getattr(args, "pin_version", None),
+                "profile_contract": profile,
+                "effective_durable": effective_durable if profile is not None else None,
+                "effective_require_settled": (
+                    effective_require_settled if profile is not None else None
+                ),
+            },
+            params=runtime_params,
+            worklists=runtime_worklists,
+            effect_verifier=effect_verifier,
+            api_actuator=api_actuator,
+            durable=effective_durable,
+            allow_egress=bool(_egress),
+            run_replayer=_build_and_run_replayer,
+            approval_gate_for_run=_approval_gate_for_run,
+            finish=_finish_replay,
+            default_run_dir=_default_run_dir,
+            attest_pre_state=_maybe_attest_pre_state,
+            mode=repair_mode,
+        )
+        if exit_code is not None:
+            _attach_cloud_seal(args)
+            return exit_code
+    exit_code = _cmd_replay(args)
+    _attach_cloud_seal(args)
+    return exit_code
+
+
+def _resume_approval_mode(args: argparse.Namespace, authorization):
+    """The approval mode a resume must use, or an exit code when refused.
+
+    A run's retained authorization decides: a resume can never pick another
+    mode. A Standard or Regulated run retained without a mode (it predates
+    approval modes, or Cloud minted it) resumes as ``each_item`` unless the
+    caller names a mode, as the hosted runner names ``not_gated``.
+    """
+    from openadapt_flow.approval_mode.model import resolve_approval_mode
+
+    requested = getattr(args, "approval_mode", None)
+    retained = getattr(authorization, "approval_mode", None)
+    if retained is not None:
+        if requested is not None and requested != retained:
+            print(
+                f"Resume REFUSED: this run was admitted in the {retained} approval "
+                f"mode, not {requested}. Nothing was executed."
+            )
+            return 3
+        return resolve_approval_mode(retained)
+    profile = getattr(authorization, "execution_profile", None)
+    if profile in {"standard", "regulated"} or requested is not None:
+        return resolve_approval_mode(requested)
+    return None
+
+
+def _carry_item_approval_to_pause(
+    run_dir: Path,
+    store,
+    pending,
+    key_dir: Optional[Path] = None,
+    pin: Optional[dict[str, Any]] = None,
+):
+    """Answer a waiting ``item_approval`` pause from an unused approval, if any.
+
+    Returns the pause as it now stands (unchanged when there's no approval).
+    """
+    from openadapt_flow.approval_mode.item_approval import (
+        ItemApprovalRefused,
+        ItemApprovalStore,
+    )
+
+    try:
+        manifest = store.read_manifest()
+        found = (
+            ItemApprovalStore(
+                run_dir, key_dir=key_dir, **(pin or {})
+            ).find_unused_approval(
+                run_id=manifest.run_id,
+                step_id=pending.step_id,
+                step_index=pending.step_index,
+            )
+            if manifest is not None
+            else None
+        )
+    except (OSError, ValueError, ItemApprovalRefused):
+        found = None
+    if found is None:
+        return pending
+    request, answer = found
+    _answer_durable_item_pause(run_dir, request, answer)
+    return store.read_pending() or pending
+
+
+def _resume_approval_gate(
+    args: argparse.Namespace,
+    mode,
+    run_dir: Path,
+    *,
+    policy_name: Optional[str] = None,
+):
+    if mode is None:
+        return None
+    from openadapt_flow.approval_mode.gate import ApprovalGate
+
+    # A resume keeps the run's own grant and initiator; it never re-records
+    # who started the run.
+    store, approver = _prepare_approval_store(args, run_dir, record_initiator=False)
+    return ApprovalGate(
+        mode,
+        approval_store=store,
+        approval_wait_s=_approval_wait_seconds(args),
+        approver=approver,
+        policy_name=policy_name,
+    )
+
+
+def _was_rolled_back(run_dir: Path) -> bool:
+    """Did a compensating rollback start undoing this run?"""
+    from openadapt_flow.runtime.durable.resume import was_compensated
+
+    return was_compensated(run_dir)
+
+
+def _cmd_resume(args: argparse.Namespace) -> int:
+    from openadapt_flow import crypto
+    from openadapt_flow.runtime.durable import resume, resume_point
+    from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
+
+    run_dir = Path(args.run_dir)
+    # Encrypted runs (OPENADAPT_BUNDLE_KEY set) need the key to read the pause;
+    # unset => None => plaintext, unchanged.
+    ckpt_key = crypto.resolve_key(None)
+    store = CheckpointStore(run_dir, key=ckpt_key)
+    if getattr(args, "roll_back", False):
+        return _cmd_resume_roll_back(args, run_dir, store, ckpt_key)
+    pending = store.read_pending()
+    if pending is None:
+        print(
+            f"No pending escalation at {run_dir} — nothing to resume "
+            "(a run only durably pauses when executed with a durable "
+            "deployment; see --config runtime.durable / --durable)."
+        )
+        return 1
+    if pending.category == "item_declined" or (
+        pending.category == "item_approval" and pending.status == "rejected"
+    ):
+        print(
+            "Resume REFUSED: a person declined this save; the item is over. "
+            "Nothing was executed."
+        )
+        return 3
+    if _was_rolled_back(run_dir):
+        print(
+            "Resume REFUSED: this run was rolled back after it stopped, so its "
+            "earlier writes are undone and resuming would carry them as done. "
+            "Start a new run. Nothing was executed."
+        )
+        return 3
+    # A governed run's resume takes its approver pin only from the deployment
+    # config, everywhere it checks an answer (the run directory and the
+    # environment are never the anchor).
+    _early_manifest = store.read_manifest()
+    args._resume_governed = bool(
+        _early_manifest is not None
+        and _early_manifest.governed_authorization is not None
+    )
+    resume_pin = _approver_pin(args, config_only=_run_is_config_pinned(args))
+    if pending.category == "item_approval" and pending.status == "pending":
+        # The person may have approved while the run was giving up waiting,
+        # before this pause existed for `item-approval approve` to answer.
+        # Carry that approval to the pause now; the resumed run still checks
+        # the answer itself and uses it once.
+        pending = _carry_item_approval_to_pause(
+            run_dir, store, pending, _args_key_dir(args), resume_pin
+        )
+    if args.require_approval and pending.status != "approved":
+        from openadapt_flow.cli_hints import command
+
+        approve_command = (
+            command("item-approval approve")
+            if pending.category == "item_approval"
+            else "openadapt flow approve"
+        )
+        print(
+            f"Pending escalation at {run_dir} is {pending.status!r}, not "
+            "'approved'. Approval is required before resume:\n"
+            f"    {approve_command} {run_dir}"
+        )
+        return 3
+
+    manifest = store.read_manifest()
+    if manifest is None:
+        print(
+            "Resume REFUSED: the durable run manifest is missing, so the "
+            "paused workflow cannot be identified safely. Nothing was executed."
+        )
+        return 3
+    if pending.category == "item_approval":
+        from openadapt_flow.approval_mode.item_approval import ItemApprovalStore
+
+        if (
+            ItemApprovalStore(
+                run_dir, key_dir=_args_key_dir(args), **resume_pin
+            ).find_unused_approval(
+                run_id=manifest.run_id,
+                step_id=pending.step_id,
+                step_index=pending.step_index,
+            )
+            is None
+        ):
+            from openadapt_flow.cli_hints import command
+
+            print(
+                "Resume REFUSED: this item waits for a person to approve the "
+                f"save in Desktop's Run it ({command('item-approval approve')}). "
+                "Nothing was executed."
+            )
+            return 3
+    elif pending.category != "business_decision":
+        # An item's authority is its signed answer, checked above and again by
+        # the run; a business decision carries its own signed receipt. Any
+        # other stored approval must be signed by a registered approver key:
+        # approval.json is a file any process could write.
+        from openadapt_flow.jit.lifecycle import default_key_dir
+        from openadapt_flow.runtime.durable.approval import stored_approval_refusal
+
+        stored = store.read_approval()
+        if stored is not None:
+            from openadapt_flow.approval_mode.item_approval import (
+                ItemApprovalStore as _PinStore,
+            )
+
+            # The run's own recorded pin and roster head when it has one; a
+            # governed run's resume otherwise takes only the config's root.
+            pin = _PinStore(
+                run_dir,
+                key_dir=_args_key_dir(args) or default_key_dir(),
+                **_approver_pin(
+                    args,
+                    config_only=manifest.governed_authorization is not None,
+                ),
+            )
+            root, head, pin_refusal = pin._root_pin()
+            code = pin_refusal or stored_approval_refusal(
+                stored,
+                _args_key_dir(args) or default_key_dir(),
+                root=root,
+                at_least=head,
+            )
+            if code is not None:
+                print(
+                    f"Resume REFUSED ({code}): the approval isn't signed by a "
+                    "registered approver key. Approve with openadapt flow approve "
+                    "--approver-key. Nothing was executed."
+                )
+                return 3
+    resume_mode = _resume_approval_mode(args, manifest.governed_authorization)
+    if isinstance(resume_mode, int):
+        return resume_mode
+    managed_binding = None
+    if manifest.delivery_authority_kind == "cloud_runner":
+        from openadapt_flow.runner.dispatch_envelope import (
+            ManagedDispatchEnvelopeError,
+            read_managed_dispatch_envelope,
+            with_runner_local_authorization,
+        )
+
+        try:
+            managed_binding = read_managed_dispatch_envelope(
+                Path(getattr(args, "managed_dispatch_file", ""))
+            )
+            retained = manifest.governed_authorization
+            if retained is not None and retained.approval_mode is not None:
+                # The runner bound its own approval mode at admission; Cloud's
+                # dispatch never carries it.
+                managed_binding = with_runner_local_authorization(
+                    managed_binding,
+                    managed_binding.authorization.model_copy(
+                        update={"approval_mode": retained.approval_mode}
+                    ),
+                )
+        except (ManagedDispatchEnvelopeError, TypeError, ValueError):
+            print(
+                "Resume REFUSED: managed dispatch binding is invalid. Nothing was executed."
+            )
+            return 3
+        if (
+            managed_binding.run_id != manifest.remote_delivery_run_id
+            or managed_binding.authorization != manifest.governed_authorization
+            or managed_binding.binding_sha256
+            != manifest.managed_dispatch_binding_sha256
+        ):
+            print(
+                "Resume REFUSED: managed dispatch does not match this run. Nothing was executed."
+            )
+            return 3
+    from openadapt_flow.ir import Workflow
+
+    try:
+        workflow = Workflow.load(Path(manifest.bundle_dir), key=ckpt_key)
+    except Exception:  # crypto / integrity / structural errors -> fail closed
+        # Do not echo the exception: a malformed local backend hint can contain
+        # a PHI-bearing title and Pydantic/provider errors may repeat inputs.
+        print(
+            "Resume REFUSED: the paused workflow bundle could not be loaded "
+            f"safely. {_SAFE_BUNDLE_LOAD_GUIDANCE} Nothing was executed."
+        )
+        return 3
+
+    production_guard = None
+    campaign_guard = None
+    retained_authorization = manifest.governed_authorization
+    if (
+        retained_authorization is not None
+        and retained_authorization.production_qualification_admission_id is not None
+    ):
+        from openadapt_flow.production_qualification import (
+            ProductionQualificationAuthorityError,
+            ProductionQualificationGuard,
+        )
+
+        authority_file = getattr(args, "qualification_authority_file", None)
+        if not authority_file:
+            print(
+                "Resume REFUSED: Production actuation requires the private "
+                "qualification authority again. Nothing was executed."
+            )
+            return 3
+        try:
+            production_guard = ProductionQualificationGuard(
+                authority_file,
+                remote_permit_revalidation=(
+                    manifest.delivery_authority_kind == "cloud_runner"
+                ),
+            )
+            production_binding = production_guard.authorization_binding(workflow)
+        except ProductionQualificationAuthorityError:
+            print(
+                "Resume REFUSED: the Production qualification authority is invalid, "
+                "expired, revoked, or does not match this exact run. Nothing was "
+                "executed."
+            )
+            return 3
+        if any(
+            getattr(retained_authorization, field, None) != value
+            for field, value in production_binding.items()
+        ):
+            print(
+                "Resume REFUSED: the Production qualification authority differs "
+                "from the retained run. Nothing was executed."
+            )
+            return 3
+        args._production_qualification_guard = production_guard
+
+    if (
+        retained_authorization is not None
+        and retained_authorization.qualification_campaign_permit_id is not None
+    ):
+        from openadapt_flow.qualification_campaign_authority import (
+            QualificationCampaignAuthorityError,
+            QualificationCampaignGuard,
+        )
+
+        authority_file = getattr(args, "qualification_campaign_authority_file", None)
+        if not authority_file:
+            print(
+                "Resume REFUSED: qualification actuation requires the private "
+                "signed non-production campaign authority again. Nothing was "
+                "executed."
+            )
+            return 3
+        try:
+            campaign_guard = QualificationCampaignGuard(
+                authority_file,
+                workflow=workflow,
+                case_id=retained_authorization.qualification_case_id,
+                input_digest=retained_authorization.runtime_inputs_digest,
+            )
+            campaign_refusal = campaign_guard.authorization_refusal(
+                workflow, retained_authorization
+            )
+        except QualificationCampaignAuthorityError:
+            campaign_refusal = "qualification campaign authority is invalid"
+        if campaign_refusal is not None:
+            print(
+                "Resume REFUSED: the non-production qualification campaign "
+                "permit is invalid, expired, consumed, or differs from the "
+                "retained run. Nothing was executed."
+            )
+            return 3
+        args._qualification_campaign_guard = campaign_guard
+
+    # A GUI automation cannot be resumed without a LIVE backend/vision, so build
+    # a fresh Replayer here (deployment wiring from --config) and hand it to the
+    # durable resume entrypoint, which re-binds params from the run manifest.
+    from openadapt_flow.backends.factory import _normalize_kind, build_backend
+    from openadapt_flow.report import render_run_report
+    from openadapt_flow.runtime.durable.approval import ResumeRefused
+
+    (
+        cfg,
+        effect_verifier,
+        api_actuator,
+        _durable,
+        allow_egress,
+    ) = _deployment_runtime(
+        args,
+        params=_replay_params(
+            getattr(args, "param", None), getattr(args, "params_file", None)
+        ),
+    )
+    if manifest.delivery_authority_kind == "cloud_runner" and allow_egress:
+        print(
+            "Resume REFUSED: this managed runner doesn't permit model grounding "
+            "because its evidence contract requires "
+            "screenshots_may_leave_box=false. Nothing was executed."
+        )
+        return 3
+
+    # Route the resumed run through the SAME backend factory as replay/run
+    # (--backend / --agent-url / --rdp-host over --config), so a resume drives
+    # the bundle's real substrate rather than always the browser. The default
+    # (web / no flag) reproduces the historical Playwright path below exactly.
+    backend_cfg = _resolve_backend_config(args, cfg, workflow)
+    refused = _enforce_surface_binding(args, workflow, backend_cfg, operation="resume")
+    if refused is not None:
+        return refused
+    if _refuse_missing_citrix_readiness(backend_cfg, operation="Resume"):
+        return 2
+    if _refuse_shared_readback_session(cfg, backend_cfg, operation="Resume"):
+        return 2
+
+    where = (
+        f"state '{pending.step_id}'"
+        if pending.program
+        else f"step {pending.step_index} '{pending.step_id}' "
+        f"(from index {resume_point(run_dir, key=ckpt_key)})"
+    )
+    print(
+        f"Resuming {run_dir} at {where}: {pending.category}. "
+        "Already-verified work is NOT re-run."
+    )
+
+    def _resume_with(backend: "Backend") -> "RunReport":
+        replayer = _configured_replayer(
+            backend,
+            workflow=workflow,
+            allow_egress=allow_egress,
+            effect_verifier=effect_verifier,
+            api_actuator=api_actuator,
+            durable=True,  # resume forces durability so it can pause again
+            use_structural=True,
+            pixel_verify_enabled=cfg.runtime.pixel_verify_enabled,
+            governed_authorization=retained_authorization,
+            managed_dispatch_binding=managed_binding,
+            production_qualification_guard=production_guard,
+            qualification_campaign_guard=campaign_guard,
+            runtime_config=cfg.runtime,
+            checkpoint_key=ckpt_key,
+            approval_gate=_resume_approval_gate(
+                args, resume_mode, run_dir, policy_name=cfg.policy.policy
+            ),
+            deployment_surface=backend_cfg.deployment_surface,
+        )
+        return resume(
+            run_dir,
+            replayer,
+            key=ckpt_key,
+            execution_target_kind=_report_backend_kind(backend_cfg.kind),
+            surface_override=bool(getattr(args, "_surface_override", False)),
+        )
+
+    try:
+        if _normalize_kind(backend_cfg.kind) == "web":
+            from openadapt_flow._browser_setup import launch_chromium
+
+            url = args.url or cfg.backend.url
+            if url is None:
+                raise SystemExit(
+                    "resume needs the target app URL to rebuild a live backend — "
+                    "pass --url or set backend.url in --config."
+                )
+            headed = args.headed or cfg.backend.headed
+            if backend_cfg.browser_cdp_endpoint or backend_cfg.browser_page_url:
+                # Resume in the same signed-in browser the run used; nothing
+                # navigates or closes it.
+                with _attached_web_page(
+                    backend_cfg, url=url, workflow=workflow
+                ) as page:
+                    report = _resume_with(build_backend(backend_cfg, page=page))
+            else:
+                from playwright.sync_api import sync_playwright
+
+                with sync_playwright() as p:
+                    browser = launch_chromium(p.chromium, headless=not headed)
+                    page = browser.new_page(viewport=_VIEWPORT)
+                    from openadapt_flow.backends.playwright_backend import (
+                        prepare_ws_guard,
+                    )
+
+                    # Guard the page's WebSockets from its first document (wire check).
+                    prepare_ws_guard(page)
+                    page.goto(url)
+                    try:
+                        report = _resume_with(build_backend(backend_cfg, page=page))
+                    finally:
+                        browser.close()
+        else:
+            # Desktop/native/remote: no browser, no --url; the factory builds
+            # the native backend from the resolved config (fail-loud on a missing
+            # required field). RDP transports hold a live socket — close them.
+            try:
+                backend = build_backend(backend_cfg)
+            except ValueError as e:
+                raise SystemExit(str(e))
+            try:
+                report = _resume_with(backend)
+            finally:
+                close = getattr(backend, "close", None)
+                if callable(close):
+                    close()
+    except ResumeRefused as refused:
+        # P0-5: the library REFUSED the resume (no valid approval, an expired
+        # pause, a changed bundle, or a diverged app state) — never a silent
+        # proceed. Approve first:  openadapt-flow approve <run_dir>
+        print(f"Resume REFUSED: {refused}")
+        return 3
+
+    if ckpt_key:
+        from openadapt_flow.rollback_durable import SealedRollback, SealedStateError
+
+        sealed = SealedRollback(run_dir, ckpt_key)
+        if report.success:
+            # The run finished: its sealed rollback state has nothing left to do.
+            sealed.clear()
+        else:
+            try:
+                armed = sealed.load_armed() is not None
+            except SealedStateError:
+                armed = True
+            if armed:
+                _bind_sealed_run(sealed, run_dir)
+            if armed:
+                from openadapt_flow.cli_hints import command
+
+                print(
+                    "Rollback is armed for this run. Resume it again, or roll it "
+                    f"back: {command(f'resume {run_dir} --roll-back')}"
+                )
+    report_md = render_run_report(run_dir)
+    execution_outcome = getattr(report, "execution_outcome", None)
+    outcome = execution_outcome or ("success" if report.success else "FAILED")
+    print(f"Resume {outcome}: {report_md}")
+    _maybe_report_break(run_dir, report)
+    _maybe_report_run(
+        run_dir,
+        report,
+        args,
+        backend_kind=_report_backend_kind(backend_cfg.kind),
+    )
+    _maybe_attest_run(run_dir, report, args)
+    if getattr(report, "execution_profile", None) in {"standard", "regulated"}:
+        return 0 if outcome == "VERIFIED" else 1
+    return 0 if report.success else 1
+
+
+def _cmd_resume_roll_back(
+    args: argparse.Namespace, run_dir: Path, store, ckpt_key: Optional[str]
+) -> int:
+    """Roll back a paused durable run, or a rollback a crash interrupted, from
+    the sealed state (docs/ROLLBACK.md, Durable runs). Afterwards the run is
+    never resumed."""
+    from openadapt_flow.rollback_durable import SealedRollback, SealedStateError
+
+    if ckpt_key is None:
+        print(
+            "Roll back REFUSED: the rollback state is encrypted with the "
+            "deployment's key (OPENADAPT_BUNDLE_KEY), which isn't set. Nothing ran."
+        )
+        return 3
+    sealed = SealedRollback(run_dir, ckpt_key)
+    try:
+        with sealed.lock():
+            return _roll_back_sealed(args, run_dir, store, ckpt_key, sealed)
+    except SealedStateError as exc:
+        print(f"Roll back REFUSED: {exc}. Nothing ran.")
+        return 3
+
+
+def _roll_back_sealed(
+    args: argparse.Namespace, run_dir: Path, store, ckpt_key: str, sealed
+) -> int:
+    """``resume --roll-back`` while it holds the run's rollback lock."""
+    from openadapt_flow.after_stop import UndoNotOffered, _load_report
+    from openadapt_flow.backends.factory import _normalize_kind, build_backend
+    from openadapt_flow.ir import Workflow
+    from openadapt_flow.rollback import (
+        ReplayerRunner,
+        plan_from_deployment,
+        rollback_lines,
+        screen_fresh_session,
+        web_fresh_session,
+    )
+    from openadapt_flow.rollback_durable import SealedStateError
+    from openadapt_flow.runtime.durable.program_checkpoint import bundle_version
+
+    done = sealed.finished()
+    if done is not None:
+        print(
+            f"Roll back REFUSED: this run's rollback already ended ({done}); "
+            "nothing runs twice. Nothing ran."
+        )
+        return 3
+    try:
+        armed = sealed.load_armed()
+        after_stop = sealed.load_stop() if armed is not None else None
+        restarted = sealed.started_steps() if armed is not None else frozenset()
+        compensated = sealed.compensated_steps() if armed is not None else frozenset()
+        report, _digest = _load_report(run_dir)
+    except (SealedStateError, UndoNotOffered) as exc:
+        print(f"Roll back REFUSED: {exc}. Nothing ran.")
+        return 3
+    if armed is None:
+        print(
+            f"Roll back REFUSED: {run_dir} holds no rollback state (rollback "
+            "wasn't on for this run, or it finished). Nothing ran."
+        )
+        return 3
+    if report.success:
+        print("Nothing to roll back: the run finished.")
+        return 0
+    manifest = store.read_manifest()
+    if manifest is None or armed["run_id"] != manifest.run_id:
+        print(
+            "Roll back REFUSED: the sealed rollback state isn't bound to this "
+            "run's durable manifest. Nothing ran."
+        )
+        return 3
+    governed = manifest.governed_authorization
+    if manifest.delivery_authority_kind == "cloud_runner" or (
+        governed is not None
+        and (
+            governed.production_qualification_admission_id is not None
+            or governed.qualification_campaign_permit_id is not None
+        )
+    ):
+        print(
+            "Roll back REFUSED: this run carries a managed dispatch or a "
+            "qualification authority, which a roll back doesn't re-check. "
+            "Nothing ran."
+        )
+        return 3
+    bundle = Path(manifest.bundle_dir)
+    if not armed["bundle_version"] or bundle_version(bundle) != armed["bundle_version"]:
+        print(
+            "Roll back REFUSED: the run's bundle changed since the run (its "
+            "compensations may not be the ones approved for it). Nothing ran."
+        )
+        return 3
+    try:
+        workflow = Workflow.load(bundle, key=ckpt_key)
+    except Exception:  # noqa: BLE001 - never echo a bundle's contents
+        print(
+            "Roll back REFUSED: the run's workflow bundle could not be loaded "
+            f"safely. {_SAFE_BUNDLE_LOAD_GUIDANCE} Nothing ran."
+        )
+        return 3
+    cfg, effect_verifier, api_actuator, _durable, allow_egress = _deployment_runtime(
+        args, params=dict(armed["params"])
+    )
+    plan = plan_from_deployment(cfg, effect_verifier)
+    if plan is None:
+        print("Roll back REFUSED: rollback is off in this deployment. Nothing ran.")
+        return 3
+    before = plan.restore(armed)
+    if before is None:
+        print(
+            "Roll back REFUSED: the deployment's rollback settings changed since "
+            "the run, or the run's own user or its audit log as it was before "
+            "the run can't be rebuilt from the sealed state. Nothing ran."
+        )
+        return 3
+    backend_cfg = _resolve_backend_config(args, cfg, workflow)
+
+    def roll_back_on(backend, fresh_session) -> "RunReport":
+        def make_replayer():
+            return _configured_replayer(
+                backend,
+                workflow=workflow,
+                allow_egress=allow_egress,
+                effect_verifier=effect_verifier,
+                api_actuator=api_actuator,
+                durable=False,
+                use_structural=True,
+                pixel_verify_enabled=cfg.runtime.pixel_verify_enabled,
+                runtime_config=cfg.runtime,
+            )
+
+        return plan.finish(
+            report,
+            workflow,
+            before=before,
+            run_dir=run_dir,
+            bundle_dir=bundle,
+            runner=ReplayerRunner(make_replayer, fresh_session),
+            journal=sealed,
+            after_stop=after_stop,
+            restarted=restarted,
+            compensated=compensated,
+        )
+
+    if _normalize_kind(backend_cfg.kind) == "web":
+        url = args.url or cfg.backend.url
+        if backend_cfg.browser_cdp_endpoint or backend_cfg.browser_page_url:
+            # The operator's own signed-in browser is never reset: only an
+            # API-only compensation runs there.
+            with _attached_web_page(backend_cfg, url=url, workflow=workflow) as page:
+                report = roll_back_on(build_backend(backend_cfg, page=page), None)
+        else:
+            from playwright.sync_api import sync_playwright
+
+            from openadapt_flow._browser_setup import launch_chromium
+
+            if url is None:
+                raise SystemExit(
+                    "roll back needs the target app URL — pass --url or set "
+                    "backend.url in --config."
+                )
+            with sync_playwright() as p:
+                browser = launch_chromium(
+                    p.chromium, headless=not (args.headed or cfg.backend.headed)
+                )
+                page = browser.new_page(viewport=_VIEWPORT)
+                page.goto(url)
+                try:
+                    report = roll_back_on(
+                        build_backend(backend_cfg, page=page),
+                        web_fresh_session(page, url),
+                    )
+                finally:
+                    browser.close()
+    else:
+        try:
+            backend = build_backend(backend_cfg)
+        except ValueError as e:
+            raise SystemExit(str(e))
+        try:
+            report = roll_back_on(
+                backend,
+                screen_fresh_session(
+                    backend, workflow, bundle_dir=bundle, run_dir=run_dir
+                ),
+            )
+        finally:
+            close = getattr(backend, "close", None)
+            if callable(close):
+                close()
+    for line in rollback_lines(report):
+        print(line)
+    status = report.rollback.status if report.rollback is not None else None
+    return 0 if status in ("rolled_back", "nothing_landed") else 1
+
+
+def _approver_signer(args: argparse.Namespace, *, method: str) -> Any:
+    """The registered approver key from ``--approver-key``, or ``None`` after
+    printing why. A person's approval is signed with it; nothing else counts."""
+
+    from openadapt_flow.approval_mode.human_attestation import (
+        AttestationRefused,
+        load_signer,
+    )
+    from openadapt_flow.jit.lifecycle import default_key_dir
+
+    key_path = getattr(args, "approver_key", None)
+    if not key_path:
+        print(
+            "A person's approval is signed with their registered approver key: "
+            "pass --approver-key (with OPENADAPT_JIT_KEY_PASSPHRASE set). "
+            "Create one with jit keygen; an approver on the roster adds it with "
+            "jit approver add (or jit approver init starts the roster)."
+        )
+        return None
+    key_dir = _args_key_dir(args) or default_key_dir()
+    try:
+        return load_signer(  # type: ignore[arg-type]
+            key_path, key_dir, method=method, root=_args_approver_root(args)
+        )
+    except AttestationRefused as exc:
+        print(f"Approval refused ({exc.code}): {exc}")
+        return None
+
+
+def _cmd_approve(args: argparse.Namespace) -> int:
+    """Record an AUTHENTICATED approval for a durably-paused run (P0-5).
+
+    Writes an :class:`ApprovalRecord` (approver identity / timestamp / chosen
+    resolution / bundle-version hash) to ``run_dir/approval.json`` — the artifact
+    the durable ``resume`` entrypoint now ENFORCES (a resume with no valid
+    approval is refused). Also flips the pending escalation's ``status`` to
+    ``approved`` for the audit trail / back-compat.
+    """
+    from openadapt_flow import crypto
+    from openadapt_flow.runtime.durable.approval import (
+        ResumeRefused,
+        enforce_resume_authorization,
+        issue_resume_approval,
+    )
+    from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
+    from openadapt_flow.runtime.durable.program_checkpoint import bundle_version
+
+    run_dir = Path(args.run_dir)
+    store = CheckpointStore(run_dir, key=crypto.resolve_key(None))
+    pending = store.read_pending()
+    if pending is None:
+        print(f"No pending escalation at {run_dir} — nothing to approve.")
+        return 1
+    manifest = store.read_manifest()
+    if manifest is None or not manifest.run_id:
+        print(
+            "The exact durable run manifest is unavailable. Start a fresh run "
+            "instead of approving an unbound pause."
+        )
+        return 1
+    authorize_uncertain_retry = bool(getattr(args, "authorize_uncertain_retry", False))
+    if pending.delivery_uncertainty is not None and not authorize_uncertain_retry:
+        print(
+            "This step may already have actuated. A normal resume cannot repeat "
+            "it. Reconcile and independently verify the outcome through the "
+            "attended completion path. If reconciliation proves a retry is "
+            "necessary, rerun approve with --authorize-uncertain-retry."
+        )
+        return 1
+    try:
+        store.validate_namespace(manifest)
+    except ResumeRefused as exc:
+        print(f"Approval refused: {exc}")
+        return 1
+    if pending.status == "rejected":
+        print("This durable pause was rejected and cannot be approved or resumed.")
+        return 1
+    if pending.category in {"item_approval", "item_declined"}:
+        from openadapt_flow.cli_hints import command
+
+        print(
+            "This item waits for a person's approval before a save. Only "
+            f"Desktop's Run it can answer it ({command('item-approval')} "
+            "approve|decline); a generic approval can't save an item."
+        )
+        return 1
+
+    # The approver is whoever the registered approver key belongs to. A name
+    # on the command line, or the OS user, is a claim any process can make.
+    signer = _approver_signer(args, method="person_key")
+    if signer is None:
+        return 1
+    if args.approver and args.approver != signer.principal_id:
+        print(
+            f"--approver {args.approver!r} doesn't match the approver key, which "
+            f"is registered as {signer.principal_id!r}."
+        )
+        return 1
+    approver = signer.principal_id
+    try:
+        bundle_ver = bundle_version(manifest.bundle_dir)
+    except OSError:
+        print(
+            "The retained bundle is unavailable. Restore it before approving "
+            "this pause."
+        )
+        return 1
+    existing_approval = store.read_approval()
+    if pending.status == "approved" and existing_approval is not None:
+        try:
+            enforce_resume_authorization(
+                pending,
+                existing_approval,
+                bundle_version=bundle_ver,
+                run_id=manifest.run_id,
+                workflow_name=manifest.workflow_name,
+                run_dir=run_dir,
+            )
+        except ResumeRefused:
+            pass
+        else:
+            print(f"Pending escalation at {run_dir} is already approved.")
+            return 0
+    resolution = args.resolution or (
+        pending.proposed_options[0] if pending.proposed_options else "approved"
+    )
+    approval = issue_resume_approval(
+        pending,
+        approver=approver,
+        resolution=resolution,
+        bundle_version=bundle_ver,
+        workflow_name=pending.workflow_name,
+        run_id=manifest.run_id,
+        run_dir=run_dir,
+        authorize_uncertain_retry=authorize_uncertain_retry,
+    )
+    from openadapt_flow.approval_mode.human_attestation import RESUME_DOMAIN
+
+    approval = approval.model_copy(
+        update={"attestation": signer.attest(RESUME_DOMAIN, approval.signed_payload())}
+    )
+    # Bind the exact authority and pause-state transition in one filesystem
+    # transaction. A concurrent resume cannot replace the retained approver or
+    # leave approval.json describing authority that the live attempt did not use.
+    store.commit_approval_transition(
+        expected_pending=pending,
+        approval=approval,
+        target_status="approved",
+    )
+    from openadapt_flow.cli_hints import command
+
+    print(
+        f"Approved pending escalation at {run_dir} by {approver!r} "
+        f"(step {pending.step_index} '{pending.step_id}': {pending.category}).\n"
+        f"Resume it with:  {command('resume')} {run_dir}"
+    )
+    return 0
+
+
+def _parse_head(value: Optional[str]) -> Optional[tuple[int, str]]:
+    """``SEQ:sha256:HEX`` (or ``SEQ:HEX``) as a roster head, or ``None``."""
+
+    if not value:
+        return None
+    seq, _, digest = str(value).partition(":")
+    if not seq.isdigit() or not digest:
+        raise SystemExit(f"REFUSED: --approver-head {value!r} isn't SEQ:SHA256")
+    digest = digest if digest.startswith("sha256:") else "sha256:" + digest
+    return int(seq), digest
+
+
+def _cmd_item_approval(args: argparse.Namespace) -> int:
+    """List, approve or decline per-item approval requests (Desktop's Run it).
+
+    ``show`` prints the run's requests as JSON. ``approve`` and ``decline``
+    answer one request exactly once, for the request digest the person saw.
+    A person answers with ``--decided-by human`` from the ``desktop_run_it``
+    route. An agent, system or rule answers with ``--delegate-kind`` and
+    ``--delegate-id``, ``--decided-by automation`` and its own route, and only
+    where the run's approver policy allows that kind for the step; the
+    default policy allows only a person. The waiting run re-checks every
+    answer itself.
+    """
+    import json
+
+    from openadapt_flow.approval_mode.human_attestation import AttestationRefused
+    from openadapt_flow.approval_mode.item_approval import (
+        ItemApprovalRefused,
+        ItemApprovalStore,
+        make_answer,
+        request_summary,
+    )
+
+    verb = args.item_approval_cmd
+    run_dir = Path(args.run_dir)
+    key_dir = getattr(args, "key_dir", None)
+    store = ItemApprovalStore(
+        run_dir,
+        key_dir=Path(key_dir) if key_dir else None,
+        approver_root=getattr(args, "approver_root", None),
+        config_head=_parse_head(getattr(args, "approver_head", None)),
+    )
+    if verb == "show":
+        rows = [request_summary(store, request) for request in store.requests()]
+        if not args.all:
+            rows = [row for row in rows if row["status"] in {"waiting", "approved"}]
+        print(
+            json.dumps(
+                {
+                    "schema": "openadapt.item-approval-list/v1",
+                    "run_dir": str(run_dir.resolve()),
+                    "requests": rows,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 0
+
+    def refuse(code: str, message: str) -> int:
+        print(json.dumps({"ok": False, "code": code, "message": message}))
+        return 2
+
+    delegate = None
+    if getattr(args, "delegate_kind", None):
+        from openadapt_flow.approval_mode.approver import (
+            ApproverAuth,
+            ApproverIdentityV1,
+            ApproverKind,
+        )
+
+        if args.approver_id or args.unauthenticated:
+            return refuse(
+                "approver_invalid",
+                "a delegated answer names its approver with --delegate-id only",
+            )
+        try:
+            delegate = ApproverIdentityV1(
+                kind=ApproverKind(args.delegate_kind),
+                auth=ApproverAuth(
+                    "mcp_session" if args.route == "mcp" else "local_cli"
+                ),
+                id=args.delegate_id,
+                on_behalf_of=getattr(args, "on_behalf_of", None),
+            )
+        except ValueError as exc:
+            return refuse(
+                "approver_invalid", f"the delegated approver is invalid: {exc}"
+            )
+    elif bool(args.unauthenticated) == bool(args.approver_id):
+        return refuse(
+            "approver_invalid",
+            "name the approver's Cloud user id with --approver-id, or pass "
+            "--unauthenticated when Desktop is signed out",
+        )
+    if (
+        delegate is None
+        and args.unauthenticated
+        and args.auth_method not in {None, "none"}
+    ):
+        return refuse("approver_invalid", "a signed-out approval has no sign-in method")
+    if delegate is None and args.approver_id and args.auth_method in {None, "none"}:
+        return refuse(
+            "approver_invalid",
+            "a Cloud approver needs --auth-method cloud_aal2 or cloud_aal1",
+        )
+    signer = None
+    if delegate is None:
+        from openadapt_flow.approval_mode.human_attestation import (
+            ROUTE_METHOD,
+            load_signer,
+            stdio_signer,
+        )
+
+        method = ROUTE_METHOD.get(args.route)
+        if method is None:
+            return refuse("route_not_allowed", "a person answers from desktop_run_it")
+        public_key = getattr(args, "approver_public_key", None)
+        external = getattr(args, "approver_signer", None)
+        if bool(public_key) != bool(external):
+            return refuse(
+                "approver_invalid",
+                "--approver-signer stdio and --approver-public-key go together",
+            )
+        if public_key and getattr(args, "approver_key", None):
+            return refuse(
+                "approver_invalid",
+                "pass --approver-key or --approver-signer stdio, not both",
+            )
+        if not public_key and not getattr(args, "approver_key", None):
+            return refuse(
+                "human_answer_unsigned",
+                "a person's answer is signed with the Desktop approver key: pass "
+                "--approver-key. --decided-by human on its own proves nothing",
+            )
+        try:
+            if public_key:
+                signer = stdio_signer(
+                    public_key,
+                    store.key_directory(),
+                    method=method,
+                    root=store.approver_root,
+                )
+            else:
+                signer = load_signer(
+                    args.approver_key,
+                    store.key_directory(),
+                    method=method,
+                    root=store.approver_root,
+                )
+        except AttestationRefused as exc:
+            return refuse(exc.code, str(exc))
+    try:
+        request = store.read_request(args.request_id)
+        if args.request_sha256 != request.digest():
+            raise ItemApprovalRefused(
+                "request_digest_mismatch",
+                "the request changed, or this isn't the request the person saw",
+            )
+        status = store.status(request)
+        if status != "waiting":
+            raise ItemApprovalRefused(
+                f"request_{status}", f"this approval request is {status}"
+            )
+        answer = make_answer(
+            request,
+            decision="approve" if verb == "approve" else "decline",
+            decided_by=args.decided_by,
+            route=args.route,
+            approver_id=None
+            if (args.unauthenticated or delegate)
+            else args.approver_id,
+            auth_method="none"
+            if (args.unauthenticated or delegate)
+            else args.auth_method,
+            decline_reason=getattr(args, "reason", None),
+            approver=delegate,
+            policy=store.context(),
+            signer=signer,
+        )
+        store.write_answer(answer)
+    except (ItemApprovalRefused, AttestationRefused) as exc:
+        return refuse(exc.code, str(exc))
+    resume_required = _answer_durable_item_pause(run_dir, request, answer)
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "request_id": request.request_id,
+                "decision": answer.decision,
+                "answer_sha256": answer.digest(),
+                "resume_required": resume_required,
+            }
+        )
+    )
+    return 0
+
+
+def _cmd_approver_grant(args: argparse.Namespace) -> int:
+    """Sign or check a person's approver grant (who may answer saves)."""
+    import json
+    import sys
+
+    from openadapt_flow.approval_mode.signed_policy import (
+        ApproverGrant,
+        GrantRefused,
+        SignedApproverGrant,
+        sign_grant,
+        verify_grant,
+    )
+    from openadapt_flow.jit import authority
+    from openadapt_flow.jit.lifecycle import default_key_dir
+
+    key_dir = Path(args.key_dir) if args.key_dir else default_key_dir()
+    if args.approver_grant_cmd == "verify":
+        try:
+            signed = SignedApproverGrant.model_validate_json(
+                Path(args.grant).read_text(encoding="utf-8")
+            )
+            verified = verify_grant(signed, key_dir)
+        except (OSError, ValueError) as exc:
+            code = getattr(exc, "code", "approver_grant_unreadable")
+            print(json.dumps({"ok": False, "code": code, "message": str(exc)}))
+            return 2
+        print(
+            json.dumps(
+                {
+                    "ok": True,
+                    "policy_ref": verified.policy_ref,
+                    "signer": verified.signer,
+                    "delegates": list(verified.grant.delegates),
+                    "workflows": list(verified.grant.workflows),
+                    "expires_at": verified.grant.expires_at,
+                }
+            )
+        )
+        return 0
+    # sign: a person, at a terminal, with their encrypted policy-signer key.
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+        print(
+            "approver-grant sign needs a person at an interactive terminal; "
+            "an agent or script can't sign a grant.",
+            file=sys.stderr,
+        )
+        return 2
+    grant = ApproverGrant.model_validate_json(Path(args.grant).read_text("utf-8"))
+    print(grant.model_dump_json(indent=2, by_alias=True))
+    reply = input(f"Sign this grant as {grant.signer}? Type yes to sign: ")
+    if reply.strip().lower() not in ("yes", "ok"):
+        print("Not signed.")
+        return 1
+    try:
+        signed = sign_grant(grant, authority.load_encrypted_key(args.key))
+        verified = verify_grant(signed, key_dir)
+    except (authority.AuthorityError, GrantRefused) as exc:
+        print(f"Not signed: {exc}", file=sys.stderr)
+        return 2
+    signed.save(args.out)
+    print(f"signed grant {verified.policy_ref} written to {args.out}")
+    return 0
+
+
+def _cmd_teach_authorization(args: argparse.Namespace) -> int:
+    """Create, sign or check a teach authorization (what a teaching agent may do)."""
+    import json
+    import sys
+    from datetime import datetime, timedelta, timezone
+
+    from openadapt_flow import teach_authorization as ta
+    from openadapt_flow.approval_mode.human_attestation import (
+        AttestationRefused,
+        load_signer,
+    )
+
+    def refuse(code: str, message: str) -> int:
+        print(json.dumps({"ok": False, "code": code, "message": message}))
+        return 2
+
+    if args.teach_auth_cmd == "create":
+        try:
+            spec = json.loads(Path(args.spec).read_text(encoding="utf-8"))
+            if not 0 < args.expires_in_hours <= 24 * 90:
+                return refuse(
+                    "teach_auth_malformed", "--expires-in-hours is from 0 to 2160"
+                )
+            expires = datetime.now(timezone.utc) + timedelta(
+                hours=args.expires_in_hours
+            )
+            path = ta.create(
+                Path(args.out),
+                spec,
+                authorizer=args.authorizer,
+                authorizer_public_key=args.authorizer_public_key,
+                expires_at=expires,
+            )
+        except (OSError, ValueError, ta.TeachAuthorizationError) as exc:
+            return refuse(getattr(exc, "code", "teach_auth_malformed"), str(exc))
+        print(json.dumps({"ok": True, "statement": str(path)}))
+        return 0
+    try:
+        key_dir, root = ta.pinned_trust(
+            Path(args.key_dir) if args.key_dir else None, args.approver_root
+        )
+    except ta.TeachAuthorizationError as exc:
+        return refuse(exc.code, str(exc))
+    if args.teach_auth_cmd == "verify":
+        result = ta.verify(Path(args.statement), key_dir=key_dir, root=root)
+        if not result.ok:
+            return refuse(str(result.reason), result.detail)
+        record = ta.record(result)
+        print(json.dumps({"ok": True, **record}))
+        return 0
+    # sign: the person whose approver key file it is, at a terminal.
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+        return refuse(
+            "teach_auth_unsigned",
+            "teach-authorization sign needs a person at an interactive terminal",
+        )
+    try:
+        signer = load_signer(
+            Path(args.approver_key), key_dir, method="person_key", root=root
+        )
+    except AttestationRefused as exc:
+        return refuse(exc.code, str(exc))
+    preview = ta.verify(Path(args.statement), key_dir=key_dir, root=root)
+    if preview.statement is None:
+        return refuse(str(preview.reason), preview.detail)
+    print(ta.render(preview))
+    reply = input("Sign this teach authorization? Type yes to sign: ")
+    if reply.strip().lower() != "yes":
+        print("Not signed.")
+        return 1
+    try:
+        ta.sign(Path(args.statement), signer)
+    except (ta.TeachAuthorizationError, AttestationRefused) as exc:
+        return refuse(getattr(exc, "code", "teach_auth_unsigned"), str(exc))
+    result = ta.verify(Path(args.statement), key_dir=key_dir, root=root)
+    if not result.ok:
+        return refuse(str(result.reason), result.detail)
+    print(json.dumps({"ok": True, **ta.record(result)}))
+    return 0
+
+
+def _answer_durable_item_pause(run_dir: Path, request, answer) -> bool:
+    """Carry an answer to a durable pause the run left after waiting.
+
+    See :func:`openadapt_flow.approval_mode.durable_carry.carry_answer_to_durable_pause`.
+    Returns True when ``resume`` must follow.
+    """
+    from openadapt_flow.approval_mode.durable_carry import (
+        carry_answer_to_durable_pause,
+    )
+
+    return carry_answer_to_durable_pause(run_dir, request, answer)
+
+
+def _cmd_bench(args: argparse.Namespace) -> int:
+    from contextlib import contextmanager
+
+    from openadapt_flow.bench import run_bench
+    from openadapt_flow.emit.skill import bundle_surface
+    from openadapt_flow.ir import Workflow
+    from openadapt_flow.mockmed.server import serve
+    from openadapt_flow.report import render_bench_report
+
+    try:
+        surface = bundle_surface(Workflow.load(Path(args.bundle)))
+    except Exception:  # noqa: BLE001 - run_bench reports load errors itself
+        surface = None
+    if surface not in (None, "web"):
+        from openadapt_flow.cli_hints import command
+
+        print(
+            "BENCH REFUSED: bench replays a bundle against the bundled MockMed "
+            f"web app, and this bundle was recorded on {surface!r}. Measure it "
+            "on its own app with repeated "
+            f"`{command('run BUNDLE --config deploy.yaml')}`. Nothing was executed."
+        )
+        return 2
+    url, stop = serve(port=0)
+    target_url = _with_drift(url, args.drift)
+
+    @contextmanager
+    def backend_factory():
+        from playwright.sync_api import sync_playwright
+
+        from openadapt_flow._browser_setup import launch_chromium
+        from openadapt_flow.backends.playwright_backend import (
+            PlaywrightBackend,
+        )
+
+        with sync_playwright() as p:
+            browser = launch_chromium(p.chromium, headless=not args.headed)
+            page = browser.new_page(viewport=_VIEWPORT)
+            from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+            # Guard the page's WebSockets from its first document (wire check).
+            prepare_ws_guard(page)
+            page.goto(target_url)
+            try:
+                yield PlaywrightBackend(page)
+            finally:
+                browser.close()
+
+    run_root = Path(args.run_root)
+    try:
+        result = run_bench(
+            Path(args.bundle),
+            backend_factory,
+            args.n,
+            params=_parse_params(args.param),
+            run_root=run_root,
+        )
+    finally:
+        stop()
+
+    report_md = render_bench_report(run_root / "bench.json", run_root / "BENCH.md")
+    print(
+        f"Bench: {result['success_count']}/{result['n']} succeeded "
+        f"(p50 {result['total_ms_p50']:.0f} ms) — {report_md}"
+    )
+    return 0 if result["success_count"] == result["n"] else 1
+
+
+def _cmd_silent_saves(args: argparse.Namespace) -> int:
+    """``silent-saves``: hand off to ``benchmark/silent_saves`` in the checkout."""
+
+    import importlib.util
+
+    pkg = Path(__file__).resolve().parents[1] / "benchmark" / "silent_saves"
+    if not (pkg / "__init__.py").is_file():
+        print(
+            "silent-saves runs from a source checkout of OpenAdapt "
+            "(packages/flow/benchmark/silent_saves); the wheel does not ship it.",
+            file=sys.stderr,
+        )
+        return 2
+    if "silent_saves" not in sys.modules:
+        spec = importlib.util.spec_from_file_location(
+            "silent_saves", pkg / "__init__.py", submodule_search_locations=[str(pkg)]
+        )
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules["silent_saves"] = module
+        spec.loader.exec_module(module)
+    from silent_saves.cli import main as silent_saves_main  # type: ignore[import-not-found]
+
+    return int(silent_saves_main(list(args.silent_saves_argv)))
+
+
+def _checkout_harness_on_path(command: str) -> bool:
+    """Put the checkout's ``benchmark`` harness on ``sys.path``.
+
+    The harness lives in ``packages/flow/benchmark/harness``, outside the
+    package, so a wheel install has none and the command says so.
+    """
+    checkout = Path(__file__).resolve().parents[1]
+    if not (checkout / "benchmark" / "harness" / "__init__.py").is_file():
+        print(
+            f"{command} runs from a source checkout of OpenAdapt "
+            "(packages/flow/benchmark/harness); the wheel does not ship it.",
+            file=sys.stderr,
+        )
+        return False
+    if str(checkout) not in sys.path:
+        # Appended, so nothing in the checkout shadows an installed module.
+        sys.path.append(str(checkout))
+    return True
+
+
+def _cmd_benchmark(args: argparse.Namespace) -> int:
+    if not _checkout_harness_on_path("benchmark"):
+        return 2
+    from benchmark.harness.run_benchmark import (  # type: ignore[import-not-found]
+        run_benchmark,
+    )
+
+    results = run_benchmark(
+        Path(args.out),
+        n_compiled=args.n_compiled,
+        n_agent=args.n_agent,
+        note_text=args.note_text,
+        headed=args.headed,
+    )
+    compiled = results["arms"]["compiled"]
+    agent = results["arms"]["agent"]
+    print(
+        f"compiled: {compiled['success_count']}/{compiled['n']} "
+        f"(p50 {compiled['wall_s_p50']:.1f}s, $0/run) | "
+        f"agent: {agent['success_count']}/{agent['n']} "
+        f"(p50 {agent['wall_s_p50']:.1f}s, "
+        f"${agent['cost_usd_per_run']:.4f}/run)"
+    )
+    return 0
+
+
+def _cmd_lint(args: argparse.Namespace) -> int:
+    from openadapt_flow.ir import Workflow
+    from openadapt_flow.policy import SEVERITY_ORDER, lint_workflow
+
+    workflow = Workflow.load(Path(args.bundle))
+    report = lint_workflow(workflow)
+    print(report.render())
+    # Exit code by max severity: nonzero once anything reaches `error`
+    # (an unarmed or vacuous IRREVERSIBLE step). `--strict` also fails on warn.
+    threshold = "warn" if args.strict else "error"
+    fail = SEVERITY_ORDER[report.max_severity] >= SEVERITY_ORDER[threshold]
+    if report.findings and fail:
+        _print_lint_epilogue(
+            args.bundle,
+            threshold,
+            warnings_only=SEVERITY_ORDER[report.max_severity] < SEVERITY_ORDER["error"],
+        )
+        return 1
+    return 0
+
+
+def _print_lint_epilogue(
+    bundle: str, threshold: str, *, warnings_only: bool = False
+) -> None:
+    """Three-line epilogue after a failing lint (presentation only)."""
+    from openadapt_flow.cli_hints import command
+    from openadapt_flow.tutorial import outcome_epilogue_lines
+
+    lines = outcome_epilogue_lines(
+        what=(
+            f"lint found coverage gaps at or above the '{threshold}' severity "
+            f"in {bundle}"
+        ),
+        why_safe=(
+            "gaps are reported instead of silently running unguarded or "
+            "unverifiable steps"
+        ),
+        next_command=command(f"certify {bundle} --policy clinical-write"),
+    )
+    print("\n" + "\n".join(lines))
+    if warnings_only:
+        # --strict is a CI gate: a fresh recording usually carries warnings,
+        # so say plainly why this exited 1 and what the default does.
+        print(
+            "Only warnings were found. --strict fails on warnings; without it, "
+            "lint exits 0 unless a finding reaches 'error'."
+        )
+
+
+def _cmd_scaffold_verifier(args: argparse.Namespace) -> int:
+    """Draft (never approve) an effect-oracle contract from retained evidence."""
+    from openadapt_flow.scaffold_verifier import (
+        NEXT_COMMANDS_TEMPLATE,
+        build_record_check,
+        write_draft,
+    )
+
+    def optional_path(name: str) -> Optional[Path]:
+        value = getattr(args, name, None)
+        return Path(value) if value else None
+
+    out_dir = optional_path("out")
+    built = build_record_check(
+        Path(args.source),
+        out_dir,
+        db=optional_path("db"),
+        verifier=optional_path("verifier"),
+        prove=getattr(args, "prove", None),
+        recording=optional_path("recording"),
+        bundle=optional_path("bundle"),
+        complete_read=bool(getattr(args, "complete_read", False)),
+        fault_gate=bool(getattr(args, "fault_gate", False)),
+    )
+    if built is not None:
+        print(built.summary)
+        return 0 if built.working else 1
+    out, count = write_draft(Path(args.source), out_dir)
+    print(
+        "No read in the recording returns the saved record (no network capture, "
+        "--db or --verifier), so this is a TODO draft."
+    )
+    print(NEXT_COMMANDS_TEMPLATE.format(out=out, count=count))
+    return 0
+
+
+def _cmd_explain(args: argparse.Namespace) -> int:
+    """Print a plain-language, read-only summary of one completed run."""
+    from openadapt_flow.scaffold_verifier import explain_run
+
+    print(explain_run(Path(args.run_dir)))
+    return 0
+
+
+def _cmd_visualize(args: argparse.Namespace) -> int:
+    from openadapt_flow.admitted_composition import is_process_contract_artifact
+    from openadapt_flow.composition import CompositionError, is_composition_artifact
+    from openadapt_flow.ir import Workflow
+    from openadapt_flow.visualize import (
+        PresentationProfile,
+        build_composition_graph,
+        build_program_graph,
+        project_program_graph,
+        render_html,
+        render_mermaid,
+    )
+
+    path = Path(args.bundle)
+    if is_process_contract_artifact(path):
+        return _cmd_visualize_process(args)
+    if is_composition_artifact(path):
+        try:
+            spec = build_composition_graph(path)
+        except CompositionError as exc:
+            raise SystemExit(str(exc)) from exc
+    else:
+        from openadapt_flow import sections as program_sections
+
+        workflow = Workflow.load(path)
+        spec = build_program_graph(
+            workflow, program_sections.load(path, workflow).sections
+        )
+    spec = project_program_graph(spec, PresentationProfile(args.profile))
+    fmt = args.format
+    if fmt == "json":
+        output = spec.model_dump_json(indent=2)
+    elif fmt == "mermaid":
+        output = render_mermaid(spec)
+    else:  # html
+        output = render_html(spec)
+
+    if args.out:
+        out_path = Path(args.out)
+        if out_path.parent != Path(""):
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(output, encoding="utf-8")
+        b = spec.bundle
+        if b.is_composition:
+            handoffs = sum(1 for edge in spec.edges if edge.kind.value == "handoff")
+            print(
+                f"Wrote {fmt} visualization of {b.name} "
+                f"({b.child_count} children, {handoffs} handoff(s)) to {out_path}"
+            )
+        else:
+            print(
+                f"Wrote {fmt} visualization of {b.name} "
+                f"({b.action_count} steps, {b.identity_armed_count} identity gates, "
+                f"{b.irreversible_count} irreversible, {b.halt_point_count} halt "
+                f"point(s)) to {out_path}"
+            )
+    else:
+        print(output)
+    return 0
+
+
+def _cmd_visualize_process(args: argparse.Namespace) -> int:
+    from openadapt_flow.visualize.admitted_composition import (
+        build_process_graph,
+        dumps_process_graph,
+        render_process_html,
+        render_process_mermaid,
+    )
+
+    spec = build_process_graph(Path(args.bundle))
+    fmt = args.format
+    if fmt == "json":
+        output = dumps_process_graph(spec)
+    elif fmt == "mermaid":
+        output = render_process_mermaid(spec)
+    else:
+        output = render_process_html(spec)
+    if args.out:
+        out_path = Path(args.out)
+        if out_path.parent != Path(""):
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(output, encoding="utf-8")
+        admitted = sum(1 for node in spec.nodes if node.kind == "admitted_capability")
+        handoffs = sum(1 for edge in spec.edges if edge.kind == "handoff")
+        print(
+            f"Wrote {fmt} visualization of {spec.name} "
+            f"({admitted} admitted capabilities, {handoffs} handoff(s)) to {out_path}"
+        )
+    else:
+        print(output)
+    return 0
+
+
+def _cmd_certify(args: argparse.Namespace) -> int:
+    from openadapt_flow.composition import is_composition_artifact
+    from openadapt_flow.ir import Workflow
+    from openadapt_flow.policy import evaluate_policy, load_policy
+
+    bundle = Path(args.bundle)
+    if is_composition_artifact(bundle):
+        from openadapt_flow.cli_compose import cmd_certify_composition
+
+        return cmd_certify_composition(args)
+    from openadapt_flow.admitted_composition import is_process_contract_artifact
+
+    if is_process_contract_artifact(bundle):
+        from openadapt_flow.cli_process import cmd_certify_process
+
+        return cmd_certify_process(args)
+    workflow = Workflow.load(bundle)
+    # Policy source: explicit --policy, else the deployment config's policy
+    # section (so one deployment.yaml certifies AND runs the bundle).
+    policy_source = args.policy
+    if policy_source is None and getattr(args, "config", None):
+        from openadapt_flow.deployment import load_deployment
+
+        policy_source = load_deployment(args.config).policy.policy
+    if policy_source is None:
+        raise SystemExit(
+            "certify needs a policy: pass --policy <name-or-path> or set "
+            "policy.policy in --config."
+        )
+    try:
+        policy = load_policy(policy_source)
+    except (FileNotFoundError, ValueError) as e:
+        raise SystemExit(str(e))
+    report = evaluate_policy(workflow, policy)
+    print(report.render())
+    # A failing certification exits nonzero so CI / deploy gates refuse the
+    # bundle — the whole point of making "runnable" distinct from "certified".
+    return 0 if report.passed else 2
+
+
+def _cmd_seal(args: argparse.Namespace) -> int:
+    from openadapt_flow.bundle_sealing import BundleSealingError, seal_bundle
+
+    try:
+        sealed = seal_bundle(Path(args.source), Path(args.out))
+    except BundleSealingError as exc:
+        print(f"seal REFUSED: {exc}")
+        return 2
+    print(f"Sealed bundle: {sealed.path}")
+    print(f"Content digest: sha256:{sealed.content_digest}")
+    print(f"Sealed file set: sha256:{sealed.set_digest}")
+    if sealed.certification_invalidated:
+        print(
+            "Prior certification invalidated: certify the sealed destination "
+            "before deployment."
+        )
+    return 0
+
+
+def _cmd_bind_record_checks(args: argparse.Namespace) -> int:
+    from openadapt_flow.record_check_binding import (
+        RecordCheckBinding,
+        RecordCheckBindingError,
+        bind_record_checks,
+        check_record_checks,
+    )
+
+    try:
+        binding = RecordCheckBinding.load(Path(args.binding))
+        if args.check:
+            coverage = check_record_checks(Path(args.bundle), binding)
+            if args.json:
+                print(coverage.model_dump_json(indent=2))
+            else:
+                print("bind-record-checks: binding is valid (nothing written)")
+                print(coverage.render())
+            return 0
+        if not args.out:
+            print("bind-record-checks REFUSED: --out is required unless --check")
+            return 2
+        result = bind_record_checks(Path(args.bundle), binding, Path(args.out))
+    except RecordCheckBindingError as exc:
+        print(f"bind-record-checks {exc}")
+        return 2
+    except FileExistsError as exc:
+        print(f"bind-record-checks REFUSED: {exc}")
+        return 2
+    if args.json:
+        print(result.model_dump_json(indent=2))
+        return 0
+    print(f"Bound bundle: {result.bundle_dir}")
+    print(f"Content digest: sha256:{result.content_digest}")
+    for step_id, count in result.bound_effects.items():
+        print(f"  {step_id}: {count} record check(s) bound")
+    print(result.coverage.render())
+    if result.certification_invalidated:
+        print(
+            "Prior certification invalidated: the program changed, so it needs "
+            "a fresh certification and qualification decision."
+        )
+    print(
+        "Next: review the bound contracts, then lint and qualify the new bundle; "
+        "a run verifies them only with a configured system-of-record verifier."
+    )
+    return 0
+
+
+def _qualification_workflow(args: argparse.Namespace):
+    from openadapt_flow.ir import Workflow
+
+    return Workflow.load(Path(args.bundle))
+
+
+def _qualification_policy(args: argparse.Namespace):
+    from openadapt_flow.policy import load_policy
+
+    try:
+        return load_policy(args.policy)
+    except (FileNotFoundError, ValueError) as exc:
+        raise SystemExit(str(exc)) from exc
+
+
+def _parse_qualification_signal(
+    raw: str,
+    *,
+    identifier_region: tuple[int, int, int, int] | None,
+    signal_regions: dict[str, tuple[int, int, int, int]] | None = None,
+    signal_params: dict[str, list[str]] | None = None,
+    signal_extracts: dict[str, str] | None = None,
+    signal_expecteds: dict[str, str] | None = None,
+):
+    from openadapt_flow.qualification import (
+        IdentityEvidenceSource,
+        IdentityMatchMode,
+        IdentityNormalizer,
+        IdentitySignalPolicy,
+    )
+
+    if "=" not in raw:
+        raise SystemExit("--signal expects KEY=SOURCE:MODE[:NORMALIZER,NORMALIZER]")
+    key, spec = raw.split("=", 1)
+    parts = spec.split(":")
+    if len(parts) not in (2, 3):
+        raise SystemExit("--signal expects KEY=SOURCE:MODE[:NORMALIZER,NORMALIZER]")
+    try:
+        source = IdentityEvidenceSource(parts[0])
+        match = IdentityMatchMode(parts[1])
+        normalizers = (
+            [IdentityNormalizer(value) for value in parts[2].split(",") if value]
+            if len(parts) == 3
+            else []
+        )
+        explicit_region = (signal_regions or {}).get(key)
+        return IdentitySignalPolicy(
+            key=key,
+            source=source,
+            match=match,
+            normalizers=normalizers,
+            region=(
+                explicit_region
+                if explicit_region is not None
+                else identifier_region
+                if source is IdentityEvidenceSource.IDENTIFIER_REGION
+                else None
+            ),
+            params=(signal_params or {}).get(key, []),
+            extract_pattern=(signal_extracts or {}).get(key),
+            expected_value=(signal_expecteds or {}).get(key),
+        )
+    except ValueError as exc:
+        raise SystemExit(f"invalid --signal {raw!r}: {exc}") from exc
+
+
+def _qualification_report(args: argparse.Namespace):
+    from openadapt_flow.qualification import evaluate_qualification
+
+    workflow = _qualification_workflow(args)
+    policy = _qualification_policy(args) if getattr(args, "policy", None) else None
+    evidence_root = getattr(args, "evidence_root", None)
+    return workflow, evaluate_qualification(
+        workflow,
+        policy=policy,
+        evidence_root=evidence_root,
+    )
+
+
+def _read_qualification_case_inputs(path: Path, *, workflow):
+    """Read only the canonical local input artifact for one case attempt."""
+
+    import os
+    import stat
+
+    from openadapt_flow.runtime.authorization import (
+        parse_runtime_inputs_bytes,
+        runtime_inputs_bytes,
+    )
+
+    flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as exc:
+        raise ValueError(
+            "qualification case inputs could not be opened safely"
+        ) from exc
+    try:
+        metadata = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_size > 1024 * 1024
+            or (
+                os.name != "nt"
+                and (
+                    not hasattr(os, "geteuid")
+                    or metadata.st_uid != os.geteuid()
+                    or stat.S_IMODE(metadata.st_mode) != 0o600
+                )
+            )
+        ):
+            raise ValueError("qualification case inputs are not a private regular file")
+        raw = os.read(descriptor, 1024 * 1024 + 1)
+    finally:
+        os.close(descriptor)
+    if len(raw) > 1024 * 1024:
+        raise ValueError("qualification case inputs are too large")
+    params, worklists = parse_runtime_inputs_bytes(raw, workflow=workflow)
+    if runtime_inputs_bytes(workflow, params, worklists) != raw:
+        raise ValueError("qualification case inputs are not canonical")
+    return params, worklists, raw
+
+
+def _claim_qualification_case_attempt(args: argparse.Namespace) -> bool:
+    """Persist one exact case attempt before it can reach an actuator."""
+
+    import hashlib
+    import json
+    import os
+    import stat
+
+    def _recheck_ledger_identity(path: Path, initial: os.stat_result) -> None:
+        try:
+            final = os.lstat(path)
+        except OSError as exc:
+            raise ValueError(
+                "qualification attempt ledger could not be inspected"
+            ) from exc
+        if (
+            stat.S_ISLNK(final.st_mode)
+            or not stat.S_ISDIR(final.st_mode)
+            or final.st_dev != initial.st_dev
+            or final.st_ino != initial.st_ino
+        ):
+            raise ValueError(
+                "qualification attempt ledger changed while it was inspected"
+            )
+
+    def private_directory(path: Path, *, migrate_owned_root: bool = False) -> Path:
+        """Open a private directory without trusting a pathname after inspection."""
+        path.mkdir(mode=0o700, parents=True, exist_ok=True)
+        try:
+            initial = os.lstat(path)
+        except OSError as exc:
+            raise ValueError(
+                "qualification attempt ledger could not be inspected"
+            ) from exc
+        if stat.S_ISLNK(initial.st_mode) or not stat.S_ISDIR(initial.st_mode):
+            raise ValueError("qualification attempt ledger is not a private directory")
+        if os.name == "nt":
+            # Windows cannot open a directory as a file descriptor. Hold a
+            # handle that refuses a reparse point, blocks a rename or a
+            # junction swap until the marker is written, and proves the
+            # directory sits in this user's profile.
+            from openadapt_flow._windows_directory import hold_private_directory
+
+            held_directories.append(hold_private_directory(path))
+            _recheck_ledger_identity(path, initial)
+            return path
+        flags = os.O_RDONLY
+        if hasattr(os, "O_DIRECTORY"):
+            flags |= os.O_DIRECTORY
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        try:
+            descriptor = os.open(path, flags)
+        except OSError as exc:
+            raise ValueError(
+                "qualification attempt ledger is not a private directory"
+            ) from exc
+        try:
+            metadata = os.fstat(descriptor)
+            if (
+                not stat.S_ISDIR(metadata.st_mode)
+                or metadata.st_dev != initial.st_dev
+                or metadata.st_ino != initial.st_ino
+            ):
+                raise ValueError(
+                    "qualification attempt ledger changed while it was inspected"
+                )
+            if os.name != "nt":
+                if not hasattr(os, "geteuid") or metadata.st_uid != os.geteuid():
+                    raise ValueError(
+                        "qualification attempt ledger is not owned by this user"
+                    )
+                if migrate_owned_root and stat.S_IMODE(metadata.st_mode) != 0o700:
+                    os.fchmod(descriptor, 0o700)
+                    metadata = os.fstat(descriptor)
+                if stat.S_IMODE(metadata.st_mode) != 0o700:
+                    raise ValueError(
+                        "qualification attempt ledger is not a private directory"
+                    )
+        finally:
+            os.close(descriptor)
+        _recheck_ledger_identity(path, initial)
+        return path
+
+    case = args._qualification_case_execution["case"]
+    workflow = args._qualification_case_execution["workflow"]
+    run_dir = Path(args.run_dir) if args.run_dir else _default_run_dir()
+    args.run_dir = str(run_dir)
+    project = workflow.qualification
+    manifest = workflow.manifest
+    assert project is not None and manifest is not None
+    identity = {
+        "schema": "openadapt.qualification-attempt/v1",
+        "bundle_content_digest": manifest.content_digest,
+        "project_id": project.project_id,
+        "project_revision": project.revision,
+        "project_contract_sha256": project.contract_sha256(),
+        "campaign_id_sha256": args._qualification_case_execution["campaign_id_sha256"],
+        "case_id": case.id,
+        "case_input_sha256": args._qualification_case_execution["input_sha256"],
+        "run_id_sha256": args._qualification_case_execution["run_id_sha256"],
+    }
+    payload = {
+        **identity,
+        "run_dir_sha256": hashlib.sha256(
+            str(run_dir.resolve()).encode("utf-8")
+        ).hexdigest(),
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(
+        "utf-8"
+    )
+    attempt_key = hashlib.sha256(
+        json.dumps(identity, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    state_root = Path(os.environ.get("OPENADAPT_HOME", Path.home() / ".openadapt"))
+    held_directories: list = []
+    try:
+        try:
+            root = private_directory(state_root, migrate_owned_root=True)
+            if held_directories:
+                # Open the ledger under the held root's resolved path, so a
+                # junction above the root swapped now cannot move it.
+                root = Path(held_directories[-1].final_path)
+            ledger_dir = private_directory(root / "qualification-attempts")
+        except ValueError:
+            print(
+                "run REFUSED: qualification attempt ledger is not available safely. "
+                "Nothing was executed."
+            )
+            return False
+        # On Windows the marker goes under the held ledger's resolved path,
+        # so a junction higher up that is swapped after the check cannot
+        # redirect it.
+        marker = (
+            Path(held_directories[-1].final_path) if held_directories else ledger_dir
+        ) / f"{attempt_key}.json"
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        try:
+            descriptor = os.open(marker, flags, 0o600)
+        except FileExistsError:
+            print(
+                "run REFUSED: this qualification case attempt already started in this "
+                "local qualification ledger; "
+                "reconcile its retained run evidence before another attempt. "
+                "Nothing was executed."
+            )
+            return False
+        except OSError:
+            print(
+                "run REFUSED: qualification case attempt could not be claimed safely. "
+                "Nothing was executed."
+            )
+            return False
+        try:
+            os.write(descriptor, canonical)
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+        try:
+            # Windows cannot open a directory to flush it; the marker's own
+            # bytes were flushed above, and NTFS journals the new entry.
+            if os.name != "nt":
+                directory_flags = os.O_RDONLY
+                if hasattr(os, "O_DIRECTORY"):
+                    directory_flags |= os.O_DIRECTORY
+                if hasattr(os, "O_NOFOLLOW"):
+                    directory_flags |= os.O_NOFOLLOW
+                directory = os.open(ledger_dir, directory_flags)
+                try:
+                    os.fsync(directory)
+                finally:
+                    os.close(directory)
+        except OSError:
+            print(
+                "run REFUSED: qualification attempt ledger could not be persisted safely. "
+                "Nothing was executed."
+            )
+            return False
+        return True
+
+    finally:
+        # Close the Windows directory handles only after the marker exists.
+        for held in reversed(held_directories):
+            held.close()
+
+
+def _cmd_qualify_run_case(args: argparse.Namespace) -> int:
+    """Execute one sealed, current qualification case with Flow-owned authority."""
+
+    from openadapt_flow.qualification import (
+        qualification_campaign_id_sha256,
+        qualification_run_id_sha256,
+    )
+    from openadapt_flow.runtime.authorization import runtime_inputs_digest
+
+    try:
+        workflow = _qualification_workflow(args)
+        if workflow.manifest is None or workflow.qualification is None:
+            raise ValueError(
+                "qualification case execution requires a sealed project bundle"
+            )
+        case = next(
+            (item for item in workflow.qualification.cases if item.id == args.case_id),
+            None,
+        )
+        if case is None:
+            raise ValueError("qualification case is not declared by this project")
+        if not case.action_targets or case.runtime_input_sha256 is None:
+            raise ValueError(
+                "qualification case has no exact approved action/input scope"
+            )
+        params, worklists, _raw_inputs = _read_qualification_case_inputs(
+            Path(args.inputs), workflow=workflow
+        )
+        input_sha256 = runtime_inputs_digest(workflow, params, worklists)
+        if input_sha256 != case.runtime_input_sha256:
+            raise ValueError("qualification case inputs do not match the approved case")
+        fault_driver = None
+        if case.kind.value != "representative":
+            fault_driver = _qualification_drill_driver(args, workflow, params)
+        campaign_id_sha256 = qualification_campaign_id_sha256(args.campaign_id)
+        run_id_sha256 = qualification_run_id_sha256(args.run_id)
+    except (OSError, ValueError) as exc:
+        print(f"qualification run-case REFUSED: {exc}. Nothing was executed.")
+        return 2
+
+    args._qualification_case_execution = {
+        "workflow": workflow,
+        "case": case,
+        "params": params,
+        "worklists": worklists,
+        "input_sha256": input_sha256,
+        "campaign_id": args.campaign_id,
+        "campaign_id_sha256": campaign_id_sha256,
+        "run_id": args.run_id,
+        "run_id_sha256": run_id_sha256,
+        "fault_driver": fault_driver,
+    }
+    args.profile = "standard"
+    args.policy = None
+    args.param = None
+    args.params_file = None
+    args.worklist = None
+    args.managed_dispatch_file = None
+    args.allow_unencrypted = False
+    args.approve_unverified_writes = False
+    args.strict_templates = False
+    args.pin_digest = workflow.manifest.content_digest
+    args.pin_version = None
+    args.drift = None
+    args.dry_run = bool(getattr(args, "dry_run", False))
+    if args.dry_run:
+        return _cmd_run(args)
+    exit_code = _cmd_run(args)
+    if fault_driver is not None:
+        _retain_drill_evidence(Path(args.run_dir), fault_driver)
+    return exit_code
+
+
+def _qualification_drill_driver(args: argparse.Namespace, workflow, params):
+    """The fault driver for one readiness drill (a fault qualification case).
+
+    ``--fault-driver NAME`` loads a configured campaign's driver from the
+    ``openadapt_flow.qualification_fault_drivers`` entry point. Otherwise the
+    drill uses this computer's local campaign, which the project must already
+    trust (``openadapt-flow qualify drills``). Raises ``ValueError``.
+    """
+    name = getattr(args, "fault_driver", None)
+    if name:
+        from openadapt_flow.qualification_faults import (
+            load_qualification_fault_driver,
+        )
+
+        return load_qualification_fault_driver(name)
+    from openadapt_flow.qualification_drills import (
+        LocalDrillDriver,
+        LocalDrillError,
+        local_drill_key,
+        project_trusts_local_key,
+    )
+
+    try:
+        key = local_drill_key(create=False)
+    except LocalDrillError as exc:
+        raise ValueError(str(exc)) from exc
+    if key is None or not project_trusts_local_key(workflow, key):
+        from openadapt_flow.cli_hints import command
+
+        raise ValueError(
+            f"readiness drills need a fault driver: run `{command('qualify drills')} "
+            "BUNDLE` on this computer to create the local drill campaign, "
+            "or pass --fault-driver for a configured campaign"
+        )
+    return LocalDrillDriver(key, workflow=workflow, params=params)
+
+
+def _retain_drill_evidence(run_dir: Path, driver) -> None:
+    """Keep the drill's receipt and mutation record next to its report."""
+    from openadapt_flow import sealed_set
+    from openadapt_flow.ir import RunReport
+    from openadapt_flow.qualification_drills import write_drill_evidence
+
+    try:
+        report = RunReport.model_validate_json(
+            sealed_set.read_text(run_dir / "report.json")
+        )
+    except (OSError, ValueError):
+        report = None
+    try:
+        summary = write_drill_evidence(run_dir, driver, report)
+    except OSError:
+        print("The drill's fault receipt could not be retained.")
+        return
+    if summary.get("staged"):
+        print(
+            "Drill fault receipt retained: "
+            f"{run_dir / 'qualification-fault' / 'receipt.json'}"
+        )
+    else:
+        declined = summary.get("declined") or "not_staged"
+        print(
+            f"This drill couldn't be staged here ({declined}), so it hasn't "
+            "passed. Nothing was saved."
+        )
+
+
+def _cmd_qualify_drills(args: argparse.Namespace) -> int:
+    """Create or refresh this computer's local readiness-drill campaign."""
+    import json
+
+    from openadapt_flow.qualification import QualificationError, save_qualified_workflow
+    from openadapt_flow.qualification_drills import (
+        LocalDrillError,
+        local_drill_key,
+        prepare_local_drill_campaign,
+    )
+
+    try:
+        workflow = _qualification_workflow(args)
+        if workflow.manifest is None or workflow.qualification is None:
+            raise LocalDrillError("drills need a sealed bundle with Check it set up")
+        key = local_drill_key(create=True)
+        assert key is not None
+        campaign = prepare_local_drill_campaign(
+            workflow,
+            key=key,
+            from_case_id=args.from_case,
+            save_step_id=args.save_step,
+        )
+        save_qualified_workflow(workflow, args.bundle)
+    except (LocalDrillError, QualificationError, OSError, ValueError) as exc:
+        print(f"qualify drills REFUSED: {exc}. Nothing was changed.")
+        return 2
+    if args.json:
+        print(json.dumps(campaign.as_json(), indent=2, sort_keys=True))
+    else:
+        print(
+            f"Readiness drills for step {campaign.save_step_id!r} of practice case "
+            f"{campaign.from_case_id!r}:"
+        )
+        labels = {
+            "added": "added",
+            "scoped": "now runs the practice case's inputs",
+            "kept": "already set up, unchanged",
+        }
+        for drill in campaign.drills:
+            print(f"  {drill.case_id}: {drill.name} ({labels[drill.state]})")
+        for kind, reason in campaign.skipped:
+            print(f"  {kind}: not applicable ({reason})")
+        from openadapt_flow.cli_hints import command
+
+        print(
+            "Each drill uses the practice case's inputs. Run each with "
+            f"`{command('qualify run-case')}`."
+        )
+    return 0
+
+
+def _cmd_qualify(args: argparse.Namespace) -> int:
+    import json
+
+    from pydantic import TypeAdapter
+
+    from openadapt_flow.ir import BusinessDecisionSpec, StateKind
+    from openadapt_flow.judgment_cases import JudgmentCaseSetV1
+    from openadapt_flow.qualification import (
+        ActionRiskClass,
+        ActionRiskClassification,
+        EnvironmentBoundary,
+        IdentityEnforcement,
+        IdentityPolicy,
+        QualificationCase,
+        QualificationCaseKind,
+        QualificationCaseResult,
+        QualificationOutcome,
+        QualifiedEntityLabel,
+        RequalificationCondition,
+        VerificationTier,
+        add_case,
+        add_requalification_condition,
+        certify_project,
+        entity_label_options,
+        evaluate_judgment_case_qualification,
+        init_project,
+        list_entity_labels,
+        project_schema,
+        record_case_results,
+        remove_entity_label,
+        save_qualified_workflow,
+        set_action_classification,
+        set_business_decision,
+        set_effect_policy,
+        set_entity_label,
+        set_identity_policy,
+        set_judgment_cases,
+        set_trusted_runner_key,
+    )
+
+    verb = args.qualify_cmd
+    if verb == "run-case":
+        return _cmd_qualify_run_case(args)
+    if verb == "drills":
+        return _cmd_qualify_drills(args)
+    if verb == "schema":
+        print(json.dumps(project_schema(), indent=2, sort_keys=True))
+        return 0
+    if verb in {"propose", "accept", "admit-local", "from-demo"}:
+        return _cmd_qualify_proposal(args)
+
+    workflow = _qualification_workflow(args)
+
+    if verb == "business-decision":
+        if not args.check:
+            if not args.input:
+                raise SystemExit("--input is required unless --check is used")
+            try:
+                payload = json.loads(Path(args.input).read_text(encoding="utf-8"))
+                if not isinstance(payload, dict):
+                    raise ValueError("authoring input must be an object")
+                allowed = {
+                    "schema_version",
+                    "graph_id",
+                    "state_id",
+                    "insert_before_state_id",
+                    "decision",
+                }
+                required = {"schema_version", "graph_id", "state_id", "decision"}
+                if set(payload) - allowed or required - set(payload):
+                    raise ValueError("authoring input has an unknown or missing field")
+                if (
+                    payload["schema_version"]
+                    != "openadapt.business-decision-authoring/v1"
+                ):
+                    raise ValueError("authoring schema is not supported")
+                graph_id = payload["graph_id"]
+                state_id = payload["state_id"]
+                insert_before = payload.get("insert_before_state_id")
+                if not isinstance(graph_id, str) or not isinstance(state_id, str):
+                    raise ValueError("graph_id and state_id must be strings")
+                if insert_before is not None and not isinstance(insert_before, str):
+                    raise ValueError("insert_before_state_id must be a string or null")
+                decision = BusinessDecisionSpec.model_validate(payload["decision"])
+            except (OSError, ValueError) as exc:
+                raise SystemExit(
+                    f"invalid business decision authoring input: {exc}"
+                ) from exc
+            workflow = set_business_decision(
+                workflow,
+                graph_id=graph_id,
+                state_id=state_id,
+                decision=decision,
+                insert_before_state_id=insert_before,
+            )
+            save_qualified_workflow(workflow, args.bundle)
+
+        decisions = []
+        graphs = [("__program__", workflow.program), *workflow.subflows.items()]
+        for graph_id, graph in graphs:
+            if graph is None:
+                continue
+            for state_id, state in sorted(graph.states.items()):
+                if (
+                    state.kind is not StateKind.BUSINESS_DECISION
+                    or state.decision is None
+                ):
+                    continue
+                decisions.append(
+                    {
+                        "graph_id": graph_id,
+                        "state_id": state_id,
+                        "contract_digest": f"sha256:{state.decision.contract_sha256()}",
+                        "output_param": state.decision.output_param,
+                        "option_ids": [option.id for option in state.decision.options],
+                        "successor_state_ids": [
+                            option.target for option in state.decision.options
+                        ],
+                    }
+                )
+        print(
+            json.dumps(
+                {
+                    "schema_version": "openadapt.business-decision-authoring-report/v1",
+                    "decisions": decisions,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 0
+
+    if verb == "judgment-cases":
+        if args.check:
+            report = evaluate_judgment_case_qualification(workflow)
+        else:
+            if not args.input:
+                raise SystemExit("--input is required unless --check is used")
+            try:
+                payload = json.loads(Path(args.input).read_text(encoding="utf-8"))
+                case_set = JudgmentCaseSetV1.model_validate(payload)
+            except (OSError, ValueError) as exc:
+                raise SystemExit(f"invalid judgment case set: {exc}") from exc
+            set_judgment_cases(workflow, schemas=case_set.schemas, cases=case_set.cases)
+            save_qualified_workflow(workflow, args.bundle)
+            report = evaluate_judgment_case_qualification(workflow)
+        print(report.model_dump_json(indent=2))
+        return 0 if report.passed else 2
+
+    if verb == "label":
+        if args.label_cmd == "list":
+            print(
+                json.dumps(
+                    [
+                        label.model_dump(mode="json")
+                        for label in list_entity_labels(workflow)
+                    ],
+                    indent=2,
+                )
+            )
+            return 0
+        changed = False
+        if args.label_cmd == "set":
+            reviewed_fallback = next(
+                (
+                    option["fallback"]
+                    for option in entity_label_options()
+                    if option["label"] == args.label
+                ),
+                None,
+            )
+            if (
+                reviewed_fallback is not None
+                and args.fallback is not None
+                and args.fallback != reviewed_fallback
+            ):
+                raise SystemExit(
+                    f"{args.label!r} uses the reviewed fallback {reviewed_fallback!r}"
+                )
+            fallback = reviewed_fallback or args.fallback or "record"
+            try:
+                label = QualifiedEntityLabel(
+                    step_id=args.step, label=args.label, fallback=fallback
+                )
+            except ValueError as exc:
+                raise SystemExit(f"invalid entity label: {exc}") from exc
+            assert workflow.qualification is not None
+            changed = workflow.qualification.entity_labels.get(args.step) != label
+            set_entity_label(workflow, label)
+        elif args.label_cmd == "remove":
+            assert workflow.qualification is not None
+            changed = args.step in workflow.qualification.entity_labels
+            remove_entity_label(workflow, args.step)
+        else:  # pragma: no cover - argparse requires a known command.
+            raise SystemExit(f"unknown qualification label command {args.label_cmd!r}")
+        save_qualified_workflow(workflow, args.bundle)
+        print(workflow.qualification.model_dump_json(indent=2))
+        if changed:
+            from openadapt_flow.cli_hints import command
+
+            print(
+                f"Certification invalidated. Run `{command('qualify certify')} "
+                "<bundle> --evidence-root <path>` before production V2 tasks.",
+                file=sys.stderr,
+            )
+        return 0
+
+    if verb == "init":
+        environment = EnvironmentBoundary(
+            target_kind=args.target,
+            application=args.application,
+            application_version=args.application_version,
+            environment_digest=args.environment_digest,
+            runtime_version=args.runtime_version or _package_version(),
+            required_capabilities=args.require_capability,
+        )
+        init_project(
+            workflow,
+            environment=environment,
+            minimum_effect_tier=VerificationTier(args.minimum_tier),
+            replace=args.replace,
+        )
+        save_qualified_workflow(workflow, args.bundle)
+        print(workflow.qualification.model_dump_json(indent=2))
+        return 0
+
+    if verb in {"inspect", "explain", "report"}:
+        policy = _qualification_policy(args) if getattr(args, "policy", None) else None
+        from openadapt_flow.qualification import evaluate_qualification
+
+        report = evaluate_qualification(
+            workflow,
+            policy=policy,
+            evidence_root=args.evidence_root,
+        )
+        if args.json:
+            payload = {
+                "project": (
+                    workflow.qualification.model_dump(mode="json")
+                    if workflow.qualification
+                    else None
+                ),
+                "report": report.model_dump(mode="json"),
+                "entity_label_options": entity_label_options(),
+            }
+            print(json.dumps(payload, indent=2, sort_keys=True))
+        else:
+            print(report.render())
+        return 0 if report.passed else 2
+
+    if verb == "set-identity":
+        from openadapt_flow.traversal import iter_workflow_steps
+
+        steps = {step.id: step for step in iter_workflow_steps(workflow)}
+        step = steps.get(args.step)
+        if step is None:
+            raise SystemExit(f"unknown step id {args.step!r}")
+        region = step.anchor.identifier_region if step.anchor is not None else None
+        if args.canonical_ladder:
+            if args.signal or args.quorum is not None:
+                raise SystemExit(
+                    "--canonical-ladder cannot be combined with --signal/--quorum"
+                )
+            identity_policy = IdentityPolicy(
+                step_id=args.step,
+                enforcement=IdentityEnforcement.CANONICAL_LADDER,
+            )
+        else:
+            if not args.signal or args.quorum is None:
+                raise SystemExit(
+                    "signal-quorum identity requires --signal and --quorum"
+                )
+            signal_regions: dict[str, tuple[int, int, int, int]] = {}
+            for raw_region in args.signal_region:
+                try:
+                    key, encoded = raw_region.split("=", 1)
+                    values = [int(item) for item in encoded.split(",")]
+                    if len(values) != 4:
+                        raise ValueError
+                    if key in signal_regions:
+                        raise SystemExit(f"--signal-region repeats signal key {key!r}")
+                    signal_regions[key] = (
+                        values[0],
+                        values[1],
+                        values[2],
+                        values[3],
+                    )
+                except ValueError as exc:
+                    raise SystemExit(
+                        "--signal-region expects KEY=x,y,width,height"
+                    ) from exc
+            signal_params: dict[str, list[str]] = {}
+            for raw_param in args.signal_param:
+                try:
+                    key, name = raw_param.split("=", 1)
+                except ValueError as exc:
+                    raise SystemExit("--signal-param expects KEY=PARAM") from exc
+                signal_params.setdefault(key, []).append(name)
+            signal_extracts: dict[str, str] = {}
+            for raw_extract in args.signal_extract:
+                key, separator, pattern = raw_extract.partition("=")
+                if not separator or not key or not pattern:
+                    raise SystemExit("--signal-extract expects KEY=REGEX")
+                if key in signal_extracts:
+                    raise SystemExit(f"--signal-extract repeats signal key {key!r}")
+                signal_extracts[key] = pattern
+            signal_expecteds: dict[str, str] = {}
+            for raw_expected in args.signal_expected:
+                key, separator, expected = raw_expected.partition("=")
+                if not separator or not key or not expected:
+                    raise SystemExit("--signal-expected expects KEY=VALUE")
+                if key in signal_expecteds:
+                    raise SystemExit(f"--signal-expected repeats signal key {key!r}")
+                signal_expecteds[key] = expected
+            signal_keys = {raw.split("=", 1)[0] for raw in args.signal if "=" in raw}
+            unknown_options = sorted(
+                (
+                    set(signal_regions)
+                    | set(signal_params)
+                    | set(signal_extracts)
+                    | set(signal_expecteds)
+                ).difference(signal_keys)
+            )
+            if unknown_options:
+                raise SystemExit(
+                    "--signal-region/--signal-param/--signal-extract/"
+                    "--signal-expected references unknown signal "
+                    "key(s): " + ", ".join(unknown_options)
+                )
+            signals = [
+                _parse_qualification_signal(
+                    raw,
+                    identifier_region=region,
+                    signal_regions=signal_regions,
+                    signal_params=signal_params,
+                    signal_extracts=signal_extracts,
+                    signal_expecteds=signal_expecteds,
+                )
+                for raw in args.signal
+            ]
+            identity_policy = IdentityPolicy(
+                step_id=args.step,
+                enforcement=IdentityEnforcement.SIGNAL_QUORUM,
+                signals=signals,
+                quorum=args.quorum,
+            )
+        set_identity_policy(
+            workflow,
+            identity_policy,
+        )
+        save_qualified_workflow(workflow, args.bundle)
+        print(workflow.qualification.model_dump_json(indent=2))
+        return 0
+
+    if verb == "set-risk":
+        set_action_classification(
+            workflow,
+            ActionRiskClassification(
+                step_id=args.step,
+                classification=ActionRiskClass(args.classification),
+                explanation=args.explanation,
+                operator_confirmed=True,
+            ),
+        )
+        save_qualified_workflow(workflow, args.bundle)
+        print(workflow.qualification.model_dump_json(indent=2))
+        return 0
+
+    if verb == "trust-runner":
+        set_trusted_runner_key(
+            workflow,
+            key_id=args.key_id,
+            public_key_base64=args.public_key,
+        )
+        save_qualified_workflow(workflow, args.bundle)
+        print(workflow.qualification.model_dump_json(indent=2))
+        return 0
+
+    if verb == "set-effect":
+        set_effect_policy(
+            workflow,
+            step_id=args.step,
+            effect_index=args.effect_index,
+            tier=VerificationTier(args.tier),
+            actuation_path=args.path,
+        )
+        save_qualified_workflow(workflow, args.bundle)
+        print(workflow.qualification.model_dump_json(indent=2))
+        return 0
+
+    if verb == "add-case":
+        add_case(
+            workflow,
+            QualificationCase(
+                id=args.case_id,
+                kind=QualificationCaseKind(args.kind),
+                description=args.description,
+                input_ref=args.input_ref,
+                expected_outcome=QualificationOutcome(args.expected_outcome),
+                required=not args.optional,
+            ),
+        )
+        save_qualified_workflow(workflow, args.bundle)
+        print(workflow.qualification.model_dump_json(indent=2))
+        return 0
+
+    if verb == "add-requalification":
+        add_requalification_condition(
+            workflow,
+            RequalificationCondition(
+                kind=args.kind,
+                description=args.description,
+            ),
+        )
+        save_qualified_workflow(workflow, args.bundle)
+        print(workflow.qualification.model_dump_json(indent=2))
+        return 0
+
+    if verb == "run":
+        try:
+            raw = json.loads(Path(args.results).read_text(encoding="utf-8"))
+            adapter = TypeAdapter(list[QualificationCaseResult])
+            results = adapter.validate_python(raw if isinstance(raw, list) else [raw])
+        except (OSError, ValueError) as exc:
+            raise SystemExit(f"invalid qualification results: {exc}") from exc
+        record_case_results(
+            workflow,
+            results,
+            evidence_root=args.evidence_root,
+        )
+        save_qualified_workflow(workflow, args.bundle)
+        print(workflow.qualification.model_dump_json(indent=2))
+        return 0
+
+    if verb == "certify":
+        policy = _qualification_policy(args)
+        report = certify_project(
+            workflow,
+            policy=policy,
+            evidence_root=args.evidence_root,
+            execution_profile=args.profile,
+        )
+        save_qualified_workflow(workflow, args.bundle)
+        print(report.model_dump_json(indent=2) if args.json else report.render())
+        return 0 if report.passed else 2
+
+    raise SystemExit(f"unknown qualify command {verb!r}")
+
+
+def _cmd_qualify_proposal(args: argparse.Namespace) -> int:
+    """Propose, accept, or locally admit pins mined from the compiled demo."""
+
+    from openadapt_flow.ir import Workflow
+    from openadapt_flow.qualification_proposal import (
+        QualificationProposalError,
+        accept_proposal,
+        admit_local_dev,
+        emit_proposal_json,
+        load_proposal,
+        propose_qualification,
+        proposer_from_name,
+        refuse_pin,
+        save_accepted_bundle,
+    )
+
+    verb = args.qualify_cmd
+    bundle = Path(args.bundle)
+    try:
+        workflow = Workflow.load(bundle)
+    except (OSError, ValueError) as exc:
+        raise SystemExit(f"could not load bundle: {exc}") from exc
+    from openadapt_flow import sealed_set
+
+    out_arg = getattr(args, "out", None)
+    if (
+        out_arg
+        and sealed_set.is_sealed_path(bundle)
+        and not sealed_set.is_sealed_path(Path(out_arg))
+    ):
+        raise SystemExit(
+            f"qualify {verb} REFUSED: the bundle is encrypted, so --out must be "
+            "inside it (or omitted). Nothing was written."
+        )
+
+    if verb == "propose":
+        try:
+            proposer = proposer_from_name(getattr(args, "proposer", "off"))
+        except QualificationProposalError as exc:
+            raise SystemExit(str(exc)) from exc
+        proposal = propose_qualification(
+            workflow,
+            recording_dir=getattr(args, "recording", None),
+            policy_pack=getattr(args, "policy_pack", "community"),
+            proposer=proposer,
+        )
+        print(emit_proposal_json(proposal, getattr(args, "out", None)))
+        if proposal.status == "halted":
+            print(
+                proposal.halt_reason or "qualification proposal HALTed",
+                file=sys.stderr,
+            )
+            return 2
+        return 0
+
+    if verb == "from-demo":
+        try:
+            proposer = proposer_from_name(getattr(args, "proposer", "off"))
+        except QualificationProposalError as exc:
+            raise SystemExit(str(exc)) from exc
+        proposal = propose_qualification(
+            workflow,
+            recording_dir=args.recording,
+            policy_pack=args.policy_pack,
+            proposer=proposer,
+        )
+        if proposal.status == "halted":
+            print(emit_proposal_json(proposal, getattr(args, "out", None)))
+            print(
+                proposal.halt_reason or "qualification proposal HALTed",
+                file=sys.stderr,
+            )
+            return 2
+        try:
+            accepted = accept_proposal(workflow, proposal)
+            local = None
+            if args.admit_local:
+                local = admit_local_dev(workflow, accepted, bundle_dir=bundle)
+            save_accepted_bundle(
+                workflow,
+                bundle,
+                proposal=accepted,
+                local_admission=local,
+            )
+        except QualificationProposalError as exc:
+            raise SystemExit(str(exc)) from exc
+        print(emit_proposal_json(accepted, getattr(args, "out", None)))
+        return 0
+
+    if verb == "accept":
+        try:
+            proposal = load_proposal(args.proposal)
+        except (OSError, ValueError) as exc:
+            raise SystemExit(f"invalid qualification proposal: {exc}") from exc
+        refused = getattr(args, "refuse_pin", None)
+        if refused:
+            halted = refuse_pin(proposal, refused)
+            print(emit_proposal_json(halted, getattr(args, "out", None)))
+            print(halted.halt_reason, file=sys.stderr)
+            return 2
+        try:
+            accepted = accept_proposal(workflow, proposal, replace=args.replace)
+            local = None
+            if args.admit_local:
+                local = admit_local_dev(workflow, accepted, bundle_dir=bundle)
+            save_accepted_bundle(
+                workflow,
+                bundle,
+                proposal=accepted,
+                local_admission=local,
+            )
+        except QualificationProposalError as exc:
+            raise SystemExit(str(exc)) from exc
+        print(emit_proposal_json(accepted, getattr(args, "out", None)))
+        return 0
+
+    if verb == "admit-local":
+        try:
+            proposal = load_proposal(args.proposal)
+            local = admit_local_dev(workflow, proposal, bundle_dir=bundle)
+        except QualificationProposalError as exc:
+            raise SystemExit(str(exc)) from exc
+        out = (
+            Path(args.out)
+            if args.out
+            else bundle / "qualification-admission.local-dev.json"
+        )
+        from openadapt_flow import sealed_set
+
+        sealed_set.write_text(out, local.model_dump_json(indent=2))
+        print(local.model_dump_json(indent=2))
+        return 0
+
+    raise SystemExit(f"unknown qualify command {verb!r}")
+
+
+def _cmd_propose_qualification(args: argparse.Namespace) -> int:
+    """Top-level alias for ``qualify propose``."""
+
+    args.qualify_cmd = "propose"
+    return _cmd_qualify_proposal(args)
+
+
+def _cmd_disambiguate(args: argparse.Namespace) -> int:
+    import json
+
+    from openadapt_flow.compiler.disambiguation import (
+        apply_answers,
+        detect_ambiguities,
+    )
+    from openadapt_flow.ir import Workflow
+
+    bundle = Path(args.bundle)
+    workflow = Workflow.load(bundle)
+    questions = detect_ambiguities(workflow)
+
+    if not questions:
+        print("No ambiguities detected; the demo is fully specified.")
+        return 0
+
+    answers: dict[str, str] = {}
+    if args.answers:
+        answers = json.loads(Path(args.answers).read_text())
+    elif args.interactive:
+        # Thin interactive wrapper -- prompts a human, then calls the same API
+        # the tests drive directly. The core stays non-interactive.
+        for q in questions:
+            print(f"\n{q.prompt}")
+            for opt in q.options:
+                print(f"  ({opt.key}) {opt.label}")
+            tag = "" if q.consequential else f" [default: {q.default_key}]"
+            reply = input(f"Answer for {q.id}{tag}: ").strip()
+            if reply:
+                answers[q.id] = reply
+    else:
+        # Non-interactive listing: surface the questions and exit nonzero if
+        # any is a consequential (must-answer) ambiguity.
+        for q in questions:
+            flag = " (CONSEQUENTIAL)" if q.consequential else ""
+            print(f"\n[{q.kind.value}] {q.id}{flag}\n  {q.prompt}")
+            for opt in q.options:
+                print(f"  ({opt.key}) {opt.label}")
+        consequential = any(q.consequential for q in questions)
+        print(
+            f"\n{len(questions)} question(s) detected. Re-run with "
+            "--interactive or --answers to resolve."
+        )
+        return 2 if consequential else 0
+
+    result = apply_answers(workflow, answers)
+    print(result.render())
+    if args.write:
+        result.workflow.save(bundle)
+        print(f"Resolved workflow written to {bundle}")
+    return 0 if result.certified else 2
+
+
+def _cmd_emit_skill(args: argparse.Namespace) -> int:
+    from openadapt_flow.emit.skill import emit_skill
+    from openadapt_flow.skills import refuse_unqualified_skill
+
+    refuse_unqualified_skill(args.bundle)
+    skill_dir = emit_skill(Path(args.bundle), Path(args.out))
+    print(f"Skill written to {skill_dir}")
+    return 0
+
+
+def _cmd_emit_mcp(args: argparse.Namespace) -> int:
+    from openadapt_flow.emit.mcp_tool import emit_mcp_server
+    from openadapt_flow.skills import refuse_unqualified_skill
+
+    refuse_unqualified_skill(args.bundle)
+    server_path = emit_mcp_server(Path(args.bundle), Path(args.out))
+    print(f"MCP server written to {server_path}")
+    return 0
+
+
+def _cmd_login(args: argparse.Namespace) -> int:
+    """Validate an ingest token against the hosted control plane and store the
+    host in config and the token in the OS keychain when saving is enabled.
+
+    Token resolution: ``--token`` -> ``OPENADAPT_INGEST_TOKEN`` env ->
+    OS keychain -> existing config migration token. Mint a
+    token in the dashboard at ``<host>/dashboard/settings/ingest``.
+    """
+    from openadapt_flow.hosted import HostedError, login
+
+    try:
+        result = login(
+            token=args.token,
+            host=args.host,
+            save=not args.no_save,
+            allow_plaintext_token=args.allow_plaintext_token,
+            destination_kind=args.destination_kind,
+            trusted_hosts=args.trusted_host,
+        )
+    except HostedError as e:
+        print(f"login failed: {e}")
+        return 1
+    print(f"Logged in to {result['host']} (token validated).")
+    if result.get("config_path"):
+        if result.get("token_storage") == "keyring":
+            print(
+                f"Token saved to {result['config_path']}; non-secret host saved in config."
+            )
+        else:
+            print(
+                f"Host + token saved to {result['config_path']} (mode 0600).\n"
+                "WARNING: plaintext storage was explicitly enabled. Prefer the "
+                "OS keychain or OPENADAPT_INGEST_TOKEN."
+            )
+    print(f"Manage tokens at {result['settings_url']}")
+    return 0
+
+
+def _cmd_connect(args: argparse.Namespace) -> int:
+    """Claim one browser-created pairing and store it in the OS keychain."""
+    from openadapt_flow.hosted import (
+        HostedError,
+        connect,
+        parse_connect_uri,
+    )
+
+    pairing = args.pairing
+    host = args.host
+    destination_kind = args.destination_kind
+    try:
+        if args.uri:
+            if host or destination_kind or args.trusted_host:
+                raise HostedError(
+                    "--uri cannot be combined with --host, --destination-kind, "
+                    "or --trusted-host"
+                )
+            request = parse_connect_uri(args.uri)
+            pairing = request["pairing"]
+            host = request["host"]
+            destination_kind = request.get("destination_kind")
+        result = connect(
+            pairing,
+            host=host,
+            device_name=args.device_name,
+            destination_kind=destination_kind,
+            trusted_hosts=args.trusted_host,
+        )
+    except HostedError as e:
+        print(f"connect failed: {e}")
+        return 1
+    print(
+        f"Connected local OpenAdapt to {result['host']} as "
+        f"{result['device_name']} (credential saved in the OS keychain)."
+    )
+    print(f"Manage or revoke this connection at {result['settings_url']}")
+    return 0
+
+
+_PUSH_JSON_SCHEMA = "openadapt.push-result/v1"
+_PUSH_RUNTIME_ATTESTATION_SCHEMAS = frozenset(
+    {
+        "openadapt.runtime-validation/v1",
+        "openadapt.runtime-validation/v2",
+        "openadapt.runtime-validation/v3",
+    }
+)
+
+
+def _push_json_base(status: str) -> dict[str, Any]:
+    """Return the complete V1 shape; phase-specific fields stay explicit nulls."""
+    return {
+        "schema": _PUSH_JSON_SCHEMA,
+        "status": status,
+        "workflow_id": None,
+        "artifact_ingest_id": None,
+        "review": None,
+        "attestation": None,
+        "binding": {
+            "kind": None,
+            "source_tree_sha256": None,
+            "derivative_tree_sha256": None,
+            "approved_archive_sha256": None,
+            "artifact_sha256": None,
+            "bundle_sha256": None,
+            "source_recording_sha256": None,
+            "sanitization_policy": None,
+            "certification_policy": None,
+            "certification_evidence_sha256": None,
+            "governed_authorization_template_sha256": None,
+            "parameter_schema_sha256": None,
+            "attested_run_report_sha256": None,
+            "resolves_run_id": None,
+            "organization_id": None,
+            "bundle_version_id": None,
+            "bundle_version": None,
+            "runtime_validation_id": None,
+        },
+        "next_action": None,
+        "dashboard_url": None,
+        "delivery": {"attempted": False, "certainty": "not_attempted"},
+        "error": None,
+    }
+
+
+def _is_sha256(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(char in "0123456789abcdef" for char in value)
+    )
+
+
+def _is_uuid(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+    try:
+        parsed = UUID(value)
+        return str(parsed) == value and parsed.version in {1, 2, 3, 4, 5, 6, 7, 8}
+    except ValueError:
+        return False
+
+
+def _is_runtime_attestation_schema(value: Any) -> bool:
+    return isinstance(value, str) and value in _PUSH_RUNTIME_ATTESTATION_SCHEMAS
+
+
+def _required_sha256(value: Any, *, field: str) -> str:
+    if not _is_sha256(value):
+        raise ValueError(f"invalid {field}")
+    return value
+
+
+def _push_json_failure(
+    *, uncertain: bool = False, context: Optional[dict[str, Any]] = None
+) -> dict[str, Any]:
+    status = "delivery_uncertain" if uncertain else "failed"
+    document = _push_json_base(status)
+    if uncertain:
+        document["next_action"] = "reconcile"
+        document["delivery"] = {"attempted": True, "certainty": "unknown"}
+        code = "delivery_uncertain"
+        message = (
+            "The upload did not return a trustworthy delivery result. Reconcile "
+            "the artifact in the hosted control plane before any retry."
+        )
+    else:
+        document["delivery"] = {
+            "attempted": None,
+            "certainty": "not_accepted",
+        }
+        code = "push_failed"
+        message = "The artifact was not accepted for ingest."
+    document["error"] = {"code": code, "message": message[:500]}
+    if uncertain and context:
+        local = context.get("local_binding")
+        sanitization = context.get("sanitization")
+        artifact = (
+            sanitization.get("artifact") if isinstance(sanitization, dict) else None
+        )
+        if isinstance(local, dict) and isinstance(artifact, dict):
+            binding = document["binding"]
+            values = {
+                "kind": artifact.get("kind"),
+                "source_tree_sha256": local.get("source_tree_sha256"),
+                "derivative_tree_sha256": local.get("derivative_tree_sha256"),
+                "approved_archive_sha256": local.get("approved_archive_sha256"),
+                "artifact_sha256": artifact.get("sha256"),
+                "sanitization_policy": local.get("sanitization_policy"),
+                "resolves_run_id": context.get("resolves_run_id"),
+            }
+            if (
+                values["kind"] in ("recording", "bundle")
+                and all(
+                    _is_sha256(values[key])
+                    for key in (
+                        "source_tree_sha256",
+                        "derivative_tree_sha256",
+                        "approved_archive_sha256",
+                        "artifact_sha256",
+                    )
+                )
+                and values["approved_archive_sha256"] == values["artifact_sha256"]
+                and isinstance(values["sanitization_policy"], str)
+                and (
+                    values["resolves_run_id"] is None
+                    or _is_uuid(values["resolves_run_id"])
+                )
+            ):
+                binding.update(values)
+                review_id = context.get("review_id")
+                if _is_sha256(review_id):
+                    document["review"] = {
+                        "id": review_id,
+                        "scope": "local_non_authoritative",
+                        "sanitized_path": None,
+                        "action": None,
+                        "original_path": None,
+                    }
+                attestation = context.get("attestation_binding")
+                if isinstance(attestation, dict):
+                    challenge_id = attestation.get("challenge_id")
+                    attestation_schema = attestation.get("schema")
+                    bundle_binding = {
+                        "bundle_sha256": attestation.get("bundle_sha256"),
+                        "source_recording_sha256": attestation.get(
+                            "source_recording_sha256"
+                        ),
+                        "certification_policy": attestation.get("policy"),
+                        "certification_evidence_sha256": attestation.get(
+                            "policy_evidence_sha256"
+                        ),
+                        "governed_authorization_template_sha256": attestation.get(
+                            "governed_authorization_template_sha256"
+                        ),
+                        "parameter_schema_sha256": attestation.get(
+                            "parameter_schema_sha256"
+                        ),
+                        "attested_run_report_sha256": attestation.get(
+                            "run_report_sha256"
+                        ),
+                    }
+                    template_sha = bundle_binding[
+                        "governed_authorization_template_sha256"
+                    ]
+                    has_complete_binding = (
+                        isinstance(challenge_id, str)
+                        and 1 <= len(challenge_id) <= 200
+                        and _is_runtime_attestation_schema(attestation_schema)
+                        and bundle_binding["bundle_sha256"] == values["artifact_sha256"]
+                        and all(
+                            _is_sha256(bundle_binding[key])
+                            for key in (
+                                "bundle_sha256",
+                                "source_recording_sha256",
+                                "certification_evidence_sha256",
+                                "parameter_schema_sha256",
+                                "attested_run_report_sha256",
+                            )
+                        )
+                        and isinstance(bundle_binding["certification_policy"], str)
+                        and bool(bundle_binding["certification_policy"])
+                        and (
+                            (
+                                attestation_schema == "openadapt.runtime-validation/v3"
+                                and _is_sha256(template_sha)
+                            )
+                            or (
+                                attestation_schema
+                                in {
+                                    "openadapt.runtime-validation/v1",
+                                    "openadapt.runtime-validation/v2",
+                                }
+                                and template_sha is None
+                            )
+                        )
+                    )
+                    if has_complete_binding:
+                        document["attestation"] = {
+                            "id": challenge_id,
+                            "schema": attestation_schema,
+                        }
+                        binding.update(bundle_binding)
+    return document
+
+
+def _push_json_invalid_response(context: dict[str, Any]) -> dict[str, Any]:
+    document = _push_json_failure(uncertain=True, context=context)
+    document["error"]["message"] = (
+        "The server response did not prove an exact accepted ingest. "
+        "Reconcile the artifact in the hosted control plane before any retry."
+    )
+    return document
+
+
+def _push_json_result(result: dict[str, Any]) -> dict[str, Any]:
+    """Build a stable Desktop contract from verified local and server evidence."""
+    local_binding = result.get("local_binding")
+    if not isinstance(local_binding, dict):
+        raise ValueError("missing local binding")
+    source_sha = _required_sha256(
+        local_binding.get("source_tree_sha256"), field="source tree binding"
+    )
+    derivative_sha = _required_sha256(
+        local_binding.get("derivative_tree_sha256"),
+        field="derivative tree binding",
+    )
+    sanitization_policy = local_binding.get("sanitization_policy")
+    if not isinstance(sanitization_policy, str) or not sanitization_policy:
+        raise ValueError("missing sanitization policy")
+    review_id = _required_sha256(result.get("review_id"), field="review id")
+
+    if result.get("pending_review") is True and result.get("uploaded") is False:
+        kind = result.get("kind") or "recording"
+        if kind not in ("recording", "bundle"):
+            raise ValueError("invalid review kind")
+        sanitized_path = result.get("sanitized_path")
+        review_action = result.get("review_action")
+        original_path = result.get("original_path")
+        if not isinstance(sanitized_path, str) or not sanitized_path:
+            raise ValueError("missing sanitized review path")
+        if review_action != "review_sanitized":
+            raise ValueError("missing review action")
+        if not isinstance(original_path, str) or not original_path:
+            raise ValueError("missing original review path")
+        document = _push_json_base("paused_for_review")
+        document["review"] = {
+            "id": review_id,
+            "scope": "local_non_authoritative",
+            "sanitized_path": sanitized_path,
+            "action": review_action,
+            "original_path": original_path,
+        }
+        document["binding"].update(
+            {
+                "kind": kind,
+                "source_tree_sha256": source_sha,
+                "derivative_tree_sha256": derivative_sha,
+                "sanitization_policy": sanitization_policy,
+            }
+        )
+        document["next_action"] = "review_local"
+        return document
+
+    if result.get("uploaded") is not True:
+        raise ValueError("missing upload acknowledgment")
+    sanitization = result.get("sanitization")
+    artifact = sanitization.get("artifact") if isinstance(sanitization, dict) else None
+    if not isinstance(artifact, dict):
+        raise ValueError("missing sanitization binding")
+    kind = artifact.get("kind")
+    if kind not in ("recording", "bundle") or result.get("kind") != kind:
+        raise ValueError("ingest kind mismatch")
+    approved_sha = _required_sha256(
+        local_binding.get("approved_archive_sha256"),
+        field="approved archive binding",
+    )
+    artifact_sha = _required_sha256(
+        artifact.get("sha256"), field="local artifact binding"
+    )
+    if approved_sha != artifact_sha or result.get("artifact_sha256") != artifact_sha:
+        raise ValueError("server artifact binding mismatch")
+    artifact_ingest_id = result.get("artifact_ingest_id")
+    if not _is_uuid(artifact_ingest_id):
+        raise ValueError("missing server artifact ingest id")
+
+    document = _push_json_base("accepted_for_ingest")
+    document["artifact_ingest_id"] = artifact_ingest_id
+    document["review"] = {
+        "id": review_id,
+        "scope": "local_non_authoritative",
+        "sanitized_path": None,
+        "action": None,
+        "original_path": None,
+    }
+    document["binding"].update(
+        {
+            "kind": kind,
+            "source_tree_sha256": source_sha,
+            "derivative_tree_sha256": derivative_sha,
+            "approved_archive_sha256": approved_sha,
+            "artifact_sha256": artifact_sha,
+            "sanitization_policy": sanitization_policy,
+        }
+    )
+    document["delivery"] = {"attempted": True, "certainty": "accepted"}
+
+    if kind == "recording":
+        if result.get("workflow_id") is not None:
+            raise ValueError("recording ingest must not activate a workflow")
+        server_status = result.get("status")
+        if server_status == "needs_parameterization":
+            document["next_action"] = "parameterize"
+        elif server_status == "needs_runtime_validation":
+            document["next_action"] = "validate_runtime"
+        else:
+            raise ValueError("recording ingest has no governed next action")
+        return document
+
+    workflow_id = result.get("workflow_id")
+    if not _is_uuid(workflow_id):
+        raise ValueError("bundle ingest has no workflow id")
+    requested_workflow_id = result.get("requested_workflow_id")
+    if requested_workflow_id is not None and not _is_uuid(requested_workflow_id):
+        raise ValueError("invalid requested workflow binding")
+    if requested_workflow_id is not None and workflow_id != requested_workflow_id:
+        raise ValueError("accepted workflow does not match the requested workflow")
+    if result.get("status") != "accepted":
+        raise ValueError("bundle ingest is not accepted")
+    version = result.get("version")
+    if not isinstance(version, dict):
+        raise ValueError("bundle ingest has no retained version binding")
+    bundle_version_id = version.get("id")
+    organization_id = version.get("org_id")
+    version_workflow_id = version.get("workflow_id")
+    version_artifact_sha = version.get("artifact_sha256")
+    runtime_validation_id = version.get("runtime_validation_id")
+    version_resolves_run_id = version.get("promoted_from_run_id")
+    version_number = version.get("version")
+    if not _is_uuid(bundle_version_id):
+        raise ValueError("invalid retained bundle version id")
+    if not _is_uuid(organization_id):
+        raise ValueError("invalid retained organization binding")
+    if version_workflow_id != workflow_id:
+        raise ValueError("retained bundle version workflow mismatch")
+    if version_artifact_sha != artifact_sha:
+        raise ValueError("retained bundle version artifact mismatch")
+    if not _is_uuid(runtime_validation_id):
+        raise ValueError("invalid retained runtime validation binding")
+    if not isinstance(version_number, int) or isinstance(version_number, bool):
+        raise ValueError("invalid retained bundle version")
+    if version_number < 1:
+        raise ValueError("invalid retained bundle version")
+    attestation = result.get("attestation_binding")
+    if not isinstance(attestation, dict):
+        raise ValueError("bundle ingest has no attestation binding")
+    challenge_id = attestation.get("challenge_id")
+    schema = attestation.get("schema")
+    policy = attestation.get("policy")
+    if not isinstance(challenge_id, str) or not 1 <= len(challenge_id) <= 200:
+        raise ValueError("invalid attestation id")
+    if not _is_runtime_attestation_schema(schema):
+        raise ValueError("invalid attestation schema")
+    if not isinstance(policy, str) or not policy:
+        raise ValueError("invalid certification policy")
+    bundle_sha = _required_sha256(
+        attestation.get("bundle_sha256"), field="bundle binding"
+    )
+    if bundle_sha != approved_sha:
+        raise ValueError("attested bundle does not match approved archive")
+    policy_evidence_sha = _required_sha256(
+        attestation.get("policy_evidence_sha256"),
+        field="policy evidence binding",
+    )
+    parameter_schema_sha = _required_sha256(
+        attestation.get("parameter_schema_sha256"),
+        field="parameter schema binding",
+    )
+    run_report_sha = _required_sha256(
+        attestation.get("run_report_sha256"), field="run report binding"
+    )
+    source_recording_sha = _required_sha256(
+        attestation.get("source_recording_sha256"),
+        field="attested source recording binding",
+    )
+    template_sha = attestation.get("governed_authorization_template_sha256")
+    if template_sha is not None:
+        template_sha = _required_sha256(
+            template_sha, field="governed authorization template binding"
+        )
+    if schema == "openadapt.runtime-validation/v3" and template_sha is None:
+        raise ValueError("v3 attestation has no governed authorization template")
+    if (
+        schema
+        in {
+            "openadapt.runtime-validation/v1",
+            "openadapt.runtime-validation/v2",
+        }
+        and template_sha is not None
+    ):
+        raise ValueError("legacy attestation has an unexpected template binding")
+    resolves_run_id = result.get("resolves_run_id")
+    if resolves_run_id is not None and not _is_uuid(resolves_run_id):
+        raise ValueError("invalid resolved run binding")
+    if version_resolves_run_id != resolves_run_id:
+        raise ValueError("retained resolved run binding mismatch")
+    document["workflow_id"] = workflow_id
+    document["attestation"] = {"id": challenge_id, "schema": schema}
+    document["binding"].update(
+        {
+            "bundle_sha256": bundle_sha,
+            "source_recording_sha256": source_recording_sha,
+            "certification_policy": policy,
+            "certification_evidence_sha256": policy_evidence_sha,
+            "governed_authorization_template_sha256": template_sha,
+            "parameter_schema_sha256": parameter_schema_sha,
+            "attested_run_report_sha256": run_report_sha,
+            "resolves_run_id": resolves_run_id,
+            "organization_id": organization_id,
+            "bundle_version_id": bundle_version_id,
+            "bundle_version": version_number,
+            "runtime_validation_id": runtime_validation_id,
+        }
+    )
+    dashboard_url = result.get("dashboard_url")
+    destination_host = result.get("destination_host")
+    if not isinstance(dashboard_url, str) or not isinstance(destination_host, str):
+        raise ValueError("missing trusted dashboard binding")
+    dashboard = urlsplit(dashboard_url)
+    destination = urlsplit(destination_host)
+    if dashboard[:2] != destination[:2] or (
+        dashboard.path != f"/dashboard/workflows/{workflow_id}"
+        or dashboard.query
+        or dashboard.fragment
+    ):
+        raise ValueError("dashboard origin mismatch")
+    document["dashboard_url"] = dashboard_url
+    document["next_action"] = "open_dashboard"
+    return document
+
+
+def _print_push_json(document: dict[str, Any]) -> None:
+    print(json.dumps(document, sort_keys=True, separators=(",", ":")))
+
+
+def _cmd_push(args: argparse.Namespace) -> int:
+    """Upload the exact approved sanitized archive to ``/api/ingest``.
+
+    ``PATH`` defaults to the most-recent recording directory. Raw input creates
+    a derivative and pauses for review; approved input sends the exact frozen
+    archive and prints the server-assigned workflow id/dashboard URL.
+    """
+    from openadapt_flow.hosted import HostedDeliveryUncertain, HostedError, push
+
+    try:
+        result = push(
+            args.path,
+            kind=args.kind,
+            name=args.name,
+            workflow_id=args.workflow_id,
+            resolves_run_id=args.resolves_run_id,
+            host=args.host,
+            token=args.token,
+            deployment_kind=args.deployment_kind,
+            attest_non_phi=args.attest_non_phi,
+            destination_kind=args.destination_kind,
+            trusted_hosts=args.trusted_host,
+            sanitized_out=args.sanitized_out,
+            auto_approve=args.auto_approve,
+            validation_attestation=args.validation_attestation,
+        )
+    except HostedDeliveryUncertain as e:
+        if args.json:
+            _print_push_json(_push_json_failure(uncertain=True, context=e.context))
+            return 1
+        reconciliation = _push_json_failure(uncertain=True, context=e.context)
+        artifact_sha256 = reconciliation["binding"]["artifact_sha256"]
+        print("Push delivery is uncertain. The server can have received the artifact.")
+        if artifact_sha256 is not None:
+            print(f"Artifact SHA-256: {artifact_sha256}")
+        print(
+            "Do not retry this upload. Reconcile the artifact in the hosted "
+            "control plane first."
+        )
+        return 1
+    except HostedError as e:
+        if args.json:
+            _print_push_json(_push_json_failure())
+            return 1
+        print(f"push failed: {_refusal_text(args, e)}")
+        return 1
+    if args.json:
+        try:
+            document = _push_json_result(result)
+        except ValueError:
+            _print_push_json(_push_json_invalid_response(result))
+            return 1
+        _print_push_json(document)
+        return 0
+    if result.get("pending_review"):
+        print(f"Sanitized derivative created at {result['sanitized_path']}.")
+        print(
+            "Upload paused for local review; the original was not modified or uploaded."
+        )
+        print(f"Review original: {result['original_path']}")
+        print(f"Sanitized derivative: {result['sanitized_path']}")
+        from openadapt_flow.cli_hints import command
+
+        print(
+            f"Review locally: {command('review-sanitized')} "
+            f"{result['sanitized_path']} --original {result['original_path']}"
+        )
+        return 0
+    kind = result.get("kind")
+    server_status = result.get("status", "?")
+    if result.get("workflow_id"):
+        version = result.get("version")
+        version_number = version.get("version") if isinstance(version, dict) else None
+        from openadapt_flow import safe_errors
+
+        name = safe_errors.label(
+            result.get("workflow_name"), private=_private_input(args)
+        )
+        detail = f"name={name}, kind={kind}, status={server_status}"
+        if version_number is not None:
+            detail += f", version={version_number}"
+        print(f"Pushed. workflow_id={result['workflow_id']} ({detail}).")
+    else:
+        print(
+            f"Pushed. artifact_ingest_id={result.get('artifact_ingest_id')} "
+            f"(kind={kind}, status={server_status})."
+        )
+    if result.get("dashboard_url"):
+        print(f"Dashboard: {result['dashboard_url']}")
+    return 0
+
+
+def _cmd_validate_hosted(args: argparse.Namespace) -> int:
+    """Create a challenge-bound operator runtime-validation attestation."""
+    import json
+
+    from openadapt_flow.runtime_validation import (
+        RuntimeValidationError,
+        create_runtime_validation_attestation,
+        save_runtime_validation_attestation,
+    )
+
+    try:
+        compiler_config = (
+            json.loads(Path(args.compiler_config).read_text(encoding="utf-8"))
+            if args.compiler_config
+            else None
+        )
+        if compiler_config is not None and not isinstance(compiler_config, dict):
+            raise RuntimeValidationError("Compiler config must be a JSON object")
+        attestation = create_runtime_validation_attestation(
+            recording_derivative=Path(args.recording),
+            bundle_derivative=Path(args.bundle),
+            run_dir=Path(args.run_dir),
+            policy_source=args.policy,
+            risk_class=args.risk_class,
+            environment=args.environment,
+            target_kind=args.target_kind,
+            target_url=args.target_url,
+            allowed_hosts=args.allowed_host,
+            compiler_config=compiler_config,
+            host=args.host,
+            token=args.token,
+            destination_kind=args.destination_kind,
+            trusted_hosts=args.trusted_host,
+        )
+        output = save_runtime_validation_attestation(attestation, Path(args.out))
+    except (OSError, json.JSONDecodeError, RuntimeValidationError) as exc:
+        print(f"validate-hosted failed: {exc}")
+        return 1
+    print(f"Runtime-validation attestation written to {output}.")
+    print(
+        "This is a challenge-bound operator attestation, not independent "
+        "certification. Upload it once with `push --validation-attestation`."
+    )
+    return 0
+
+
+def _cmd_sanitize(args: argparse.Namespace) -> int:
+    from openadapt_flow.sanitized_artifact import SanitizationError, sanitize_artifact
+
+    try:
+        manifest = sanitize_artifact(
+            Path(args.path),
+            Path(args.out),
+            kind=args.kind,
+            redactions_file=Path(args.redactions) if args.redactions else None,
+            overwrite=args.overwrite,
+        )
+    except SanitizationError as e:
+        print(f"sanitize failed: {e}")
+        return 1
+    print(
+        f"Sanitized {manifest['processed_file_count']} file(s) into {args.out}; "
+        f"execution semantics: {manifest['execution_semantics']}."
+    )
+    from openadapt_flow.cli_hints import command
+
+    print(
+        f"Review locally: {command('review-sanitized')} "
+        f"{args.out} --original {args.path}"
+    )
+    return 0
+
+
+def _cmd_review_sanitized(args: argparse.Namespace) -> int:
+    from openadapt_flow.sanitized_artifact import SanitizationError, serve_review
+
+    try:
+        serve_review(
+            Path(args.original),
+            Path(args.path),
+            port=args.port,
+            open_browser=not args.no_open,
+        )
+    except SanitizationError as e:
+        print(f"review failed: {e}")
+        return 1
+    return 0
+
+
+def _cmd_approve_sanitized(args: argparse.Namespace) -> int:
+    from openadapt_flow.sanitized_artifact import SanitizationError, approve_derivative
+
+    try:
+        approval = approve_derivative(
+            Path(args.path), source=Path(args.original), reviewer=args.reviewer
+        )
+    except SanitizationError as e:
+        print(f"approval failed: {e}")
+        return 1
+    print(
+        "Approved immutable archive "
+        f"sha256={approval['approved_derivative_sha256']} "
+        f"size={approval['approved_archive_size_bytes']} bytes."
+    )
+    return 0
+
+
+def _cmd_materialize_approved(args: argparse.Namespace) -> int:
+    from openadapt_flow.sanitized_artifact import (
+        SanitizationError,
+        materialize_approved_derivative,
+    )
+
+    try:
+        approval = materialize_approved_derivative(
+            Path(args.archive),
+            approval=Path(args.approval),
+            destination=Path(args.out),
+            expected_archive_sha256=args.expect_archive_sha256,
+        )
+    except SanitizationError as e:
+        print(f"materialize failed: {e}")
+        return 1
+    print(
+        f"Materialized the approved derivative into {args.out}; "
+        f"reviewer={approval['reviewer']} "
+        f"sha256={approval['approved_derivative_sha256']}."
+    )
+    return 0
+
+
+def _cmd_report_break(args: argparse.Namespace) -> int:
+    """Emit a PHI-free break diagnostic from a halted run's ``report.json``.
+
+    Reads ``run_dir/report.json`` (``RunReport.halt`` / ``HaltObservation``) —
+    halt is read from the report, NOT a process exit code — then builds a
+    closed-schema summary from bounded counts and enums only. Free text,
+    screenshots, record values, and report/effect hashes never enter the
+    request. The recording never leaves the machine.
+    """
+    from openadapt_flow.hosted import HostedError, report_break
+
+    try:
+        result = report_break(
+            args.run_dir,
+            workflow_id=args.workflow_id,
+            host=args.host,
+            token=args.token,
+            deployment_kind=args.deployment_kind,
+            org_id=args.org_id,
+            destination_kind=args.destination_kind,
+            trusted_hosts=args.trusted_host,
+        )
+    except HostedError as e:
+        print(f"report-break failed: {e}")
+        return 1
+    if not result.get("emitted"):
+        if result.get("local_only"):
+            print(f"Break kept LOCAL-ONLY: {result.get('reason')}")
+        else:
+            print(f"Nothing emitted: {result.get('reason')}")
+        return 0
+    print(
+        f"Break reported (run_id={result.get('run_id')}, "
+        f"halt_id={result.get('halt_id')}, status={result.get('status')})."
+    )
+    if result.get("teach_url"):
+        print(f"Teach: {result['teach_url']}")
+    return 0
+
+
+def _cmd_report_run(args: argparse.Namespace) -> int:
+    """Emit a PHI-free SUCCESS summary from a completed run's ``report.json``.
+
+    The success counterpart of ``report-break`` (same endpoint, same paired
+    ingest credential, same fail-closed PHI boundary): posts a schema-minimal
+    summary — validated enums and bounded counts/durations, never record values
+    or resolved-effect fingerprints — to ``/api/runs/ingest-report`` so the
+    control plane can show locally reported runs. The recording never leaves
+    the machine, and self-reported rows are not a billing meter.
+    """
+    if getattr(args, "receipt", None) is not None:
+        return _emit_local_receipt(args)
+
+    from openadapt_flow.hosted import HostedError, report_run
+
+    try:
+        result = report_run(
+            args.run_dir,
+            workflow_id=args.workflow_id,
+            host=args.host,
+            token=args.token,
+            deployment_kind=args.deployment_kind,
+            org_id=args.org_id,
+            backend=args.backend,
+            destination_kind=args.destination_kind,
+            trusted_hosts=args.trusted_host,
+        )
+    except HostedError as e:
+        print(f"report-run failed: {e}")
+        return 1
+    if not result.get("emitted"):
+        if result.get("local_only"):
+            print(f"Run summary kept LOCAL-ONLY: {result.get('reason')}")
+        else:
+            print(f"Nothing emitted: {result.get('reason')}")
+        return 0
+    duplicate = " (already reported)" if result.get("duplicate") else ""
+    print(
+        f"Run summary reported (run_id={result.get('run_id')}, "
+        f"status={result.get('status')}){duplicate}."
+    )
+    return 0
+
+
+def _emit_local_receipt(args: argparse.Namespace) -> int:
+    """Write a LOCAL, allow-listed run receipt. No network, ever.
+
+    Only a complete governed VERIFIED run may claim the success rail, so a
+    legacy unclassified or ``COMPLETED_UNVERIFIED`` run emits nothing. The
+    free tutorial can now REACH VERIFIED with real effect evidence, so the
+    artifact this gate protects is finally producible without a hosted account.
+
+    The receipt is built additively from the closed allow-list in
+    ``openadapt_flow.receipt``; the rich local ``REPORT.md`` -- screenshots,
+    typed values, OCR identity text, parameters -- is never the source.
+    """
+    from openadapt_flow.ir import RunReport
+    from openadapt_flow.receipt import ReceiptError, build_receipt, write_receipt
+
+    run_dir = Path(args.run_dir)
+    report_path = run_dir / "report.json"
+    if not report_path.is_file():
+        print(f"report-run failed: no report.json in {run_dir} — nothing to report.")
+        return 1
+    try:
+        report = RunReport.model_validate_json(report_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        print("report-run failed: report.json is unreadable or invalid")
+        return 1
+
+    success_rail_eligible = report.success and report.execution_outcome == "VERIFIED"
+    if not success_rail_eligible:
+        print(
+            "Nothing emitted: run is not VERIFIED; only complete governed "
+            "VERIFIED successes may use the success rail"
+        )
+        return 0
+
+    if not args.production:
+        from openadapt_flow.cli_hints import command
+
+        print(
+            "report-run REFUSED: --production is required because a saved "
+            f"report cannot prove synthetic provenance. Run `{command('tutorial')}` "
+            "to emit the bundled reference receipt directly."
+        )
+        return 2
+    try:
+        receipt = build_receipt(report)
+    except ReceiptError as e:
+        print(f"report-run failed: {e}")
+        return 1
+    paths = write_receipt(receipt, Path(args.receipt))
+    print("Receipt written (LOCAL ONLY, nothing was uploaded):")
+    for path in (paths["png"], paths["json"], paths["markdown"]):
+        print(f"  {path}")
+    from openadapt_flow.records.run import write_sealed_reads
+
+    records_path = write_sealed_reads(report, paths["json"])
+    if records_path is not None:
+        print(f"  {records_path} (values read, Seal pointers to this receipt)")
+    print(
+        "\nEvery byte that would leave this machine is in receipt.json. "
+        "Publishing is a separate, explicit step."
+    )
+    print(
+        "This receipt is marked `production`. Review it, then use the "
+        "sanitize / review-sanitized / approve-sanitized flow before it "
+        "leaves your trust boundary."
+    )
+    return 0
+
+
+def _maybe_report_break(run_dir: Path, report) -> None:
+    """Opt-in post-run hook: emit a break diagnostic when a run halts.
+
+    Off by default and fully best-effort — it only fires when BOTH
+    ``OPENADAPT_FLOW_HOSTED_WORKFLOW_ID`` is set (the hosted workflow id this
+    bundle maps to) and the run carries a halt. Any failure is swallowed so the
+    hook NEVER changes the run's outcome or exit code (WRAP-not-rewrite).
+    """
+    import os
+
+    workflow_id = os.environ.get("OPENADAPT_FLOW_HOSTED_WORKFLOW_ID")
+    attention_outcomes = {
+        "COMPLETED_UNVERIFIED",
+        "HALTED",
+        "FAILED",
+        "ROLLED_BACK",
+    }
+    if not workflow_id or (
+        getattr(report, "halt", None) is None
+        and getattr(report, "execution_outcome", None) not in attention_outcomes
+    ):
+        return
+    try:
+        from openadapt_flow.hosted import report_break
+
+        result = report_break(
+            run_dir,
+            workflow_id=workflow_id,
+            deployment_kind=os.environ.get("OPENADAPT_FLOW_DEPLOYMENT_KIND", "cloud"),
+            org_id=os.environ.get("OPENADAPT_FLOW_ORG_ID"),
+        )
+        if result.get("emitted"):
+            print(f"Break reported to hosted control plane (workflow {workflow_id}).")
+    except Exception as e:  # noqa: BLE001 — a diagnostic hook must never fail a run
+        print(f"(break report skipped: {e})")
+
+
+def _maybe_report_run(
+    run_dir: Path,
+    report,
+    args=None,
+    *,
+    backend_kind: Optional[str] = None,
+) -> None:
+    """Opt-in post-run hook: emit a PHI-free VERIFIED summary (the L0 rail).
+
+    NEVER auto-uploads: it fires only when the operator explicitly opted in —
+    ``run --report`` on this invocation, or ``OPENADAPT_FLOW_REPORT_RUN=1``
+    in the environment/config — and the run SUCCEEDED. Fully best-effort:
+    any failure is swallowed so the hook never changes the run's outcome or
+    exit code (mirrors ``_maybe_report_break``).
+    """
+    import os
+
+    opted_in = bool(getattr(args, "report", False)) or os.environ.get(
+        "OPENADAPT_FLOW_REPORT_RUN", ""
+    ).lower() in ("1", "true", "yes")
+    execution_outcome = getattr(report, "execution_outcome", None)
+    success_rail_eligible = bool(getattr(report, "success", False)) and (
+        execution_outcome is None or execution_outcome == "VERIFIED"
+    )
+    if not opted_in or not success_rail_eligible:
+        return
+    try:
+        from openadapt_flow.hosted import report_run
+
+        result = report_run(
+            run_dir,
+            workflow_id=os.environ.get("OPENADAPT_FLOW_HOSTED_WORKFLOW_ID"),
+            # Only the closed backend token crosses this PHI-free rail. Window
+            # owner/title/readiness hints remain local bundle configuration.
+            backend=backend_kind or getattr(args, "backend", None),
+        )
+        if result.get("emitted"):
+            print(
+                "Run summary reported to hosted control plane "
+                f"(run_id={result.get('run_id')})."
+            )
+        elif result.get("local_only"):
+            print(f"(run summary kept LOCAL-ONLY: {result.get('reason')})")
+    except Exception as e:  # noqa: BLE001 — a reporting hook must never fail a run
+        print(f"(run summary report skipped: {e})")
+
+
+def _maybe_attest_pre_state(run_dir: Path, args=None) -> None:
+    """Opt-in pre-actuation hook: snapshot the system of record for attest.
+
+    Delegates to :mod:`openadapt_flow.attest_bridge` (a silent no-op without
+    ``--attest-contract`` / ``OPENADAPT_FLOW_ATTEST_CONTRACT``). Wrapped so
+    even an import failure cannot affect the run (WRAP-not-rewrite, mirrors
+    ``_maybe_report_break``).
+    """
+    try:
+        from openadapt_flow.attest_bridge import maybe_capture_pre_state
+
+        maybe_capture_pre_state(run_dir, args)
+    except Exception as e:  # noqa: BLE001 — a proof hook must never fail a run
+        print(f"(attest pre-state capture skipped: {e})")
+
+
+def _maybe_attest_run(run_dir: Path, report, args=None) -> None:
+    """Opt-in post-run hook: verify the claimed effect via openadapt-attest.
+
+    Delegates to :mod:`openadapt_flow.attest_bridge`, which lazy-imports the
+    separate ``openadapt_attest`` sidecar and degrades to one printed line
+    when it is not installed. Wrapped so no exception can ever change the
+    run's outcome, report, or exit code (mirrors ``_maybe_report_run``).
+    """
+    try:
+        from openadapt_flow.attest_bridge import maybe_attest_run
+
+        maybe_attest_run(run_dir, report, args)
+    except Exception as e:  # noqa: BLE001 — a proof hook must never fail a run
+        print(f"(attest receipt skipped: {e})")
+
+
+def _cmd_teach(args: argparse.Namespace) -> int:
+    """Self-serve HALT -> LEARN -> RESOLVE for a halted run + a fix demo.
+
+    Drives the governed halt->learn loop (induce the operator resolution as a
+    guarded exception branch, gate it, validate it on held-out coverage) and
+    writes an UPDATED bundle ONLY when it promotes. On a governed refusal
+    (underdetermined or unsafe correction) nothing is written, the base bundle
+    stays halting, and this exits nonzero.
+    """
+    from openadapt_flow.learning.teach import TeachError, teach
+
+    try:
+        result = teach(
+            Path(args.run_dir),
+            Path(args.fix),
+            Path(args.out),
+            bundle=Path(args.bundle),
+            skill_id=args.skill_id,
+            library_dir=Path(args.library) if args.library else None,
+        )
+    except TeachError as e:
+        print(f"teach cannot run: {_refusal_text(args, e)}")
+        return 2
+
+    print(result.summary())
+    if result.promoted:
+        from openadapt_flow.cli_hints import command
+
+        print(
+            "\nLEARNED a repair candidate. Nothing has replayed it yet. Replay it "
+            "where the run stopped before you rely on it:"
+            f"\n    {command('replay')} {args.out}"
+        )
+        return 0
+    print(
+        "\nREFUSED (governed): nothing was promoted and the base bundle is "
+        "unchanged, so it still stops here. The reason is above."
+    )
+    return 1
+
+
+def _cmd_teach_branch(args: argparse.Namespace) -> int:
+    """Learn one guarded branch from two or more resolved halts."""
+    from openadapt_flow.learning.branch_teach import BranchExample, teach_branch
+    from openadapt_flow.learning.teach import TeachError
+
+    try:
+        result = teach_branch(
+            [BranchExample(run_dir=Path(r), fix=Path(f)) for r, f in args.example],
+            Path(args.out),
+            bundle=Path(args.bundle),
+            negatives=[Path(n) for n in args.normal_run or []],
+            skill_id=args.skill_id,
+            library_dir=Path(args.library) if args.library else None,
+        )
+    except TeachError as e:
+        print(f"teach-branch cannot run: {_refusal_text(args, e)}")
+        return 2
+    print(result.summary())
+    return 0 if result.promoted else 1
+
+
+def _cmd_repair(args: argparse.Namespace) -> int:
+    """Governed repair promotion lifecycle (see docs/REPAIR_LIFECYCLE.md).
+
+    candidate -> reviewed -> replay_passed -> fault_passed -> approved ->
+    staged -> canary -> active, with hard fail-closed gates between states,
+    human-only approval, atomic hash-verified activation, a bounded
+    self-halting canary, and one-command rollback.
+    """
+    from openadapt_flow.repair.cli import run_repair_command
+
+    return run_repair_command(args)
+
+
+def _add_browser_session_flags(p: argparse.ArgumentParser) -> None:
+    """Add the attached signed-in browser flags to a run-shaped subparser."""
+
+    p.add_argument(
+        "--browser-cdp-endpoint",
+        default=None,
+        metavar="URL",
+        help=(
+            "Run in an already-running, signed-in local Chromium through its "
+            "loopback DevTools endpoint (for example, http://127.0.0.1:9222) "
+            "instead of launching a new, signed-out browser. The run binds the "
+            "one open tab on the --url origin, starts from the screen it shows, "
+            "and never navigates or closes the browser. Overrides "
+            "backend.browser_cdp_endpoint from --config."
+        ),
+    )
+    p.add_argument(
+        "--browser-page-url",
+        default=None,
+        metavar="URL",
+        help=(
+            "Exact current URL of the tab to run in, when more than one open "
+            "tab has the --url origin. Requires --browser-cdp-endpoint."
+        ),
+    )
+
+
+def _add_surface_flags(p: argparse.ArgumentParser) -> None:
+    """Add ``--surface NAME=KIND[:TARGET]`` (multi-surface bundles)."""
+
+    p.add_argument(
+        "--surface",
+        action="append",
+        default=None,
+        metavar="NAME=KIND[:TARGET]",
+        help=(
+            "Multi-surface bundles: bind a backend to the backend surface NAME "
+            "(repeatable). KIND defaults to the kind the bundle declares; "
+            "TARGET fills that kind's target (web: URL, windows: agent URL, "
+            "macos: app, linux: app, rdp: host, citrix: client window). "
+            "NAME=TARGET alone is accepted. Other fields go in the config's "
+            "surfaces: map. Browser tabs and popups need no binding. See "
+            "docs/MULTI_SURFACE.md."
+        ),
+    )
+
+
+def _add_backend_flags(p: argparse.ArgumentParser) -> None:
+    """Add the backend-selector flags (``--backend`` + targets) to a subparser.
+
+    These override the ``backend`` section of a deployment ``--config``.
+    There is no universal browser default: ``record`` with no ``--backend``
+    and no ``--url`` captures on this OS; ``--url`` without ``--backend``
+    still selects web. Production profiles still require an explicit target.
+    """
+    p.add_argument(
+        "--backend",
+        choices=["web", "windows", "macos", "linux", "rdp", "citrix"],
+        default=None,
+        help=(
+            "Backend to drive: 'web' (Playwright/Chromium), 'windows' "
+            "(native Windows via the WAA HTTP agent at replay), 'macos' (one "
+            "native Mac app window), 'linux' (one exact AT-SPI app window at "
+            "replay), 'rdp' (pixel-only network or local remote desktop), or "
+            "'citrix' (the local "
+            "Citrix Workspace window; its owner defaults by host OS and a "
+            "configured rdp_window may override it). Overrides backend.kind "
+            "from --config. Omit on record to capture on this OS, or pass "
+            "--url to record the browser."
+        ),
+    )
+    p.add_argument(
+        "--agent-url",
+        default=None,
+        metavar="URL",
+        help=(
+            "Base URL of the in-guest Windows (WAA) agent for --backend windows "
+            "(e.g. http://localhost:5001). Replay/run only: desktop record "
+            "refuses this flag because local Capture cannot bind to a WAA "
+            "endpoint. Overrides backend.agent_url."
+        ),
+    )
+    p.add_argument(
+        "--macos-app",
+        default=None,
+        metavar="APP",
+        help=(
+            "Owner application for --backend macos (e.g. TextEdit). During "
+            "record this scopes Capture to that local app window; during "
+            "replay/run it overrides backend.macos_app."
+        ),
+    )
+    p.add_argument(
+        "--macos-window-title",
+        default=None,
+        metavar="TITLE",
+        help=(
+            "Window-title substring for --backend macos. Ambiguous matches "
+            "are refused. During record this scopes Capture; during replay/run "
+            "it overrides backend.macos_window_title."
+        ),
+    )
+    p.add_argument(
+        "--linux-app",
+        default=None,
+        metavar="APP",
+        help=(
+            "Exact AT-SPI application name for --backend linux (e.g. gedit). "
+            "Replay/run only: the current Capture path records the local Linux "
+            "desktop and refuses this flag. Overrides backend.linux_app."
+        ),
+    )
+    p.add_argument(
+        "--linux-window-title",
+        default=None,
+        metavar="TITLE",
+        help=(
+            "Exact top-level window title for --backend linux. Zero or "
+            "multiple matches are refused. Replay/run only: the current "
+            "Capture path records the local Linux desktop and refuses this "
+            "flag. Overrides backend.linux_window_title."
+        ),
+    )
+    p.add_argument(
+        "--linux-allow-physical-input",
+        action="store_true",
+        help=(
+            "Explicitly allow window-bound X11 pointer/keyboard fallback for "
+            "--backend linux replay/run when native AT-SPI actuation is "
+            "unavailable. Record refuses this replay-only flag."
+        ),
+    )
+    p.add_argument(
+        "--rdp-host",
+        default=None,
+        metavar="HOST",
+        help=(
+            "RDP host/IP for --backend rdp (network RDP via FreeRDP). Overrides "
+            "backend.rdp_host. Replay/run only: record cannot connect local "
+            "Capture to this endpoint. Record inside the remote session, or "
+            "capture a local client with --window/--rdp-window."
+        ),
+    )
+    p.add_argument(
+        "--rdp-window",
+        default=None,
+        metavar="OWNER",
+        help=(
+            "Exact local remote-display window owner/process for --backend "
+            "rdp or citrix. On Windows this is the process basename (for "
+            "example wfica32); on macOS it is the app owner (for example "
+            "'Citrix Viewer'). During record it also scopes local Capture to "
+            "that window; during replay/run it overrides backend.rdp_window."
+        ),
+    )
+    p.add_argument(
+        "--rdp-window-title",
+        default=None,
+        metavar="TITLE",
+        help=(
+            "Exact local remote-display window title used to disambiguate "
+            "multiple matching RDP/Citrix client windows. During record it "
+            "also scopes local Capture; during replay/run it overrides "
+            "backend.rdp_window_title."
+        ),
+    )
+    p.add_argument(
+        "--rdp-readiness-text",
+        default=None,
+        metavar="TEXT",
+        help=(
+            "Stable text that must be visible in the current remote frame "
+            "before input. Required for governed Citrix `run`; overrides "
+            "backend.rdp_readiness_text."
+        ),
+    )
+    p.add_argument(
+        "--allow-surface-override",
+        action="store_true",
+        help=(
+            "Explicitly permit executing a workflow on a DIFFERENT surface "
+            "than the one it was recorded/qualified on (Workflow.surface). "
+            "Off by default: a cross-surface run is refused. The override is "
+            "recorded in the run report (surface_override) as compatibility "
+            "evidence; it is never silent."
+        ),
+    )
+
+
+def _add_approver_key_flags(p: argparse.ArgumentParser) -> None:
+    p.add_argument(
+        "--approver-key",
+        default=None,
+        help=(
+            "The person's encrypted approver key (jit keygen; on the approver "
+            "roster via jit approver init or add). Its passphrase comes from "
+            "OPENADAPT_JIT_KEY_PASSPHRASE. A person's approval is signed with "
+            "it; without it the approval is refused"
+        ),
+    )
+    p.add_argument(
+        "--key-dir",
+        default=None,
+        help="Key directory with the approver roster (default "
+        "$OPENADAPT_JIT_KEY_DIR or ~/.openadapt/jit)",
+    )
+    p.add_argument(
+        "--approver-root",
+        default=None,
+        metavar="HEX",
+        help=(
+            "The root approver key (64 hex) this run trusts: a person's answer "
+            "counts only when its signer is on the signed approver roster this "
+            "key vouches for. Also set by the deployment config's "
+            "approvers.root_public_key or OPENADAPT_APPROVER_ROOT; without one, "
+            "a person's answer is refused"
+        ),
+    )
+
+
+def _add_approval_flags(p: argparse.ArgumentParser) -> None:
+    """Add the per-item approval flags to ``run``, ``resume`` and ``run-case``."""
+
+    p.add_argument(
+        "--approver-root",
+        default=None,
+        metavar="HEX",
+        help=(
+            "The root approver key (64 hex) this run trusts: a person's answer "
+            "counts only when its signer is on the signed approver roster this "
+            "key vouches for. Also set by the deployment config's "
+            "approvers.root_public_key or OPENADAPT_APPROVER_ROOT; without one, "
+            "a person's answer is refused"
+        ),
+    )
+    p.add_argument(
+        "--key-dir",
+        default=None,
+        help=(
+            "Key directory with the signed approver roster (approvers.json) that "
+            "approvals are checked against; use the one you approved with "
+            "(default $OPENADAPT_JIT_KEY_DIR or ~/.openadapt/jit)"
+        ),
+    )
+    p.add_argument(
+        "--approver-policy",
+        default=None,
+        metavar="FILE",
+        help=(
+            "A person-signed approver grant (openadapt-flow approver-grant "
+            "sign): which agents or systems may answer which classes of save, "
+            "until when. Without a grant that verifies against the signer "
+            "registry, only a person may answer; an unsigned or tampered file "
+            "gives no authority. A clinical_write save takes a non-person "
+            "approver only when the grant's policy pins an opt-in."
+        ),
+    )
+    p.add_argument(
+        "--started-by",
+        default=None,
+        metavar="ID",
+        help=(
+            "The agent or system that started this run (opaque id). It can "
+            "never answer this run's saves. openadapt-agent sets it."
+        ),
+    )
+    p.add_argument(
+        "--approver-webhook",
+        default=None,
+        metavar="URL",
+        help=(
+            "Ask this https endpoint (the customer's approver agent or system) "
+            "about each waiting save, with HMAC-signed, PHI-free messages. The "
+            "secret is read from OPENADAPT_APPROVER_WEBHOOK_SECRET. A person can "
+            "still answer in Desktop. Needs --approver-webhook-id and a policy "
+            "that allows the approver's kind."
+        ),
+    )
+    p.add_argument(
+        "--approver-webhook-id",
+        default=None,
+        help="The webhook approver's opaque id, such as system:acme-approvals",
+    )
+    p.add_argument(
+        "--approver-webhook-kind",
+        choices=["agent", "system"],
+        default="system",
+        help="Whether the webhook approver is an agent or a system (default system)",
+    )
+
+    p.add_argument(
+        "--approval-mode",
+        choices=["each_item", "problems_only", "not_gated"],
+        default=None,
+        help=(
+            "Per-item approval before each consequential save. each_item (the "
+            "default for every run): the run waits "
+            "before every save until a person approves it in Desktop's Run it "
+            "(see `item-approval`). problems_only: only problems go to a "
+            "person; until a switch record is configured, every save still "
+            "asks. not_gated: no per-item pause, recorded in the report (the "
+            "hosted runner, Execute and MCP callers). Overrides "
+            "runtime.approval_mode. A resume always keeps the run's own mode."
+        ),
+    )
+    p.add_argument(
+        "--approval-wait",
+        type=float,
+        default=None,
+        metavar="SECONDS",
+        help=(
+            "How long the run waits for a person's answer before it stops "
+            "before the save (default 900, at most 14400). An answer given "
+            "later can still be used by `resume`."
+        ),
+    )
+
+
+def _add_deployment_flags(
+    p: argparse.ArgumentParser, *, worklist: bool = False
+) -> None:
+    """Add the shared deployment-wiring flags (config + effects + actuation +
+    durable, optionally a worklist) to a replay-family subparser."""
+    p.add_argument(
+        "--config-sha256",
+        default=None,
+        metavar="HEX",
+        help=(
+            "The SHA-256 of --config's bytes. Flow opens the file once (not "
+            "through a symlink; it must be a regular file), refuses it if the "
+            "digest differs, and from then on parses only those bytes whenever "
+            "this command loads that path, so replacing the file, or a symlink "
+            "put in its place, changes nothing"
+        ),
+    )
+    p.add_argument(
+        "--config",
+        default=None,
+        metavar="YAML",
+        help=(
+            "Deployment config YAML wiring backend / actuation / effects / "
+            "runtime / policy (see docs/deployment.example.yaml). Direct flags "
+            "below override individual fields."
+        ),
+    )
+    p.add_argument(
+        "--effects-kind",
+        choices=["none", "rest", "fhir", "sql", "file", "document-hash"],
+        default=None,
+        help=(
+            "System-of-record EffectVerifier to wire so consequential writes "
+            "are verified against the real record (not the screen). rest "
+            "needs --effects-records-path; the fhir/sql/file kinds need their "
+            "config fields (resource_type and field_paths, sql_query, root, "
+            "...) from a --config deployment YAML"
+        ),
+    )
+    p.add_argument(
+        "--effects-base-url",
+        default=None,
+        help="Base URL for the rest / fhir effect verifier",
+    )
+    p.add_argument(
+        "--effects-records-path",
+        default=None,
+        help="Path whose GET returns the app's records (rest effect verifier)",
+    )
+    p.add_argument(
+        "--effects-root",
+        default=None,
+        help="Document-store root for the document-hash effect verifier",
+    )
+    p.add_argument(
+        "--api-actuator",
+        action="store_true",
+        help=(
+            "Wire the API/tool actuation tier: a step carrying an ApiBinding is "
+            "performed via the API (deterministic, $0) and confirmed by the "
+            "effect verifier, skipping the GUI"
+        ),
+    )
+    p.add_argument(
+        "--api-base-url",
+        default=None,
+        help="Base URL for the API actuator (implies --api-actuator)",
+    )
+    p.add_argument(
+        "--durable",
+        action="store_true",
+        help=(
+            "Enable the Tier-3 durable runtime: checkpoint each verified step "
+            "and durably PAUSE on halt, so the run is resumable via `resume` "
+            "(never re-performing a confirmed write)"
+        ),
+    )
+    if worklist:
+        p.add_argument(
+            "--worklist",
+            action="append",
+            metavar="[RELATION=]FILE",
+            help=(
+                "CSV/JSON worklist of parameter rows driving a PROGRAM bundle's "
+                "loop over a relation (repeatable). 'RELATION=FILE' binds the "
+                "file to that relation; a bare 'FILE' binds to the program's "
+                "sole loop relation."
+            ),
+        )
+        p.add_argument(
+            "--workers",
+            type=int,
+            default=None,
+            metavar="N",
+            help=(
+                "Run a worklist program's items on N workers at once, each in "
+                "its own signed-in session (docs/THROUGHPUT.md). The deployment "
+                "must declare worklist.max_workers >= N, one account per "
+                "worker, and items_independent: true. Each item is claimed "
+                "once; a halt on any worker stops new items on all of them."
+            ),
+        )
+        p.add_argument(
+            "--readback-window",
+            type=int,
+            default=None,
+            metavar="K",
+            help=(
+                "Let a worker start its next item while up to K earlier saves "
+                "still wait for their system-of-record read-back (default: "
+                "worklist.readback_window, normally 0). A failed read-back "
+                "stops the run and names the items written after it."
+            ),
+        )
+
+
+def _add_attest_flags(p: argparse.ArgumentParser) -> None:
+    """Add the opt-in openadapt-attest proof-sidecar flags to a replay-family
+    subparser. Attest is a SEPARATE, privately distributed package; without it
+    these flags print a notice and do nothing (see docs/ATTEST_BRIDGE.md)."""
+    p.add_argument(
+        "--attest-contract",
+        default=None,
+        metavar="PATH",
+        help=(
+            "OPT-IN: effect-contract YAML for the openadapt-attest proof "
+            "sidecar. After the run it verifies the claimed effect against "
+            "the system of record and writes a SIGNED receipt "
+            "(attest_receipt.json) into the run directory. Never changes the "
+            "run outcome or exit code. Env fallback: "
+            "OPENADAPT_FLOW_ATTEST_CONTRACT"
+        ),
+    )
+    p.add_argument(
+        "--attest-sign-key",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Signing key for the attest receipt (env fallback: "
+            "OPENADAPT_FLOW_ATTEST_SIGN_KEY)"
+        ),
+    )
+    p.add_argument(
+        "--attest-audit-log",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Append-only audit log the attest sidecar writes to (env "
+            "fallback: OPENADAPT_FLOW_ATTEST_AUDIT_LOG)"
+        ),
+    )
+    p.add_argument(
+        "--attest-pre-state",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Existing pre-actuation system-of-record snapshot for delta "
+            "checks. When omitted, replay captures one into the run "
+            "directory (attest_pre_state.json) before actuation begins (env "
+            "fallback: OPENADAPT_FLOW_ATTEST_PRE_STATE)"
+        ),
+    )
+
+
+def _package_version() -> str:
+    """The installed ``openadapt-flow`` distribution version.
+
+    Falls back to the source tree's ``openadapt_flow.__version__`` when the
+    package is not installed as a distribution (e.g. run from a checkout).
+    """
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return version("openadapt-flow")
+    except PackageNotFoundError:
+        from openadapt_flow import __version__
+
+        return __version__
+
+
+QUALIFY_DEFINITION = (
+    "Qualify: before a compiled workflow may run unattended on a real system, "
+    "run it against the normal case and deliberate faults, and confirm it is "
+    "verified by reading back the system of record and halts on every fault."
+)
+QUALIFY_HELP = """The faults are a duplicated save button, a relabeled save button, a blanked
+screen, and a weak or missing check that the write happened. Certifying
+(--certify) signs the result under a policy such as clinical-write; you get a
+signed report and a certified bundle the runner will admit. A certificate
+covers only the environment the workflow was qualified in.
+
+Definitions of qualify and certify:
+  https://docs.openadapt.ai/reference/glossary/#qualify
+Certification policies (built-in clinical-write and permissive, or your own
+YAML file passed to --certify):
+  https://docs.openadapt.ai/reference/glossary/#certification-policy
+How to write verify.yaml:
+  https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/QUALIFY_A_WORKFLOW.md
+"""
+
+
+def _definition_first(parser: argparse.ArgumentParser) -> None:
+    """Make ``--help`` open with the one-line definition, before usage."""
+
+    original = parser.format_help
+
+    def format_help() -> str:
+        return QUALIFY_DEFINITION + "\n\n" + original()
+
+    parser.format_help = format_help  # type: ignore[method-assign]
+
+
+def _cmd_qualify_campaign(args: argparse.Namespace) -> int:
+    import json
+    import os
+    import time
+    from pathlib import Path
+
+    from openadapt_flow.qualify import (
+        QualifyConfigError,
+        QualifyError,
+        load_verify_config,
+        qualify,
+    )
+
+    # verify.yaml may name module:function hooks importable from here.
+    if os.getcwd() not in sys.path:
+        sys.path.insert(0, os.getcwd())
+    try:
+        config = load_verify_config(args.verify)
+    except QualifyConfigError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    certify = (
+        config.campaign.policy if args.certify == "__from_verify__" else args.certify
+    )
+    run_params = None
+    if args.run_params:
+        run_params = json.loads(Path(args.run_params).read_text())
+        if not isinstance(run_params, dict):
+            print("--run-params must hold a JSON object", file=sys.stderr)
+            return 2
+    bundle = Path(args.bundle)
+    out = (
+        Path(args.out)
+        if args.out
+        else Path("runs")
+        / f"qualify-{bundle.resolve().name}-{time.strftime('%Y%m%d-%H%M%S')}"
+    )
+    try:
+        result = qualify(
+            bundle,
+            config,
+            out=out,
+            cases=args.cases,
+            trials=args.trials,
+            certify=certify,
+            run_params=run_params,
+            campaign_id=args.campaign_id,
+        )
+    except QualifyConfigError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    except QualifyError as exc:
+        print(f"qualify REFUSED: {exc}\nEvidence so far: {out}", file=sys.stderr)
+        return 1
+    if not result.passed and result.partial:
+        print(
+            f"\nqualify PARTIAL: {len(result.rows)} trial(s) behaved as required in "
+            f"{result.timing['campaign_wall_s']} s; qualifying needs all six cases."
+        )
+        return 0
+    verdict = "PASS" if result.passed else "FAIL"
+    print(
+        f"\nqualify {verdict}: {len(result.rows)} trial(s) in {result.timing['campaign_wall_s']} s"
+    )
+    if result.lookup is not None:
+        pixels = result.lookup.pixels_only
+        print(
+            f"Surface: {result.lookup.surface}; lookups used: "
+            f"{', '.join(result.lookup.capabilities_used)}. Pixels-only pass "
+            f"({'gate' if pixels.role == 'gate' else 'informational'}): "
+            f"{pixels.rate_text()}."
+        )
+        common = pixels.common_failure()
+        if common:
+            print(f"Most common pixels-only failure: {common}")
+    if result.certified:
+        print(f"Certified under {result.policy}. Bundle: {result.bundle_dir}")
+    elif certify is None:
+        print("Not certified (pass --certify to sign the result under a policy).")
+    print(f"Report: {result.out / 'QUALIFICATION.md'}")
+    return 0 if result.passed else 1
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Build the top-level argument parser."""
+    from openadapt_flow.cli_hints import command
+
+    parser = argparse.ArgumentParser(
+        prog="openadapt-flow",
+        description=(
+            "Record a task and compile it into a program that runs on "
+            "this computer. With a record check configured, a governed run "
+            "confirms each save by reading the record back, and a run that "
+            "can't confirm a save stops and asks a person. When the screen "
+            "changes, it finds the same field again or stops, and a lasting fix "
+            "needs a person's approval."
+        ),
+        epilog=(
+            f"New here? Run '{command('demo')}' to see a checked run and a "
+            "stopped run side by side on one page."
+        ),
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {_package_version()}",
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser(
+        "demo",
+        help=(
+            "See the proof in one command: a checked run and a run whose save "
+            "fails, side by side on one page (fake clinic data, no AI calls)"
+        ),
+        description=(
+            "Run the bundled tutorial twice on a fake clinic app: once with a "
+            "normal save, and once with the save set to fail on the server. "
+            "Writes one self-contained HTML "
+            "page with both final screens, the record check for each run, and "
+            "what a person sees when a run stops, and opens it when a display "
+            "is available. Exit 0 when the first run is Done and checked and "
+            "the second stopped; 1 when the pair didn't show that; 2 when the "
+            "demo refused to start or lacked evidence."
+        ),
+    )
+    p.add_argument(
+        "--out",
+        default=None,
+        help=(
+            "Folder for the page and both runs' evidence (default: "
+            "./openadapt-demo, then -2, -3, ... so an earlier demo is never "
+            "overwritten). An existing non-empty folder is refused, and so is "
+            "a folder an earlier demo used, even after it was deleted."
+        ),
+    )
+    p.add_argument(
+        "--no-open",
+        action="store_true",
+        help="Write the page but don't open it in a browser",
+    )
+    p.add_argument(
+        "--headed", action="store_true", help="Show the browser while the runs happen"
+    )
+    p.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Also print each engine stage as it runs",
+    )
+    p.set_defaults(func=_cmd_demo)
+
+    p = sub.add_parser(
+        "record",
+        help=(
+            "Record YOUR workflow interactively: a headed browser "
+            "(--backend web --url), or the operator's real local desktop input "
+            "through openadapt-capture (--backend windows/macos/linux/rdp/citrix)"
+        ),
+    )
+    p.add_argument(
+        "--url",
+        default=None,
+        help="URL of the app to record against (required for --backend web)",
+    )
+    p.add_argument(
+        "--browser-cdp-endpoint",
+        default=None,
+        metavar="URL",
+        help=(
+            "Attach the web recorder to an already-running local Chromium "
+            "browser through its loopback DevTools endpoint (for example, "
+            "http://127.0.0.1:9222). The recorder selects a tab on the "
+            "--url origin and does not launch, navigate, or close the browser."
+        ),
+    )
+    p.add_argument(
+        "--browser-page-url",
+        default=None,
+        metavar="URL",
+        help=(
+            "Exact current URL of the existing tab to record. Use this with "
+            "--browser-cdp-endpoint when more than one open tab has the "
+            "--url origin."
+        ),
+    )
+    p.add_argument("--out", required=True, help="Recording output directory")
+    p.add_argument(
+        "--secret",
+        action="append",
+        default=[],
+        metavar="FIELD",
+        help=(
+            "Mark a typed field (by name or id) as a SECRET; its value is "
+            "never persisted and is injected at replay from "
+            "OPENADAPT_FLOW_SECRET_<FIELD>. input[type=password] is always "
+            "treated as secret. Repeatable."
+        ),
+    )
+    p.add_argument(
+        "--param",
+        action="append",
+        default=[],
+        metavar="FIELD",
+        help=(
+            "Record a typed value as a PARAMETER; its demonstrated value "
+            "becomes the default, overridable at replay with --param. For "
+            "--backend web, FIELD is the field name/id. For --backend "
+            "windows/macos/linux/rdp/citrix (capture has no field identity), use "
+            "NAME=VALUE — the typed value equal to VALUE is marked as parameter "
+            "NAME. Repeatable."
+        ),
+    )
+    p.add_argument(
+        "--identifier",
+        action="append",
+        default=[],
+        metavar="FIELD|X,Y,W,H",
+        help=(
+            "Mark the RECORD-IDENTIFYING region (patient banner / MRN field) "
+            "so the compiler crops its pixels (anchor.identifier_crop) and "
+            "the pixel-compare identity tier arms on remote-display/pixel "
+            "replays (Citrix/RDP). For --backend web, FIELD is the field "
+            "name/id (repeatable; the first marked field present at each "
+            "click contributes its rect). For --backend "
+            "windows/macos/linux/rdp/citrix (a pixel capture has no field "
+            "identity), give the region once as X,Y,W,H in recording "
+            "pixels. Unmarked recordings still get automatic crops on "
+            "identity-armed pixel steps (from the OCR identity band)."
+        ),
+    )
+    p.add_argument(
+        "--task",
+        default=None,
+        help=(
+            "Task description for a desktop "
+            "(--backend windows/macos/linux/rdp/citrix) capture session "
+            "(stored in the recording metadata)."
+        ),
+    )
+    p.add_argument(
+        "--until-cmd",
+        default=None,
+        metavar="CMD",
+        help=(
+            "Run CMD on an interval while recording. Exit 0 stops the record. "
+            "The command is not captured as clicks. Ctrl-C still stops. "
+            "A non-zero exit keeps recording (probe failure is not done)."
+        ),
+    )
+    p.add_argument(
+        "--window",
+        default=None,
+        metavar="OWNER",
+        help=(
+            "Scope a desktop capture "
+            "(--backend windows/macos/linux/rdp/citrix) to ONE "
+            "window, recorded in that window's OWN pixel space (owner-app "
+            "substring, e.g. --window Parallels / --window 'Citrix Workspace'). "
+            "Closes the coordinate-space gap with the pixel (rdp) replay "
+            "surface. Combine with --window-title to disambiguate. "
+            "Supported on macOS and Windows hosts; refused elsewhere. "
+            "Ignored (rejected) for --backend web."
+        ),
+    )
+    p.add_argument(
+        "--window-title",
+        default=None,
+        metavar="SUBSTRING",
+        help=(
+            "Title substring to disambiguate the --window target when the owner "
+            "app has multiple windows (case-insensitive; may be used with or "
+            "without --window). The resolved title is stored in the LOCAL "
+            "recording metadata only."
+        ),
+    )
+    p.add_argument(
+        "--headless",
+        action="store_true",
+        help="Run the browser headless (scripted/CI recording)",
+    )
+    p.add_argument(
+        "--profile",
+        choices=["demo", "standard", "regulated"],
+        default=None,
+        help=(
+            "Recording posture (Section 5). standard/regulated REQUIRE an "
+            "explicit --backend (no implicit browser default in production). "
+            "demo may omit --backend: it defaults to capture on this OS "
+            "(macos/windows/linux), or to the browser when --url is given, "
+            "and prints a visible notice. Omitted: the same permissive "
+            "pre-profile default."
+        ),
+    )
+    p.add_argument(
+        "--no-encrypt",
+        action="store_true",
+        help=(
+            "Write a web recording in plaintext (recorded in "
+            "~/.openadapt/plaintext-at-rest.jsonl). Web recordings are "
+            "encrypted by default, under the configured key or a local one; "
+            "refused under OPENADAPT_FLOW_AT_REST=strict"
+        ),
+    )
+    p.add_argument(
+        "--capture-network",
+        action="store_true",
+        help=(
+            "Web only: also keep the page's requests (network.jsonl; cookies, "
+            "passwords and session tokens withheld). compile then proposes an "
+            "API step for a save it can repeat as one request; a person admits "
+            "it with 'api admit'"
+        ),
+    )
+    p.add_argument(
+        "--with-check",
+        action="store_true",
+        help=(
+            "After the save, also show how you'd check it saved (reload or "
+            "search again, open the record). Flow then asks which fields show "
+            "the values you typed and writes check.json"
+        ),
+    )
+    p.add_argument(
+        "--verify",
+        nargs="?",
+        const="",
+        default=None,
+        metavar="VERIFY_YAML",
+        help=(
+            "Read the system of record through the verifier: section of this "
+            "file (rest, sql, fhir, graphql or file) before and after the "
+            "recording, and propose the checks for what changed in "
+            "verify.proposed.yaml. Both reads go to sor_snapshots.json "
+            "(mode 0600). With no file, look the record up after you save: "
+            "that look-up becomes the proposed check"
+        ),
+    )
+    _add_backend_flags(p)
+    p.set_defaults(func=_cmd_record)
+
+    p = sub.add_parser(
+        "demo-record",
+        help="Serve MockMed and record the canonical triage demo",
+    )
+    p.add_argument("--out", required=True, help="Recording output directory")
+    p.add_argument(
+        "--note-text",
+        default="Follow-up in 2 weeks; BP recheck.",
+        help="Note text typed during the demo (recorded as a parameter)",
+    )
+    p.add_argument("--param-name", default="note", help="Parameter name for the note")
+    p.add_argument("--drift", default=None, help="Comma-separated MockMed drift modes")
+    p.add_argument("--headed", action="store_true", help="Run the browser headed")
+    p.add_argument(
+        "--record-video",
+        default=None,
+        metavar="DIR",
+        help=(
+            "OPT-IN: capture a WebM video of the recording session into DIR "
+            "(default: off; no effect on the recording written to --out)"
+        ),
+    )
+    p.set_defaults(func=_cmd_demo_record)
+
+    p = sub.add_parser(
+        "tutorial",
+        help=(
+            "Run the bundled tutorial end to end against a real local system "
+            "of record: record, compile, certify, govern, and VERIFY the write "
+            "out of band, then write a shareable local receipt"
+        ),
+    )
+    p.add_argument(
+        "--out",
+        default=None,
+        help=(
+            "Directory for the tutorial's recording, bundle, and run "
+            "(default: tutorials/tutorial-<UTC timestamp> under the current "
+            "directory)"
+        ),
+    )
+    p.add_argument(
+        "--name",
+        default=None,
+        help="Workflow name for the compiled bundle (default: local-quickstart)",
+    )
+    p.add_argument("--headed", action="store_true", help="Run the browser headed")
+    p.add_argument(
+        "--guided",
+        action="store_true",
+        help=(
+            "Presentation mode: record the demonstration yourself, then watch "
+            "a visibly paced governed replay"
+        ),
+    )
+    p.add_argument(
+        "--interactive-record",
+        action="store_true",
+        help=(
+            "Perform the tutorial demonstration yourself in a headed browser; "
+            "the browser closes after the saved record is observed"
+        ),
+    )
+    p.add_argument(
+        "--presentation-delay",
+        type=float,
+        default=None,
+        metavar="SECONDS",
+        help=(
+            "Tutorial-only pause before each scripted recording action and "
+            "replay step (0-5 seconds; guided default: 1)"
+        ),
+    )
+    p.add_argument(
+        "--no-receipt",
+        action="store_true",
+        help="Skip writing the local receipt (the run and its report are unchanged)",
+    )
+    p.add_argument(
+        "--break-it",
+        action="store_true",
+        dest="break_it",
+        help=(
+            "After the clean VERIFIED run, rerun the SAME certified bundle "
+            "against a backend that silently rejects the write AFTER the app "
+            "paints its success banner -- and watch the engine HALT instead of "
+            "believing the screen. The halted run's evidence lands in "
+            "<out>/run-broken/REPORT.md"
+        ),
+    )
+    p.set_defaults(func=_cmd_tutorial)
+
+    p = sub.add_parser("compile", help="Compile a recording into a workflow bundle")
+    p.add_argument("recording", help="Recording directory")
+    p.add_argument("--out", required=True, help="Output bundle directory")
+    p.add_argument("--name", required=True, help="Workflow name")
+    p.add_argument(
+        "--accept-params",
+        default=None,
+        metavar="NAME1,NAME2",
+        help=(
+            "Non-interactive confirm pass: accept these flagged field-label "
+            "parameter proposals as-is (comma-separated proposed names; see "
+            "param_proposals.json in the bundle). Proposals not listed stay "
+            "demonstrated constants. Unknown names fail loud."
+        ),
+    )
+    p.add_argument(
+        "--params-from",
+        default=None,
+        metavar="FILE",
+        help=(
+            "Non-interactive confirm pass: JSON decision file mapping each "
+            'proposed name to {"action": "confirm"|"rename"|"secret"|'
+            '"constant", "name": "<new name, for rename>"}. Unlisted '
+            "proposals stay constants (fail-closed)."
+        ),
+    )
+    p.add_argument(
+        "--no-confirm-params",
+        action="store_true",
+        help=(
+            "Skip the interactive parameter review even on a TTY; flagged "
+            "proposals stay demonstrated constants."
+        ),
+    )
+    p.add_argument(
+        "--pixel-verify-enabled",
+        action="store_true",
+        help=(
+            "The runtime that will run this bundle sets "
+            "runtime.pixel_verify_enabled. Lets the compiler give an unlabeled "
+            "button a pixel identifier crop as its identity check. Without it "
+            "the compiler doesn't, because a crop that can't be verified halts "
+            "an irreversible step on every run."
+        ),
+    )
+    p.set_defaults(func=_cmd_compile)
+
+    p = sub.add_parser(
+        "induce",
+        help=(
+            "Induce a parameterized PROGRAM bundle from MULTIPLE recordings "
+            "(multi-trace induction: infer params / loops / branches). Loops: "
+            "back-to-back repeats and search, open, act, return worklists, "
+            "including rows that differ; not pagination (a next-page step "
+            "between rows) or a list nested inside each row. Certified and "
+            "governed runs refuse a loop that opens each row's record by its "
+            "values (a record-selecting click) until qualification covers it. "
+            "REFUSES (nonzero exit, no bundle) when intent is "
+            "underdetermined, printing a record-next worklist of missing "
+            "demonstrations"
+        ),
+    )
+    p.add_argument(
+        "recording",
+        nargs="+",
+        help=(
+            "Two or more recording directories (or already-compiled bundle "
+            "directories) of the SAME task"
+        ),
+    )
+    p.add_argument(
+        "--out",
+        required=True,
+        help="Output program-bundle directory (written only when CERTIFIED)",
+    )
+    p.add_argument(
+        "--name",
+        default=None,
+        help="Name for the induced workflow (default: 'induced-program')",
+    )
+    p.add_argument(
+        "--held-out",
+        action="store_true",
+        help=(
+            "Also print the leave-one-out STRUCTURAL held-out coverage (needs "
+            ">= 2 traces). It compares program shape with each held-out trace, "
+            "executes nothing and checks neither identity nor effects; for a "
+            "generalization claim run held-out items with openadapt_flow."
+            "validation.behavioral_generalization"
+        ),
+    )
+    p.add_argument(
+        "--probe-on",
+        default=None,
+        metavar="DEPLOYMENT",
+        help=(
+            "Settle refused optional steps by replaying each reading (step "
+            "dropped / step kept when present) in a fresh session on the test "
+            "copy this deployment file declares (test_copy.declared: true), "
+            "scored by its reward contract's read-back. Refuses any target "
+            "not declared a test copy. See docs/PROBE_INDUCTION.md"
+        ),
+    )
+    p.add_argument(
+        "--probe-work-dir",
+        default=None,
+        help=(
+            "Keep probe bundles and run directories here (default: a "
+            "temporary directory, removed afterwards)"
+        ),
+    )
+    p.add_argument(
+        "--report",
+        default=None,
+        help="Write the induction report (JSON, every probe run included) here",
+    )
+    p.add_argument(
+        "--accept-narrated",
+        action="append",
+        default=[],
+        metavar="LOCATION@GUARD_ID",
+        help=(
+            "Accept the guard narration proposed at LOCATION, pinned by its "
+            "GUARD_ID, exactly as the report prints it (e.g. opt_2@3fa9c1d2e4b5). "
+            "A guard any recording contradicts stays refused. Repeatable; "
+            "needs --accepted-by"
+        ),
+    )
+    p.add_argument(
+        "--accepted-by",
+        default=None,
+        help="Who accepted the narrated guard(s); recorded in the program",
+    )
+    p.add_argument(
+        "--narration-model",
+        action="store_true",
+        help=(
+            "Let a compile-time model (your own Anthropic key) read narrated "
+            "sentences the built-in parser cannot. Its answer is a flagged "
+            "proposal, checked like any other; never used at run time. The "
+            "sentence is scrubbed before it is sent. See docs/NARRATION.md"
+        ),
+    )
+    p.set_defaults(func=_cmd_induce)
+
+    p = sub.add_parser(
+        "narration",
+        help=(
+            "Spoken narration for a recording: transcribe on this machine, "
+            "scrub, line up with the steps (narration.json), or show it"
+        ),
+    )
+    nsub = p.add_subparsers(dest="narration_cmd", required=True)
+    pa = nsub.add_parser(
+        "attach",
+        help=(
+            "Transcribe audio on this machine (or read a transcript), scrub it "
+            "with openadapt-privacy, and line it up with the recording's steps"
+        ),
+    )
+    pa.add_argument("recording", help="Recording directory (events.jsonl)")
+    src = pa.add_mutually_exclusive_group(required=True)
+    src.add_argument("--audio", help="16 kHz audio file (WAV, or FLAC with soundfile)")
+    src.add_argument(
+        "--transcript",
+        help="Whisper-style JSON transcript ({'segments': [{start, end, text}]})",
+    )
+    pa.add_argument(
+        "--offset",
+        type=float,
+        default=0.0,
+        help="Seconds after the recording started that the audio starts (default 0)",
+    )
+    pa.add_argument("--model", default="base", help="Whisper model (default: base)")
+    pa.add_argument(
+        "--backend",
+        default="auto",
+        help="On-device backend: auto | faster-whisper | openai-whisper",
+    )
+    pa.set_defaults(func=_cmd_narration_attach)
+    ps = nsub.add_parser("show", help="Print a recording's narration by step")
+    ps.add_argument("recording", help="Recording or bundle directory")
+    ps.set_defaults(func=_cmd_narration_show)
+
+    p = sub.add_parser(
+        "for-each",
+        help=(
+            "Author a DATA-DRIVEN LOOP bundle: wrap an existing single-"
+            "demonstration bundle's linear body in a LOOP that runs once per "
+            "record of a worklist (CSV/JSON), binding each record's columns to "
+            "the workflow's parameters. Emits a program:true bundle the runtime "
+            "executes bounded, $0, identity-gated and effect-verified per record"
+        ),
+    )
+    p.add_argument(
+        "bundle",
+        help="Existing single-demonstration bundle directory (the linear body)",
+    )
+    p.add_argument(
+        "--records",
+        required=True,
+        help=(
+            "Worklist file (.csv header names columns, or .json list of row "
+            "objects); one record = one loop iteration"
+        ),
+    )
+    p.add_argument("--out", required=True, help="Output program-bundle directory")
+    p.add_argument(
+        "--map",
+        action="append",
+        metavar="COLUMN=PARAM",
+        help=(
+            "Map a worklist COLUMN to a workflow PARAM (repeatable). Omit to map "
+            "each column to the parameter of the same name. Every column must "
+            "map to a known non-secret parameter or authoring FAILS LOUDLY."
+        ),
+    )
+    p.add_argument(
+        "--relation",
+        default="worklist",
+        help="Name of the emitted loop relation (default: 'worklist')",
+    )
+    p.add_argument(
+        "--max-iterations",
+        type=int,
+        default=1000,
+        help=(
+            "Hard fail-safe bound on iterations (default 1000); a worklist "
+            "longer than this is refused at authoring time and HALTs at run time"
+        ),
+    )
+    p.add_argument(
+        "--loop-var",
+        default=None,
+        help="Optional human label for the loop variable (reports only)",
+    )
+    p.add_argument(
+        "--name",
+        default=None,
+        help="Name for the looped workflow (default: '<body>-for-each')",
+    )
+    p.set_defaults(func=_cmd_for_each)
+
+    p = sub.add_parser(
+        "compose",
+        help=(
+            "Author a parent sequencer from named compiled child bundles and "
+            "a handoff contract. Each child stays bound to its recorded "
+            "surface. certify/run the output directory."
+        ),
+    )
+    p.add_argument(
+        "--child",
+        action="append",
+        metavar="NAME=PATH",
+        required=True,
+        help="Named compiled child bundle (repeat; at least two)",
+    )
+    p.add_argument(
+        "--handoff",
+        action="append",
+        metavar="FROM.source=TO.target",
+        help=(
+            "Verified fact copied from a predecessor effect-bound parameter "
+            "into a successor parameter. Repeatable. Missing evidence HALTs."
+        ),
+    )
+    p.add_argument(
+        "--after",
+        action="append",
+        metavar="NAME=PRED[,PRED]",
+        help=(
+            "Explicit DAG predecessors for NAME. Omit to run children in --child order."
+        ),
+    )
+    p.add_argument(
+        "--allow-halt",
+        action="append",
+        metavar="NAME=OUTCOME",
+        help=(
+            "Let NAME start when a predecessor ended OUTCOME instead of "
+            "VERIFIED (HALTED, FAILED, ...). VERIFIED is always allowed."
+        ),
+    )
+    p.add_argument("--out", required=True, help="Output composition directory")
+    p.add_argument("--name", default=None, help="Composition name")
+    p.set_defaults(func=_cmd_compose)
+
+    p = sub.add_parser(
+        "process",
+        help=(
+            "Author a ProcessContract parent from independently admitted "
+            "capabilities. Each --child needs a --admission envelope. "
+            "certify/run the output directory; replay refuses it."
+        ),
+    )
+    p.add_argument(
+        "--child",
+        action="append",
+        metavar="NAME=BUNDLE",
+        help="Named admitted child bundle pointer (repeat; at least two)",
+    )
+    p.add_argument(
+        "--spec",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Complete openadapt.process-contract/v1 JSON document. Use this "
+            "for mixed Flow, code, human, and artifact-edge contracts."
+        ),
+    )
+    p.add_argument(
+        "--admission",
+        action="append",
+        metavar="NAME=ENVELOPE",
+        help=(
+            "QualificationAdmissionEnvelope for NAME. A compiled recording "
+            "without an envelope is not an admitted capability."
+        ),
+    )
+    p.add_argument(
+        "--handoff",
+        action="append",
+        metavar="FROM.source=TO.target",
+        help=(
+            "Verified fact copied from a predecessor effect-bound parameter "
+            "into a successor parameter. Repeatable. Missing evidence HALTs."
+        ),
+    )
+    p.add_argument(
+        "--after",
+        action="append",
+        metavar="NAME=PRED[,PRED]",
+        help=(
+            "Explicit DAG predecessors for NAME. Omit to run children in --child order."
+        ),
+    )
+    p.add_argument(
+        "--allow-halt",
+        action="append",
+        metavar="NAME=OUTCOME",
+        help=(
+            "Let the parent absorb NAME ending OUTCOME instead of VERIFIED "
+            "and continue to successors without minting facts from NAME."
+        ),
+    )
+    p.add_argument(
+        "--input",
+        action="append",
+        metavar="NAME",
+        help="Parent-level parameter name (values arrive at run time)",
+    )
+    p.add_argument("--out", required=True, help="Output process-contract directory")
+    p.add_argument("--name", default=None, help="Process contract name")
+    p.set_defaults(func=_cmd_process)
+
+    p = sub.add_parser(
+        "variants",
+        help=(
+            "Author or extend a variant set: separately admitted variants of one "
+            "workflow, routed deterministically before the run"
+        ),
+    )
+    vsub = p.add_subparsers(dest="variants_command")
+    q = vsub.add_parser("author", help="Write variant-set.json from a JSON spec")
+    q.add_argument(
+        "--spec",
+        required=True,
+        help=(
+            "JSON {name, variants: [{name, bundle, admission, when}]}; paths are "
+            "relative to the spec file"
+        ),
+    )
+    q.add_argument("--out", required=True, help="Output variant-set directory")
+    q.add_argument("--name", default=None, help="Variant set name")
+    q.set_defaults(func=_cmd_variants)
+    q = vsub.add_parser(
+        "add",
+        help="Add one admitted variant, for example a repaired case promoted to a variant",
+    )
+    q.add_argument("variant_set", help="Variant-set directory")
+    q.add_argument("--variant", required=True, metavar="NAME=BUNDLE")
+    q.add_argument(
+        "--admission",
+        required=True,
+        metavar="ENVELOPE",
+        help="The bundle's own QualificationAdmissionEnvelope",
+    )
+    q.add_argument(
+        "--when-input",
+        action="append",
+        metavar="NAME=VALUE",
+        help="Input condition; repeat a name to allow several values",
+    )
+    q.add_argument("--when-theme", choices=["light", "dark"], default=None)
+    q.add_argument(
+        "--when-text",
+        action="append",
+        metavar="TEXT",
+        help="Marker that must be on the first screen (app version, tenant banner)",
+    )
+    q.add_argument(
+        "--when-no-text",
+        action="append",
+        metavar="TEXT",
+        help="Marker that must not be on the first screen",
+    )
+    q.add_argument(
+        "--derived-from",
+        default=None,
+        metavar="VARIANT",
+        help="Existing variant this repaired bundle was healed from",
+    )
+    q.set_defaults(func=_cmd_variants)
+    q = vsub.add_parser("show", help="Print a variant set")
+    q.add_argument("variant_set", help="Variant-set directory")
+    q.set_defaults(func=_cmd_variants)
+    p.set_defaults(func=_cmd_variants)
+
+    p = sub.add_parser(
+        "route",
+        help=(
+            "Show which admitted variant a variant set would run for one item "
+            "(inputs + first screen). Executes nothing."
+        ),
+    )
+    p.add_argument("variant_set", help="Variant-set directory")
+    p.add_argument("--param", action="append", metavar="K=V", help="Item input")
+    p.add_argument("--params-file", default=None, help="JSON object of item inputs")
+    p.add_argument("--first-screen", default=None, metavar="PNG")
+    p.add_argument(
+        "--url", default=None, help="Launch a browser here to read the first screen"
+    )
+    p.add_argument("--drift", default=None, help=argparse.SUPPRESS)
+    p.add_argument("--config", default=None, help="Deployment config (backend section)")
+    _add_backend_flags(p)
+    _add_browser_session_flags(p)
+    p.set_defaults(func=_cmd_route)
+
+    p = sub.add_parser(
+        "replay",
+        help=(
+            "Replay a bundle against --url, the config's backend.url, or "
+            "with --demo-app the bundled demo app"
+        ),
+    )
+    p.add_argument("bundle", help="Workflow bundle directory")
+    p.add_argument(
+        "--url",
+        default=None,
+        help="URL of the target app",
+    )
+    p.add_argument(
+        "--demo-app",
+        action="store_true",
+        help=(
+            "Serve the bundled MockMed demo app and replay against it (for a "
+            "bundle recorded on it, such as the tutorial's)"
+        ),
+    )
+    p.add_argument(
+        "--drift",
+        default=None,
+        help=(
+            "Comma-separated MockMed drift modes (theme,move,rename,modal) "
+            "to demonstrate bounded drift resolution; only with --demo-app"
+        ),
+    )
+    p.add_argument(
+        "--run-dir",
+        default=None,
+        help=(
+            "Run output directory "
+            "(default: runs/replay-<UTC timestamp> under the current "
+            "directory)"
+        ),
+    )
+    p.add_argument(
+        "--param",
+        action="append",
+        metavar="K=V",
+        help="Parameter substitution (repeatable)",
+    )
+    p.add_argument(
+        "--params-file",
+        default=None,
+        help=(
+            "JSON object of parameter bindings; keeps values out of process "
+            "arguments for managed execution"
+        ),
+    )
+    p.add_argument(
+        "--local-grounding",
+        action="store_true",
+        help=(
+            "Pixel surfaces (Citrix, RDP, VNC): find icons and unlabeled "
+            "controls again after a display-scale, zoom, font or theme change "
+            "with a local model. Look-alikes halt the step. In process, no "
+            "outbound calls; the pinned 24 MB weights are fetched once."
+        ),
+    )
+    p.add_argument(
+        "--allow-model-grounding",
+        action="store_true",
+        help=(
+            "EGRESS OPT-IN (PHI audit REM-3): permit wiring an off-box model "
+            "grounder / identity-VLM / state-verifier (a paid API or an on-prem "
+            "VLM appliance via OPENADAPT_FLOW_VLM_URL). Screenshots may leave "
+            "the box. Off by default: replay is fully local with zero outbound "
+            "calls."
+        ),
+    )
+    p.add_argument(
+        "--save-healed-to",
+        default=None,
+        help="Write the healed bundle to this directory",
+    )
+    p.add_argument("--headed", action="store_true", help="Run the browser headed")
+    p.add_argument(
+        "--record-video",
+        default=None,
+        metavar="DIR",
+        help=(
+            "OPT-IN: capture a WebM video of the replay session into DIR "
+            "(default: off; no effect on the run directory or report)"
+        ),
+    )
+    _add_backend_flags(p)
+    _add_surface_flags(p)
+    _add_browser_session_flags(p)
+    _add_deployment_flags(p, worklist=True)
+    _add_attest_flags(p)
+    p.set_defaults(func=_cmd_replay)
+
+    p = sub.add_parser(
+        "run",
+        help=(
+            "Execute a bundle under a deployment config (--config): the replay "
+            "path wired for a real deployment (backend / effects / actuation / "
+            "durable / policy) instead of the demo"
+        ),
+    )
+    p.add_argument("bundle", help="Workflow bundle directory")
+    p.add_argument(
+        "--first-screen",
+        default=None,
+        metavar="PNG",
+        help=(
+            "Variant sets only: the first screen to route on. Without it the "
+            "router reads one frame through the selected backend."
+        ),
+    )
+    p.add_argument(
+        "--profile",
+        choices=["demo", "standard", "regulated"],
+        default=None,
+        help=(
+            "Named execution posture (or runtime.profile from --config). Demo "
+            "is explicitly non-production; Standard "
+            "requires certification, durability, identity, and independently "
+            "verified consequential effects. Regulated additionally requires "
+            "encrypted bundles, strictly sealed evidence assets, and encrypted "
+            "durable checkpoints in a customer-controlled deployment. Omit only "
+            "for compatibility with a pre-profile deployment."
+        ),
+    )
+    p.add_argument(
+        "--url",
+        default=None,
+        help="Target app URL (default: backend.url from --config)",
+    )
+    p.add_argument(
+        "--run-dir",
+        default=None,
+        help="Run output directory (default: runs/replay-<UTC timestamp>)",
+    )
+    p.add_argument(
+        "--param",
+        action="append",
+        metavar="K=V",
+        help="Parameter substitution (repeatable)",
+    )
+    p.add_argument(
+        "--params-file",
+        default=None,
+        help=(
+            "JSON object of parameter bindings; keeps values out of process "
+            "arguments for managed execution"
+        ),
+    )
+    p.add_argument(
+        "--local-grounding",
+        action="store_true",
+        help=(
+            "Pixel surfaces (Citrix, RDP, VNC): find icons and unlabeled "
+            "controls again after a display-scale, zoom, font or theme change "
+            "with a local model. Look-alikes halt the step. In process, no "
+            "outbound calls; the pinned 24 MB weights are fetched once."
+        ),
+    )
+    p.add_argument(
+        "--allow-model-grounding",
+        action="store_true",
+        help=(
+            "EGRESS OPT-IN (PHI audit REM-3): permit wiring an off-box model "
+            "component (also settable via runtime.allow_model_grounding)"
+        ),
+    )
+    p.add_argument(
+        "--save-healed-to",
+        default=None,
+        help="Write the healed bundle to this directory",
+    )
+    p.add_argument("--headed", action="store_true", help="Run the browser headed")
+    p.add_argument(
+        "--record-video", default=None, metavar="DIR", help=argparse.SUPPRESS
+    )
+    p.add_argument(
+        "--hold-on-halt",
+        type=float,
+        default=0.0,
+        metavar="SECONDS",
+        help=(
+            "When a browser run halts, keep its page open for up to SECONDS "
+            "so openadapt-agent can record a repair on it (see "
+            "openadapt_flow.repair.hold). 0, the default, closes it at once. "
+            "Max 1800."
+        ),
+    )
+    from openadapt_flow.cli_self_repair import add_self_repair_flags
+
+    add_self_repair_flags(p)
+    _add_backend_flags(p)
+    _add_surface_flags(p)
+    _add_browser_session_flags(p)
+    _add_deployment_flags(p, worklist=True)
+    _add_attest_flags(p)
+    # Fail-closed admission-gate controls (see openadapt_flow.run_gate).
+    p.add_argument(
+        "--policy",
+        default=None,
+        metavar="NAME-OR-PATH",
+        help=(
+            "Certifying policy the bundle must PASS to run (default: the "
+            "deployment config's policy, else 'clinical-write')"
+        ),
+    )
+    p.add_argument(
+        "--approve-unverified-writes",
+        action="store_true",
+        help=(
+            "APPROVAL FALLBACK: explicitly approve executing writes whose "
+            "effects cannot be independently verified in this deployment (no "
+            "verifier configured). Without it such a bundle is refused"
+        ),
+    )
+    p.add_argument(
+        "--strict-templates",
+        action="store_true",
+        help=(
+            "Refuse (not just warn) when template/screenshot assets are unsealed "
+            "(plaintext at rest)"
+        ),
+    )
+    p.add_argument(
+        "--allow-unencrypted",
+        action="store_true",
+        help=(
+            "Escape hatch: permit running a bundle whose workflow.json is NOT "
+            "encrypted at rest (disables the encryption gate). Discouraged"
+        ),
+    )
+    p.add_argument(
+        "--pin-digest",
+        default=None,
+        metavar="SHA256",
+        help="Refuse unless the bundle's sealed content digest equals this",
+    )
+    p.add_argument(
+        "--pin-version",
+        default=None,
+        metavar="VERSION",
+        help="Refuse unless the bundle's compiler version equals this",
+    )
+    p.add_argument("--managed-dispatch-file", default=None, help=argparse.SUPPRESS)
+    p.add_argument(
+        "--qualification-trust",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Qualification signer trust registry for a process-contract parent. "
+            "Also OPENADAPT_QUALIFICATION_TRUST or qualification-trust.json "
+            "beside process-contract.json"
+        ),
+    )
+    p.add_argument(
+        "--execute-url",
+        default=None,
+        metavar="URL",
+        help=(
+            "HTTPS Execute v1 base URL for process children "
+            "(OPENADAPT_EXECUTE_URL). Local process run uses governed run "
+            "unless this and a bearer token are set"
+        ),
+    )
+    p.add_argument(
+        "--execute-token",
+        default=None,
+        metavar="TOKEN",
+        help=argparse.SUPPRESS,
+    )
+    p.add_argument(
+        "--execute-environment-id",
+        default=None,
+        metavar="ID",
+        help=(
+            "Execute environment_id for process children "
+            "(OPENADAPT_EXECUTE_ENVIRONMENT_ID)"
+        ),
+    )
+    p.add_argument(
+        "--code-trust",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Code-admission Ed25519 signer registry for ProcessContract v1. "
+            "Required when the contract contains a code child."
+        ),
+    )
+    p.add_argument(
+        "--code-runtime-environment-digest",
+        default=None,
+        metavar="SHA256",
+        help="Exact admitted runtime-environment digest for code children",
+    )
+    p.add_argument(
+        "--allow-trusted-code",
+        action="store_true",
+        help="Approve exact admitted code that uses the trusted_local profile",
+    )
+    p.add_argument(
+        "--process-receipt-private-key",
+        default=None,
+        metavar="PATH",
+        help="Raw 32-byte Ed25519 key for the ProcessContract v1 terminal receipt",
+    )
+    p.add_argument(
+        "--process-receipt-issuer-key-id",
+        default="runner-evidence-key",
+    )
+    p.add_argument("--process-environment-id", default="environment-local")
+    p.add_argument("--process-runner-id", default="runner-local")
+    p.add_argument(
+        "--qualification-authority-file",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Private owner-only Production qualification authority (v2 envelope "
+            "or issued openadapt.qualification-admission/v4). Required for "
+            "Standard and Regulated actuation; verified and re-read at every "
+            "input edge"
+        ),
+    )
+    p.add_argument(
+        "--dry-run",
+        "--explain",
+        dest="dry_run",
+        action="store_true",
+        help="Print the fail-closed coverage report and exit WITHOUT executing",
+    )
+    p.add_argument(
+        "--report",
+        action="store_true",
+        help=(
+            "OPT-IN: after a SUCCESSFUL run, emit the PHI-free run summary to "
+            "the paired hosted control plane (see `report-run`). Off by "
+            "default — nothing is ever uploaded without this flag (or "
+            "OPENADAPT_FLOW_REPORT_RUN=1)"
+        ),
+    )
+    p.add_argument(
+        "--cloud-execution-id",
+        default=None,
+        help=(
+            "OpenAdapt Cloud Execute execution this run belongs to (or "
+            "OPENADAPT_CLOUD_EXECUTION_ID). After a VERIFIED outcome, Cloud's "
+            "signed receipt is fetched with OPENADAPT_EXECUTE_API_KEY and "
+            "written into report.json as execute_receipt."
+        ),
+    )
+    _add_approval_flags(p)
+    p.set_defaults(func=_cmd_run)
+
+    sa = sub.add_parser(
+        "attach-seal",
+        help="Attach Cloud's signed Execute receipt (the Seal) to a VERIFIED run report",
+    )
+    sa.add_argument("run_dir", help="Run directory holding a VERIFIED report.json")
+    sa.add_argument("--execution-id", required=True, help="Cloud Execute execution id")
+    sa.add_argument(
+        "--cloud-url",
+        default=None,
+        help="Cloud base URL (or OPENADAPT_CLOUD_URL; default https://app.openadapt.ai)",
+    )
+    sa.set_defaults(func=_cmd_attach_seal)
+
+    from openadapt_flow.cli_local_seal import register as _register_local_seal
+
+    _register_local_seal(sub)
+
+    from openadapt_flow.cli_redact_report import register as _register_redact_report
+
+    _register_redact_report(sub)
+
+    from openadapt_flow.cli_no_outbound import register as _register_no_outbound
+
+    _register_no_outbound(sub)
+
+    from openadapt_flow.cli_service import register as _register_service
+
+    _register_service(sub)
+
+    p = sub.add_parser(
+        "verify-run",
+        help=(
+            "Read the system of record and rule on an effect that an agent, "
+            "script, or person claims it made; writes an unsigned "
+            "openadapt.effect-receipt/v1. The executor's own record is "
+            "hashed, never trusted"
+        ),
+    )
+    p.add_argument(
+        "--verify",
+        default=None,
+        metavar="YAML",
+        help="verify.yaml: verifier wiring and effect contract",
+    )
+    p.add_argument(
+        "--params",
+        default=None,
+        metavar="JSON",
+        help="The authorized task's values the contract binds",
+    )
+    p.add_argument(
+        "--run-record",
+        default=None,
+        metavar="JSON",
+        help="The executor's run record (needs executor_kind)",
+    )
+    p.add_argument(
+        "--authorization-ref",
+        default=None,
+        help="Opaque id of the authorization in your own system",
+    )
+    p.add_argument(
+        "--baseline",
+        default=None,
+        metavar="JSON",
+        help="Baseline captured before the executor ran",
+    )
+    p.add_argument(
+        "--capture-baseline",
+        default=None,
+        metavar="JSON",
+        help="Read the store now and write a private baseline, then exit",
+    )
+    p.add_argument(
+        "--provenance",
+        default=None,
+        metavar="JSON",
+        help=(
+            "Where each parameter came from (openadapt.param-provenance/v1, as "
+            "intake writes it). The saved record is then compared with the "
+            "source document, not only with --params"
+        ),
+    )
+    p.add_argument(
+        "--source",
+        action="append",
+        default=None,
+        metavar="FILE",
+        help="A source document the provenance cites (repeatable)",
+    )
+    p.add_argument(
+        "--out", default=None, metavar="DIR", help="Directory for effect-receipt.json"
+    )
+    p.add_argument(
+        "--check",
+        default=None,
+        metavar="JSON",
+        help="Check a signed effect receipt offline instead",
+    )
+    p.add_argument(
+        "--keys",
+        default=None,
+        metavar="JSON",
+        help="Pinned Seal key registry for --check",
+    )
+    p.add_argument(
+        "--accept-outcome",
+        action="append",
+        default=None,
+        choices=[
+            "halted_before_effect",
+            "reconciliation_required",
+            "rejected_policy",
+            "failed_platform",
+        ],
+        help=(
+            "With --check: also exit 0 for this outcome when the signature is "
+            "genuine (repeatable; no value accepts every outcome)"
+        ),
+    )
+    p.add_argument(
+        "--approver",
+        default=None,
+        metavar="JSON",
+        help="Who approved the write: {kind, id, policy_ref}; id is opaque",
+    )
+    p.add_argument(
+        "--remediates",
+        default=None,
+        metavar="RECEIPT_ID",
+        help="receipt_id of an earlier effect receipt this run remediates",
+    )
+    p.add_argument(
+        "--correlation-id",
+        default=None,
+        metavar="ID",
+        help="Your own opaque id linking this receipt to a ticket or trace",
+    )
+    p.set_defaults(func=_cmd_verify_run)
+
+    p = sub.add_parser(
+        "resume",
+        help=(
+            "Resume a durably-paused run from its last verified checkpoint "
+            "(never re-running an already-confirmed write)"
+        ),
+    )
+    p.add_argument("run_dir", help="The paused run directory (holds checkpoints)")
+    p.add_argument("--managed-dispatch-file", default=None, help=argparse.SUPPRESS)
+    p.add_argument(
+        "--qualification-authority-file",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Private owner-only Production qualification authority for the "
+            "resumed input edge"
+        ),
+    )
+    p.add_argument(
+        "--qualification-campaign-authority-file",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Private signed non-production campaign authority for a resumed "
+            "qualification input edge"
+        ),
+    )
+    p.add_argument(
+        "--url",
+        default=None,
+        help="Target app URL to rebuild a live backend (default: backend.url)",
+    )
+    p.add_argument("--headed", action="store_true", help="Run the browser headed")
+    p.add_argument(
+        "--roll-back",
+        action="store_true",
+        help=(
+            "Instead of resuming, roll the run back with its approved "
+            "compensations and prove the store matches the read from before "
+            "the run; also continues a rollback a crash interrupted"
+        ),
+    )
+    p.add_argument(
+        "--require-approval",
+        action="store_true",
+        help=(
+            "Refuse to resume unless the pending escalation is 'approved' "
+            "(see `approve`)"
+        ),
+    )
+    p.add_argument(
+        "--report",
+        action="store_true",
+        help=(
+            "After a successful resume, send the PHI-minimal local completion "
+            "summary to the paired control plane (also enabled by "
+            "OPENADAPT_FLOW_REPORT_RUN=1)"
+        ),
+    )
+    # A deployment whose effect verifier binds run parameters
+    # (effects.path_params / search_param_exprs / sql_query_params) needs the
+    # SAME params to rebuild the verifier on resume — without them the
+    # construction fails loud and the resume refuses. Mirror replay/run.
+    p.add_argument(
+        "--param",
+        action="append",
+        metavar="K=V",
+        help=(
+            "Parameter substitution (repeatable); required again on resume "
+            "when the effect-verifier config binds run parameters"
+        ),
+    )
+    p.add_argument(
+        "--params-file",
+        default=None,
+        help=(
+            "JSON object of parameter bindings; keeps values out of process "
+            "arguments for managed execution (see --param)"
+        ),
+    )
+    _add_backend_flags(p)
+    _add_browser_session_flags(p)
+    _add_deployment_flags(p)
+    _add_attest_flags(p)
+    _add_approval_flags(p)
+    p.set_defaults(func=_cmd_resume)
+
+    p = sub.add_parser(
+        "approve",
+        help=(
+            "Record an authenticated approval (approver / resolution / bundle "
+            "version) authorizing a durably-paused run to resume"
+        ),
+    )
+    p.add_argument("run_dir", help="The paused run directory (holds the escalation)")
+    p.add_argument(
+        "--approver",
+        default=None,
+        help=(
+            "Optional check: the approver id the --approver-key must be "
+            "registered as. The approval names the key's registered approver"
+        ),
+    )
+    p.add_argument(
+        "--resolution",
+        default=None,
+        help=(
+            "The chosen resolution (defaults to the pause's first proposed "
+            "option) — recorded for the audit trail"
+        ),
+    )
+    p.add_argument(
+        "--authorize-uncertain-retry",
+        action="store_true",
+        help=(
+            "After reconciling an uncertain delivery, explicitly authorize one "
+            "retry of the possibly dispatched step (ordinary approval refuses)"
+        ),
+    )
+    _add_approver_key_flags(p)
+    p.set_defaults(func=_cmd_approve)
+
+    p = sub.add_parser(
+        "item-approval",
+        help=(
+            "List, approve or decline the per-item approval requests a run is "
+            "waiting on (Desktop's Run it)"
+        ),
+    )
+    item_sub = p.add_subparsers(dest="item_approval_cmd", required=True)
+    q = item_sub.add_parser("show", help="Print the run's approval requests as JSON")
+    q.add_argument("run_dir", help="The run directory")
+    q.add_argument(
+        "--all",
+        action="store_true",
+        help="Include answered, used and expired requests",
+    )
+    q.set_defaults(func=_cmd_item_approval)
+    for verb, verb_help in (
+        ("approve", "Approve one save a person checked in Desktop's Run it"),
+        ("decline", "Don't save: decline one save with a closed reason"),
+    ):
+        q = item_sub.add_parser(verb, help=verb_help)
+        q.add_argument("run_dir", help="The run directory")
+        q.add_argument("--request-id", required=True)
+        q.add_argument(
+            "--request-sha256",
+            required=True,
+            help="The request digest from `item-approval show` that the person saw",
+        )
+        q.add_argument(
+            "--decided-by",
+            required=True,
+            help=(
+                "Who decided: 'human', or 'automation' with --delegate-kind "
+                "for an agent, system or rule the run's policy allows"
+            ),
+        )
+        q.add_argument(
+            "--route",
+            required=True,
+            help=(
+                "Where it was decided: 'desktop_run_it' for a person; "
+                "'local_cli' or 'mcp' for a delegated approver"
+            ),
+        )
+        q.add_argument(
+            "--delegate-kind",
+            choices=["agent", "system"],
+            default=None,
+            help="A delegated approver's kind. The run's approver policy must allow it",
+        )
+        q.add_argument(
+            "--delegate-id",
+            default=None,
+            help="The delegated approver's opaque id, such as agent:approver-bot",
+        )
+        q.add_argument(
+            "--on-behalf-of",
+            default=None,
+            help="The organization or person the delegated approver acts for",
+        )
+        q.add_argument(
+            "--approver-id",
+            default=None,
+            help="The approver's own OpenAdapt Cloud user id",
+        )
+        q.add_argument(
+            "--auth-method",
+            choices=["cloud_aal2", "cloud_aal1", "none"],
+            default=None,
+            help="How the approver signed in to Cloud",
+        )
+        q.add_argument(
+            "--unauthenticated",
+            action="store_true",
+            help="Desktop was signed out: record the answer without a name",
+        )
+        _add_approver_key_flags(q)
+        q.add_argument(
+            "--approver-signer",
+            choices=["stdio"],
+            default=None,
+            help=(
+                "The process that started this one holds the approver key and "
+                "signs over stdin/stdout (Desktop's Keychain key). Flow writes "
+                "one sign request line and reads one response line"
+            ),
+        )
+        q.add_argument(
+            "--approver-public-key",
+            default=None,
+            help="With --approver-signer: the registered approver key's public key (hex)",
+        )
+        q.add_argument(
+            "--approver-head",
+            default=None,
+            metavar="SEQ:SHA256",
+            help=(
+                "A roster head the answering side recorded (Desktop's Keychain): "
+                "the approver roster must extend it"
+            ),
+        )
+        if verb == "decline":
+            q.add_argument(
+                "--reason",
+                required=True,
+                choices=["wrong_values", "wrong_record", "screen_problem"],
+            )
+        q.set_defaults(func=_cmd_item_approval)
+
+    p = sub.add_parser(
+        "approver-grant",
+        help=(
+            "Sign or check a grant that lets named agents or systems answer "
+            "some saves. Only a registered person signs, at a terminal"
+        ),
+    )
+    grant_sub = p.add_subparsers(dest="approver_grant_cmd", required=True)
+    q = grant_sub.add_parser("sign", help="Sign a grant with your policy-signer key")
+    q.add_argument("grant", help="Unsigned openadapt-flow/approver-grant/v1 JSON")
+    q.add_argument("--key", required=True, help="Your encrypted policy-signer key")
+    q.add_argument("--out", required=True)
+    q.add_argument("--key-dir", default=None)
+    q.set_defaults(func=_cmd_approver_grant)
+    q = grant_sub.add_parser("verify", help="Check a signed grant against the registry")
+    q.add_argument("grant", help="Signed grant JSON")
+    q.add_argument("--key-dir", default=None)
+    q.set_defaults(func=_cmd_approver_grant)
+
+    p = sub.add_parser(
+        "teach-authorization",
+        help=(
+            "Create, sign or check a teach authorization: what a teaching agent "
+            "may do, signed by a person with their approver key"
+        ),
+    )
+    ta_sub = p.add_subparsers(dest="teach_auth_cmd", required=True)
+    q = ta_sub.add_parser("create", help="Write the unsigned statement for a spec")
+    q.add_argument(
+        "spec", help="JSON: task, purposes, origins, inputs, writes, forbidden"
+    )
+    q.add_argument("--out", required=True, help="Folder for teach-authorization.json")
+    q.add_argument("--authorizer", required=True, help="Your principal on the roster")
+    q.add_argument(
+        "--authorizer-public-key", required=True, help="Your approver key (64 hex)"
+    )
+    q.add_argument(
+        "--expires-in-hours",
+        type=float,
+        default=24.0,
+        help="How long it may be used to teach (default 24, at most 2160)",
+    )
+    q.set_defaults(func=_cmd_teach_authorization)
+    for verb, text in (
+        ("sign", "Show what the statement allows, then sign it with your approver key"),
+        ("verify", "Check a signed statement against the approver roster"),
+    ):
+        q = ta_sub.add_parser(verb, help=text)
+        q.add_argument("statement", help="teach-authorization.json or its folder")
+        q.add_argument("--key-dir", default=None, help="Holds the approver roster")
+        q.add_argument(
+            "--approver-root",
+            default=None,
+            help="The approver root to pin (default OPENADAPT_APPROVER_ROOT)",
+        )
+        if verb == "sign":
+            q.add_argument(
+                "--approver-key",
+                required=True,
+                help="Your encrypted approver key file (passphrase from "
+                "OPENADAPT_JIT_KEY_PASSPHRASE)",
+            )
+        q.set_defaults(func=_cmd_teach_authorization)
+
+    p = sub.add_parser(
+        "bench", help="Replay a bundle N times against MockMed and aggregate"
+    )
+    p.add_argument("bundle", help="Workflow bundle directory")
+    p.add_argument("--n", type=int, default=3, help="Number of iterations")
+    p.add_argument(
+        "--drift",
+        default=None,
+        help="Comma-separated drift modes forwarded to the MockMed URL",
+    )
+    p.add_argument("--run-root", required=True, help="Directory for per-iteration runs")
+    p.add_argument(
+        "--param",
+        action="append",
+        metavar="K=V",
+        help="Parameter substitution (repeatable)",
+    )
+    p.add_argument("--headed", action="store_true", help="Run the browser headed")
+    p.set_defaults(func=_cmd_bench)
+
+    p = sub.add_parser(
+        "benchmark",
+        help=(
+            "Benchmark compiled replay vs. a Claude computer-use agent on "
+            "the MockMed triage task (agent arm needs an Anthropic API key "
+            "and costs real money)"
+        ),
+    )
+    p.add_argument(
+        "--n-compiled",
+        type=int,
+        default=100,
+        help="Compiled-replay iterations",
+    )
+    p.add_argument("--n-agent", type=int, default=20, help="Agent iterations")
+    p.add_argument(
+        "--out",
+        default="benchmark/",
+        help="Output directory for results.json / BENCHMARK.md / chart",
+    )
+    p.add_argument(
+        "--note-text",
+        default="Follow-up in 2 weeks; BP recheck.",
+        help="Note text both arms enter",
+    )
+    p.add_argument("--headed", action="store_true", help="Run the browsers headed")
+    p.set_defaults(func=_cmd_benchmark)
+
+    # Arguments are parsed by the benchmark itself (benchmark/silent_saves),
+    # which ships in the source checkout, not the wheel. prefix_chars="+"
+    # passes every "-" option through untouched.
+    p = sub.add_parser(
+        "silent-saves",
+        help=(
+            "Score any GUI agent on injected bad saves: how often it reports "
+            "success while the record is wrong (source checkout)"
+        ),
+        add_help=False,
+        prefix_chars="+",
+    )
+    p.add_argument("silent_saves_argv", nargs="*")
+    p.set_defaults(func=_cmd_silent_saves)
+
+    from openadapt_flow.registry import add_parser as _add_pull_parser
+    from openadapt_flow.skills import add_parser as _add_skill_parser
+
+    _add_pull_parser(sub)
+    _add_skill_parser(sub)
+
+    from openadapt_flow.intake.cli import add_parser as _add_intake_parser
+
+    _add_intake_parser(sub)
+
+    from openadapt_flow.decision.cli import add_parser as _add_triage_parser
+
+    _add_triage_parser(sub)
+
+    p = sub.add_parser(
+        "lint",
+        help=(
+            "Report a bundle's coverage gaps (unarmed clicks, vacuous "
+            "postconditions, under-classified risk); exits nonzero by severity"
+        ),
+    )
+    p.add_argument("bundle", help="Workflow bundle directory")
+    p.add_argument(
+        "--strict",
+        action="store_true",
+        help="Exit nonzero on warnings too (default: only on errors)",
+    )
+    p.set_defaults(func=_cmd_lint)
+
+    p = sub.add_parser(
+        "scaffold-verifier",
+        help=(
+            "Build a record check from the reads the app made after the save "
+            "and test it against injected bad writes (record_check.proposed.yaml "
+            "+ record_check.proof.json; exit 1 when it misses one). Without a "
+            "read, drafts effect_contract.yaml for a person to fill in. Never "
+            "approves; refuses demonstrations with no consequential (write) step"
+        ),
+    )
+    p.add_argument(
+        "source",
+        help="Recording directory OR workflow bundle directory",
+    )
+    p.add_argument(
+        "-o",
+        "--out",
+        default=None,
+        metavar="DIR",
+        help=(
+            "Directory for the proposed check or drafted effect_contract.yaml "
+            "(default: beside the input)"
+        ),
+    )
+    p.add_argument(
+        "--db",
+        default=None,
+        metavar="SQLITE",
+        help=(
+            "Read-only database read path (SQLite file): find the saved row in "
+            "every table and guard the rest with a no-new-rows check"
+        ),
+    )
+    p.add_argument(
+        "--verifier",
+        default=None,
+        metavar="YAML",
+        help=(
+            "A verify.yaml whose `verifier:` section reads the system of "
+            "record (REST, FHIR, SQL); read once to find the saved record"
+        ),
+    )
+    p.add_argument(
+        "--prove",
+        default=None,
+        choices=("mockmed", "effect-e2e"),
+        help=(
+            "Also run the proposed check end to end against this "
+            "fault-injection fixture (the check must match its record service)"
+        ),
+    )
+    p.add_argument(
+        "--complete-read",
+        action="store_true",
+        help=(
+            "Declare that the reads return everything the save can change "
+            "(one store, no other tables). Recorded as declared, not proven"
+        ),
+    )
+    p.add_argument(
+        "--fault-gate",
+        action="store_true",
+        help=(
+            "With --db: write each bad save to a copy of the database and let "
+            "the check read it through its own read (the fault gate). A fault "
+            "the read can't see keeps the check a draft"
+        ),
+    )
+    p.add_argument(
+        "--recording",
+        default=None,
+        metavar="DIR",
+        help="The recording a bundle was compiled from (when SOURCE is a bundle)",
+    )
+    p.add_argument(
+        "--bundle",
+        default=None,
+        metavar="DIR",
+        help=(
+            "The bundle compiled from this recording, for identity coverage "
+            "(when SOURCE is a recording)"
+        ),
+    )
+    p.set_defaults(func=_cmd_scaffold_verifier)
+
+    p = sub.add_parser(
+        "explain",
+        help=(
+            "Plain-language read of a completed run dir: what happened, why "
+            "the outcome is the safe one, and the next suggested command "
+            "(read-only)"
+        ),
+    )
+    p.add_argument(
+        "run_dir",
+        help="Completed run directory (holds report.json)",
+    )
+    p.set_defaults(func=_cmd_explain)
+
+    p = sub.add_parser(
+        "visualize",
+        help=(
+            "See what a demonstration compiled INTO: emit a program-graph "
+            "view of a bundle or a composed parent (child bundles, --after "
+            "DAG, effect-bound handoffs) as self-contained HTML, Mermaid, "
+            "or the shared JSON graph spec"
+        ),
+    )
+    p.add_argument(
+        "bundle",
+        help="Workflow bundle directory, or a composed parent directory",
+    )
+    p.add_argument(
+        "--format",
+        choices=("html", "mermaid", "json"),
+        default="html",
+        help=(
+            "html: self-contained, offline-openable page (default); "
+            "mermaid: flowchart source for Markdown/docs; "
+            "json: the shared program-graph spec every surface renders"
+        ),
+    )
+    p.add_argument(
+        "-o",
+        "--out",
+        default=None,
+        help="Write to this file instead of stdout (parent dirs are created)",
+    )
+    p.add_argument(
+        "--profile",
+        choices=(
+            "operator-local",
+            "remote-safe",
+            "public-synthetic",
+            "sanitized-derivative",
+        ),
+        default="operator-local",
+        help=(
+            "Data boundary for the rendered view. Non-local profiles remove "
+            "recorded text, values, selectors, URLs, free-text predicates, "
+            "and local provenance. Projection is not source sanitization."
+        ),
+    )
+    p.set_defaults(func=_cmd_visualize)
+
+    from openadapt_flow.cli_sections import add_parser as _add_sections_parser
+
+    _add_sections_parser(sub)
+
+    p = sub.add_parser(
+        "seal",
+        help=(
+            "Encrypt every file of a bundle that can hold patient data with "
+            "OPENADAPT_BUNDLE_KEY, bind the whole file set to one sealed "
+            "index, verify it, and publish it atomically at a new path"
+        ),
+    )
+    p.add_argument("source", help="Existing workflow bundle directory")
+    p.add_argument(
+        "-o",
+        "--out",
+        required=True,
+        help="New destination directory (must not already exist)",
+    )
+    p.set_defaults(func=_cmd_seal)
+
+    from openadapt_flow.countersign.cli import add_countersign_parser
+
+    add_countersign_parser(sub)
+
+    from openadapt_flow.cli_known_ids import register as _register_known_ids
+
+    _register_known_ids(sub)
+
+    p = sub.add_parser(
+        "bind-record-checks",
+        help=(
+            "Attach reviewed record checks (system-of-record effect contracts) "
+            "to a compiled program's save step, in a new bundle; reports which "
+            "entered fields they compare"
+        ),
+    )
+    p.add_argument("bundle", help="Compiled workflow bundle directory (not modified)")
+    p.add_argument(
+        "--binding",
+        required=True,
+        help="Record-check binding file (openadapt.record-check-binding/v1, JSON or YAML)",
+    )
+    p.add_argument(
+        "-o",
+        "--out",
+        default=None,
+        help="New bundle directory to publish (must not exist); required unless --check",
+    )
+    p.add_argument(
+        "--check",
+        action="store_true",
+        help="Validate the binding and print entered-field coverage; write nothing",
+    )
+    p.add_argument("--json", action="store_true", help="Print the result as JSON")
+    p.set_defaults(func=_cmd_bind_record_checks)
+
+    p = sub.add_parser(
+        "certify",
+        help=(
+            "Enforce a policy on a bundle (exits nonzero + reports if it "
+            "fails); passing means the bundle meets that policy's rules, "
+            "not that it is safe to run"
+        ),
+    )
+    p.add_argument("bundle", help="Workflow bundle directory")
+    p.add_argument(
+        "--policy",
+        default=None,
+        help=(
+            "Policy YAML path, or a built-in name (permissive, clinical-write). "
+            "Defaults to policy.policy from --config."
+        ),
+    )
+    p.add_argument(
+        "--config",
+        default=None,
+        metavar="YAML",
+        help="Deployment config YAML to read the policy from when --policy is omitted",
+    )
+    p.set_defaults(func=_cmd_certify)
+
+    p = sub.add_parser(
+        "qualify",
+        help=QUALIFY_DEFINITION
+        + " Also: create, edit, test, explain and certify the qualification "
+        "project sealed into a bundle.",
+        description=QUALIFY_HELP,
+        usage=(
+            "%(prog)s <bundle> --verify verify.yaml [--cases ...] [--out DIR] "
+            "[--certify [POLICY]] [--run-params FILE]\n"
+            "       %(prog)s <command> ..."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    _definition_first(p)
+    qsub = p.add_subparsers(dest="qualify_cmd", required=True)
+
+    q = qsub.add_parser(
+        "campaign",
+        help=(
+            "Qualify a bundle from verify.yaml (also the default form: "
+            "`qualify <bundle> --verify verify.yaml`)"
+        ),
+        description=QUALIFY_HELP,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    _definition_first(q)
+    q.add_argument("bundle", help="Compiled workflow bundle directory")
+    q.add_argument(
+        "--verify",
+        required=True,
+        metavar="YAML",
+        help="verify.yaml: the per-workflow read-back, field mapping, save step and inputs",
+    )
+    q.add_argument(
+        "--cases",
+        nargs="+",
+        default=None,
+        metavar="CASE",
+        help=(
+            "Run only these cases (representative, fault-ambiguity, "
+            "fault-wrong-identity, fault-stale-identity, fault-weak-effect, "
+            "fault-missing-effect). Certification needs all six."
+        ),
+    )
+    q.add_argument(
+        "--trials",
+        type=int,
+        default=None,
+        help="Trials per case (default: verify.yaml, 3)",
+    )
+    q.add_argument("--out", default=None, metavar="DIR", help="New output directory")
+    q.add_argument(
+        "--certify",
+        nargs="?",
+        const="__from_verify__",
+        default=None,
+        metavar="POLICY",
+        help=(
+            "Certify under this policy (default: campaign.policy in verify.yaml, "
+            "usually clinical-write). See "
+            "https://docs.openadapt.ai/reference/glossary/#certification-policy."
+        ),
+    )
+    q.add_argument(
+        "--run-params",
+        default=None,
+        metavar="JSON",
+        help="After certifying, run the certified bundle once with these inputs",
+    )
+    q.add_argument(
+        "--campaign-id",
+        default=None,
+        help="Campaign id (default: verify.yaml or generated)",
+    )
+    q.set_defaults(func=_cmd_qualify_campaign)
+
+    q = qsub.add_parser("schema", help="Print the qualification-project JSON Schema")
+    q.set_defaults(func=_cmd_qualify)
+
+    q = qsub.add_parser(
+        "label",
+        help="Optionally set, remove, or list presentation-only entity labels",
+    )
+    label_sub = q.add_subparsers(dest="label_cmd", required=True)
+    label = label_sub.add_parser(
+        "set",
+        help="Set an optional presentation label for one qualified step",
+    )
+    label.add_argument("bundle", help="Workflow bundle directory")
+    label.add_argument("--step", required=True, help="Exact qualified workflow step ID")
+    label.add_argument(
+        "--label",
+        required=True,
+        help=(
+            "Local class label, for example: insurance claim. Reviewed labels "
+            "can cross a remote boundary; other labels use the neutral fallback."
+        ),
+    )
+    label.add_argument(
+        "--fallback",
+        choices=("record", "item"),
+        default=None,
+        help=(
+            "Neutral remote label for a custom class (default: record). "
+            "Reviewed labels use their canonical fallback."
+        ),
+    )
+    label.set_defaults(func=_cmd_qualify)
+    label = label_sub.add_parser("remove", help="Remove a step entity label")
+    label.add_argument("bundle", help="Workflow bundle directory")
+    label.add_argument("--step", required=True, help="Exact qualified workflow step ID")
+    label.set_defaults(func=_cmd_qualify)
+    label = label_sub.add_parser("list", help="List qualification-owned entity labels")
+    label.add_argument("bundle", help="Workflow bundle directory")
+    label.set_defaults(func=_cmd_qualify)
+
+    q = qsub.add_parser("init", help="Initialize a bundle's qualification project")
+    q.add_argument("bundle", help="Workflow bundle directory")
+    q.add_argument(
+        "--target",
+        required=True,
+        choices=("web", "windows", "macos", "linux", "rdp", "citrix"),
+    )
+    q.add_argument("--application", required=True)
+    q.add_argument("--application-version", required=True)
+    q.add_argument("--environment-digest", required=True)
+    q.add_argument(
+        "--runtime-version",
+        default=None,
+        help="Exact qualified runtime version (default: installed Flow version)",
+    )
+    q.add_argument("--require-capability", action="append", default=[])
+    q.add_argument("--minimum-tier", type=int, choices=(1, 2, 3, 4), default=3)
+    q.add_argument("--replace", action="store_true")
+    q.set_defaults(func=_cmd_qualify)
+
+    q = qsub.add_parser(
+        "propose",
+        help=(
+            "Draft application, environment, identity, and effect pins from "
+            "the compiled demo. Missing pins HALT; nothing is guessed. "
+            "Runs the proposed oracle against a --break-it fault."
+        ),
+    )
+    q.add_argument("bundle", help="Compiled workflow bundle directory")
+    q.add_argument(
+        "--recording",
+        default=None,
+        help="Recording directory (meta.json) used to mine application and environment pins",
+    )
+    q.add_argument(
+        "--policy-pack",
+        choices=("community", "cloud", "regulated"),
+        default="community",
+        help="Which shipped pack to bind (default: community)",
+    )
+    q.add_argument(
+        "--proposer",
+        choices=("off", "llm"),
+        default="off",
+        help=(
+            "Optional compile-time sketch proposer. Off by default. "
+            "Suggestions are flagged and still face the oracle gates."
+        ),
+    )
+    q.add_argument("--out", default=None, help="Write the draft JSON to this path")
+    q.set_defaults(func=_cmd_qualify)
+
+    q = qsub.add_parser(
+        "accept",
+        help=(
+            "Confirm every proposed pin in one command after the proposed "
+            "oracle catches a --break-it fault. Refusing a pin HALTs."
+        ),
+    )
+    q.add_argument("bundle", help="Compiled workflow bundle directory")
+    q.add_argument(
+        "--proposal", required=True, help="Draft qualification-proposal JSON"
+    )
+    q.add_argument(
+        "--refuse-pin",
+        choices=("application", "environment", "identity", "effect"),
+        default=None,
+        help="Refuse one pin instead of accepting. The command HALTs.",
+    )
+    q.add_argument(
+        "--admit-local",
+        action="store_true",
+        help="Sign a MockMed/local-dev admission that production trust maps refuse",
+    )
+    q.add_argument("--replace", action="store_true", help="Replace an existing project")
+    q.add_argument("--out", default=None, help="Write the accepted proposal JSON")
+    q.set_defaults(func=_cmd_qualify)
+
+    q = qsub.add_parser(
+        "admit-local",
+        help=(
+            "Sign a local-dev admission for an accepted proposal. "
+            "The signer cannot enter a production trust map."
+        ),
+    )
+    q.add_argument("bundle", help="Compiled workflow bundle directory")
+    q.add_argument(
+        "--proposal", required=True, help="Accepted qualification-proposal JSON"
+    )
+    q.add_argument("--out", default=None, help="Write the local-dev admission JSON")
+    q.set_defaults(func=_cmd_qualify)
+
+    q = qsub.add_parser(
+        "from-demo",
+        help=(
+            "Propose pins from the demo, accept them, and optionally sign a "
+            "local-dev admission. After record and compile."
+        ),
+    )
+    q.add_argument("bundle", help="Compiled workflow bundle directory")
+    q.add_argument(
+        "--recording",
+        required=True,
+        help="Recording directory that produced the bundle",
+    )
+    q.add_argument(
+        "--policy-pack",
+        choices=("community", "cloud", "regulated"),
+        default="community",
+    )
+    q.add_argument(
+        "--admit-local",
+        action="store_true",
+        help="Sign a MockMed/local-dev admission that production trust maps refuse",
+    )
+    q.add_argument(
+        "--proposer",
+        choices=("off", "llm"),
+        default="off",
+        help="Optional compile-time sketch proposer. Off by default.",
+    )
+    q.add_argument("--out", default=None, help="Write the accepted proposal JSON")
+    q.set_defaults(func=_cmd_qualify)
+
+    for verb in ("inspect", "explain", "report"):
+        q = qsub.add_parser(verb, help=f"{verb.title()} qualification coverage")
+        q.add_argument("bundle", help="Workflow bundle directory")
+        q.add_argument("--policy", default=None)
+        q.add_argument("--evidence-root", default=None)
+        q.add_argument("--json", action="store_true")
+        q.set_defaults(func=_cmd_qualify)
+
+    q = qsub.add_parser(
+        "set-identity",
+        help="Set exact/normalized identity fields and their quorum",
+    )
+    q.add_argument("bundle", help="Workflow bundle directory")
+    q.add_argument("--step", required=True)
+    q.add_argument("--canonical-ladder", action="store_true")
+    q.add_argument(
+        "--signal",
+        action="append",
+        metavar="KEY=SOURCE:MODE[:NORMALIZER,...]",
+    )
+    q.add_argument(
+        "--signal-region",
+        action="append",
+        default=[],
+        metavar="KEY=X,Y,W,H",
+        help="Explicit qualified pixel region for a context/identifier signal",
+    )
+    q.add_argument(
+        "--signal-param",
+        action="append",
+        default=[],
+        metavar="KEY=PARAM",
+        help="Bind a complete workflow parameter value to an identity signal",
+    )
+    q.add_argument(
+        "--signal-extract",
+        action="append",
+        default=[],
+        metavar="KEY=REGEX",
+        help=(
+            "Extract one named (?P<value>...) field from a structured or "
+            "captured-context signal"
+        ),
+    )
+    q.add_argument(
+        "--signal-expected",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help=(
+            "Bind a qualified PHI-free expected value to an "
+            "application/session/workflow-state signal"
+        ),
+    )
+    q.add_argument("--quorum", type=int)
+    q.set_defaults(func=_cmd_qualify)
+
+    q = qsub.add_parser(
+        "set-risk",
+        help="Confirm an action's reviewed business-risk classification",
+    )
+    q.add_argument("bundle", help="Workflow bundle directory")
+    q.add_argument("--step", required=True)
+    q.add_argument(
+        "--classification",
+        required=True,
+        choices=("read_only", "state_changing", "consequential", "irreversible"),
+    )
+    q.add_argument("--explanation", required=True)
+    q.set_defaults(func=_cmd_qualify)
+
+    q = qsub.add_parser(
+        "trust-runner",
+        help="Trust an Ed25519 qualification-runner public key",
+    )
+    q.add_argument("bundle", help="Workflow bundle directory")
+    q.add_argument("--key-id", required=True)
+    q.add_argument("--public-key", required=True, help="Raw 32-byte key in base64")
+    q.set_defaults(func=_cmd_qualify)
+
+    q = qsub.add_parser(
+        "set-effect",
+        help="Assign verification-strength tier to an existing effect",
+    )
+    q.add_argument("bundle", help="Workflow bundle directory")
+    q.add_argument("--step", required=True)
+    q.add_argument("--effect-index", type=int, required=True)
+    q.add_argument(
+        "--path",
+        choices=("gui", "api"),
+        default="gui",
+        help="Actuation path whose effect is being qualified (default: gui)",
+    )
+    q.add_argument("--tier", type=int, choices=(1, 2, 3, 4), required=True)
+    q.set_defaults(func=_cmd_qualify)
+
+    q = qsub.add_parser(
+        "business-decision",
+        help=(
+            "Add, update, or inspect one reviewed finite business decision "
+            "without editing the workflow manifest"
+        ),
+    )
+    q.add_argument("bundle", help="Workflow bundle directory")
+    q.add_argument(
+        "--input",
+        metavar="JSON",
+        help=(
+            "Local openadapt.business-decision-authoring/v1 JSON file "
+            "(required without --check)"
+        ),
+    )
+    q.add_argument(
+        "--check",
+        action="store_true",
+        help="List the bundle's current typed decisions without changing it",
+    )
+    q.set_defaults(func=_cmd_qualify)
+
+    q = qsub.add_parser(
+        "judgment-cases",
+        help=(
+            "Store or check reviewed local judgment cases; this command never "
+            "synthesizes an executable rule from examples"
+        ),
+    )
+    q.add_argument("bundle", help="Workflow bundle directory")
+    q.add_argument(
+        "--input",
+        metavar="JSON",
+        help="Local openadapt.judgment-case-set/v1 JSON file (required without --check)",
+    )
+    q.add_argument(
+        "--check",
+        action="store_true",
+        help="Evaluate the bundle's current stored cases without changing it",
+    )
+    q.set_defaults(func=_cmd_qualify)
+
+    q = qsub.add_parser("add-case", help="Add a representative or fault case")
+    q.add_argument("bundle", help="Workflow bundle directory")
+    q.add_argument("--case-id", required=True)
+    q.add_argument(
+        "--kind",
+        required=True,
+        choices=(
+            "representative",
+            "ambiguity",
+            "wrong_identity",
+            "stale_identity",
+            "weak_effect",
+            "missing_effect",
+        ),
+    )
+    q.add_argument(
+        "--expected-outcome",
+        required=True,
+        choices=(
+            "verified",
+            "completed_unverified",
+            "halted",
+            "failed",
+            "rolled_back",
+        ),
+    )
+    q.add_argument("--description", default="")
+    q.add_argument("--input-ref", default=None)
+    q.add_argument("--optional", action="store_true")
+    q.set_defaults(func=_cmd_qualify)
+
+    q = qsub.add_parser(
+        "run",
+        help=(
+            "Import case results produced by the Desktop/local/customer-controlled "
+            "qualification runner"
+        ),
+    )
+    q.add_argument("bundle", help="Workflow bundle directory")
+    q.add_argument("--results", required=True, metavar="JSON")
+    q.add_argument("--evidence-root", required=True)
+    q.set_defaults(func=_cmd_qualify)
+
+    q = qsub.add_parser(
+        "run-case",
+        help=(
+            "Run one current qualification case (the practice item or a "
+            "readiness drill) with Flow-owned Standard authorization"
+        ),
+    )
+    q.add_argument("bundle", help="Sealed workflow bundle directory")
+    q.add_argument(
+        "--case-id", required=True, help="Declared practice case or readiness drill"
+    )
+    q.add_argument(
+        "--inputs",
+        required=True,
+        metavar="JSON",
+        help=(
+            "Private canonical runtime-input artifact from Desktop "
+            "(mode 0600; params and worklists only)"
+        ),
+    )
+    q.add_argument("--campaign-id", required=True, help="Local campaign identity")
+    q.add_argument("--run-id", required=True, help="One local case-attempt identity")
+    q.add_argument(
+        "--qualification-campaign-authority-file",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Private owner-only signed non-production authority for this exact "
+            "trial; required once the run actuates under a campaign permit"
+        ),
+    )
+    q.add_argument(
+        "--run-dir", required=True, help="New durable case-attempt directory"
+    )
+    q.add_argument("--url", default=None, help="Target app URL")
+    q.add_argument("--headed", action="store_true", help="Run browser headed")
+    q.add_argument("--dry-run", action="store_true", help="Validate without input")
+    q.add_argument("--save-healed-to", default=None, help=argparse.SUPPRESS)
+    q.add_argument(
+        "--fault-driver",
+        default=None,
+        metavar="NAME",
+        help=(
+            "A drill's fault driver from the openadapt_flow."
+            "qualification_fault_drivers entry point (a configured campaign). "
+            "Without it, a drill uses this computer's local drill campaign "
+            "(see `qualify drills`)."
+        ),
+    )
+    _add_backend_flags(q)
+    _add_browser_session_flags(q)
+    _add_deployment_flags(q)
+    _add_approval_flags(q)
+    q.set_defaults(func=_cmd_qualify)
+
+    q = qsub.add_parser(
+        "drills",
+        help=(
+            "Add the five readiness drills for the practice case's save and "
+            "trust this computer's local drill key (a local campaign)"
+        ),
+    )
+    q.add_argument("bundle", help="Sealed workflow bundle directory")
+    q.add_argument(
+        "--from-case",
+        default=None,
+        help="The practice (representative) case to drill from",
+    )
+    q.add_argument(
+        "--save-step",
+        default=None,
+        help="The save to drill (default: the practice case's first save)",
+    )
+    q.add_argument("--json", action="store_true", help="Print the campaign as JSON")
+    q.set_defaults(func=_cmd_qualify)
+
+    q = qsub.add_parser(
+        "add-requalification",
+        help="Add a condition that requires this workflow to be requalified",
+    )
+    q.add_argument("bundle", help="Workflow bundle directory")
+    q.add_argument(
+        "--kind",
+        required=True,
+        choices=(
+            "workflow_changed",
+            "application_version_changed",
+            "environment_changed",
+            "identity_policy_changed",
+            "effect_policy_changed",
+            "runtime_version_changed",
+            "expiry",
+            "operator_requested",
+        ),
+    )
+    q.add_argument("--description", default="")
+    q.set_defaults(func=_cmd_qualify)
+
+    q = qsub.add_parser(
+        "certify",
+        help="Persist a combined qualification and existing-policy decision",
+    )
+    q.add_argument("bundle", help="Workflow bundle directory")
+    q.add_argument("--policy", default="clinical-write")
+    q.add_argument(
+        "--profile",
+        choices=("standard", "regulated"),
+        default="standard",
+        help="Production execution profile bound into the emitted template",
+    )
+    q.add_argument("--evidence-root", required=True)
+    q.add_argument("--json", action="store_true")
+    q.set_defaults(func=_cmd_qualify)
+
+    p = sub.add_parser(
+        "propose-qualification",
+        help=(
+            "Draft a production-shaped qualification contract from a compiled "
+            "demo. Alias of `qualify propose`."
+        ),
+    )
+    p.add_argument("bundle", help="Compiled workflow bundle directory")
+    p.add_argument(
+        "--recording",
+        default=None,
+        help="Recording directory (meta.json) used to mine application and environment pins",
+    )
+    p.add_argument(
+        "--policy-pack",
+        choices=("community", "cloud", "regulated"),
+        default="community",
+        help="Which shipped pack to bind (default: community)",
+    )
+    p.add_argument(
+        "--proposer",
+        choices=("off", "llm"),
+        default="off",
+        help="Optional compile-time sketch proposer. Off by default.",
+    )
+    p.add_argument("--out", default=None, help="Write the draft JSON to this path")
+    p.set_defaults(func=_cmd_propose_qualification)
+
+    p = sub.add_parser(
+        "disambiguate",
+        help=(
+            "Surface compile-time multiple-choice questions for an ambiguous "
+            "demo and apply the answers as guards/params (ask, don't guess)"
+        ),
+    )
+    p.add_argument("bundle", help="Workflow bundle directory")
+    p.add_argument(
+        "--interactive",
+        action="store_true",
+        help="Prompt for each question on the terminal",
+    )
+    p.add_argument(
+        "--answers",
+        help="JSON file mapping question id -> chosen option key",
+    )
+    p.add_argument(
+        "--write",
+        action="store_true",
+        help="Save the resolved workflow back into the bundle",
+    )
+    p.set_defaults(func=_cmd_disambiguate)
+
+    p = sub.add_parser("emit-skill", help="Emit an Agent Skills folder for a bundle")
+    p.add_argument("bundle", help="Workflow bundle directory")
+    p.add_argument("--out", required=True, help="Parent directory for the skill folder")
+    p.set_defaults(func=_cmd_emit_skill)
+
+    p = sub.add_parser("emit-mcp", help="Emit a standalone MCP server.py for a bundle")
+    p.add_argument("bundle", help="Workflow bundle directory")
+    p.add_argument("--out", required=True, help="Path for the generated server.py")
+    p.set_defaults(func=_cmd_emit_mcp)
+
+    p = sub.add_parser(
+        "teach",
+        help=(
+            "Self-serve HALT -> LEARN: resolve a halted run from a fix "
+            "demonstration. Induces the correction as a guarded exception "
+            "branch, gates + validates it, and writes an updated bundle ONLY "
+            "if it passes (governed refusal otherwise; nonzero exit)"
+        ),
+    )
+    p.add_argument(
+        "run_dir",
+        help="The HALTED run directory (holds report.json with a halt)",
+    )
+    p.add_argument(
+        "--fix",
+        required=True,
+        help=(
+            "The fix demonstration: a RECORDING directory of the resolution "
+            "(record ONLY the corrective actions, e.g. dismiss the dialog), or "
+            "a .json correction spec (scripted / CI: resolution_steps, optional "
+            "tail_intents / facts / params)"
+        ),
+    )
+    p.add_argument(
+        "--bundle",
+        required=True,
+        help="The base bundle that halted (seeds the skill's active version)",
+    )
+    p.add_argument(
+        "--out",
+        required=True,
+        help=(
+            "Output directory for the UPDATED bundle (written only when the "
+            "correction is promoted)"
+        ),
+    )
+    p.add_argument(
+        "--skill-id",
+        default=None,
+        help="Skill id in the library (default: the run's workflow name)",
+    )
+    p.add_argument(
+        "--library",
+        default=None,
+        help=(
+            "Directory for the versioned skill library that keeps the "
+            "promotion lineage (default: <out>.skills)"
+        ),
+    )
+    p.set_defaults(func=_cmd_teach)
+
+    p = sub.add_parser(
+        "teach-branch",
+        help=(
+            "Learn a guarded branch from two or more halts resolved the same "
+            "way. The branch keys on the screen text they share (narrowed by "
+            "an enum parameter when normal runs show that text too) and is "
+            "written as a repair candidate that needs approval"
+        ),
+    )
+    p.add_argument(
+        "--example",
+        nargs=2,
+        action="append",
+        required=True,
+        metavar=("RUN_DIR", "FIX"),
+        help="A halted run directory and its fix (recording or .json spec). "
+        "Pass at least twice",
+    )
+    p.add_argument(
+        "--normal-run",
+        action="append",
+        metavar="RUN_DIR",
+        help="A run of the bundle that went the normal way (repeatable)",
+    )
+    p.add_argument("--bundle", required=True, help="The base bundle that halted")
+    p.add_argument("--out", required=True, help="Where to write the candidate bundle")
+    p.add_argument("--skill-id", default=None)
+    p.add_argument("--library", default=None)
+    p.set_defaults(func=_cmd_teach_branch)
+
+    p = sub.add_parser(
+        "repair",
+        help=(
+            "Governed repair promotion lifecycle: register a proposed (healed "
+            "or taught) bundle as a CANDIDATE, review its diff, run the replay "
+            "and fault campaigns, approve (human), stage, canary, and roll "
+            "back. A proposed bundle NEVER becomes active without this "
+            "lifecycle. See docs/REPAIR_LIFECYCLE.md"
+        ),
+    )
+    rsub = p.add_subparsers(dest="repair_cmd", required=True)
+
+    def _repair_store_flag(rp: argparse.ArgumentParser) -> None:
+        rp.add_argument(
+            "--store",
+            default=None,
+            help=(
+                "Repair store directory (candidates, staged bundles by hash, "
+                "and the atomic ACTIVE.json pointer). Default: repair-store/"
+            ),
+        )
+
+    r = rsub.add_parser(
+        "register",
+        help=(
+            "Register a (prior, proposed) bundle pair as a repair candidate; "
+            "refuses (fail closed) any contract weakening without a new "
+            "qualification revision"
+        ),
+    )
+    r.add_argument("proposed", help="The proposed (healed / taught) bundle")
+    r.add_argument(
+        "--prior",
+        default=None,
+        help=(
+            "The prior bundle the proposal derives from (omit to import the "
+            "detached repair/candidate.json the engine wrote into the "
+            "proposed bundle)"
+        ),
+    )
+    r.add_argument(
+        "--source",
+        choices=["heal", "teach", "manual", "model_suggestion"],
+        default="manual",
+        help="Where the proposal came from (default: manual)",
+    )
+    r.add_argument(
+        "--evidence",
+        default=None,
+        help=(
+            "Run directory holding the failure evidence (heals/<step>/ "
+            "frames); required later by the campaigns"
+        ),
+    )
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
+    r = rsub.add_parser("list", help="List candidates and their lifecycle states")
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
+    r = rsub.add_parser(
+        "show", help="Show a candidate's reviewable diff, campaigns, and state"
+    )
+    r.add_argument("candidate_id")
+    r.add_argument(
+        "--json", action="store_true", help="Also print the full candidate record"
+    )
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
+    r = rsub.add_parser("review", help="Record a human review of the candidate's diff")
+    r.add_argument("candidate_id")
+    r.add_argument(
+        "--reviewed-by",
+        default=None,
+        help="Reviewer identity (default: the invoking OS user)",
+    )
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
+    r = rsub.add_parser(
+        "campaign",
+        help=(
+            "Run a campaign against the candidate's evidence frames: 'replay' "
+            "(healthy drift battery must all pass) or 'fault' (ambiguity / "
+            "wrong-entity / stale-target / dialog / verifier-failure frames "
+            "must all be REFUSED)"
+        ),
+    )
+    r.add_argument("candidate_id")
+    r.add_argument("--kind", choices=["replay", "fault"], required=True)
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
+    r = rsub.add_parser(
+        "approve",
+        help=(
+            "HUMAN approval gating promotion; refuses unless the diff was "
+            "reviewed and BOTH campaigns passed. Binds the exact bundle hashes"
+        ),
+    )
+    r.add_argument("candidate_id")
+    r.add_argument(
+        "--approved-by",
+        default=None,
+        help=(
+            "Approver identity recorded on the approval (default: the "
+            "invoking OS user; REQUIRED with --non-interactive)"
+        ),
+    )
+    r.add_argument(
+        "--non-interactive",
+        action="store_true",
+        help=(
+            "Skip the confirmation prompt (automation). Requires an explicit "
+            "--approved-by human identity"
+        ),
+    )
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
+    r = rsub.add_parser(
+        "stage",
+        help=(
+            "Copy BOTH bundles into the store by content hash and re-verify "
+            "them byte-exact (prior too, so rollback is always local)"
+        ),
+    )
+    r.add_argument("candidate_id")
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
+    r = rsub.add_parser(
+        "canary",
+        help=(
+            "Atomically activate the staged bundle in CANARY mode: a bounded "
+            "first-N-runs window with per-run verification before full active"
+        ),
+    )
+    r.add_argument("candidate_id")
+    r.add_argument(
+        "--max-runs",
+        type=int,
+        default=None,
+        help="Canary window size (default: the candidate's configured window)",
+    )
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
+    r = rsub.add_parser(
+        "canary-record",
+        help=(
+            "Record one canary run from its run directory; any "
+            "silent-incorrect or verification regression auto-reverts to the "
+            "prior bundle"
+        ),
+    )
+    r.add_argument("candidate_id")
+    r.add_argument("--run-dir", required=True, help="The completed run directory")
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
+    r = rsub.add_parser(
+        "rollback",
+        help=(
+            "One-command rollback: restore the prior bundle hash as the active pointer"
+        ),
+    )
+    r.add_argument(
+        "--candidate-id",
+        default=None,
+        help="Candidate to roll back (default: the currently active one)",
+    )
+    r.add_argument(
+        "--by",
+        default=None,
+        help="Operator identity recorded on the rollback (default: OS user)",
+    )
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
+    r = rsub.add_parser(
+        "status", help="Show the atomic active-bundle pointer and its lineage"
+    )
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
+    r = rsub.add_parser(
+        "revert",
+        help=(
+            "Undo a repair that applied without a person: the prior bundle is "
+            "active again, and repairs of that step go to a person"
+        ),
+    )
+    r.add_argument("candidate_id", help="The automatic repair's candidate id")
+    r.add_argument("--by", required=True, help="Your name, recorded on the revert")
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
+    r = rsub.add_parser(
+        "standard-changes",
+        help="List the repairs that applied without a person (the daily digest)",
+    )
+    r.add_argument("--day", default=None, help="UTC day, YYYY-MM-DD (default: today)")
+    r.add_argument("--json", action="store_true", help="Print the ledger rows as JSON")
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
+    r = rsub.add_parser(
+        "clear-hold",
+        help="Let repairs of a step apply without a person again after a revert",
+    )
+    r.add_argument("--workflow", required=True)
+    r.add_argument("--step", required=True)
+    r.add_argument("--by", required=True, help="Your name, recorded on the ledger")
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
+    p = sub.add_parser(
+        "connect",
+        help=(
+            "Claim a one-time browser pairing and store the workspace credential "
+            "in the OS keychain"
+        ),
+    )
+    pairing_source = p.add_mutually_exclusive_group(required=True)
+    pairing_source.add_argument(
+        "--pairing",
+        default=None,
+        help="Five-minute one-time pairing code from Cloud settings",
+    )
+    pairing_source.add_argument(
+        "--uri",
+        default=None,
+        help="Exact openadapt://connect deep link supplied by the desktop app",
+    )
+    p.add_argument(
+        "--host",
+        default=None,
+        help="Cloud origin (default: https://app.openadapt.ai)",
+    )
+    p.add_argument(
+        "--device-name",
+        default=None,
+        help="Name shown for this computer (default: local hostname)",
+    )
+    p.add_argument(
+        "--destination-kind",
+        choices=["openadapt-managed", "customer-managed", "local"],
+        default=None,
+        help="Trust class for the pairing destination",
+    )
+    p.add_argument(
+        "--trusted-host",
+        action="append",
+        default=None,
+        help="Exact allowed customer-managed origin (repeatable)",
+    )
+    p.set_defaults(func=_cmd_connect)
+
+    p = sub.add_parser(
+        "login",
+        help=(
+            "Validate an ingest token against the hosted control plane and "
+            "store it in the OS keychain"
+        ),
+    )
+    p.add_argument(
+        "--token",
+        default=None,
+        help=(
+            "Ingest token (oai_ingest_…). Falls back to OPENADAPT_INGEST_TOKEN, "
+            "then OS keychain, then an existing config migration token. "
+            "Mint one at <host>/dashboard/settings/ingest."
+        ),
+    )
+    p.add_argument(
+        "--host",
+        default=None,
+        help="Hosted base URL (default: config.toml host, else https://app.openadapt.ai)",
+    )
+    p.add_argument(
+        "--destination-kind",
+        choices=["openadapt-managed", "customer-managed", "local"],
+        default=None,
+        help="Trust class for the token destination",
+    )
+    p.add_argument(
+        "--trusted-host",
+        action="append",
+        default=None,
+        help="Exact allowed customer-managed origin (repeatable)",
+    )
+    p.add_argument(
+        "--no-save",
+        action="store_true",
+        help="Validate only; do not store the host or token",
+    )
+    p.add_argument(
+        "--allow-plaintext-token",
+        action="store_true",
+        help=(
+            "Explicitly allow mode-0600 config token storage when no OS keychain "
+            "is available (insecure fallback)"
+        ),
+    )
+    p.set_defaults(func=_cmd_login)
+
+    p = sub.add_parser(
+        "sanitize",
+        help="Create a verified PHI-scrubbed derivative without modifying the original",
+    )
+    p.add_argument("path", help="Original recording or bundle directory")
+    p.add_argument("--out", required=True, help="New sanitized derivative directory")
+    p.add_argument(
+        "--kind", choices=["recording", "bundle"], required=True, help="Artifact type"
+    )
+    p.add_argument(
+        "--redactions",
+        default=None,
+        help="Optional local JSON file with additional text/image redactions",
+    )
+    p.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Replace an existing derivative (never modifies the original)",
+    )
+    p.set_defaults(func=_cmd_sanitize)
+
+    p = sub.add_parser(
+        "review-sanitized",
+        help="Review original vs sanitized content in a loopback-only local viewer",
+    )
+    p.add_argument("path", help="Sanitized derivative directory")
+    p.add_argument("--original", required=True, help="Original artifact directory")
+    p.add_argument(
+        "--port", type=int, default=0, help="Loopback port (default: random)"
+    )
+    p.add_argument(
+        "--no-open", action="store_true", help="Print the viewer URL without opening it"
+    )
+    p.set_defaults(func=_cmd_review_sanitized)
+
+    p = sub.add_parser(
+        "materialize-approved",
+        help="Rebuild an approved derivative from its archive and approval record",
+        description=(
+            "Approval binds the archive's own SHA-256, so the archive cannot "
+            "carry it and an archive unzipped elsewhere reads as unapproved. "
+            "This places the reviewer's existing approval record beside the "
+            "extracted bytes and then runs the unchanged approval gate. It "
+            "approves nothing."
+        ),
+    )
+    p.add_argument(
+        "--archive", required=True, help="Approved immutable archive (.approved.zip)"
+    )
+    p.add_argument(
+        "--approval",
+        required=True,
+        help=(
+            "Existing approval record: either the derivative's "
+            ".openadapt-approval.json or the openadapt.sanitization/v1 ingest "
+            "envelope a deployment persisted for it"
+        ),
+    )
+    p.add_argument(
+        "--out", required=True, help="New, empty derivative directory to materialize"
+    )
+    p.add_argument(
+        "--expect-archive-sha256",
+        default=None,
+        help=(
+            "Pin the archive to a digest the caller already trusts, checked "
+            "independently of the approval record"
+        ),
+    )
+    p.set_defaults(func=_cmd_materialize_approved)
+
+    p = sub.add_parser(
+        "approve-sanitized",
+        help="Approve and freeze the exact reviewed derivative as an immutable archive",
+    )
+    p.add_argument("path", help="Sanitized derivative directory")
+    p.add_argument("--original", required=True, help="Original artifact directory")
+    p.add_argument(
+        "--reviewer", required=True, help="Reviewer identity for the audit record"
+    )
+    p.set_defaults(func=_cmd_approve_sanitized)
+
+    p = sub.add_parser(
+        "validate-hosted",
+        help=(
+            "Bind strict lint, policy certification, and a successful local "
+            "replay to an expiring Cloud challenge and exact approved artifacts. "
+            "Standard and Regulated activation also binds the sealed governed "
+            "authorization template."
+        ),
+    )
+    p.add_argument(
+        "--recording",
+        required=True,
+        help="Approved sanitized recording derivative used to compile the bundle",
+    )
+    p.add_argument(
+        "--bundle",
+        required=True,
+        help="Approved sanitized bundle derivative whose exact archive will upload",
+    )
+    p.add_argument(
+        "--run-dir",
+        required=True,
+        help="Successful governed replay directory containing report.json",
+    )
+    p.add_argument(
+        "--policy",
+        required=True,
+        help="Named or file-backed policy that the bundle must pass",
+    )
+    p.add_argument(
+        "--risk-class",
+        required=True,
+        choices=["low", "consequential"],
+        help=(
+            "Compiled workflow risk class: low for reversible-only workflows, "
+            "consequential when any step is irreversible; must match the bundle"
+        ),
+    )
+    p.add_argument(
+        "--environment",
+        required=True,
+        help=(
+            "Non-PHI validation environment identifier; only its SHA-256 is uploaded"
+        ),
+    )
+    p.add_argument(
+        "--target-kind",
+        choices=["web", "windows", "macos", "linux", "rdp", "citrix"],
+        default=None,
+        help=(
+            "Optional expected replay substrate. The signed value is derived "
+            "from report.json; a supplied value must match it exactly."
+        ),
+    )
+    p.add_argument(
+        "--target-url",
+        default=None,
+        help=(
+            "Web only: exact non-PHI HTTPS entry URL used by the validated "
+            "browser workflow; required for web and refused for native/remote"
+        ),
+    )
+    p.add_argument(
+        "--allowed-host",
+        action="append",
+        default=None,
+        help=(
+            "Additional exact hostname the hosted browser may reach (repeatable); "
+            "the target hostname is included automatically"
+        ),
+    )
+    p.add_argument(
+        "--compiler-config",
+        default=None,
+        help="Optional JSON object describing the compile configuration",
+    )
+    p.add_argument("--out", required=True, help="Attestation JSON output path")
+    p.add_argument(
+        "--host",
+        default=None,
+        help="Hosted base URL (default: configured host or https://app.openadapt.ai)",
+    )
+    p.add_argument(
+        "--destination-kind",
+        choices=["openadapt-managed", "customer-managed", "local"],
+        default=None,
+        help="Trust class for the challenge destination",
+    )
+    p.add_argument(
+        "--trusted-host",
+        action="append",
+        default=None,
+        help="Exact allowed customer-managed origin (repeatable)",
+    )
+    p.add_argument(
+        "--token",
+        default=None,
+        help="Ingest token used to acquire and sign the one-time challenge",
+    )
+    p.set_defaults(func=_cmd_validate_hosted)
+
+    p = sub.add_parser(
+        "push",
+        help=(
+            "Upload the exact approved sanitized archive to /api/ingest; "
+            "raw input is sanitized locally and paused for review"
+        ),
+    )
+    p.add_argument(
+        "path",
+        nargs="?",
+        default=None,
+        help=(
+            "Recording (or bundle) directory to push. Default: the most-recent "
+            "recording directory found under the current directory."
+        ),
+    )
+    p.add_argument(
+        "--kind",
+        choices=["recording", "bundle"],
+        default="recording",
+        help="What the directory is (default: recording)",
+    )
+    p.add_argument(
+        "--name",
+        default=None,
+        help="Workflow name (the server auto-suggests one otherwise)",
+    )
+    p.add_argument(
+        "--workflow-id",
+        default=None,
+        help=(
+            "Existing hosted workflow UUID to receive this validated bundle as "
+            "a new active version (bundle uploads only)"
+        ),
+    )
+    p.add_argument(
+        "--deployment-kind",
+        choices=["cloud", "byoc", "regulated"],
+        default=None,
+        help=(
+            "Execution deployment lane (independent of destination trust; default: "
+            "OPENADAPT_FLOW_DEPLOYMENT_KIND env, then config.toml "
+            "deployment_lane, else cloud). All lanes may upload only a verified "
+            "sanitized derivative."
+        ),
+    )
+    p.add_argument(
+        "--attest-non-phi",
+        action="store_true",
+        help=(
+            "Deprecated and refused: declarations no longer bypass sanitization, "
+            "review, or exact-hash approval."
+        ),
+    )
+    p.add_argument(
+        "--destination-kind",
+        choices=["openadapt-managed", "customer-managed", "local"],
+        default=None,
+        help=(
+            "Trust class for the upload endpoint. app.openadapt.ai is recognized "
+            "automatically; customer-managed endpoints also require --trusted-host."
+        ),
+    )
+    p.add_argument(
+        "--trusted-host",
+        action="append",
+        default=None,
+        help="Exact allowed customer-managed origin, e.g. https://control.example (repeatable)",
+    )
+    p.add_argument(
+        "--sanitized-out",
+        default=None,
+        help="Where to create the derivative when PATH is raw (default: OPENADAPT_HOME)",
+    )
+    p.add_argument(
+        "--auto-approve",
+        action="store_true",
+        default=None,
+        help=(
+            "Administrator policy approval for fully covered, stable derivatives; "
+            "human review is the default."
+        ),
+    )
+    p.add_argument(
+        "--validation-attestation",
+        default=None,
+        help=("Challenge-bound runtime-validation JSON required for runnable bundles"),
+    )
+    p.add_argument(
+        "--resolves-run-id",
+        default=None,
+        help=(
+            "Halted run UUID resolved by this validated replacement; requires "
+            "--kind bundle and --workflow-id"
+        ),
+    )
+    p.add_argument(
+        "--host",
+        default=None,
+        help="Hosted base URL (default: config.toml host, else https://app.openadapt.ai)",
+    )
+    p.add_argument(
+        "--token",
+        default=None,
+        help=(
+            "Ingest token (default: OPENADAPT_INGEST_TOKEN env, OS keychain, "
+            "then an existing config migration token)"
+        ),
+    )
+    p.add_argument(
+        "--json",
+        action="store_true",
+        help=(
+            "Emit one stable openadapt.push-result/v1 JSON object for Desktop "
+            "and other local controllers"
+        ),
+    )
+    p.set_defaults(func=_cmd_push)
+
+    p = sub.add_parser(
+        "report-break",
+        help=(
+            "Emit a PHI-free break diagnostic from a halted run's report.json "
+            "to /api/runs/ingest-report (the recording stays local)"
+        ),
+    )
+    p.add_argument("run_dir", help="The halted run directory (holds report.json)")
+    p.add_argument(
+        "--workflow-id",
+        required=True,
+        help="The hosted workflow id this run belongs to (from `push`/dashboard)",
+    )
+    p.add_argument(
+        "--deployment-kind",
+        choices=["cloud", "byoc"],
+        default="cloud",
+        help=(
+            "Backward-compatible hint; v2 provenance is derived server-side "
+            "and this value is not sent"
+        ),
+    )
+    p.add_argument(
+        "--org-id",
+        default=None,
+        help=(
+            "Backward-compatible hint; token ownership is derived server-side "
+            "and this value is not sent"
+        ),
+    )
+    p.add_argument(
+        "--host",
+        default=None,
+        help="Hosted base URL (default: config.toml host, else https://app.openadapt.ai)",
+    )
+    p.add_argument(
+        "--destination-kind",
+        choices=["openadapt-managed", "customer-managed", "local"],
+        default=None,
+        help="Trust class for the break-report destination",
+    )
+    p.add_argument(
+        "--trusted-host",
+        action="append",
+        default=None,
+        help="Exact allowed customer-managed origin (repeatable)",
+    )
+    p.add_argument(
+        "--token",
+        default=None,
+        help=(
+            "Ingest token (default: OPENADAPT_INGEST_TOKEN env, OS keychain, "
+            "then an existing config migration token)"
+        ),
+    )
+    p.set_defaults(func=_cmd_report_break)
+
+    p = sub.add_parser(
+        "report-run",
+        help=(
+            "Emit a PHI-free SUCCESS summary from a completed run's "
+            "report.json to /api/runs/ingest-report (bounded counts, duration, "
+            "and exact pushed-bundle identity — the recording stays local)"
+        ),
+    )
+    p.add_argument("run_dir", help="The completed run directory (holds report.json)")
+    p.add_argument(
+        "--workflow-id",
+        default=None,
+        help=(
+            "Hosted workflow id (from `push`/dashboard). When omitted the "
+            "summary binds by the exact pushed bundle content digest"
+        ),
+    )
+    p.add_argument(
+        "--deployment-kind",
+        choices=["local", "cloud", "byoc"],
+        default="local",
+        help=(
+            "Deprecated compatibility input from Flow 1.18.0; accepted but "
+            "ignored because authenticated server provenance is authoritative"
+        ),
+    )
+    p.add_argument(
+        "--backend",
+        choices=["web", "windows", "macos", "linux", "rdp", "citrix"],
+        default=None,
+        help=(
+            "Backend/substrate this run executed on "
+            "(web/windows/macos/linux/rdp/citrix)"
+        ),
+    )
+    p.add_argument(
+        "--org-id",
+        default=None,
+        help=(
+            "Deprecated compatibility input from Flow 1.18.0; accepted but "
+            "ignored because token ownership is authoritative"
+        ),
+    )
+    p.add_argument(
+        "--host",
+        default=None,
+        help="Hosted base URL (default: config.toml host, else https://app.openadapt.ai)",
+    )
+    p.add_argument(
+        "--destination-kind",
+        choices=["openadapt-managed", "customer-managed", "local"],
+        default=None,
+        help="Trust class for the run-summary destination",
+    )
+    p.add_argument(
+        "--trusted-host",
+        action="append",
+        default=None,
+        help="Exact allowed customer-managed origin (repeatable)",
+    )
+    p.add_argument(
+        "--token",
+        default=None,
+        help=(
+            "Ingest token (default: OPENADAPT_INGEST_TOKEN env, OS keychain, "
+            "then an existing config migration token)"
+        ),
+    )
+    p.add_argument(
+        "--receipt",
+        default=None,
+        metavar="DIR",
+        help=(
+            "LOCAL ONLY: write a shareable run receipt (receipt.png / .json / "
+            ".md) into DIR instead of contacting any host. The receipt is "
+            "generated from a closed allow-list -- closed enums, counts, "
+            "digests, versions -- and can carry no screenshot, OCR text, typed "
+            "value, parameter, URL, hostname, coordinate, or free-form text"
+        ),
+    )
+    p.add_argument(
+        "--production",
+        action="store_true",
+        help=(
+            "--receipt only: explicitly mark this as a real production run. "
+            "A production receipt must go "
+            "through sanitize/approve before it leaves your trust boundary"
+        ),
+    )
+    p.set_defaults(func=_cmd_report_run)
+
+    p = sub.add_parser(
+        "console",
+        help=(
+            "Serve the operator console: a localhost-only web UI over compiled "
+            "bundles, run reports/halt evidence, and skill-library lineage. "
+            "Read-only unless --allow-actions; needs `pip install "
+            "'openadapt-flow[console]'`"
+        ),
+    )
+    p.add_argument(
+        "--bundles",
+        default=".",
+        help=(
+            "Directory scanned (2 levels deep) for workflow bundle "
+            "directories (default: current directory)"
+        ),
+    )
+    p.add_argument(
+        "--runs",
+        default="runs",
+        help="Directory scanned for run directories (default: runs/)",
+    )
+    p.add_argument(
+        "--skills",
+        default=None,
+        help=(
+            "Extra directory scanned for skill libraries (skills.json); the "
+            "bundles directory is always scanned too"
+        ),
+    )
+    p.add_argument(
+        "--port",
+        type=int,
+        default=7863,
+        help="Port on 127.0.0.1 (the bind address is loopback-only, always)",
+    )
+    p.add_argument(
+        "--allow-actions",
+        action="store_true",
+        help=(
+            "Enable executing governed actions (approve / resume / certify / "
+            "promote / rollback) from the UI after an explicit confirm that "
+            "shows the exact command. Default: read-only — the UI renders the "
+            "command for the operator to copy instead"
+        ),
+    )
+    p.add_argument(
+        "--repair-store",
+        default=None,
+        help=(
+            "Repair store whose automatic repairs (standard changes) the "
+            "console lists and, when attended, lets a person revert"
+        ),
+    )
+    p.add_argument(
+        "--attend",
+        action="store_true",
+        help=(
+            "Open the authenticated local Needs Attention queue first. It is "
+            "read-only unless --allow-actions is also supplied; attended "
+            "mutations additionally require an engine-issued pause capability "
+            "and qualified deployment service"
+        ),
+    )
+    p.add_argument(
+        "--url",
+        default=None,
+        help=(
+            "Live browser URL for attended verification/continuation. Required "
+            "for --backend web unless backend.url is set in --config."
+        ),
+    )
+    p.add_argument(
+        "--headed",
+        action="store_true",
+        help=(
+            "Keep the attended browser visible for the operator. The web "
+            "attended-action path requires a headed session."
+        ),
+    )
+    p.add_argument(
+        "--local-grounding",
+        action="store_true",
+        help=(
+            "Pixel surfaces (Citrix, RDP, VNC): find icons and unlabeled "
+            "controls again after a display-scale, zoom, font or theme change "
+            "with a local model. Look-alikes halt the step. In process, no "
+            "outbound calls; the pinned 24 MB weights are fetched once."
+        ),
+    )
+    p.add_argument(
+        "--allow-model-grounding",
+        action="store_true",
+        help=(
+            "EGRESS OPT-IN: permit configured off-box model components during "
+            "fresh attended verification and deterministic continuation"
+        ),
+    )
+    p.add_argument(
+        "--remote-decisions",
+        action="store_true",
+        help=(
+            "Publish open attended pauses to the hosted decision surface over "
+            "an OUTBOUND-ONLY connection, so a paired phone can answer them "
+            "from anywhere without any inbound port, certificate, or reverse "
+            "proxy. Requires --attend --allow-actions, a --config whose "
+            "human_decisions.remote is enabled with an exact tenant and runner, "
+            "and OPENADAPT_RUNNER_TOKEN. Only the PHI-free signed task and the "
+            "closed halt context cross the wire; screenshots never leave"
+        ),
+    )
+    p.add_argument(
+        "--remote-decision-host",
+        default=None,
+        metavar="URL",
+        help=(
+            "Hosted control-plane origin for --remote-decisions "
+            "(default: the configured hosted host, https://app.openadapt.ai)"
+        ),
+    )
+    _add_backend_flags(p)
+    _add_deployment_flags(p)
+    p.set_defaults(func=_cmd_console)
+
+    p = sub.add_parser(
+        "serve-execute",
+        help=(
+            "Host the public Execute v1 HTTP+MCP contract locally. Receipts "
+            "are self-signed with a local key. They are not OpenAdapt "
+            "production Seals. Needs `pip install 'openadapt-flow[execute]'`"
+        ),
+    )
+    p.add_argument(
+        "--port",
+        type=int,
+        default=8787,
+        help="Port (default: 8787)",
+    )
+    p.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Bind address (default: 127.0.0.1)",
+    )
+    p.add_argument(
+        "--data-dir",
+        default=None,
+        help="Local data directory (default: ~/.openadapt/execute-ref)",
+    )
+    p.add_argument(
+        "--token",
+        default=None,
+        help="Bearer token (default: generated on first start in --data-dir)",
+    )
+    p.add_argument(
+        "--seed-mockmed",
+        action="store_true",
+        help="Write the synthetic MockMed ok and banner-lie admissions",
+    )
+    p.set_defaults(func=_cmd_serve_execute)
+
+    p = sub.add_parser(
+        "serve-reward",
+        help=(
+            "Score training episodes by reading the system of record through "
+            "an independent oracle. Receipts are self-signed reward receipts, "
+            "not Execute Seals. Needs `pip install 'openadapt-flow[reward]'`"
+        ),
+    )
+    p.add_argument(
+        "--contract",
+        default=None,
+        help=(
+            "Reward contract bundle directory (contract.json, "
+            "required_effects.json, forbidden_effects.json, oracle.json, "
+            "optional certificate.json). Defaults to the seeded MockMed "
+            "tier-2 bundle when --seed-mockmed is given."
+        ),
+    )
+    p.add_argument(
+        "--port",
+        type=int,
+        default=8788,
+        help="Port (default: 8788)",
+    )
+    p.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Bind address (default: 127.0.0.1)",
+    )
+    p.add_argument(
+        "--data-dir",
+        default=None,
+        help="Local data directory (default: ~/.openadapt/reward-ref)",
+    )
+    p.add_argument(
+        "--token",
+        default=None,
+        help="Bearer token (default: generated on first start in --data-dir)",
+    )
+    p.add_argument(
+        "--seed-mockmed",
+        action="store_true",
+        help=(
+            "Write the synthetic MockMed reward bundles (tier-2 read-only "
+            "SQLite oracle with a calibrated synthetic certificate; tier-0 "
+            "screen dump)"
+        ),
+    )
+    p.set_defaults(func=_cmd_serve_reward)
+
+    p = sub.add_parser(
+        "business-decisions",
+        help="Customer-runner typed-decision relay; it never resumes or acts.",
+    )
+    bdsub = p.add_subparsers(dest="business_decisions_cmd", required=True)
+    ps = bdsub.add_parser("serve", help="Serve the outbound-only non-actuating relay")
+    ps.add_argument("--runs", required=True, help="Customer-local durable run root")
+    ps.add_argument(
+        "--runner-config", default=None, help="Operator-authored runner.toml"
+    )
+    ps.add_argument(
+        "--profile", required=True, help="Named deployment profile from runner.toml"
+    )
+    ps.add_argument(
+        "--cloud-origin",
+        default=None,
+        metavar="URL",
+        help="Outbound HTTPS control-plane origin",
+    )
+    ps.add_argument(
+        "--poll-wait-seconds",
+        type=float,
+        default=25.0,
+        help="Cloud long-poll wait (0 through 25; default: 25)",
+    )
+    ps.add_argument("--once", action="store_true", help="Run one relay cycle and exit")
+    ps.set_defaults(func=_cmd_business_decisions_serve)
+
+    # --- connector: the BYOC (bring-your-own-cloud) outbound-pull daemon -------
+    p = sub.add_parser(
+        "connector",
+        help=(
+            "BYOC connector: enroll this machine with OpenAdapt Cloud and run "
+            "governed jobs LOCALLY (customer owns the data boundary; PHI stays "
+            "on this side)"
+        ),
+    )
+    csub = p.add_subparsers(dest="connector_cmd", required=True)
+
+    pe = csub.add_parser(
+        "enroll",
+        help="Enroll against a mock/development control plane and persist its token",
+    )
+    pe.add_argument(
+        "--control-plane-url", help="Control plane base URL (or CONTROL_PLANE_URL)"
+    )
+    pe.add_argument(
+        "--enrollment-secret", help="Org enrollment secret (or BYOC_ENROLLMENT_SECRET)"
+    )
+    pe.add_argument("--org-id", help="Org id to enroll under (or BYOC_ORG_ID)")
+    pe.add_argument("--name", help="Connector name (or BYOC_CONNECTOR_NAME)")
+    pe.add_argument(
+        "--profile", help="Path to the deployment.yaml governed runs use as --config"
+    )
+    pe.add_argument(
+        "--policy", help="Pinned admitted policy name (else the deployment config's)"
+    )
+    pe.add_argument("--storage-backend", help="Customer storage backend (local)")
+    pe.add_argument(
+        "--storage-root",
+        help="Customer storage root dir (a full-disk-encrypted volume)",
+    )
+    pe.set_defaults(func=_cmd_connector)
+
+    pr = csub.add_parser(
+        "run",
+        help="Poll the control plane and run governed jobs until interrupted",
+    )
+    pr.add_argument(
+        "--control-plane-url", help="Control plane base URL (or CONTROL_PLANE_URL)"
+    )
+    pr.add_argument("--token", help="Per-connector token (or BYOC_CONNECTOR_TOKEN)")
+    pr.add_argument("--org-id", help="Org id (or BYOC_ORG_ID)")
+    pr.add_argument(
+        "--profile", help="Path to the deployment.yaml governed runs use as --config"
+    )
+    pr.add_argument(
+        "--policy", help="Pinned admitted policy name (else the deployment config's)"
+    )
+    pr.add_argument("--storage-backend", help="Customer storage backend (local)")
+    pr.add_argument("--storage-root", help="Customer storage root dir")
+    pr.add_argument(
+        "--poll-wait", type=int, help="Long-poll wait seconds (or BYOC_POLL_WAIT_S)"
+    )
+    pr.add_argument(
+        "--once", action="store_true", help="Poll once then exit (cron-style)"
+    )
+    pr.set_defaults(func=_cmd_connector)
+
+    from openadapt_flow.cli_admit import register_admit_parser
+    from openadapt_flow.cli_api import register_api_parser
+    from openadapt_flow.cli_check import register_check_parser
+
+    register_admit_parser(sub)
+    register_check_parser(sub)
+    register_api_parser(sub)
+
+    from openadapt_flow.cli_deferred import register_deferred_parser
+
+    register_deferred_parser(sub)
+
+    from openadapt_flow.cli_undo import register as _register_undo
+
+    _register_undo(
+        sub,
+        replay=_cmd_replay,
+        target_problem=_undo_run_target_problem,
+        add_run_flags=(
+            _add_backend_flags,
+            _add_browser_session_flags,
+            _add_deployment_flags,
+        ),
+    )
+
+    from openadapt_flow.cli_rollback import register as _register_rollback
+
+    _register_rollback(sub)
+
+    from openadapt_flow.cli_shadow import register as _register_shadow
+
+    _register_shadow(sub)
+
+    from openadapt_flow.cli_receipt import register as _register_receipt
+
+    _register_receipt(sub)
+
+    from openadapt_flow.learn import register as _register_learn
+
+    _register_learn(sub)
+
+    from openadapt_flow.cli_cleanup import register as _register_cleanup
+
+    _register_cleanup(sub)
+
+    from openadapt_flow.jit.cli import add_parser as _add_jit_parser
+
+    _add_jit_parser(sub)
+
+    from openadapt_flow.compile_agent.cli import add_parser as _add_compile_agent_parser
+
+    _add_compile_agent_parser(sub)
+
+    from openadapt_flow.agent_guard.cli import add_parser as _add_guard_parser
+
+    _add_guard_parser(sub)
+
+    from openadapt_flow.cli_fleet import register_fleet_parser
+
+    register_fleet_parser(sub)
+
+    return parser
+
+
+@contextmanager
+def _attended_service_from_args(args: argparse.Namespace) -> Iterator[Any]:
+    """Resolve CLI overrides into the public persistent attended service."""
+    if not (args.attend and args.allow_actions):
+        yield None
+        return
+    if not (getattr(args, "config", None) or getattr(args, "backend", None)):
+        raise SystemExit(
+            "console --attend --allow-actions requires an explicit --config "
+            "or --backend target; refusing to attach mutations to a demo or "
+            "implicit default"
+        )
+
+    from openadapt_flow.backends.factory import _normalize_kind
+    from openadapt_flow.runtime.durable.attended_service import (
+        AttendedActionService,
+    )
+
+    try:
+        cfg, effects_cfg, actuation_cfg = _deployment_sections(args)
+        backend_cfg = _resolve_backend_config(args, cfg)
+    except (FileNotFoundError, ValueError) as exc:
+        raise SystemExit(str(exc)) from exc
+    readback_cfg = cfg.model_copy(update={"effects": effects_cfg})
+    if _refuse_shared_readback_session(readback_cfg, backend_cfg, operation="console"):
+        raise SystemExit(2)
+    allow_egress = bool(
+        cfg.runtime.allow_model_grounding
+        or getattr(args, "allow_model_grounding", False)
+    )
+
+    if _normalize_kind(backend_cfg.kind) == "web":
+        target_url = getattr(args, "url", None) or backend_cfg.url
+        if not target_url:
+            raise SystemExit(
+                "attended web actions require --url or backend.url in --config"
+            )
+        headed = bool(getattr(args, "headed", False) or backend_cfg.headed)
+        if not headed:
+            raise SystemExit(
+                "attended web actions require a visible live session; pass "
+                "--headed or set backend.headed: true"
+            )
+        backend_cfg = backend_cfg.model_copy(
+            update={"url": target_url, "headed": headed}
+        )
+
+    deployment = cfg.model_copy(
+        update={
+            "backend": backend_cfg,
+            "effects": effects_cfg,
+            "actuation": actuation_cfg,
+            "runtime": cfg.runtime.model_copy(
+                update={
+                    "allow_model_grounding": allow_egress,
+                    "local_grounding": bool(
+                        cfg.runtime.local_grounding
+                        or getattr(args, "local_grounding", False)
+                    ),
+                }
+            ),
+        }
+    )
+    try:
+        with AttendedActionService(deployment) as service:
+            yield service
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+
+
+def _decision_supervisor_from_args(
+    args: argparse.Namespace, attended_service: Any
+) -> Any:
+    """Build the outbound decision lane, or fail loudly. Never returns silently.
+
+    Every refusal here is a ``SystemExit`` rather than a disabled feature. An
+    operator who asked for ``--remote-decisions`` and got a loopback-only
+    console instead would believe a phone can answer a halt when nothing is
+    listening for one, which is the exact "looks like it works" failure this
+    lane must not have.
+    """
+    if not getattr(args, "remote_decisions", False):
+        return None
+    if not (args.attend and args.allow_actions):
+        raise SystemExit(
+            "--remote-decisions requires --attend --allow-actions: a remote "
+            "answer is executed through the same governed attended path as a "
+            "local one, and that path is not available in a read-only console"
+        )
+    if attended_service is None:  # pragma: no cover - guarded by the check above
+        raise SystemExit("--remote-decisions requires an attended action service")
+
+    from openadapt_flow.console.decision_relay import (
+        DecisionRelay,
+        HttpxRelayTransport,
+        RelayRefused,
+        resolve_runner_token,
+    )
+    from openadapt_flow.console.decision_supervisor import (
+        DecisionSupervisor,
+        DecisionSupervisorThread,
+    )
+    from openadapt_flow.hosted import HostedError, resolve_host
+
+    try:
+        cfg, _effects_cfg, _actuation_cfg = _deployment_sections(args)
+    except (FileNotFoundError, ValueError) as exc:
+        raise SystemExit(str(exc)) from exc
+    remote = cfg.human_decisions.remote
+    if not remote.enabled:
+        raise SystemExit(
+            "--remote-decisions requires human_decisions.remote.enabled in "
+            "--config, with the exact tenant_id and runner_id the control "
+            "plane issued for this machine"
+        )
+    try:
+        token = resolve_runner_token()
+        origin = resolve_host(getattr(args, "remote_decision_host", None))
+        relay = DecisionRelay(
+            HttpxRelayTransport(origin, token), token=token, deployment=cfg
+        )
+    except (RelayRefused, HostedError) as exc:
+        raise SystemExit(str(exc)) from exc
+    supervisor = DecisionSupervisor(
+        args.runs, relay=relay, deployment=cfg, executor=attended_service
+    )
+    print(
+        f"  remote decisions: outbound-only to {origin} "
+        f"(tier {remote.context_tier}; no inbound port, no certificate)"
+    )
+    return DecisionSupervisorThread(supervisor)
+
+
+def _cmd_console(args: argparse.Namespace) -> int:
+    # find_spec first so "extra not installed" is distinguishable from "the
+    # console package itself is broken" (a wiring bug must surface, not hide
+    # behind an install hint).
+    from importlib.util import find_spec
+
+    missing = [m for m in ("fastapi", "uvicorn") if find_spec(m) is None]
+    if missing:
+        raise SystemExit(
+            f"the operator console needs {', '.join(missing)} — install the "
+            "console extra:  pip install 'openadapt-flow[console]'"
+        )
+    from openadapt_flow.console.server import LOOPBACK_HOST, serve
+
+    allow_actions = args.allow_actions
+    mode = "ACTIONS ENABLED (confirm-gated)" if allow_actions else "read-only"
+    if args.attend:
+        mode += "; attention-first"
+    print(
+        f"operator console on http://{LOOPBACK_HOST}:{args.port}  [{mode}]\n"
+        f"  bundles: {Path(args.bundles).resolve()}\n"
+        f"  runs:    {Path(args.runs).resolve()}"
+    )
+    with _attended_service_from_args(args) as attended_service:
+        serve(
+            args.bundles,
+            args.runs,
+            args.skills,
+            allow_actions=allow_actions,
+            attend=args.attend,
+            attended_service=attended_service,
+            decision_supervisor=_decision_supervisor_from_args(args, attended_service),
+            port=args.port,
+            repair_store=getattr(args, "repair_store", None),
+        )
+    return 0
+
+
+def _cmd_serve_execute(args: argparse.Namespace) -> int:
+    from importlib.util import find_spec
+
+    missing = [
+        name
+        for name in ("fastapi", "uvicorn", "openadapt_types")
+        if find_spec(name) is None
+    ]
+    if missing:
+        raise SystemExit(
+            f"serve-execute needs {', '.join(missing)} — install the "
+            "execute extra:  pip install 'openadapt-flow[execute]'"
+        )
+    from openadapt_flow.execute import SELF_SIGNED_NOTICE
+    from openadapt_flow.execute.app import serve
+    from openadapt_flow.execute.service import ExecuteService, default_data_dir
+
+    data_dir = Path(args.data_dir) if args.data_dir else default_data_dir()
+    store = ExecuteService(
+        data_dir,
+        token=args.token,
+        seed_mockmed=bool(args.seed_mockmed),
+    )
+    print("openadapt-flow reference Execute")
+    print(f"  http://{args.host}:{args.port}")
+    print(f"  data dir     {data_dir}")
+    print(f"  token        {store.token}")
+    print("  issuer       self_signed")
+    print(f"  fingerprint  {store.fingerprint}")
+    print(f"  {SELF_SIGNED_NOTICE}")
+    if args.seed_mockmed:
+        print("  seeded MockMed admissions (ok + banner-lie)")
+    serve(
+        data_dir,
+        host=args.host,
+        port=args.port,
+        token=store.token,
+        service=store,
+    )
+    return 0
+
+
+def _cmd_serve_reward(args: argparse.Namespace) -> int:
+    from importlib.util import find_spec
+
+    missing = [
+        name
+        for name in ("fastapi", "uvicorn", "openadapt_types")
+        if find_spec(name) is None
+    ]
+    if missing:
+        raise SystemExit(
+            f"serve-reward needs {', '.join(missing)} — install the "
+            "reward extra:  pip install 'openadapt-flow[reward]'"
+        )
+    from openadapt_flow.reward import REWARD_NOTICE
+    from openadapt_flow.reward.serve import serve
+    from openadapt_flow.reward.worker import RewardWorker, default_data_dir
+
+    data_dir = Path(args.data_dir) if args.data_dir else default_data_dir()
+    contract = args.contract
+    seeded_paths: dict[str, Path] = {}
+    if args.seed_mockmed:
+        from openadapt_flow.execute.keys import (
+            fingerprint_of,
+            load_or_create_private_key,
+        )
+        from openadapt_flow.reward.seed import seed_mockmed
+
+        key = load_or_create_private_key(data_dir)
+        issuer_key_id = "self_signed:" + fingerprint_of(key.public_key())
+        seeded_paths = seed_mockmed(data_dir, key, issuer_key_id)
+        if contract is None:
+            contract = str(seeded_paths["tier2"])
+    if contract is None:
+        raise SystemExit("serve-reward needs --contract <bundle dir> or --seed-mockmed")
+    worker = RewardWorker(contract, data_dir, token=args.token)
+    print("openadapt-flow reference reward worker")
+    print(f"  http://{args.host}:{args.port}")
+    print(f"  data dir     {data_dir}")
+    print(f"  contract     {worker.bundle.directory}")
+    print(f"  digest       {worker.contract.digest}")
+    print(
+        f"  oracle       {worker.bundle.oracle.channel.value} "
+        f"(tier {int(worker.bundle.oracle.tier)})"
+    )
+    print(f"  certificate  {'present' if worker.certificate else 'absent'}")
+    print(f"  token        {worker.token}")
+    print("  issuer       self_signed")
+    print(f"  fingerprint  {worker.fingerprint}")
+    print(f"  {REWARD_NOTICE}")
+    for label, path in seeded_paths.items():
+        print(f"  seeded {label:<6} {path}")
+    if seeded_paths:
+        print(f"  store        {data_dir / 'mockmed' / 'records.db'}")
+        print(f"  screen       {data_dir / 'mockmed' / 'screen.json'}")
+        print(
+            "  Register each episode with POST /v1/episodes BEFORE the "
+            "rollout runs. A required effect asserts a change, so the worker "
+            "needs the pre-episode baseline and fixes the subject in advance."
+        )
+    serve(worker, host=args.host, port=args.port)
+    return 0
+
+
+def _connector_flags(args: argparse.Namespace) -> dict[str, object]:
+    """Collect the connector CLI flags into the settings-resolution dict."""
+    keys = (
+        "control_plane_url",
+        "token",
+        "org_id",
+        "name",
+        "profile",
+        "policy",
+        "storage_backend",
+        "storage_root",
+        "poll_wait",
+    )
+    return {
+        k: getattr(args, k, None) for k in keys if getattr(args, k, None) is not None
+    }
+
+
+def _cmd_connector(args: argparse.Namespace) -> int:
+    """The BYOC connector: enroll this machine, or run governed jobs locally.
+
+    Both sub-verbs are thin wrappers over :mod:`openadapt_flow.connector`. The
+    engine ships the connector so a dispatched run is the SAME fail-closed
+    ``openadapt-flow run`` admission gate + governed Replayer the local CLI uses,
+    executed inside the customer perimeter against the customer's own storage.
+    """
+    import os
+
+    from openadapt_flow.connector import (
+        ConnectorClient,
+        ConnectorClientError,
+        load_settings,
+        run_loop,
+        save_enrollment,
+    )
+    from openadapt_flow.connector.config import ConnectorConfigError
+    from openadapt_flow.connector.executor import _subprocess_runner
+
+    verb = getattr(args, "connector_cmd", None)
+    try:
+        settings = load_settings(_connector_flags(args))
+    except ConnectorConfigError as exc:
+        print(f"connector: {exc}")
+        return 2
+
+    if verb == "enroll":
+        enrollment_secret = getattr(args, "enrollment_secret", None) or os.environ.get(
+            "BYOC_ENROLLMENT_SECRET"
+        )
+        client = ConnectorClient(settings.control_plane_url)
+        try:
+            data = client.enroll(
+                enrollment_secret=enrollment_secret,
+                org_id=settings.org_id,
+                name=settings.name,
+            )
+        except ConnectorClientError as exc:
+            print(f"connector enroll failed: {exc}")
+            return 1
+        finally:
+            client.close()
+        settings.token = data.get("token") or settings.token
+        settings.org_id = data.get("org_id") or settings.org_id
+        path = save_enrollment(settings)
+        print(
+            f"enrolled connector {data.get('connector_id', '?')} for org "
+            f"{settings.org_id}; token persisted to {path} (0600)."
+        )
+        return 0
+
+    # verb == "run"
+    if not settings.token:
+        print(
+            "connector run: no token. Create an organization connector in "
+            "OpenAdapt Cloud → Settings, then pass --token or set "
+            "BYOC_CONNECTOR_TOKEN."
+        )
+        return 2
+    client = ConnectorClient(settings.control_plane_url, token=settings.token)
+    try:
+        return run_loop(
+            client,
+            settings,
+            runner=_subprocess_runner,
+            once=bool(getattr(args, "once", False)),
+        )
+    finally:
+        client.close()
+
+
+def _cmd_business_decisions_serve(args: argparse.Namespace) -> int:
+    """Run typed-decision transport only; no workflow can continue here."""
+
+    from openadapt_flow.interop.decision_relay_transport import RelayRefused
+    from openadapt_flow.runner.business_decision_service import (
+        BusinessDecisionServiceLoop,
+        build_business_decision_supervisor,
+        resolve_business_decision_origin,
+    )
+    from openadapt_flow.runner.config import RunnerConfigError, load_runner_config
+
+    try:
+        config = load_runner_config(
+            Path(args.runner_config) if args.runner_config else None
+        )
+        origin = resolve_business_decision_origin(args.cloud_origin)
+        supervisor = build_business_decision_supervisor(
+            runs_root=Path(args.runs),
+            runner_config=config,
+            profile=args.profile,
+            origin=origin,
+        )
+        loop = BusinessDecisionServiceLoop(supervisor, wait_s=args.poll_wait_seconds)
+    except (RelayRefused, RunnerConfigError, OSError, ValueError) as exc:
+        print(f"business decisions: {exc}", file=sys.stderr)
+        return 2
+    if args.once:
+        health = loop.serve_once()
+        print(health.as_json())
+        return 0 if health.state == "ready" else 1
+    loop.run(lambda health: print(health.as_json(), flush=True))
+    return 0
+
+
+def _qualify_default_form(argv: list[str]) -> list[str]:
+    """``qualify <bundle> --verify ...`` means ``qualify campaign <bundle> ...``."""
+
+    if len(argv) >= 2 and argv[0] == "qualify" and not argv[1].startswith("-"):
+        verbs = set()
+        for action in build_parser()._subparsers._group_actions:  # type: ignore[union-attr]
+            qualify_parser = getattr(action, "choices", {}).get("qualify")
+            if qualify_parser is not None:
+                for sub_action in qualify_parser._subparsers._group_actions:  # type: ignore[union-attr]
+                    verbs |= set(getattr(sub_action, "choices", {}) or {})
+        if argv[1] not in verbs:
+            return [argv[0], "campaign", *argv[1:]]
+    return argv
+
+
+# Flags that print and exit before any work, so loading OCR would only slow
+# the exit down.
+_PREWARM_SKIP_FLAGS = frozenset({"-h", "--help", "--version"})
+
+
+#: Commands that read sealed bundles and encrypted recordings in memory and
+#: keep what they write sealed (docs/phi_at_rest.md). Any other command given
+#: a sealed path refuses before it reads anything, rather than decrypt to disk
+#: or misread the ciphertext. Keyed by ``module:function``.
+_SEALED_READY_COMMANDS: frozenset[str] = frozenset(
+    {
+        "openadapt_flow.__main__:_cmd_seal",
+        "openadapt_flow.__main__:_cmd_certify",
+        "openadapt_flow.__main__:_cmd_record",
+        "openadapt_flow.__main__:_cmd_compile",
+        "openadapt_flow.__main__:_cmd_induce",
+        "openadapt_flow.__main__:_cmd_scaffold_verifier",
+        "openadapt_flow.__main__:_cmd_run",
+        "openadapt_flow.__main__:_cmd_replay",
+        "openadapt_flow.__main__:_cmd_resume",
+        "openadapt_flow.__main__:_cmd_approve",
+        "openadapt_flow.__main__:_cmd_qualify",
+        # Read through openadapt_flow.artifacts (tests/test_artifact_reads.py).
+        "openadapt_flow.__main__:_cmd_visualize",
+        "openadapt_flow.__main__:_cmd_explain",
+        "openadapt_flow.__main__:_cmd_emit_skill",
+        "openadapt_flow.__main__:_cmd_for_each",
+        "openadapt_flow.__main__:_cmd_visualize_process",
+        "openadapt_flow.__main__:_cmd_compose",
+        "openadapt_flow.__main__:_cmd_process",
+        "openadapt_flow.__main__:_cmd_variants",
+        "openadapt_flow.__main__:_cmd_route",
+        "openadapt_flow.__main__:_cmd_teach",
+        "openadapt_flow.__main__:_cmd_push",
+        "openadapt_flow.__main__:_cmd_sanitize",
+        "openadapt_flow.__main__:_cmd_review_sanitized",
+        "openadapt_flow.__main__:_cmd_approve_sanitized",
+        "openadapt_flow.cli_sections:cmd_sections",
+        "openadapt_flow.cli_check:cmd_check_mark",
+        "openadapt_flow.cli_admit:cmd_admit_run",
+        "openadapt_flow.cli_admit:cmd_admit_decide",
+        "openadapt_flow.cli_admit:cmd_admit_status",
+        "openadapt_flow.cli_undo:_cmd_undo_declare",
+        "openadapt_flow.cli_undo:_cmd_undo_list",
+        "openadapt_flow.cli_undo:_cmd_undo_approve",
+        "openadapt_flow.cli_undo:_cmd_undo_run",
+    }
+)
+
+
+#: Commands whose output can't be encrypted yet (docs/phi_at_rest.md): by
+#: default they write it in plaintext and name it on stderr and in the ledger;
+#: OPENADAPT_FLOW_AT_REST=strict refuses them before they run.
+_UNSEALED_OUTPUT_COMMANDS: dict[str, str] = {
+    "openadapt_flow.__main__:_cmd_visualize": "the visualize page",
+    "openadapt_flow.__main__:_cmd_visualize_process": "the visualize page",
+    "openadapt_flow.__main__:_cmd_explain": "the explain output",
+    "openadapt_flow.__main__:_cmd_teach": "the teach output",
+    "openadapt_flow.__main__:_cmd_emit_skill": "the emitted skill",
+    "openadapt_flow.__main__:_cmd_push": "the push upload copy",
+    # Their parent reports (composition, variant, process) can't be sealed
+    # yet and are written after records change, so strict refuses up front.
+    "openadapt_flow.__main__:_cmd_compose": "the composition report",
+    "openadapt_flow.__main__:_cmd_process": "the process report",
+    "openadapt_flow.__main__:_cmd_variants": "the variant report",
+    "openadapt_flow.__main__:_cmd_route": "the variant report",
+    "openadapt_flow.__main__:_cmd_for_each": "the looped bundle",
+    "openadapt_flow.__main__:_cmd_bench": "the bench report",
+    "openadapt_flow.__main__:_cmd_sanitize": "the sanitized copy",
+    "openadapt_flow.cli_redact_report:_cmd_redact_report": "the redacted report",
+    "openadapt_flow.cli_shadow:cmd_shadow": "the shadow snapshots and report",
+    "openadapt_flow.compile_agent.cli:cmd_compile_agent": (
+        "the compile-agent screenshots and traces"
+    ),
+    "openadapt_flow.agent_guard.cli:cmd_guard": "the guard's run record",
+    "openadapt_flow.jit.cli:cmd_jit": "the compiled agent run",
+}
+
+#: Commands that write no recorded screen, record or report data (service
+#: health and control, the no-outbound allow list, key and Seal verification).
+#: Under OPENADAPT_FLOW_AT_REST=strict only these and the sealed-ready commands
+#: run; every other command is held back before it starts.
+_STRICT_SAFE_COMMANDS: frozenset[str] = frozenset(
+    {
+        "openadapt_flow.cli_service:_cmd_boot_check",
+        "openadapt_flow.cli_service:_cmd_egress_audit",
+        "openadapt_flow.cli_service:_cmd_health",
+        "openadapt_flow.cli_service:_cmd_notices",
+        "openadapt_flow.cli_service:_cmd_pf_check",
+        "openadapt_flow.cli_service:_cmd_pf_render",
+        "openadapt_flow.cli_service:_cmd_restart",
+        "openadapt_flow.cli_service:_cmd_run",
+        "openadapt_flow.cli_no_outbound:_cmd_add",
+        "openadapt_flow.cli_no_outbound:_cmd_derive",
+        "openadapt_flow.cli_no_outbound:_cmd_list",
+        "openadapt_flow.cli_no_outbound:_cmd_remove",
+        "openadapt_flow.cli_local_seal:_guarded",
+        "openadapt_flow.cli_receipt:cmd_anchor",
+        "openadapt_flow.cli_receipt:cmd_keys_export",
+        "openadapt_flow.cli_receipt:cmd_verify",
+        "openadapt_flow.agent.seal_cli:cmd_keys_pin",
+        "openadapt_flow.agent.seal_cli:cmd_keys_show",
+        "openadapt_flow.agent.seal_cli:cmd_verify",
+    }
+)
+
+
+#: Sealed-ready commands that seal plaintext input themselves under strict
+#: mode (a recording, a compiled, induced or admitted bundle, a run directory,
+#: the taught bundle and skill library, the sanitized review copy of a push).
+_STRICT_SELF_SEALING: frozenset[str] = frozenset(
+    {
+        "openadapt_flow.__main__:_cmd_record",
+        "openadapt_flow.__main__:_cmd_compile",
+        "openadapt_flow.__main__:_cmd_induce",
+        "openadapt_flow.cli_admit:cmd_admit_run",
+        "openadapt_flow.__main__:_cmd_run",
+        "openadapt_flow.__main__:_cmd_replay",
+        "openadapt_flow.__main__:_cmd_resume",
+        "openadapt_flow.__main__:_cmd_teach",
+        "openadapt_flow.__main__:_cmd_push",
+    }
+)
+
+
+def _plaintext_directories_in(args: argparse.Namespace) -> list[Path]:
+    """Existing directories among the arguments that are not inside a sealed
+    set. Files a person passes (a config, a results JSON) are not artifacts
+    and are not checked."""
+    from openadapt_flow import sealed_set
+
+    found: list[Path] = []
+    for name, value in vars(args).items():
+        if name == "func":
+            continue
+        for item in value if isinstance(value, (list, tuple)) else [value]:
+            if not isinstance(item, (str, Path)) or not str(item):
+                continue
+            text = str(item)
+            if "://" in text or "\n" in text or len(text) > 4096:
+                continue
+            candidates = [text]
+            if isinstance(item, str) and "=" in text:
+                candidates.append(text.split("=", 1)[1])
+            for candidate in candidates:
+                path = Path(candidate)
+                if not path.is_dir():
+                    continue
+                if sealed_set.is_sealed(path) or sealed_set.sealed_root(path):
+                    continue
+                if path not in found:
+                    found.append(path)
+    return found
+
+
+#: Commands that write their output sealed when an input is sealed, by the
+#: arguments that name those inputs.
+_SEALED_OUTPUT_FROM_SEALED_INPUT: dict[str, tuple[str, ...]] = {
+    "openadapt_flow.__main__:_cmd_for_each": ("bundle",),
+    "openadapt_flow.__main__:_cmd_teach": ("run_dir", "fix", "bundle"),
+    "openadapt_flow.__main__:_cmd_push": ("path",),
+}
+
+#: Commands that write their output sealed in strict mode.
+_SEALED_OUTPUT_IN_STRICT: frozenset[str] = frozenset(
+    {"openadapt_flow.__main__:_cmd_teach", "openadapt_flow.__main__:_cmd_push"}
+)
+
+
+def _unsealed_output_check(args: argparse.Namespace) -> None:
+    """Warn and record, or refuse in strict mode, a command whose output
+    can't be encrypted yet. Strict mode runs only the sealed-ready and
+    strict-safe commands. Also rejects a mistyped OPENADAPT_FLOW_AT_REST."""
+    from openadapt_flow import at_rest
+
+    func = getattr(args, "func", None)
+    command = f"{getattr(func, '__module__', '')}:{getattr(func, '__name__', '')}"
+    video = getattr(args, "record_video", None)
+    if at_rest.strict():  # raises on an unknown mode before anything runs
+        if command not in _SEALED_READY_COMMANDS | _STRICT_SAFE_COMMANDS:
+            raise at_rest.AtRestRefused(
+                f"{at_rest.MODE_ENV}=strict runs only the commands that keep "
+                "patient data encrypted, and this one writes files outside an "
+                "encrypted set. Nothing was run."
+            )
+        if command in _SEALED_READY_COMMANDS and command not in _STRICT_SELF_SEALING:
+            # These keep sealed input sealed; given plaintext input they
+            # re-save or write beside it in plaintext. So every directory
+            # they are given must already be encrypted.
+            plain = _plaintext_directories_in(args)
+            if plain:
+                raise at_rest.AtRestRefused(
+                    f"{at_rest.MODE_ENV}=strict runs this command on encrypted "
+                    f"input only, and {plain[0]} is not encrypted. Seal it first "
+                    "(openadapt-flow seal, or compile/run under strict mode). "
+                    "Nothing was run."
+                )
+        if command == "openadapt_flow.__main__:_cmd_qualify" and getattr(
+            args, "qualify_cmd", None
+        ) in {"run-case", "drills"}:
+            raise at_rest.AtRestRefused(
+                f"{at_rest.MODE_ENV}=strict holds back qualification trials: "
+                "their case inputs and fault files are written beside the "
+                "sealed run. Nothing was run."
+            )
+        # Written after records change, so refused before the run starts.
+        healed = getattr(args, "save_healed_to", None)
+        if healed:
+            at_rest.unsealed_write("a healed bundle (--save-healed-to)", healed)
+        workers = getattr(args, "workers", None)
+        if isinstance(workers, int) and workers > 0:
+            at_rest.unsealed_write(
+                "the worker pool report (--workers)", "the run directory"
+            )
+    if video:
+        at_rest.unsealed_write("a screen video (--record-video)", video)
+    artifact = _UNSEALED_OUTPUT_COMMANDS.get(command)
+    if artifact is None:
+        return
+    if command in _SEALED_OUTPUT_IN_STRICT and at_rest.strict():
+        return  # strict mode makes a sealed output
+    if command in _SEALED_OUTPUT_FROM_SEALED_INPUT:
+        from openadapt_flow import sealed_set
+
+        for name in _SEALED_OUTPUT_FROM_SEALED_INPUT[command]:
+            source = getattr(args, name, None)
+            if source and sealed_set.is_sealed_path(source):
+                return  # a sealed input makes a sealed output
+    target = next(
+        (
+            getattr(args, name)
+            for name in ("out", "output", "out_dir", "dest")
+            if isinstance(getattr(args, name, None), (str, Path))
+        ),
+        "its output",
+    )
+    at_rest.unsealed_write(artifact, target)
+
+
+class _UnclassifiedArgument(ValueError):
+    """An argument value that is neither a path, a scalar nor a container."""
+
+
+def _sealed_paths_in(args: argparse.Namespace) -> list[Path]:
+    """The sealed roots named anywhere in the command's arguments.
+
+    Values are walked at any depth (lists, tuples, sets, mappings, nested
+    pairs such as teach-branch's ``--example RUN FIX``). A value that is not
+    a path, a known scalar or a container raises ``_UnclassifiedArgument``;
+    ``_private_input`` treats that as private.
+    """
+    found: list[Path] = []
+    unclassified: list[str] = []
+    for name, value in vars(args).items():
+        if name == "func":
+            continue
+        # Attributes named "_..." are set by the code (handlers, run state),
+        # not typed by the user: their paths are still read, but an object
+        # among them does not make the run private.
+        internal = name.startswith("_")
+        _collect_sealed(value, name, found, [] if internal else unclassified)
+    if unclassified:
+        raise _UnclassifiedArgument(
+            f"cannot tell whether {unclassified[0]} names sealed input"
+        )
+    return found
+
+
+def _collect_sealed(
+    value: object, name: str, found: list[Path], unclassified: list[str]
+) -> None:
+    import enum
+
+    from openadapt_flow import sealed_set
+
+    if value is None or isinstance(value, (bool, int, float, enum.Enum)):
+        return
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            _collect_sealed(key, name, found, unclassified)
+            _collect_sealed(item, name, found, unclassified)
+        return
+    if isinstance(value, (list, tuple, set, frozenset)):
+        for item in value:
+            _collect_sealed(item, name, found, unclassified)
+        return
+    if not isinstance(value, (str, Path)):
+        unclassified.append(f"--{name.replace('_', '-')}")
+        return
+    text = str(value)
+    if not text:
+        return
+    # Every string is checked against the filesystem, whatever it looks
+    # like: a newline, "://" or any length can spell a local path. NAME=PATH
+    # arguments (--child, --admission, --variant) name a path after the
+    # first "="; check both readings.
+    candidates = [text]
+    if isinstance(value, str) and "=" in text:
+        candidates.append(text.split("=", 1)[1])
+    for candidate in candidates:
+        if not candidate:
+            continue
+        try:
+            root = _sealed_root_named(candidate)
+        except _UnclassifiedArgument:
+            unclassified.append(f"--{name.replace('_', '-')}")
+            continue
+        if root is None:
+            root = sealed_set.sealed_root(candidate)  # an active writer
+        if root is not None and root not in found:
+            found.append(root)
+
+
+def _sealed_root_named(text: str) -> Optional[Path]:
+    """The sealed set that ``text`` names or lies inside, if any.
+
+    Raises ``_UnclassifiedArgument`` when the filesystem cannot tell (a
+    header that cannot be checked for a reason other than not existing).
+    """
+    import errno
+    import os
+    import stat
+
+    from openadapt_flow import sealed_set
+
+    # The path cannot exist, so nothing sealed can be read through it.
+    no_such_path = (errno.ENOENT, errno.ENOTDIR, errno.ENAMETOOLONG)
+    # Windows rejects a name it cannot hold, such as "http:" with a colon
+    # (ERROR_INVALID_NAME, ERROR_BAD_PATHNAME): no such path can exist either.
+    invalid_name = (123, 161)
+    try:
+        full = os.path.abspath(text)
+    except ValueError:  # an embedded NUL: no such path
+        return None
+    current = full
+    while True:
+        try:
+            st = os.stat(os.path.join(current, sealed_set.HEADER))
+        except ValueError:
+            return None
+        except OSError as exc:
+            invalid = getattr(exc, "winerror", None) in invalid_name
+            if exc.errno not in no_such_path and not invalid:
+                raise _UnclassifiedArgument(
+                    "a path whose sealed header cannot be checked"
+                ) from exc
+        else:
+            if stat.S_ISREG(st.st_mode):
+                return Path(text) if current == full else Path(current)
+        parent = os.path.dirname(current)
+        if parent == current:
+            return None
+        current = parent
+
+
+def _refusal_text(args: argparse.Namespace, error: BaseException) -> str:
+    """What a command prints when it refuses ``error``.
+
+    When the command read sealed input or strict mode is on, any part of the
+    message may quote decrypted content (a skill id, a workflow name, a
+    path inside the artifact), so only the kind of error is printed, unless
+    the error is marked ``public`` (built only from the command line).
+    Otherwise the message prints without quoted input values.
+    """
+    from openadapt_flow import safe_errors
+
+    if _private_input(args) and getattr(error, "public", False) is not True:
+        return safe_errors.withheld(error)
+    return safe_errors.message(error)
+
+
+def _private_input(args: argparse.Namespace) -> bool:
+    """Whether the command read sealed input or runs in strict mode."""
+    from openadapt_flow import at_rest, sealed_set
+
+    try:
+        return at_rest.strict() or bool(_sealed_paths_in(args))
+    except (sealed_set.SealedSetError, ValueError, OSError):
+        return True  # cannot tell: treat it as private
+
+
+def _sealed_input_refusal(args: argparse.Namespace) -> Optional[str]:
+    """Refuse a sealed path in a command that cannot keep it sealed, and a
+    sealed path whose key is not configured, before the command runs."""
+    from openadapt_flow import sealed_set
+
+    sealed = _sealed_paths_in(args)
+    if not sealed:
+        return None
+    func = getattr(args, "func", None)
+    command = f"{getattr(func, '__module__', '')}:{getattr(func, '__name__', '')}"
+    if command not in _SEALED_READY_COMMANDS:
+        root = sealed[0]
+        kind = sealed_set.header_kind(root)
+        return (
+            f"{root} is an encrypted {kind}, and this command does not read "
+            "encrypted input yet. Flow will not decrypt it to disk for this "
+            "command. Commands that read sealed input: record, compile, "
+            "induce, scaffold-verifier, seal, certify, qualify, admit, run, "
+            "replay, approve, resume, undo, visualize, explain, emit-skill, "
+            "for-each, sections, check mark, compose, process, variants, "
+            "route, teach, push, sanitize, review-sanitized and "
+            "approve-sanitized."
+        )
+    for root in sealed:
+        kind = sealed_set.header_kind(root)
+        if not sealed_set.passphrase_for(kind):
+            return sealed_set.missing_key_message(root, kind)
+        try:
+            # With no key configured the local key resolves; opening the set
+            # tells "sealed with a key that isn't set" apart before any work.
+            sealed_set.open_set(root)
+        except sealed_set.SealedSetKeyError as exc:
+            return str(exc)
+    return None
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """CLI entry point. Returns a process exit code."""
+    raw = list(sys.argv[1:] if argv is None else argv)
+    if raw[:1] in (["demo"], ["tutorial"]) and not _PREWARM_SKIP_FLAGS & set(raw):
+        # Building the parser imports for a second or two on a new install;
+        # start loading OCR and checking the browser driver meanwhile.
+        from openadapt_flow import _prewarm
+
+        _prewarm.start()
+
+    from openadapt_flow._browser_setup import BrowserSupportMissing
+
+    argv = list(sys.argv[1:] if argv is None else argv)
+    argv = _qualify_default_form(argv)
+    from openadapt_flow.cli_admit import admit_default_form
+
+    argv = admit_default_form(argv)
+    # Strict no-outbound mode (OPENADAPT_NO_OUTBOUND=1) is installed before
+    # any command runs, so no Python socket in this process, and no child it
+    # starts uncontained, can open a connection off the machine. Native code and
+    # loopback relays are outside it (docs/OFFLINE_SEALS.md).
+    from openadapt_flow import no_outbound
+
+    no_outbound.enforce_from_env()
+    args = build_parser().parse_args(argv)
+    if getattr(args, "config_sha256", None):
+        if not getattr(args, "config", None):
+            print("REFUSED: --config-sha256 needs --config", file=sys.stderr)
+            return 2
+        # Pin by the absolute path: a relative path plus a later chdir would
+        # otherwise name a different, unpinned file.
+        import os
+
+        from openadapt_flow.deployment import pin_deployment_bytes
+
+        args.config = os.path.abspath(args.config)
+        try:
+            # Read the config once, check it, and parse only those bytes.
+            pin_deployment_bytes(args.config, args.config_sha256)
+            # The approver pin comes from those same bytes, now.
+            _deployment_approvers(args)
+        except (OSError, ValueError) as exc:
+            print(f"REFUSED (deployment_config_changed): {exc}", file=sys.stderr)
+            return 2
+    from openadapt_flow import safe_errors, sealed_set
+
+    try:
+        refusal = _sealed_input_refusal(args)
+    except (sealed_set.SealedSetError, _UnclassifiedArgument) as exc:
+        refusal = str(exc)
+    if refusal is not None:
+        print(f"REFUSED: {safe_errors.message(refusal)}", file=sys.stderr)
+        return 2
+    from openadapt_flow import at_rest
+
+    try:
+        _unsealed_output_check(args)
+    except (at_rest.AtRestRefused, ValueError) as exc:
+        print(f"REFUSED: {safe_errors.message(exc)}", file=sys.stderr)
+        return 2
+    try:
+        code = args.func(args)
+        if getattr(args, "command", None) in ("run", "replay"):
+            # Offline Seal by default (OPENADAPT_LOCAL_SEAL=off disables). It
+            # never changes the run's exit code.
+            from openadapt_flow.offline_seal import seal_after_run
+
+            run_dir = getattr(args, "run_dir", None)
+            note = seal_after_run(Path(run_dir) if run_dir else None)
+            if note:
+                print(note, file=sys.stderr)
+        return code
+    except (sealed_set.SealedSetError, at_rest.AtRestRefused) as exc:
+        # A sealed bundle or encrypted recording that is missing its key,
+        # was changed after sealing, or holds an unknown file, or a write
+        # strict mode refuses: fail closed.
+        print(f"REFUSED: {safe_errors.message(exc)}", file=sys.stderr)
+        return 2
+    except BrowserSupportMissing as exc:
+        # Missing optional browser support is a setup decision, not a crash.
+        print(f"Browser setup required:\n{exc}", file=sys.stderr)
+        return 2
+    except Exception as exc:
+        from openadapt_flow.runtime.known_ids import KnownIdAdmissionHalt
+
+        if not isinstance(exc, KnownIdAdmissionHalt):
+            if _private_input(args):
+                # A traceback would quote what the command read from sealed
+                # input: name the kind of error only.
+                print(f"FAILED: {safe_errors.withheld(exc)}", file=sys.stderr)
+                return 1
+            raise
+        # The configured known-ID list may not be used: halt before any step
+        # runs, with the named reason.
+        print(
+            f"replay halted before start: {exc.reason}: {exc.detail}", file=sys.stderr
+        )
+        return 3
+
+
+if __name__ == "__main__":
+    sys.exit(main())

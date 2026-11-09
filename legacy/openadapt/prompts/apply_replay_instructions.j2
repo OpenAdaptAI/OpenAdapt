@@ -1,0 +1,28 @@
+Consider the actions in the recording:
+
+```json
+{{ actions }}
+```
+
+Consider the user's replay instructions:
+```text
+{{ replay_instructions }}
+```
+
+Provide an updated list of actions that are modified such that replaying them will
+accomplish the user's replay instructions.
+
+Do NOT provide available_segment_descriptions in your response.
+
+Respond with json and nothing else.
+
+{% if exceptions.length %}
+Your previous attempts at this produced the following exceptions:
+{% for exception in exceptions %}
+<exception>
+{{ exception }}
+</exception>
+{% endfor %}
+{% endif %}
+
+My career depends on this. Lives are at stake.

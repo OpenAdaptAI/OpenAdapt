@@ -1,0 +1,1202 @@
+{
+  "schema_version": 2,
+  "name": "openemr-create-synthetic-patient (api tier)",
+  "recording_id": "241803615513807b7f5236413f1efaaa520f1edc831dbd9e2c86ce9d144f10b9",
+  "contains_phi": false,
+  "phi_scrubbed": false,
+  "encrypted": false,
+  "created_at": "2026-10-15T01:01:43.646413+00:00",
+  "viewport": [
+    1280,
+    800
+  ],
+  "params": {
+    "title": "Ms.",
+    "fname": "Elena",
+    "lname": "Marsh",
+    "DOB": "1979-06-14",
+    "sex": "Female",
+    "street": "42 HARBOR LANE",
+    "city": "EXAMPLETON",
+    "state_label": "Massachusetts",
+    "postal_code": "02139",
+    "phone_home": "555-0142",
+    "email": "elena.marsh@example.invalid",
+    "country_code": "USA"
+  },
+  "param_specs": {
+    "title": {
+      "name": "title",
+      "type": "string",
+      "example": "Ms.",
+      "required": true,
+      "choices": []
+    },
+    "fname": {
+      "name": "fname",
+      "type": "string",
+      "example": "Elena",
+      "required": true,
+      "choices": []
+    },
+    "lname": {
+      "name": "lname",
+      "type": "string",
+      "example": "Marsh",
+      "required": true,
+      "choices": []
+    },
+    "DOB": {
+      "name": "DOB",
+      "type": "string",
+      "example": "1979-06-14",
+      "required": true,
+      "choices": []
+    },
+    "sex": {
+      "name": "sex",
+      "type": "string",
+      "example": "Female",
+      "required": true,
+      "choices": []
+    },
+    "street": {
+      "name": "street",
+      "type": "string",
+      "example": "42 HARBOR LANE",
+      "required": true,
+      "choices": []
+    },
+    "city": {
+      "name": "city",
+      "type": "string",
+      "example": "EXAMPLETON",
+      "required": true,
+      "choices": []
+    },
+    "state_label": {
+      "name": "state_label",
+      "type": "string",
+      "example": "Massachusetts",
+      "required": true,
+      "choices": []
+    },
+    "postal_code": {
+      "name": "postal_code",
+      "type": "string",
+      "example": "02139",
+      "required": true,
+      "choices": []
+    },
+    "phone_home": {
+      "name": "phone_home",
+      "type": "string",
+      "example": "555-0142",
+      "required": true,
+      "choices": []
+    },
+    "email": {
+      "name": "email",
+      "type": "string",
+      "example": "elena.marsh@example.invalid",
+      "required": true,
+      "choices": []
+    },
+    "country_code": {
+      "name": "country_code",
+      "type": "string",
+      "example": "USA",
+      "required": true,
+      "choices": []
+    }
+  },
+  "secret_params": [],
+  "steps": [
+    {
+      "id": "api_save",
+      "intent": "save the form via POST /interface/new/new_comprehensive_save.php (folds 41 GUI steps)",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_040.png",
+        "structural": {
+          "selector": "#confirmCreate",
+          "frame_path": [
+            "#modalframe"
+          ],
+          "role": "button",
+          "name": "Confirm Create New Patient",
+          "automation_id": null,
+          "window_name": null
+        },
+        "region": [
+          520,
+          248,
+          160,
+          64
+        ],
+        "click_point": [
+          600,
+          280
+        ],
+        "ocr_text": "Confirm Create New Patient",
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": {
+          "schema_version": 1,
+          "salt": "2bd0bacdef913775b67ed50575a98ebf",
+          "band_len": 36,
+          "tokens": [
+            {
+              "c": "680dcba873ad4b9a",
+              "r": "680dcba873ad4b9a",
+              "n": 7,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "6d8e313e89033bfa",
+              "r": "977f18e495c1ad69",
+              "n": 7,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "42f37d83c28df96a",
+              "r": "42f37d83c28df96a",
+              "n": 6,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "5fa49123dab7ff4f",
+              "r": "5fa49123dab7ff4f",
+              "n": 3,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "f6c24be2e622c022",
+              "r": "d4e50c84680d1cb5",
+              "n": 7,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "62406d441cd5a20d",
+              "r": "62406d441cd5a20d",
+              "n": 6,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            }
+          ],
+          "concats": [
+            {
+              "i": 0,
+              "size": 2,
+              "c": "1ec34e510dd2d380",
+              "r": "a2e61fe08bab6169",
+              "digit": false,
+              "name": true,
+              "n": 14
+            },
+            {
+              "i": 0,
+              "size": 3,
+              "c": "cbc7e1a89ae97faf",
+              "r": "de0fc25dc0cedcbb",
+              "digit": false,
+              "name": true,
+              "n": 20
+            },
+            {
+              "i": 0,
+              "size": 4,
+              "c": "af49d64c7963cd7a",
+              "r": "70c25ae790ce8cdd",
+              "digit": false,
+              "name": true,
+              "n": 23
+            },
+            {
+              "i": 1,
+              "size": 2,
+              "c": "a00ed16fd07342c3",
+              "r": "b1c2e6251dd03f3d",
+              "digit": false,
+              "name": true,
+              "n": 13
+            },
+            {
+              "i": 1,
+              "size": 3,
+              "c": "99d7f40ddc501806",
+              "r": "03a6e52c8e6eb829",
+              "digit": false,
+              "name": true,
+              "n": 16
+            },
+            {
+              "i": 1,
+              "size": 4,
+              "c": "11205f3a616cc78c",
+              "r": "d34f221c714e753e",
+              "digit": false,
+              "name": true,
+              "n": 23
+            },
+            {
+              "i": 2,
+              "size": 2,
+              "c": "4e43ce50af303389",
+              "r": "4e43ce50af303389",
+              "digit": false,
+              "name": true,
+              "n": 9
+            },
+            {
+              "i": 2,
+              "size": 3,
+              "c": "b44145ef5c8201e1",
+              "r": "34485d0e4f32b42f",
+              "digit": false,
+              "name": true,
+              "n": 16
+            },
+            {
+              "i": 2,
+              "size": 4,
+              "c": "c5f1aeaa9fca2746",
+              "r": "011d96e0a779dd51",
+              "digit": false,
+              "name": true,
+              "n": 22
+            },
+            {
+              "i": 3,
+              "size": 2,
+              "c": "59f9a02ecff8defd",
+              "r": "536bad54abec8e0b",
+              "digit": false,
+              "name": true,
+              "n": 10
+            },
+            {
+              "i": 3,
+              "size": 3,
+              "c": "b83931ad5de66017",
+              "r": "526f318b33f2d71e",
+              "digit": false,
+              "name": true,
+              "n": 16
+            },
+            {
+              "i": 4,
+              "size": 2,
+              "c": "ec560bc2be6a2825",
+              "r": "8c075b9d9ac827bb",
+              "digit": false,
+              "name": true,
+              "n": 13
+            }
+          ],
+          "structured": null,
+          "signal_hashes": {
+            "captured_context|exact|": "75b854d4741d82d0300c078b36770da7228e7d52045d180570f413e81a83ca84",
+            "captured_context|normalized|unicode_nfkc": "75b854d4741d82d0300c078b36770da7228e7d52045d180570f413e81a83ca84",
+            "captured_context|normalized|casefold": "0f2c89186c04c26a37f3080f567cc691e798e8098e239914872b6fa75987eb15",
+            "captured_context|normalized|collapse_whitespace": "75b854d4741d82d0300c078b36770da7228e7d52045d180570f413e81a83ca84",
+            "captured_context|normalized|strip_punctuation": "ce6bb7f01356215676099c1ecdf970ad034b73e107876c4d64d01666db31250d",
+            "captured_context|normalized|unicode_nfkc,casefold": "0f2c89186c04c26a37f3080f567cc691e798e8098e239914872b6fa75987eb15",
+            "captured_context|normalized|unicode_nfkc,collapse_whitespace": "75b854d4741d82d0300c078b36770da7228e7d52045d180570f413e81a83ca84",
+            "captured_context|normalized|unicode_nfkc,strip_punctuation": "ce6bb7f01356215676099c1ecdf970ad034b73e107876c4d64d01666db31250d",
+            "captured_context|normalized|casefold,collapse_whitespace": "0f2c89186c04c26a37f3080f567cc691e798e8098e239914872b6fa75987eb15",
+            "captured_context|normalized|casefold,strip_punctuation": "4fbff88ddb88c39fb5b129f56db93999e44fc48bab72323a3c8e7b7e5be8e173",
+            "captured_context|normalized|collapse_whitespace,strip_punctuation": "ce6bb7f01356215676099c1ecdf970ad034b73e107876c4d64d01666db31250d",
+            "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace": "0f2c89186c04c26a37f3080f567cc691e798e8098e239914872b6fa75987eb15",
+            "captured_context|normalized|unicode_nfkc,casefold,strip_punctuation": "4fbff88ddb88c39fb5b129f56db93999e44fc48bab72323a3c8e7b7e5be8e173",
+            "captured_context|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "ce6bb7f01356215676099c1ecdf970ad034b73e107876c4d64d01666db31250d",
+            "captured_context|normalized|casefold,collapse_whitespace,strip_punctuation": "4fbff88ddb88c39fb5b129f56db93999e44fc48bab72323a3c8e7b7e5be8e173",
+            "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "4fbff88ddb88c39fb5b129f56db93999e44fc48bab72323a3c8e7b7e5be8e173"
+          },
+          "param_token_indices": {},
+          "rests_on_confusable_identifier": false
+        },
+        "identifier_crop": "templates/identifiers/step_040.png",
+        "identifier_region": [
+          107,
+          258,
+          678,
+          34
+        ],
+        "landmarks": [
+          {
+            "relation": "above",
+            "ocr_text": "Name",
+            "distance_px": 151,
+            "dx_px": 50,
+            "dy_px": 142
+          },
+          {
+            "relation": "above",
+            "ocr_text": "Name",
+            "distance_px": 152,
+            "dx_px": -54,
+            "dy_px": 142
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "field_label": null,
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": null,
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [],
+      "effects": [
+        {
+          "kind": "record_written",
+          "match": {
+            "email": {
+              "literal": null,
+              "param": "email"
+            },
+            "lname": {
+              "literal": null,
+              "param": "lname"
+            }
+          },
+          "field": null,
+          "value": null,
+          "expected_count": 1,
+          "new_records": [],
+          "identity_field": "id",
+          "idempotency_key": null,
+          "key_field": "key",
+          "count_new_only": false,
+          "forbid_collateral_loss": true,
+          "risk": "reversible",
+          "probe": "exactly one synthetic OpenEMR patient exists",
+          "timeout_s": 5.0,
+          "needs_operator_confirmation": false,
+          "readback": null
+        },
+        {
+          "kind": "field_equals",
+          "match": {
+            "email": {
+              "literal": null,
+              "param": "email"
+            },
+            "lname": {
+              "literal": null,
+              "param": "lname"
+            }
+          },
+          "field": "title",
+          "value": {
+            "literal": null,
+            "param": "title"
+          },
+          "expected_count": 1,
+          "new_records": [],
+          "identity_field": "id",
+          "idempotency_key": null,
+          "key_field": "key",
+          "count_new_only": false,
+          "forbid_collateral_loss": true,
+          "risk": "reversible",
+          "probe": "OpenEMR patient field 'title' read-back",
+          "timeout_s": 5.0,
+          "needs_operator_confirmation": false,
+          "readback": null
+        },
+        {
+          "kind": "field_equals",
+          "match": {
+            "email": {
+              "literal": null,
+              "param": "email"
+            },
+            "lname": {
+              "literal": null,
+              "param": "lname"
+            }
+          },
+          "field": "fname",
+          "value": {
+            "literal": null,
+            "param": "fname"
+          },
+          "expected_count": 1,
+          "new_records": [],
+          "identity_field": "id",
+          "idempotency_key": null,
+          "key_field": "key",
+          "count_new_only": false,
+          "forbid_collateral_loss": true,
+          "risk": "reversible",
+          "probe": "OpenEMR patient field 'fname' read-back",
+          "timeout_s": 5.0,
+          "needs_operator_confirmation": false,
+          "readback": null
+        },
+        {
+          "kind": "field_equals",
+          "match": {
+            "email": {
+              "literal": null,
+              "param": "email"
+            },
+            "lname": {
+              "literal": null,
+              "param": "lname"
+            }
+          },
+          "field": "DOB",
+          "value": {
+            "literal": null,
+            "param": "DOB"
+          },
+          "expected_count": 1,
+          "new_records": [],
+          "identity_field": "id",
+          "idempotency_key": null,
+          "key_field": "key",
+          "count_new_only": false,
+          "forbid_collateral_loss": true,
+          "risk": "reversible",
+          "probe": "OpenEMR patient field 'DOB' read-back",
+          "timeout_s": 5.0,
+          "needs_operator_confirmation": false,
+          "readback": null
+        },
+        {
+          "kind": "field_equals",
+          "match": {
+            "email": {
+              "literal": null,
+              "param": "email"
+            },
+            "lname": {
+              "literal": null,
+              "param": "lname"
+            }
+          },
+          "field": "sex",
+          "value": {
+            "literal": null,
+            "param": "sex"
+          },
+          "expected_count": 1,
+          "new_records": [],
+          "identity_field": "id",
+          "idempotency_key": null,
+          "key_field": "key",
+          "count_new_only": false,
+          "forbid_collateral_loss": true,
+          "risk": "reversible",
+          "probe": "OpenEMR patient field 'sex' read-back",
+          "timeout_s": 5.0,
+          "needs_operator_confirmation": false,
+          "readback": null
+        },
+        {
+          "kind": "field_equals",
+          "match": {
+            "email": {
+              "literal": null,
+              "param": "email"
+            },
+            "lname": {
+              "literal": null,
+              "param": "lname"
+            }
+          },
+          "field": "street",
+          "value": {
+            "literal": null,
+            "param": "street"
+          },
+          "expected_count": 1,
+          "new_records": [],
+          "identity_field": "id",
+          "idempotency_key": null,
+          "key_field": "key",
+          "count_new_only": false,
+          "forbid_collateral_loss": true,
+          "risk": "reversible",
+          "probe": "OpenEMR patient field 'street' read-back",
+          "timeout_s": 5.0,
+          "needs_operator_confirmation": false,
+          "readback": null
+        },
+        {
+          "kind": "field_equals",
+          "match": {
+            "email": {
+              "literal": null,
+              "param": "email"
+            },
+            "lname": {
+              "literal": null,
+              "param": "lname"
+            }
+          },
+          "field": "city",
+          "value": {
+            "literal": null,
+            "param": "city"
+          },
+          "expected_count": 1,
+          "new_records": [],
+          "identity_field": "id",
+          "idempotency_key": null,
+          "key_field": "key",
+          "count_new_only": false,
+          "forbid_collateral_loss": true,
+          "risk": "reversible",
+          "probe": "OpenEMR patient field 'city' read-back",
+          "timeout_s": 5.0,
+          "needs_operator_confirmation": false,
+          "readback": null
+        },
+        {
+          "kind": "field_equals",
+          "match": {
+            "email": {
+              "literal": null,
+              "param": "email"
+            },
+            "lname": {
+              "literal": null,
+              "param": "lname"
+            }
+          },
+          "field": "state",
+          "value": {
+            "literal": "MA",
+            "param": null
+          },
+          "expected_count": 1,
+          "new_records": [],
+          "identity_field": "id",
+          "idempotency_key": null,
+          "key_field": "key",
+          "count_new_only": false,
+          "forbid_collateral_loss": true,
+          "risk": "reversible",
+          "probe": "OpenEMR patient field 'state' read-back",
+          "timeout_s": 5.0,
+          "needs_operator_confirmation": false,
+          "readback": null
+        },
+        {
+          "kind": "field_equals",
+          "match": {
+            "email": {
+              "literal": null,
+              "param": "email"
+            },
+            "lname": {
+              "literal": null,
+              "param": "lname"
+            }
+          },
+          "field": "postal_code",
+          "value": {
+            "literal": null,
+            "param": "postal_code"
+          },
+          "expected_count": 1,
+          "new_records": [],
+          "identity_field": "id",
+          "idempotency_key": null,
+          "key_field": "key",
+          "count_new_only": false,
+          "forbid_collateral_loss": true,
+          "risk": "reversible",
+          "probe": "OpenEMR patient field 'postal_code' read-back",
+          "timeout_s": 5.0,
+          "needs_operator_confirmation": false,
+          "readback": null
+        },
+        {
+          "kind": "field_equals",
+          "match": {
+            "email": {
+              "literal": null,
+              "param": "email"
+            },
+            "lname": {
+              "literal": null,
+              "param": "lname"
+            }
+          },
+          "field": "phone_home",
+          "value": {
+            "literal": null,
+            "param": "phone_home"
+          },
+          "expected_count": 1,
+          "new_records": [],
+          "identity_field": "id",
+          "idempotency_key": null,
+          "key_field": "key",
+          "count_new_only": false,
+          "forbid_collateral_loss": true,
+          "risk": "reversible",
+          "probe": "OpenEMR patient field 'phone_home' read-back",
+          "timeout_s": 5.0,
+          "needs_operator_confirmation": false,
+          "readback": null
+        },
+        {
+          "kind": "field_equals",
+          "match": {
+            "email": {
+              "literal": null,
+              "param": "email"
+            },
+            "lname": {
+              "literal": null,
+              "param": "lname"
+            }
+          },
+          "field": "country_code",
+          "value": {
+            "literal": null,
+            "param": "country_code"
+          },
+          "expected_count": 1,
+          "new_records": [],
+          "identity_field": "id",
+          "idempotency_key": null,
+          "key_field": "key",
+          "count_new_only": false,
+          "forbid_collateral_loss": true,
+          "risk": "reversible",
+          "probe": "OpenEMR patient field 'country_code' read-back",
+          "timeout_s": 5.0,
+          "needs_operator_confirmation": false,
+          "readback": null
+        }
+      ],
+      "api_binding": {
+        "kind": "rest",
+        "on_unavailable": "halt",
+        "method": "POST",
+        "url_template": "/interface/new/new_comprehensive_save.php",
+        "body_template": {
+          "csrf_token_form": "{__session_csrf_token_form}",
+          "form_title": "{title}",
+          "form_fname": "{fname}",
+          "form_mname": "",
+          "form_lname": "{lname}",
+          "form_suffix": "",
+          "form_preferred_name": "",
+          "form_birth_fname": "",
+          "form_birth_mname": "",
+          "form_birth_lname": "",
+          "form_DOB": "{DOB}",
+          "form_sex": "{sex}",
+          "form_gender_identity": "",
+          "form_text_gender_identity": "",
+          "form_sex_identified": "",
+          "form_sexual_orientation": "",
+          "form_text_sexual_orientation": "",
+          "form_pronoun": "",
+          "form_pubpid": "",
+          "form_ss": "",
+          "form_drivers_license": "",
+          "form_status": "",
+          "form_genericname1": "",
+          "form_genericval1": "",
+          "form_genericname2": "",
+          "form_genericval2": "",
+          "form_billing_note": "",
+          "form_street": "{street}",
+          "form_street_line_2": "",
+          "form_city": "{city}",
+          "form_state": "{state_label}",
+          "form_postal_code": "{postal_code}",
+          "form_country_code": "{country_code}",
+          "form_county": "",
+          "form_mothersname": "",
+          "form_contact_relationship": "",
+          "form_phone_contact": "",
+          "form_phone_home": "{phone_home}",
+          "form_phone_biz": "",
+          "form_phone_cell": "",
+          "form_email": "{email}",
+          "form_email_direct": "",
+          "form_providerID": "",
+          "form_provider_since_date": "",
+          "form_ref_providerID": "",
+          "form_pharmacy_id": "0",
+          "form_hipaa_notice": "",
+          "form_hipaa_voice": "",
+          "form_hipaa_message": "",
+          "form_hipaa_mail": "",
+          "form_hipaa_allowsms": "",
+          "form_hipaa_allowemail": "",
+          "form_allow_imm_reg_use": "",
+          "form_allow_imm_info_share": "",
+          "form_allow_health_info_ex": "",
+          "form_allow_patient_portal": "",
+          "form_cmsportal_login": "",
+          "form_imm_reg_status": "",
+          "form_imm_reg_stat_effdate": "",
+          "form_publicity_code": "",
+          "form_publ_code_eff_date": "",
+          "form_protect_indicator": "",
+          "form_prot_indi_effdate": "",
+          "form_care_team_status": "active",
+          "form_patient_groups[]": "",
+          "form_occupation": "",
+          "form_industry": "",
+          "form_em_name": "",
+          "form_em_street": "",
+          "form_em_street_line_2": "",
+          "form_em_city": "",
+          "form_em_state": "",
+          "form_em_postal_code": "",
+          "form_em_country": "",
+          "form_em_start_date": "",
+          "form_em_end_date": "",
+          "form_language": "",
+          "form_ethnicity[]": "",
+          "form_race[]": "",
+          "form_nationality_country": "",
+          "form_financial_review": "",
+          "form_family_size": "",
+          "form_monthly_income": "",
+          "form_homeless": "",
+          "form_interpreter_needed": "",
+          "form_interpretter": "",
+          "form_migrantseasonal": "",
+          "form_referral_source": "",
+          "form_vfc": "",
+          "form_religion": "",
+          "form_tribal_affiliations": "",
+          "form_deceased_date": "",
+          "form_deceased_reason": "",
+          "form_guardiansname": "",
+          "form_guardianrelationship": "",
+          "form_guardiansex": "",
+          "form_guardianaddress": "",
+          "form_guardiancity": "",
+          "form_guardianstate": "",
+          "form_guardianpostalcode": "",
+          "form_guardiancountry": "",
+          "form_guardianphone": "",
+          "form_guardianworkphone": "",
+          "form_guardianemail": "",
+          "form_person_gender": ""
+        },
+        "query": {},
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "expected_status": [
+          200
+        ],
+        "timeout_s": 30.0,
+        "effects": [
+          {
+            "kind": "record_written",
+            "match": {
+              "email": {
+                "literal": null,
+                "param": "email"
+              },
+              "lname": {
+                "literal": null,
+                "param": "lname"
+              }
+            },
+            "field": null,
+            "value": null,
+            "expected_count": 1,
+            "new_records": [],
+            "identity_field": "id",
+            "idempotency_key": null,
+            "key_field": "key",
+            "count_new_only": false,
+            "forbid_collateral_loss": true,
+            "risk": "reversible",
+            "probe": "exactly one synthetic OpenEMR patient exists",
+            "timeout_s": 5.0,
+            "needs_operator_confirmation": false,
+            "readback": null
+          },
+          {
+            "kind": "field_equals",
+            "match": {
+              "email": {
+                "literal": null,
+                "param": "email"
+              },
+              "lname": {
+                "literal": null,
+                "param": "lname"
+              }
+            },
+            "field": "title",
+            "value": {
+              "literal": null,
+              "param": "title"
+            },
+            "expected_count": 1,
+            "new_records": [],
+            "identity_field": "id",
+            "idempotency_key": null,
+            "key_field": "key",
+            "count_new_only": false,
+            "forbid_collateral_loss": true,
+            "risk": "reversible",
+            "probe": "OpenEMR patient field 'title' read-back",
+            "timeout_s": 5.0,
+            "needs_operator_confirmation": false,
+            "readback": null
+          },
+          {
+            "kind": "field_equals",
+            "match": {
+              "email": {
+                "literal": null,
+                "param": "email"
+              },
+              "lname": {
+                "literal": null,
+                "param": "lname"
+              }
+            },
+            "field": "fname",
+            "value": {
+              "literal": null,
+              "param": "fname"
+            },
+            "expected_count": 1,
+            "new_records": [],
+            "identity_field": "id",
+            "idempotency_key": null,
+            "key_field": "key",
+            "count_new_only": false,
+            "forbid_collateral_loss": true,
+            "risk": "reversible",
+            "probe": "OpenEMR patient field 'fname' read-back",
+            "timeout_s": 5.0,
+            "needs_operator_confirmation": false,
+            "readback": null
+          },
+          {
+            "kind": "field_equals",
+            "match": {
+              "email": {
+                "literal": null,
+                "param": "email"
+              },
+              "lname": {
+                "literal": null,
+                "param": "lname"
+              }
+            },
+            "field": "DOB",
+            "value": {
+              "literal": null,
+              "param": "DOB"
+            },
+            "expected_count": 1,
+            "new_records": [],
+            "identity_field": "id",
+            "idempotency_key": null,
+            "key_field": "key",
+            "count_new_only": false,
+            "forbid_collateral_loss": true,
+            "risk": "reversible",
+            "probe": "OpenEMR patient field 'DOB' read-back",
+            "timeout_s": 5.0,
+            "needs_operator_confirmation": false,
+            "readback": null
+          },
+          {
+            "kind": "field_equals",
+            "match": {
+              "email": {
+                "literal": null,
+                "param": "email"
+              },
+              "lname": {
+                "literal": null,
+                "param": "lname"
+              }
+            },
+            "field": "sex",
+            "value": {
+              "literal": null,
+              "param": "sex"
+            },
+            "expected_count": 1,
+            "new_records": [],
+            "identity_field": "id",
+            "idempotency_key": null,
+            "key_field": "key",
+            "count_new_only": false,
+            "forbid_collateral_loss": true,
+            "risk": "reversible",
+            "probe": "OpenEMR patient field 'sex' read-back",
+            "timeout_s": 5.0,
+            "needs_operator_confirmation": false,
+            "readback": null
+          },
+          {
+            "kind": "field_equals",
+            "match": {
+              "email": {
+                "literal": null,
+                "param": "email"
+              },
+              "lname": {
+                "literal": null,
+                "param": "lname"
+              }
+            },
+            "field": "street",
+            "value": {
+              "literal": null,
+              "param": "street"
+            },
+            "expected_count": 1,
+            "new_records": [],
+            "identity_field": "id",
+            "idempotency_key": null,
+            "key_field": "key",
+            "count_new_only": false,
+            "forbid_collateral_loss": true,
+            "risk": "reversible",
+            "probe": "OpenEMR patient field 'street' read-back",
+            "timeout_s": 5.0,
+            "needs_operator_confirmation": false,
+            "readback": null
+          },
+          {
+            "kind": "field_equals",
+            "match": {
+              "email": {
+                "literal": null,
+                "param": "email"
+              },
+              "lname": {
+                "literal": null,
+                "param": "lname"
+              }
+            },
+            "field": "city",
+            "value": {
+              "literal": null,
+              "param": "city"
+            },
+            "expected_count": 1,
+            "new_records": [],
+            "identity_field": "id",
+            "idempotency_key": null,
+            "key_field": "key",
+            "count_new_only": false,
+            "forbid_collateral_loss": true,
+            "risk": "reversible",
+            "probe": "OpenEMR patient field 'city' read-back",
+            "timeout_s": 5.0,
+            "needs_operator_confirmation": false,
+            "readback": null
+          },
+          {
+            "kind": "field_equals",
+            "match": {
+              "email": {
+                "literal": null,
+                "param": "email"
+              },
+              "lname": {
+                "literal": null,
+                "param": "lname"
+              }
+            },
+            "field": "state",
+            "value": {
+              "literal": "MA",
+              "param": null
+            },
+            "expected_count": 1,
+            "new_records": [],
+            "identity_field": "id",
+            "idempotency_key": null,
+            "key_field": "key",
+            "count_new_only": false,
+            "forbid_collateral_loss": true,
+            "risk": "reversible",
+            "probe": "OpenEMR patient field 'state' read-back",
+            "timeout_s": 5.0,
+            "needs_operator_confirmation": false,
+            "readback": null
+          },
+          {
+            "kind": "field_equals",
+            "match": {
+              "email": {
+                "literal": null,
+                "param": "email"
+              },
+              "lname": {
+                "literal": null,
+                "param": "lname"
+              }
+            },
+            "field": "postal_code",
+            "value": {
+              "literal": null,
+              "param": "postal_code"
+            },
+            "expected_count": 1,
+            "new_records": [],
+            "identity_field": "id",
+            "idempotency_key": null,
+            "key_field": "key",
+            "count_new_only": false,
+            "forbid_collateral_loss": true,
+            "risk": "reversible",
+            "probe": "OpenEMR patient field 'postal_code' read-back",
+            "timeout_s": 5.0,
+            "needs_operator_confirmation": false,
+            "readback": null
+          },
+          {
+            "kind": "field_equals",
+            "match": {
+              "email": {
+                "literal": null,
+                "param": "email"
+              },
+              "lname": {
+                "literal": null,
+                "param": "lname"
+              }
+            },
+            "field": "phone_home",
+            "value": {
+              "literal": null,
+              "param": "phone_home"
+            },
+            "expected_count": 1,
+            "new_records": [],
+            "identity_field": "id",
+            "idempotency_key": null,
+            "key_field": "key",
+            "count_new_only": false,
+            "forbid_collateral_loss": true,
+            "risk": "reversible",
+            "probe": "OpenEMR patient field 'phone_home' read-back",
+            "timeout_s": 5.0,
+            "needs_operator_confirmation": false,
+            "readback": null
+          },
+          {
+            "kind": "field_equals",
+            "match": {
+              "email": {
+                "literal": null,
+                "param": "email"
+              },
+              "lname": {
+                "literal": null,
+                "param": "lname"
+              }
+            },
+            "field": "country_code",
+            "value": {
+              "literal": null,
+              "param": "country_code"
+            },
+            "expected_count": 1,
+            "new_records": [],
+            "identity_field": "id",
+            "idempotency_key": null,
+            "key_field": "key",
+            "count_new_only": false,
+            "forbid_collateral_loss": true,
+            "risk": "reversible",
+            "probe": "OpenEMR patient field 'country_code' read-back",
+            "timeout_s": 5.0,
+            "needs_operator_confirmation": false,
+            "readback": null
+          }
+        ],
+        "identity": []
+      },
+      "risk": "irreversible",
+      "risk_explanation": "the marked #confirmCreate click creates the patient chart",
+      "risk_review_required": false,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": true,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null,
+      "submit_binding": null,
+      "submit_binding_unbound_reason": null
+    }
+  ],
+  "interstitials": [],
+  "program": null,
+  "subflows": {},
+  "data_sources": {},
+  "manifest": {
+    "schema_version": 2,
+    "content_digest": "e5c038601681335df2537e2816dcb8d613193d88781aada637bc038961c1a2b1",
+    "file_hashes": {},
+    "provenance": {
+      "compiler_version": "2.2.0",
+      "source_recording_sha256": "241803615513807b7f5236413f1efaaa520f1edc831dbd9e2c86ce9d144f10b9",
+      "compiler_config_sha256": "b12e6c6e0943d452f357b90258b55555593fd95e2fcdb6026330a0222204ed24",
+      "created_at": "2026-10-15T01:01:43.647330+00:00",
+      "policy_name": null,
+      "certified": false,
+      "certification_status": null,
+      "certified_at": null,
+      "expires_at": null,
+      "certification_invalidated_at": null,
+      "certification_invalidation_reason": null,
+      "governed_authorization_template": null
+    },
+    "encrypted": false
+  }
+}

@@ -1,0 +1,101 @@
+name: canvas-nodom-ladder
+
+# No-DOM HTML5-canvas vision-ladder qualification (DRAFT CI wiring).
+#
+# Runs the record -> compile -> replay contract through the vision-only resolver
+# ladder over a genuine no-accessible-DOM HTML5 <canvas> (noVNC/TigerVNC,
+# benchmark/canvas_ladder) with NO structural backend. This is the CI-viable
+# stand-in for the Citrix Workspace-WEB canvas class -- it is NOT Citrix ICA/HDX
+# (see benchmark/canvas_ladder/README.md).
+#
+# WEEKLY + manual only (not a per-PR required gate): the harness drives a real
+# browser over a VNC round-trip, so a run is minutes, not seconds. The fixture
+# image is amd64+arm64; GitHub's ubuntu runners are amd64.
+on:
+  schedule:
+    - cron: "30 8 * * 3"   # Wednesdays 08:30 UTC
+  workflow_dispatch: {}
+
+concurrency:
+  group: canvas-nodom-ladder-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  canvas-nodom-ladder:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      # `playwright install --with-deps` shells out to apt on the hosted runner,
+      # so this step depends on the Ubuntu mirror even though it names no
+      # package. On 2026-08-19 the scheduled run spent the whole 30-minute job
+      # budget in this step and was killed; a healthy job finishes in about
+      # three minutes. Prefer the canonical archive and bound the step.
+      - name: Install flow with the vision + browser stack
+        timeout-minutes: 12
+        run: |
+          set -uo pipefail
+          # The hosted runner resolves its Ubuntu mirror through
+          # /etc/apt/apt-mirrors.txt, which points at azure.archive.ubuntu.com.
+          # That mirror fails intermittently, and every failure costs minutes of
+          # apt retries before the canonical archive is tried. Prefer the
+          # canonical archive up front. Keep this best-effort: if the file is
+          # absent or already canonical, the run continues unchanged.
+          sudo sed -i \
+            's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
+            /etc/apt/apt-mirrors.txt 2>/dev/null || true
+          # Refresh the indexes here rather than inside Playwright, so an
+          # unreachable mirror fails loudly and early instead of burning the
+          # step budget inside `--with-deps`.
+          update_ok=""
+          for attempt in 1 2 3; do
+            if sudo apt-get update; then
+              update_ok=1
+              break
+            fi
+            echo "::warning::apt-get update failed (attempt ${attempt}/3); retrying"
+            sleep $((attempt * 10))
+          done
+          if [ -z "$update_ok" ]; then
+            echo "::error::apt-get update failed three times; the Ubuntu mirror is unreachable"
+            exit 1
+          fi
+          set -e
+          python -m pip install --upgrade pip
+          pip install -e ".[ocr,cv]" || pip install -e .
+          pip install opencv-python-headless rapidocr-onnxruntime pillow numpy playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Build the no-DOM canvas fixture image
+        run: docker build -t oaflow-canvas-fixture:latest benchmark/canvas_ladder/fixture
+
+      - name: Start the no-DOM canvas surface
+        run: |
+          docker run -d --name oaflow-canvas-ladder --shm-size=1g -p 6080:6080 \
+            oaflow-canvas-fixture:latest
+          sleep 18
+
+      - name: Run the no-DOM canvas vision-ladder qualification
+        run: |
+          python benchmark/canvas_ladder/run_canvas_ladder_qualification.py \
+            --container oaflow-canvas-ladder \
+            --output runs/canvas-ladder/results.json \
+            --candidate-commit "${GITHUB_SHA}"
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: canvas-nodom-ladder-qualification
+          path: runs/canvas-ladder/results.json
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Tear down
+        if: always()
+        run: docker rm -f oaflow-canvas-ladder || true

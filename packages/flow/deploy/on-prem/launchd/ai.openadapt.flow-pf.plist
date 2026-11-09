@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Strict mode only. Enables pf and loads /etc/pf.conf (which loads the
+  ai.openadapt.flow anchor) at every boot, so the service account's
+  outbound rules hold after a restart or an OS update.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>ai.openadapt.flow-pf</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/sbin/pfctl</string>
+    <string>-E</string>
+    <string>-f</string>
+    <string>/etc/pf.conf</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <false/>
+  <key>StandardErrorPath</key>
+  <string>/var/log/ai.openadapt.flow-pf.log</string>
+</dict>
+</plist>

@@ -1,0 +1,105 @@
+{
+  "additionalProperties": false,
+  "description": "An immutable registry index entry with no target assertion.",
+  "properties": {
+    "kind": {
+      "const": "qualification-release",
+      "default": "qualification-release",
+      "title": "Kind",
+      "type": "string"
+    },
+    "object_media_type": {
+      "const": "application/vnd.openadapt.qualification-release+json;version=2",
+      "default": "application/vnd.openadapt.qualification-release+json;version=2",
+      "title": "Object Media Type",
+      "type": "string"
+    },
+    "object_path": {
+      "pattern": "^production-evidence/objects/sha256/[0-9a-f]{2}/[0-9a-f]{64}\\.qualification-release\\.json$",
+      "title": "Object Path",
+      "type": "string"
+    },
+    "object_schema_version": {
+      "const": "openadapt.qualification-release/v2",
+      "default": "openadapt.qualification-release/v2",
+      "title": "Object Schema Version",
+      "type": "string"
+    },
+    "object_sha256": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Object Sha256",
+      "type": "string"
+    },
+    "registry_entry_sha256": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Registry Entry Sha256",
+      "type": "string"
+    },
+    "registry_head_sha256": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Registry Head Sha256",
+      "type": "string"
+    },
+    "registry_revision": {
+      "minimum": 1,
+      "title": "Registry Revision",
+      "type": "integer"
+    },
+    "registry_source_commit": {
+      "pattern": "^[0-9a-f]{40}$",
+      "title": "Registry Source Commit",
+      "type": "string"
+    },
+    "repository": {
+      "const": "OpenAdaptAI/.github",
+      "default": "OpenAdaptAI/.github",
+      "title": "Repository",
+      "type": "string"
+    },
+    "repository_id": {
+      "const": "858454062",
+      "default": "858454062",
+      "title": "Repository Id",
+      "type": "string"
+    },
+    "repository_owner_id": {
+      "const": "132681217",
+      "default": "132681217",
+      "title": "Repository Owner Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "openadapt.production-evidence-object-reference/v2",
+      "default": "openadapt.production-evidence-object-reference/v2",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "semantic_identity_sha256": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Semantic Identity Sha256",
+      "type": "string"
+    },
+    "size_bytes": {
+      "minimum": 1,
+      "title": "Size Bytes",
+      "type": "integer"
+    },
+    "subject_sha256": {
+      "default": null,
+      "title": "Subject Sha256",
+      "type": "null"
+    }
+  },
+  "required": [
+    "registry_source_commit",
+    "registry_revision",
+    "registry_head_sha256",
+    "registry_entry_sha256",
+    "object_path",
+    "object_sha256",
+    "size_bytes",
+    "semantic_identity_sha256"
+  ],
+  "title": "QualificationReleaseReferenceV2",
+  "type": "object"
+}

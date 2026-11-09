@@ -1,0 +1,329 @@
+{
+  "ledger": {
+    "agent": "claude",
+    "model": "claude-sonnet-5-5",
+    "vision": "code",
+    "model_calls": 11,
+    "input_tokens": 24,
+    "output_tokens": 943,
+    "cache_creation_input_tokens": 8350,
+    "cache_read_input_tokens": 59516,
+    "prompt_tokens": 67890,
+    "images_in_requests": 0,
+    "cost_usd": 0.042256,
+    "wall_seconds": 46.638,
+    "model_seconds": 17.384,
+    "finished": true,
+    "summary": "Created patient Clarice ScoreboardC704 (pid 5); the duplicate check found no matches.",
+    "tool_errors": 0,
+    "calls": [
+      {
+        "turn": 1,
+        "input_tokens": 4,
+        "output_tokens": 119,
+        "cache_creation_input_tokens": 2854,
+        "cache_read_input_tokens": 0,
+        "seconds": 2.086,
+        "stop_reason": "tool_use",
+        "images_in_request": 0
+      },
+      {
+        "turn": 2,
+        "input_tokens": 2,
+        "output_tokens": 108,
+        "cache_creation_input_tokens": 1796,
+        "cache_read_input_tokens": 2854,
+        "seconds": 1.624,
+        "stop_reason": "tool_use",
+        "images_in_request": 0
+      },
+      {
+        "turn": 3,
+        "input_tokens": 2,
+        "output_tokens": 63,
+        "cache_creation_input_tokens": 202,
+        "cache_read_input_tokens": 4650,
+        "seconds": 1.391,
+        "stop_reason": "tool_use",
+        "images_in_request": 0
+      },
+      {
+        "turn": 4,
+        "input_tokens": 2,
+        "output_tokens": 74,
+        "cache_creation_input_tokens": 159,
+        "cache_read_input_tokens": 4852,
+        "seconds": 1.575,
+        "stop_reason": "tool_use",
+        "images_in_request": 0
+      },
+      {
+        "turn": 5,
+        "input_tokens": 2,
+        "output_tokens": 164,
+        "cache_creation_input_tokens": 761,
+        "cache_read_input_tokens": 5011,
+        "seconds": 1.772,
+        "stop_reason": "tool_use",
+        "images_in_request": 0
+      },
+      {
+        "turn": 6,
+        "input_tokens": 2,
+        "output_tokens": 62,
+        "cache_creation_input_tokens": 751,
+        "cache_read_input_tokens": 5772,
+        "seconds": 1.68,
+        "stop_reason": "tool_use",
+        "images_in_request": 0
+      },
+      {
+        "turn": 7,
+        "input_tokens": 2,
+        "output_tokens": 63,
+        "cache_creation_input_tokens": 164,
+        "cache_read_input_tokens": 6523,
+        "seconds": 1.502,
+        "stop_reason": "tool_use",
+        "images_in_request": 0
+      },
+      {
+        "turn": 8,
+        "input_tokens": 2,
+        "output_tokens": 45,
+        "cache_creation_input_tokens": 193,
+        "cache_read_input_tokens": 6687,
+        "seconds": 1.138,
+        "stop_reason": "tool_use",
+        "images_in_request": 0
+      },
+      {
+        "turn": 9,
+        "input_tokens": 2,
+        "output_tokens": 113,
+        "cache_creation_input_tokens": 1165,
+        "cache_read_input_tokens": 6880,
+        "seconds": 1.656,
+        "stop_reason": "tool_use",
+        "images_in_request": 0
+      },
+      {
+        "turn": 10,
+        "input_tokens": 2,
+        "output_tokens": 52,
+        "cache_creation_input_tokens": 197,
+        "cache_read_input_tokens": 8045,
+        "seconds": 1.394,
+        "stop_reason": "tool_use",
+        "images_in_request": 0
+      },
+      {
+        "turn": 11,
+        "input_tokens": 2,
+        "output_tokens": 80,
+        "cache_creation_input_tokens": 108,
+        "cache_read_input_tokens": 8242,
+        "seconds": 1.564,
+        "stop_reason": "tool_use",
+        "images_in_request": 0
+      }
+    ]
+  },
+  "harness": {
+    "observations": 0,
+    "screenshots_requested": 0,
+    "screenshots_at_gate": 0,
+    "screenshots_every_turn": 0,
+    "actions": 35,
+    "gate_checks": 1,
+    "gate_evidence_screenshots": 1,
+    "gate_refusals": 0
+  },
+  "trace": {
+    "surface": "dom",
+    "scripts": 11,
+    "lines": 32,
+    "actions": 19,
+    "errors": 1,
+    "screenshots": 0,
+    "shell_commands": 0,
+    "shell_isolation": "sandbox-exec",
+    "by_structure": 16,
+    "with_recorded_locator": 16,
+    "locator_agrees": 16,
+    "locator_unique": 16,
+    "commits": 1,
+    "identity_read_before_commit": [
+      "identity:Create New Patient",
+      "input:DOB",
+      "input:country_code",
+      "input:fname",
+      "input:lname",
+      "input:sex",
+      "input:state_label",
+      "input:title"
+    ],
+    "read_back_after_commit": [
+      "input:fname",
+      "input:lname"
+    ]
+  },
+  "scripts": [
+    {
+      "script": "tree",
+      "output": "$ tree\npage: OpenEMR (http://127.0.0.1:9911/interface/main/tabs/main.php?...)\n@1 link \"OpenEMR Website\"\nCalendar\nFinder\nFlow\nRecalls\nMessages\n@2 button \"Patient\"\n@3 button \"Fees\"\n@4 button \"Modules\"\n@5 button \"Procedures\"\n@6 button \"Admin\"\n@7 button \"Reports\"\n@8 button \"Miscellaneous\"\n@9 button \"Popups\"\n@10 textbox \"Search by any demographics\" value=\"\"\n@11 button \"Search for patient by entering whole or part of any demographics field information\"\n@12 button \"Current user\"\nCalendar\nMessage Center\nSearch or Add Patient\n# frame 6: Search or Add Patient\n# Search or Add Patient\n@13 button \"Who\"\nTitle:\n@14 combobox \"form_title\" value=\"Unassigned\" options=[\"Unassigned\", \"Mr.\", \"Mrs.\", \"Ms.\", \"Dr.\"]\nName:\n@15 textbox \"First Name\" value=\"\"\n@16 textbox \"Middle Name\" value=\"\"\n@17 textbox \"Last Name\" value=\"\"\n@18 textbox \"Name Suffix\" value=\"\"\nPreferred Name:\n@19 textbox \"Patient preferred name or name patient is commonly known.\" value=\"\"\nBirth Name:\n@20 textbox \"Birth First Name\" value=\"\"\n@21 textbox \"Middle Name\" value=\"\"\n@22 textbox \"Birth Last Name\" value=\"\"\nDOB:\n@23 textbox \"form_DOB\" value=\"\"\nBirth Sex:\n@24 combobox \"form_sex\" value=\"Unassigned\" options=[\"Unassigned\", \"Female\", \"Male\", \"Unknown\"]\nGender Identity:\n@25 combobox \"form_gender_identity\" value=\"Unassigned\" options=[\"Unassigned\", \"Identifies as Male\", \"Identifies as Female\", \"Female-to-Male (FTM)/Transgender Male/Trans Man\", \"Male-to-Female (MTF)/Transgender Female/Trans Woman\", \"Genderqueer, neither exclusively male nor female\", \"Additional gender category or other, please specify\", \"Choose not to disclose\"]\nSex:\n@26 combobox \"form_sex_identified\" value=\"Unassigned\" options=[\"Unassigned\", \"Male\", \"Female\", \"Identifies as nonbinary gender (finding)\", \"Asked But Declined\", \"unknown\"]\nSexual Orientation:\n@27 combobox \"form_sexual_orientation\" value=\"Unassigned\" options=[\"Unassigned\", \"Straight or heterosexual\", \"Lesbian, gay or homosexual\", \"Bisexual\", \"Something else, please describe\", \"Don't know\", \"Choose not to disclose\"]\nPronouns:\n@28 combobox \"form_pronoun\" value=\"Unassigned\" options=[\"Unassigned\", \"he/him/his/his/himself\", \"she/her/her/hers/herself\", \"they/them/their/theirs/themselves\", \"Ask me\", \"Decline to answer\", \"Other\"]\nExternal ID:\n@29 textbox \"form_pubpid\" value=\"\"\nS.S.:\n@30 textbox \"form_ss\" value=\"\"\nLicense/ID:\n@31 textbox \"form_drivers_license\" value=\"\"\nMarital Status:\n@32 combobox \"form_status\" value=\"Unassigned\" options=[\"Unassigned\", \"Married\", \"Single\", \"Divorced\", \"Widowed\", \"Separated\", \"Domestic Partner\"]\nUser Defined:\n@33 textbox \"form_genericname1\" value=\"\"\n@34 textbox \"form_genericval1\" value=\"\"\n@35 textbox \"form_genericname2\" value=\"\"\n@36 textbox \"form_genericval2\" value=\"\"\nBilling Note:\n@37 textbox \"form_billing_note\" value=\"\"\nPrevious Names:\n@38 combobox \"form_name_history[]\" value=\"\"\n@39 button \"Add\"\n@40 button \"Contact\"\n(7 controls below the visible area: \"Choices\", \"Employer\", \"Stats\", \"Misc\", \"Related\", \"Search\", \"Create New Patient\"; scroll down to reach them",
+      "images": 0
+    },
+    {
+      "script": "select @14 option=Ms.\nfill @15 value=Clarice\nfill @17 value=ScoreboardC704\nfill @23 value=1979-09-03\nselect @24 option=Female\nclick @40\ntree grep=a max=80",
+      "output": "$ select @14 option=Ms.\nok: select combobox \"form_title\" value=\"Ms.\"\npage: OpenEMR (http://127.0.0.1:9911/interface/main/tabs/main.php?...)\n$ fill @15 value=Clarice\nok: fill textbox \"First Name\" value=\"Clarice\"\npage: OpenEMR (http://127.0.0.1:9911/interface/main/tabs/main.php?...)\n$ fill @17 value=ScoreboardC704\nok: fill textbox \"Last Name\" value=\"ScoreboardC704\"\npage: OpenEMR (http://127.0.0.1:9911/interface/main/tabs/main.php?...)\n$ fill @23 value=1979-09-03\nok: fill textbox \"form_DOB\" value=\"1979-09-03\"\npage: OpenEMR (http://127.0.0.1:9911/interface/main/tabs/main.php?...)\n$ select @24 option=Female\nok: select combobox \"form_sex\" value=\"Female\"\npage: OpenEMR (http://127.0.0.1:9911/interface/main/tabs/main.php?...)\n$ click @40\nok: click button \"Contact\"\npage: OpenEMR (http://127.0.0.1:9911/interface/main/tabs/main.php?...)\n$ tree grep=a max=80\npage: OpenEMR (http://127.0.0.1:9911/interface/main/tabs/main.php?...)\nCalendar\nRecalls\nMessages\n@2 button \"Patient\"\n@6 button \"Admin\"\n@8 button \"Miscellaneous\"\n@10 textbox \"Search by any demographics\" value=\"\"\n@11 button \"Search for patient by entering whole or part of any demographics field information\"\nCalendar\nMessage Center\nSearch or Add Patient\n# frame 6: Search or Add Patient\n# Search or Add Patient\n@14 combobox \"form_title\" value=\"Ms.\" options=[\"Unassigned\", \"Mr.\", \"Mrs.\", \"Ms.\", \"Dr.\"]\nName:\n@15 textbox \"First Name\" value=\"Clarice\"\n@16 textbox \"Middle Name\" value=\"\"\n@17 textbox \"Last Name\" value=\"ScoreboardC704\"\n@18 textbox \"Name Suffix\" value=\"\"\nPreferred Name:\n@19 textbox \"Patient preferred name or name patient is commonly known.\" value=\"\"\nBirth Name:\n@20 textbox \"Birth First Name\" value=\"\"\n@21 textbox \"Middle Name\" value=\"\"\n@22 textbox \"Birth Last Name\" value=\"\"\n@23 textbox \"form_DOB\" value=\"1979-09-03\"\n@24 combobox \"form_sex\" value=\"Female\" options=[\"Unassigned\", \"Female\", \"Male\", \"Unknown\"]\n@25 combobox \"form_gender_identity\" value=\"Unassigned\" options=[\"Unassigned\", \"Identifies as Male\", \"Identifies as Female\", \"Female-to-Male (FTM)/Transgender Male/Trans Man\", \"Male-to-Female (MTF)/Transgender Female/Trans Woman\", \"Genderqueer, neither exclusively male nor female\", \"Additional gender category or other, please specify\", \"Choose not to disclose\"]\n@26 combobox \"form_sex_identified\" value=\"Unassigned\" options=[\"Unassigned\", \"Male\", \"Female\", \"Identifies as nonbinary gender (finding)\", \"Asked But Declined\", \"unknown\"]\nSexual Orientation:\n@27 combobox \"form_sexual_orientation\" value=\"Unassigned\" options=[\"Unassigned\", \"Straight or heterosexual\", \"Lesbian, gay or homosexual\", \"Bisexual\", \"Something else, please describe\", \"Don't know\", \"Choose not to disclose\"]\n@28 combobox \"form_pronoun\" value=\"Unassigned\" options=[\"Unassigned\", \"he/him/his/his/himself\", \"she/her/her/hers/herself\", \"they/them/their/theirs/themselves\", \"Ask me\", \"Decline to answer\", \"Other\"]\nExternal ID:\n@29 textbox \"form_pubpid\" value=\"\"\n@30 textbox \"form_ss\" value=\"\"\n@31 textbox \"form_drivers_license\" value=\"\"\nMarital Status:\n@",
+      "images": 0
+    },
+    {
+      "script": "find role=textbox name=form_street\nfind role=combobox name=form_state\nfind role=combobox name=form_country_code\nfind role=textbox name=form_phone_home\nfind role=textbox name=form_email",
+      "output": "$ find role=textbox name=form_street\nno match\n$ find role=combobox name=form_state\nno match\n$ find role=combobox name=form_country_code\nno match\n$ find role=textbox name=form_phone_home\nno match\n$ find role=textbox name=form_email\nno match",
+      "images": 0
+    },
+    {
+      "script": "scroll down px=600\ntree grep=form_ max=80",
+      "output": "$ scroll down px=600\nerror: the scroll was sent, but nothing scrolled: the pointer is over a part of the screen that does not scroll (a fixed bar?). Click a field or label in the area you want to scroll, then scroll again\n(stopped; 1 lines not run)",
+      "images": 0
+    },
+    {
+      "script": "click role=textbox name=form_billing_note\nscroll down px=600\ntree grep=form_",
+      "output": "$ click role=textbox name=form_billing_note\nok: click textbox \"form_billing_note\"\npage: OpenEMR (http://127.0.0.1:9911/interface/main/tabs/main.php?...)\n$ scroll down px=600\nok: scroll down 600px\npage: OpenEMR (http://127.0.0.1:9911/interface/main/tabs/main.php?...)\n$ tree grep=form_\npage: OpenEMR (http://127.0.0.1:9911/interface/main/tabs/main.php?...)\n@14 textbox \"form_street\" value=\"\"\n@15 textbox \"form_street_line_2\" value=\"\"\n@16 textbox \"form_city\" value=\"\"\n@17 combobox \"form_state\" value=\"Unassigned\" options=[\"Unassigned\", \"Alabama\", \"Alaska\", \"Arizona\", \"Arkansas\", \"California\", \"Colorado\", \"Connecticut\", \"Delaware\", \"District of Columbia\", \"Florida\", \"Georgia\", +41 more]\n@19 textbox \"form_postal_code\" value=\"\"\n@20 combobox \"form_country_code\" value=\"Unassigned\" options=[\"Unassigned\", \"USA\"]\n@22 combobox \"form_county\" value=\"Unassigned\" options=[\"Unassigned\", \"ADAIR\", \"ANDREW\", \"ATCHISON\", \"AUDRAIN\", \"BARRY\"]\n@24 textbox \"form_mothersname\" value=\"\"\n@25 textbox \"form_contact_relationship\" value=\"\"\n@26 textbox \"form_phone_contact\" value=\"\"\n@27 textbox \"form_phone_home\" value=\"\"\n@28 textbox \"form_phone_biz\" value=\"\"\n@29 textbox \"form_phone_cell\" value=\"\"\n@30 textbox \"form_email\" value=\"\"\n@31 textbox \"form_email_direct\" value=\"\"\n(27 controls above the visible area: \"Who\", \"form_title\", \"First Name\", \"Middle Name\", \"Last Name\", \"Name Suffix\", \"Patient preferred name or name patient is commonly known.\", \"Birth First Name\" and 19 more; scroll up to reach them)",
+      "images": 0
+    },
+    {
+      "script": "fill @14 value=\"714 SYNTHETIC WAY\"\nfill @16 value=EXAMPLETON\nselect @17 option=Massachusetts\nfill @19 value=02139\nselect @20 option=USA\nfill @27 value=555-0104\nfill @30 value=clarice.scoreboard.704@example.invalid\nfind role=button name=\"Create New Patient\"",
+      "output": "$ fill @14 value=\"714 SYNTHETIC WAY\"\nok: fill textbox \"form_street\" value=\"714 SYNTHETIC WAY\"\npage: OpenEMR (http://127.0.0.1:9911/interface/main/tabs/main.php?...)\n$ fill @16 value=EXAMPLETON\nok: fill textbox \"form_city\" value=\"EXAMPLETON\"\npage: OpenEMR (http://127.0.0.1:9911/interface/main/tabs/main.php?...)\n$ select @17 option=Massachusetts\nok: select combobox \"form_state\" value=\"Massachusetts\"\npage: OpenEMR (http://127.0.0.1:9911/interface/main/tabs/main.php?...)\n$ fill @19 value=02139\nok: fill textbox \"form_postal_code\" value=\"02139\"\npage: OpenEMR (http://127.0.0.1:9911/interface/main/tabs/main.php?...)\n$ select @20 option=USA\nok: select combobox \"form_country_code\" value=\"USA\"\npage: OpenEMR (http://127.0.0.1:9911/interface/main/tabs/main.php?...)\n$ fill @27 value=555-0104\nok: fill textbox \"form_phone_home\" value=\"555-0104\"\npage: OpenEMR (http://127.0.0.1:9911/interface/main/tabs/main.php?...)\n$ fill @30 value=clarice.scoreboard.704@example.invalid\nok: fill textbox \"form_email\" value=\"clarice.scoreboard.704@example.invalid\"\npage: OpenEMR (http://127.0.0.1:9911/interface/main/tabs/main.php?...)\n$ find role=button name=\"Create New Patient\"\nno match",
+      "images": 0
+    },
+    {
+      "script": "find name=\"Create New Patient\"\ntree grep=Create",
+      "output": "$ find name=\"Create New Patient\"\nno match\n$ tree grep=Create\npage: OpenEMR (http://127.0.0.1:9911/interface/main/tabs/main.php?...)\n(2 controls below the visible area: \"Search\", \"Create New Patient\"; scroll down to reach them)",
+      "images": 0
+    },
+    {
+      "script": "scroll down px=2000\nclick name=\"Create New Patient\"",
+      "output": "$ scroll down px=2000\nok: scroll down 2000px\npage: OpenEMR (http://127.0.0.1:9911/interface/main/tabs/main.php?...)\n$ click name=\"Create New Patient\"\nok: click button \"Create New Patient\"\npage: OpenEMR (http://127.0.0.1:9911/interface/main/tabs/main.php?...)",
+      "images": 0
+    },
+    {
+      "script": "text",
+      "output": "$ text\nCalendar\nFinder\nFlow\nRecalls\nMessages\nPatient\nFees\nModules\nProcedures\nAdmin\nReports\nMiscellaneous\nPopups\nCalendar\nMessage Center\nSearch or Add Patient\nSearch or Add Patient\nWho\nTitle:\nUnassigned\nMr.\nMrs.\nMs.\nDr.\nName:\nPreferred Name:\nBirth Name:\nDOB:\nBirth Sex:\nUnassigned\nFemale\nMale\nUnknown\nGender Identity:\nUnassigned\nIdentifies as Male\nIdentifies as Female\nFemale-to-Male (FTM)/Transgender Male/Trans Man\nMale-to-Female (MTF)/Transgender Female/Trans Woman\nGenderqueer, neither exclusively male nor female\nAdditional gender category or other, please specify\nChoose not to disclose\nSex:\nUnassigned\nMale\nFemale\nIdentifies as nonbinary gender (finding)\nAsked But Declined\nunknown\nSexual Orientation:\nUnassigned\nStraight or heterosexual\nLesbian, gay or homosexual\nBisexual\nSomething else, please describe\nDon't know\nChoose not to disclose\nPronouns:\nUnassigned\nhe/him/his/his/himself\nshe/her/her/hers/herself\nthey/them/their/theirs/themselves\nAsk me\nDecline to answer\nOther\nExternal ID:\nS.S.:\nLicense/ID:\nMarital Status:\nUnassigned\nMarried\nSingle\nDivorced\nWidowed\nSeparated\nDomestic Partner\nUser Defined:\nBilling Note:\nPrevious Names:\nAdd\nContact\nAddress:\nAddress Line 2:\nCity:\nState:\nUnassigned\nAlabama\nAlaska\nArizona\nArkansas\nCalifornia\nColorado\nConnecticut\nDelaware\nDistrict of Columbia\nFlorida\nGeorgia\nHawaii\nIdaho\nIllinois\nIndiana\nIowa\nKansas\nKentucky\nLouisiana\nMaine\nMaryland\nMassachusetts\nMichigan\nMinnesota\nMississippi\nMissouri\nMontana\nNebraska\nNevada\nNew Hampshire\nNew Jersey\nNew Mexico\nNew York\nNorth Carolina\nNorth Dakota\nOhio\nOklahoma\nOregon\nPennsylvania\nPuerto Rico\nRhode Island\nSouth Carolina\nSouth Dakota\nTennessee\nTexas\nUtah\nVermont\nVirginia\nWashington\nWest Virginia\nWisconsin\nWyoming\nPostal Code:\nCountry:\nUnassigned\nUSA\nCounty:\nUnassigned\nADAIR\nANDREW\nATCHISON\nAUDRAIN\nBARRY\nMother`s Name:\nEmergency Contact:\nEmergency Phone:\nHome Phone:\nWork Phone:\nMobile Phone:\nContact Email:\nTrusted Email:\nAdditional Addresses\nShow Inactive\nNONE\nChoices\nEmployer\nStats\nMisc\nRelated\nSearch\nCreate New Patient\n1 - 0 of 0\nHits\tName\t\tPreferred Name\tBirth Name\t\t\tDOB\tBirth Sex\tExternal ID\tPrevious Names\nNo matches were found.\nConfirm Create New Patient Cancel",
+      "images": 0
+    },
+    {
+      "script": "click name=\"Confirm Create New Patient\"",
+      "output": "$ click name=\"Confirm Create New Patient\"\nok: click button \"Confirm Create New Patient\" (save gate passed)\npage: OpenEMR (http://127.0.0.1:9911/interface/main/tabs/main.php?...)",
+      "images": 0
+    },
+    {
+      "script": "text grep=Clarice",
+      "output": "$ text grep=Clarice\nClarice ScoreboardC704 (5)\nMedical Record Dashboard - Clarice ScoreboardC704",
+      "images": 0
+    }
+  ],
+  "result": {
+    "record_status": "needs_human_admit",
+    "detail": null,
+    "gates": [
+      {
+        "control": "Confirm Create New Patient",
+        "missing": [],
+        "decision": "passed_no_hold"
+      }
+    ],
+    "program_check": {
+      "trace_steps_with_locator": 16,
+      "distilled_steps": [],
+      "in_program": 16,
+      "missing_steps": [],
+      "program_structural_steps": 16,
+      "passed": true
+    },
+    "steps": 35,
+    "canary_status": "refused",
+    "canary_detail": "no canary ran: a write step lacks an independent read-back: step_033: a write step with no read-back",
+    "canary_halt": null,
+    "admitted": false,
+    "params": {
+      "lifted": [
+        {
+          "field_label": "form_DOB",
+          "masked_example": "19******03",
+          "name": "DOB",
+          "step_id": "step_008"
+        },
+        {
+          "field_label": "form_city",
+          "masked_example": "EX******ON",
+          "name": "city",
+          "step_id": "step_019"
+        },
+        {
+          "field_label": "form_country_code",
+          "masked_example": "U*A",
+          "name": "country_code",
+          "step_id": "step_026"
+        },
+        {
+          "field_label": "form_email",
+          "masked_example": "cl**********************************id",
+          "name": "email",
+          "step_id": "step_031"
+        },
+        {
+          "field_label": "First Name",
+          "masked_example": "C*****e",
+          "name": "fname",
+          "step_id": "step_004"
+        },
+        {
+          "field_label": "Last Name",
+          "masked_example": "Sc**********04",
+          "name": "lname",
+          "step_id": "step_006"
+        },
+        {
+          "field_label": "form_phone_home",
+          "masked_example": "5******4",
+          "name": "phone_home",
+          "step_id": "step_029"
+        },
+        {
+          "field_label": "form_postal_code",
+          "masked_example": "0***9",
+          "name": "postal_code",
+          "step_id": "step_024"
+        },
+        {
+          "field_label": "form_sex",
+          "masked_example": "F****e",
+          "name": "sex",
+          "step_id": "step_010"
+        },
+        {
+          "field_label": "form_state",
+          "masked_example": "Ma*********ts",
+          "name": "state_label",
+          "step_id": "step_021"
+        },
+        {
+          "field_label": "form_street",
+          "masked_example": "71*************AY",
+          "name": "street",
+          "step_id": "step_017"
+        },
+        {
+          "field_label": "form_title",
+          "masked_example": "M*.",
+          "name": "title",
+          "step_id": "step_001"
+        }
+      ],
+      "unlifted": {}
+    }
+  }
+}

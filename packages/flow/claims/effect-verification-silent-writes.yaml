@@ -1,0 +1,29 @@
+id: effect-verification-silent-writes
+claim: >-
+  Effect verification against the system of record catches silent wrong
+  writes the screen-only oracle misses (5 of 7 transactional fault classes).
+surfaces: [README.md, docs]
+tier: supported
+evidence:
+  - path: tests/test_effect_verifier.py
+    proves: >-
+      The REST/FHIR/document-hash verifiers confirm exactly-one write and
+      refute duplicate / missing / partial / collateral-loss writes.
+  - path: tests/test_silent_wrong_action_benchmark.py
+    proves: >-
+      Each silent-wrong-action class is silent under the screen-only oracle
+      and is CAUGHT once effects are declared and verified.
+  - path: tests/test_effect_fhir.py
+    proves: >-
+      The FHIR effect verifier's read/confirm/refute/indeterminate contract
+      (the live-OpenEMR smoke is a separate opt-in function in this file).
+  - path: benchmark/fault_model/FAULT_MODEL.md
+    kind: benchmark
+    proves: >-
+      The 7-class transactional fault-model study: 5/7 classes silently
+      mishandled by screen-only, all 5 halt through the real replayer.
+caveats:
+  - >-
+    Verification requires the step to DECLARE typed `effects` AND a
+    configured EffectVerifier. Without a real system-of-record verifier,
+    on-screen read-back is SAME-SURFACE and not independent.

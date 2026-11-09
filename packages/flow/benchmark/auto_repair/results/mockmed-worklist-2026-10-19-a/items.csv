@@ -1,0 +1,11 @@
+mode,item,status,runs,readback,queue_status,wall_s
+relink,item-1,verified,2,correct,done,33.2
+relink,item-2,verified,2,correct,done,33.2
+relink,item-3,verified,2,correct,done,33.2
+relink,item-4,verified,2,correct,done,33.2
+relink,item-5,verified,2,correct,done,33.2
+redesign,item-1,verified,2,correct,done,46.8
+redesign,item-2,verified,2,correct,done,46.8
+redesign,item-3,verified,2,correct,done,46.8
+redesign,item-4,verified,2,correct,done,46.8
+redesign,item-5,verified,2,correct,done,46.8

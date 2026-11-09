@@ -1,0 +1,1034 @@
+{
+  "meta": {
+    "schema_version": 1,
+    "evidence_scope": "bounded_aggregate",
+    "synthetic": true,
+    "domain": "lending (MockLoan) - loan disbursement authorization",
+    "oracle": "benchmark-local read-only SQLite ground truth with independent row and open-world canonical table-content classification",
+    "judge_read_path": "direct read-only SQLite capture over sqlite_master-discovered business tables",
+    "single_surface_read_path": "/api/disbursements",
+    "full_read_path": "/api/db",
+    "ground_truth": "mockloan.fault_server isolated temporary SQLite ledger",
+    "arms": [
+      "screen_only",
+      "effect_verify_single",
+      "effect_verify_full"
+    ],
+    "tasks": 12,
+    "trials_per_task_per_arm": 3,
+    "deterministic": true,
+    "model_calls": 0
+  },
+  "screen_only": {
+    "arm": "screen_only",
+    "n_episodes": 36,
+    "n_tasks": 12,
+    "arms": [
+      "screen_only"
+    ],
+    "swer": {
+      "numerator": 24,
+      "denominator": 36,
+      "rate": 0.6666666666666666
+    },
+    "swer_wrong_write": {
+      "numerator": 18,
+      "denominator": 36,
+      "rate": 0.5
+    },
+    "swer_phantom": {
+      "numerator": 6,
+      "denominator": 36,
+      "rate": 0.16666666666666666
+    },
+    "over_halt": {
+      "numerator": 0,
+      "denominator": 36,
+      "rate": 0.0
+    },
+    "task_success": {
+      "numerator": 6,
+      "denominator": 36,
+      "rate": 0.16666666666666666
+    },
+    "screen_success": {
+      "numerator": 30,
+      "denominator": 36,
+      "rate": 0.8333333333333334
+    },
+    "success_effect_gap": 0.6666666666666666,
+    "total_cost_usd": 0.0,
+    "mean_cost_usd": 0.0,
+    "cells": [
+      {
+        "category": "C1_partial_save",
+        "substrate": "web",
+        "n": 3,
+        "success_effect_gap": 1.0,
+        "swer": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0
+        },
+        "swer_wrong_write": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0
+        },
+        "swer_phantom": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "task_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "screen_success": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0
+        }
+      },
+      {
+        "category": "C2_duplicate_submission",
+        "substrate": "web",
+        "n": 6,
+        "success_effect_gap": 1.0,
+        "swer": {
+          "numerator": 6,
+          "denominator": 6,
+          "rate": 1.0
+        },
+        "swer_wrong_write": {
+          "numerator": 6,
+          "denominator": 6,
+          "rate": 1.0
+        },
+        "swer_phantom": {
+          "numerator": 0,
+          "denominator": 6,
+          "rate": 0.0
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 6,
+          "rate": 0.0
+        },
+        "task_success": {
+          "numerator": 0,
+          "denominator": 6,
+          "rate": 0.0
+        },
+        "screen_success": {
+          "numerator": 6,
+          "denominator": 6,
+          "rate": 1.0
+        }
+      },
+      {
+        "category": "C3_optimistic_then_reject",
+        "substrate": "web",
+        "n": 9,
+        "success_effect_gap": 0.3333333333333333,
+        "swer": {
+          "numerator": 3,
+          "denominator": 9,
+          "rate": 0.3333333333333333
+        },
+        "swer_wrong_write": {
+          "numerator": 0,
+          "denominator": 9,
+          "rate": 0.0
+        },
+        "swer_phantom": {
+          "numerator": 3,
+          "denominator": 9,
+          "rate": 0.3333333333333333
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 9,
+          "rate": 0.0
+        },
+        "task_success": {
+          "numerator": 0,
+          "denominator": 9,
+          "rate": 0.0
+        },
+        "screen_success": {
+          "numerator": 3,
+          "denominator": 9,
+          "rate": 0.3333333333333333
+        }
+      },
+      {
+        "category": "C4_stale_overwrite",
+        "substrate": "web",
+        "n": 3,
+        "success_effect_gap": 1.0,
+        "swer": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0
+        },
+        "swer_wrong_write": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0
+        },
+        "swer_phantom": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "task_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "screen_success": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0
+        }
+      },
+      {
+        "category": "C5_double_delivered_input",
+        "substrate": "web",
+        "n": 3,
+        "success_effect_gap": 1.0,
+        "swer": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0
+        },
+        "swer_wrong_write": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0
+        },
+        "swer_phantom": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "task_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "screen_success": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0
+        }
+      },
+      {
+        "category": "C6_wrong_record_homonym",
+        "substrate": "web",
+        "n": 3,
+        "success_effect_gap": 1.0,
+        "swer": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0
+        },
+        "swer_wrong_write": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0
+        },
+        "swer_phantom": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "task_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "screen_success": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0
+        }
+      },
+      {
+        "category": "C7_silent_noop_wrong_target",
+        "substrate": "web",
+        "n": 3,
+        "success_effect_gap": 1.0,
+        "swer": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0
+        },
+        "swer_wrong_write": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "swer_phantom": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "task_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "screen_success": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0
+        }
+      },
+      {
+        "category": "control",
+        "substrate": "web",
+        "n": 6,
+        "success_effect_gap": 0.0,
+        "swer": {
+          "numerator": 0,
+          "denominator": 6,
+          "rate": 0.0
+        },
+        "swer_wrong_write": {
+          "numerator": 0,
+          "denominator": 6,
+          "rate": 0.0
+        },
+        "swer_phantom": {
+          "numerator": 0,
+          "denominator": 6,
+          "rate": 0.0
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 6,
+          "rate": 0.0
+        },
+        "task_success": {
+          "numerator": 6,
+          "denominator": 6,
+          "rate": 1.0
+        },
+        "screen_success": {
+          "numerator": 6,
+          "denominator": 6,
+          "rate": 1.0
+        }
+      }
+    ],
+    "outcome_counts": {
+      "success": 6,
+      "silent_wrong_effect": 24,
+      "false_abort": 3,
+      "safe_halt": 3
+    }
+  },
+  "effect_verify_single": {
+    "arm": "effect_verify_single",
+    "n_episodes": 36,
+    "n_tasks": 12,
+    "arms": [
+      "effect_verify_single"
+    ],
+    "swer": {
+      "numerator": 3,
+      "denominator": 36,
+      "rate": 0.08333333333333333
+    },
+    "swer_wrong_write": {
+      "numerator": 3,
+      "denominator": 36,
+      "rate": 0.08333333333333333
+    },
+    "swer_phantom": {
+      "numerator": 0,
+      "denominator": 36,
+      "rate": 0.0
+    },
+    "over_halt": {
+      "numerator": 3,
+      "denominator": 36,
+      "rate": 0.08333333333333333
+    },
+    "task_success": {
+      "numerator": 9,
+      "denominator": 36,
+      "rate": 0.25
+    },
+    "screen_success": {
+      "numerator": 12,
+      "denominator": 36,
+      "rate": 0.3333333333333333
+    },
+    "success_effect_gap": 0.08333333333333333,
+    "total_cost_usd": 0.0,
+    "mean_cost_usd": 0.0,
+    "cells": [
+      {
+        "category": "C1_partial_save",
+        "substrate": "web",
+        "n": 3,
+        "success_effect_gap": 0.0,
+        "swer": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "swer_wrong_write": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "swer_phantom": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "task_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "screen_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        }
+      },
+      {
+        "category": "C2_duplicate_submission",
+        "substrate": "web",
+        "n": 6,
+        "success_effect_gap": 0.5,
+        "swer": {
+          "numerator": 3,
+          "denominator": 6,
+          "rate": 0.5
+        },
+        "swer_wrong_write": {
+          "numerator": 3,
+          "denominator": 6,
+          "rate": 0.5
+        },
+        "swer_phantom": {
+          "numerator": 0,
+          "denominator": 6,
+          "rate": 0.0
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 6,
+          "rate": 0.0
+        },
+        "task_success": {
+          "numerator": 0,
+          "denominator": 6,
+          "rate": 0.0
+        },
+        "screen_success": {
+          "numerator": 3,
+          "denominator": 6,
+          "rate": 0.5
+        }
+      },
+      {
+        "category": "C3_optimistic_then_reject",
+        "substrate": "web",
+        "n": 9,
+        "success_effect_gap": 0.0,
+        "swer": {
+          "numerator": 0,
+          "denominator": 9,
+          "rate": 0.0
+        },
+        "swer_wrong_write": {
+          "numerator": 0,
+          "denominator": 9,
+          "rate": 0.0
+        },
+        "swer_phantom": {
+          "numerator": 0,
+          "denominator": 9,
+          "rate": 0.0
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 9,
+          "rate": 0.0
+        },
+        "task_success": {
+          "numerator": 3,
+          "denominator": 9,
+          "rate": 0.3333333333333333
+        },
+        "screen_success": {
+          "numerator": 3,
+          "denominator": 9,
+          "rate": 0.3333333333333333
+        }
+      },
+      {
+        "category": "C4_stale_overwrite",
+        "substrate": "web",
+        "n": 3,
+        "success_effect_gap": 0.0,
+        "swer": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "swer_wrong_write": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "swer_phantom": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "task_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "screen_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        }
+      },
+      {
+        "category": "C5_double_delivered_input",
+        "substrate": "web",
+        "n": 3,
+        "success_effect_gap": 0.0,
+        "swer": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "swer_wrong_write": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "swer_phantom": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "task_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "screen_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        }
+      },
+      {
+        "category": "C6_wrong_record_homonym",
+        "substrate": "web",
+        "n": 3,
+        "success_effect_gap": 0.0,
+        "swer": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "swer_wrong_write": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "swer_phantom": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "task_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "screen_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        }
+      },
+      {
+        "category": "C7_silent_noop_wrong_target",
+        "substrate": "web",
+        "n": 3,
+        "success_effect_gap": 0.0,
+        "swer": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "swer_wrong_write": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "swer_phantom": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "over_halt": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0
+        },
+        "task_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "screen_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        }
+      },
+      {
+        "category": "control",
+        "substrate": "web",
+        "n": 6,
+        "success_effect_gap": 0.0,
+        "swer": {
+          "numerator": 0,
+          "denominator": 6,
+          "rate": 0.0
+        },
+        "swer_wrong_write": {
+          "numerator": 0,
+          "denominator": 6,
+          "rate": 0.0
+        },
+        "swer_phantom": {
+          "numerator": 0,
+          "denominator": 6,
+          "rate": 0.0
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 6,
+          "rate": 0.0
+        },
+        "task_success": {
+          "numerator": 6,
+          "denominator": 6,
+          "rate": 1.0
+        },
+        "screen_success": {
+          "numerator": 6,
+          "denominator": 6,
+          "rate": 1.0
+        }
+      }
+    ],
+    "outcome_counts": {
+      "success": 9,
+      "wrong_action": 15,
+      "safe_halt": 6,
+      "over_halt": 3,
+      "silent_wrong_effect": 3
+    }
+  },
+  "effect_verify_full": {
+    "arm": "effect_verify_full",
+    "n_episodes": 36,
+    "n_tasks": 12,
+    "arms": [
+      "effect_verify_full"
+    ],
+    "swer": {
+      "numerator": 0,
+      "denominator": 36,
+      "rate": 0.0
+    },
+    "swer_wrong_write": {
+      "numerator": 0,
+      "denominator": 36,
+      "rate": 0.0
+    },
+    "swer_phantom": {
+      "numerator": 0,
+      "denominator": 36,
+      "rate": 0.0
+    },
+    "over_halt": {
+      "numerator": 3,
+      "denominator": 36,
+      "rate": 0.08333333333333333
+    },
+    "task_success": {
+      "numerator": 9,
+      "denominator": 36,
+      "rate": 0.25
+    },
+    "screen_success": {
+      "numerator": 9,
+      "denominator": 36,
+      "rate": 0.25
+    },
+    "success_effect_gap": 0.0,
+    "total_cost_usd": 0.0,
+    "mean_cost_usd": 0.0,
+    "cells": [
+      {
+        "category": "C1_partial_save",
+        "substrate": "web",
+        "n": 3,
+        "success_effect_gap": 0.0,
+        "swer": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "swer_wrong_write": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "swer_phantom": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "task_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "screen_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        }
+      },
+      {
+        "category": "C2_duplicate_submission",
+        "substrate": "web",
+        "n": 6,
+        "success_effect_gap": 0.0,
+        "swer": {
+          "numerator": 0,
+          "denominator": 6,
+          "rate": 0.0
+        },
+        "swer_wrong_write": {
+          "numerator": 0,
+          "denominator": 6,
+          "rate": 0.0
+        },
+        "swer_phantom": {
+          "numerator": 0,
+          "denominator": 6,
+          "rate": 0.0
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 6,
+          "rate": 0.0
+        },
+        "task_success": {
+          "numerator": 0,
+          "denominator": 6,
+          "rate": 0.0
+        },
+        "screen_success": {
+          "numerator": 0,
+          "denominator": 6,
+          "rate": 0.0
+        }
+      },
+      {
+        "category": "C3_optimistic_then_reject",
+        "substrate": "web",
+        "n": 9,
+        "success_effect_gap": 0.0,
+        "swer": {
+          "numerator": 0,
+          "denominator": 9,
+          "rate": 0.0
+        },
+        "swer_wrong_write": {
+          "numerator": 0,
+          "denominator": 9,
+          "rate": 0.0
+        },
+        "swer_phantom": {
+          "numerator": 0,
+          "denominator": 9,
+          "rate": 0.0
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 9,
+          "rate": 0.0
+        },
+        "task_success": {
+          "numerator": 3,
+          "denominator": 9,
+          "rate": 0.3333333333333333
+        },
+        "screen_success": {
+          "numerator": 3,
+          "denominator": 9,
+          "rate": 0.3333333333333333
+        }
+      },
+      {
+        "category": "C4_stale_overwrite",
+        "substrate": "web",
+        "n": 3,
+        "success_effect_gap": 0.0,
+        "swer": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "swer_wrong_write": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "swer_phantom": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "task_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "screen_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        }
+      },
+      {
+        "category": "C5_double_delivered_input",
+        "substrate": "web",
+        "n": 3,
+        "success_effect_gap": 0.0,
+        "swer": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "swer_wrong_write": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "swer_phantom": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "task_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "screen_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        }
+      },
+      {
+        "category": "C6_wrong_record_homonym",
+        "substrate": "web",
+        "n": 3,
+        "success_effect_gap": 0.0,
+        "swer": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "swer_wrong_write": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "swer_phantom": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "task_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "screen_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        }
+      },
+      {
+        "category": "C7_silent_noop_wrong_target",
+        "substrate": "web",
+        "n": 3,
+        "success_effect_gap": 0.0,
+        "swer": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "swer_wrong_write": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "swer_phantom": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "over_halt": {
+          "numerator": 3,
+          "denominator": 3,
+          "rate": 1.0
+        },
+        "task_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        },
+        "screen_success": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0.0
+        }
+      },
+      {
+        "category": "control",
+        "substrate": "web",
+        "n": 6,
+        "success_effect_gap": 0.0,
+        "swer": {
+          "numerator": 0,
+          "denominator": 6,
+          "rate": 0.0
+        },
+        "swer_wrong_write": {
+          "numerator": 0,
+          "denominator": 6,
+          "rate": 0.0
+        },
+        "swer_phantom": {
+          "numerator": 0,
+          "denominator": 6,
+          "rate": 0.0
+        },
+        "over_halt": {
+          "numerator": 0,
+          "denominator": 6,
+          "rate": 0.0
+        },
+        "task_success": {
+          "numerator": 6,
+          "denominator": 6,
+          "rate": 1.0
+        },
+        "screen_success": {
+          "numerator": 6,
+          "denominator": 6,
+          "rate": 1.0
+        }
+      }
+    ],
+    "outcome_counts": {
+      "success": 9,
+      "wrong_action": 18,
+      "safe_halt": 6,
+      "over_halt": 3
+    }
+  }
+}

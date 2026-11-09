@@ -1,0 +1,1689 @@
+"""Typed effects and the ``EffectVerifier`` protocol -- verify REAL effects
+against a system of record, not the screen.
+
+This is the concrete runtime for the ``Effect`` type proposed in the
+Workflow-Program IR RFC (``docs/design/WORKFLOW_PROGRAM_IR.md``, PR #61):
+that RFC promotes today's vision-only :class:`openadapt_flow.ir.Postcondition`
+into a *typed* ``Effect`` with **system-of-record** kinds
+(``record_written`` / ``field_equals``) whose probe is backend-specific (an
+API / DB read), closing the transactional gap the fault-model study measured
+(``docs/LIMITS.md`` "5 of 7 write faults silent"; ``benchmark/fault_model/``).
+
+Why not the screen? A vision postcondition answers *"do the pixels look like a
+save happened?"* -- which a partial save, an optimistic-UI-then-reject, a
+duplicate submission, a lost update, or a double-delivered click all satisfy
+while the **record** is wrong or missing. An ``EffectVerifier`` answers the
+only question a record system may trust: *"is the intended record actually in
+the system of record, exactly once, with the right field values?"*
+
+Design posture -- mirror the identity gate (``runtime.identity``): **fail safe
+to HALT, refuse rather than guess.** A verdict is one of
+
+- :attr:`Verdict.CONFIRMED`     -- the effect is present and correct -> proceed;
+- :attr:`Verdict.REFUTED`       -- the system of record affirmatively
+  contradicts the effect (missing / duplicated / wrong value / collateral
+  loss) -> HALT (never accept as success);
+- :attr:`Verdict.INDETERMINATE` -- the system of record is unreachable or
+  unreadable, so the effect *cannot be certified* -> HALT (never assume
+  success). Consistent with the identity ladder's ``unreadable`` -> refuse.
+
+Both non-confirmed verdicts set :attr:`EffectVerdict.should_halt`. There is no
+"probably fine": an unverifiable consequential write halts, exactly as an
+unreadable identity band does.
+
+Everything here is import-light (pydantic only); concrete substrates
+(``rest`` / ``fhir`` / ``document_hash``) bring their own I/O deps lazily.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+from collections.abc import Mapping
+from datetime import datetime, timezone
+from decimal import Decimal
+from enum import Enum
+from typing import Any, Literal, Optional, Protocol, runtime_checkable
+
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PrivateAttr,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
+from pydantic_core import to_jsonable_python
+
+ValueKind = Literal["phone", "date", "email"]
+
+
+def kind_form(
+    kind: Optional[str], value: Any, date_order: Optional[str] = None
+) -> Optional[str]:
+    """``value`` in the canonical form of a declared value kind, or None when
+    it can't be read as one (which then matches nothing). The one normalizer
+    is :mod:`openadapt_flow.runtime.effects.readback_values`, shared with the
+    on-screen read-back:
+
+    - ``phone``: the digits, with an extension kept apart; a value with
+      anything but digits, ``( ) + - . /``, spaces and one trailing extension
+      isn't a phone number;
+    - ``date``: ISO ``YYYY-MM-DD`` (a stored date-time keeps its date; nothing
+      else may follow); a numeric date needs ``date_order``, or it is
+      ambiguous;
+    - ``email``: one address, case folded.
+    """
+
+    from openadapt_flow.runtime.effects.readback_values import normalize_value
+
+    if value is None:
+        return None
+    text = str(value).strip()
+    if kind is None:
+        return text
+    return normalize_value(text, kind, date_order=date_order)  # type: ignore[arg-type]
+
+
+#: A plain decimal number as text: an optional minus, digits without a
+#: leading zero, an optional fraction and exponent. No spaces, ``+``,
+#: underscores, ``NaN`` or ``Infinity``: anything else is text.
+_PLAIN_NUMBER = re.compile(
+    r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE](?P<exp>[+-]?[0-9]+))?"
+)
+#: The largest exponent a plain number may have: Decimal's default context
+#: range, so every comparison of two plain numbers is exact and can't raise.
+_MAX_EXPONENT = 999_999
+
+
+def plain_number(text: str) -> Optional[Decimal]:
+    """``text`` as an exact :class:`~decimal.Decimal` when it is a plain
+    decimal number (``2``, ``2.00``, ``-0.25``, ``1e+21``), else None.
+
+    Raises ``ValueError`` for a plain number whose exponent is beyond
+    +/-999999 (``1e9999999``): it can't be compared exactly, and saying so
+    is better than reading it as text.
+    """
+
+    if not isinstance(text, str):
+        return None
+    shape = _PLAIN_NUMBER.fullmatch(text)
+    if shape is None:
+        return None
+    exponent = shape.group("exp")
+    if exponent is not None and abs(int(exponent)) > _MAX_EXPONENT:
+        raise ValueError(f"number {text[:40]!r} has an exponent beyond +/-999999")
+    return Decimal(text)
+
+
+def stored_number(value: Any) -> Optional[Decimal]:
+    """A stored value the store typed as a number, as an exact Decimal.
+
+    An ``int``, ``float`` or ``Decimal`` from the driver or the JSON body
+    (a float by its shortest text, so ``0.1`` is ``Decimal("0.1")``). A
+    bool, any text, and a non-finite float are not numbers: None.
+    """
+
+    if isinstance(value, bool) or not isinstance(value, (int, float, Decimal)):
+        return None
+    number = Decimal(str(value)) if isinstance(value, float) else Decimal(value)
+    return number if number.is_finite() else None
+
+
+def number_matches(stored: Any, want: Any, *, text_numbers: bool) -> Optional[bool]:
+    """Compare ``stored`` and ``want`` by exact numeric value, when both are
+    numbers; None when the rule doesn't apply (compare as text instead).
+
+    ``stored`` is a number only when the store typed it as one
+    (:func:`stored_number`): a SQL numeric column, a JSON number. ``want``
+    is a number when it is a :attr:`ValueExpr.number`, or, with
+    ``text_numbers`` (a SQL read, whose column types are the store's), any
+    plain decimal text. So a stored ``2`` equals ``2.0`` and ``"2.00"`` in a
+    SQL numeric column, while a text column, and a JSON string, stay exact.
+    """
+
+    have = stored_number(stored)
+    if have is None:
+        return None
+    if isinstance(want, ValueExpr):
+        if want.kind is not None or want.literal is None:
+            return None
+        if not (want.number or text_numbers):
+            return None
+        text = want.literal
+    elif text_numbers and isinstance(want, str):
+        text = want
+    else:
+        return None
+    try:
+        expected = plain_number(text)
+    except ValueError:
+        # A number beyond any stored number's range (a parameter like this
+        # is refused at bind): it equals no stored number.
+        return False
+    if expected is None:
+        return None
+    return have == expected
+
+
+def _capitalize_word(word: str) -> str:
+    """One word as a form's JavaScript capitalize step stores it:
+    ``charAt(0).toUpperCase() + substring(1)``. Split on the space character
+    only, the rest keeps its case ("McDonald" stays "McDonald"). ``charAt``
+    takes one UTF-16 code unit, so a first letter outside the BMP (Adlam,
+    Osage, Deseret) is half a surrogate pair and stays as typed."""
+
+    if ord(word[0]) > 0xFFFF:
+        return word
+    return word[0].upper() + word[1:]
+
+
+class ValueExpr(BaseModel):
+    """A single effect-contract value: either a static ``literal`` or a
+    reference to a run ``param`` (P0-3 fix).
+
+    Before this type an :class:`Effect` carried plain static strings, so a
+    PARAMETERIZED workflow verified its effects against the values baked in at
+    DEMONSTRATION time (write patient "Susan" via the GUI, then verify the
+    recorded demo patient "Phil"). ``ValueExpr`` lets a compiled effect declare
+    ``{"param": "patient_id"}`` and have the runtime resolve it against the
+    RUN's params before verification, so the record actually written is the
+    record checked.
+
+    Exactly one of :attr:`literal` / :attr:`param` is meaningful. Old bundles
+    (and hand-authored effects) that pass a bare string are coerced to
+    ``ValueExpr(literal=...)`` by :class:`Effect`'s validators, and this type's
+    ``__eq__`` / ``__str__`` compare/render as that bare string so every
+    existing reader (learning gate signatures, codegen review comments) and the
+    substrate matchers behave BYTE-FOR-BYTE identically for a literal.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: A static value baked into the contract (the v1 form). ``None`` when the
+    #: value comes from a run param instead.
+    literal: Optional[str] = None
+    #: Name of a run parameter to resolve against at run time (``Workflow.params``
+    #: overlaid by the caller's values). ``None`` for a literal.
+    param: Optional[str] = None
+    #: For a ``param`` the system of record stores as a code: the stored value
+    #: for each value the run may enter (a select's label and its option
+    #: value, such as ``Massachusetts`` and ``MA``). The record check then
+    #: reads the entered value back as its code. A value the map doesn't name
+    #: resolves to nothing, so the check matches nothing and fails closed.
+    map: Optional[dict[str, str]] = None
+    #: For a ``param`` the system of record stores transformed: how it stores
+    #: what was entered (OpenEMR's New Patient form saves street and city in
+    #: capitals). Applied after :attr:`map`, with full Unicode case mapping,
+    #: as the browser's ``toUpperCase()`` does for OpenEMR's "U" fields
+    #: ("Peña" is stored "PEÑA", "Straße" "STRASSE"). ``capitalize_words``
+    #: puts the first letter of each space-separated word in capitals and
+    #: drops extra spaces, as an app's capitalize-on-save fields do (JavaScript:
+    #: " ada  lovelace" is stored "Ada Lovelace"). A closed set, declared per
+    #: field: the check stays exact, so it expects the stored form, not any
+    #: casing, and a different value is still refuted.
+    stored: Optional[Literal["upper", "lower", "capitalize_words"]] = None
+    #: A declared value kind (:func:`kind_form`): the expected value and the
+    #: stored one are compared in canonical form, so formatting alone never
+    #: refutes, and a different value always does. Never inferred.
+    kind: Optional[ValueKind] = None
+    #: ``kind: date`` only: how a numeric date entered for this value reads.
+    date_order: Optional[Literal["mdy", "dmy"]] = None
+    #: ``True`` for a null value: a parameter the run set to ``None`` binds to
+    #: this. It matches a stored null (SQL ``NULL``; for REST, an absent or
+    #: null field) and nothing else: never ``""``, never the text ``"None"``.
+    null: Optional[Literal[True]] = None
+    #: ``True`` when the system of record leaves this field out of a record
+    #: whose value is null (Redmine's issue JSON omits ``assigned_to`` when
+    #: no one is assigned). Then a null value matches a missing field too.
+    #: Without it a missing field matches nothing: a misspelled or
+    #: unprojected field must not pass for null. Declared per field, never
+    #: assumed for a store.
+    absent_is_null: Optional[Literal[True]] = None
+    #: ``True`` when the value is a number: a parameter the run passed as a
+    #: JSON number binds to this. A number compares with a stored number by
+    #: exact decimal value (``2.0`` equals a stored ``2``), never with text
+    #: (:func:`number_matches`).
+    number: Optional[Literal[True]] = None
+
+    @model_validator(mode="after")
+    def _exactly_one_source(self) -> "ValueExpr":
+        """Require one unambiguous source for every contract value."""
+
+        sources = sum(
+            1 for value in (self.literal, self.param, self.null) if value is not None
+        )
+        if sources != 1:
+            raise ValueError("exactly one of literal, param or null must be set")
+        if self.null and (self.map is not None or self.stored is not None):
+            raise ValueError("a null value takes no map or stored form")
+        if self.absent_is_null and self.literal is not None:
+            raise ValueError("absent_is_null applies to a parameter or a null")
+        if self.param == "":
+            raise ValueError("effect parameter name must not be empty")
+        if self.map is not None and (self.param is None or not self.map):
+            raise ValueError("a value map needs a parameter and at least one entry")
+        if self.stored is not None and self.param is None:
+            raise ValueError("a stored form applies to a parameter")
+        if self.date_order is not None and self.kind != "date":
+            raise ValueError("date_order applies to kind: date")
+        if self.number and (
+            self.kind is not None
+            or self.map is not None
+            or self.stored is not None
+            or (self.literal is not None and plain_number(self.literal) is None)
+        ):
+            raise ValueError("a number is a plain decimal, with no kind, map or form")
+        if self.number and self.literal is None:
+            raise ValueError("number applies to a literal; a parameter's type sets it")
+        return self
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> Any:
+        # A value without a map serializes exactly as before, so existing
+        # effect contract hashes and bundle digests are unchanged.
+        data = handler(self)
+        if isinstance(data, dict):
+            for key in (
+                "map",
+                "stored",
+                "kind",
+                "date_order",
+                "null",
+                "absent_is_null",
+                "number",
+            ):
+                if data.get(key) is None:
+                    data.pop(key, None)
+        return data
+
+    def resolve(self, params: Mapping[str, object]) -> Optional[str]:
+        """Resolve to a concrete string against ``params``.
+
+        A ``param`` reference reads ``params[param]`` (``None`` when the run did
+        not supply it -- fail-safe: an unresolved selector matches nothing, so
+        the effect REFUTEs / HALTs rather than silently confirming the wrong
+        record). A parameter the run set to ``None`` has no text either and
+        also gives ``None``; only :meth:`resolved` binds it, as a null value.
+        A pure literal returns its literal unchanged.
+        """
+        if self.param is not None:
+            if self.param not in params or params[self.param] is None:
+                return None
+            # Keep the authorized JSON scalar typed until this exact
+            # string-only effect-verifier boundary.
+            from openadapt_flow.runtime.authorization import runtime_param_text
+
+            entered = runtime_param_text(params[self.param])  # type: ignore[arg-type]
+            return self.stored_form(entered)
+        return self.literal
+
+    def stored_form(self, entered: str) -> Optional[str]:
+        """What the system of record stores for ``entered``: its code under
+        :attr:`map` (None when the map doesn't name it), then :attr:`stored`."""
+
+        value: Optional[str] = entered
+        if self.map is not None:
+            value = self.map.get(entered)
+        if value is not None and self.stored == "upper":
+            value = value.upper()
+        elif value is not None and self.stored == "lower":
+            value = value.lower()
+        elif value is not None and self.stored == "capitalize_words":
+            value = " ".join(
+                _capitalize_word(word) for word in value.split(" ") if word
+            )
+        return value
+
+    def resolved(self, params: Mapping[str, object]) -> "ValueExpr":
+        """Return a pure-literal copy of this expression bound to ``params``.
+
+        A parameter the run set to ``None`` binds to a null value
+        (``null: true``), which matches only a stored null.
+        A parameter passed as a JSON number (not a bool) with no kind, map or
+        stored form binds as a number (:attr:`number`).
+        """
+        if self.null or (
+            self.param is not None
+            and self.param in params
+            and params[self.param] is None
+        ):
+            return ValueExpr(
+                null=True,
+                kind=self.kind,
+                date_order=self.date_order,
+                absent_is_null=self.absent_is_null,
+            )
+        literal = self.resolve(params)
+        raw = params.get(self.param) if self.param is not None else None
+        if self.param is not None and literal is not None:
+            try:
+                plain_number(literal)
+            except ValueError as exc:
+                raise ValueError(f"parameter {self.param!r}: {exc}") from None
+        number = (
+            self.number
+            if self.param is None
+            else (
+                True
+                if isinstance(raw, (int, float))
+                and not isinstance(raw, bool)
+                and self.kind is None
+                and self.map is None
+                and self.stored is None
+                and literal is not None
+                and plain_number(literal) is not None
+                else None
+            )
+        )
+        return ValueExpr(
+            literal=literal, kind=self.kind, date_order=self.date_order, number=number
+        )
+
+    def matches(self, stored: Any) -> bool:
+        """Does a stored value equal this (resolved) value? In canonical form
+        when a kind is declared, as text otherwise. A null value equals only
+        a stored ``None``."""
+
+        if self.null:
+            return stored is None
+        if self.kind is None:
+            return str(stored) == str(self)
+        want = kind_form(self.kind, self.literal, self.date_order)
+        return want is not None and kind_form(self.kind, stored) == want
+
+    # -- transparent str-compatibility (back-compat with the v1 plain-string
+    #    form): a literal ValueExpr compares, hashes, stringifies, and reprs
+    #    exactly as the bare string it replaced, so existing readers and tests
+    #    that treat ``effect.value`` / ``effect.match[k]`` as a string are
+    #    unaffected. ---------------------------------------------------------
+    def __str__(self) -> str:
+        # Display only: every comparison checks :attr:`null` first, so the
+        # text "null" never equals a null value.
+        if self.null:
+            return "null"
+        if self.literal is not None:
+            return self.literal
+        if self.param is not None:
+            return "{" + self.param + "}"
+        return ""
+
+    def __repr__(self) -> str:
+        # Mirror ``repr(str)`` for a literal so codegen review comments
+        # (``idempotency_key={eff.idempotency_key!r}``) and ``dict`` reprs of a
+        # ``match`` selector render as they did when values were plain strings.
+        if self.null:
+            return "None"
+        if self.param is None:
+            return repr(self.literal)
+        return repr("{" + self.param + "}")
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, ValueExpr):
+            return (
+                self.literal == other.literal
+                and self.param == other.param
+                and self.map == other.map
+                and self.null == other.null
+                and self.absent_is_null == other.absent_is_null
+                and self.number == other.number
+            )
+        if isinstance(other, str):
+            # A literal expression equals the bare string it stands for.
+            return self.param is None and not self.null and self.literal == other
+        return NotImplemented
+
+    def __hash__(self) -> int:
+        # A literal expression must hash IDENTICALLY to the bare string it
+        # stands for, so it collides with that string in sets/dicts (the
+        # hash/eq invariant given ``__eq__`` treats them as equal). Existing
+        # code that keys a set/dict on ``match`` values mixing plain strings
+        # and literal expressions then behaves unchanged.
+        if self.null:
+            return hash(("__null__", bool(self.absent_is_null)))
+        if self.param is None:
+            return hash(self.literal)
+        return hash(("__param__", self.param, tuple(sorted((self.map or {}).items()))))
+
+
+class EffectKind(str, Enum):
+    """System-of-record effect kinds (RFC section 2.2).
+
+    These are the NEW kinds the RFC adds beyond the vision-checkable
+    postcondition kinds (``text_present`` / ``region_stable`` / ...): their
+    probe is a read against the system of record, not the frame.
+    """
+
+    #: A record matching :attr:`Effect.match` must exist in the system of
+    #: record EXACTLY :attr:`Effect.expected_count` times (default once --
+    #: at-most-once for a consequential write; catches missing, phantom,
+    #: duplicate, and double-click writes).
+    RECORD_WRITTEN = "record_written"
+    #: The unique record matching :attr:`Effect.match` must carry
+    #: ``field == value``. For a write this is read-back of a persisted field
+    #: (and catches a partial save); for a read-only workflow it independently
+    #: verifies the declared business outcome against the system of record.
+    FIELD_EQUALS = "field_equals"
+    #: The set of records ADDED to the read set (scoped by :attr:`Effect.match`)
+    #: must be EXACTLY the declared set :attr:`Effect.new_records` -- every
+    #: declared record present once, and NO additional new record. This is the
+    #: over-write guard: a per-record ``record_written`` effect answers "is my
+    #: record there?" and is silent about the records it never named, so an
+    #: agent that wrote the 6 intended rows AND 31 unintended ones satisfies
+    #: every per-record contract. Requires a REAL pre-state baseline (a set
+    #: delta against an unknown baseline is never guessed -> INDETERMINATE).
+    EXACT_NEW_SET = "exact_new_set"
+
+
+#: A screen region ``(x, y, w, h)`` in the recorded/live frame's pixel space.
+#: Mirrors :data:`openadapt_flow.ir.Region`; defined locally to keep this
+#: module import-light (``ir`` imports :class:`Effect`, not the reverse).
+Region = tuple[int, int, int, int]
+
+
+class ReadbackNav(BaseModel):
+    """One deterministic navigation action to RE-OPEN the written record by a
+    path DIFFERENT from the write flow, before an on-screen read-back.
+
+    Auto-derived from the demonstration (the steps the person took to view the
+    saved record again — e.g. clear the form, search the patient, open the
+    encounter). Deliberately tiny and model-free: a re-navigation is replayed
+    by coordinate/keyboard exactly as recorded; anything a backend cannot
+    perform makes the read-back INDETERMINATE (HALT), never a guessed CONFIRM.
+    """
+
+    #: ``click`` (at :attr:`point`) | ``type`` (:attr:`text`) | ``key``
+    #: (:attr:`key`). An unknown action is refused by the navigator (HALT).
+    action: str
+    #: Click target in frame pixel space (``click`` only).
+    point: Optional[tuple[int, int]] = None
+    #: Literal text to type (``type`` only).
+    text: Optional[str] = None
+    #: Key name to press, e.g. ``"Enter"`` (``key`` only).
+    key: Optional[str] = None
+    #: ``type`` only: type this run parameter's value instead of :attr:`text`
+    #: (for example, search for this run's patient). Set by a check the person
+    #: demonstrated (:mod:`openadapt_flow.compiler.readback_authoring`).
+    param: Optional[str] = None
+    #: ``type`` only: type the reference number captured from the screen
+    #: right after the save (:attr:`ReadbackSpec.reference`) instead of
+    #: :attr:`text`, to find the record again by it.
+    reference: bool = False
+    #: The run parameter :attr:`text` was bound from when the contract was
+    #: resolved (:func:`_resolve_readback` clears :attr:`param`). In memory
+    #: only: the verifier uses it to know the search is by a run input.
+    _bound_param: Optional[str] = PrivateAttr(default=None)
+
+    @property
+    def types_run_input(self) -> bool:
+        """Whether this step types a run input (before or after binding)."""
+
+        return bool(self.param or self._bound_param)
+
+    @model_serializer(mode="wrap")
+    def _drop_unset_param(self, handler: Any) -> dict[str, Any]:
+        """Keep the bytes of navigations that predate ``param``."""
+
+        data: dict[str, Any] = handler(self)
+        if self.param is None:
+            data.pop("param", None)
+        if not self.reference:
+            data.pop("reference", None)
+        return data
+
+
+class ReadbackField(BaseModel):
+    """One field a person marked on the saved record's screen.
+
+    The verifier reads :attr:`region` and requires :attr:`value` there.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: Record field name, for reports (usually the parameter's name).
+    name: str
+    #: ``(x, y, w, h)`` region of the frame that shows the field.
+    region: tuple[int, int, int, int]
+    #: The value the field must show: normally a run parameter.
+    value: ValueExpr
+    #: The DOM selector or accessibility path of the marked element, when the
+    #: surface exposed one. Recorded for review.
+    locator: Optional[str] = None
+    #: How the verifier reads the field. ``ocr`` reads :attr:`region` from the
+    #: screenshot. ``structure`` reads the text of the element at the
+    #: region's center from the page structure (DOM, or accessibility tree);
+    #: when the backend can't, the read is INDETERMINATE, never OCR.
+    source: Literal["ocr", "structure"] = "ocr"
+    #: How the read and the expected value are compared
+    #: (:mod:`openadapt_flow.runtime.effects.readback_values`): ``text``,
+    #: ``code`` (case and separators ignored), ``date``, ``currency`` or
+    #: ``number``.
+    value_kind: Literal["text", "code", "date", "currency", "number"] = "text"
+    #: ``date`` only: the order of a numeric date such as ``03/04/2026``.
+    #: Unset, a numeric date that reads two ways is ambiguous.
+    date_order: Optional[Literal["dmy", "mdy"]] = None
+
+    @model_serializer(mode="wrap")
+    def _drop_default_source(self, handler: Any) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        if self.source == "ocr":
+            data.pop("source", None)
+        if self.value_kind == "text":
+            data.pop("value_kind", None)
+        if self.date_order is None:
+            data.pop("date_order", None)
+        return data
+
+
+#: State-busting boundaries a demonstrated check can show before it reads.
+ReadbackResetKind = Literal["reload", "new_search", "reopen_window", "fresh_session"]
+
+
+class ReadbackReset(BaseModel):
+    """The step of a demonstrated check that throws away client-side state.
+
+    Without one, the check could read a form buffer or a client-side page the
+    save left behind, and a save that never reached the record would pass.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: ReadbackResetKind
+    #: Index into :attr:`ReadbackSpec.renavigation` of the boundary step.
+    at: int = Field(ge=0)
+    #: ``detected``: the compiler recognized the step (a reload key, a closed
+    #: window, a typed and submitted search). ``declared``: the person said
+    #: which step it is and the compiler could not check it from the
+    #: recording; the person who admits the check sees which.
+    evidence: Literal["detected", "declared"] = "detected"
+
+
+class ReadbackGuard(BaseModel):
+    """What a read-back's replayed navigation must never do.
+
+    The navigation runs in the acting session, on any surface (a browser, a
+    desktop app, an RDP or Citrix window), where no network guard can stop a
+    stray write. Before each click the verifier reads the text under the
+    pointer and refuses a control whose label is a commit word or one of the
+    save's own control labels; it refuses save and delete key chords. A
+    refusal makes the check INDETERMINATE (HALT), never a guessed CONFIRM.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: Labels of the controls the write flow committed with (for example the
+    #: save button's text), recorded at compile time.
+    commit_labels: list[str] = Field(default_factory=list)
+
+
+class ReadbackReference(BaseModel):
+    """A reference number the application shows right after the save.
+
+    Learned from the demonstration: text that appeared on the screen the save
+    left, was not typed, and looks like an identifier (a claim, order or
+    encounter number). Read at run time from :attr:`region` with
+    :attr:`pattern` (one capture group), it is evidence that the application
+    issued a record (check level ``same_screen``) and, when a navigation
+    step types it (:attr:`ReadbackNav.reference`), the way to find the record
+    again. The captured value itself is never stored in a report.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    region: tuple[int, int, int, int]
+    pattern: str = Field(min_length=1, max_length=512)
+
+    @model_validator(mode="after")
+    def _one_group(self) -> "ReadbackReference":
+        try:
+            compiled = re.compile(self.pattern)
+        except re.error as exc:
+            raise ValueError(f"readback.reference.pattern is invalid: {exc}") from exc
+        if compiled.groups != 1:
+            raise ValueError("readback.reference.pattern needs exactly one group")
+        if self.region[2] <= 0 or self.region[3] <= 0:
+            raise ValueError("readback.reference.region must have a size")
+        return self
+
+
+#: Names that are not a person: an admission by one of them admits nothing.
+_NOT_A_PERSON = frozenset(
+    {
+        "",
+        "agent",
+        "agent_and_person",
+        "person",
+        "model",
+        "assistant",
+        "cua",
+        "llm",
+        "ai",
+        "bot",
+        "system",
+        "service",
+        "auto",
+        "automatic",
+        "unknown",
+    }
+)
+_NOT_A_PERSON_PREFIXES = (
+    "agent:",
+    "model:",
+    "cua:",
+    "llm:",
+    "ai:",
+    "bot:",
+    "service:",
+    "svc:",
+    "system:",
+)
+
+
+def is_agent_identity(name: object) -> bool:
+    """True when ``name`` is empty or names an agent, a model or a service.
+
+    An identity check only: Flow can't prove a person typed a name, but it
+    can refuse the names it knows are not people.
+    """
+
+    if not isinstance(name, str):
+        return True
+    lower = name.strip().lower()
+    return lower in _NOT_A_PERSON or lower.startswith(_NOT_A_PERSON_PREFIXES)
+
+
+class ReadbackAdmission(BaseModel):
+    """A person's acceptance of a read-back taught by demonstration.
+
+    The demonstration that taught the check cannot approve it. Until a person
+    admits it, the check can't confirm a save (the verifier rules
+    ``INDETERMINATE``). The admission is bound to the exact check by
+    :attr:`spec_digest`; a changed check needs a new admission.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    admitted_by: str = Field(min_length=1)
+    #: ISO-8601 UTC timestamp.
+    admitted_at: str = Field(min_length=1)
+    spec_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    #: Who admitted it. Only a person can.
+    role: Literal["person"] = "person"
+
+
+class ReadbackSpec(BaseModel):
+    """The on-screen read-back oracle mined from the demonstration.
+
+    Carries WHERE to re-read the saved value (:attr:`region`) and, for the
+    stronger DIFFERENT-PATH variant, the re-navigation that re-opens the record
+    (:attr:`renavigation`) so the read is forced through a real fetch rather
+    than the form the write left on screen. Consumed by
+    :class:`~openadapt_flow.runtime.effects.onscreen.OnScreenReadbackVerifier`;
+    every non-onscreen substrate ignores it.
+
+    SAFETY — the ``different_path`` flag is the gate. A ``different_path=True``
+    read-back re-opens the record by an independent path (defeating the
+    "the form still shows what I typed but nothing persisted" phantom-save
+    class) and is safe enough to be the DEFAULT out-of-the-box oracle. A
+    ``different_path=False`` (SAME-SURFACE) read-back re-reads the very region
+    the write drove; it CANNOT see a phantom/optimistic save (the measured
+    false-CONFIRM rate is > 0), so it is wired but NON-default — a
+    halt-inducing consistency signal an operator opts into with eyes open, not
+    a pass. See ``docs/LIMITS.md`` and ``benchmark/effect_readback/``.
+    """
+
+    #: Region to OCR for the saved value. None => the verifier's constructed
+    #: region (a hand-configured deployment).
+    region: Optional[Region] = None
+    #: True when :attr:`renavigation` re-opens the record by an independent
+    #: path (the strong, default-eligible oracle); False for a same-surface
+    #: re-read (weak, non-default).
+    different_path: bool = False
+    #: The re-navigation to perform BEFORE reading (different-path only). Empty
+    #: for a same-surface read-back.
+    renavigation: list[ReadbackNav] = Field(default_factory=list)
+    #: Several fields to read after one re-navigation. When set, every field
+    #: must read back; :attr:`region` is the first field's region.
+    fields: list[ReadbackField] = Field(default_factory=list)
+    #: True when a person or agent taught this check by demonstration
+    #: (``check.json``). Such a check confirms nothing until
+    #: :attr:`admission` records that a person accepted it.
+    demonstrated: bool = False
+    #: Who drove the demonstration, from the recording's ``meta.json``:
+    #: ``person``, ``agent`` or ``agent_and_person``. None when unknown.
+    demonstrated_by: Optional[str] = None
+    #: The state-busting step the demonstrated check shows before it reads.
+    reset: Optional[ReadbackReset] = None
+    #: A person's acceptance of this exact check.
+    admission: Optional[ReadbackAdmission] = None
+    #: What the replayed navigation must never click or press.
+    guard: Optional[ReadbackGuard] = None
+    #: A reference number to capture from the screen right after the save.
+    reference: Optional[ReadbackReference] = None
+
+    @model_serializer(mode="wrap")
+    def _drop_empty_fields(self, handler: Any) -> dict[str, Any]:
+        """Keep the bytes of read-back contracts that predate these fields."""
+
+        data: dict[str, Any] = handler(self)
+        if not self.fields:
+            data.pop("fields", None)
+        if not self.demonstrated:
+            data.pop("demonstrated", None)
+        if self.demonstrated_by is None:
+            data.pop("demonstrated_by", None)
+        if self.reset is None:
+            data.pop("reset", None)
+        if self.admission is None:
+            data.pop("admission", None)
+        if self.guard is None:
+            data.pop("guard", None)
+        if self.reference is None:
+            data.pop("reference", None)
+        return data
+
+    def admission_digest(self) -> str:
+        """SHA-256 of the check a person admits: everything but the admission."""
+
+        payload = self.model_copy(update={"admission": None}).model_dump(mode="json")
+        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    def admitted(self) -> bool:
+        """True when a person admitted this exact (unresolved) check.
+
+        An admission in the name of an agent, a model or a service admits
+        nothing, however it got into the bundle.
+        """
+
+        return (
+            self.admission is not None
+            and self.admission.role == "person"
+            and not is_agent_identity(self.admission.admitted_by)
+            and self.admission.spec_digest == self.admission_digest()
+        )
+
+
+def _resolve_readback(
+    spec: Optional[ReadbackSpec], params: Mapping[str, object]
+) -> Optional[ReadbackSpec]:
+    """Bind a demonstrated check's field values and typed searches to ``params``.
+
+    A read-back without marked fields or parameterized typing is returned
+    unchanged, so older contracts behave as before. A navigation whose
+    parameter is missing keeps its ``param`` and the verifier refuses it.
+    """
+    if spec is not None and spec.admission is not None and not spec.admitted():
+        # The admission was for another check. Drop it so the verifier sees an
+        # unadmitted check and refuses to confirm with it.
+        spec = spec.model_copy(deep=True, update={"admission": None})
+    if spec is None or (
+        not spec.fields and not any(nav.param for nav in spec.renavigation)
+    ):
+        return spec
+    renavigation = []
+    for nav in spec.renavigation:
+        if nav.param and params.get(nav.param) is not None:
+            name = nav.param
+            nav = nav.model_copy(update={"text": str(params[name]), "param": None})
+            nav._bound_param = name
+        renavigation.append(nav)
+    fields = [
+        field.model_copy(update={"value": field.value.resolved(params)})
+        if field.value.resolve(params) is not None
+        else field
+        for field in spec.fields
+    ]
+    return spec.model_copy(
+        deep=True, update={"renavigation": renavigation, "fields": fields}
+    )
+
+
+# A different-path re-navigation must be genuinely independent of the write
+# flow.  Shared by the compiler and runtime so a hand-authored or corrupted
+# contract cannot claim stronger evidence than the compiler would emit.
+MIN_RENAV_ACTIONS = 2
+
+#: The record field read as an at-most-once key when nothing names another:
+#: :attr:`Effect.key_field`'s default, and the field the effect miner reads
+#: unless its caller names another (or ``None`` for no key). The miner sets a
+#: key only when the observed record carries a value there.
+DEFAULT_IDEMPOTENCY_KEY_FIELD = "key"
+
+
+class Effect(BaseModel):
+    """A typed system-of-record effect (RFC ``Effect``, concrete runtime form).
+
+    An ``Effect`` is a *contract*: what must be true of the system of record
+    for a step to have actually succeeded. It is deliberately substrate-neutral
+    -- the SAME ``Effect`` is checked by the REST verifier, the FHIR verifier,
+    or the filesystem verifier (see :class:`EffectVerifier`). The verifier maps
+    :attr:`match` / :attr:`field` onto its substrate's query language.
+
+    Binds to the RFC (``docs/design/WORKFLOW_PROGRAM_IR.md`` section 2.2): the
+    RFC's ``Effect(kind="record_written", probe="encounter exists for
+    patient")`` is realized here with a machine-checkable :attr:`match`
+    selector and an :attr:`expected_count`; the RFC's
+    ``Effect(kind="field_equals", field="note", value=params.note)`` maps to
+    :attr:`field` / :attr:`value`.
+    """
+
+    model_config = ConfigDict(validate_assignment=True)
+
+    kind: EffectKind
+    #: Field -> value selector identifying the INTENDED record in the system
+    #: of record (e.g. ``{"patient_id": "p1", "type": "Triage"}``). A verifier
+    #: matches a record when every selector pair is satisfied. Values compare
+    #: as strings after ``str()`` so numeric ids match across JSON/DB types.
+    #: Each value is a :class:`ValueExpr` -- a literal OR a run-``param``
+    #: reference -- so a PARAMETERIZED workflow verifies the record it actually
+    #: wrote this run, not the demonstration's record (P0-3). A bare string in
+    #: v1 bundles is coerced to ``ValueExpr(literal=...)`` and behaves
+    #: identically.
+    match: dict[str, ValueExpr] = Field(default_factory=dict)
+    #: ``field_equals`` only: the record/outcome field that must equal
+    #: :attr:`value`.
+    field: Optional[str] = None
+    #: ``field_equals`` only: the required value of :attr:`field` (literal or a
+    #: run-``param`` reference; see :attr:`match`). Exactly one matching record
+    #: is required, so missing or ambiguous read outcomes refuse.
+    value: Optional[ValueExpr] = None
+    #: ``record_written`` only: how many matching records must exist. 1 is the
+    #: at-most-once contract for a consequential write; 0 asserts absence.
+    #: ``exact_new_set``: the declared CARDINALITY of the added set, which must
+    #: equal ``len(new_records)`` (validated) -- an explicit, hashed number so
+    #: a hand edit that deletes one member of the set fails loud instead of
+    #: silently weakening the contract.
+    expected_count: int = 1
+    #: ``exact_new_set`` only: the declared set of records the action may add,
+    #: one selector per intended record (same matching rules as :attr:`match`,
+    #: each value a literal or a run-``param`` reference). Repeating an
+    #: identical selector declares that many identical additions. Empty with
+    #: ``expected_count: 0`` is the meaningful assertion "this action adds
+    #: NOTHING to this read set".
+    new_records: list[dict[str, ValueExpr]] = Field(default_factory=list)
+    #: ``exact_new_set`` only: the record field whose value gives a record its
+    #: stable identity, used to tell records ADDED by the action from records
+    #: that were already there. It must be present on every record of both
+    #: snapshots; a record missing it makes the verdict INDETERMINATE (the
+    #: added set cannot be enumerated, so it is never guessed). An
+    #: environment-assigned surrogate key is the RIGHT choice here even though
+    #: it is the wrong thing to pin in a selector: it cannot identify the
+    #: INTENDED record across runs, but it does distinguish a new row from an
+    #: old one within one run.
+    identity_field: str = "id"
+    #: Optional idempotency / at-most-once key. When set, ``record_written``
+    #: counts records bearing THIS key (via :attr:`key_field`) and requires
+    #: exactly :attr:`expected_count` -- so a duplicate submission that reused
+    #: the key collapses to one record and a non-idempotent duplicate (no key,
+    #: or a second distinct write) is caught as ``observed_count > expected``.
+    #: A :class:`ValueExpr`: bind it to a run ``param`` (or a stable run
+    #: identity) so the key is PER-RUN, not the frozen demonstration literal
+    #: that would collide across unrelated runs (P0-3).
+    idempotency_key: Optional[ValueExpr] = None
+    #: Which record field carries the idempotency key. The contract names it
+    #: beside ``idempotency_key``; the effect miner sets it from the field its
+    #: caller names (:data:`DEFAULT_IDEMPOTENCY_KEY_FIELD` unless told).
+    key_field: str = DEFAULT_IDEMPOTENCY_KEY_FIELD
+    #: ``record_written`` only: a duplicate (idempotency) key made of several
+    #: fields, such as OpenEMR's ``{lname, fname, DOB}``. Field -> value, each
+    #: a :class:`ValueExpr` like :attr:`match`. The count reads only records
+    #: whose key fields all match, and the check also REFUTES when more than
+    #: one record in the read set carries the key, counting records that
+    #: existed before the action as well as new ones (so ``count_new_only``
+    #: cannot hide a second chart for the same person). Those other records
+    #: are compared loosely (case, spacing, a date read back as a datetime),
+    #: the save's own record exactly. The read must therefore cover the key:
+    #: filtered by key fields only, or complete (no row limit, or a paged
+    #: read with a total). A one-field composite key is allowed and differs
+    #: from :attr:`idempotency_key` in counting pre-existing records.
+    #: ``expected_count`` must be 0 or 1. Use either this or
+    #: :attr:`idempotency_key`, not both. Bound into the contract hash and
+    #: serialized only when set, so existing digests hold.
+    composite_key: dict[str, ValueExpr] = Field(default_factory=dict)
+    #: Cross-cutting duplicate-write / idempotency guard (kit). When True, a
+    #: ``record_written`` count considers ONLY records that are NEW relative to
+    #: the pre-action snapshot (by :func:`stable_id`): with the default
+    #: ``expected_count=1`` the contract reads "exactly ONE NEW matching record
+    #: was created by this action" -- so a selector that legitimately matches
+    #: pre-existing rows (e.g. "an encounter for this patient") still catches a
+    #: double-submit (2 new rows) and a phantom write (0 new rows). Requires a
+    #: REACHABLE pre-state baseline: when the pre-state could not be read the
+    #: verdict is INDETERMINATE -> HALT (a delta against an unknown baseline is
+    #: never guessed). Works identically on every substrate (REST / SQL / FHIR
+    #: / filesystem) because the delta is computed in the shared judge.
+    #: ``record_written`` ONLY (validated -- a ``field_equals`` contract
+    #: refuses it rather than silently ignoring it). Caveat for substrates
+    #: whose records carry no ``id``: newness falls back to whole-record
+    #: identity (:func:`stable_id`), so a NEW row byte-identical to a
+    #: pre-existing one is not counted as new -- prefer substrates/queries
+    #: that expose a stable id when using this guard.
+    #: Default False -- absolute counting, byte-for-byte the v1 behavior.
+    count_new_only: bool = False
+    #: ``record_written`` only: also REFUTE when a record that existed in the
+    #: pre-state (``before``) and does NOT match :attr:`match` has since
+    #: vanished -- collateral loss. This is what catches a stale / lost-update
+    #: (last-write-wins) fault: our row lands (count 1, looks fine) while a
+    #: concurrent actor's row was silently destroyed. On an ``exact_new_set``
+    #: effect :attr:`match` is a SCOPE rather than a target, so the rule reads
+    #: the other way round: a pre-state record INSIDE the scope that has
+    #: vanished is the collateral loss (an exact-set claim about additions
+    #: must not quietly tolerate removals inside the same scope).
+    forbid_collateral_loss: bool = True
+    #: ``record_written`` only: also REFUTE when a record that existed in the
+    #: pre-state, does NOT match :attr:`match`, and is still there (same
+    #: :func:`stable_id`) has CHANGED -- collateral change. The vanished-record
+    #: rule above misses a write that edits another record in place (a wrong
+    #: row updated alongside the right one). Records without an ``id`` are
+    #: identified by their whole content, so for them a change already reads
+    #: as a vanished record. Default False: a shared table that other actors
+    #: edit would otherwise refute every save; ``verify-run`` turns it on.
+    #: Bound into the contract hash only when set, so existing digests hold.
+    forbid_collateral_change: bool = False
+    #: Consequential-write flag (mirrors ``Step.risk`` / RFC ``State.risk``).
+    #: Compensation (``effects.compensation``) only fires for irreversible
+    #: effects; a reversible effect just halts.
+    risk: str = "reversible"
+    #: Human-readable probe description (mirrors the RFC's illustrative
+    #: ``probe="encounter exists for patient"``); for audit/logging only.
+    probe: Optional[str] = None
+    #: How long a verifier may poll the system of record before ruling
+    #: INDETERMINATE (the SoR write may lag the GUI paint).
+    timeout_s: float = 5.0
+    #: Set by the compiler's effect miner
+    #: (``compiler.effect_mining``) on a PLACEHOLDER effect: the step is a
+    #: consequential write, but its system-of-record binding (which API /
+    #: record / idempotency key) was NOT derivable from the demonstration —
+    #: it is "irreducibly app-specific" (RFC ``WORKFLOW_PROGRAM_IR.md`` §7).
+    #: The miner refuses to INVENT an endpoint, so :attr:`match` here is a
+    #: sentinel, not a real selector. Such an effect must never be silently
+    #: trusted: a run treats it as fail-safe (the replayer HALTs rather than
+    #: verify a fabricated binding — see ``runtime.replayer._verify_effects``)
+    #: until an operator completes the binding and clears this flag.
+    needs_operator_confirmation: bool = False
+    #: On-screen read-back oracle (the no-API default for GUI-only recordings).
+    #: Set by the compiler's effect miner (``compiler.effect_mining``) when the
+    #: demonstration shows the person VIEWING the saved value: it names the
+    #: region to re-OCR and, for the DIFFERENT-PATH variant, the re-navigation
+    #: that re-opens the record. Consumed ONLY by the ``onscreen`` substrate
+    #: (:class:`~openadapt_flow.runtime.effects.onscreen.OnScreenReadbackVerifier`);
+    #: every system-of-record substrate ignores it. None => not an on-screen
+    #: read-back effect (the structured/placeholder paths are unchanged).
+    readback: Optional[ReadbackSpec] = None
+
+    _contract_hash_override: Optional[str] = PrivateAttr(default=None)
+    _contract_semantics_sha256: Optional[str] = PrivateAttr(default=None)
+
+    # -- back-compat coercion: accept the v1 plain-string JSON form ----------
+    @staticmethod
+    def _coerce_expr(v: Any) -> Any:
+        """Coerce a bare string / None into a :class:`ValueExpr` shape.
+
+        v1 bundles serialize effect values as plain strings
+        (``"value": "Phil"``); this lets them load into the parameterized
+        ``ValueExpr`` fields unchanged. A ``dict`` (the new serialized form
+        ``{"literal": ...}`` / ``{"param": ...}``) and an existing ``ValueExpr``
+        pass straight through to pydantic.
+        """
+        if isinstance(v, str):
+            return ValueExpr(literal=v)
+        return v
+
+    @field_validator("match", "composite_key", mode="before")
+    @classmethod
+    def _coerce_match(cls, v: Any) -> Any:
+        if isinstance(v, dict):
+            return {k: cls._coerce_expr(val) for k, val in v.items()}
+        return v
+
+    @field_validator("value", "idempotency_key", mode="before")
+    @classmethod
+    def _coerce_value(cls, v: Any) -> Any:
+        return cls._coerce_expr(v)
+
+    @field_validator("new_records", mode="before")
+    @classmethod
+    def _coerce_new_records(cls, v: Any) -> Any:
+        if isinstance(v, list):
+            return [
+                (
+                    {k: cls._coerce_expr(val) for k, val in selector.items()}
+                    if isinstance(selector, dict)
+                    else selector
+                )
+                for selector in v
+            ]
+        return v
+
+    @model_validator(mode="after")
+    def _count_new_only_scope(self) -> "Effect":
+        """``count_new_only`` is a ``record_written`` guard; refuse (fail
+        loud) rather than silently ignore it on a ``field_equals`` contract."""
+        if self.count_new_only and self.kind is not EffectKind.RECORD_WRITTEN:
+            raise ValueError(
+                "count_new_only applies only to record_written effects "
+                "(a field_equals read-back has no newness delta; an "
+                "exact_new_set effect always counts new records only)"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _collateral_change_scope(self) -> "Effect":
+        """``forbid_collateral_change`` is judged on ``record_written`` only."""
+        if self.forbid_collateral_change and self.kind is not EffectKind.RECORD_WRITTEN:
+            raise ValueError(
+                "forbid_collateral_change applies only to record_written effects"
+            )
+        return self
+
+    @model_serializer(mode="wrap")
+    def _drop_unset_collateral_change(self, handler: Any) -> dict[str, Any]:
+        """Keep the bytes of effects that predate ``forbid_collateral_change``.
+
+        Every hash over a dumped workflow (the workflow contract hash that a
+        certification and a governed authorization bind, as well as the
+        content digest) was computed before this field existed. Dropping the
+        False default keeps those hashes reproducible; a contract that turns
+        the check on is still hashed.
+        """
+
+        data: dict[str, Any] = handler(self)
+        if not self.forbid_collateral_change:
+            data.pop("forbid_collateral_change", None)
+        if not self.composite_key:
+            data.pop("composite_key", None)
+        return data
+
+    @model_validator(mode="after")
+    def _composite_key_shape(self) -> "Effect":
+        """A composite duplicate key is a ``record_written`` guard that
+        replaces the single-field key; refuse a contract that mixes them."""
+        if not self.composite_key:
+            return self
+        if self.kind is not EffectKind.RECORD_WRITTEN:
+            raise ValueError("composite_key applies only to record_written effects")
+        if self.idempotency_key is not None:
+            raise ValueError(
+                "give the duplicate key as idempotency_key (one field) or "
+                "composite_key (several fields), not both"
+            )
+        if any(not name.strip() for name in self.composite_key):
+            raise ValueError("composite_key field names must not be blank")
+        if self.expected_count > 1:
+            # Every one of the expected records would carry the key, so the
+            # duplicate rule would refute each correct save.
+            raise ValueError(
+                "composite_key identifies one record; it cannot be combined "
+                f"with expected_count {self.expected_count}"
+            )
+        return self
+
+    def key_selector(self) -> dict[str, ValueExpr]:
+        """The duplicate key as a ``field -> value`` selector.
+
+        ``{key_field: idempotency_key}`` for the single-field form, the
+        :attr:`composite_key` for the several-field form, empty without a key.
+        """
+        if self.composite_key:
+            return dict(self.composite_key)
+        if self.idempotency_key is not None:
+            return {self.key_field: self.idempotency_key}
+        return {}
+
+    @model_validator(mode="after")
+    def _exact_new_set_shape(self) -> "Effect":
+        """Refuse an ``exact_new_set`` whose declared set is unusable, and
+        refuse ``new_records`` on any other kind rather than ignore it."""
+        if self.kind is not EffectKind.EXACT_NEW_SET:
+            if self.new_records:
+                raise ValueError(
+                    "new_records applies only to exact_new_set effects "
+                    f"(this effect is {self.kind.value})"
+                )
+            return self
+        for position, selector in enumerate(self.new_records, start=1):
+            if not selector:
+                raise ValueError(
+                    f"exact_new_set member {position} has an EMPTY selector, "
+                    "which matches every record -- every member must name at "
+                    "least one field"
+                )
+        if self.expected_count != len(self.new_records):
+            raise ValueError(
+                "an exact_new_set declares expected_count == len(new_records) "
+                f"(got expected_count={self.expected_count} for "
+                f"{len(self.new_records)} declared record(s)); the cardinality "
+                "is stated explicitly so an edit that drops a member of the "
+                "set fails loud instead of silently weakening the contract"
+            )
+        if not self.identity_field:
+            raise ValueError(
+                "an exact_new_set requires a non-empty identity_field naming "
+                "the record field that distinguishes a new record from a "
+                "pre-existing one"
+            )
+        return self
+
+    @property
+    def requires_baseline(self) -> bool:
+        """Whether judging this effect needs a REAL pre-action snapshot.
+
+        True for a ``count_new_only`` delta and for every ``exact_new_set``
+        guard: both answer "what did THIS action add?", which is unanswerable
+        against an unknown or synthetic-empty baseline. Callers that would
+        otherwise supply a post-hoc empty baseline (``check.run_check``, the
+        gate) must refuse instead -- a set delta is never guessed.
+        """
+        return self.count_new_only or self.kind is EffectKind.EXACT_NEW_SET
+
+    # -- run-time parameter binding (P0-3) -----------------------------------
+    def resolve(
+        self,
+        params: Mapping[str, object],
+        *,
+        opaque_param_sha256: Mapping[str, str] | None = None,
+    ) -> "Effect":
+        """Return a copy with every :class:`ValueExpr` bound to ``params``.
+
+        The runtime calls this BEFORE snapshotting the pre-state and verifying,
+        so ``match`` / ``value`` / ``idempotency_key`` reflect the RECORD THIS
+        RUN WROTE, not the demonstration's. A pure-literal effect (a v1 bundle)
+        is returned unchanged in value -- ``resolve`` is a no-op for it, which
+        is why an old bundle behaves identically.
+        """
+        resolved = self.model_copy(
+            deep=True,
+            update={
+                "match": {k: v.resolved(params) for k, v in self.match.items()},
+                "new_records": [
+                    {k: v.resolved(params) for k, v in selector.items()}
+                    for selector in self.new_records
+                ],
+                "value": None if self.value is None else self.value.resolved(params),
+                "idempotency_key": (
+                    None
+                    if self.idempotency_key is None
+                    else self.idempotency_key.resolved(params)
+                ),
+                "readback": _resolve_readback(self.readback, params),
+                "composite_key": {
+                    k: v.resolved(params) for k, v in self.composite_key.items()
+                },
+            },
+        )
+        resolved._contract_hash_override = self.resolved_contract_hash(
+            params,
+            opaque_param_sha256=opaque_param_sha256,
+        )
+        resolved._contract_semantics_sha256 = resolved._semantic_contract_sha256()
+        return resolved
+
+    def resolved_contract_hash(
+        self,
+        params: Mapping[str, object],
+        *,
+        opaque_param_sha256: Mapping[str, str] | None = None,
+    ) -> str:
+        """Hash one exact resolved contract without exposing opaque values.
+
+        A reserved run identity is available to the verifier in memory, but a
+        qualification artifact retains only its SHA-256 digest.  This method
+        uses that digest as a domain-separated value in the contract hash.  All
+        ordinary literal and parameter contracts remain byte-identical to the
+        hash produced by ``resolve(params).contract_hash()``.
+        """
+
+        opaque = dict(opaque_param_sha256 or {})
+        for name, digest in opaque.items():
+            if len(digest) != 64 or any(
+                char not in "0123456789abcdef" for char in digest
+            ):
+                raise ValueError(f"opaque parameter {name!r} has an invalid digest")
+            if name in params:
+                resolved_value = ValueExpr(param=name).resolve(params)
+                if resolved_value is None or (
+                    hashlib.sha256(resolved_value.encode("utf-8")).hexdigest() != digest
+                ):
+                    raise ValueError(
+                        f"opaque parameter {name!r} digest does not match its value"
+                    )
+        missing = self.referenced_params().difference(params).difference(opaque)
+        if missing:
+            raise ValueError("effect contract references an unavailable parameter")
+
+        def value(expr: ValueExpr | None) -> object:
+            if expr is None:
+                return None
+            if expr.param is not None and expr.param in opaque:
+                return {
+                    "opaque_param": expr.param,
+                    "sha256": opaque[expr.param],
+                }
+            return expr.resolve(params)
+
+        payload: dict[str, object] = {
+            "kind": self.kind.value,
+            "match": {k: value(v) for k, v in sorted(self.match.items())},
+            "field": self.field,
+            "value": value(self.value),
+            "expected_count": self.expected_count,
+            "idempotency_key": value(self.idempotency_key),
+            "key_field": self.key_field,
+            "forbid_collateral_loss": self.forbid_collateral_loss,
+        }
+        if self.count_new_only:
+            payload["count_new_only"] = True
+        if self.forbid_collateral_change:
+            payload["forbid_collateral_change"] = True
+        # Bound ONLY on the new kind, so every pre-existing effect's digest
+        # (and every ledger entry that pins it) stays byte-identical.
+        if self.kind is EffectKind.EXACT_NEW_SET:
+            payload["new_records"] = [
+                {k: value(v) for k, v in sorted(selector.items())}
+                for selector in self.new_records
+            ]
+            payload["identity_field"] = self.identity_field
+        if self.composite_key:
+            payload["composite_key"] = {
+                k: value(v) for k, v in sorted(self.composite_key.items())
+            }
+        digest = hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        return f"sha256:{digest}"
+
+    def absent_is_null_fields(self) -> list[str]:
+        """The record fields this effect declares ``absent_is_null`` on."""
+
+        pairs = [
+            *self.match.items(),
+            *((k, v) for selector in self.new_records for k, v in selector.items()),
+        ]
+        if self.value is not None:
+            pairs.append((self.field or "", self.value))
+        return sorted(
+            {k for k, v in pairs if isinstance(v, ValueExpr) and v.absent_is_null}
+        )
+
+    def referenced_params(self) -> set[str]:
+        """Return the parameter names that determine this effect contract."""
+
+        expressions = [
+            *self.match.values(),
+            *(expr for selector in self.new_records for expr in selector.values()),
+            *self.composite_key.values(),
+            self.value,
+            self.idempotency_key,
+        ]
+        return {
+            expression.param
+            for expression in expressions
+            if expression is not None and expression.param is not None
+        }
+
+    def contract_hash(self) -> str:
+        """A stable, NON-secret-bearing digest of the (resolved) contract.
+
+        Persisted in the RunReport for auditability: two runs whose effect
+        contracts resolved to different records/values (or idempotency keys)
+        have different hashes, and a duplicated run has the same hash. Being a
+        one-way SHA-256 digest it records THAT the contract differed without
+        exposing the underlying value (e.g. a patient identifier).
+        """
+        if self._contract_hash_override is not None:
+            if (
+                self._contract_semantics_sha256 is None
+                or self._semantic_contract_sha256() != self._contract_semantics_sha256
+            ):
+                raise ValueError("resolved effect contract changed after binding")
+            return self._contract_hash_override
+        payload = self._contract_payload()
+        digest = hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        return f"sha256:{digest}"
+
+    def _contract_payload(self) -> dict[str, object]:
+        """Return the exact public semantics bound by :meth:`contract_hash`."""
+
+        payload: dict[str, object] = {
+            "kind": self.kind.value,
+            "match": {k: str(v) for k, v in sorted(self.match.items())},
+            "field": self.field,
+            "value": None if self.value is None else str(self.value),
+            "expected_count": self.expected_count,
+            "idempotency_key": (
+                None if self.idempotency_key is None else str(self.idempotency_key)
+            ),
+            "key_field": self.key_field,
+            "forbid_collateral_loss": self.forbid_collateral_loss,
+        }
+        # Included ONLY when set, so every pre-existing contract (and every
+        # governed-run authorization / completed-effect ledger entry that binds
+        # its hash — PR #129) keeps its exact digest.
+        if self.count_new_only:
+            payload["count_new_only"] = True
+        if self.forbid_collateral_change:
+            payload["forbid_collateral_change"] = True
+        if self.kind is EffectKind.EXACT_NEW_SET:
+            payload["new_records"] = [
+                {k: str(v) for k, v in sorted(selector.items())}
+                for selector in self.new_records
+            ]
+            payload["identity_field"] = self.identity_field
+        # Bound ONLY when set, so every single-key contract keeps its digest.
+        if self.composite_key:
+            payload["composite_key"] = {
+                k: str(v) for k, v in sorted(self.composite_key.items())
+            }
+        # A value that reads an entered label back as a stored code binds its
+        # map: a changed map is a different contract. Included only when a
+        # value has one, so every other contract keeps its exact digest.
+        maps: dict[str, dict[str, str]] = {}
+        for key, expr in sorted(self.match.items()):
+            if isinstance(expr, ValueExpr) and expr.map is not None:
+                maps[f"match.{key}"] = dict(sorted(expr.map.items()))
+        for name in ("value", "idempotency_key"):
+            expr = getattr(self, name)
+            if isinstance(expr, ValueExpr) and expr.map is not None:
+                maps[name] = dict(sorted(expr.map.items()))
+        for key, expr in sorted(self.composite_key.items()):
+            if isinstance(expr, ValueExpr) and expr.map is not None:
+                maps[f"composite_key.{key}"] = dict(sorted(expr.map.items()))
+        for index, selector in enumerate(self.new_records):
+            for key, expr in sorted(selector.items()):
+                if isinstance(expr, ValueExpr) and expr.map is not None:
+                    maps[f"new_records.{index}.{key}"] = dict(sorted(expr.map.items()))
+        if maps:
+            payload["value_maps"] = maps
+        # A field the store may leave out when null is a different contract.
+        # Bound only when set, so every other contract keeps its digest.
+        absent = sorted(
+            path
+            for path, expr in [
+                *((f"match.{k}", v) for k, v in self.match.items()),
+                ("value", self.value),
+                *(
+                    (f"new_records.{i}.{k}", v)
+                    for i, selector in enumerate(self.new_records)
+                    for k, v in selector.items()
+                ),
+            ]
+            if isinstance(expr, ValueExpr) and expr.absent_is_null
+        )
+        if absent:
+            payload["absent_is_null"] = absent
+        # A number compares by value, text by text: a value marked as a
+        # number is a different contract. Bound only when set, so every
+        # other contract keeps its exact digest.
+        numbers = sorted(
+            path
+            for path, expr in [
+                *((f"match.{k}", v) for k, v in self.match.items()),
+                ("value", self.value),
+                ("idempotency_key", self.idempotency_key),
+                *((f"composite_key.{k}", v) for k, v in self.composite_key.items()),
+                *(
+                    (f"new_records.{i}.{k}", v)
+                    for i, selector in enumerate(self.new_records)
+                    for k, v in selector.items()
+                ),
+            ]
+            if isinstance(expr, ValueExpr) and expr.number
+        )
+        if numbers:
+            payload["value_numbers"] = numbers
+        return payload
+
+    def _semantic_contract_sha256(self) -> str:
+        """Digest current semantics without consulting a retained override."""
+
+        return hashlib.sha256(
+            json.dumps(
+                self._contract_payload(),
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+
+
+class EffectState(BaseModel):
+    """A snapshot of the system of record captured BEFORE the action.
+
+    Two jobs: (1) establish a baseline so ``record_written`` can count only
+    records that appeared *because of this action* (delta / at-most-once),
+    and (2) let :attr:`Effect.forbid_collateral_loss` detect a pre-existing
+    record that the action destroyed (lost update). :attr:`reachable` is
+    False when the system of record could not be read at capture time -- the
+    verifier factors that into an INDETERMINATE verdict rather than assuming
+    an empty baseline.
+    """
+
+    substrate: str
+    reachable: bool
+    #: The system-of-record records present at capture time. Each is a plain
+    #: dict in the substrate's native shape (a FaultDB row, a FHIR resource, a
+    #: filesystem descriptor). Empty when unreachable.
+    records: list[dict[str, Any]] = Field(default_factory=list)
+    captured_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+    detail: dict[str, Any] = Field(default_factory=dict)
+
+
+class Verdict(str, Enum):
+    """The three-valued effect verdict (fail-safe to HALT)."""
+
+    CONFIRMED = "confirmed"  # effect present and correct -> proceed
+    REFUTED = "refuted"  # SoR contradicts the effect -> HALT
+    INDETERMINATE = "indeterminate"  # SoR unreachable/unreadable -> HALT
+
+
+class EffectVerdict(BaseModel):
+    """Outcome of verifying one :class:`Effect` against a system of record."""
+
+    verdict: Verdict
+    kind: EffectKind
+    substrate: str = ""
+    reason: str = ""
+    observed_count: Optional[int] = None
+    expected_count: Optional[int] = None
+    observed_value: Optional[str] = None
+    expected_value: Optional[str] = None
+    #: Records the verifier judged to MATCH :attr:`Effect.match` (native
+    #: shape), so a caller / compensator can act on them (e.g. delete the
+    #: extras of a duplicate).
+    matched_records: list[dict[str, Any]] = Field(default_factory=list)
+    #: True when this (INDETERMINATE) verdict was caused by the system of
+    #: record being UNREACHABLE/unreadable at verify time (transport or
+    #: credential failure) -- the adapter platform refines it to the explicit
+    #: UNAVAILABLE result (``adapter.classify_adapter_result``). Additive;
+    #: default False keeps every pre-existing verdict byte-identical.
+    unavailable: bool = False
+    #: True when the read succeeded but the evidence lies OUTSIDE the
+    #: adapter's declared freshness window (``adapter.enforce_freshness``):
+    #: the read cannot certify the CURRENT state -> STALE, an INDETERMINATE
+    #: refinement, never a pass. Additive; default False.
+    stale: bool = False
+    #: The pending entry a later report settles, when this effect's check is
+    #: a declared deferred report (the verdict is then INDETERMINATE).
+    deferred_check: Optional[str] = None
+    #: How the check was done, when the verifier states it:
+    #: ``independent_readback``, ``screen_readback`` or ``unchecked``
+    #: (:mod:`openadapt_flow.assurance`). None for verifiers that don't.
+    assurance: Optional[
+        Literal["independent_readback", "screen_readback", "unchecked"]
+    ] = None
+
+    @property
+    def should_halt(self) -> bool:
+        """True unless the effect was CONFIRMED -- a REFUTED or INDETERMINATE
+        consequential effect must halt the run (never proceed on an
+        unverified or contradicted write)."""
+        return self.verdict is not Verdict.CONFIRMED
+
+    @property
+    def confirmed(self) -> bool:
+        return self.verdict is Verdict.CONFIRMED
+
+    @property
+    def observed_effect(self) -> Literal["present", "absent", "conflicting", "unknown"]:
+        """Honest read of the BUSINESS EFFECT behind this verdict.
+
+        Independent of pass/fail, this states what the system of record showed
+        so a halted run can distinguish "no write happened" from "a write may
+        have happened":
+
+        - ``present``: CONFIRMED -- the effect landed and is correct.
+        - ``absent``: REFUTED with an observed count of zero -- the verifier
+          established that NO record was written (a screen may claim success,
+          but nothing landed). This is what makes HALTED_BEFORE_EFFECT honest.
+        - ``conflicting``: REFUTED with a nonzero observed count -- a record WAS
+          written but is a duplicate / partial / wrong value. A business effect
+          occurred and must be reconciled.
+        - ``unknown``: INDETERMINATE (system of record unreachable/unreadable),
+          or a REFUTED verdict that carried no count. Absence cannot be claimed;
+          fail safe to reconciliation.
+        """
+        if self.verdict is Verdict.CONFIRMED:
+            return "present"
+        if self.verdict is Verdict.INDETERMINATE:
+            return "unknown"
+        if self.observed_count is None:
+            return "unknown"
+        return "absent" if self.observed_count == 0 else "conflicting"
+
+
+@runtime_checkable
+class EffectVerifier(Protocol):
+    """Independent verification of a typed :class:`Effect` against a REAL
+    system of record (an API / DB / filesystem), never the screen.
+
+    A verifier is bound to one substrate (an OpenEMR FHIR endpoint, a REST
+    system of record, a document store) and knows how to (1) snapshot the
+    system of record before the action and (2) decide whether the intended
+    effect actually landed. The same :class:`Effect` contract is honored by
+    every substrate -- that substrate-agnosticism is the point (an
+    OpenEMR-shaped protocol would just overfit MockMed's replacement).
+
+    Contract for implementers:
+
+    - :meth:`verify` must return :attr:`Verdict.INDETERMINATE` (never raise,
+      never guess CONFIRMED) when the system of record is unreachable or its
+      response is unusable -- the run then HALTs, consistent with the identity
+      gate's refuse-rather-than-guess posture.
+    - :meth:`verify` returns :attr:`Verdict.REFUTED` only on AFFIRMATIVE
+      contradiction (wrong count, wrong value, collateral loss) -- a positive
+      signal the effect is bad, distinct from "could not tell".
+    """
+
+    #: Stable substrate name for audit (``"rest"`` / ``"fhir"`` / ``"fs"``).
+    substrate: str
+
+    def capture_pre_state(self, context: Any = None) -> EffectState:
+        """Snapshot the system of record before the action runs."""
+        ...
+
+    def verify(
+        self, expected: Effect, before: EffectState, context: Any = None
+    ) -> EffectVerdict:
+        """Decide whether ``expected`` actually landed in the system of
+        record, given the pre-action snapshot ``before``."""
+        ...
+
+
+# -- shared matching helpers (used by every substrate) -----------------------
+
+
+def is_null_value(value: Any) -> bool:
+    """Whether ``value`` is a bound null (:attr:`ValueExpr.null`)."""
+
+    return isinstance(value, ValueExpr) and bool(value.null)
+
+
+def selector_value(value: Any) -> Any:
+    """A selector value for :func:`record_matches`: a value with a declared
+    kind, a null value, or a number stays an expression; any other becomes
+    text."""
+
+    if isinstance(value, ValueExpr) and (
+        value.kind is not None or value.null or value.number
+    ):
+        return value
+    return str(value)
+
+
+def record_matches(
+    record: dict[str, Any], selector: dict[str, Any], *, text_numbers: bool = False
+) -> bool:
+    """Whether ``record`` satisfies every ``field == value`` in ``selector``.
+
+    Comparison is on ``str()`` of both sides so a numeric id in JSON (``1``)
+    matches a string selector (``"1"``) without the caller tracking types.
+    An empty selector matches every record (used by absence checks).
+
+    A null value (:attr:`ValueExpr.null`) matches only a field that is
+    present and ``None``. A missing field matches it only when the contract
+    declares that field :attr:`ValueExpr.absent_is_null`; otherwise it may
+    be a misspelled or unprojected field and matches nothing. The record
+    check and the frame both call this, so they agree.
+    The text ``"None"`` or ``""`` never matches a null value, and a null
+    stored value never matches a text selector.
+
+    A stored number and an expected number compare by exact decimal value
+    instead (:func:`number_matches`; ``text_numbers`` for a SQL read), so a
+    whole-number float such as ``2.0`` equals a stored ``2``. Text compared
+    with text stays exact: ``"2.0"`` never equals ``"2"``.
+    """
+    for key, want in selector.items():
+        if is_null_value(want):
+            if key in record:
+                if record[key] is not None:
+                    return False
+            elif not want.absent_is_null:
+                return False
+            continue
+        stored = record.get(key, None)
+        if stored is None:
+            # A stored null (or a missing field) equals no text, not even
+            # "None", and no value of a declared kind or number.
+            return False
+        if isinstance(want, ValueExpr) and want.kind is not None:
+            if not want.matches(stored):
+                return False
+            continue
+        by_value = number_matches(stored, want, text_numbers=text_numbers)
+        if by_value is not None:
+            if not by_value:
+                return False
+        elif str(stored) != str(want):
+            return False
+    return True
+
+
+def stable_id(record: dict[str, Any]) -> Any:
+    """A record's identity for pre/post delta accounting.
+
+    Prefers an ``id`` field; falls back to the whole record's sorted-items
+    tuple so substrates without an explicit id still support collateral-loss
+    detection.
+
+    Values are compared in their JSON form. A baseline is stored with
+    ``model_dump(mode="json")``, so a UUID, Decimal or datetime read from a
+    database driver comes back as a string; comparing the raw value would
+    count every pre-existing row as new and confirm a write that never
+    happened.
+    """
+    if "id" in record:
+        return ("id", _json_form(record["id"]))
+    return tuple(sorted((k, str(_json_form(v))) for k, v in record.items()))
+
+
+def _json_form(value: Any) -> Any:
+    """``value`` as a JSON baseline stores it, or unchanged if it has no such form."""
+    try:
+        return to_jsonable_python(value)
+    except Exception:  # noqa: BLE001 - e.g. bytes that are not UTF-8
+        return value

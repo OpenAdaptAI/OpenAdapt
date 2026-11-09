@@ -1,0 +1,321 @@
+"""Focused invariants for the public Execute v1 contract."""
+
+import json
+from importlib.resources import files
+from unittest.mock import patch
+from urllib.error import HTTPError
+from urllib.request import Request
+
+import pytest
+from pydantic import ValidationError
+
+from openadapt_types import (
+    EffectStrengthV1,
+    ExecuteEvidenceContractV1,
+    ExecuteEvidenceReceiptV1,
+    ExecuteClient,
+    ExecuteLifecycleStateV1,
+    ExecuteRequestV1,
+    ExecuteStatusV1,
+    ExecuteTerminalOutcomeV1,
+    ExecuteWebhookEventTypeV1,
+    execute_openapi_document,
+    oracle_tier_from_effect_strength,
+    sign_execute_webhook_hmac,
+)
+from openadapt_types.execute_client import _RejectRedirectHandler
+
+
+def _contract(**updates: object) -> ExecuteEvidenceContractV1:
+    fields: dict[str, object] = {
+        "authorization_passed": True,
+        "identity_passed": True,
+        "postcondition_passed": True,
+        "effect_passed": True,
+        "minimum_effect_strength": EffectStrengthV1.INDEPENDENT_SESSION,
+        "observed_effect_strength": EffectStrengthV1.INDEPENDENT_SYSTEM_OF_RECORD,
+        "model_used": False,
+        "external_network_used": False,
+    }
+    fields.update(updates)
+    return ExecuteEvidenceContractV1.model_validate(fields)
+
+
+def _receipt(**updates: object) -> ExecuteEvidenceReceiptV1:
+    fields: dict[str, object] = {
+        "receipt_id": "receipt_12345678",
+        "execution_id": "execution_12345678",
+        "workflow_digest": "sha256:" + "a" * 64,
+        "workflow_version": "workflow_20260729",
+        "qualification_id": "qualification_12345678",
+        "environment_id": "environment_12345678",
+        "runner_id": "runner:hosted",
+        "nonce": "nonce:execution_12345678",
+        "oracle_tier": 2,
+        "outcome": ExecuteTerminalOutcomeV1.VERIFIED,
+        "contracts": _contract(),
+        "delivery_uncertain": False,
+        "evidence_digest": "sha256:" + "b" * 64,
+        "issued_at": "2026-07-29T12:00:00Z",
+    }
+    fields.update(updates)
+    return ExecuteEvidenceReceiptV1.model_validate(fields)
+
+
+def test_request_binds_qualified_workflow_environment_and_idempotency() -> None:
+    request = ExecuteRequestV1(
+        qualification_id="qualification_12345678",
+        workflow_version="workflow_20260729",
+        workflow_digest="sha256:" + "c" * 64,
+        environment_id="environment_12345678",
+        parameters={"patient": {"id": "12345"}, "date": "2026-08-15"},
+        idempotency_key="caller_key_12345678",
+        authorization_context={
+            "actor_id": "caller_agent_12345678",
+            "authorization_reference": "authorization_12345678",
+        },
+        minimum_effect_strength=EffectStrengthV1.INDEPENDENT_SYSTEM_OF_RECORD,
+    )
+
+    assert request.effect_strength_schema_version == "1"
+    assert request.parameters["patient"] == {"id": "12345"}
+
+
+def test_lifecycle_state_and_terminal_outcome_cannot_be_conflated() -> None:
+    waiting = ExecuteStatusV1(
+        execution_id="execution_12345678",
+        state=ExecuteLifecycleStateV1.WAITING_FOR_RECONCILIATION,
+        updated_at="2026-07-29T12:00:00Z",
+    )
+    assert waiting.terminal_outcome is None
+
+    with pytest.raises(ValidationError, match="only a terminal state"):
+        ExecuteStatusV1(
+            execution_id="execution_12345678",
+            state=ExecuteLifecycleStateV1.WAITING_FOR_RECONCILIATION,
+            terminal_outcome=ExecuteTerminalOutcomeV1.RECONCILIATION_REQUIRED,
+            updated_at="2026-07-29T12:00:00Z",
+        )
+
+    terminal = ExecuteStatusV1(
+        execution_id="execution_12345678",
+        state=ExecuteLifecycleStateV1.TERMINAL,
+        terminal_outcome=ExecuteTerminalOutcomeV1.RECONCILIATION_REQUIRED,
+        evidence_receipt_id="receipt_12345678",
+        updated_at="2026-07-29T12:00:00Z",
+    )
+    assert terminal.terminal_outcome is ExecuteTerminalOutcomeV1.RECONCILIATION_REQUIRED
+
+
+def test_verified_and_rollback_outcomes_require_their_independent_proof() -> None:
+    _receipt()
+
+    with pytest.raises(ValidationError, match="below the required strength"):
+        _receipt(
+            contracts=_contract(
+                minimum_effect_strength=EffectStrengthV1.INDEPENDENT_SYSTEM_OF_RECORD,
+                observed_effect_strength=EffectStrengthV1.INDEPENDENT_SESSION,
+            )
+        )
+
+    with pytest.raises(ValidationError, match="independently verified compensation"):
+        _receipt(outcome=ExecuteTerminalOutcomeV1.ROLLED_BACK_VERIFIED)
+
+    rolled_back = _receipt(
+        outcome=ExecuteTerminalOutcomeV1.ROLLED_BACK_VERIFIED,
+        compensation_effect_verified=True,
+    )
+    assert rolled_back.compensation_effect_verified is True
+
+
+def test_reconciliation_requires_uncertainty_not_a_success_shaped_receipt() -> None:
+    with pytest.raises(ValidationError, match="requires an uncertain"):
+        _receipt(outcome=ExecuteTerminalOutcomeV1.RECONCILIATION_REQUIRED)
+
+    receipt = _receipt(
+        outcome=ExecuteTerminalOutcomeV1.RECONCILIATION_REQUIRED,
+        delivery_uncertain=True,
+        contracts=_contract(effect_passed=False, observed_effect_strength=None),
+        oracle_tier=0,
+    )
+    assert receipt.outcome is ExecuteTerminalOutcomeV1.RECONCILIATION_REQUIRED
+    assert receipt.oracle_tier == 0
+
+
+def test_receipt_is_the_seal_and_verified_requires_sor_oracle() -> None:
+    receipt = _receipt()
+    assert receipt.workflow_version == "workflow_20260729"
+    assert receipt.qualification_id == "qualification_12345678"
+    assert receipt.environment_id == "environment_12345678"
+    assert receipt.runner_id == "runner:hosted"
+    assert receipt.nonce == "nonce:execution_12345678"
+    assert receipt.oracle_tier == 2
+    assert oracle_tier_from_effect_strength(
+        EffectStrengthV1.INDEPENDENT_SYSTEM_OF_RECORD
+    ) == 2
+    assert oracle_tier_from_effect_strength(
+        EffectStrengthV1.INDEPENDENT_SESSION
+    ) == 1
+    assert oracle_tier_from_effect_strength(
+        EffectStrengthV1.IMMEDIATE_SCREEN_CONFIRMATION
+    ) == 0
+
+    with pytest.raises(ValidationError, match="oracle_tier must match"):
+        _receipt(oracle_tier=1)
+
+    with pytest.raises(ValidationError, match="oracle tier 2 or 3"):
+        _receipt(
+            contracts=_contract(
+                minimum_effect_strength=EffectStrengthV1.INDEPENDENT_SESSION,
+                observed_effect_strength=EffectStrengthV1.INDEPENDENT_SESSION,
+            ),
+            oracle_tier=1,
+        )
+
+
+def test_webhook_signature_binds_the_closed_state_payload() -> None:
+    key = b"k" * 32
+    webhook = sign_execute_webhook_hmac(
+        key=key,
+        fields={
+            "event_type": ExecuteWebhookEventTypeV1.EXECUTION_STATE_CHANGED,
+            "event_id": "event_12345678",
+            "delivery_attempt": 1,
+            "issued_at": "2026-07-29T12:00:00Z",
+            "issuer_key_id": "webhook_key_12345678",
+            "execution": {
+                "execution_id": "execution_12345678",
+                "state": "running",
+                "updated_at": "2026-07-29T12:00:00Z",
+            },
+        },
+    )
+    assert webhook.verify_hmac(key)
+    assert not webhook.model_copy(update={"delivery_attempt": 2}).verify_hmac(key)
+
+
+def test_halted_webhook_carries_only_a_halted_before_effect_receipt() -> None:
+    key = b"k" * 32
+    halted = _receipt(
+        outcome=ExecuteTerminalOutcomeV1.HALTED_BEFORE_EFFECT,
+        contracts=_contract(
+            effect_passed=False, postcondition_passed=False, observed_effect_strength=None
+        ),
+        oracle_tier=0,
+    )
+    fields = {
+        "event_type": ExecuteWebhookEventTypeV1.EXECUTION_HALTED,
+        "event_id": "event_12345678",
+        "delivery_attempt": 1,
+        "issued_at": "2026-07-29T12:00:00Z",
+        "issuer_key_id": "webhook_key_12345678",
+        "receipt": halted.model_dump(mode="json"),
+    }
+    webhook = sign_execute_webhook_hmac(key=key, fields=fields)
+    assert webhook.event_type is ExecuteWebhookEventTypeV1.EXECUTION_HALTED
+    assert webhook.verify_hmac(key)
+    with pytest.raises(ValueError):
+        sign_execute_webhook_hmac(
+            key=key, fields={**fields, "receipt": _receipt().model_dump(mode="json")}
+        )
+    assert "executionHalted" in execute_openapi_document()["webhooks"]
+
+
+def test_packaged_openapi_is_the_generated_public_contract() -> None:
+    generated = execute_openapi_document()
+    packaged = files("openadapt_types.schemas").joinpath("execute-v1-openapi.json")
+    assert json.loads(packaged.read_text()) == generated
+    assert generated["x-openadapt-schema"] == "openadapt.execute-openapi/v1"
+    assert set(generated["paths"]) == {
+        "/v1/executions",
+        "/v1/executions/{execution_id}",
+        "/v1/executions/{execution_id}/receipt",
+    }
+    assert "security" not in generated
+    assert all(
+        operation["security"] == [{"bearerAuth": []}]
+        for path in generated["paths"].values()
+        for operation in path.values()
+    )
+    for webhook in generated["webhooks"].values():
+        operation = webhook["post"]
+        assert operation["security"] == []
+        assert "body HMAC" in operation["description"]
+
+
+def test_python_client_uses_the_public_base_url_and_v1_contract() -> None:
+    class Response:
+        def __enter__(self) -> "Response":
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b'{"schema_version":"openadapt.execute-accepted/v1","execution_id":"execution_12345678","state":"queued"}'
+
+    request = ExecuteRequestV1(
+        qualification_id="qualification_12345678",
+        workflow_version="workflow_20260729",
+        workflow_digest="sha256:" + "c" * 64,
+        environment_id="environment_12345678",
+        idempotency_key="caller_key_12345678",
+        authorization_context={
+            "actor_id": "caller_agent_12345678",
+            "authorization_reference": "authorization_12345678",
+        },
+        minimum_effect_strength=EffectStrengthV1.INDEPENDENT_SYSTEM_OF_RECORD,
+    )
+    with patch(
+        "openadapt_types.execute_client._NO_REDIRECT_OPENER.open", return_value=Response()
+    ) as open_request:
+        accepted = ExecuteClient("https://example.test/api", "partner-token").create_execution(
+            request
+        )
+
+    sent = open_request.call_args.args[0]
+    assert accepted.execution_id == "execution_12345678"
+    assert sent.full_url == "https://example.test/api/v1/executions"
+    assert sent.get_header("Authorization") == "Bearer partner-token"
+
+
+def test_python_client_rejects_redirect_before_token_forwarding() -> None:
+    original = Request(
+        "https://partner.example/api/v1/executions",
+        headers={"Authorization": "Bearer partner-token"},
+    )
+
+    with pytest.raises(HTTPError, match="redirects are not allowed") as error:
+        _RejectRedirectHandler().redirect_request(
+            original,
+            None,
+            302,
+            "Found",
+            {},
+            "https://untrusted.example/collect-token",
+        )
+
+    assert error.value.code == 302
+
+
+def test_python_client_url_encodes_execution_identifiers() -> None:
+    class Response:
+        def __enter__(self) -> "Response":
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b'{"schema_version":"openadapt.execute-status/v1","execution_id":"execution_12345678","state":"running","updated_at":"2026-07-29T12:00:00Z"}'
+
+    with patch(
+        "openadapt_types.execute_client._NO_REDIRECT_OPENER.open", return_value=Response()
+    ) as open_request:
+        ExecuteClient("https://example.test/api", "partner-token").get_execution(
+            "execution:with/slash"
+        )
+
+    assert open_request.call_args.args[0].full_url.endswith(
+        "/v1/executions/execution%3Awith%2Fslash"
+    )

@@ -1,0 +1,157 @@
+# Contributing to OpenAdapt
+
+Thank you for your interest in contributing to OpenAdapt!
+
+Participation in this project is governed by the
+[Code of Conduct](CODE_OF_CONDUCT.md).
+
+## Product boundary
+
+`OpenAdaptAI/OpenAdapt` is a monorepo. The root holds the `openadapt`
+launcher, and `packages/` holds the engine (`packages/flow`), the MCP server
+(`packages/agent`), the shared contracts (`packages/types`), the recorder
+(`packages/capture`), privacy scrubbing (`packages/privacy`), OpenAdapt
+Desktop (`packages/desktop`) and its menu-bar and tray controller
+(`packages/tray`). New engine, replay, repair, policy, and backend
+work belongs in `packages/flow`. Open new issues and pull requests here.
+
+The [signed Production record](https://docs.openadapt.ai/production-lifecycle.json)
+provides the current admission state. Do not infer a lifecycle state from
+package availability, repository text, or a sibling repository.
+
+## Where to Contribute
+
+- **Root (`openadapt/`, `tests/`)**: launcher packaging, unified CLI
+  compatibility, and CI.
+- **`packages/flow`**: compiler, replay, verification, governed repair, and
+  backend implementation. The MCP server's code is in `openadapt_flow.agent`.
+- **`packages/types`**: the shared request, result and receipt models
+  (`openadapt-types`). It depends only on Pydantic and must never import Flow;
+  Flow depends on it and re-exports it as `openadapt_flow.contracts`.
+- **`packages/agent`**: the `openadapt-agent` package, which keeps the old
+  imports and commands working on top of `openadapt_flow.agent`.
+- **`packages/capture`, `packages/privacy`, `packages/desktop`,
+  `packages/tray`**: each keeps its own README, tests and lockfile. Open issues
+  and pull requests here.
+- **Other repositories** (research such as openadapt-ml and the rest): open
+  issues only when their stated lifecycle and contribution guide match the
+  proposed work.
+
+## Getting started
+
+1. Fork and clone the repository.
+2. Create a focused branch from current `origin/main`.
+3. Install what you're changing in development mode. For the launcher:
+
+   ```bash
+   python -m pip install -e '.[dev]'
+   ```
+
+   For a package, install it from its directory, with Flow from the same
+   checkout. For example, for the MCP server:
+
+   ```bash
+   cd packages/agent
+   python -m pip install -e '../flow[agent]' -e '.[dev]'
+   ```
+
+   [`.github/workflows/packages.yml`](.github/workflows/packages.yml) has the
+   exact install and test commands CI runs for each package.
+
+4. Run the focused test suite and formatting checks. For the launcher:
+
+   ```bash
+   pytest
+   ruff check openadapt tests
+   ```
+
+   For a package, run `pytest -q` in its directory.
+
+5. Open a pull request. The pull-request template lists the required release
+   and source-boundary checks.
+
+## Guidelines
+
+- Follow the existing code style.
+- Test durable behavior and package contracts rather than ordinary copy.
+- Keep changes focused and update the canonical documentation when behavior
+  changes.
+- Never place customer-derived data, deployment recipes, or secrets in a public
+  fixture or package artifact.
+
+### Pushing to a pull request
+
+Every push to a pull request starts a full CI run and cancels the run in
+progress. All open pull requests share the same CI runners, so each extra run
+delays every other pull request. In early November 2026, about 40% of
+pull-request CI time went to runs that a newer push cancelled.
+
+- Run the tests you touched locally before you push, for example
+  `pytest -q tests/test_x.py` in the package's directory.
+- Batch your fixes, including fixes for review comments, into one push.
+  Don't push each fix on its own.
+- Merge `main` into your branch only to resolve a conflict. CI already tests
+  your branch merged with the current `main`, and branch protection doesn't
+  require it to be up to date.
+- To retry a failed job, re-run it with `gh run rerun <run-id> --failed`.
+  Don't push an empty commit to start CI again.
+
+## Licensing and the open-core boundary
+
+OpenAdapt is open-core. The public repositories (this monorepo with the
+launcher and engine, `openadapt-capture`, `openadapt-desktop`, and the other
+`openadapt-*` repos) are MIT licensed: the mechanism and the public
+interfaces are open. The hosted control plane (OpenAdapt Cloud) is a
+proprietary commercial service, and certain data and empirical tuning stay
+private by policy.
+
+What this means for contributions to the public repos:
+
+- Do not contribute application-specific recipes, customer fixtures, or
+  proprietary system identifiers derived from real deployments (for example,
+  automation content tied to a specific customer's EHR configuration). CI
+  runs `scripts/check_source_boundary.py` to reject that class of content.
+  That script keeps no denylist of its own: it reads
+  [`source-policy.public.json`](source-policy.public.json), a generated file
+  rendered from OpenAdapt's canonical source-availability manifest. Do not edit
+  the generated file by hand; a rule changes at its source, and the guard fails
+  closed if the file is missing or incomplete.
+- Do not contribute deployment-derived corpora, tuned adversary parameters,
+  thresholds, oracle or connector recipes, or datasets tied to real systems
+  of record. Synthetic, reproducible fixtures are welcome.
+- Do not copy or vendor GPL/AGPL/SSPL or otherwise non-MIT-compatible
+  material into these repositories or their built packages.
+- The OpenAdapt name and logo are trademarks and are not covered by the MIT
+  License; see [TRADEMARKS.md](TRADEMARKS.md).
+
+## Developer Certificate of Origin
+
+By submitting a contribution you certify the
+[Developer Certificate of Origin (DCO) 1.1](https://developercertificate.org/):
+that you wrote the contribution or otherwise have the right to submit it
+under the MIT License. Signing off your commits (`git commit -s`) is
+appreciated but the certification applies to every contribution regardless.
+
+## Contributor License Agreement
+
+A Contributor License Agreement is published:
+[`packages/flow/CLA.md`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/CLA.md)
+for individuals, and
+[`packages/flow/CCLA.md`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/CCLA.md)
+for companies whose employees contribute on company time. It gives MLDSAI Inc.
+an explicit copyright and patent license, which the MIT License alone doesn't
+provide, and it keeps the option of relicensing the combined work later.
+
+It is not enforced here yet. You don't agree to it by opening a pull request,
+and nothing is implied. You agree when you sign, either through the automated
+CLA check once that check is turned on for this repository, or by email. Until
+then the DCO and the MIT License are what govern your contribution.
+
+The open-core boundary above is the reason this matters. Your contribution may
+end up in the proprietary products MLDSAI Inc. builds on this code. The MIT
+License already permits that. The CLA says it out loud so nobody is surprised.
+
+## Questions?
+
+- [Discord](https://discord.gg/yF527cQbDG)
+- [GitHub Discussions](https://github.com/OpenAdaptAI/OpenAdapt/discussions)

@@ -1,0 +1,286 @@
+{
+  "model": "mlx-community/Qwen3-VL-4B-Instruct-4bit",
+  "note": "model-friendly resolution supplement",
+  "state_downscaled": {
+    "render": "dsf=1 900x600",
+    "n_true_cases": 6,
+    "n_false_cases": 8,
+    "true_rescue_rate": 1.0,
+    "false_rescue_rate": 0.125,
+    "false_rescue_cases": [
+      {
+        "fid": "fr_saving_spinner",
+        "kind": "false_rescue",
+        "truth": "no",
+        "expected_state": "the patient record was saved successfully",
+        "answer": "yes",
+        "holds": true,
+        "latency_s": 1.305116891860962,
+        "note": "in-progress/partial state, not yet saved"
+      }
+    ],
+    "answers": {
+      "tr_saved_dark": "yes",
+      "tr_appt_serif_scaled": "yes",
+      "tr_order_lowcontrast": "yes",
+      "tr_rx_dark_italic": "yes",
+      "tr_changes_toast": "yes",
+      "tr_signed_scaled": "yes",
+      "fr_save_failed": "no",
+      "fr_blank_form": "no",
+      "fr_saving_spinner": "yes",
+      "fr_appt_cancelled": "no",
+      "fr_wrong_record": "no",
+      "fr_logged_out": "no",
+      "fr_validation_error": "no",
+      "fr_stale_dashboard": "no"
+    },
+    "rows": [
+      {
+        "fid": "tr_saved_dark",
+        "kind": "true_rescue",
+        "truth": "yes",
+        "expected_state": "the patient record was saved successfully",
+        "answer": "yes",
+        "holds": true,
+        "latency_s": 1.4302799701690674,
+        "note": "dark theme, green success banner"
+      },
+      {
+        "fid": "tr_appt_serif_scaled",
+        "kind": "true_rescue",
+        "truth": "yes",
+        "expected_state": "an appointment was successfully booked",
+        "answer": "yes",
+        "holds": true,
+        "latency_s": 1.2940690517425537,
+        "note": "serif font, scaled title, booking confirmation"
+      },
+      {
+        "fid": "tr_order_lowcontrast",
+        "kind": "true_rescue",
+        "truth": "yes",
+        "expected_state": "the lab order was submitted successfully",
+        "answer": "yes",
+        "holds": true,
+        "latency_s": 1.298142910003662,
+        "note": "low-contrast grey-on-grey success"
+      },
+      {
+        "fid": "tr_rx_dark_italic",
+        "kind": "true_rescue",
+        "truth": "yes",
+        "expected_state": "the prescription was sent to the pharmacy",
+        "answer": "yes",
+        "holds": true,
+        "latency_s": 1.298886775970459,
+        "note": "dark, italic, e-prescribe confirmation"
+      },
+      {
+        "fid": "tr_changes_toast",
+        "kind": "true_rescue",
+        "truth": "yes",
+        "expected_state": "the changes were saved",
+        "answer": "yes",
+        "holds": true,
+        "latency_s": 1.3016839027404785,
+        "note": "small dark toast (OCR-hostile size)"
+      },
+      {
+        "fid": "tr_signed_scaled",
+        "kind": "true_rescue",
+        "truth": "yes",
+        "expected_state": "the encounter note was signed",
+        "answer": "yes",
+        "holds": true,
+        "latency_s": 1.2965340614318848,
+        "note": "large serif, sign-off confirmation"
+      },
+      {
+        "fid": "fr_save_failed",
+        "kind": "false_rescue",
+        "truth": "no",
+        "expected_state": "the patient record was saved successfully",
+        "answer": "no",
+        "holds": false,
+        "latency_s": 1.3323888778686523,
+        "note": "error banner in the same card layout as success"
+      },
+      {
+        "fid": "fr_blank_form",
+        "kind": "false_rescue",
+        "truth": "no",
+        "expected_state": "the patient record was saved successfully",
+        "answer": "no",
+        "holds": false,
+        "latency_s": 1.3326809406280518,
+        "note": "blank edit form; nothing was saved"
+      },
+      {
+        "fid": "fr_saving_spinner",
+        "kind": "false_rescue",
+        "truth": "no",
+        "expected_state": "the patient record was saved successfully",
+        "answer": "yes",
+        "holds": true,
+        "latency_s": 1.305116891860962,
+        "note": "in-progress/partial state, not yet saved"
+      },
+      {
+        "fid": "fr_appt_cancelled",
+        "kind": "false_rescue",
+        "truth": "no",
+        "expected_state": "an appointment was successfully booked",
+        "answer": "no",
+        "holds": false,
+        "latency_s": 1.3340401649475098,
+        "note": "opposite action confirmed (cancel, not book)"
+      },
+      {
+        "fid": "fr_wrong_record",
+        "kind": "false_rescue",
+        "truth": "no",
+        "expected_state": "the record for Jane Doe was saved",
+        "answer": "no",
+        "holds": false,
+        "latency_s": 1.3391218185424805,
+        "note": "success, but for a DIFFERENT patient than expected"
+      },
+      {
+        "fid": "fr_logged_out",
+        "kind": "false_rescue",
+        "truth": "no",
+        "expected_state": "the patient record was saved successfully",
+        "answer": "no",
+        "holds": false,
+        "latency_s": 1.332076072692871,
+        "note": "green success banner for an unrelated action (logout)"
+      },
+      {
+        "fid": "fr_validation_error",
+        "kind": "false_rescue",
+        "truth": "no",
+        "expected_state": "the intake form was submitted successfully",
+        "answer": "no",
+        "holds": false,
+        "latency_s": 1.3355131149291992,
+        "note": "validation error in a banner-shaped layout; not submitted"
+      },
+      {
+        "fid": "fr_stale_dashboard",
+        "kind": "false_rescue",
+        "truth": "no",
+        "expected_state": "the lab order was submitted successfully",
+        "answer": "no",
+        "holds": false,
+        "latency_s": 1.333014965057373,
+        "note": "stale/neutral screen; the order was never placed"
+      }
+    ]
+  },
+  "grounder_downscaled": {
+    "render_scaled_to_w": 1000,
+    "scale_factor": 0.44642857142857145,
+    "scaled_image_wh": [
+      1000,
+      1663
+    ],
+    "tol_px": 40,
+    "n_targets": 6,
+    "hit_rate": 0.0,
+    "median_error_px": 472.20786626313145,
+    "returned_proposal_rate": 1.0,
+    "rows": [
+      {
+        "row": 0,
+        "name": "Halloran, Karen",
+        "proposed": [
+          922,
+          52
+        ],
+        "truth": [
+          919.1964285714287,
+          112.05357142857143
+        ],
+        "error_px": 60.118977486993515,
+        "hit": false,
+        "latency_s": 4.11513614654541
+      },
+      {
+        "row": 8,
+        "name": "Ngyuen, Anh",
+        "proposed": [
+          922,
+          172
+        ],
+        "truth": [
+          919.1964285714287,
+          354.9107142857143
+        ],
+        "error_px": 182.93219895159328,
+        "hit": false,
+        "latency_s": 4.655876874923706
+      },
+      {
+        "row": 16,
+        "name": "Okafor, Janet",
+        "proposed": [
+          922,
+          372
+        ],
+        "truth": [
+          919.1964285714287,
+          597.7678571428572
+        ],
+        "error_px": 225.78526376101848,
+        "hit": false,
+        "latency_s": 4.646883010864258
+      },
+      {
+        "row": 24,
+        "name": "Fitzgerald, Gregory",
+        "proposed": [
+          922,
+          122
+        ],
+        "truth": [
+          919.1964285714287,
+          840.625
+        ],
+        "error_px": 718.6304687652445,
+        "hit": false,
+        "latency_s": 4.661563158035278
+      },
+      {
+        "row": 32,
+        "name": "Whitfield, Daniel",
+        "proposed": [
+          922,
+          172
+        ],
+        "truth": [
+          919.1964285714287,
+          1083.482142857143
+        ],
+        "error_px": 911.4864545127394,
+        "hit": false,
+        "latency_s": 4.681951999664307
+      },
+      {
+        "row": 40,
+        "name": "Bianchi, Gregory",
+        "proposed": [
+          922,
+          282
+        ],
+        "truth": [
+          919.1964285714287,
+          1326.3392857142858
+        ],
+        "error_px": 1044.3430488584581,
+        "hit": false,
+        "latency_s": 4.710628032684326
+      }
+    ]
+  }
+}

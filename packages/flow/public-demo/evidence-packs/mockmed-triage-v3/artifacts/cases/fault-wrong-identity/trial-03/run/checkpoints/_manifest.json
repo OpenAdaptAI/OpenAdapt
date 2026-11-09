@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "run_id": "13e73ceed35949a69000f91a40dbf3d1",
+  "workflow_name": "mockmed-triage",
+  "bundle_dir": "/private/tmp/openadapt-flow-pr253-source/public-demo/evidence-packs/.mockmed-triage-v3.6o0oosjc/artifacts/bundle",
+  "params": {
+    "note": "Synthetic follow-up in two weeks"
+  },
+  "worklists": {},
+  "governed_authorization": {
+    "authorization_id": "13e73ceed35949a69000f91a40dbf3d1",
+    "created_at": "2026-07-26T07:07:12.465301+00:00",
+    "bundle_content_digest": "5ed622b5568dac64e4202dae379835277f954c0b24fb2ead8108f32e1c1ce68e",
+    "runtime_inputs_digest": "342463e1dfa0e45e5a5dac4c34a3daf2f1499aeeb2fa7eefeb8f0a9a027b3ea1",
+    "admitted_policy_name": "clinical-write",
+    "execution_profile": "standard",
+    "minimum_effect_tier": 1,
+    "required_identity_step_ids": [
+      "step_000",
+      "step_001",
+      "step_002",
+      "step_003",
+      "step_005"
+    ],
+    "unverified_write_approvals": [],
+    "approval_source": "public-demo-qualified-campaign"
+  },
+  "screenshots_may_leave_box": false,
+  "model_calls": 0,
+  "external_network_calls": "observed",
+  "save_healed_to": null,
+  "created_at": "2026-07-26T07:07:12.467949+00:00"
+}

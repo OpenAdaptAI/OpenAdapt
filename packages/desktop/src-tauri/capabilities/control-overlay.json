@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "control-overlay",
+  "description": "Minimal event and window access for the privacy-safe automation control overlay.",
+  "windows": ["control-overlay"],
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "core:window:allow-show",
+    "core:window:allow-hide"
+  ]
+}

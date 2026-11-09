@@ -1,0 +1,74 @@
+.venv/
+.venv-dense/
+.venv-glyph/
+.venv-dom/
+.venv-homonym/
+.venv9th/
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.DS_Store
+/runs/
+/recordings/
+.openadapt-chrome-profile/
+.openadapt-recording-partial-*/
+dist/
+benchmark/openemr/finals/
+benchmark/openemr/rows.jsonl
+benchmark/hybrid/finals/
+benchmark/hybrid/rows.jsonl
+benchmark/dom/finals/
+benchmark/dom/rows.jsonl
+benchmark/desktop/finals/
+benchmark/desktop/_work/
+benchmark/reliability/artifacts/
+benchmark/cosmetic_drift/runs/
+benchmark/cosmetic_drift/_bundle/
+benchmark/cosmetic_drift/_recording/
+benchmark/fault_model/runs/
+benchmark/fault_model/_bundle/
+benchmark/fault_model/_recording/
+# Lending (MockLoan) fault-model study scratch (recording/bundle/replay dirs);
+# the committed evidence is results.json + *.md only.
+benchmark/lending_fault_model/_bundle/
+benchmark/lending_fault_model/_recording/
+benchmark/lending_fault_model/runs/
+benchmark/lending_fault_model/runs_ladder/
+# openIMIS claims reference environment: recordings, bundles, generated
+# stack secrets, and media captures all stay local.
+benchmark/openimis_claims/out/
+.venv-phi/
+
+# --- PHI governance (audit REM-1): keep compiled bundles out of git ---
+# A compiled bundle (workflow.json + templates/*.png) is a HIPAA-designated
+# record. Do NOT commit bundles produced against real patient data. The
+# committed docs/showcase-openemr/bundle is an explicit, PHI-free exception
+# (synthetic OpenEMR public-demo data; see that dir's README). The
+# docs/showcase-loop/bundle is the same exception, one generation on: the
+# PHI-free data-driven-LOOP (program:true) artifact built from it.
+# docs/showcase-encounter-loop is a third exception: a compact, hand-authored,
+# PHI-free MockMed loop (linear body/ + program:true bundle/) for the README.
+/bundles/
+bundle/
+!docs/showcase-openemr/bundle/
+!docs/showcase-loop/bundle/
+!docs/showcase-encounter-loop/body/
+!docs/showcase-encounter-loop/bundle/
+*.bundle/
+# Local scrub/regeneration scratch venvs
+.venv-phi/
+paper/build/
+
+# Never-publish workspace material (strategy, prospect research, counsel packs,
+# personal contact details). Created ad hoc; must never reach a remote.
+.private/
+
+# Cover every .env variant, not one at a time. A .env.bak holding live
+# API keys sat in a stash for six weeks and was one `git add -A` from being
+# committed; .env.backup had already been added by hand after an earlier
+# near-miss. Negate the committed template so it stays tracked.
+.env.*
+!.env.example

@@ -1,0 +1,162 @@
+import type { ProgramGraphSpec } from "../src/index.js";
+import referralSpec from "../fixtures/openemr-referral/spec.json";
+import referralFolds from "../fixtures/openemr-referral/folds.json";
+import referralTrace from "../fixtures/openemr-referral/trace.json";
+import referralMedia from "../fixtures/openemr-referral/media.json";
+import type { FoldSpec, NodeMedia, RunTrace, StopExit } from "../src/index.js";
+
+// Desktop's program-workbench preview graph: a loop over records with an
+// identity-checked write and a branch back to the loop.
+export const processRecords = {
+  bundle: {
+    name: "Process incoming records",
+    action_count: 4,
+    irreversible_count: 1,
+    identity_armed_count: 1,
+    identity_unarmed_count: 0,
+    effect_count: 1,
+    encrypted: false,
+    schema_version: 2,
+    provenance: { content_digest: "7a4c1b2d9e0f" },
+  },
+  nodes: [
+    {
+      id: "open_worklist",
+      index: 0,
+      kind: "action",
+      title: "Open worklist",
+      action: "click",
+      resolution: {
+        top_rung: "structural",
+        rungs: [
+          { name: "structural", label: "Structural", present: true, detail: "" },
+          { name: "template", label: "Template", present: true, detail: "" },
+          { name: "ocr", label: "OCR anchor", present: false, detail: "" },
+          { name: "geometry", label: "Geometry", present: false, detail: "" },
+        ],
+      },
+      risk: "reversible",
+      identity: null,
+      effects: [],
+      postconditions: ["worklist is visible"],
+      halts: ["the worklist cannot be resolved uniquely"],
+      badges: [],
+    },
+    {
+      id: "for_each_record",
+      index: 1,
+      kind: "loop",
+      title: "For each record",
+      action: null,
+      resolution: null,
+      risk: null,
+      identity: null,
+      effects: [],
+      postconditions: [],
+      halts: [],
+      badges: [],
+    },
+    {
+      id: "open_record",
+      index: 2,
+      kind: "action",
+      title: "Open current record",
+      action: "click",
+      resolution: {
+        top_rung: "template",
+        rungs: [
+          { name: "structural", label: "Structural", present: false, detail: "" },
+          { name: "template", label: "Template", present: true, detail: "" },
+          { name: "ocr", label: "OCR anchor", present: true, detail: "" },
+          { name: "geometry", label: "Geometry", present: true, detail: "" },
+        ],
+      },
+      risk: "reversible",
+      identity: {
+        applicable: true,
+        armed: true,
+        phi_free: true,
+        has_structured: true,
+        has_identifier_crop: true,
+      },
+      effects: [],
+      postconditions: ["record view is visible"],
+      halts: ["identity does not match", "target evidence is ambiguous"],
+      badges: ["identity armed"],
+    },
+    {
+      id: "write_update",
+      index: 3,
+      kind: "action",
+      title: "Write declared update",
+      action: "type",
+      resolution: {
+        top_rung: "structural",
+        rungs: [
+          { name: "structural", label: "Structural", present: true, detail: "" },
+          { name: "template", label: "Template", present: true, detail: "" },
+          { name: "ocr", label: "OCR anchor", present: false, detail: "" },
+          { name: "geometry", label: "Geometry", present: false, detail: "" },
+        ],
+      },
+      risk: "irreversible",
+      identity: {
+        applicable: true,
+        armed: true,
+        phi_free: true,
+        has_structured: true,
+        has_identifier_crop: true,
+      },
+      effects: [
+        { kind: "field_equals", summary: "record field status == {status}", risk: "irreversible", needs_operator_confirmation: false },
+      ],
+      postconditions: ["confirmation is visible"],
+      halts: ["fresh frame changed", "effect cannot be verified independently"],
+      badges: ["consequential"],
+    },
+    {
+      id: "record_complete",
+      index: 4,
+      kind: "branch",
+      title: "More records?",
+      action: null,
+      resolution: null,
+      risk: null,
+      identity: null,
+      effects: [],
+      postconditions: [],
+      halts: [],
+      badges: [],
+    },
+    {
+      id: "done",
+      index: 5,
+      kind: "terminal",
+      title: "End of declared steps",
+      action: null,
+      resolution: null,
+      risk: null,
+      identity: null,
+      effects: [],
+      postconditions: [],
+      halts: [],
+      badges: [],
+    },
+  ],
+  edges: [
+    { source: "open_worklist", target: "for_each_record", kind: "sequence", label: "ready" },
+    { source: "for_each_record", target: "open_record", kind: "loop_body", label: "next record" },
+    { source: "for_each_record", target: "done", kind: "sequence", label: "worklist empty" },
+    { source: "open_record", target: "write_update", kind: "sequence", label: "identity verified" },
+    { source: "write_update", target: "record_complete", kind: "sequence", label: "effect verified" },
+    { source: "record_complete", target: "for_each_record", kind: "branch", label: "more" },
+    { source: "record_complete", target: "done", kind: "branch", label: "complete" },
+  ],
+} as ProgramGraphSpec;
+
+export const referral = {
+  spec: referralSpec as ProgramGraphSpec,
+  folds: referralFolds as FoldSpec & { stops: StopExit[] },
+  trace: referralTrace as RunTrace,
+  media: referralMedia as Record<string, NodeMedia>,
+};

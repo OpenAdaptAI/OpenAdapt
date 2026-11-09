@@ -1,0 +1,32 @@
+id: qualified-remote-decision-v2-supported
+claim: >-
+  A negotiated V2 attended task binds optional reviewed entity wording to
+  the exact qualification, bundle, step, policy, and pause authority. An
+  unqualified or unrecognized entity class stays local and the remote task
+  uses the signed neutral record or item fallback.
+surfaces: [docs]
+tier: supported
+evidence:
+  - path: tests/test_attended_actions.py
+    proves: >-
+      Required CI covers the V1-compatible and V2 signed envelopes,
+      provenance binding, remote-safe entity vocabulary, idempotent
+      decisions, and fresh revalidation before resumed actuation.
+  - path: tests/test_qualification_project.py
+    proves: >-
+      Required CI requires the current exact qualification contract before
+      the V2 producer can emit its reviewed presentation metadata.
+  - path: docs/DECISION_DELIVERY.md
+    kind: doc
+    proves: >-
+      The delivery contract defines explicit V2 negotiation, neutral V1
+      fallback, and the local boundary for actual entity identifiers.
+caveats:
+  - >-
+    V2 requires openadapt-types 0.10.x and explicit peer negotiation. The
+    dependency does not upgrade a V1 consumer, and the byte-compatible V1
+    path remains available.
+  - >-
+    The entity class is presentation metadata only. Actual record identity
+    remains inside the customer-controlled runner and is revalidated before
+    any resumed action.

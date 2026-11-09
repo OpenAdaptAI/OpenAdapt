@@ -1,0 +1,12 @@
+name: benchmark-multiapp-standard
+description: >-
+  Certification policy for the deterministic multi-application API-tier
+  benchmarks. Policy certification requires a confirmed system-effect
+  contract on every consequential write. Standard-profile admission separately
+  enforces identity coverage, and the runtime proves each exact API
+  request/effect binding before dispatch.
+
+require_system_effects_for:
+  - write
+
+prohibit_unconfirmed_effect_bindings: true

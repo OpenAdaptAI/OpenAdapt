@@ -1,0 +1,103 @@
+\section{Introduction}
+
+Much operational computer work is \emph{repeated}: the business intent is stable,
+the sequence is mostly known, errors are costly, and the same task may run
+hundreds of times. Reasoning through such a workflow on every run is both
+wasteful and unsafe. Wasteful, because a general model re-derives the same plan
+each time, paying latency, inference cost, and run-to-run variation. Unsafe,
+because the usual success signal is the \emph{screen}: a model or a script sees a
+rendered ``Saved'' banner and stops---but a banner is not a persisted write. The
+same green pixels can follow a partial save, a duplicate submission, a stale
+overwrite, or a silently rejected transaction. The failure mode that matters in
+production is not the visible crash; it is the \emph{silent wrong action} that
+reports success.
+
+Graphical user interfaces remain the practical integration boundary for legacy,
+third-party, and remote applications, so this problem cannot be assumed away with
+an API. Selector-based automation is fast and deterministic when stable structure
+is available but brittle under interface drift, while visual scripting extends to
+pixel surfaces \cite{sikuli}. Recent computer-use agents instead observe the
+screen and choose each action with a general model
+\cite{anthropic2024computeruse,uitars2025,cheng2024seeclick}, a useful
+formulation for previously unseen tasks and broad benchmarks
+\cite{webarena,workarena,osworld}. Neither line closes the safety gap: RPA does
+not check the system of record, and an agent re-reasons every run yet still trusts
+the screen.
+
+\system{} treats a successful human demonstration as source material for a
+\emph{program} rather than as context for a model on every run
+(Figure~\ref{fig:pipeline}). Compilation extracts parameters, redundant target
+evidence, postconditions, and risk metadata. Replay follows the compiled program
+deterministically and makes zero model calls on the healthy path; models are
+optional repair tiers, not the controller. Where a step is consequential, an
+independent verifier checks the effect against the application's own
+system of record, and the runtime refuses rather than guessing when it cannot
+verify. The distinction the paper foregrounds is not whether a task
+\emph{completed} but whether identity and external effects were \emph{verified},
+and whether the system can \emph{refuse} when evidence is insufficient. In an
+injected-fault study this distinction is decisive, and we measure it through the
+live replayer's governed actuation and verification path and judge it by an
+independent system-of-record ground
+truth: screen-only verification silently accepted 54 of 90 fault runs, an
+out-of-band effect check cut that to 9 of 90, and a complete system-of-record
+read path to 0 of 90 (Section~\ref{sec:results}). The same gap replicates on a
+second, non-healthcare lending domain and on two multi-application workflows
+spanning email, spreadsheets, documents, and two systems of record.
+
+This paper makes five contributions:
+\begin{enumerate}
+  \item A demonstration compiler and backend-neutral workflow representation
+        for deterministic repeated GUI execution.
+  \item A resolution ladder that prefers structured identity, then local visual
+        evidence, and records bounded drift repairs as reviewable changes.
+  \item System-of-record effect verification that treats the screen as a weak
+        oracle and the application's own state as the strong oracle, closing the
+        gap between a rendered success and a persisted effect.
+  \item Governance mechanisms that distinguish runnable from certified, verify
+        identity and system effects where configured, and refuse rather than
+        silently degrade. Three are load-bearing for the thesis and are
+        described in Section~\ref{sec:governance}: an explicit \emph{transaction
+        outcome} taxonomy backed by a privacy-safe effect journal and an
+        at-most-once idempotency ledger, so an uncertain write is reconciled
+        rather than retried; a \emph{governed repair promotion lifecycle} in
+        which a runtime repair is only ever a candidate until human review,
+        contract-invariant enforcement, replay and fault campaigns, a
+        digest-bound approval, and a bounded auto-rollback canary have all
+        passed; and \emph{explicit surface selection}, which refuses an implicit
+        browser default in production and refuses to run a workflow qualified on
+        one execution surface on another.
+  \item An evaluation protocol that reports task success \emph{together with}
+        silent incorrect success and over-halt, with a failure taxonomy and
+        \emph{machine-checked paper constants} that bind every headline number
+        to a released raw artifact or bounded aggregate summary. The protocol is
+        instantiated as EffectBench, a standalone versioned benchmark, and is
+        exercised in a second non-healthcare domain and on two multi-application
+        workflows so that the metric is not tied to one fixture. Raw grown
+        corpora, deployment-derived tuning, and target-specific recipes remain
+        outside the public release. The machine-check establishes transcription
+        fidelity---that the prose faithfully cites the released evidence---not
+        the validity of the underlying measurement; a sound number and an
+        unsound one are bound alike.
+\end{enumerate}
+
+The evaluation deliberately separates a broad product architecture from the
+scope of each measured result. Browser workflows supply the comparative and
+breadth studies. Additional task-bound qualifications cover Windows UIA,
+native macOS, and real-network RDP with independent effect oracles and ambiguity
+or stale-target refusals. Two multi-application benchmarks add branching,
+exception paths, and cross-system effects. These results establish working
+substrate and workflow mechanisms
+for the named environments; they are not a population estimate for arbitrary
+enterprise applications. No external organization has deployed the system, so
+nothing here is field-reliability evidence.
+Citrix ICA/HDX is a pixel-only remote-display
+environment in the same class as the measured RDP backend, and we report a
+qualification of the shipping Citrix Workspace backend against a
+\emph{deterministic synthetic stand-in} that reproduces ICA/HDX conditions in
+process. That stand-in is not Citrix: it exercises no HDX codec, no ICA
+compression, and no Workspace-client transport, and its released artifact
+records \texttt{is\_real\_ica\_hdx: false}. The measured remote-display result
+in this paper is RDP over Aardwolf into a Parallels Windows guest, and RDP
+evidence does not transfer to Citrix either.
+The limitations section states this scope precisely and names the
+specific validation it would take.

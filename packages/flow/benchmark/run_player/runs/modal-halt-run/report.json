@@ -1,0 +1,312 @@
+{
+  "workflow_name": "mockmed-triage",
+  "started_at": "2026-07-12T22:43:13.648385+00:00",
+  "params": {
+    "note": "Showcase triage booking three months"
+  },
+  "results": [
+    {
+      "step_id": "step_000",
+      "intent": "click at (214, 195)",
+      "ok": true,
+      "resolution": {
+        "rung": "template",
+        "point": [
+          214,
+          195
+        ],
+        "confidence": 0.999949038028717,
+        "elapsed_ms": 22.0081249717623
+      },
+      "identity": null,
+      "input_verified": null,
+      "input_retried": false,
+      "postconditions_ok": true,
+      "postcondition_drift_rescues": [],
+      "drift_oracle_calls": 0,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_000_before.png",
+      "after_png": "steps/step_000_after.png",
+      "elapsed_ms": 6356.470416998491
+    },
+    {
+      "step_id": "step_001",
+      "intent": "type 'nurse.demo'",
+      "ok": true,
+      "resolution": null,
+      "identity": null,
+      "input_verified": true,
+      "input_retried": false,
+      "postconditions_ok": true,
+      "postcondition_drift_rescues": [],
+      "drift_oracle_calls": 0,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_001_before.png",
+      "after_png": "steps/step_001_after.png",
+      "elapsed_ms": 4303.676124953199
+    },
+    {
+      "step_id": "step_002",
+      "intent": "click at (214, 264)",
+      "ok": true,
+      "resolution": {
+        "rung": "template",
+        "point": [
+          214,
+          264
+        ],
+        "confidence": 1.0,
+        "elapsed_ms": 15.181583992671221
+      },
+      "identity": null,
+      "input_verified": null,
+      "input_retried": false,
+      "postconditions_ok": true,
+      "postcondition_drift_rescues": [],
+      "drift_oracle_calls": 0,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_002_before.png",
+      "after_png": "steps/step_002_after.png",
+      "elapsed_ms": 376.1332500143908
+    },
+    {
+      "step_id": "step_003",
+      "intent": "type 'mockmed-demo-pass'",
+      "ok": true,
+      "resolution": null,
+      "identity": null,
+      "input_verified": true,
+      "input_retried": false,
+      "postconditions_ok": true,
+      "postcondition_drift_rescues": [],
+      "drift_oracle_calls": 0,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_003_before.png",
+      "after_png": "steps/step_003_after.png",
+      "elapsed_ms": 3032.916958036367
+    },
+    {
+      "step_id": "step_004",
+      "intent": "click 'Sign In'",
+      "ok": true,
+      "resolution": {
+        "rung": "template",
+        "point": [
+          119,
+          324
+        ],
+        "confidence": 1.0,
+        "elapsed_ms": 15.824791043996811
+      },
+      "identity": null,
+      "input_verified": null,
+      "input_retried": false,
+      "postconditions_ok": true,
+      "postcondition_drift_rescues": [],
+      "drift_oracle_calls": 0,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_004_before.png",
+      "after_png": "steps/step_004_after.png",
+      "elapsed_ms": 854.1756249614991
+    },
+    {
+      "step_id": "step_005",
+      "intent": "click 'Open'",
+      "ok": true,
+      "resolution": {
+        "rung": "template",
+        "point": [
+          775,
+          186
+        ],
+        "confidence": 0.999998927116394,
+        "elapsed_ms": 13.335499970708042
+      },
+      "identity": null,
+      "input_verified": null,
+      "input_retried": false,
+      "postconditions_ok": true,
+      "postcondition_drift_rescues": [],
+      "drift_oracle_calls": 0,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_005_before.png",
+      "after_png": "steps/step_005_after.png",
+      "elapsed_ms": 721.7156250262633
+    },
+    {
+      "step_id": "step_006",
+      "intent": "click 'New Encounter'",
+      "ok": true,
+      "resolution": {
+        "rung": "template",
+        "point": [
+          114,
+          159
+        ],
+        "confidence": 0.999999463558197,
+        "elapsed_ms": 14.741541992407292
+      },
+      "identity": null,
+      "input_verified": null,
+      "input_retried": false,
+      "postconditions_ok": true,
+      "postcondition_drift_rescues": [],
+      "drift_oracle_calls": 0,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_006_before.png",
+      "after_png": "steps/step_006_after.png",
+      "elapsed_ms": 657.1492499788292
+    },
+    {
+      "step_id": "step_007",
+      "intent": "click 'Triage'",
+      "ok": true,
+      "resolution": {
+        "rung": "template",
+        "point": [
+          85,
+          160
+        ],
+        "confidence": 1.0,
+        "elapsed_ms": 11.801457963883877
+      },
+      "identity": null,
+      "input_verified": null,
+      "input_retried": false,
+      "postconditions_ok": true,
+      "postcondition_drift_rescues": [],
+      "drift_oracle_calls": 0,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_007_before.png",
+      "after_png": "steps/step_007_after.png",
+      "elapsed_ms": 346.8537079752423
+    },
+    {
+      "step_id": "step_008",
+      "intent": "click at (344, 290)",
+      "ok": true,
+      "resolution": {
+        "rung": "template",
+        "point": [
+          344,
+          290
+        ],
+        "confidence": 1.0,
+        "elapsed_ms": 23.566708026919514
+      },
+      "identity": null,
+      "input_verified": null,
+      "input_retried": false,
+      "postconditions_ok": true,
+      "postcondition_drift_rescues": [],
+      "drift_oracle_calls": 0,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_008_before.png",
+      "after_png": "steps/step_008_after.png",
+      "elapsed_ms": 458.72654201230034
+    },
+    {
+      "step_id": "step_009",
+      "intent": "type <note>",
+      "ok": true,
+      "resolution": null,
+      "identity": null,
+      "input_verified": true,
+      "input_retried": false,
+      "postconditions_ok": true,
+      "postcondition_drift_rescues": [],
+      "drift_oracle_calls": 0,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_009_before.png",
+      "after_png": "steps/step_009_after.png",
+      "elapsed_ms": 1643.3253749855794
+    },
+    {
+      "step_id": "step_010",
+      "intent": "click 'Save Encounter'",
+      "ok": false,
+      "resolution": {
+        "rung": "template",
+        "point": [
+          134,
+          391
+        ],
+        "confidence": 1.0,
+        "elapsed_ms": 15.978041978087276
+      },
+      "identity": null,
+      "input_verified": null,
+      "input_retried": false,
+      "postconditions_ok": false,
+      "postcondition_drift_rescues": [],
+      "drift_oracle_calls": 0,
+      "heal": null,
+      "error": "Postconditions failed for step 'step_010' (click 'Save Encounter'): expected screen state not reached (semantic drift) — failed: region_stable region=(0, 43, 968, 169); text_present 'JaneSample—MRNP1—DOB1980-01-01' — run aborted",
+      "before_png": "steps/step_010_before.png",
+      "after_png": "steps/step_010_after.png",
+      "elapsed_ms": 7164.206666988321
+    }
+  ],
+  "success": false,
+  "rung_counts": {
+    "template": 7
+  },
+  "heal_count": 0,
+  "model_calls": 0,
+  "est_model_cost_usd": 0.0,
+  "total_ms": 25915.441291988827,
+  "identity_applicable_steps": 8,
+  "identity_armed_steps": 0,
+  "identity_unarmed": [
+    {
+      "step_id": "step_000",
+      "intent": "click at (214, 195)",
+      "reason": "no identity context recorded at compile time (bundle predates the armed-coverage audit field)"
+    },
+    {
+      "step_id": "step_002",
+      "intent": "click at (214, 264)",
+      "reason": "no identity context recorded at compile time (bundle predates the armed-coverage audit field)"
+    },
+    {
+      "step_id": "step_004",
+      "intent": "click 'Sign In'",
+      "reason": "no identity context recorded at compile time (bundle predates the armed-coverage audit field)"
+    },
+    {
+      "step_id": "step_005",
+      "intent": "click 'Open'",
+      "reason": "no identity context recorded at compile time (bundle predates the armed-coverage audit field)"
+    },
+    {
+      "step_id": "step_006",
+      "intent": "click 'New Encounter'",
+      "reason": "no identity context recorded at compile time (bundle predates the armed-coverage audit field)"
+    },
+    {
+      "step_id": "step_007",
+      "intent": "click 'Triage'",
+      "reason": "no identity context recorded at compile time (bundle predates the armed-coverage audit field)"
+    },
+    {
+      "step_id": "step_008",
+      "intent": "click at (344, 290)",
+      "reason": "no identity context recorded at compile time (bundle predates the armed-coverage audit field)"
+    },
+    {
+      "step_id": "step_010",
+      "intent": "click 'Save Encounter'",
+      "reason": "no identity context recorded at compile time (bundle predates the armed-coverage audit field)"
+    }
+  ]
+}

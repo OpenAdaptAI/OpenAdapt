@@ -1,0 +1,83 @@
+name: CodeQL
+
+# SOC 2: SAST (OA-C-24). Static analysis on push/PR to main + weekly.
+on:
+  push:
+    branches: [main]
+  # Every pull request, whatever its base, plus each merge queue group.
+  pull_request:
+    # Drafts run nothing (each job checks `draft`); marking one ready runs CI.
+    types: [opened, synchronize, reopened, ready_for_review]
+  merge_group:
+  schedule:
+    - cron: "23 5 * * 1"
+
+permissions:
+  contents: read
+
+# Cancel a pull request's earlier run when it gets a new commit; runs on
+# main always finish.
+concurrency:
+  # A pull request's newer push cancels its older run. Every other event (the
+  # merge queue, main, schedules, dispatches) gets a group of its own, so it
+  # is never cancelled or replaced.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    if: github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        # javascript-typescript and rust cover packages/desktop (React UI, Tauri shell).
+        language: ["python", "javascript-typescript", "rust"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+      # Pull requests and queue groups analyze a language only when they change
+      # its files. The job still runs and reports, so the required check never
+      # waits. Pushes to main and the weekly scan always analyze everything.
+      - name: Decide whether this change needs the analysis
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          LANGUAGE: ${{ matrix.language }}
+        run: |
+          set -euo pipefail
+          case "$EVENT_NAME" in
+            pull_request) base="HEAD^1" ;;
+            merge_group)
+              base="$GROUP_BASE_SHA"
+              git fetch --no-tags --depth=1 origin "$base" || { echo "run=true" >> "$GITHUB_OUTPUT"; exit 0; }
+              ;;
+            *) echo "run=true" >> "$GITHUB_OUTPUT"; exit 0 ;;
+          esac
+          changed="$(git diff --name-only "$base" HEAD)"
+          case "$LANGUAGE" in
+            python) pattern='\.py$|^\.github/codeql/|^\.github/workflows/codeql\.yml$' ;;
+            *) pattern='^packages/desktop/|^\.github/codeql/|^\.github/workflows/codeql\.yml$' ;;
+          esac
+          if grep -Eq "$pattern" <<<"$changed"; then run=true; else run=false; fi
+          echo "run=$run" | tee -a "$GITHUB_OUTPUT"
+      - name: Initialize CodeQL
+        if: steps.scope.outputs.run == 'true'
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          config-file: ${{ matrix.language != 'python' && './.github/codeql/desktop.yml' || '' }}
+      - name: Perform CodeQL Analysis
+        if: steps.scope.outputs.run == 'true'
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          category: "/language:${{ matrix.language }}"

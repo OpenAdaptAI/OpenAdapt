@@ -1,0 +1,37 @@
+id: identifier-crop-compile-emission
+claim: >-
+  The compiler emits a pixel identifier crop (anchor.identifier_crop) for
+  identity-armed steps without structured identity — and for any step whose
+  identifying region is marked at record time (--identifier) — so the
+  pixel-compare identity tier arms on remote-display/pixel replays; every
+  crop-less identity-applicable step records an explicit degrade reason,
+  and lint surfaces per-bundle pixel-identity coverage.
+surfaces: [docs]
+tier: supported
+evidence:
+  - path: tests/test_compile_identifier_crop.py
+    proves: >-
+      Synthetic-fixture proof of the emission mechanism: a pixel-only
+      recording compiles WITH a crop under templates/identifiers/ (sealed
+      + manifest-hashed like every image crop); a structured recording
+      writes NO identity pixels and records why; explicit --identifier
+      markings (event rect / meta region) win; encrypted save seals the
+      crop and the sealed crop still reaches the tier; the compiled crop
+      drives a wrong-MRN MISMATCH through the real replayer ladder while
+      pixel VERIFY stays hard-gated off (zero-false-accept preserved).
+  - path: tests/test_identifier_crop_lint.py
+    proves: >-
+      Lint coverage surfacing: identity-armed steps with vs without crops
+      (missing_identifier_crop findings carry the compiler's degrade
+      reason; warn on band-only identity, info under structured identity).
+caveats:
+  - >-
+    Mechanism proven on synthetic fixtures and the bundled demo app only —
+    this does NOT re-qualify any desktop/remote-display substrate, and the
+    pixel tier remains MISMATCH-or-ABSTAIN (it can add a safe halt on a
+    wrong identifier, never authorize a match; PIXEL_VERIFY_ENABLED stays
+    off pending a jitter-robust distance).
+  - >-
+    Automatic emission requires an OCR-readable identity band at compile
+    time; icon-only or unreadable rows still compile crop-less (with the
+    recorded reason) and fall back to the OCR band tier at replay.

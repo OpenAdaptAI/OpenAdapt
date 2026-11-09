@@ -1,0 +1,65 @@
+{
+ "save": {
+  "method": "POST",
+  "path": "/interface/new/new_comprehensive_save.php",
+  "fields": 105,
+  "by_source": {
+   "session": 1,
+   "param": 11,
+   "form_default": 92,
+   "select_label": 1
+  }
+ },
+ "precheck": {
+  "method": "GET",
+  "path": "/interface/new/new_search_popup.php",
+  "query": [
+   [
+    "mf_fname",
+    "{fname}"
+   ],
+   [
+    "mf_lname",
+    "{lname}"
+   ],
+   [
+    "mf_DOB",
+    "{DOB}"
+   ],
+   [
+    "close",
+    ""
+   ]
+  ],
+  "require_text": [
+   "Confirm Create New Patient",
+   "No matches were found."
+  ],
+  "from_gui_step": "step_039"
+ },
+ "login": {
+  "path": "/interface/main/main_screen.php",
+  "fields": [
+   "new_login_session_management",
+   "languageChoice",
+   "authUser",
+   "clearPass",
+   "languageChoice"
+  ]
+ },
+ "success_regex": "set_pid=(\\d+)",
+ "param_fields": {
+  "form_title": "title",
+  "form_fname": "fname",
+  "form_lname": "lname",
+  "form_DOB": "DOB",
+  "form_sex": "sex",
+  "form_street": "street",
+  "form_city": "city",
+  "form_state": "state_label",
+  "form_postal_code": "postal_code",
+  "form_country_code": "country_code",
+  "form_phone_home": "phone_home",
+  "form_email": "email"
+ }
+}

@@ -1,0 +1,38 @@
+{
+  "_comment": "Shared cases for openadapt_desktop/outcomes.py and src/lib/outcomes.ts. A label may claim that nothing was written only when the transaction outcome proves it.",
+  "cases": [
+    { "execution": "VERIFIED", "transaction": "VERIFIED", "key": "done_checked", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "VERIFIED", "transaction": null, "key": "done_checked", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "HALTED", "transaction": "HALTED_BEFORE_EFFECT", "key": "stopped_before_saving", "nothing_written": true, "safe_to_retry": true },
+    { "execution": "HALTED", "transaction": "REJECTED_POLICY", "key": "stopped_before_saving", "nothing_written": true, "safe_to_retry": true },
+    { "execution": "FAILED", "transaction": "CANCELED", "key": "stopped_before_saving", "nothing_written": true, "safe_to_retry": true },
+    { "execution": "FAILED", "transaction": "FAILED_PLATFORM", "key": "did_not_finish", "nothing_written": true, "safe_to_retry": true },
+    { "execution": "HALTED", "transaction": "RECONCILIATION_REQUIRED", "key": "check_record", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "COMPLETED_UNVERIFIED", "transaction": "RECONCILIATION_REQUIRED", "key": "check_record", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "ROLLED_BACK", "transaction": "ROLLED_BACK", "key": "check_record", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "COMPLETED_UNVERIFIED", "transaction": "COMPLETED_UNVERIFIED", "key": "finished_unchecked", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "HALTED", "transaction": null, "key": "check_record", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "halt", "transaction": null, "key": "check_record", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "FAILED", "transaction": null, "key": "did_not_finish", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "ROLLED_BACK", "transaction": null, "key": "check_record", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "COMPLETED_UNVERIFIED", "transaction": null, "key": "finished_unchecked", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "success", "transaction": null, "key": "finished_unchecked", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "unknown", "transaction": null, "key": "check_record", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "VERIFIED", "transaction": "HALTED_BEFORE_EFFECT", "key": "check_record", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "FAILED", "transaction": "HALTED_BEFORE_EFFECT", "key": "check_record", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "HALTED", "transaction": "VERIFIED", "key": "check_record", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "unknown", "transaction": "HALTED_BEFORE_EFFECT", "key": "check_record", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "HALTED", "transaction": "NOT_A_REAL_OUTCOME", "key": "check_record", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "refused", "transaction": null, "pre_action_refusal": true, "key": "did_not_start", "nothing_written": true, "safe_to_retry": true }
+  ],
+  "_switch_comment": "Items run under 'Only ask a person about problems'. The outcome word comes from the transaction outcome alone; the approval block decides only whether the item waits for a person and whether it counts as saved without one.",
+  "switch_cases": [
+    {"name": "saved without a person", "execution": "VERIFIED", "transaction": "VERIFIED", "approval": {"validated": true, "mode": "problems_only", "decision": "no_person", "reason": null, "needs_person": false, "counts_toward_problems": false, "switch_off_reason": null, "failed_check": null, "post_checks": {"verified": true, "whole_run_clean": true}, "saves_without_person": 1}, "key": "done_checked", "saved_without_person": true, "status": "done", "confirmed_but_needs_look": false},
+    {"name": "VERIFIED with no transaction outcome never counts and goes to a person", "execution": "VERIFIED", "transaction": null, "approval": {"validated": true, "mode": "problems_only", "decision": "no_person", "reason": null, "needs_person": false, "counts_toward_problems": false, "switch_off_reason": null, "failed_check": null, "post_checks": {"verified": true, "whole_run_clean": true}, "saves_without_person": 1}, "key": "done_checked", "saved_without_person": false, "status": "open", "confirmed_but_needs_look": false},
+    {"name": "confirmed save after a workaround goes to a person", "execution": "VERIFIED", "transaction": "VERIFIED", "approval": {"validated": true, "mode": "problems_only", "decision": "problem", "reason": "screen_changed", "needs_person": true, "counts_toward_problems": true, "switch_off_reason": "screen_changed", "failed_check": null, "post_checks": {"verified": true, "whole_run_clean": false}, "saves_without_person": 1}, "key": "done_checked", "saved_without_person": false, "status": "open", "confirmed_but_needs_look": true},
+    {"name": "a block Flow rejected needs a person", "execution": "VERIFIED", "transaction": "VERIFIED", "approval": {"validated": false, "mode": "problems_only", "decision": "unverified", "reason": null, "needs_person": true, "counts_toward_problems": false, "switch_off_reason": null, "failed_check": null, "post_checks": {"verified": true, "whole_run_clean": true}, "saves_without_person": 1}, "key": "done_checked", "saved_without_person": false, "status": "open", "confirmed_but_needs_look": true},
+    {"name": "waiting for approval before the save", "execution": "HALTED", "transaction": "HALTED_BEFORE_EFFECT", "approval": {"validated": true, "mode": "problems_only", "decision": "approval_required", "reason": "channel", "needs_person": true, "counts_toward_problems": false, "switch_off_reason": null, "failed_check": null, "post_checks": {"verified": false, "whole_run_clean": false}, "saves_without_person": 0}, "key": "stopped_before_saving", "saved_without_person": false, "status": "open", "confirmed_but_needs_look": false},
+    {"name": "the record check contradicted the save", "execution": "HALTED", "transaction": "RECONCILIATION_REQUIRED", "approval": {"validated": true, "mode": "problems_only", "decision": "problem", "reason": "reconciliation_required", "needs_person": true, "counts_toward_problems": true, "switch_off_reason": "uncertain_result", "failed_check": null, "post_checks": {"verified": false, "whole_run_clean": true}, "saves_without_person": 0}, "key": "check_record", "saved_without_person": false, "status": "open", "confirmed_but_needs_look": false},
+    {"name": "finished, not checked stays a problem", "execution": "COMPLETED_UNVERIFIED", "transaction": "COMPLETED_UNVERIFIED", "approval": {"validated": true, "mode": "problems_only", "decision": "problem", "reason": "completed_unverified", "needs_person": true, "counts_toward_problems": true, "switch_off_reason": "uncertain_result", "failed_check": null, "post_checks": {"verified": false, "whole_run_clean": true}, "saves_without_person": 0}, "key": "finished_unchecked", "saved_without_person": false, "status": "open", "confirmed_but_needs_look": false}
+  ]
+}

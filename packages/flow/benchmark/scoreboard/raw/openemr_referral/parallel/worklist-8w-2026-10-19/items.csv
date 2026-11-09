@@ -1,0 +1,27 @@
+task,arm,run_id,item,attempt,fault,reported_success,readback,outcome,model_calls,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,cost_usd,item_s,wall_s,approvals_asked,host_load_1m,timed,detail
+openemr_referral,parallel,worklist-8w-2026-10-19,1,1,none,True,correct,correct,0,0,0,0,0,0.0,34.996,35.972,0,13.16,False,worker oa_clerk6; state completed; 
+openemr_referral,parallel,worklist-8w-2026-10-19,2,1,none,True,correct,correct,0,0,0,0,0,0.0,35.325,36.235,0,13.16,False,worker oa_clerk1; state completed; 
+openemr_referral,parallel,worklist-8w-2026-10-19,3,1,none,False,missing,safe_stop,0,0,0,0,0,0.0,46.663,47.509,0,13.16,False,"worker oa_clerk3; state reconciliation_required; Postconditions failed for step 'step_040' (click 'Confirm Create New Patient'): expected screen state not reached (semantic drift) — failed: region_stable region=(0, 308, 1280, 451); text_present 'TreatmentInterventionPreferences?' — run aborted"
+openemr_referral,parallel,worklist-8w-2026-10-19,4,1,none,True,correct,correct,0,0,0,0,0,0.0,35.242,36.227,0,13.16,False,worker oa_clerk7; state completed; 
+openemr_referral,parallel,worklist-8w-2026-10-19,5,1,none,True,correct,correct,0,0,0,0,0,0.0,35.677,36.506,0,13.16,False,worker oa_clerk5; state completed; 
+openemr_referral,parallel,worklist-8w-2026-10-19,6,1,none,False,missing,safe_stop,0,0,0,0,0,0.0,0.0,0.087,0,-1.0,False,worker oa_clerk4; state error; 
+openemr_referral,parallel,worklist-8w-2026-10-19,7,1,none,True,correct,correct,0,0,0,0,0,0.0,34.803,35.772,0,13.16,False,worker oa_clerk2; state completed; 
+openemr_referral,parallel,worklist-8w-2026-10-19,8,1,none,False,missing,safe_stop,0,0,0,0,0,0.0,30.937,31.894,0,13.16,False,"worker oa_clerk8; state reconciliation_required; Identity check failed for step 'step_040' (click 'Confirm Create New Patient'): a target was found positionally (rung 'structural', confidence 1.00) but its surrounding text does not match the recorded target's — expected '<identity template>', observ"
+openemr_referral,parallel,worklist-8w-2026-10-19,9,0,none,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,not started: the worklist stopped first
+openemr_referral,parallel,worklist-8w-2026-10-19,10,0,none,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,not started: the worklist stopped first
+openemr_referral,parallel,worklist-8w-2026-10-19,11,0,none,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,not started: the worklist stopped first
+openemr_referral,parallel,worklist-8w-2026-10-19,12,0,none,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,not started: the worklist stopped first
+openemr_referral,parallel,worklist-8w-2026-10-19,13,0,none,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,not started: the worklist stopped first
+openemr_referral,parallel,worklist-8w-2026-10-19,14,0,none,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,not started: the worklist stopped first
+openemr_referral,parallel,worklist-8w-2026-10-19,15,0,none,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,not started: the worklist stopped first
+openemr_referral,parallel,worklist-8w-2026-10-19,16,0,none,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,not started: the worklist stopped first
+openemr_referral,parallel,worklist-8w-2026-10-19,17,0,none,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,not started: the worklist stopped first
+openemr_referral,parallel,worklist-8w-2026-10-19,18,0,none,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,not started: the worklist stopped first
+openemr_referral,parallel,worklist-8w-2026-10-19,19,0,none,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,not started: the worklist stopped first
+openemr_referral,parallel,worklist-8w-2026-10-19,20,0,none,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,not started: the worklist stopped first
+openemr_referral,parallel,worklist-8w-2026-10-19,21,0,none,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,not started: the worklist stopped first
+openemr_referral,parallel,worklist-8w-2026-10-19,22,0,none,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,not started: the worklist stopped first
+openemr_referral,parallel,worklist-8w-2026-10-19,23,0,none,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,not started: the worklist stopped first
+openemr_referral,parallel,worklist-8w-2026-10-19,24,0,none,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,not started: the worklist stopped first
+openemr_referral,parallel,worklist-8w-2026-10-19,25,0,none,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,not started: the worklist stopped first
+openemr_referral,parallel,worklist-8w-2026-10-19,26,0,none,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,not started: the worklist stopped first

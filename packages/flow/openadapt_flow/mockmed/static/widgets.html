@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MockMed Widgets</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    /* Widgets lab: one interaction primitive per panel, selected with
+       ?panel=<name> so each recorded demo sees exactly one control. */
+    #status {
+      background: #fff7e0;
+      border: 1px solid #d4b106;
+      padding: 12px;
+      margin-bottom: 18px;
+      font-size: 16px;
+    }
+    .panel { max-width: 640px; }
+    select {
+      font-size: 16px;
+      padding: 8px;
+      border: 1px solid #9aa7b8;
+      border-radius: 4px;
+      background: #ffffff;
+      color: #1a2330;
+      min-width: 220px;
+    }
+    .check-row { margin: 10px 0; font-size: 16px; }
+    .check-row input { width: 18px; height: 18px; vertical-align: middle; }
+    #suggestions button {
+      display: block;
+      width: 280px;
+      margin: 6px 0;
+      background: #ffffff;
+      color: #2456a4;
+      text-align: left;
+    }
+    #widget-table td button { width: 90px; padding: 8px 0; }
+    .pager { margin-top: 12px; }
+    .pager button { margin-right: 10px; width: 120px; }
+    a#report-link { font-size: 16px; color: #2456a4; }
+  </style>
+</head>
+<body>
+  <header id="topbar">
+    <span id="brand">MockMed</span>
+    <span id="subtitle">Widgets lab — interaction primitives, all data fake</span>
+  </header>
+  <main id="app"></main>
+  <div id="modal-root"></div>
+  <script src="widgets.js"></script>
+</body>
+</html>

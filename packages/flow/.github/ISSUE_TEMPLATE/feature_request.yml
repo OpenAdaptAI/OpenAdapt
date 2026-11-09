@@ -1,0 +1,21 @@
+name: Feature request
+description: Suggest an improvement or new capability.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / use case
+      description: What are you trying to do, and what makes it hard today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you like to see? Alternatives you considered?
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Substrate (browser/desktop/RDP), scale, determinism/safety needs, etc.

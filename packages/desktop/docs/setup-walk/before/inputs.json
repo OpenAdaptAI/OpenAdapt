@@ -1,0 +1,175 @@
+{
+  "variant": "before",
+  "app": "MockMed (openadapt_flow.mockmed.fault_server, ?fault=ok)",
+  "workflow": "Add a triage note",
+  "seconds": 49,
+  "counts": {
+    "navigation": 4,
+    "decision": 4,
+    "choice": 3,
+    "free_text": 2,
+    "confirmation": 1
+  },
+  "total": 14,
+  "reached_checked_run": false,
+  "blocked": {
+    "where": "Check it: practice run",
+    "flow_refusal": [
+      "Certification: require_idempotency_key_for: the save's record check carries no idempotency key",
+      "Approval fallback: qualified action path has no effect contract to assign a tier"
+    ],
+    "shown_to_the_person": "The practice run didn't pass. (technical details: Qualification run did not retain a valid report)",
+    "why_check_it_cannot_fix_it": [
+      "The plain record-check form has no idempotency key. MockMed sends a fixed key (not a typed value), and exact checks only take a key from a typed value.",
+      "Five steps stay unclassified until a person classifies each in exact checks; unclassified steps count as saves without a record check."
+    ]
+  },
+  "inputs": [
+    {
+      "screen": "Workflows",
+      "kind": "navigation",
+      "label": "Check it",
+      "shot": "01-workflows.png",
+      "note": ""
+    },
+    {
+      "screen": "Check it",
+      "kind": "decision",
+      "label": "Start the check with the app from your recording",
+      "shot": "02-start-check.png",
+      "note": ""
+    },
+    {
+      "screen": "Check it: how it confirms the save",
+      "kind": "choice",
+      "label": "What does this step save? (It adds a new entry)",
+      "shot": "03-effect-kind.png",
+      "note": ""
+    },
+    {
+      "screen": "Check it: how it confirms the save",
+      "kind": "choice",
+      "label": "Which value identifies the record? (Note)",
+      "shot": "04-effect-match-param.png",
+      "note": "Already Note; the person still has to check it"
+    },
+    {
+      "screen": "Check it: how it confirms the save",
+      "kind": "free_text",
+      "label": "What is that ID called in your system's records? (note)",
+      "shot": "05-effect-match-field.png",
+      "note": ""
+    },
+    {
+      "screen": "Check it: how it confirms the save",
+      "kind": "choice",
+      "label": "How should OpenAdapt read the record back? (system's records)",
+      "shot": "06-effect-tier.png",
+      "note": "Already selected; the person still has to check it"
+    },
+    {
+      "screen": "Check it: how it confirms the save",
+      "kind": "decision",
+      "label": "Save how it confirms the save",
+      "shot": "07-effect-save.png",
+      "note": ""
+    },
+    {
+      "screen": "Check it",
+      "kind": "navigation",
+      "label": "Show part 3 (its confirm button is inside the fold)",
+      "shot": "08-unfold-part-3.png",
+      "note": ""
+    },
+    {
+      "screen": "Check it",
+      "kind": "decision",
+      "label": "These look right",
+      "shot": "09-these-look-right.png",
+      "note": ""
+    },
+    {
+      "screen": "Check it: practice run",
+      "kind": "navigation",
+      "label": "Change where it runs",
+      "shot": "11-open-where.png",
+      "note": ""
+    },
+    {
+      "screen": "Check it: practice run",
+      "kind": "free_text",
+      "label": "Deployment settings file (for IT)",
+      "shot": "12-practice-settings-file.png",
+      "note": "The record check reads MockMed's store; without this file the practice run has no record check to run"
+    },
+    {
+      "screen": "Check it: practice run",
+      "kind": "confirmation",
+      "label": "These are test values, and I'll keep the app in view",
+      "shot": "13-practice-attest.png",
+      "note": ""
+    },
+    {
+      "screen": "Check it: practice run",
+      "kind": "decision",
+      "label": "Run the practice item",
+      "shot": "14-practice-run.png",
+      "note": ""
+    },
+    {
+      "screen": "Check it",
+      "kind": "navigation",
+      "label": "Advanced: exact checks (the 5 unclassified steps)",
+      "shot": "17-exact-checks.png",
+      "note": ""
+    }
+  ],
+  "engine_commands": [
+    "compile_recording",
+    "shadow_status",
+    "shadow_status",
+    "get_auth_status",
+    "get_auth_status",
+    "get_first_workflow_state",
+    "get_workflows",
+    "get_first_workflow_state",
+    "get_workflows",
+    "get_first_workflow_state",
+    "get_needs_attention",
+    "get_needs_attention",
+    "get_sync_state",
+    "get_sync_state",
+    "authoring_status",
+    "authoring_status",
+    "get_workflows",
+    "get_results_summary",
+    "get_workflows",
+    "get_results_summary",
+    "get_workflows",
+    "get_task_inputs",
+    "get_qualification",
+    "get_workflows",
+    "get_task_inputs",
+    "get_qualification",
+    "propose_qualification_from_demo",
+    "get_capabilities",
+    "get_capabilities",
+    "propose_qualification_from_demo",
+    "initialize_qualification",
+    "bind_qualification_effect",
+    "set_qualification_risk",
+    "shadow_status",
+    "add_qualification_case",
+    "run_qualification_case",
+    "get_item_approval",
+    "get_item_approval",
+    "get_qualification",
+    "get_qualification",
+    "get_capabilities",
+    "get_capabilities"
+  ],
+  "setup_inputs": 10,
+  "first_item_inputs": 0,
+  "navigation": 4,
+  "screens": "Calm UI (#1310), commit 926d6c940"
+}

@@ -1,0 +1,2895 @@
+{
+  "schema_version": 2,
+  "name": "openemr-showcase-for-each",
+  "recording_id": "50758ec282e94c4a9f99f69ab7415678",
+  "contains_phi": false,
+  "phi_scrubbed": false,
+  "encrypted": false,
+  "created_at": "2026-07-14T00:51:06.482608+00:00",
+  "viewport": [
+    1280,
+    800
+  ],
+  "params": {
+    "note": "Reviewed hypertension follow-up; BP within target range today."
+  },
+  "param_specs": {
+    "note": {
+      "name": "note",
+      "type": "string",
+      "example": "Reviewed hypertension follow-up; BP within target range today.",
+      "required": true,
+      "choices": []
+    }
+  },
+  "secret_params": [],
+  "steps": [
+    {
+      "id": "step_000",
+      "intent": "click 'ername'",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_000.png",
+        "structural": null,
+        "region": [
+          625,
+          372,
+          160,
+          64
+        ],
+        "click_point": [
+          705,
+          404
+        ],
+        "ocr_text": "ername",
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": null,
+        "identifier_crop": null,
+        "identifier_region": null,
+        "landmarks": [
+          {
+            "relation": "left_of",
+            "ocr_text": "PracticeManagementsolution.",
+            "distance_px": 82,
+            "dx_px": 65,
+            "dy_px": 50
+          },
+          {
+            "relation": "left_of",
+            "ocr_text": "Password",
+            "distance_px": 86,
+            "dx_px": 67,
+            "dy_px": -54
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "key": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            555,
+            351,
+            301,
+            106
+          ],
+          "phash": "c3dbd8dac3d098d0",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0,
+          "template": "templates/step_000_expect.png"
+        }
+      ],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": false,
+      "identity_unarmed_reason": "row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)",
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_001",
+      "intent": "type 'admin'",
+      "action": "type",
+      "anchor": null,
+      "text": "admin",
+      "param": null,
+      "secret": false,
+      "key": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            570,
+            365,
+            138,
+            77
+          ],
+          "phash": "ce7cb37ccc78b040",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0,
+          "template": "templates/step_001_expect.png"
+        },
+        {
+          "kind": "text_present",
+          "text": "admin",
+          "region": null,
+          "phash": null,
+          "phash_tolerance": 8,
+          "timeout_s": 5.0,
+          "template": null
+        }
+      ],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_002",
+      "intent": "click 'Password'",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_002.png",
+        "structural": null,
+        "region": [
+          604,
+          426,
+          160,
+          64
+        ],
+        "click_point": [
+          684,
+          458
+        ],
+        "ocr_text": "Password",
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": null,
+        "identifier_crop": null,
+        "identifier_region": null,
+        "landmarks": [
+          {
+            "relation": "below",
+            "ocr_text": "Default-English(Standard)",
+            "distance_px": 56,
+            "dx_px": -24,
+            "dy_px": -51
+          },
+          {
+            "relation": "left_of",
+            "ocr_text": "admin",
+            "distance_px": 80,
+            "dx_px": 59,
+            "dy_px": 54
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "key": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            555,
+            351,
+            301,
+            160
+          ],
+          "phash": "c14adac6dacae1d8",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0,
+          "template": "templates/step_002_expect.png"
+        }
+      ],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": false,
+      "identity_unarmed_reason": "row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)",
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_003",
+      "intent": "type 'pass'",
+      "action": "type",
+      "anchor": null,
+      "text": "pass",
+      "param": null,
+      "secret": false,
+      "key": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            571,
+            419,
+            133,
+            77
+          ],
+          "phash": "a27f9178c7c79038",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0,
+          "template": "templates/step_003_expect.png"
+        }
+      ],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_004",
+      "intent": "click 'Login'",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_004.png",
+        "structural": null,
+        "region": [
+          559,
+          534,
+          160,
+          64
+        ],
+        "click_point": [
+          639,
+          566
+        ],
+        "ocr_text": "Login",
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": null,
+        "identifier_crop": null,
+        "identifier_region": null,
+        "landmarks": [
+          {
+            "relation": "below",
+            "ocr_text": "Acknowledgments,Licensing and Certification",
+            "distance_px": 45,
+            "dx_px": -2,
+            "dy_px": -45
+          },
+          {
+            "relation": "right_of",
+            "ocr_text": "Default-English(Standard)",
+            "distance_px": 89,
+            "dx_px": -69,
+            "dy_px": 56
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "key": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "text_present",
+          "text": "CalendarFinderFlowRecallsMessagesPatientFeesModulesInventoryProceduresAdminReportsMiscellaneousPopups",
+          "region": null,
+          "phash": null,
+          "phash_tolerance": 8,
+          "timeout_s": 5.0,
+          "template": null
+        }
+      ],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": false,
+      "identity_unarmed_reason": "the only readable row text is the target's own label (mutable evidence, excluded from identity)",
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_005",
+      "intent": "click 'Searchbyanydemogre'",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_005.png",
+        "structural": null,
+        "region": [
+          1041,
+          0,
+          160,
+          64
+        ],
+        "click_point": [
+          1121,
+          31
+        ],
+        "ocr_text": "Searchbyanydemogre",
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": {
+          "schema_version": 1,
+          "salt": "076a9e81b90d6ddda88595bd2dd19e90",
+          "band_len": 102,
+          "tokens": [
+            {
+              "c": "f31da5157c6a4025",
+              "r": "54173ac4de425e17",
+              "n": 101,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "c908362266024318",
+              "r": "c908362266024318",
+              "n": 1,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            }
+          ],
+          "concats": [
+            {
+              "i": 0,
+              "size": 2,
+              "c": "c6686c7b4153485a",
+              "r": "e9642945cf74a524",
+              "digit": false,
+              "name": true,
+              "n": 102
+            }
+          ],
+          "structured": null,
+          "param_token_indices": {},
+          "rests_on_confusable_identifier": false
+        },
+        "identifier_crop": null,
+        "identifier_region": null,
+        "landmarks": [
+          {
+            "relation": "below",
+            "ocr_text": "Week",
+            "distance_px": 172,
+            "dx_px": -102,
+            "dy_px": -139
+          },
+          {
+            "relation": "left_of",
+            "ocr_text": "Billy Smith",
+            "distance_px": 353,
+            "dx_px": 302,
+            "dy_px": -182
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "key": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            286,
+            531,
+            994,
+            84
+          ],
+          "phash": "fff881038670f07c",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0,
+          "template": "templates/step_005_expect.png"
+        }
+      ],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": true,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_006",
+      "intent": "type 'Phil'",
+      "action": "type",
+      "anchor": null,
+      "text": "Phil",
+      "param": null,
+      "secret": false,
+      "key": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            1017,
+            0,
+            209,
+            71
+          ],
+          "phash": "eae01715fb7a801d",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0,
+          "template": "templates/step_006_expect.png"
+        },
+        {
+          "kind": "text_present",
+          "text": "Phil",
+          "region": null,
+          "phash": null,
+          "phash_tolerance": 8,
+          "timeout_s": 5.0,
+          "template": null
+        }
+      ],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_007",
+      "intent": "press Enter",
+      "action": "key",
+      "anchor": null,
+      "text": null,
+      "param": null,
+      "secret": false,
+      "key": "Enter",
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            0,
+            72,
+            1280,
+            728
+          ],
+          "phash": "fbf70460c387a568",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0,
+          "template": "templates/step_007_expect.png"
+        },
+        {
+          "kind": "text_present",
+          "text": "beninNewBrowserTabSearchwithexactmethod",
+          "region": null,
+          "phash": null,
+          "phash_tolerance": 8,
+          "timeout_s": 5.0,
+          "template": null
+        }
+      ],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_008",
+      "intent": "click 'ford,Phil'",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_008.png",
+        "structural": null,
+        "region": [
+          0,
+          411,
+          160,
+          64
+        ],
+        "click_point": [
+          17,
+          443
+        ],
+        "ocr_text": "ford,Phil",
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": {
+          "schema_version": 1,
+          "salt": "076a9e81b90d6ddda88595bd2dd19e90",
+          "band_len": 32,
+          "tokens": [
+            {
+              "c": "a2929a25be2ec74e",
+              "r": "1a87697ed567a355",
+              "n": 12,
+              "alpha": false,
+              "name": false,
+              "digit": true,
+              "idsh": true,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "8bd929d424f946de",
+              "r": "c14f3daa06b03b31",
+              "n": 9,
+              "alpha": false,
+              "name": false,
+              "digit": true,
+              "idsh": true,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "3eb2a6e306ae66eb",
+              "r": "960f3c575917b914",
+              "n": 10,
+              "alpha": false,
+              "name": false,
+              "digit": true,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "75e7d6b0c8b31579",
+              "r": "bc89869273be9f2d",
+              "n": 1,
+              "alpha": false,
+              "name": false,
+              "digit": true,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            }
+          ],
+          "concats": [
+            {
+              "i": 0,
+              "size": 2,
+              "c": "ec85fa0ac01cf590",
+              "r": "d7f444202dcda5ec",
+              "digit": true,
+              "name": false,
+              "n": 21
+            },
+            {
+              "i": 0,
+              "size": 3,
+              "c": "15a4b9c9025d0962",
+              "r": "99ea03dca99dacd3",
+              "digit": true,
+              "name": false,
+              "n": 31
+            },
+            {
+              "i": 0,
+              "size": 4,
+              "c": "d2f0b3f456a67420",
+              "r": "e8810bee45734b17",
+              "digit": true,
+              "name": false,
+              "n": 32
+            },
+            {
+              "i": 1,
+              "size": 2,
+              "c": "c5acf03e788c6228",
+              "r": "32163c0ce6b28d4d",
+              "digit": true,
+              "name": false,
+              "n": 19
+            },
+            {
+              "i": 1,
+              "size": 3,
+              "c": "8f267bdbe912dc67",
+              "r": "1697925105c49d5e",
+              "digit": true,
+              "name": false,
+              "n": 20
+            },
+            {
+              "i": 2,
+              "size": 2,
+              "c": "c9dd5262c3073063",
+              "r": "51b932b9fa3730ef",
+              "digit": true,
+              "name": false,
+              "n": 11
+            }
+          ],
+          "structured": null,
+          "param_token_indices": {},
+          "rests_on_confusable_identifier": false
+        },
+        "identifier_crop": null,
+        "identifier_region": null,
+        "landmarks": [
+          {
+            "relation": "above",
+            "ocr_text": "Name",
+            "distance_px": 45,
+            "dx_px": -10,
+            "dy_px": 44
+          },
+          {
+            "relation": "above",
+            "ocr_text": "earchbyName",
+            "distance_px": 104,
+            "dx_px": -37,
+            "dy_px": 97
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "key": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            0,
+            195,
+            1280,
+            326
+          ],
+          "phash": "fee1e1a6b28180db",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0,
+          "template": "templates/step_008_expect.png"
+        },
+        {
+          "kind": "text_present",
+          "text": "edicalRecordDashboard-PhilBelford",
+          "region": null,
+          "phash": null,
+          "phash_tolerance": 8,
+          "timeout_s": 5.0,
+          "template": null
+        }
+      ],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": true,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_009",
+      "intent": "scroll by (0, 400)",
+      "action": "scroll",
+      "anchor": null,
+      "text": null,
+      "param": null,
+      "secret": false,
+      "key": null,
+      "scroll_dx": 0,
+      "scroll_dy": 400,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_010",
+      "intent": "scroll by (0, 400)",
+      "action": "scroll",
+      "anchor": null,
+      "text": null,
+      "param": null,
+      "secret": false,
+      "key": null,
+      "scroll_dx": 0,
+      "scroll_dy": 400,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_011",
+      "intent": "scroll by (0, 400)",
+      "action": "scroll",
+      "anchor": null,
+      "text": null,
+      "param": null,
+      "secret": false,
+      "key": null,
+      "scroll_dx": 0,
+      "scroll_dy": 400,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_012",
+      "intent": "scroll by (0, 400)",
+      "action": "scroll",
+      "anchor": null,
+      "text": null,
+      "param": null,
+      "secret": false,
+      "key": null,
+      "scroll_dx": 0,
+      "scroll_dy": 400,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_013",
+      "intent": "click at (815, 369)",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_013.png",
+        "structural": null,
+        "region": [
+          735,
+          337,
+          160,
+          64
+        ],
+        "click_point": [
+          815,
+          369
+        ],
+        "ocr_text": null,
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": null,
+        "identifier_crop": null,
+        "identifier_region": null,
+        "landmarks": [
+          {
+            "relation": "right_of",
+            "ocr_text": "None",
+            "distance_px": 123,
+            "dx_px": -87,
+            "dy_px": 87
+          },
+          {
+            "relation": "above",
+            "ocr_text": "Immunizations",
+            "distance_px": 180,
+            "dx_px": -120,
+            "dy_px": 134
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "key": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            0,
+            176,
+            691,
+            174
+          ],
+          "phash": "c3da3fb5b7408590",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0,
+          "template": "templates/step_013_expect.png"
+        },
+        {
+          "kind": "text_present",
+          "text": "PatientMessagesforBelford,Phil",
+          "region": null,
+          "phash": null,
+          "phash_tolerance": 8,
+          "timeout_s": 5.0,
+          "template": null
+        }
+      ],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": false,
+      "identity_unarmed_reason": "row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)",
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_014",
+      "intent": "click '+Add <B'",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_014.png",
+        "structural": null,
+        "region": [
+          10,
+          249,
+          160,
+          64
+        ],
+        "click_point": [
+          90,
+          281
+        ],
+        "ocr_text": "+Add <B",
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": {
+          "schema_version": 1,
+          "salt": "076a9e81b90d6ddda88595bd2dd19e90",
+          "band_len": 36,
+          "tokens": [
+            {
+              "c": "f5b89ea5142b5e91",
+              "r": "f5b89ea5142b5e91",
+              "n": 8,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "2a4e26a62a817b8f",
+              "r": "2a4e26a62a817b8f",
+              "n": 6,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "a81affd64fb2c163",
+              "r": "8dc21edf58e82b0a",
+              "n": 6,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "3bcb2a25be6f30a0",
+              "r": "e1eeaf211ad0417e",
+              "n": 16,
+              "alpha": true,
+              "name": false,
+              "digit": true,
+              "idsh": true,
+              "glyph": true,
+              "gen": false
+            }
+          ],
+          "concats": [
+            {
+              "i": 0,
+              "size": 2,
+              "c": "9c7670036b964faa",
+              "r": "9c7670036b964faa",
+              "digit": false,
+              "name": true,
+              "n": 14
+            },
+            {
+              "i": 0,
+              "size": 3,
+              "c": "f008957ffe76ef2c",
+              "r": "aeb1ca31866c1a91",
+              "digit": false,
+              "name": true,
+              "n": 20
+            },
+            {
+              "i": 0,
+              "size": 4,
+              "c": "806e1397bb055068",
+              "r": "8e656181756dd1dd",
+              "digit": true,
+              "name": false,
+              "n": 36
+            },
+            {
+              "i": 1,
+              "size": 2,
+              "c": "ca91edffd517fcbd",
+              "r": "73d8635eeb4b5c99",
+              "digit": false,
+              "name": true,
+              "n": 12
+            },
+            {
+              "i": 1,
+              "size": 3,
+              "c": "723139e2f16f2596",
+              "r": "52cef78f2d8771cd",
+              "digit": true,
+              "name": false,
+              "n": 28
+            },
+            {
+              "i": 2,
+              "size": 2,
+              "c": "dc6c8036ae9738fb",
+              "r": "cd6105f83340aa51",
+              "digit": true,
+              "name": false,
+              "n": 22
+            }
+          ],
+          "structured": null,
+          "param_token_indices": {},
+          "rests_on_confusable_identifier": true
+        },
+        "identifier_crop": null,
+        "identifier_region": null,
+        "landmarks": [
+          {
+            "relation": "below",
+            "ocr_text": "Show All",
+            "distance_px": 98,
+            "dx_px": -21,
+            "dy_px": -96
+          },
+          {
+            "relation": "above",
+            "ocr_text": "alendarx",
+            "distance_px": 102,
+            "dx_px": 32,
+            "dy_px": 97
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "key": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            0,
+            0,
+            1280,
+            800
+          ],
+          "phash": "c6e62f272d9090ed",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0,
+          "template": "templates/step_014_expect.png"
+        },
+        {
+          "kind": "text_present",
+          "text": "Calendar Finder Flow Recalls Messa",
+          "region": null,
+          "phash": null,
+          "phash_tolerance": 8,
+          "timeout_s": 5.0,
+          "template": null
+        }
+      ],
+      "effects": [],
+      "api_binding": null,
+      "risk": "irreversible",
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": true,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_015",
+      "intent": "click at (639, 357)",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_015.png",
+        "structural": null,
+        "region": [
+          479,
+          293,
+          320,
+          128
+        ],
+        "click_point": [
+          639,
+          357
+        ],
+        "ocr_text": null,
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": null,
+        "identifier_crop": null,
+        "identifier_region": null,
+        "landmarks": [
+          {
+            "relation": "left_of",
+            "ocr_text": "Save as new message",
+            "distance_px": 169,
+            "dx_px": 139,
+            "dy_px": -97
+          },
+          {
+            "relation": "left_of",
+            "ocr_text": "Smith, Billy",
+            "distance_px": 216,
+            "dx_px": 197,
+            "dy_px": 89
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "key": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            351,
+            269,
+            578,
+            178
+          ],
+          "phash": "e8d0c0f0f8f87a6a",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0,
+          "template": "templates/step_015_expect.png"
+        }
+      ],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": false,
+      "identity_unarmed_reason": "row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)",
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_016",
+      "intent": "type <note>",
+      "action": "type",
+      "anchor": null,
+      "text": "Reviewed hypertension follow-up; BP within target range today.",
+      "param": "note",
+      "secret": false,
+      "key": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_017",
+      "intent": "click 'Save as new messag'",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_017.png",
+        "structural": null,
+        "region": [
+          409,
+          420,
+          160,
+          64
+        ],
+        "click_point": [
+          489,
+          452
+        ],
+        "ocr_text": "Save as new messag",
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": null,
+        "identifier_crop": null,
+        "identifier_region": null,
+        "landmarks": [
+          {
+            "relation": "above",
+            "ocr_text": "Smith, Billy",
+            "distance_px": 191,
+            "dx_px": 48,
+            "dy_px": 185
+          },
+          {
+            "relation": "left_of",
+            "ocr_text": "Active",
+            "distance_px": 234,
+            "dx_px": 233,
+            "dy_px": 21
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "key": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            0,
+            0,
+            1280,
+            800
+          ],
+          "phash": "c0d91b9db162c6a7",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0,
+          "template": "templates/step_017_expect.png"
+        },
+        {
+          "kind": "text_present",
+          "text": "CalendarFinderFlowRecallsMessagesPatientFeesModulesInventoryProceduresAdminReportsMiscellaneousPopups",
+          "region": null,
+          "phash": null,
+          "phash_tolerance": 8,
+          "timeout_s": 5.0,
+          "template": null
+        }
+      ],
+      "effects": [],
+      "api_binding": null,
+      "risk": "irreversible",
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": false,
+      "identity_unarmed_reason": "row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)",
+      "identifier_crop_missing_reason": null
+    }
+  ],
+  "program": {
+    "entry": "for_each",
+    "states": {
+      "for_each": {
+        "id": "for_each",
+        "kind": "loop",
+        "step": null,
+        "loop": {
+          "relation": "worklist",
+          "body": "loop_body",
+          "var": "encounter_note",
+          "max_iterations": 1000
+        },
+        "subflow": null,
+        "transitions": [
+          {
+            "guard": null,
+            "target": "__loop_done__",
+            "label": "worklist exhausted"
+          }
+        ],
+        "on_exception": null,
+        "outcome": null,
+        "reason": ""
+      },
+      "__loop_done__": {
+        "id": "__loop_done__",
+        "kind": "terminal",
+        "step": null,
+        "loop": null,
+        "subflow": null,
+        "transitions": [],
+        "on_exception": null,
+        "outcome": "success",
+        "reason": "all worklist records processed"
+      }
+    }
+  },
+  "subflows": {
+    "loop_body": {
+      "entry": "s::step_000",
+      "states": {
+        "s::step_000": {
+          "id": "s::step_000",
+          "kind": "action",
+          "step": {
+            "id": "step_000",
+            "intent": "click 'ername'",
+            "action": "click",
+            "anchor": {
+              "template": "templates/step_000.png",
+              "structural": null,
+              "region": [
+                625,
+                372,
+                160,
+                64
+              ],
+              "click_point": [
+                705,
+                404
+              ],
+              "ocr_text": "ername",
+              "context_text": null,
+              "structured_identity": null,
+              "identity_template": null,
+              "identifier_crop": null,
+              "identifier_region": null,
+              "landmarks": [
+                {
+                  "relation": "left_of",
+                  "ocr_text": "PracticeManagementsolution.",
+                  "distance_px": 82,
+                  "dx_px": 65,
+                  "dy_px": 50
+                },
+                {
+                  "relation": "left_of",
+                  "ocr_text": "Password",
+                  "distance_px": 86,
+                  "dx_px": 67,
+                  "dy_px": -54
+                }
+              ],
+              "search_pad": 80
+            },
+            "text": null,
+            "param": null,
+            "secret": false,
+            "key": null,
+            "scroll_dx": null,
+            "scroll_dy": null,
+            "expect": [
+              {
+                "kind": "region_stable",
+                "text": null,
+                "region": [
+                  555,
+                  351,
+                  301,
+                  106
+                ],
+                "phash": "c3dbd8dac3d098d0",
+                "phash_tolerance": 16,
+                "timeout_s": 5.0,
+                "template": "templates/step_000_expect.png"
+              }
+            ],
+            "effects": [],
+            "api_binding": null,
+            "risk": "reversible",
+            "wait_until": null,
+            "guard": null,
+            "timeout_s": 10.0,
+            "identity_armed": false,
+            "identity_unarmed_reason": "row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)",
+            "identifier_crop_missing_reason": null
+          },
+          "loop": null,
+          "subflow": null,
+          "transitions": [
+            {
+              "guard": null,
+              "target": "s::step_001",
+              "label": ""
+            }
+          ],
+          "on_exception": null,
+          "outcome": null,
+          "reason": ""
+        },
+        "s::step_001": {
+          "id": "s::step_001",
+          "kind": "action",
+          "step": {
+            "id": "step_001",
+            "intent": "type 'admin'",
+            "action": "type",
+            "anchor": null,
+            "text": "admin",
+            "param": null,
+            "secret": false,
+            "key": null,
+            "scroll_dx": null,
+            "scroll_dy": null,
+            "expect": [
+              {
+                "kind": "region_stable",
+                "text": null,
+                "region": [
+                  570,
+                  365,
+                  138,
+                  77
+                ],
+                "phash": "ce7cb37ccc78b040",
+                "phash_tolerance": 16,
+                "timeout_s": 5.0,
+                "template": "templates/step_001_expect.png"
+              },
+              {
+                "kind": "text_present",
+                "text": "admin",
+                "region": null,
+                "phash": null,
+                "phash_tolerance": 8,
+                "timeout_s": 5.0,
+                "template": null
+              }
+            ],
+            "effects": [],
+            "api_binding": null,
+            "risk": "reversible",
+            "wait_until": null,
+            "guard": null,
+            "timeout_s": 10.0,
+            "identity_armed": null,
+            "identity_unarmed_reason": null,
+            "identifier_crop_missing_reason": null
+          },
+          "loop": null,
+          "subflow": null,
+          "transitions": [
+            {
+              "guard": null,
+              "target": "s::step_002",
+              "label": ""
+            }
+          ],
+          "on_exception": null,
+          "outcome": null,
+          "reason": ""
+        },
+        "s::step_002": {
+          "id": "s::step_002",
+          "kind": "action",
+          "step": {
+            "id": "step_002",
+            "intent": "click 'Password'",
+            "action": "click",
+            "anchor": {
+              "template": "templates/step_002.png",
+              "structural": null,
+              "region": [
+                604,
+                426,
+                160,
+                64
+              ],
+              "click_point": [
+                684,
+                458
+              ],
+              "ocr_text": "Password",
+              "context_text": null,
+              "structured_identity": null,
+              "identity_template": null,
+              "identifier_crop": null,
+              "identifier_region": null,
+              "landmarks": [
+                {
+                  "relation": "below",
+                  "ocr_text": "Default-English(Standard)",
+                  "distance_px": 56,
+                  "dx_px": -24,
+                  "dy_px": -51
+                },
+                {
+                  "relation": "left_of",
+                  "ocr_text": "admin",
+                  "distance_px": 80,
+                  "dx_px": 59,
+                  "dy_px": 54
+                }
+              ],
+              "search_pad": 80
+            },
+            "text": null,
+            "param": null,
+            "secret": false,
+            "key": null,
+            "scroll_dx": null,
+            "scroll_dy": null,
+            "expect": [
+              {
+                "kind": "region_stable",
+                "text": null,
+                "region": [
+                  555,
+                  351,
+                  301,
+                  160
+                ],
+                "phash": "c14adac6dacae1d8",
+                "phash_tolerance": 16,
+                "timeout_s": 5.0,
+                "template": "templates/step_002_expect.png"
+              }
+            ],
+            "effects": [],
+            "api_binding": null,
+            "risk": "reversible",
+            "wait_until": null,
+            "guard": null,
+            "timeout_s": 10.0,
+            "identity_armed": false,
+            "identity_unarmed_reason": "row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)",
+            "identifier_crop_missing_reason": null
+          },
+          "loop": null,
+          "subflow": null,
+          "transitions": [
+            {
+              "guard": null,
+              "target": "s::step_003",
+              "label": ""
+            }
+          ],
+          "on_exception": null,
+          "outcome": null,
+          "reason": ""
+        },
+        "s::step_003": {
+          "id": "s::step_003",
+          "kind": "action",
+          "step": {
+            "id": "step_003",
+            "intent": "type 'pass'",
+            "action": "type",
+            "anchor": null,
+            "text": "pass",
+            "param": null,
+            "secret": false,
+            "key": null,
+            "scroll_dx": null,
+            "scroll_dy": null,
+            "expect": [
+              {
+                "kind": "region_stable",
+                "text": null,
+                "region": [
+                  571,
+                  419,
+                  133,
+                  77
+                ],
+                "phash": "a27f9178c7c79038",
+                "phash_tolerance": 16,
+                "timeout_s": 5.0,
+                "template": "templates/step_003_expect.png"
+              }
+            ],
+            "effects": [],
+            "api_binding": null,
+            "risk": "reversible",
+            "wait_until": null,
+            "guard": null,
+            "timeout_s": 10.0,
+            "identity_armed": null,
+            "identity_unarmed_reason": null,
+            "identifier_crop_missing_reason": null
+          },
+          "loop": null,
+          "subflow": null,
+          "transitions": [
+            {
+              "guard": null,
+              "target": "s::step_004",
+              "label": ""
+            }
+          ],
+          "on_exception": null,
+          "outcome": null,
+          "reason": ""
+        },
+        "s::step_004": {
+          "id": "s::step_004",
+          "kind": "action",
+          "step": {
+            "id": "step_004",
+            "intent": "click 'Login'",
+            "action": "click",
+            "anchor": {
+              "template": "templates/step_004.png",
+              "structural": null,
+              "region": [
+                559,
+                534,
+                160,
+                64
+              ],
+              "click_point": [
+                639,
+                566
+              ],
+              "ocr_text": "Login",
+              "context_text": null,
+              "structured_identity": null,
+              "identity_template": null,
+              "identifier_crop": null,
+              "identifier_region": null,
+              "landmarks": [
+                {
+                  "relation": "below",
+                  "ocr_text": "Acknowledgments,Licensing and Certification",
+                  "distance_px": 45,
+                  "dx_px": -2,
+                  "dy_px": -45
+                },
+                {
+                  "relation": "right_of",
+                  "ocr_text": "Default-English(Standard)",
+                  "distance_px": 89,
+                  "dx_px": -69,
+                  "dy_px": 56
+                }
+              ],
+              "search_pad": 80
+            },
+            "text": null,
+            "param": null,
+            "secret": false,
+            "key": null,
+            "scroll_dx": null,
+            "scroll_dy": null,
+            "expect": [
+              {
+                "kind": "text_present",
+                "text": "CalendarFinderFlowRecallsMessagesPatientFeesModulesInventoryProceduresAdminReportsMiscellaneousPopups",
+                "region": null,
+                "phash": null,
+                "phash_tolerance": 8,
+                "timeout_s": 5.0,
+                "template": null
+              }
+            ],
+            "effects": [],
+            "api_binding": null,
+            "risk": "reversible",
+            "wait_until": null,
+            "guard": null,
+            "timeout_s": 10.0,
+            "identity_armed": false,
+            "identity_unarmed_reason": "the only readable row text is the target's own label (mutable evidence, excluded from identity)",
+            "identifier_crop_missing_reason": null
+          },
+          "loop": null,
+          "subflow": null,
+          "transitions": [
+            {
+              "guard": null,
+              "target": "s::step_005",
+              "label": ""
+            }
+          ],
+          "on_exception": null,
+          "outcome": null,
+          "reason": ""
+        },
+        "s::step_005": {
+          "id": "s::step_005",
+          "kind": "action",
+          "step": {
+            "id": "step_005",
+            "intent": "click 'Searchbyanydemogre'",
+            "action": "click",
+            "anchor": {
+              "template": "templates/step_005.png",
+              "structural": null,
+              "region": [
+                1041,
+                0,
+                160,
+                64
+              ],
+              "click_point": [
+                1121,
+                31
+              ],
+              "ocr_text": "Searchbyanydemogre",
+              "context_text": null,
+              "structured_identity": null,
+              "identity_template": {
+                "schema_version": 1,
+                "salt": "076a9e81b90d6ddda88595bd2dd19e90",
+                "band_len": 102,
+                "tokens": [
+                  {
+                    "c": "f31da5157c6a4025",
+                    "r": "54173ac4de425e17",
+                    "n": 101,
+                    "alpha": true,
+                    "name": true,
+                    "digit": false,
+                    "idsh": false,
+                    "glyph": false,
+                    "gen": false
+                  },
+                  {
+                    "c": "c908362266024318",
+                    "r": "c908362266024318",
+                    "n": 1,
+                    "alpha": true,
+                    "name": true,
+                    "digit": false,
+                    "idsh": false,
+                    "glyph": false,
+                    "gen": false
+                  }
+                ],
+                "concats": [
+                  {
+                    "i": 0,
+                    "size": 2,
+                    "c": "c6686c7b4153485a",
+                    "r": "e9642945cf74a524",
+                    "digit": false,
+                    "name": true,
+                    "n": 102
+                  }
+                ],
+                "structured": null,
+                "param_token_indices": {},
+                "rests_on_confusable_identifier": false
+              },
+              "identifier_crop": null,
+              "identifier_region": null,
+              "landmarks": [
+                {
+                  "relation": "below",
+                  "ocr_text": "Week",
+                  "distance_px": 172,
+                  "dx_px": -102,
+                  "dy_px": -139
+                },
+                {
+                  "relation": "left_of",
+                  "ocr_text": "Billy Smith",
+                  "distance_px": 353,
+                  "dx_px": 302,
+                  "dy_px": -182
+                }
+              ],
+              "search_pad": 80
+            },
+            "text": null,
+            "param": null,
+            "secret": false,
+            "key": null,
+            "scroll_dx": null,
+            "scroll_dy": null,
+            "expect": [
+              {
+                "kind": "region_stable",
+                "text": null,
+                "region": [
+                  286,
+                  531,
+                  994,
+                  84
+                ],
+                "phash": "fff881038670f07c",
+                "phash_tolerance": 16,
+                "timeout_s": 5.0,
+                "template": "templates/step_005_expect.png"
+              }
+            ],
+            "effects": [],
+            "api_binding": null,
+            "risk": "reversible",
+            "wait_until": null,
+            "guard": null,
+            "timeout_s": 10.0,
+            "identity_armed": true,
+            "identity_unarmed_reason": null,
+            "identifier_crop_missing_reason": null
+          },
+          "loop": null,
+          "subflow": null,
+          "transitions": [
+            {
+              "guard": null,
+              "target": "s::step_006",
+              "label": ""
+            }
+          ],
+          "on_exception": null,
+          "outcome": null,
+          "reason": ""
+        },
+        "s::step_006": {
+          "id": "s::step_006",
+          "kind": "action",
+          "step": {
+            "id": "step_006",
+            "intent": "type 'Phil'",
+            "action": "type",
+            "anchor": null,
+            "text": "Phil",
+            "param": null,
+            "secret": false,
+            "key": null,
+            "scroll_dx": null,
+            "scroll_dy": null,
+            "expect": [
+              {
+                "kind": "region_stable",
+                "text": null,
+                "region": [
+                  1017,
+                  0,
+                  209,
+                  71
+                ],
+                "phash": "eae01715fb7a801d",
+                "phash_tolerance": 16,
+                "timeout_s": 5.0,
+                "template": "templates/step_006_expect.png"
+              },
+              {
+                "kind": "text_present",
+                "text": "Phil",
+                "region": null,
+                "phash": null,
+                "phash_tolerance": 8,
+                "timeout_s": 5.0,
+                "template": null
+              }
+            ],
+            "effects": [],
+            "api_binding": null,
+            "risk": "reversible",
+            "wait_until": null,
+            "guard": null,
+            "timeout_s": 10.0,
+            "identity_armed": null,
+            "identity_unarmed_reason": null,
+            "identifier_crop_missing_reason": null
+          },
+          "loop": null,
+          "subflow": null,
+          "transitions": [
+            {
+              "guard": null,
+              "target": "s::step_007",
+              "label": ""
+            }
+          ],
+          "on_exception": null,
+          "outcome": null,
+          "reason": ""
+        },
+        "s::step_007": {
+          "id": "s::step_007",
+          "kind": "action",
+          "step": {
+            "id": "step_007",
+            "intent": "press Enter",
+            "action": "key",
+            "anchor": null,
+            "text": null,
+            "param": null,
+            "secret": false,
+            "key": "Enter",
+            "scroll_dx": null,
+            "scroll_dy": null,
+            "expect": [
+              {
+                "kind": "region_stable",
+                "text": null,
+                "region": [
+                  0,
+                  72,
+                  1280,
+                  728
+                ],
+                "phash": "fbf70460c387a568",
+                "phash_tolerance": 16,
+                "timeout_s": 5.0,
+                "template": "templates/step_007_expect.png"
+              },
+              {
+                "kind": "text_present",
+                "text": "beninNewBrowserTabSearchwithexactmethod",
+                "region": null,
+                "phash": null,
+                "phash_tolerance": 8,
+                "timeout_s": 5.0,
+                "template": null
+              }
+            ],
+            "effects": [],
+            "api_binding": null,
+            "risk": "reversible",
+            "wait_until": null,
+            "guard": null,
+            "timeout_s": 10.0,
+            "identity_armed": null,
+            "identity_unarmed_reason": null,
+            "identifier_crop_missing_reason": null
+          },
+          "loop": null,
+          "subflow": null,
+          "transitions": [
+            {
+              "guard": null,
+              "target": "s::step_008",
+              "label": ""
+            }
+          ],
+          "on_exception": null,
+          "outcome": null,
+          "reason": ""
+        },
+        "s::step_008": {
+          "id": "s::step_008",
+          "kind": "action",
+          "step": {
+            "id": "step_008",
+            "intent": "click 'ford,Phil'",
+            "action": "click",
+            "anchor": {
+              "template": "templates/step_008.png",
+              "structural": null,
+              "region": [
+                0,
+                411,
+                160,
+                64
+              ],
+              "click_point": [
+                17,
+                443
+              ],
+              "ocr_text": "ford,Phil",
+              "context_text": null,
+              "structured_identity": null,
+              "identity_template": {
+                "schema_version": 1,
+                "salt": "076a9e81b90d6ddda88595bd2dd19e90",
+                "band_len": 32,
+                "tokens": [
+                  {
+                    "c": "a2929a25be2ec74e",
+                    "r": "1a87697ed567a355",
+                    "n": 12,
+                    "alpha": false,
+                    "name": false,
+                    "digit": true,
+                    "idsh": true,
+                    "glyph": false,
+                    "gen": false
+                  },
+                  {
+                    "c": "8bd929d424f946de",
+                    "r": "c14f3daa06b03b31",
+                    "n": 9,
+                    "alpha": false,
+                    "name": false,
+                    "digit": true,
+                    "idsh": true,
+                    "glyph": false,
+                    "gen": false
+                  },
+                  {
+                    "c": "3eb2a6e306ae66eb",
+                    "r": "960f3c575917b914",
+                    "n": 10,
+                    "alpha": false,
+                    "name": false,
+                    "digit": true,
+                    "idsh": false,
+                    "glyph": false,
+                    "gen": false
+                  },
+                  {
+                    "c": "75e7d6b0c8b31579",
+                    "r": "bc89869273be9f2d",
+                    "n": 1,
+                    "alpha": false,
+                    "name": false,
+                    "digit": true,
+                    "idsh": false,
+                    "glyph": false,
+                    "gen": false
+                  }
+                ],
+                "concats": [
+                  {
+                    "i": 0,
+                    "size": 2,
+                    "c": "ec85fa0ac01cf590",
+                    "r": "d7f444202dcda5ec",
+                    "digit": true,
+                    "name": false,
+                    "n": 21
+                  },
+                  {
+                    "i": 0,
+                    "size": 3,
+                    "c": "15a4b9c9025d0962",
+                    "r": "99ea03dca99dacd3",
+                    "digit": true,
+                    "name": false,
+                    "n": 31
+                  },
+                  {
+                    "i": 0,
+                    "size": 4,
+                    "c": "d2f0b3f456a67420",
+                    "r": "e8810bee45734b17",
+                    "digit": true,
+                    "name": false,
+                    "n": 32
+                  },
+                  {
+                    "i": 1,
+                    "size": 2,
+                    "c": "c5acf03e788c6228",
+                    "r": "32163c0ce6b28d4d",
+                    "digit": true,
+                    "name": false,
+                    "n": 19
+                  },
+                  {
+                    "i": 1,
+                    "size": 3,
+                    "c": "8f267bdbe912dc67",
+                    "r": "1697925105c49d5e",
+                    "digit": true,
+                    "name": false,
+                    "n": 20
+                  },
+                  {
+                    "i": 2,
+                    "size": 2,
+                    "c": "c9dd5262c3073063",
+                    "r": "51b932b9fa3730ef",
+                    "digit": true,
+                    "name": false,
+                    "n": 11
+                  }
+                ],
+                "structured": null,
+                "param_token_indices": {},
+                "rests_on_confusable_identifier": false
+              },
+              "identifier_crop": null,
+              "identifier_region": null,
+              "landmarks": [
+                {
+                  "relation": "above",
+                  "ocr_text": "Name",
+                  "distance_px": 45,
+                  "dx_px": -10,
+                  "dy_px": 44
+                },
+                {
+                  "relation": "above",
+                  "ocr_text": "earchbyName",
+                  "distance_px": 104,
+                  "dx_px": -37,
+                  "dy_px": 97
+                }
+              ],
+              "search_pad": 80
+            },
+            "text": null,
+            "param": null,
+            "secret": false,
+            "key": null,
+            "scroll_dx": null,
+            "scroll_dy": null,
+            "expect": [
+              {
+                "kind": "region_stable",
+                "text": null,
+                "region": [
+                  0,
+                  195,
+                  1280,
+                  326
+                ],
+                "phash": "fee1e1a6b28180db",
+                "phash_tolerance": 16,
+                "timeout_s": 5.0,
+                "template": "templates/step_008_expect.png"
+              },
+              {
+                "kind": "text_present",
+                "text": "edicalRecordDashboard-PhilBelford",
+                "region": null,
+                "phash": null,
+                "phash_tolerance": 8,
+                "timeout_s": 5.0,
+                "template": null
+              }
+            ],
+            "effects": [],
+            "api_binding": null,
+            "risk": "reversible",
+            "wait_until": null,
+            "guard": null,
+            "timeout_s": 10.0,
+            "identity_armed": true,
+            "identity_unarmed_reason": null,
+            "identifier_crop_missing_reason": null
+          },
+          "loop": null,
+          "subflow": null,
+          "transitions": [
+            {
+              "guard": null,
+              "target": "s::step_009",
+              "label": ""
+            }
+          ],
+          "on_exception": null,
+          "outcome": null,
+          "reason": ""
+        },
+        "s::step_009": {
+          "id": "s::step_009",
+          "kind": "action",
+          "step": {
+            "id": "step_009",
+            "intent": "scroll by (0, 400)",
+            "action": "scroll",
+            "anchor": null,
+            "text": null,
+            "param": null,
+            "secret": false,
+            "key": null,
+            "scroll_dx": 0,
+            "scroll_dy": 400,
+            "expect": [],
+            "effects": [],
+            "api_binding": null,
+            "risk": "reversible",
+            "wait_until": null,
+            "guard": null,
+            "timeout_s": 10.0,
+            "identity_armed": null,
+            "identity_unarmed_reason": null,
+            "identifier_crop_missing_reason": null
+          },
+          "loop": null,
+          "subflow": null,
+          "transitions": [
+            {
+              "guard": null,
+              "target": "s::step_010",
+              "label": ""
+            }
+          ],
+          "on_exception": null,
+          "outcome": null,
+          "reason": ""
+        },
+        "s::step_010": {
+          "id": "s::step_010",
+          "kind": "action",
+          "step": {
+            "id": "step_010",
+            "intent": "scroll by (0, 400)",
+            "action": "scroll",
+            "anchor": null,
+            "text": null,
+            "param": null,
+            "secret": false,
+            "key": null,
+            "scroll_dx": 0,
+            "scroll_dy": 400,
+            "expect": [],
+            "effects": [],
+            "api_binding": null,
+            "risk": "reversible",
+            "wait_until": null,
+            "guard": null,
+            "timeout_s": 10.0,
+            "identity_armed": null,
+            "identity_unarmed_reason": null,
+            "identifier_crop_missing_reason": null
+          },
+          "loop": null,
+          "subflow": null,
+          "transitions": [
+            {
+              "guard": null,
+              "target": "s::step_011",
+              "label": ""
+            }
+          ],
+          "on_exception": null,
+          "outcome": null,
+          "reason": ""
+        },
+        "s::step_011": {
+          "id": "s::step_011",
+          "kind": "action",
+          "step": {
+            "id": "step_011",
+            "intent": "scroll by (0, 400)",
+            "action": "scroll",
+            "anchor": null,
+            "text": null,
+            "param": null,
+            "secret": false,
+            "key": null,
+            "scroll_dx": 0,
+            "scroll_dy": 400,
+            "expect": [],
+            "effects": [],
+            "api_binding": null,
+            "risk": "reversible",
+            "wait_until": null,
+            "guard": null,
+            "timeout_s": 10.0,
+            "identity_armed": null,
+            "identity_unarmed_reason": null,
+            "identifier_crop_missing_reason": null
+          },
+          "loop": null,
+          "subflow": null,
+          "transitions": [
+            {
+              "guard": null,
+              "target": "s::step_012",
+              "label": ""
+            }
+          ],
+          "on_exception": null,
+          "outcome": null,
+          "reason": ""
+        },
+        "s::step_012": {
+          "id": "s::step_012",
+          "kind": "action",
+          "step": {
+            "id": "step_012",
+            "intent": "scroll by (0, 400)",
+            "action": "scroll",
+            "anchor": null,
+            "text": null,
+            "param": null,
+            "secret": false,
+            "key": null,
+            "scroll_dx": 0,
+            "scroll_dy": 400,
+            "expect": [],
+            "effects": [],
+            "api_binding": null,
+            "risk": "reversible",
+            "wait_until": null,
+            "guard": null,
+            "timeout_s": 10.0,
+            "identity_armed": null,
+            "identity_unarmed_reason": null,
+            "identifier_crop_missing_reason": null
+          },
+          "loop": null,
+          "subflow": null,
+          "transitions": [
+            {
+              "guard": null,
+              "target": "s::step_013",
+              "label": ""
+            }
+          ],
+          "on_exception": null,
+          "outcome": null,
+          "reason": ""
+        },
+        "s::step_013": {
+          "id": "s::step_013",
+          "kind": "action",
+          "step": {
+            "id": "step_013",
+            "intent": "click at (815, 369)",
+            "action": "click",
+            "anchor": {
+              "template": "templates/step_013.png",
+              "structural": null,
+              "region": [
+                735,
+                337,
+                160,
+                64
+              ],
+              "click_point": [
+                815,
+                369
+              ],
+              "ocr_text": null,
+              "context_text": null,
+              "structured_identity": null,
+              "identity_template": null,
+              "identifier_crop": null,
+              "identifier_region": null,
+              "landmarks": [
+                {
+                  "relation": "right_of",
+                  "ocr_text": "None",
+                  "distance_px": 123,
+                  "dx_px": -87,
+                  "dy_px": 87
+                },
+                {
+                  "relation": "above",
+                  "ocr_text": "Immunizations",
+                  "distance_px": 180,
+                  "dx_px": -120,
+                  "dy_px": 134
+                }
+              ],
+              "search_pad": 80
+            },
+            "text": null,
+            "param": null,
+            "secret": false,
+            "key": null,
+            "scroll_dx": null,
+            "scroll_dy": null,
+            "expect": [
+              {
+                "kind": "region_stable",
+                "text": null,
+                "region": [
+                  0,
+                  176,
+                  691,
+                  174
+                ],
+                "phash": "c3da3fb5b7408590",
+                "phash_tolerance": 16,
+                "timeout_s": 5.0,
+                "template": "templates/step_013_expect.png"
+              },
+              {
+                "kind": "text_present",
+                "text": "PatientMessagesforBelford,Phil",
+                "region": null,
+                "phash": null,
+                "phash_tolerance": 8,
+                "timeout_s": 5.0,
+                "template": null
+              }
+            ],
+            "effects": [],
+            "api_binding": null,
+            "risk": "reversible",
+            "wait_until": null,
+            "guard": null,
+            "timeout_s": 10.0,
+            "identity_armed": false,
+            "identity_unarmed_reason": "row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)",
+            "identifier_crop_missing_reason": null
+          },
+          "loop": null,
+          "subflow": null,
+          "transitions": [
+            {
+              "guard": null,
+              "target": "s::step_014",
+              "label": ""
+            }
+          ],
+          "on_exception": null,
+          "outcome": null,
+          "reason": ""
+        },
+        "s::step_014": {
+          "id": "s::step_014",
+          "kind": "action",
+          "step": {
+            "id": "step_014",
+            "intent": "click '+Add <B'",
+            "action": "click",
+            "anchor": {
+              "template": "templates/step_014.png",
+              "structural": null,
+              "region": [
+                10,
+                249,
+                160,
+                64
+              ],
+              "click_point": [
+                90,
+                281
+              ],
+              "ocr_text": "+Add <B",
+              "context_text": null,
+              "structured_identity": null,
+              "identity_template": {
+                "schema_version": 1,
+                "salt": "076a9e81b90d6ddda88595bd2dd19e90",
+                "band_len": 36,
+                "tokens": [
+                  {
+                    "c": "f5b89ea5142b5e91",
+                    "r": "f5b89ea5142b5e91",
+                    "n": 8,
+                    "alpha": true,
+                    "name": true,
+                    "digit": false,
+                    "idsh": false,
+                    "glyph": false,
+                    "gen": false
+                  },
+                  {
+                    "c": "2a4e26a62a817b8f",
+                    "r": "2a4e26a62a817b8f",
+                    "n": 6,
+                    "alpha": true,
+                    "name": true,
+                    "digit": false,
+                    "idsh": false,
+                    "glyph": false,
+                    "gen": false
+                  },
+                  {
+                    "c": "a81affd64fb2c163",
+                    "r": "8dc21edf58e82b0a",
+                    "n": 6,
+                    "alpha": true,
+                    "name": true,
+                    "digit": false,
+                    "idsh": false,
+                    "glyph": false,
+                    "gen": false
+                  },
+                  {
+                    "c": "3bcb2a25be6f30a0",
+                    "r": "e1eeaf211ad0417e",
+                    "n": 16,
+                    "alpha": true,
+                    "name": false,
+                    "digit": true,
+                    "idsh": true,
+                    "glyph": true,
+                    "gen": false
+                  }
+                ],
+                "concats": [
+                  {
+                    "i": 0,
+                    "size": 2,
+                    "c": "9c7670036b964faa",
+                    "r": "9c7670036b964faa",
+                    "digit": false,
+                    "name": true,
+                    "n": 14
+                  },
+                  {
+                    "i": 0,
+                    "size": 3,
+                    "c": "f008957ffe76ef2c",
+                    "r": "aeb1ca31866c1a91",
+                    "digit": false,
+                    "name": true,
+                    "n": 20
+                  },
+                  {
+                    "i": 0,
+                    "size": 4,
+                    "c": "806e1397bb055068",
+                    "r": "8e656181756dd1dd",
+                    "digit": true,
+                    "name": false,
+                    "n": 36
+                  },
+                  {
+                    "i": 1,
+                    "size": 2,
+                    "c": "ca91edffd517fcbd",
+                    "r": "73d8635eeb4b5c99",
+                    "digit": false,
+                    "name": true,
+                    "n": 12
+                  },
+                  {
+                    "i": 1,
+                    "size": 3,
+                    "c": "723139e2f16f2596",
+                    "r": "52cef78f2d8771cd",
+                    "digit": true,
+                    "name": false,
+                    "n": 28
+                  },
+                  {
+                    "i": 2,
+                    "size": 2,
+                    "c": "dc6c8036ae9738fb",
+                    "r": "cd6105f83340aa51",
+                    "digit": true,
+                    "name": false,
+                    "n": 22
+                  }
+                ],
+                "structured": null,
+                "param_token_indices": {},
+                "rests_on_confusable_identifier": true
+              },
+              "identifier_crop": null,
+              "identifier_region": null,
+              "landmarks": [
+                {
+                  "relation": "below",
+                  "ocr_text": "Show All",
+                  "distance_px": 98,
+                  "dx_px": -21,
+                  "dy_px": -96
+                },
+                {
+                  "relation": "above",
+                  "ocr_text": "alendarx",
+                  "distance_px": 102,
+                  "dx_px": 32,
+                  "dy_px": 97
+                }
+              ],
+              "search_pad": 80
+            },
+            "text": null,
+            "param": null,
+            "secret": false,
+            "key": null,
+            "scroll_dx": null,
+            "scroll_dy": null,
+            "expect": [
+              {
+                "kind": "region_stable",
+                "text": null,
+                "region": [
+                  0,
+                  0,
+                  1280,
+                  800
+                ],
+                "phash": "c6e62f272d9090ed",
+                "phash_tolerance": 16,
+                "timeout_s": 5.0,
+                "template": "templates/step_014_expect.png"
+              },
+              {
+                "kind": "text_present",
+                "text": "Calendar Finder Flow Recalls Messa",
+                "region": null,
+                "phash": null,
+                "phash_tolerance": 8,
+                "timeout_s": 5.0,
+                "template": null
+              }
+            ],
+            "effects": [],
+            "api_binding": null,
+            "risk": "irreversible",
+            "wait_until": null,
+            "guard": null,
+            "timeout_s": 10.0,
+            "identity_armed": true,
+            "identity_unarmed_reason": null,
+            "identifier_crop_missing_reason": null
+          },
+          "loop": null,
+          "subflow": null,
+          "transitions": [
+            {
+              "guard": null,
+              "target": "s::step_015",
+              "label": ""
+            }
+          ],
+          "on_exception": null,
+          "outcome": null,
+          "reason": ""
+        },
+        "s::step_015": {
+          "id": "s::step_015",
+          "kind": "action",
+          "step": {
+            "id": "step_015",
+            "intent": "click at (639, 357)",
+            "action": "click",
+            "anchor": {
+              "template": "templates/step_015.png",
+              "structural": null,
+              "region": [
+                479,
+                293,
+                320,
+                128
+              ],
+              "click_point": [
+                639,
+                357
+              ],
+              "ocr_text": null,
+              "context_text": null,
+              "structured_identity": null,
+              "identity_template": null,
+              "identifier_crop": null,
+              "identifier_region": null,
+              "landmarks": [
+                {
+                  "relation": "left_of",
+                  "ocr_text": "Save as new message",
+                  "distance_px": 169,
+                  "dx_px": 139,
+                  "dy_px": -97
+                },
+                {
+                  "relation": "left_of",
+                  "ocr_text": "Smith, Billy",
+                  "distance_px": 216,
+                  "dx_px": 197,
+                  "dy_px": 89
+                }
+              ],
+              "search_pad": 80
+            },
+            "text": null,
+            "param": null,
+            "secret": false,
+            "key": null,
+            "scroll_dx": null,
+            "scroll_dy": null,
+            "expect": [
+              {
+                "kind": "region_stable",
+                "text": null,
+                "region": [
+                  351,
+                  269,
+                  578,
+                  178
+                ],
+                "phash": "e8d0c0f0f8f87a6a",
+                "phash_tolerance": 16,
+                "timeout_s": 5.0,
+                "template": "templates/step_015_expect.png"
+              }
+            ],
+            "effects": [],
+            "api_binding": null,
+            "risk": "reversible",
+            "wait_until": null,
+            "guard": null,
+            "timeout_s": 10.0,
+            "identity_armed": false,
+            "identity_unarmed_reason": "row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)",
+            "identifier_crop_missing_reason": null
+          },
+          "loop": null,
+          "subflow": null,
+          "transitions": [
+            {
+              "guard": null,
+              "target": "s::step_016",
+              "label": ""
+            }
+          ],
+          "on_exception": null,
+          "outcome": null,
+          "reason": ""
+        },
+        "s::step_016": {
+          "id": "s::step_016",
+          "kind": "action",
+          "step": {
+            "id": "step_016",
+            "intent": "type <note>",
+            "action": "type",
+            "anchor": null,
+            "text": "Reviewed hypertension follow-up; BP within target range today.",
+            "param": "note",
+            "secret": false,
+            "key": null,
+            "scroll_dx": null,
+            "scroll_dy": null,
+            "expect": [],
+            "effects": [],
+            "api_binding": null,
+            "risk": "reversible",
+            "wait_until": null,
+            "guard": null,
+            "timeout_s": 10.0,
+            "identity_armed": null,
+            "identity_unarmed_reason": null,
+            "identifier_crop_missing_reason": null
+          },
+          "loop": null,
+          "subflow": null,
+          "transitions": [
+            {
+              "guard": null,
+              "target": "s::step_017",
+              "label": ""
+            }
+          ],
+          "on_exception": null,
+          "outcome": null,
+          "reason": ""
+        },
+        "s::step_017": {
+          "id": "s::step_017",
+          "kind": "action",
+          "step": {
+            "id": "step_017",
+            "intent": "click 'Save as new messag'",
+            "action": "click",
+            "anchor": {
+              "template": "templates/step_017.png",
+              "structural": null,
+              "region": [
+                409,
+                420,
+                160,
+                64
+              ],
+              "click_point": [
+                489,
+                452
+              ],
+              "ocr_text": "Save as new messag",
+              "context_text": null,
+              "structured_identity": null,
+              "identity_template": null,
+              "identifier_crop": null,
+              "identifier_region": null,
+              "landmarks": [
+                {
+                  "relation": "above",
+                  "ocr_text": "Smith, Billy",
+                  "distance_px": 191,
+                  "dx_px": 48,
+                  "dy_px": 185
+                },
+                {
+                  "relation": "left_of",
+                  "ocr_text": "Active",
+                  "distance_px": 234,
+                  "dx_px": 233,
+                  "dy_px": 21
+                }
+              ],
+              "search_pad": 80
+            },
+            "text": null,
+            "param": null,
+            "secret": false,
+            "key": null,
+            "scroll_dx": null,
+            "scroll_dy": null,
+            "expect": [
+              {
+                "kind": "region_stable",
+                "text": null,
+                "region": [
+                  0,
+                  0,
+                  1280,
+                  800
+                ],
+                "phash": "c0d91b9db162c6a7",
+                "phash_tolerance": 16,
+                "timeout_s": 5.0,
+                "template": "templates/step_017_expect.png"
+              },
+              {
+                "kind": "text_present",
+                "text": "CalendarFinderFlowRecallsMessagesPatientFeesModulesInventoryProceduresAdminReportsMiscellaneousPopups",
+                "region": null,
+                "phash": null,
+                "phash_tolerance": 8,
+                "timeout_s": 5.0,
+                "template": null
+              }
+            ],
+            "effects": [],
+            "api_binding": null,
+            "risk": "irreversible",
+            "wait_until": null,
+            "guard": null,
+            "timeout_s": 10.0,
+            "identity_armed": false,
+            "identity_unarmed_reason": "row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)",
+            "identifier_crop_missing_reason": null
+          },
+          "loop": null,
+          "subflow": null,
+          "transitions": [
+            {
+              "guard": null,
+              "target": "__end__",
+              "label": ""
+            }
+          ],
+          "on_exception": null,
+          "outcome": null,
+          "reason": ""
+        },
+        "__end__": {
+          "id": "__end__",
+          "kind": "terminal",
+          "step": null,
+          "loop": null,
+          "subflow": null,
+          "transitions": [],
+          "on_exception": null,
+          "outcome": "success",
+          "reason": ""
+        }
+      }
+    }
+  },
+  "data_sources": {
+    "worklist": {
+      "name": "worklist",
+      "rows": [
+        {
+          "note": "Reviewed hypertension follow-up; BP within target range today."
+        },
+        {
+          "note": "Diabetes check; A1c stable, continue metformin."
+        },
+        {
+          "note": "Annual wellness visit; screening labs ordered."
+        }
+      ],
+      "description": "data-driven worklist authored over 3 record(s)"
+    }
+  },
+  "manifest": {
+    "schema_version": 2,
+    "content_digest": "b3519d3a46f6bdc353b76fd5a5e84f3941b42663d5fdd9e10d9e43ab4e96f684",
+    "file_hashes": {
+      "templates/step_000.png": "f1828b7d1644fbe316c20d5e85904149f582bc851516a4f57ab87854e09d91f6",
+      "templates/step_000_expect.png": "a191ba28eaf2691ea2bdbde6043f87eeea0bda377ed1dbd92ed8f99e4645c38e",
+      "templates/step_001_expect.png": "a368fb929154c409069b8529c4159e95009de1cd90847ef8c9e6e7217383112e",
+      "templates/step_002.png": "edc6f6ff053c14c201f17cca8b46ae4b91b8e80858c203f8f47425552f4a2aea",
+      "templates/step_002_expect.png": "b588f9b3a2ac3c47e9f3b5482cb73e841bb1fceda2dcec1f25d76639c2d7885b",
+      "templates/step_003_expect.png": "5d0d7095f8556037dca2486a9f65b811afc778e56424c60596f2701e749d8d20",
+      "templates/step_004.png": "e92c4f9a9641f85ab09240761747f296a259514da6f0fa5dcb553f4cd24973c3",
+      "templates/step_004_expect.png": "518fb9deade19e00173d7c3898c41e5061269a7fd297da794445f02f33bd44f6",
+      "templates/step_005.png": "e21c6ca4622199cd03c4ec569d79992e275321dd633a532a8e95f9839692cd7c",
+      "templates/step_005_expect.png": "c5667abd0a4634138fe14c45fb9e9db24915730f9833b380a468c192b9705553",
+      "templates/step_006_expect.png": "f7e7bea1e80633fdfb6d59c0fe8a21e555258467771a4aae77e04e0ae5638237",
+      "templates/step_007_expect.png": "b00f01ef23bb84596f854e770197f88b4a573dc595dec10f4641d5853dfae8f6",
+      "templates/step_008.png": "daa4ed0af4be54f6c834124d428c3cc53782bf47f078e2aed3ac66b1821cc001",
+      "templates/step_008_expect.png": "eb616c03c24974233e5926db0ce325efd28ba09bf7d7294b2654182056a64001",
+      "templates/step_013.png": "44bcea01c29ffce089359a39defec0e9e54083af01410e9c4a3f7c0d25eb3cab",
+      "templates/step_013_expect.png": "49573416a7ebe7aff262d82ee44dd54ee21cb4a76ba99a07e666e46b5a721446",
+      "templates/step_014.png": "7feb81b1126ebf4da47b3d3cde66852d45df9c5c0de92271fd5967aa2191befb",
+      "templates/step_014_expect.png": "4b82d961d0ab7706325dc0aaae70e0432eb7f6130871cd9bbd48fe8b26a11774",
+      "templates/step_015.png": "a525c1b81d24176746463b435cfa870f27ae8851918ace8d667a91cbd429c58e",
+      "templates/step_015_expect.png": "5e7fba0ba58b1d27497f4a1148934be51886a92c94edaa50582ac3045642f74f",
+      "templates/step_017.png": "1952c2c78b8fbea7f97276e5ceb9a80a1f559deadca13ebb8e1526f272c8935f",
+      "templates/step_017_expect.png": "3bb8ad7cd2002f295c44a7d5e57a268d7dc2c712519bccb169cf8ca8f50392b7"
+    },
+    "provenance": {
+      "compiler_version": "1.19.0",
+      "source_recording_sha256": null,
+      "compiler_config_sha256": null,
+      "created_at": "2026-07-14T00:51:06.482608+00:00",
+      "policy_name": null,
+      "certified": false,
+      "certification_status": null,
+      "certified_at": null,
+      "expires_at": null
+    },
+    "encrypted": false
+  }
+}

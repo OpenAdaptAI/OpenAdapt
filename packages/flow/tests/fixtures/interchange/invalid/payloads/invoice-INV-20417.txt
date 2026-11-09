@@ -1,0 +1,5 @@
+SYNTHETIC INVOICE
+Vendor ID: V-0042
+Invoice No: INV-20417
+Amount: 1249.50
+Due date: 2026-11-15

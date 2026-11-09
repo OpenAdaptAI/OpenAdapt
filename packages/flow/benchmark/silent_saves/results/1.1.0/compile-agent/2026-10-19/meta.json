@@ -1,0 +1,18 @@
+{
+  "benchmark": "silent-saves",
+  "version": "1.1.0",
+  "protocol": "silent-saves/2026-10-19.2",
+  "app": "mockmed",
+  "executor": "compile-agent",
+  "agent_spec": "compile-agent",
+  "readback": false,
+  "arm": "compile_agent",
+  "arm_cap_usd": 2.0,
+  "items": 100,
+  "per_fault": null,
+  "faults": null,
+  "git_head": "031836f5f140440a29720577a5f387505360e3ec",
+  "machine": "arm64 Darwin 24.6.0",
+  "python": "3.12.13",
+  "written_at": "2026-10-19T12:53:47-0400"
+}

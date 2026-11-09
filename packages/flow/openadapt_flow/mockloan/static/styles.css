@@ -1,0 +1,228 @@
+/* MockLoan - deterministic styling: no transitions, no animations,
+   all font sizes >= 14px. A finance/origination palette, visually
+   distinct from MockMed (teal/slate instead of clinical blue). */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  transition: none !important;
+  animation: none !important;
+}
+
+html, body {
+  font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+  font-size: 16px;
+  background: #eef2f1;
+  color: #16241f;
+}
+
+#topbar {
+  background: #0f5a4a;
+  color: #ffffff;
+  padding: 14px 24px;
+  font-size: 20px;
+  font-weight: bold;
+}
+
+#subtitle {
+  font-size: 14px;
+  font-weight: normal;
+  margin-left: 16px;
+  opacity: 0.9;
+}
+
+main {
+  padding: 24px;
+  max-width: 980px;
+}
+
+h1 { font-size: 24px; margin-bottom: 16px; }
+h2 { font-size: 20px; margin: 20px 0 10px; }
+p  { font-size: 16px; }
+
+button {
+  font-size: 16px;
+  padding: 10px 18px;
+  border: 1px solid #0f5a4a;
+  background: #128066;
+  color: #ffffff;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+input, textarea {
+  font-size: 16px;
+  padding: 8px;
+  border: 1px solid #8ba39b;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #16241f;
+}
+
+label {
+  display: block;
+  font-size: 15px;
+  margin: 12px 0 4px;
+  font-weight: bold;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  background: #ffffff;
+}
+
+th, td {
+  border: 1px solid #cbd8d3;
+  padding: 10px 12px;
+  font-size: 15px;
+  text-align: left;
+}
+
+th { background: #dbe7e2; }
+
+.actions {
+  display: flex;
+  width: 100%;
+  margin-top: 18px;
+  justify-content: flex-start;
+}
+
+body.drift-move .actions.movable {
+  justify-content: flex-end;
+}
+
+/* Segmented product chooser (buttons, never a native <select>). */
+.segmented {
+  display: inline-flex;
+  border: 1px solid #0f5a4a;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+
+.seg-btn {
+  border: none;
+  border-radius: 0;
+  background: #ffffff;
+  color: #0f5a4a;
+  width: 130px;
+}
+
+.seg-btn.selected {
+  background: #0f5a4a;
+  color: #ffffff;
+}
+
+#authorized-banner {
+  background: #d7f5e5;
+  border: 1px solid #2f9a6a;
+  color: #0d4a30;
+  padding: 12px;
+  margin: 14px 0;
+  font-size: 16px;
+}
+
+#loan-banner {
+  background: #e6efec;
+  border: 1px solid #9ec3b7;
+  padding: 12px;
+  margin-bottom: 8px;
+  font-size: 17px;
+}
+
+#amount-field {
+  background: #f2f7f5;
+  border: 1px solid #8ba39b;
+  padding: 10px 12px;
+  font-size: 18px;
+  font-weight: bold;
+  width: 220px;
+  display: block;
+  color: #0d4a30;
+}
+
+/* Fixed widths so the "rename" drift keeps buttons in identical positions. */
+#new-disbursement { width: 190px; }
+#authorize { width: 240px; }
+.open-btn { width: 90px; padding: 8px 0; }
+#signin { margin-top: 4px; width: 140px; }
+
+#login-card {
+  background: #ffffff;
+  border: 1px solid #cbd8d3;
+  padding: 24px;
+  width: 380px;
+}
+
+#login-card input { width: 100%; }
+
+#save-error:not(:empty) {
+  background: #fdecea;
+  border: 1px solid #c0392b;
+  color: #8e2418;
+  padding: 12px;
+  margin-top: 14px;
+  font-size: 16px;
+  max-width: 640px;
+}
+
+body.drift-theme #save-error:not(:empty) {
+  background: #3a1d1a;
+  border-color: #e07a6a;
+  color: #f2b8ae;
+}
+
+textarea#memo {
+  width: 100%;
+  max-width: 640px;
+  display: block;
+}
+
+#disbursement-list li {
+  font-size: 15px;
+  margin: 6px 0 6px 20px;
+}
+
+/* Larger type (drift mode "font"). */
+body.drift-font { font-size: 19px; }
+body.drift-font button,
+body.drift-font input,
+body.drift-font textarea,
+body.drift-font p { font-size: 19px; }
+body.drift-font th, body.drift-font td { font-size: 18px; }
+body.drift-font label { font-size: 18px; }
+body.drift-font h1 { font-size: 28px; }
+body.drift-font h2 { font-size: 24px; }
+
+/* Whole-page scale (drift mode "zoom"). */
+body.drift-zoom { zoom: 1.25; }
+
+/* Dark palette (drift mode "theme"): breaks template matching, keeps
+   contrast high so OCR still works. */
+body.drift-theme { background: #101917; color: #e4ede9; }
+body.drift-theme #topbar { background: #071411; color: #e4ede9; }
+body.drift-theme table { background: #17231f; }
+body.drift-theme th { background: #21322c; }
+body.drift-theme th, body.drift-theme td { border-color: #35493f; }
+body.drift-theme input, body.drift-theme textarea {
+  background: #17231f;
+  color: #e4ede9;
+  border-color: #4c6459;
+}
+body.drift-theme button {
+  background: #3fae87;
+  border-color: #2c7a5f;
+  color: #071411;
+}
+body.drift-theme .seg-btn { background: #17231f; color: #8fe0c1; }
+body.drift-theme .seg-btn.selected { background: #3fae87; color: #071411; }
+body.drift-theme #login-card { background: #17231f; border-color: #35493f; }
+body.drift-theme #loan-banner { background: #1c2b26; border-color: #2c7a5f; }
+body.drift-theme #amount-field { background: #1c2b26; color: #8fe0c1; border-color: #4c6459; }
+body.drift-theme #authorized-banner {
+  background: #12321f;
+  border-color: #2f7a45;
+  color: #a7e3c1;
+}

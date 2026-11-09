@@ -1,0 +1,35 @@
+{
+  "generated_at": "2026-07-26T18:13:53.666190+00:00",
+  "is_real_ica_hdx": false,
+  "schema_version": "openadapt.citrix-status-dimensions.v1",
+  "status_dimensions": {
+    "backend_shipped": {
+      "detail": "CitrixWorkspaceBackend (RemoteDisplayBackend preset) is in the package and qualified against the deterministic stand-in.",
+      "status": "shipped"
+    },
+    "customer_controlled_execution_available": {
+      "detail": "Customer-controlled on-prem execution is the target of the real-ICA release gate; not asserted by this stand-in.",
+      "status": "pending"
+    },
+    "deterministic_standin_qualification": {
+      "detail": "The Section 10 ICA/HDX condition matrix is qualified against a DETERMINISTIC SYNTHETIC STAND-IN (this campaign) -- NOT real ICA/HDX.",
+      "status": "qualified"
+    },
+    "exact_application_qualification_available": {
+      "detail": "Exact published-application qualification (e.g. Accuro) is performed in the customer's exact environment; not asserted here.",
+      "status": "pending"
+    },
+    "installed_driver_available": {
+      "detail": "MacWindowClient (Quartz) and Win32WindowClient host drivers ship; live capture/input requires per-host Screen-Recording / Accessibility / integrity trust granted at deployment.",
+      "status": "shipped_host_clients"
+    },
+    "managed_execution_available": {
+      "detail": "Hosted/managed execution of this workflow is not asserted by this stand-in.",
+      "status": "pending"
+    },
+    "real_protocol_environment_evidence": {
+      "detail": "No real Citrix ICA/HDX acceptance. Pending the customer-environment (Accuro) lane: HDX codecs, ICA compression, and the real Workspace-client transport are NOT exercised here.",
+      "status": "pending"
+    }
+  }
+}

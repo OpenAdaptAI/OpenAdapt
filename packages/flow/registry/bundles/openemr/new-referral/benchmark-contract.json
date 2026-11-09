@@ -1,0 +1,22 @@
+{
+  "effects_sha256": "50f848801002c21c5e8ee57459c838a42c1db9c8a6d6063bfe095a6d6ca0a76b",
+  "marker_sha256": "7180c24064c8c02851229f9cd684a3985ddb800eda491b3c20e81d863b740540",
+  "required_params": [
+    "DOB",
+    "city",
+    "country_code",
+    "email",
+    "fname",
+    "lname",
+    "phone_home",
+    "postal_code",
+    "sex",
+    "state_label",
+    "street",
+    "title"
+  ],
+  "save_step_id": "step_040",
+  "schema_version": 1,
+  "source_recording_sha256": "5437aed816f9bbab74104f6728af52d7a5b9ae13a37452eb6b18ca9cd6686f87",
+  "workflow_name": "openemr-create-synthetic-patient"
+}

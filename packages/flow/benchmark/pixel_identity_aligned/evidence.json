@@ -1,0 +1,21 @@
+{
+  "summary": {
+    "n_same": 384,
+    "n_diff": 504,
+    "false_accept": 0,
+    "false_mismatch": 3,
+    "same_match_rate_matching_render": 0.6743421052631579,
+    "same_mismatch_rate": 0.0078125,
+    "diff_collapse_mismatch_rate_matching_render": 0.6743421052631579,
+    "n_diff_wrong_matched": 0
+  },
+  "distance_stats": {
+    "same_matching_max_window_max": 0.06150856986641884,
+    "same_matching_max_window_p95": 0.054703517258167265,
+    "diff_min_max_window": 0.07047790288925171,
+    "diff_p5_max_window": 0.08600400052964688,
+    "gate": 0.04,
+    "gap": 0.00896933302283287
+  },
+  "n_trials": 888
+}

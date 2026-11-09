@@ -1,0 +1,45 @@
+name: Cross-platform control contract
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "openadapt_capture/control.py"
+      - "openadapt_capture/recorder.py"
+      - "openadapt_capture/cli.py"
+      - "tests/test_control.py"
+      - "tests/control_recorder_process.py"
+      - ".github/workflows/control-contract.yml"
+
+concurrency:
+  group: capture-control-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  control-contract:
+    # The normal PR matrix proves Linux. This focused matrix proves the same
+    # subprocess ready -> status -> stop -> verified-complete contract on the
+    # two other supported operating systems without running the costly native
+    # video and input-injection suites on every PR.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Run the authenticated control contract
+        run: uv run pytest tests/test_control.py -v --timeout=120

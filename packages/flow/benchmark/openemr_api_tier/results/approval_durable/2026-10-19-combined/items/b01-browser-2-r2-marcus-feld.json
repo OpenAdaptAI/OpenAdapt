@@ -1,0 +1,99 @@
+{
+ "arm": "browser",
+ "ref": "r2-marcus-feld",
+ "mismatch": false,
+ "error": null,
+ "engine_success": false,
+ "transaction_outcome": "RECONCILIATION_REQUIRED",
+ "actuation": null,
+ "api_fallback": "API steps are off for this run",
+ "step_errors": [
+  [
+   "step_040",
+   "Identity check failed for step 'step_040' (click recorded visual target): a target was found positionally (rung 'structural', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Emergency Contact: Confirm Create New Patient Cance"
+  ]
+ ],
+ "new_charts": 0,
+ "readback": "0/12",
+ "correct": false,
+ "field_check": [
+  {
+   "field": "title",
+   "want": "Mr.",
+   "got": null,
+   "match": false
+  },
+  {
+   "field": "fname",
+   "want": "Marcus",
+   "got": null,
+   "match": false
+  },
+  {
+   "field": "lname",
+   "want": "Feld",
+   "got": null,
+   "match": false
+  },
+  {
+   "field": "DOB",
+   "want": "1958-09-02",
+   "got": null,
+   "match": false
+  },
+  {
+   "field": "sex",
+   "want": "Male",
+   "got": null,
+   "match": false
+  },
+  {
+   "field": "street",
+   "want": "114 QUARRY HILL DRIVE",
+   "got": null,
+   "match": false
+  },
+  {
+   "field": "city",
+   "want": "EXAMPLETON",
+   "got": null,
+   "match": false
+  },
+  {
+   "field": "state",
+   "want": "MA",
+   "got": null,
+   "match": false
+  },
+  {
+   "field": "postal_code",
+   "want": "02139",
+   "got": null,
+   "match": false
+  },
+  {
+   "field": "phone_home",
+   "want": "555-0124",
+   "got": null,
+   "match": false
+  },
+  {
+   "field": "email",
+   "want": "marcus.feld@example.invalid",
+   "got": null,
+   "match": false
+  },
+  {
+   "field": "country_code",
+   "want": "USA",
+   "got": null,
+   "match": false
+  }
+ ],
+ "approvals": 2,
+ "approval_kinds": "dom+dom",
+ "approval_wait_s": 0.048,
+ "engine_s": 14.588,
+ "wall_s": 17.402,
+ "checkpoints": 40
+}

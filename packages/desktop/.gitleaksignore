@@ -1,0 +1,19 @@
+# Reviewed false positives: release artifact SHA-256 values and the matching
+# field/variable names in the managed FFmpeg provenance path. Fingerprints are
+# commit- and line-specific, so future changes remain subject to scanning.
+c7bcaa46ba8c960b461ec53efa0db4b4d2061015:src-tauri/ffmpeg-runtime-manifest.json:generic-api-key:140
+c7bcaa46ba8c960b461ec53efa0db4b4d2061015:src-tauri/ffmpeg-runtime-manifest.json:generic-api-key:280
+c7bcaa46ba8c960b461ec53efa0db4b4d2061015:src-tauri/ffmpeg-runtime-manifest.json:generic-api-key:420
+c7bcaa46ba8c960b461ec53efa0db4b4d2061015:src-tauri/ffmpeg-runtime-manifest.json:generic-api-key:554
+0a469e3666b6b5213fa36b0b85cab588dfca3bc6:src-tauri/ffmpeg-runtime-manifest.json:generic-api-key:140
+0a469e3666b6b5213fa36b0b85cab588dfca3bc6:src-tauri/ffmpeg-runtime-manifest.json:generic-api-key:280
+0a469e3666b6b5213fa36b0b85cab588dfca3bc6:src-tauri/ffmpeg-runtime-manifest.json:generic-api-key:420
+0a469e3666b6b5213fa36b0b85cab588dfca3bc6:src-tauri/ffmpeg-runtime-manifest.json:generic-api-key:554
+c7bcaa46ba8c960b461ec53efa0db4b4d2061015:src-tauri/src/ffmpeg.rs:generic-api-key:1070
+0a469e3666b6b5213fa36b0b85cab588dfca3bc6:src-tauri/src/ffmpeg.rs:generic-api-key:1070
+144cae3ccc6f5341dbed5642bb2b95d0bc178d11:scripts/build_managed_ffmpeg_runtime.sh:generic-api-key:212
+144cae3ccc6f5341dbed5642bb2b95d0bc178d11:.github/workflows/ffmpeg-runtime.yml:generic-api-key:19
+412cd978a079912051ac84515b0508741c141c2e:scripts/build_managed_ffmpeg_runtime.sh:generic-api-key:207
+144cae3ccc6f5341dbed5642bb2b95d0bc178d11:scripts/package_ffmpeg_runtime.py:generic-api-key:18
+412cd978a079912051ac84515b0508741c141c2e:scripts/package_ffmpeg_runtime.py:generic-api-key:18
+412cd978a079912051ac84515b0508741c141c2e:.github/workflows/ffmpeg-runtime.yml:generic-api-key:19

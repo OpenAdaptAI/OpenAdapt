@@ -1,0 +1,225 @@
+\section{Evaluation Methodology}
+\label{sec:method}
+
+We separate comparative task performance, breadth, transactional safety, and
+identity availability. A single aggregate success rate would hide materially
+different errors.
+
+\paragraph{Comparative conditions.}
+Both repeated-workflow comparisons were generated on 2026-07-08 on the recorded
+platform \texttt{macOS-15.7.3-arm64-arm-64bit}. The compiled and agent arms
+drove the same vision-only Playwright backend: screenshots in and pixel clicks,
+typed text, key presses, and scrolling out, with no DOM selectors at runtime.
+The agent condition used \texttt{claude-sonnet-5} with the
+\texttt{computer\_20251124} tool and
+\texttt{computer-use-2025-11-24} beta header. Agent costs are calculated from
+recorded token usage and the list-price schedule stored in each raw result; the
+compiled condition recorded no model calls. The agent is a single-attempt
+observe-act loop given the task goal and the same settled screenshots the
+replayer uses, without a system prompt, planning or reflection scaffolding, or
+whole-task retry, and bounded by per-run action and cost caps. It is a
+same-backend reference rather than a maximally scaffolded agent. The measured
+latency and cost differences characterize only these exact configurations; they
+do not predict what additional planning, reflection, or retry scaffolding would
+cost or recover, and they are not a reliability comparison.
+
+\paragraph{Outcome taxonomy.}
+Success means the external task oracle is satisfied. A safe halt stops without
+the intended effect. Over-halt is a safe halt when the intended correct action
+was in fact available. Silent incorrect success means the runtime reports
+success while the external oracle disagrees. False abort means the intended
+effect occurred but the runtime reports failure.
+
+\paragraph{Scripted coverage counts, not sampled rates.}
+The fault-injection and end-to-end studies use localhost, make no model calls,
+and inject a fixed fault at the persistence boundary. In the released matrices,
+the repeated outcomes were invariant within each arm--scenario cell. Those
+repeats confirm reproducibility in this implementation and environment; they are
+not independent samples from a target population. We therefore report run
+counts as a \emph{coverage matrix} over a small, hand-authored fault taxonomy,
+not as an estimate of a production incidence rate. Inferential confidence
+intervals would require a sampling design and a target distribution that this
+study does not have. Two consequences are load-bearing for how these numbers
+should be read. First, the screen-versus-effect headline is determined by the
+authored differentiating classes, and the out-of-band-versus-complete-read-path
+gap rests on exactly one class, rather than on a sampled workload distribution.
+Second, the taxonomy is an adversarial transactional-fault lineage
+\cite{gray1981transaction} chosen to differentiate oracles; it is not weighted
+to any measured EMR or lending incident distribution, so a figure such as the
+screen arm's 60\% is fault coverage under this taxonomy, never an expected
+production frequency.
+
+\paragraph{OpenEMR comparison.}
+The task logs into the shared public OpenEMR demonstration site, searches a
+patient, opens Patient Messages, adds a parameterized note, and saves. The
+compiled arm has 20 runs and the computer-use-agent arm 10. Both use the same
+task-level success check. The shared public instance is mutable and the study is
+not fully reproducible in CI; it is field evidence, not a production study.
+
+\paragraph{MockMed comparison.}
+The bundled browser fixture performs a triage workflow. The compiled arm has
+100 runs and the agent arm 20. This is the CI-reproducible anchor, but the
+application is purpose-built and is not evidence about hostile enterprise UIs.
+
+\paragraph{Public-web reliability corpus.}
+Twenty-nine public, unauthenticated applications are recorded, compiled, and
+replayed once on an unchanged UI using an external goal oracle. This study is
+descriptive: one run per application does not meet the repeated-trial standard
+for a capability claim, and the selection excludes SSO-walled and desktop
+targets.
+
+\paragraph{Transactional fault model (perception included, screen arm only).}
+Seven persistence faults and controls are injected at a real HTTP persistence
+boundary behind the MockMed UI, with 10 repeats per class. Database state, not
+the UI report, is the oracle. This study is the one that exercises the full
+perception path---a real browser, real screenshots, and real OCR through the
+resolution ladder---but it measures only the screen-only arm; it carries no
+effect-verified arm and contributes no effect-verified number to this paper. It
+is complementary to, and separate from, the end-to-end study below.
+
+\paragraph{End-to-end effect verification (governed path, perception stubbed).}
+The headline safety result is measured through the actual governed replay path,
+not an in-process stub. Ten persistence scenarios, seven fault classes plus an
+accepted-write control and two delivery controls, are each run nine times per
+arm. Every write is issued by the replayer's actuator as an HTTP POST to an
+on-disk SQLite system of record. We state the boundary of ``end to end''
+precisely, because it is the obvious thing to overclaim: what is real here is
+the governed decision path---the replayer, its actuation tier, its effect
+verifier, the policy gates, and the transaction-outcome classification---while
+the observation backend and vision stack are null stubs, so this study measures
+\emph{verification and refusal}, not GUI perception. Perception is covered by
+the browser-and-OCR fault-model study above, whose arm is screen-only. No single
+released study covers both at once, and we do not report one as though it did.
+Each trial contains three operationally
+distinct paths: the actuator writes over HTTP; the system-under-test effect
+verifier reads through a separate REST endpoint and connection; and the
+benchmark ground truth opens the SQLite file read-only over every table,
+fingerprints canonical typed schema and row content, and classifies the
+before/after state without seeing the write's success flag. The verifier and
+judge necessarily observe the same persisted system of record, but they share
+neither a read channel nor classifier implementation, so the system-under-test
+verifier cannot define its own score. This is operational independence, not
+independence of the business specification. We evaluate three arms:
+screen-only banner verification, an out-of-band effect oracle whose read path
+covers the record surface, and a complete effect oracle whose read path covers
+every mutable surface the action can touch. This supersedes an earlier in-process
+study in which the effect verifier and the ground truth read the same object,
+which made its zero circular by construction. Zero model calls, localhost only.
+
+\paragraph{Second domain: lending.}
+To test generalization beyond healthcare, the same effect-verification protocol
+is replicated on MockLoan, a loan-disbursement authorization workflow with its
+own SQLite ledger. Twelve tasks span the seven EffectBench divergence categories,
+a lending-local cross-surface collateral variant of the extra-write category,
+and clean and idempotent controls. Each runs three times per arm. The product
+arms read their declared surface through REST; the benchmark judge instead opens
+the persisted SQLite file through a separate read-only connection before and
+after each write, discovers business tables from SQLite's catalog, and
+uses benchmark-local canonical typed row and table-content classification rather
+than the runtime effect classifier. One task funds a decoy loan; post-action,
+identity-sensitive readback locates the trial-unique persisted row by memo and
+product, then verifies its loan identifier against the intended loan. Zero model
+calls.
+
+\paragraph{Multi-application workflows.}
+The studies above are single-application, linear, worklist-driven form fills of
+roughly five to fifteen recorded steps, which is a fair criticism of the suite's
+complexity. Two benchmarks were added to close that gap. \emph{AP invoice} is an
+accounts-payable intake spanning a maildir inbox, a PDF document, an ERP
+three-way match, a payments API, an exception queue, and an outbound mail
+gateway: two applications, five modalities, 32 executed action steps over a
+five-row worklist, with branching on match route and discount eligibility.
+\emph{O2C reconciliation} is an order-to-cash billing reconciliation spanning an
+exported CSV worklist, a comparison pass, ledger adjustments through a UI-only
+gateway with no adjustment API, reconcile marks over REST, and a results
+spreadsheet written back and re-read from disk across two separate SQLite
+systems of record: 26 executed action steps over a ten-row worklist. Each
+benchmark runs five scenarios---one healthy and four exception paths---three
+times in each of two arms. The \emph{naive} arm runs the demonstration profile
+and trusts the application's own banner; the \emph{governed} arm runs the
+production profile under a named policy that requires system effects for every
+write and prohibits unconfirmed effect bindings. A benchmark-local ground truth
+reads both databases directly and audits per-table deltas. Both fixtures are
+synthetic and localhost-only, every consequential action is actuated through the
+replayer's API tier, and no model is called; as with the end-to-end study,
+these measure governed workflow semantics and cross-system effects, not GUI
+perception and not document understanding.
+
+\paragraph{Citrix ICA/HDX: a deterministic stand-in, not Citrix.}
+No real Citrix ICA/HDX result is reported in this paper. What is reported is a
+qualification of the shipping Citrix Workspace backend---unmodified---against a
+deterministic synthetic stand-in in which only the backend's window-client seam
+is replaced by an in-process source of synthetic frames that the real backend
+decodes, hashes, and DPI-maps. Sixteen ICA/HDX-class conditions (session launch
+and readiness, lock and unlock, reconnect and roaming, minimize, occlusion, move
+and resize, single and multi-monitor geometry, DPI and scaling, compression and
+codec artifacts, latency and delayed frames, keyboard layout and IME, clipboard
+restriction, focus theft, unexpected dialogs, uncertain submission, and
+out-of-band persisted-state readback) are exercised over 29 trials, with an
+out-of-band in-process oracle and never the on-screen banner. This exercises no
+HDX codec, no ICA compression, and no Workspace-client transport; the released
+artifact records \texttt{is\_real\_ica\_hdx: false} and
+\texttt{ica\_hdx\_accepted: false}, and its status manifest reports
+real-protocol environment evidence as \texttt{pending}. We treat it as evidence
+about the backend's gating logic under adverse remote-display conditions, and as
+nothing else.
+
+\paragraph{Released benchmark.}
+The metric and fault taxonomy are packaged as EffectBench, a standalone,
+versioned, and independently runnable benchmark (specification version 1.0.0), so
+that the silent-wrong-effect rate can be measured against any GUI or API
+automation, not only ours. We state its current scope honestly, because the
+reusable surface a third party can run is narrower than the specification.
+
+\emph{What is public.} The MIT synthetic sample is one fixture, the MockMed
+anchor, and it covers five of the seven divergence categories (C1--C5) plus
+controls, on the \texttt{web} substrate alone. C6 (homonym) and C7
+(no-op/wrong-target) are specified but exercised only by the container-gated
+real-system-of-record packs and the private hardened corpus, as are the desktop
+and remote-display substrates. The differentiating cases are therefore defined in
+the open and measured behind a gate. A submission may target any subset it can
+reach and must report which pack and split it ran.
+
+\emph{What the public pack hands away.} The reference pack ships the synthetic
+system of record together with its reference oracle. In a real deployment,
+authoring a cheap, correct, independent oracle for a legacy system of record is
+the whole cost, and this paper does not claim to remove it: effects are authored
+per deployment and the compiler does not infer them
+(Section~\ref{sec:governance}). A benchmark that supplies the oracle therefore
+measures whether a system uses one, not whether it could obtain one. We mark the
+built-in oracle reference-only rather than expose it to the system under test as
+a general capability, and a pluggable interface lets a third party bring its own
+system of record and its own independent oracle. That is the honest boundary of
+what the public pack tests.
+
+\emph{What is not yet demonstrated.} The two baselines scored so far are our own
+screen-only and effect-verified arms, so fair cross-system ranking is a design
+property rather than a shown one. The public fixture is also small, fixed, and
+open, which is exactly the shape a submission can special-case; the private
+hardened corpus is the intended mitigation, but a non-gameability argument that
+rests on a corpus the reader cannot inspect is asserted rather than
+demonstrated. Both gaps close only when an independent system of record and an
+independently scored third-party submission enter the public pack.
+
+\paragraph{Identity ladder.}
+Adversarial same-name/same-date-of-birth homonyms differ by confusable glyphs
+such as O/0 and l/1. The actual replayer stack is evaluated with structured and
+pure-pixel configurations. False accept and over-halt are both reported because
+a system can obtain zero wrong clicks by refusing every correct one.
+
+\paragraph{Desktop and remote-substrate qualification.}
+These mechanism studies are task-bound rather than comparative. Windows UIA is
+evaluated on one in-tree WinForms Patient Notes workflow in a Windows 11 ARM VM.
+Each counted trial starts from a clean snapshot, writes a trial-unique note, and
+uses an independent SQLite query as the effect oracle; stale and ambiguous
+candidate controls must leave every row unchanged. Native macOS is evaluated on
+one macOS 15.7.3 arm64 host using TextEdit, exact file-byte readback, and a
+two-window ambiguity control. The preserved batch report classifies graceful-
+close cleanup warnings as failure; a separate hash-bound offline adjudication
+accepts only the three action effects and ambiguity refusal after verifying the
+exact harness processes and temporary root were absent. RDP is evaluated over
+Aardwolf 0.2.14 into one 1280x800 Parallels Windows 11 snapshot: input through
+the Windows Run dialog creates a trial-unique file whose exact contents are read
+back through guest tools independently of the RDP channel. Each promoted task
+has three counted trials, records model calls, silent incorrect success and
+over-halt, and retains environment-cleanup evidence.

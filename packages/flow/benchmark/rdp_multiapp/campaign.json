@@ -1,0 +1,72 @@
+{
+  "schema_version": "openadapt.rdp-multiapp-campaign.v1",
+  "task": "Process one referral across inbox, worklist, and scheduler windows through RDP pixels, then prove the appointment, worklist status, and confirmation email on independent persisted surfaces.",
+  "trials_per_condition": 3,
+  "required_metrics": [
+    "verified_outcomes",
+    "safe_halts",
+    "silent_incorrect_successes",
+    "over_halts",
+    "wrong_record_writes",
+    "duplicate_effects",
+    "model_calls",
+    "p50_runtime_s",
+    "p95_runtime_s"
+  ],
+  "conditions": [
+    {
+      "id": "healthy",
+      "expect": "verified",
+      "fault": "none",
+      "oracle": ["sqlite", "csv", "maildir"]
+    },
+    {
+      "id": "row_reordered",
+      "expect": "verified",
+      "fault": "The target worklist row moves to a different visual position.",
+      "oracle": ["sqlite", "csv", "maildir"]
+    },
+    {
+      "id": "focus_theft_before_write",
+      "expect": "safe_halt",
+      "fault": "Another task window takes focus after resolution and before the scheduler write.",
+      "oracle": ["sqlite"]
+    },
+    {
+      "id": "wrong_record_before_write",
+      "expect": "safe_halt",
+      "fault": "The active scheduler record changes before the consequential click.",
+      "oracle": ["sqlite"]
+    },
+    {
+      "id": "duplicate_save_control",
+      "expect": "safe_halt",
+      "fault": "A competing Save appointment control appears in the same visual state.",
+      "oracle": ["sqlite"]
+    },
+    {
+      "id": "partial_render",
+      "expect": "safe_halt",
+      "fault": "The target window is incomplete when the next action is due.",
+      "oracle": ["sqlite", "csv", "maildir"]
+    },
+    {
+      "id": "moderate_display_drift",
+      "expect": "verified_or_safe_halt",
+      "fault": "Theme, scaling, and compression change while text remains readable.",
+      "oracle": ["sqlite", "csv", "maildir"]
+    },
+    {
+      "id": "severe_display_drift",
+      "expect": "safe_halt",
+      "fault": "The frame no longer supports unambiguous target and record identity.",
+      "oracle": ["sqlite", "csv", "maildir"]
+    },
+    {
+      "id": "commit_then_timeout",
+      "expect": "verified_or_reconciliation_required",
+      "fault": "The scheduler write can persist before the input channel reports uncertainty.",
+      "oracle": ["sqlite"]
+    }
+  ]
+}

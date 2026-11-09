@@ -1,0 +1,59 @@
+task,arm,run_id,item,attempt,fault,reported_success,readback,outcome,model_calls,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,cost_usd,item_s,wall_s,approvals_asked,host_load_1m,timed,detail
+openimis,program_repair,2026-10-19-a,45,1,none,True,correct,correct,0,0,0,0,0,0,31.898,31.898,0,11.22,False,self_repair=not_needed
+openimis,program_repair,2026-10-19-a,46,1,none,True,correct,correct,0,0,0,0,0,0,19.764,19.764,0,21.98,False,self_repair=not_needed
+openimis,program_repair,2026-10-19-a,47,1,none,True,correct,correct,0,0,0,0,0,0,20.064,20.064,0,18.49,False,self_repair=not_needed
+openimis,program_repair,2026-10-19-a,48,1,none,True,correct,correct,0,0,0,0,0,0,23.404,23.404,0,17.12,False,self_repair=not_needed
+openimis,program_repair,2026-10-19-a,49,1,none,True,correct,correct,0,0,0,0,0,0,23.659,23.659,0,26.3,False,self_repair=not_needed
+openimis,program_repair,2026-10-19-a,50,1,ui_change,False,missing,safe_stop,0,0,0,0,0,0,22.987,22.987,0,21.98,False,"self_repair=not_repairable (the run ended RECONCILIATION_REQUIRED; self-repair handles only a halt before any effect); halted step_014: Step 'step_014' (scroll by (0, -600)): closed-loop scroll exhausted its budget (1200px of 1500px allowed, 2.5x the recorded distance) without the anchor of step"
+openimis,program_repair,2026-10-19-a,50,2,ui_change,False,missing,safe_stop,0,0,0,0,0,0,37.078,37.078,0,19.24,False,"self_repair=not_repairable (the run ended RECONCILIATION_REQUIRED; self-repair handles only a halt before any effect); halted step_014: Step 'step_014' (scroll by (0, -600)): closed-loop scroll exhausted its budget (1200px of 1500px allowed, 2.5x the recorded distance) without the anchor of step"
+openimis,program_repair,2026-10-19-a,50,3,ui_change,False,missing,safe_stop,0,0,0,0,0,0,16.111,16.111,0,15.06,False,"self_repair=not_repairable (the run ended RECONCILIATION_REQUIRED; self-repair handles only a halt before any effect); halted step_014: Step 'step_014' (scroll by (0, -600)): closed-loop scroll exhausted its budget (1200px of 1500px allowed, 2.5x the recorded distance) without the anchor of step"
+openimis,program_repair,2026-10-19-a,51,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,52,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,53,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,54,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,55,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,56,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,57,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,58,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,59,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,60,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,61,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,62,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,63,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,64,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,65,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,66,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,67,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,68,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,69,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,70,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,71,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,72,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,73,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,74,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,75,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,76,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,77,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,78,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,79,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,80,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,81,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,82,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,83,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,84,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,85,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,86,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,87,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,88,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,89,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,90,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,91,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,92,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,93,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,94,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,95,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,96,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,97,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,98,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,99,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50
+openimis,program_repair,2026-10-19-a,100,0,ui_change,False,not_checked,paused,0,0,0,0,0,0.0,0.0,0.0,0,-1.0,False,batch paused for a person at item 50

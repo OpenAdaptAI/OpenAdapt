@@ -1,0 +1,132 @@
+{
+ "source": "results/runs.csv",
+ "rows": 40,
+ "arms": {
+  "browser": {
+   "runs": 20,
+   "correct": 19,
+   "normal_runs": 18,
+   "normal_saved_12_of_12": 17,
+   "duplicate_runs": 2,
+   "duplicate_no_new_chart": 2,
+   "wall_s_correct_normal": {
+    "n": 17,
+    "median": 23.899,
+    "p10": 22.997,
+    "p90": 27.111,
+    "min": 22.736,
+    "max": 28.391,
+    "mean": 24.671
+   },
+   "task_s_correct_normal": {
+    "n": 17,
+    "median": 22.539,
+    "p10": 21.666,
+    "p90": 25.6,
+    "min": 21.395,
+    "max": 27.013,
+    "mean": 23.284
+   },
+   "setup_s_correct_normal": {
+    "n": 17,
+    "median": 1.479,
+    "p10": 1.412,
+    "p90": 1.889,
+    "min": 1.406,
+    "max": 1.999,
+    "mean": 1.597
+   },
+   "engine_s_correct_normal": {
+    "n": 17,
+    "median": 21.019,
+    "p10": 20.043,
+    "p90": 23.933,
+    "min": 19.957,
+    "max": 25.388,
+    "mean": 21.687
+   },
+   "wall_s_all_runs": {
+    "n": 20,
+    "median": 24.091,
+    "p10": 22.823,
+    "p90": 28.559,
+    "min": 21.115,
+    "max": 34.35,
+    "mean": 25.247
+   },
+   "failures": [
+    {
+     "block": "3",
+     "ref": "r2-marcus-feld",
+     "readback": "0/12",
+     "outcome": "HALTED",
+     "error": ""
+    }
+   ]
+  },
+  "api": {
+   "runs": 20,
+   "correct": 20,
+   "normal_runs": 18,
+   "normal_saved_12_of_12": 18,
+   "duplicate_runs": 2,
+   "duplicate_no_new_chart": 2,
+   "wall_s_correct_normal": {
+    "n": 18,
+    "median": 2.136,
+    "p10": 2.035,
+    "p90": 2.368,
+    "min": 1.996,
+    "max": 2.54,
+    "mean": 2.17
+   },
+   "task_s_correct_normal": {
+    "n": 18,
+    "median": 0.846,
+    "p10": 0.731,
+    "p90": 1.052,
+    "min": 0.708,
+    "max": 1.171,
+    "mean": 0.866
+   },
+   "setup_s_correct_normal": {
+    "n": 18,
+    "median": 0.485,
+    "p10": 0.416,
+    "p90": 0.58,
+    "min": 0.412,
+    "max": 0.698,
+    "mean": 0.499
+   },
+   "engine_s_correct_normal": {
+    "n": 18,
+    "median": 0.338,
+    "p10": 0.296,
+    "p90": 0.47,
+    "min": 0.292,
+    "max": 0.549,
+    "mean": 0.368
+   },
+   "wall_s_all_runs": {
+    "n": 20,
+    "median": 2.123,
+    "p10": 1.976,
+    "p90": 2.343,
+    "min": 1.763,
+    "max": 2.54,
+    "mean": 2.131
+   },
+   "failures": []
+  }
+ },
+ "speedup": {
+  "wall_median_ratio": 11.19,
+  "wall_median_ratio_ci95": [
+   10.78,
+   12.14
+  ],
+  "wall_median_diff_s": 21.763,
+  "task_median_ratio": 26.64,
+  "engine_median_ratio": 62.19
+ }
+}

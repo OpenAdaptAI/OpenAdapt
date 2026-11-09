@@ -1,0 +1,95 @@
+# Qualify the OpenEMR patient-registration workflow on the local fixture.
+#
+#   PYTHONPATH=. openadapt-flow qualify path/to/bundle \
+#     --verify benchmark/openemr_local/verify.yaml --out runs/openemr-qual \
+#     --certify clinical-write
+#
+# Made-up patients only. See docs/QUALIFY_A_WORKFLOW.md.
+schema_version: openadapt.verify/v1
+environment_id: openemr-local-fixture-7c96c8eefe46
+minimum_effect_strength: independent_system_of_record
+
+app:
+  target: web
+  name: OpenEMR (local fixture, made-up patients)
+  url: ${OPENEMR_UI_URL:-http://127.0.0.1:9301}
+  version: openemr@7c96c8eefe46 (benchmark/openemr_local lock)
+  # OpenEMR's sign-in opens the form through its tab shell, and the fixture
+  # resets by restoring a database snapshot; both are small functions.
+  session: benchmark.openemr_local.qualify_hooks:open_session
+  reset:
+    python: benchmark.openemr_local.qualify_hooks:reset
+
+# Read the patient back through OpenEMR's REST API with a separate,
+# read-only OAuth client. This is the existing RestRecordVerifier.
+verifier:
+  kind: rest
+  base_url: ${OPENEMR_API_URL:-https://127.0.0.1:9300}
+  records_path: /apis/default/api/patient?_limit=1000
+  records_key: data
+  session: benchmark.openemr_local.qualify_hooks:oracle_session
+
+# What the save writes; expands to the effect contract list (one
+# record_written plus a field_equals per field). A bare value is a parameter.
+record:
+  name: patient
+  match: [email, lname]
+  duplicate_key: email   # OpenEMR has no idempotency column; one chart per email
+  fields:
+    email: email
+    # OpenEMR's New Patient form saves what was typed transformed, when the
+    # field changes: each word of a name capitalized ("C"), street and city
+    # in capitals ("U"). The check expects exactly that stored form.
+    lname: {param: lname, stored: capitalize_words}
+    title: title
+    fname: {param: fname, stored: capitalize_words}
+    DOB: DOB
+    sex: sex
+    street: {param: street, stored: upper}
+    city: {param: city, stored: upper}
+    state: {literal: MA}  # the select shows "Massachusetts"; the record stores MA
+    postal_code: postal_code
+    phone_home: phone_home
+    country_code: country_code
+
+save_step: auto
+
+inputs:
+  source: recorded
+
+campaign:
+  id: openemr-local-patient-registration-v2
+  trials: 3
+  policy: clinical-write
+
+# A rule OpenEMR itself enforces. After the reset, an existing chart for the
+# same person (Rosa Delgado, born 1958-03-27) is seeded; the referral is Rosa
+# Delgado born 1958-03-22. OpenEMR's duplicate check lists the existing chart,
+# and the program must stop before the save: HALTED_BEFORE_EFFECT, with no new
+# or changed chart. Certification runs it on every trial.
+business_rules:
+  - id: existing-duplicate
+    description: >-
+      An existing chart for the same person with a close birth date; the
+      duplicate check lists it, and the program stops before saving.
+    seed:
+      python: benchmark.openemr_local.qualify_hooks:seed_existing_chart
+    params:
+      title: Mrs.
+      fname: Rosa
+      lname: Delgado
+      DOB: "1958-03-22"
+      sex: Female
+      street: 7 MILL ROAD
+      city: EXAMPLETON
+      state_label: Massachusetts
+      postal_code: "02139"
+      phone_home: 555-0188
+      email: rosa.delgado@example.invalid
+      country_code: USA
+    expect: HALTED_BEFORE_EFFECT
+    readback: no_mutation
+    # Stop at the duplicate dialog's "No matches were found." check (after
+    # #create, or again before #confirmCreate); a halt anywhere else fails.
+    halt_at: empty_result_guard
+    halt_reason: No matches were found.

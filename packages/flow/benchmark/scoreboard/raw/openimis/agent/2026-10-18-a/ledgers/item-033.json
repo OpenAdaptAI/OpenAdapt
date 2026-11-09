@@ -1,0 +1,296 @@
+{
+  "model": "claude-sonnet-5-5",
+  "effort": "medium",
+  "tool": "computer_toolset_20260801",
+  "price_per_mtok_usd": {
+    "input": 2.0,
+    "output": 10.0,
+    "cache_read": 0.2,
+    "cache_write": 2.5
+  },
+  "started_at": 1792359009.485722,
+  "finished_at": 1792359046.92431,
+  "model_calls": 7,
+  "actions": 27,
+  "cost_usd": 0.056322,
+  "final_text": "I entered claim SA033 for insurance number 999000103 (Lindqvist Sam, active policy) and clicked Save. The page now shows the claim as saved. It lists the main diagnosis \"Scarlet fever, uncomplicated\", the service A1 General Consultation at $400.00, and the explanation \"Rash on trunk, swab taken (#33)\".",
+  "refused_actions": [],
+  "calls": [
+    {
+      "turn": 1,
+      "started_s": 1792359009.485727,
+      "ended_s": 1792359011.5239391,
+      "input_tokens": 4,
+      "output_tokens": 107,
+      "cache_read_input_tokens": 0,
+      "cache_creation_input_tokens": 5232,
+      "cost_usd": 0.014158,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              369,
+              220
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "999000103"
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 3
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgAR2HD2ivSaTpaVbdANd",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 2,
+      "started_s": 1792359015.884779,
+      "ended_s": 1792359017.979274,
+      "input_tokens": 2,
+      "output_tokens": 157,
+      "cache_read_input_tokens": 5232,
+      "cache_creation_input_tokens": 1526,
+      "cost_usd": 0.0064354,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              988,
+              288
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "SA033"
+          }
+        },
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              735,
+              288
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "Scarlet"
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 2
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgAR2kQe5EeJT8dQZsncB",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 3,
+      "started_s": 1792359022.05461,
+      "ended_s": 1792359024.117506,
+      "input_tokens": 2,
+      "output_tokens": 142,
+      "cache_read_input_tokens": 6758,
+      "cache_creation_input_tokens": 1590,
+      "cost_usd": 0.006750600000000001,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              746,
+              514
+            ]
+          }
+        },
+        {
+          "name": "scroll",
+          "input": {
+            "coordinate": [
+              746,
+              514
+            ],
+            "scroll_direction": "down",
+            "scroll_amount": 5
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 1
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgAR3CneEn5A1mQ6S9hTe",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 4,
+      "started_s": 1792359026.498074,
+      "ended_s": 1792359028.488668,
+      "input_tokens": 2,
+      "output_tokens": 113,
+      "cache_read_input_tokens": 8348,
+      "cache_creation_input_tokens": 1553,
+      "cost_usd": 0.0066861,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              235,
+              536
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "General"
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 2
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgAR3XoPDCdNdYeaQ5aRa",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 5,
+      "started_s": 1792359031.8651211,
+      "ended_s": 1792359034.1223621,
+      "input_tokens": 2,
+      "output_tokens": 167,
+      "cache_read_input_tokens": 9901,
+      "cache_creation_input_tokens": 1522,
+      "cost_usd": 0.0074592,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              142,
+              582
+            ]
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 1
+          }
+        },
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              400,
+              216
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "Rash on trunk, swab taken (#33)"
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 1
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgAR3vn1prrjRLDa3pMS7",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 6,
+      "started_s": 1792359038.482005,
+      "ended_s": 1792359041.065058,
+      "input_tokens": 2,
+      "output_tokens": 99,
+      "cache_read_input_tokens": 11423,
+      "cache_creation_input_tokens": 1601,
+      "cost_usd": 0.0072811,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              1243,
+              752
+            ]
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 2
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgAR4R5r5w4n9x1f6ofue",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 7,
+      "started_s": 1792359044.099769,
+      "ended_s": 1792359046.92321,
+      "input_tokens": 2,
+      "output_tokens": 120,
+      "cache_read_input_tokens": 13024,
+      "cache_creation_input_tokens": 1497,
+      "cost_usd": 0.0075513,
+      "actions": [],
+      "request_id": "req_011CgAR4q2FkY4R9Gts8HkRi",
+      "stop_reason": "end_turn"
+    }
+  ]
+}

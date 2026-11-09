@@ -1,0 +1,17 @@
+# What OpenAdapt checks after the "Add expense" click, against the expenses
+# table (read-only, through the `effects` section of work/deployment.yaml).
+#
+# The compiler proposes a contract from the row it saw appear while you
+# recorded, with the recorded values hard-coded. This reviewed version binds
+# description and amount to the tool's parameters, so each call is checked
+# against the values that call passed.
+effects:
+  - kind: record_written
+    match:
+      description: {param: description}
+      amount: {param: amount}
+      submitted_by: E-1042
+      status: submitted
+    expected_count: 1     # exactly one matching row
+    count_new_only: true  # that was not there before the click
+    probe: one new expenses row with this description and amount

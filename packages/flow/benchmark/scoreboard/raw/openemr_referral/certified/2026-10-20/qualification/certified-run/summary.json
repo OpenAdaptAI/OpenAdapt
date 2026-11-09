@@ -1,0 +1,20 @@
+{
+  "execution_outcome": "VERIFIED",
+  "execution_profile": "standard",
+  "failed_error": null,
+  "failed_step_id": null,
+  "model_calls": 0,
+  "oracle": "exact_record",
+  "production_eligible": true,
+  "sql-oracle_passed": true,
+  "success": true,
+  "timing": {
+    "engine_total_ms": 17783.44662487507,
+    "replay_task_s": 18.07,
+    "reset_s": 3.4,
+    "run_wall_s": 22.097,
+    "session_open_s": 2.211
+  },
+  "total_ms": 17783.44662487507,
+  "transaction_outcome": "VERIFIED"
+}

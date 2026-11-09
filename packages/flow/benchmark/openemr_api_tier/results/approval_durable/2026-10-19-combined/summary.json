@@ -1,0 +1,43 @@
+{
+ "label": "API step under each_item approval + durable, no run gate; harness answers approvals; approval wait excluded",
+ "engine_sha": "352af585b",
+ "arms": {
+  "browser": {
+   "runs": 20,
+   "correct": 19,
+   "errors": 0,
+   "api_saves": 0,
+   "approvals_per_item": [
+    1,
+    2
+   ],
+   "approval_kinds": [
+    "dom",
+    "dom+dom"
+   ],
+   "median_engine_s": 15.95,
+   "median_approval_wait_s": 0.049,
+   "max_load_start": null,
+   "safe_stops": 1,
+   "wrong_saves": 0
+  },
+  "api": {
+   "runs": 20,
+   "correct": 20,
+   "errors": 0,
+   "api_saves": 18,
+   "approvals_per_item": [
+    1
+   ],
+   "approval_kinds": [
+    "api_request",
+    "dom"
+   ],
+   "median_engine_s": 1.12,
+   "median_approval_wait_s": 0.026,
+   "max_load_start": null,
+   "safe_stops": 0,
+   "wrong_saves": 0
+  }
+ }
+}

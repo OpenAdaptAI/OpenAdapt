@@ -1,0 +1,4506 @@
+{
+  "schema_version": 2,
+  "name": "openemr-create-synthetic-patient",
+  "recording_id": "5437aed816f9bbab74104f6728af52d7a5b9ae13a37452eb6b18ca9cd6686f87",
+  "contains_phi": false,
+  "phi_scrubbed": false,
+  "encrypted": false,
+  "created_at": "2026-10-10T05:21:26.051206+00:00",
+  "viewport": [
+    1280,
+    800
+  ],
+  "params": {
+    "title": "Ms.",
+    "fname": "Elena",
+    "lname": "Marsh",
+    "DOB": "1979-06-14",
+    "sex": "Female",
+    "street": "42 HARBOR LANE",
+    "city": "EXAMPLETON",
+    "state_label": "Massachusetts",
+    "postal_code": "02139",
+    "phone_home": "555-0142",
+    "email": "elena.marsh@example.invalid",
+    "country_code": "USA"
+  },
+  "param_specs": {
+    "title": {
+      "name": "title",
+      "type": "string",
+      "example": "Ms.",
+      "required": true,
+      "choices": []
+    },
+    "fname": {
+      "name": "fname",
+      "type": "string",
+      "example": "Elena",
+      "required": true,
+      "choices": []
+    },
+    "lname": {
+      "name": "lname",
+      "type": "string",
+      "example": "Marsh",
+      "required": true,
+      "choices": []
+    },
+    "DOB": {
+      "name": "DOB",
+      "type": "string",
+      "example": "1979-06-14",
+      "required": true,
+      "choices": []
+    },
+    "sex": {
+      "name": "sex",
+      "type": "string",
+      "example": "Female",
+      "required": true,
+      "choices": []
+    },
+    "street": {
+      "name": "street",
+      "type": "string",
+      "example": "42 HARBOR LANE",
+      "required": true,
+      "choices": []
+    },
+    "city": {
+      "name": "city",
+      "type": "string",
+      "example": "EXAMPLETON",
+      "required": true,
+      "choices": []
+    },
+    "state_label": {
+      "name": "state_label",
+      "type": "string",
+      "example": "Massachusetts",
+      "required": true,
+      "choices": []
+    },
+    "postal_code": {
+      "name": "postal_code",
+      "type": "string",
+      "example": "02139",
+      "required": true,
+      "choices": []
+    },
+    "phone_home": {
+      "name": "phone_home",
+      "type": "string",
+      "example": "555-0142",
+      "required": true,
+      "choices": []
+    },
+    "email": {
+      "name": "email",
+      "type": "string",
+      "example": "elena.marsh@example.invalid",
+      "required": true,
+      "choices": []
+    },
+    "country_code": {
+      "name": "country_code",
+      "type": "string",
+      "example": "USA",
+      "required": true,
+      "choices": []
+    }
+  },
+  "secret_params": [],
+  "steps": [
+    {
+      "id": "step_000",
+      "intent": "click 'Unassigned'",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_000.png",
+        "structural": {
+          "selector": "#form_title",
+          "frame_path": [
+            "div:nth-of-type(3) > iframe:nth-of-type(1)"
+          ],
+          "role": "combobox",
+          "name": "form_title",
+          "automation_id": null,
+          "window_name": null
+        },
+        "region": [
+          356,
+          250,
+          160,
+          64
+        ],
+        "click_point": [
+          436,
+          282
+        ],
+        "ocr_text": "Unassigned",
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": null,
+        "identifier_crop": null,
+        "identifier_region": null,
+        "landmarks": [
+          {
+            "relation": "below",
+            "ocr_text": "Birth First Name",
+            "distance_px": 111,
+            "dx_px": -4,
+            "dy_px": -111
+          },
+          {
+            "relation": "right_of",
+            "ocr_text": "Middle",
+            "distance_px": 113,
+            "dx_px": -107,
+            "dy_px": -36
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "field_label": null,
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": null,
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            346,
+            233,
+            180,
+            99
+          ],
+          "phash": "8b766996dd61304b",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0,
+          "template": "templates/step_000_expect.png"
+        }
+      ],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "control label has no retained consequential-write signal",
+      "risk_review_required": false,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": false,
+      "identity_unarmed_reason": "row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)",
+      "identifier_crop_missing_reason": "identity is not armed on this step (see identity_unarmed_reason) — there is no identity evidence to crop"
+    },
+    {
+      "id": "step_001",
+      "intent": "type <title>",
+      "action": "type",
+      "anchor": null,
+      "text": "Ms.",
+      "param": "title",
+      "secret": false,
+      "field_label": "form_title",
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": null,
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "action has no retained consequential commit signal",
+      "risk_review_required": false,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_002",
+      "intent": "press Enter",
+      "action": "key",
+      "anchor": null,
+      "text": null,
+      "param": null,
+      "secret": false,
+      "field_label": null,
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": "Enter",
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "submission/deletion key may edit locally or commit application state",
+      "risk_review_required": true,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_003",
+      "intent": "click 'FirstName'",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_003.png",
+        "structural": {
+          "selector": "#form_fname",
+          "frame_path": [
+            "div:nth-of-type(3) > iframe:nth-of-type(1)"
+          ],
+          "role": "textbox",
+          "name": "First Name",
+          "automation_id": null,
+          "window_name": null
+        },
+        "region": [
+          364,
+          285,
+          160,
+          64
+        ],
+        "click_point": [
+          444,
+          317
+        ],
+        "ocr_text": "FirstName",
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": {
+          "schema_version": 1,
+          "salt": "2c2b0ae13e735d8eb142df708d892db7",
+          "band_len": 32,
+          "tokens": [
+            {
+              "c": "1879bb6e2468d0dc",
+              "r": "1879bb6e2468d0dc",
+              "n": 5,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "c97e03adcb2daf4f",
+              "r": "c97e03adcb2daf4f",
+              "n": 4,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "35ec48c4bace74c5",
+              "r": "35ec48c4bace74c5",
+              "n": 4,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "55804f1e61781aea",
+              "r": "ed668f44268f6073",
+              "n": 6,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "35ec48c4bace74c5",
+              "r": "35ec48c4bace74c5",
+              "n": 4,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "457dd1c61bab807d",
+              "r": "48d46e39162131a8",
+              "n": 5,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "35ec48c4bace74c5",
+              "r": "35ec48c4bace74c5",
+              "n": 4,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            }
+          ],
+          "concats": [
+            {
+              "i": 0,
+              "size": 2,
+              "c": "daeb090ece3daaee",
+              "r": "daeb090ece3daaee",
+              "digit": false,
+              "name": true,
+              "n": 9
+            },
+            {
+              "i": 0,
+              "size": 3,
+              "c": "6769b16d8917635a",
+              "r": "6769b16d8917635a",
+              "digit": false,
+              "name": true,
+              "n": 13
+            },
+            {
+              "i": 0,
+              "size": 4,
+              "c": "5a4fa85fde16d94a",
+              "r": "4ca243508696eac5",
+              "digit": false,
+              "name": true,
+              "n": 19
+            },
+            {
+              "i": 1,
+              "size": 2,
+              "c": "576f1cd09419e09e",
+              "r": "576f1cd09419e09e",
+              "digit": false,
+              "name": true,
+              "n": 8
+            },
+            {
+              "i": 1,
+              "size": 3,
+              "c": "dce3f95f124b8f30",
+              "r": "f6e7aeaa8572a0f8",
+              "digit": false,
+              "name": true,
+              "n": 14
+            },
+            {
+              "i": 1,
+              "size": 4,
+              "c": "7865570230ee4e36",
+              "r": "9a71be104f7e3652",
+              "digit": false,
+              "name": true,
+              "n": 18
+            },
+            {
+              "i": 2,
+              "size": 2,
+              "c": "4e1073d2a173a491",
+              "r": "2e347665ca8b043d",
+              "digit": false,
+              "name": true,
+              "n": 10
+            },
+            {
+              "i": 2,
+              "size": 3,
+              "c": "82beb4ec07109364",
+              "r": "62780d4258ffdc69",
+              "digit": false,
+              "name": true,
+              "n": 14
+            },
+            {
+              "i": 2,
+              "size": 4,
+              "c": "b32346eb5c377a2a",
+              "r": "325244a6f07555be",
+              "digit": false,
+              "name": true,
+              "n": 19
+            },
+            {
+              "i": 3,
+              "size": 2,
+              "c": "0b8d70225c53df2c",
+              "r": "9c18e6662a4d8458",
+              "digit": false,
+              "name": true,
+              "n": 10
+            },
+            {
+              "i": 3,
+              "size": 3,
+              "c": "f800121a8060a3e3",
+              "r": "5f7d5643b1be751e",
+              "digit": false,
+              "name": true,
+              "n": 15
+            },
+            {
+              "i": 3,
+              "size": 4,
+              "c": "3db1107690556298",
+              "r": "8949caa391f7d186",
+              "digit": false,
+              "name": true,
+              "n": 19
+            },
+            {
+              "i": 4,
+              "size": 2,
+              "c": "ec04f98caaa05b00",
+              "r": "038c19f7030c4554",
+              "digit": false,
+              "name": true,
+              "n": 9
+            },
+            {
+              "i": 4,
+              "size": 3,
+              "c": "3b28a74db45a3fbf",
+              "r": "eb8a7c9b56c29783",
+              "digit": false,
+              "name": true,
+              "n": 13
+            },
+            {
+              "i": 5,
+              "size": 2,
+              "c": "103de94799b5d3c9",
+              "r": "9353aadf00b18f24",
+              "digit": false,
+              "name": true,
+              "n": 9
+            }
+          ],
+          "structured": null,
+          "signal_hashes": {
+            "captured_context|exact|": "51f7e01d28a5d31cc62ff5c3ed583c48a5618ce4217fa6a391f54ff96ab4ea8c",
+            "captured_context|normalized|unicode_nfkc": "51f7e01d28a5d31cc62ff5c3ed583c48a5618ce4217fa6a391f54ff96ab4ea8c",
+            "captured_context|normalized|casefold": "9ae8f99180bffeea89fc1891164d9a2c11a2cd218456e692f60580c703547838",
+            "captured_context|normalized|collapse_whitespace": "51f7e01d28a5d31cc62ff5c3ed583c48a5618ce4217fa6a391f54ff96ab4ea8c",
+            "captured_context|normalized|strip_punctuation": "4bef1b043b9a39d0594e62bca1652b770571a50e768fc0bd25fc269ed32d4b03",
+            "captured_context|normalized|unicode_nfkc,casefold": "9ae8f99180bffeea89fc1891164d9a2c11a2cd218456e692f60580c703547838",
+            "captured_context|normalized|unicode_nfkc,collapse_whitespace": "51f7e01d28a5d31cc62ff5c3ed583c48a5618ce4217fa6a391f54ff96ab4ea8c",
+            "captured_context|normalized|unicode_nfkc,strip_punctuation": "4bef1b043b9a39d0594e62bca1652b770571a50e768fc0bd25fc269ed32d4b03",
+            "captured_context|normalized|casefold,collapse_whitespace": "9ae8f99180bffeea89fc1891164d9a2c11a2cd218456e692f60580c703547838",
+            "captured_context|normalized|casefold,strip_punctuation": "ef2a1ad777b9f9b77c869dac1e3328898c44c74ea72eef6650fdc9388fe52d56",
+            "captured_context|normalized|collapse_whitespace,strip_punctuation": "4bef1b043b9a39d0594e62bca1652b770571a50e768fc0bd25fc269ed32d4b03",
+            "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace": "9ae8f99180bffeea89fc1891164d9a2c11a2cd218456e692f60580c703547838",
+            "captured_context|normalized|unicode_nfkc,casefold,strip_punctuation": "ef2a1ad777b9f9b77c869dac1e3328898c44c74ea72eef6650fdc9388fe52d56",
+            "captured_context|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "4bef1b043b9a39d0594e62bca1652b770571a50e768fc0bd25fc269ed32d4b03",
+            "captured_context|normalized|casefold,collapse_whitespace,strip_punctuation": "ef2a1ad777b9f9b77c869dac1e3328898c44c74ea72eef6650fdc9388fe52d56",
+            "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "ef2a1ad777b9f9b77c869dac1e3328898c44c74ea72eef6650fdc9388fe52d56"
+          },
+          "param_token_indices": {},
+          "rests_on_confusable_identifier": false
+        },
+        "identifier_crop": "templates/identifiers/step_003.png",
+        "identifier_region": [
+          109,
+          304,
+          711,
+          25
+        ],
+        "landmarks": [
+          {
+            "relation": "below",
+            "ocr_text": "Birth First Name",
+            "distance_px": 76,
+            "dx_px": 4,
+            "dy_px": -76
+          },
+          {
+            "relation": "right_of",
+            "ocr_text": "Middle",
+            "distance_px": 124,
+            "dx_px": -99,
+            "dy_px": -75
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "field_label": null,
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": null,
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            346,
+            300,
+            197,
+            67
+          ],
+          "phash": "8969b532b2b3e88b",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0,
+          "template": "templates/step_003_expect.png"
+        }
+      ],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "control label has no retained consequential-write signal",
+      "risk_review_required": false,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": true,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_004",
+      "intent": "press Control+a",
+      "action": "key",
+      "anchor": null,
+      "text": null,
+      "param": null,
+      "secret": false,
+      "field_label": null,
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": "Control+a",
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "special key may navigate, edit, or invoke an application shortcut",
+      "risk_review_required": true,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_005",
+      "intent": "type <fname>",
+      "action": "type",
+      "anchor": null,
+      "text": "Elena",
+      "param": "fname",
+      "secret": false,
+      "field_label": "First Name",
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": null,
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "action has no retained consequential commit signal",
+      "risk_review_required": false,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_006",
+      "intent": "click 'Last Name'",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_006.png",
+        "structural": {
+          "selector": "#form_lname",
+          "frame_path": [
+            "div:nth-of-type(3) > iframe:nth-of-type(1)"
+          ],
+          "role": "textbox",
+          "name": "Last Name",
+          "automation_id": null,
+          "window_name": null
+        },
+        "region": [
+          591,
+          285,
+          160,
+          64
+        ],
+        "click_point": [
+          671,
+          317
+        ],
+        "ocr_text": "Last Name",
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": {
+          "schema_version": 1,
+          "salt": "2c2b0ae13e735d8eb142df708d892db7",
+          "band_len": 28,
+          "tokens": [
+            {
+              "c": "1879bb6e2468d0dc",
+              "r": "1879bb6e2468d0dc",
+              "n": 5,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "c97e03adcb2daf4f",
+              "r": "c97e03adcb2daf4f",
+              "n": 4,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "35ec48c4bace74c5",
+              "r": "35ec48c4bace74c5",
+              "n": 4,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "1728ba6bd417f83e",
+              "r": "1728ba6bd417f83e",
+              "n": 5,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "55804f1e61781aea",
+              "r": "ed668f44268f6073",
+              "n": 6,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "35ec48c4bace74c5",
+              "r": "35ec48c4bace74c5",
+              "n": 4,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            }
+          ],
+          "concats": [
+            {
+              "i": 0,
+              "size": 2,
+              "c": "daeb090ece3daaee",
+              "r": "daeb090ece3daaee",
+              "digit": false,
+              "name": true,
+              "n": 9
+            },
+            {
+              "i": 0,
+              "size": 3,
+              "c": "6769b16d8917635a",
+              "r": "6769b16d8917635a",
+              "digit": false,
+              "name": true,
+              "n": 13
+            },
+            {
+              "i": 0,
+              "size": 4,
+              "c": "f89ea160482e5da2",
+              "r": "f89ea160482e5da2",
+              "digit": false,
+              "name": true,
+              "n": 18
+            },
+            {
+              "i": 1,
+              "size": 2,
+              "c": "576f1cd09419e09e",
+              "r": "576f1cd09419e09e",
+              "digit": false,
+              "name": true,
+              "n": 8
+            },
+            {
+              "i": 1,
+              "size": 3,
+              "c": "db56efbd6ef0a157",
+              "r": "db56efbd6ef0a157",
+              "digit": false,
+              "name": true,
+              "n": 13
+            },
+            {
+              "i": 1,
+              "size": 4,
+              "c": "77b10a8d7cd558a3",
+              "r": "7cb24e8904a71d6b",
+              "digit": false,
+              "name": true,
+              "n": 19
+            },
+            {
+              "i": 2,
+              "size": 2,
+              "c": "9c15c23c77967372",
+              "r": "9c15c23c77967372",
+              "digit": false,
+              "name": true,
+              "n": 9
+            },
+            {
+              "i": 2,
+              "size": 3,
+              "c": "705f13f9e62a8a6c",
+              "r": "d7560863fce0af70",
+              "digit": false,
+              "name": true,
+              "n": 15
+            },
+            {
+              "i": 2,
+              "size": 4,
+              "c": "b0672dfdc70efa06",
+              "r": "947465083d2ecab8",
+              "digit": false,
+              "name": true,
+              "n": 19
+            },
+            {
+              "i": 3,
+              "size": 2,
+              "c": "7dae712e31ae87b0",
+              "r": "4d84b05c88f8c00d",
+              "digit": false,
+              "name": true,
+              "n": 11
+            },
+            {
+              "i": 3,
+              "size": 3,
+              "c": "cdd35a61a0690fff",
+              "r": "bc46ba2b1f3c6edc",
+              "digit": false,
+              "name": true,
+              "n": 15
+            },
+            {
+              "i": 4,
+              "size": 2,
+              "c": "0b8d70225c53df2c",
+              "r": "9c18e6662a4d8458",
+              "digit": false,
+              "name": true,
+              "n": 10
+            }
+          ],
+          "structured": null,
+          "signal_hashes": {
+            "captured_context|exact|": "387e47193a3dfad42e930c70537a08eca7728d381ccb65fac57e712b41af706d",
+            "captured_context|normalized|unicode_nfkc": "387e47193a3dfad42e930c70537a08eca7728d381ccb65fac57e712b41af706d",
+            "captured_context|normalized|casefold": "a301b4193990116dbf7ef4d6ec17ebddd734ebaec7b633edb9dc10db83e3bfb4",
+            "captured_context|normalized|collapse_whitespace": "387e47193a3dfad42e930c70537a08eca7728d381ccb65fac57e712b41af706d",
+            "captured_context|normalized|strip_punctuation": "0da2e016066385df59acf4de61055429d22b23731e04d9dfc44fc85877d127b3",
+            "captured_context|normalized|unicode_nfkc,casefold": "a301b4193990116dbf7ef4d6ec17ebddd734ebaec7b633edb9dc10db83e3bfb4",
+            "captured_context|normalized|unicode_nfkc,collapse_whitespace": "387e47193a3dfad42e930c70537a08eca7728d381ccb65fac57e712b41af706d",
+            "captured_context|normalized|unicode_nfkc,strip_punctuation": "0da2e016066385df59acf4de61055429d22b23731e04d9dfc44fc85877d127b3",
+            "captured_context|normalized|casefold,collapse_whitespace": "a301b4193990116dbf7ef4d6ec17ebddd734ebaec7b633edb9dc10db83e3bfb4",
+            "captured_context|normalized|casefold,strip_punctuation": "083db5eba8f154e1293e029290efe9f0bcd42bb14ca75938d069dc7bb48e9a1f",
+            "captured_context|normalized|collapse_whitespace,strip_punctuation": "0da2e016066385df59acf4de61055429d22b23731e04d9dfc44fc85877d127b3",
+            "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace": "a301b4193990116dbf7ef4d6ec17ebddd734ebaec7b633edb9dc10db83e3bfb4",
+            "captured_context|normalized|unicode_nfkc,casefold,strip_punctuation": "083db5eba8f154e1293e029290efe9f0bcd42bb14ca75938d069dc7bb48e9a1f",
+            "captured_context|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "0da2e016066385df59acf4de61055429d22b23731e04d9dfc44fc85877d127b3",
+            "captured_context|normalized|casefold,collapse_whitespace,strip_punctuation": "083db5eba8f154e1293e029290efe9f0bcd42bb14ca75938d069dc7bb48e9a1f",
+            "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "083db5eba8f154e1293e029290efe9f0bcd42bb14ca75938d069dc7bb48e9a1f"
+          },
+          "context_params": [
+            "fname"
+          ],
+          "param_token_indices": {
+            "fname": [
+              3
+            ]
+          },
+          "rests_on_confusable_identifier": false
+        },
+        "identifier_crop": "templates/identifiers/step_006.png",
+        "identifier_region": [
+          109,
+          304,
+          711,
+          25
+        ],
+        "landmarks": [
+          {
+            "relation": "below",
+            "ocr_text": "Birth Last Name",
+            "distance_px": 79,
+            "dx_px": 22,
+            "dy_px": -76
+          },
+          {
+            "relation": "below",
+            "ocr_text": "BirthSex:",
+            "distance_px": 109,
+            "dx_px": -13,
+            "dy_px": -108
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "field_label": null,
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": null,
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            555,
+            268,
+            232,
+            99
+          ],
+          "phash": "eb0c710eee7190c7",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0,
+          "template": "templates/step_006_expect.png"
+        }
+      ],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "control label has no retained consequential-write signal",
+      "risk_review_required": false,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": true,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_007",
+      "intent": "press Control+a",
+      "action": "key",
+      "anchor": null,
+      "text": null,
+      "param": null,
+      "secret": false,
+      "field_label": null,
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": "Control+a",
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "special key may navigate, edit, or invoke an application shortcut",
+      "risk_review_required": true,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_008",
+      "intent": "type <lname>",
+      "action": "type",
+      "anchor": null,
+      "text": "Marsh",
+      "param": "lname",
+      "secret": false,
+      "field_label": "Last Name",
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": null,
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "action has no retained consequential commit signal",
+      "risk_review_required": false,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_009",
+      "intent": "click recorded visual target",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_009.png",
+        "structural": {
+          "selector": "#form_DOB",
+          "frame_path": [
+            "div:nth-of-type(3) > iframe:nth-of-type(1)"
+          ],
+          "role": "textbox",
+          "name": "form_DOB",
+          "automation_id": null,
+          "window_name": null
+        },
+        "region": [
+          347,
+          398,
+          160,
+          64
+        ],
+        "click_point": [
+          427,
+          430
+        ],
+        "ocr_text": null,
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": {
+          "schema_version": 1,
+          "salt": "2c2b0ae13e735d8eb142df708d892db7",
+          "band_len": 23,
+          "tokens": [
+            {
+              "c": "8aaea56200531958",
+              "r": "94d08454ad433cc0",
+              "n": 9,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "c097a17bf7fa5097",
+              "r": "c097a17bf7fa5097",
+              "n": 4,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "ca01f178e95e19ba",
+              "r": "87d1b57908974f16",
+              "n": 10,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            }
+          ],
+          "concats": [
+            {
+              "i": 0,
+              "size": 2,
+              "c": "69dfa9ad299e84be",
+              "r": "1a6ba4030218b41f",
+              "digit": false,
+              "name": true,
+              "n": 13
+            },
+            {
+              "i": 0,
+              "size": 3,
+              "c": "4a1d3c0cc6d706fa",
+              "r": "ee0c1ad438b2cce7",
+              "digit": false,
+              "name": true,
+              "n": 23
+            },
+            {
+              "i": 1,
+              "size": 2,
+              "c": "70e68781d9c8b787",
+              "r": "345240d5e71e5a5f",
+              "digit": false,
+              "name": true,
+              "n": 14
+            }
+          ],
+          "structured": null,
+          "signal_hashes": {
+            "captured_context|exact|": "a7f8a11b53891bc4af714db845d14f68581c5f6d3b211341df16345ea8641489",
+            "captured_context|normalized|unicode_nfkc": "a7f8a11b53891bc4af714db845d14f68581c5f6d3b211341df16345ea8641489",
+            "captured_context|normalized|casefold": "cedae12ccea29797ff4b8b58960922596a051f28fd36fe7bc6dd943b62fd7559",
+            "captured_context|normalized|collapse_whitespace": "a7f8a11b53891bc4af714db845d14f68581c5f6d3b211341df16345ea8641489",
+            "captured_context|normalized|strip_punctuation": "587e803b6f8cd2ced88d8625c1730a21d4665b0b0b18c88eddff94eb7bd12308",
+            "captured_context|normalized|unicode_nfkc,casefold": "cedae12ccea29797ff4b8b58960922596a051f28fd36fe7bc6dd943b62fd7559",
+            "captured_context|normalized|unicode_nfkc,collapse_whitespace": "a7f8a11b53891bc4af714db845d14f68581c5f6d3b211341df16345ea8641489",
+            "captured_context|normalized|unicode_nfkc,strip_punctuation": "587e803b6f8cd2ced88d8625c1730a21d4665b0b0b18c88eddff94eb7bd12308",
+            "captured_context|normalized|casefold,collapse_whitespace": "cedae12ccea29797ff4b8b58960922596a051f28fd36fe7bc6dd943b62fd7559",
+            "captured_context|normalized|casefold,strip_punctuation": "88f2115b9f385f1b483e56c609fad4b045353b567a5f3820aa5e3aa609e5f016",
+            "captured_context|normalized|collapse_whitespace,strip_punctuation": "587e803b6f8cd2ced88d8625c1730a21d4665b0b0b18c88eddff94eb7bd12308",
+            "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace": "cedae12ccea29797ff4b8b58960922596a051f28fd36fe7bc6dd943b62fd7559",
+            "captured_context|normalized|unicode_nfkc,casefold,strip_punctuation": "88f2115b9f385f1b483e56c609fad4b045353b567a5f3820aa5e3aa609e5f016",
+            "captured_context|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "587e803b6f8cd2ced88d8625c1730a21d4665b0b0b18c88eddff94eb7bd12308",
+            "captured_context|normalized|casefold,collapse_whitespace,strip_punctuation": "88f2115b9f385f1b483e56c609fad4b045353b567a5f3820aa5e3aa609e5f016",
+            "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "88f2115b9f385f1b483e56c609fad4b045353b567a5f3820aa5e3aa609e5f016"
+          },
+          "param_token_indices": {},
+          "rests_on_confusable_identifier": false
+        },
+        "identifier_crop": "templates/identifiers/step_009.png",
+        "identifier_region": [
+          107,
+          414,
+          908,
+          28
+        ],
+        "landmarks": [
+          {
+            "relation": "below",
+            "ocr_text": "Unassigned",
+            "distance_px": 72,
+            "dx_px": -4,
+            "dy_px": -72
+          },
+          {
+            "relation": "right_of",
+            "ocr_text": "Middle",
+            "distance_px": 122,
+            "dx_px": -116,
+            "dy_px": 38
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "field_label": null,
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": null,
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            346,
+            381,
+            310,
+            298
+          ],
+          "phash": "80caeba3e383939b",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0,
+          "template": "templates/step_009_expect.png"
+        },
+        {
+          "kind": "text_present",
+          "text": "October-2026-",
+          "region": null,
+          "phash": null,
+          "phash_tolerance": 8,
+          "timeout_s": 5.0,
+          "template": null
+        }
+      ],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "control label has no retained consequential-write signal",
+      "risk_review_required": false,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": true,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_010",
+      "intent": "press Control+a",
+      "action": "key",
+      "anchor": null,
+      "text": null,
+      "param": null,
+      "secret": false,
+      "field_label": null,
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": "Control+a",
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "special key may navigate, edit, or invoke an application shortcut",
+      "risk_review_required": true,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_011",
+      "intent": "type <DOB>",
+      "action": "type",
+      "anchor": null,
+      "text": "1979-06-14",
+      "param": "DOB",
+      "secret": false,
+      "field_label": "form_DOB",
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": null,
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "action has no retained consequential commit signal",
+      "risk_review_required": false,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_012",
+      "intent": "click 'Unassigned'",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_012.png",
+        "structural": {
+          "selector": "#form_sex",
+          "frame_path": [
+            "div:nth-of-type(3) > iframe:nth-of-type(1)"
+          ],
+          "role": "combobox",
+          "name": "form_sex",
+          "automation_id": null,
+          "window_name": null
+        },
+        "region": [
+          894,
+          398,
+          160,
+          64
+        ],
+        "click_point": [
+          974,
+          430
+        ],
+        "ocr_text": "Unassigned",
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": {
+          "schema_version": 1,
+          "salt": "2c2b0ae13e735d8eb142df708d892db7",
+          "band_len": 23,
+          "tokens": [
+            {
+              "c": "8aaea56200531958",
+              "r": "94d08454ad433cc0",
+              "n": 9,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "c097a17bf7fa5097",
+              "r": "c097a17bf7fa5097",
+              "n": 4,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "b890fe3b1f5644b6",
+              "r": "13461265599c428c",
+              "n": 10,
+              "alpha": false,
+              "name": false,
+              "digit": true,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            }
+          ],
+          "concats": [
+            {
+              "i": 0,
+              "size": 2,
+              "c": "69dfa9ad299e84be",
+              "r": "1a6ba4030218b41f",
+              "digit": false,
+              "name": true,
+              "n": 13
+            },
+            {
+              "i": 0,
+              "size": 3,
+              "c": "ffa63c4453a1ca97",
+              "r": "2af13cf19b91e59a",
+              "digit": true,
+              "name": false,
+              "n": 23
+            },
+            {
+              "i": 1,
+              "size": 2,
+              "c": "e6b62f22b0bd3e5b",
+              "r": "fa48f15098678a30",
+              "digit": true,
+              "name": false,
+              "n": 14
+            }
+          ],
+          "structured": null,
+          "signal_hashes": {
+            "captured_context|exact|": "5766648443f851e69fc318498dc2bb1cfbb4a86e88db35623e1e576340b00c91",
+            "captured_context|normalized|unicode_nfkc": "5766648443f851e69fc318498dc2bb1cfbb4a86e88db35623e1e576340b00c91",
+            "captured_context|normalized|casefold": "89ce44eb30f1472d721fd21df9764154152790a5b8a5a424d81c2e92fab3298a",
+            "captured_context|normalized|collapse_whitespace": "5766648443f851e69fc318498dc2bb1cfbb4a86e88db35623e1e576340b00c91",
+            "captured_context|normalized|strip_punctuation": "691fec82c9dc4e3809917ca06bd815a73e6314d17bdbae876f3676256bbce6f7",
+            "captured_context|normalized|unicode_nfkc,casefold": "89ce44eb30f1472d721fd21df9764154152790a5b8a5a424d81c2e92fab3298a",
+            "captured_context|normalized|unicode_nfkc,collapse_whitespace": "5766648443f851e69fc318498dc2bb1cfbb4a86e88db35623e1e576340b00c91",
+            "captured_context|normalized|unicode_nfkc,strip_punctuation": "691fec82c9dc4e3809917ca06bd815a73e6314d17bdbae876f3676256bbce6f7",
+            "captured_context|normalized|casefold,collapse_whitespace": "89ce44eb30f1472d721fd21df9764154152790a5b8a5a424d81c2e92fab3298a",
+            "captured_context|normalized|casefold,strip_punctuation": "62f6d165974c48c723d489c64a7c4604ef0b2bbb7ed75e44718fd2cf8d20593e",
+            "captured_context|normalized|collapse_whitespace,strip_punctuation": "691fec82c9dc4e3809917ca06bd815a73e6314d17bdbae876f3676256bbce6f7",
+            "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace": "89ce44eb30f1472d721fd21df9764154152790a5b8a5a424d81c2e92fab3298a",
+            "captured_context|normalized|unicode_nfkc,casefold,strip_punctuation": "62f6d165974c48c723d489c64a7c4604ef0b2bbb7ed75e44718fd2cf8d20593e",
+            "captured_context|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "691fec82c9dc4e3809917ca06bd815a73e6314d17bdbae876f3676256bbce6f7",
+            "captured_context|normalized|casefold,collapse_whitespace,strip_punctuation": "62f6d165974c48c723d489c64a7c4604ef0b2bbb7ed75e44718fd2cf8d20593e",
+            "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "62f6d165974c48c723d489c64a7c4604ef0b2bbb7ed75e44718fd2cf8d20593e"
+          },
+          "context_params": [
+            "DOB"
+          ],
+          "param_token_indices": {
+            "DOB": [
+              2
+            ]
+          },
+          "rests_on_confusable_identifier": false
+        },
+        "identifier_crop": "templates/identifiers/step_012.png",
+        "identifier_region": [
+          107,
+          414,
+          615,
+          26
+        ],
+        "landmarks": [
+          {
+            "relation": "below",
+            "ocr_text": "Unassigned",
+            "distance_px": 72,
+            "dx_px": 4,
+            "dy_px": -72
+          },
+          {
+            "relation": "below",
+            "ocr_text": "Unassigned",
+            "distance_px": 141,
+            "dx_px": 4,
+            "dy_px": -141
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "field_label": null,
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": null,
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            346,
+            446,
+            310,
+            233
+          ],
+          "phash": "c0c391996e3e9ae3",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0,
+          "template": "templates/step_012_expect.png"
+        }
+      ],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "control label has no retained consequential-write signal",
+      "risk_review_required": false,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": true,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_013",
+      "intent": "type <sex>",
+      "action": "type",
+      "anchor": null,
+      "text": "Female",
+      "param": "sex",
+      "secret": false,
+      "field_label": "form_sex",
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": null,
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "action has no retained consequential commit signal",
+      "risk_review_required": false,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_014",
+      "intent": "press Enter",
+      "action": "key",
+      "anchor": null,
+      "text": null,
+      "param": null,
+      "secret": false,
+      "field_label": null,
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": "Enter",
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "submission/deletion key may edit locally or commit application state",
+      "risk_review_required": true,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_015",
+      "intent": "click recorded visual target",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_015.png",
+        "structural": {
+          "selector": null,
+          "frame_path": [
+            "div:nth-of-type(3) > iframe:nth-of-type(1)"
+          ],
+          "role": "button",
+          "name": "Contact",
+          "automation_id": null,
+          "window_name": null
+        },
+        "region": [
+          554,
+          736,
+          160,
+          64
+        ],
+        "click_point": [
+          634,
+          786
+        ],
+        "ocr_text": null,
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": null,
+        "identifier_crop": null,
+        "identifier_region": null,
+        "landmarks": [
+          {
+            "relation": "above",
+            "ocr_text": "Pronouns:",
+            "distance_px": 294,
+            "dx_px": -52,
+            "dy_px": 289
+          },
+          {
+            "relation": "above",
+            "ocr_text": "Sex:",
+            "distance_px": 327,
+            "dx_px": -32,
+            "dy_px": 325
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "field_label": null,
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": null,
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            56,
+            733,
+            1157,
+            67
+          ],
+          "phash": "de82ded280fd2961",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0,
+          "template": "templates/step_015_expect.png"
+        }
+      ],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "control label has no retained consequential-write signal",
+      "risk_review_required": false,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": false,
+      "identity_unarmed_reason": "row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)",
+      "identifier_crop_missing_reason": "identity is not armed on this step (see identity_unarmed_reason) — there is no identity evidence to crop"
+    },
+    {
+      "id": "step_016",
+      "intent": "scroll by (0, 600)",
+      "action": "scroll",
+      "anchor": null,
+      "text": null,
+      "param": null,
+      "secret": false,
+      "field_label": null,
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": null,
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": 0,
+      "scroll_dy": 600,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "action has no retained consequential commit signal",
+      "risk_review_required": false,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_017",
+      "intent": "click recorded visual target",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_017.png",
+        "structural": {
+          "selector": "#form_street",
+          "frame_path": [
+            "div:nth-of-type(3) > iframe:nth-of-type(1)"
+          ],
+          "role": "textbox",
+          "name": "form_street",
+          "automation_id": null,
+          "window_name": null
+        },
+        "region": [
+          399,
+          210,
+          160,
+          64
+        ],
+        "click_point": [
+          479,
+          242
+        ],
+        "ocr_text": null,
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": {
+          "schema_version": 1,
+          "salt": "2c2b0ae13e735d8eb142df708d892db7",
+          "band_len": 21,
+          "tokens": [
+            {
+              "c": "97ffe81f5d592357",
+              "r": "97ffe81f5d592357",
+              "n": 7,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "9ad480bebeb2da83",
+              "r": "0a714e0046da48a7",
+              "n": 4,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "f6c49fa0d75519da",
+              "r": "73c21ff4464c8e8f",
+              "n": 2,
+              "alpha": false,
+              "name": false,
+              "digit": true,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "00dee000ab12f7fd",
+              "r": "00dee000ab12f7fd",
+              "n": 8,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            }
+          ],
+          "concats": [
+            {
+              "i": 0,
+              "size": 2,
+              "c": "938123b1fe550b6a",
+              "r": "f83958da61bf4580",
+              "digit": false,
+              "name": true,
+              "n": 11
+            },
+            {
+              "i": 0,
+              "size": 3,
+              "c": "c1431ad19b24c93a",
+              "r": "fec1f77d5fe9e048",
+              "digit": true,
+              "name": false,
+              "n": 13
+            },
+            {
+              "i": 0,
+              "size": 4,
+              "c": "b0bc4b14d7e170b0",
+              "r": "ae996beeacf3b18a",
+              "digit": true,
+              "name": false,
+              "n": 21
+            },
+            {
+              "i": 1,
+              "size": 2,
+              "c": "22655d8dd66b16ba",
+              "r": "4afab32b6e8137cf",
+              "digit": true,
+              "name": false,
+              "n": 6
+            },
+            {
+              "i": 1,
+              "size": 3,
+              "c": "13dcda1d0bd8eead",
+              "r": "29ec8a74c1ac3769",
+              "digit": true,
+              "name": false,
+              "n": 14
+            },
+            {
+              "i": 2,
+              "size": 2,
+              "c": "760bada370ad6515",
+              "r": "f1d8d4123f74953c",
+              "digit": true,
+              "name": false,
+              "n": 10
+            }
+          ],
+          "structured": null,
+          "signal_hashes": {
+            "captured_context|exact|": "e649700de4ea28e8d2d0d0b113e1dd7a837139e7e026ed697edb99b37ce378e8",
+            "captured_context|normalized|unicode_nfkc": "e649700de4ea28e8d2d0d0b113e1dd7a837139e7e026ed697edb99b37ce378e8",
+            "captured_context|normalized|casefold": "0f8995c499fccf0b333a05176f82300a202ef5b1029a4911b748d8d8b70abee1",
+            "captured_context|normalized|collapse_whitespace": "e649700de4ea28e8d2d0d0b113e1dd7a837139e7e026ed697edb99b37ce378e8",
+            "captured_context|normalized|strip_punctuation": "4bd035af97f08c8a8004aa4b392f122e38e37af37439efd7efeeee921bdfad98",
+            "captured_context|normalized|unicode_nfkc,casefold": "0f8995c499fccf0b333a05176f82300a202ef5b1029a4911b748d8d8b70abee1",
+            "captured_context|normalized|unicode_nfkc,collapse_whitespace": "e649700de4ea28e8d2d0d0b113e1dd7a837139e7e026ed697edb99b37ce378e8",
+            "captured_context|normalized|unicode_nfkc,strip_punctuation": "4bd035af97f08c8a8004aa4b392f122e38e37af37439efd7efeeee921bdfad98",
+            "captured_context|normalized|casefold,collapse_whitespace": "0f8995c499fccf0b333a05176f82300a202ef5b1029a4911b748d8d8b70abee1",
+            "captured_context|normalized|casefold,strip_punctuation": "d16cfded63ce300c4792f93a74c683c6c3a00874bd39eefda5ca2d8b2d1e5c23",
+            "captured_context|normalized|collapse_whitespace,strip_punctuation": "4bd035af97f08c8a8004aa4b392f122e38e37af37439efd7efeeee921bdfad98",
+            "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace": "0f8995c499fccf0b333a05176f82300a202ef5b1029a4911b748d8d8b70abee1",
+            "captured_context|normalized|unicode_nfkc,casefold,strip_punctuation": "d16cfded63ce300c4792f93a74c683c6c3a00874bd39eefda5ca2d8b2d1e5c23",
+            "captured_context|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "4bd035af97f08c8a8004aa4b392f122e38e37af37439efd7efeeee921bdfad98",
+            "captured_context|normalized|casefold,collapse_whitespace,strip_punctuation": "d16cfded63ce300c4792f93a74c683c6c3a00874bd39eefda5ca2d8b2d1e5c23",
+            "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "d16cfded63ce300c4792f93a74c683c6c3a00874bd39eefda5ca2d8b2d1e5c23"
+          },
+          "param_token_indices": {},
+          "rests_on_confusable_identifier": false
+        },
+        "identifier_crop": "templates/identifiers/step_017.png",
+        "identifier_region": [
+          108,
+          226,
+          658,
+          25
+        ],
+        "landmarks": [
+          {
+            "relation": "above",
+            "ocr_text": "SearchorAddPatient",
+            "distance_px": 116,
+            "dx_px": 14,
+            "dy_px": 115
+          },
+          {
+            "relation": "below",
+            "ocr_text": "Unassigned",
+            "distance_px": 125,
+            "dx_px": 48,
+            "dy_px": -115
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "field_label": null,
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": null,
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            56,
+            133,
+            1157,
+            106
+          ],
+          "phash": "bdb09172ff06c146",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0,
+          "template": "templates/step_017_expect.png"
+        }
+      ],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "control label has no retained consequential-write signal",
+      "risk_review_required": false,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": true,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_018",
+      "intent": "press Control+a",
+      "action": "key",
+      "anchor": null,
+      "text": null,
+      "param": null,
+      "secret": false,
+      "field_label": null,
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": "Control+a",
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "special key may navigate, edit, or invoke an application shortcut",
+      "risk_review_required": true,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_019",
+      "intent": "type <street>",
+      "action": "type",
+      "anchor": null,
+      "text": "42 HARBOR LANE",
+      "param": "street",
+      "secret": false,
+      "field_label": "form_street",
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": null,
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "action has no retained consequential commit signal",
+      "risk_review_required": false,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_020",
+      "intent": "click recorded visual target",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_020.png",
+        "structural": {
+          "selector": "#form_city",
+          "frame_path": [
+            "div:nth-of-type(3) > iframe:nth-of-type(1)"
+          ],
+          "role": "textbox",
+          "name": "form_city",
+          "automation_id": null,
+          "window_name": null
+        },
+        "region": [
+          364,
+          245,
+          160,
+          64
+        ],
+        "click_point": [
+          444,
+          277
+        ],
+        "ocr_text": null,
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": {
+          "schema_version": 1,
+          "salt": "2c2b0ae13e735d8eb142df708d892db7",
+          "band_len": 24,
+          "tokens": [
+            {
+              "c": "f5d85322dadbfaaf",
+              "r": "f5d85322dadbfaaf",
+              "n": 6,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "14bd273ec2fa067d",
+              "r": "4cf5657edd0c823e",
+              "n": 5,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "adb1f76644c3c9a3",
+              "r": "adb1f76644c3c9a3",
+              "n": 3,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "ca01f178e95e19ba",
+              "r": "87d1b57908974f16",
+              "n": 10,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            }
+          ],
+          "concats": [
+            {
+              "i": 0,
+              "size": 2,
+              "c": "c90def6f637e63fc",
+              "r": "161f632c77f4762f",
+              "digit": false,
+              "name": true,
+              "n": 11
+            },
+            {
+              "i": 0,
+              "size": 3,
+              "c": "c69dcedb12190914",
+              "r": "230e29454a1fa69c",
+              "digit": false,
+              "name": true,
+              "n": 14
+            },
+            {
+              "i": 0,
+              "size": 4,
+              "c": "96e1d5dc0b3d2d2d",
+              "r": "25c251c6e99822f9",
+              "digit": false,
+              "name": true,
+              "n": 24
+            },
+            {
+              "i": 1,
+              "size": 2,
+              "c": "91f1a5b683350976",
+              "r": "56bc3283bdc79e35",
+              "digit": false,
+              "name": true,
+              "n": 8
+            },
+            {
+              "i": 1,
+              "size": 3,
+              "c": "51093c06e48e6d5f",
+              "r": "3158bcfc007685b9",
+              "digit": false,
+              "name": true,
+              "n": 18
+            },
+            {
+              "i": 2,
+              "size": 2,
+              "c": "d8ccf7a0d08270c1",
+              "r": "3f6308950756f372",
+              "digit": false,
+              "name": true,
+              "n": 13
+            }
+          ],
+          "structured": null,
+          "signal_hashes": {
+            "captured_context|exact|": "5401aa9f2a6ae3be68934ed5a64c8368564ebdc009801a7d4e07db3ec9f3f823",
+            "captured_context|normalized|unicode_nfkc": "5401aa9f2a6ae3be68934ed5a64c8368564ebdc009801a7d4e07db3ec9f3f823",
+            "captured_context|normalized|casefold": "972d5441bd4bafde78049ec77f524a827094b614f83a30cb167822ce21f8c054",
+            "captured_context|normalized|collapse_whitespace": "5401aa9f2a6ae3be68934ed5a64c8368564ebdc009801a7d4e07db3ec9f3f823",
+            "captured_context|normalized|strip_punctuation": "955f34b9e9d3da6cf62e14522347ed8323ef47b26d64bf5f7bfbd632a5c4243b",
+            "captured_context|normalized|unicode_nfkc,casefold": "972d5441bd4bafde78049ec77f524a827094b614f83a30cb167822ce21f8c054",
+            "captured_context|normalized|unicode_nfkc,collapse_whitespace": "5401aa9f2a6ae3be68934ed5a64c8368564ebdc009801a7d4e07db3ec9f3f823",
+            "captured_context|normalized|unicode_nfkc,strip_punctuation": "955f34b9e9d3da6cf62e14522347ed8323ef47b26d64bf5f7bfbd632a5c4243b",
+            "captured_context|normalized|casefold,collapse_whitespace": "972d5441bd4bafde78049ec77f524a827094b614f83a30cb167822ce21f8c054",
+            "captured_context|normalized|casefold,strip_punctuation": "f630d5079b5d554ef4881f9bcaa419febe46bd664fec9e5aa942c7e0ea01b9f4",
+            "captured_context|normalized|collapse_whitespace,strip_punctuation": "955f34b9e9d3da6cf62e14522347ed8323ef47b26d64bf5f7bfbd632a5c4243b",
+            "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace": "972d5441bd4bafde78049ec77f524a827094b614f83a30cb167822ce21f8c054",
+            "captured_context|normalized|unicode_nfkc,casefold,strip_punctuation": "f630d5079b5d554ef4881f9bcaa419febe46bd664fec9e5aa942c7e0ea01b9f4",
+            "captured_context|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "955f34b9e9d3da6cf62e14522347ed8323ef47b26d64bf5f7bfbd632a5c4243b",
+            "captured_context|normalized|casefold,collapse_whitespace,strip_punctuation": "f630d5079b5d554ef4881f9bcaa419febe46bd664fec9e5aa942c7e0ea01b9f4",
+            "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "f630d5079b5d554ef4881f9bcaa419febe46bd664fec9e5aa942c7e0ea01b9f4"
+          },
+          "param_token_indices": {},
+          "rests_on_confusable_identifier": false
+        },
+        "identifier_crop": "templates/identifiers/step_020.png",
+        "identifier_region": [
+          107,
+          261,
+          1045,
+          29
+        ],
+        "landmarks": [
+          {
+            "relation": "below",
+            "ocr_text": "Unassigned",
+            "distance_px": 81,
+            "dx_px": 14,
+            "dy_px": -80
+          },
+          {
+            "relation": "above",
+            "ocr_text": "Search orAdd Patient",
+            "distance_px": 151,
+            "dx_px": -21,
+            "dy_px": 150
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "field_label": null,
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": null,
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            346,
+            259,
+            267,
+            68
+          ],
+          "phash": "c89bbcc0c11ce6e7",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0,
+          "template": "templates/step_020_expect.png"
+        }
+      ],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "control label has no retained consequential-write signal",
+      "risk_review_required": false,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": true,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_021",
+      "intent": "press Control+a",
+      "action": "key",
+      "anchor": null,
+      "text": null,
+      "param": null,
+      "secret": false,
+      "field_label": null,
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": "Control+a",
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "special key may navigate, edit, or invoke an application shortcut",
+      "risk_review_required": true,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_022",
+      "intent": "type <city>",
+      "action": "type",
+      "anchor": null,
+      "text": "EXAMPLETON",
+      "param": "city",
+      "secret": false,
+      "field_label": "form_city",
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": null,
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "action has no retained consequential commit signal",
+      "risk_review_required": false,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_023",
+      "intent": "click 'Jnassigned'",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_023.png",
+        "structural": {
+          "selector": "#form_state",
+          "frame_path": [
+            "div:nth-of-type(3) > iframe:nth-of-type(1)"
+          ],
+          "role": "combobox",
+          "name": "form_state",
+          "automation_id": null,
+          "window_name": null
+        },
+        "region": [
+          937,
+          245,
+          160,
+          64
+        ],
+        "click_point": [
+          1017,
+          277
+        ],
+        "ocr_text": "Jnassigned",
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": {
+          "schema_version": 1,
+          "salt": "2c2b0ae13e735d8eb142df708d892db7",
+          "band_len": 34,
+          "tokens": [
+            {
+              "c": "f5d85322dadbfaaf",
+              "r": "f5d85322dadbfaaf",
+              "n": 6,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "14bd273ec2fa067d",
+              "r": "4cf5657edd0c823e",
+              "n": 5,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "adb1f76644c3c9a3",
+              "r": "adb1f76644c3c9a3",
+              "n": 3,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "ca01f178e95e19ba",
+              "r": "87d1b57908974f16",
+              "n": 10,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "1398cdbebd4f15fc",
+              "r": "1398cdbebd4f15fc",
+              "n": 10,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            }
+          ],
+          "concats": [
+            {
+              "i": 0,
+              "size": 2,
+              "c": "c90def6f637e63fc",
+              "r": "161f632c77f4762f",
+              "digit": false,
+              "name": true,
+              "n": 11
+            },
+            {
+              "i": 0,
+              "size": 3,
+              "c": "c69dcedb12190914",
+              "r": "230e29454a1fa69c",
+              "digit": false,
+              "name": true,
+              "n": 14
+            },
+            {
+              "i": 0,
+              "size": 4,
+              "c": "96e1d5dc0b3d2d2d",
+              "r": "25c251c6e99822f9",
+              "digit": false,
+              "name": true,
+              "n": 24
+            },
+            {
+              "i": 1,
+              "size": 2,
+              "c": "91f1a5b683350976",
+              "r": "56bc3283bdc79e35",
+              "digit": false,
+              "name": true,
+              "n": 8
+            },
+            {
+              "i": 1,
+              "size": 3,
+              "c": "51093c06e48e6d5f",
+              "r": "3158bcfc007685b9",
+              "digit": false,
+              "name": true,
+              "n": 18
+            },
+            {
+              "i": 1,
+              "size": 4,
+              "c": "fada4d558c178291",
+              "r": "317dd26a89e6e5ba",
+              "digit": false,
+              "name": true,
+              "n": 28
+            },
+            {
+              "i": 2,
+              "size": 2,
+              "c": "d8ccf7a0d08270c1",
+              "r": "3f6308950756f372",
+              "digit": false,
+              "name": true,
+              "n": 13
+            },
+            {
+              "i": 2,
+              "size": 3,
+              "c": "7d877d19c91edec7",
+              "r": "4c0b91cfdf44dc5c",
+              "digit": false,
+              "name": true,
+              "n": 23
+            },
+            {
+              "i": 3,
+              "size": 2,
+              "c": "2b25a0512963d2fc",
+              "r": "880c4a178af781a5",
+              "digit": false,
+              "name": true,
+              "n": 20
+            }
+          ],
+          "structured": null,
+          "signal_hashes": {
+            "captured_context|exact|": "5cf3874f264a35a5f541d58b39f87e1b2d8c45cc3c2b85c380451dd2b9df6c9c",
+            "captured_context|normalized|unicode_nfkc": "5cf3874f264a35a5f541d58b39f87e1b2d8c45cc3c2b85c380451dd2b9df6c9c",
+            "captured_context|normalized|casefold": "04e27d5dda8d3c4a3e44f5012f137882cc4525b9a28cfc605318989203b8ae43",
+            "captured_context|normalized|collapse_whitespace": "5cf3874f264a35a5f541d58b39f87e1b2d8c45cc3c2b85c380451dd2b9df6c9c",
+            "captured_context|normalized|strip_punctuation": "cdcc4ecc5592cb3c9020e4e34989d66401aefc39d5321ef91ddcbcff0fd52e82",
+            "captured_context|normalized|unicode_nfkc,casefold": "04e27d5dda8d3c4a3e44f5012f137882cc4525b9a28cfc605318989203b8ae43",
+            "captured_context|normalized|unicode_nfkc,collapse_whitespace": "5cf3874f264a35a5f541d58b39f87e1b2d8c45cc3c2b85c380451dd2b9df6c9c",
+            "captured_context|normalized|unicode_nfkc,strip_punctuation": "cdcc4ecc5592cb3c9020e4e34989d66401aefc39d5321ef91ddcbcff0fd52e82",
+            "captured_context|normalized|casefold,collapse_whitespace": "04e27d5dda8d3c4a3e44f5012f137882cc4525b9a28cfc605318989203b8ae43",
+            "captured_context|normalized|casefold,strip_punctuation": "1643a4f30b63059fe32f0575261c7216609c1d000b2ab211692cbd678dc8fcf5",
+            "captured_context|normalized|collapse_whitespace,strip_punctuation": "cdcc4ecc5592cb3c9020e4e34989d66401aefc39d5321ef91ddcbcff0fd52e82",
+            "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace": "04e27d5dda8d3c4a3e44f5012f137882cc4525b9a28cfc605318989203b8ae43",
+            "captured_context|normalized|unicode_nfkc,casefold,strip_punctuation": "1643a4f30b63059fe32f0575261c7216609c1d000b2ab211692cbd678dc8fcf5",
+            "captured_context|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "cdcc4ecc5592cb3c9020e4e34989d66401aefc39d5321ef91ddcbcff0fd52e82",
+            "captured_context|normalized|casefold,collapse_whitespace,strip_punctuation": "1643a4f30b63059fe32f0575261c7216609c1d000b2ab211692cbd678dc8fcf5",
+            "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "1643a4f30b63059fe32f0575261c7216609c1d000b2ab211692cbd678dc8fcf5"
+          },
+          "context_params": [
+            "city"
+          ],
+          "param_token_indices": {
+            "city": [
+              4
+            ]
+          },
+          "rests_on_confusable_identifier": false
+        },
+        "identifier_crop": "templates/identifiers/step_023.png",
+        "identifier_region": [
+          107,
+          261,
+          1045,
+          26
+        ],
+        "landmarks": [
+          {
+            "relation": "above",
+            "ocr_text": "Search by any demogre",
+            "distance_px": 248,
+            "dx_px": -39,
+            "dy_px": 245
+          },
+          {
+            "relation": "below",
+            "ocr_text": "Show Inactive",
+            "distance_px": 278,
+            "dx_px": -70,
+            "dy_px": -269
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "field_label": null,
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": null,
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            885,
+            228,
+            265,
+            99
+          ],
+          "phash": "a21d7d38eeb891c2",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0,
+          "template": "templates/step_023_expect.png"
+        }
+      ],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "control label has no retained consequential-write signal",
+      "risk_review_required": false,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": true,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_024",
+      "intent": "type <state_label>",
+      "action": "type",
+      "anchor": null,
+      "text": "Massachusetts",
+      "param": "state_label",
+      "secret": false,
+      "field_label": "form_state",
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": null,
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "action has no retained consequential commit signal",
+      "risk_review_required": false,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_025",
+      "intent": "press Enter",
+      "action": "key",
+      "anchor": null,
+      "text": null,
+      "param": null,
+      "secret": false,
+      "field_label": null,
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": "Enter",
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "submission/deletion key may edit locally or commit application state",
+      "risk_review_required": true,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_026",
+      "intent": "click recorded visual target",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_026.png",
+        "structural": {
+          "selector": "#form_postal_code",
+          "frame_path": [
+            "div:nth-of-type(3) > iframe:nth-of-type(1)"
+          ],
+          "role": "textbox",
+          "name": "form_postal_code",
+          "automation_id": null,
+          "window_name": null
+        },
+        "region": [
+          340,
+          284,
+          160,
+          64
+        ],
+        "click_point": [
+          420,
+          316
+        ],
+        "ocr_text": null,
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": {
+          "schema_version": 1,
+          "salt": "2c2b0ae13e735d8eb142df708d892db7",
+          "band_len": 32,
+          "tokens": [
+            {
+              "c": "ae151dfdf992dcc7",
+              "r": "ae151dfdf992dcc7",
+              "n": 8,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "a80b24cf38e96190",
+              "r": "a80b24cf38e96190",
+              "n": 6,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "3550c347ac0d0fa9",
+              "r": "3550c347ac0d0fa9",
+              "n": 5,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "ca01f178e95e19ba",
+              "r": "87d1b57908974f16",
+              "n": 10,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "adb1f76644c3c9a3",
+              "r": "adb1f76644c3c9a3",
+              "n": 3,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            }
+          ],
+          "concats": [
+            {
+              "i": 0,
+              "size": 2,
+              "c": "c27e939519ea396b",
+              "r": "c27e939519ea396b",
+              "digit": false,
+              "name": true,
+              "n": 14
+            },
+            {
+              "i": 0,
+              "size": 3,
+              "c": "6810179ad707b55d",
+              "r": "6810179ad707b55d",
+              "digit": false,
+              "name": true,
+              "n": 19
+            },
+            {
+              "i": 0,
+              "size": 4,
+              "c": "2fecb96df15c174b",
+              "r": "1b0babd1c317e17e",
+              "digit": false,
+              "name": true,
+              "n": 29
+            },
+            {
+              "i": 1,
+              "size": 2,
+              "c": "1ed9c08a8fedbda8",
+              "r": "1ed9c08a8fedbda8",
+              "digit": false,
+              "name": true,
+              "n": 11
+            },
+            {
+              "i": 1,
+              "size": 3,
+              "c": "d2632bacf240b3bd",
+              "r": "23413643411e36df",
+              "digit": false,
+              "name": true,
+              "n": 21
+            },
+            {
+              "i": 1,
+              "size": 4,
+              "c": "58a777dfac2adce0",
+              "r": "d7e598e4363bcca9",
+              "digit": false,
+              "name": true,
+              "n": 24
+            },
+            {
+              "i": 2,
+              "size": 2,
+              "c": "0c361f65550e5cab",
+              "r": "1621bbcbb795a198",
+              "digit": false,
+              "name": true,
+              "n": 15
+            },
+            {
+              "i": 2,
+              "size": 3,
+              "c": "dc9756385c25a267",
+              "r": "9d8cf4ea47bff812",
+              "digit": false,
+              "name": true,
+              "n": 18
+            },
+            {
+              "i": 3,
+              "size": 2,
+              "c": "4d9afcb0152072e3",
+              "r": "1a00c28a865fbbe1",
+              "digit": false,
+              "name": true,
+              "n": 13
+            }
+          ],
+          "structured": null,
+          "signal_hashes": {
+            "captured_context|exact|": "715523930bfd47db098bb390a7fc821a96b602550c95dfc3239a54fab0da0c9d",
+            "captured_context|normalized|unicode_nfkc": "715523930bfd47db098bb390a7fc821a96b602550c95dfc3239a54fab0da0c9d",
+            "captured_context|normalized|casefold": "f525cd8b771ad463ddd0b9c1b03e79771ff1d843bd37e9edd6ba63ca9513938c",
+            "captured_context|normalized|collapse_whitespace": "715523930bfd47db098bb390a7fc821a96b602550c95dfc3239a54fab0da0c9d",
+            "captured_context|normalized|strip_punctuation": "d1310a65f44ae730706fec001521a85961b2a18edb0ef30d0ec3b3a887f78d97",
+            "captured_context|normalized|unicode_nfkc,casefold": "f525cd8b771ad463ddd0b9c1b03e79771ff1d843bd37e9edd6ba63ca9513938c",
+            "captured_context|normalized|unicode_nfkc,collapse_whitespace": "715523930bfd47db098bb390a7fc821a96b602550c95dfc3239a54fab0da0c9d",
+            "captured_context|normalized|unicode_nfkc,strip_punctuation": "d1310a65f44ae730706fec001521a85961b2a18edb0ef30d0ec3b3a887f78d97",
+            "captured_context|normalized|casefold,collapse_whitespace": "f525cd8b771ad463ddd0b9c1b03e79771ff1d843bd37e9edd6ba63ca9513938c",
+            "captured_context|normalized|casefold,strip_punctuation": "935b65bc941b8cee57cbdb063823f2ff41a3d69bfb255f29950a53f5ea051844",
+            "captured_context|normalized|collapse_whitespace,strip_punctuation": "d1310a65f44ae730706fec001521a85961b2a18edb0ef30d0ec3b3a887f78d97",
+            "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace": "f525cd8b771ad463ddd0b9c1b03e79771ff1d843bd37e9edd6ba63ca9513938c",
+            "captured_context|normalized|unicode_nfkc,casefold,strip_punctuation": "935b65bc941b8cee57cbdb063823f2ff41a3d69bfb255f29950a53f5ea051844",
+            "captured_context|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "d1310a65f44ae730706fec001521a85961b2a18edb0ef30d0ec3b3a887f78d97",
+            "captured_context|normalized|casefold,collapse_whitespace,strip_punctuation": "935b65bc941b8cee57cbdb063823f2ff41a3d69bfb255f29950a53f5ea051844",
+            "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "935b65bc941b8cee57cbdb063823f2ff41a3d69bfb255f29950a53f5ea051844"
+          },
+          "param_token_indices": {},
+          "rests_on_confusable_identifier": false
+        },
+        "identifier_crop": "templates/identifiers/step_026.png",
+        "identifier_region": [
+          107,
+          300,
+          1046,
+          27
+        ],
+        "landmarks": [
+          {
+            "relation": "above",
+            "ocr_text": "SearchorAddPatient",
+            "distance_px": 195,
+            "dx_px": -45,
+            "dy_px": 190
+          },
+          {
+            "relation": "right_of",
+            "ocr_text": "State:",
+            "distance_px": 254,
+            "dx_px": -250,
+            "dy_px": 43
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "field_label": null,
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": null,
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "control label has no retained consequential-write signal",
+      "risk_review_required": false,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": true,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_027",
+      "intent": "press Control+a",
+      "action": "key",
+      "anchor": null,
+      "text": null,
+      "param": null,
+      "secret": false,
+      "field_label": null,
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": "Control+a",
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "special key may navigate, edit, or invoke an application shortcut",
+      "risk_review_required": true,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_028",
+      "intent": "type <postal_code>",
+      "action": "type",
+      "anchor": null,
+      "text": "02139",
+      "param": "postal_code",
+      "secret": false,
+      "field_label": "form_postal_code",
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": null,
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "action has no retained consequential commit signal",
+      "risk_review_required": false,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_029",
+      "intent": "click recorded visual target",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_029.png",
+        "structural": {
+          "selector": "#form_phone_home",
+          "frame_path": [
+            "div:nth-of-type(3) > iframe:nth-of-type(1)"
+          ],
+          "role": "textbox",
+          "name": "form_phone_home",
+          "automation_id": null,
+          "window_name": null
+        },
+        "region": [
+          382,
+          397,
+          160,
+          64
+        ],
+        "click_point": [
+          462,
+          429
+        ],
+        "ocr_text": null,
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": {
+          "schema_version": 1,
+          "salt": "2c2b0ae13e735d8eb142df708d892db7",
+          "band_len": 20,
+          "tokens": [
+            {
+              "c": "0da81d26127b7d7c",
+              "r": "0da81d26127b7d7c",
+              "n": 4,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "9fd9d3eb8cc7ffcd",
+              "r": "9fd9d3eb8cc7ffcd",
+              "n": 6,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "6aeef7ecc033e79b",
+              "r": "6aeef7ecc033e79b",
+              "n": 10,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            }
+          ],
+          "concats": [
+            {
+              "i": 0,
+              "size": 2,
+              "c": "f0bf2b384cbf9d84",
+              "r": "f0bf2b384cbf9d84",
+              "digit": false,
+              "name": true,
+              "n": 10
+            },
+            {
+              "i": 0,
+              "size": 3,
+              "c": "3a57888be653d0c6",
+              "r": "3a57888be653d0c6",
+              "digit": false,
+              "name": true,
+              "n": 20
+            },
+            {
+              "i": 1,
+              "size": 2,
+              "c": "f63fa753eebeef7b",
+              "r": "f63fa753eebeef7b",
+              "digit": false,
+              "name": true,
+              "n": 16
+            }
+          ],
+          "structured": null,
+          "signal_hashes": {
+            "captured_context|exact|": "40a7075f0bcc9f594c948e5f57aa7777696ea4ed51df9eae63c5c8ec0a0b1915",
+            "captured_context|normalized|unicode_nfkc": "40a7075f0bcc9f594c948e5f57aa7777696ea4ed51df9eae63c5c8ec0a0b1915",
+            "captured_context|normalized|casefold": "383ce9cc2e3ff33e0d0613bbe488a2a8e6a54191f8e34db3d8ce44c4f4c71e92",
+            "captured_context|normalized|collapse_whitespace": "40a7075f0bcc9f594c948e5f57aa7777696ea4ed51df9eae63c5c8ec0a0b1915",
+            "captured_context|normalized|strip_punctuation": "ca0e542ab131efd623e6ae28ec7cfd25fe20c09e6b3cc97839fd9ed6fb564a54",
+            "captured_context|normalized|unicode_nfkc,casefold": "383ce9cc2e3ff33e0d0613bbe488a2a8e6a54191f8e34db3d8ce44c4f4c71e92",
+            "captured_context|normalized|unicode_nfkc,collapse_whitespace": "40a7075f0bcc9f594c948e5f57aa7777696ea4ed51df9eae63c5c8ec0a0b1915",
+            "captured_context|normalized|unicode_nfkc,strip_punctuation": "ca0e542ab131efd623e6ae28ec7cfd25fe20c09e6b3cc97839fd9ed6fb564a54",
+            "captured_context|normalized|casefold,collapse_whitespace": "383ce9cc2e3ff33e0d0613bbe488a2a8e6a54191f8e34db3d8ce44c4f4c71e92",
+            "captured_context|normalized|casefold,strip_punctuation": "f5babbb3363a00000321aab6f6aea6cbec38cecb28fa0f516270004dec4d4a35",
+            "captured_context|normalized|collapse_whitespace,strip_punctuation": "ca0e542ab131efd623e6ae28ec7cfd25fe20c09e6b3cc97839fd9ed6fb564a54",
+            "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace": "383ce9cc2e3ff33e0d0613bbe488a2a8e6a54191f8e34db3d8ce44c4f4c71e92",
+            "captured_context|normalized|unicode_nfkc,casefold,strip_punctuation": "f5babbb3363a00000321aab6f6aea6cbec38cecb28fa0f516270004dec4d4a35",
+            "captured_context|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "ca0e542ab131efd623e6ae28ec7cfd25fe20c09e6b3cc97839fd9ed6fb564a54",
+            "captured_context|normalized|casefold,collapse_whitespace,strip_punctuation": "f5babbb3363a00000321aab6f6aea6cbec38cecb28fa0f516270004dec4d4a35",
+            "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "f5babbb3363a00000321aab6f6aea6cbec38cecb28fa0f516270004dec4d4a35"
+          },
+          "param_token_indices": {},
+          "rests_on_confusable_identifier": false
+        },
+        "identifier_crop": "templates/identifiers/step_029.png",
+        "identifier_region": [
+          107,
+          412,
+          638,
+          26
+        ],
+        "landmarks": [
+          {
+            "relation": "above",
+            "ocr_text": "Unassigned",
+            "distance_px": 79,
+            "dx_px": 32,
+            "dy_px": 72
+          },
+          {
+            "relation": "right_of",
+            "ocr_text": "WorkPhone:",
+            "distance_px": 234,
+            "dx_px": -234,
+            "dy_px": 4
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "field_label": null,
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": null,
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            346,
+            380,
+            232,
+            99
+          ],
+          "phash": "c04af8933fa5c66c",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0,
+          "template": "templates/step_029_expect.png"
+        }
+      ],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "control label has no retained consequential-write signal",
+      "risk_review_required": false,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": true,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_030",
+      "intent": "press Control+a",
+      "action": "key",
+      "anchor": null,
+      "text": null,
+      "param": null,
+      "secret": false,
+      "field_label": null,
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": "Control+a",
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "special key may navigate, edit, or invoke an application shortcut",
+      "risk_review_required": true,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_031",
+      "intent": "type <phone_home>",
+      "action": "type",
+      "anchor": null,
+      "text": "555-0142",
+      "param": "phone_home",
+      "secret": false,
+      "field_label": "form_phone_home",
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": null,
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "action has no retained consequential commit signal",
+      "risk_review_required": false,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_032",
+      "intent": "click recorded visual target",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_032.png",
+        "structural": {
+          "selector": "#form_email",
+          "frame_path": [
+            "div:nth-of-type(3) > iframe:nth-of-type(1)"
+          ],
+          "role": "textbox",
+          "name": "form_email",
+          "automation_id": null,
+          "window_name": null
+        },
+        "region": [
+          955,
+          432,
+          160,
+          64
+        ],
+        "click_point": [
+          1035,
+          464
+        ],
+        "ocr_text": null,
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": {
+          "schema_version": 1,
+          "salt": "2c2b0ae13e735d8eb142df708d892db7",
+          "band_len": 25,
+          "tokens": [
+            {
+              "c": "1ed8bef0f5016222",
+              "r": "c064e4ed3c5376e0",
+              "n": 6,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "9fd9d3eb8cc7ffcd",
+              "r": "9fd9d3eb8cc7ffcd",
+              "n": 6,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "850f7edea16ebac9",
+              "r": "850f7edea16ebac9",
+              "n": 7,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "f55401783095bfcb",
+              "r": "8103ffb0df32040d",
+              "n": 6,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            }
+          ],
+          "concats": [
+            {
+              "i": 0,
+              "size": 2,
+              "c": "1b74fabc9476ed4f",
+              "r": "f85eb6c4c8f2c579",
+              "digit": false,
+              "name": true,
+              "n": 12
+            },
+            {
+              "i": 0,
+              "size": 3,
+              "c": "185542fc30c056a7",
+              "r": "c3907abb1a53f9c4",
+              "digit": false,
+              "name": true,
+              "n": 19
+            },
+            {
+              "i": 0,
+              "size": 4,
+              "c": "d49c2523342db188",
+              "r": "b6fb525a0a2adec4",
+              "digit": false,
+              "name": true,
+              "n": 25
+            },
+            {
+              "i": 1,
+              "size": 2,
+              "c": "6bb325bcb71167a0",
+              "r": "6bb325bcb71167a0",
+              "digit": false,
+              "name": true,
+              "n": 13
+            },
+            {
+              "i": 1,
+              "size": 3,
+              "c": "fc6ad794226e0923",
+              "r": "8334d619a13f629a",
+              "digit": false,
+              "name": true,
+              "n": 19
+            },
+            {
+              "i": 2,
+              "size": 2,
+              "c": "bd821086a2e0b22b",
+              "r": "e8990c96985d86ef",
+              "digit": false,
+              "name": true,
+              "n": 13
+            }
+          ],
+          "structured": null,
+          "signal_hashes": {
+            "captured_context|exact|": "62f36e8d7ebe763ec0f2962aedc480f5af3f99e0e4db2cd1b47b507abbd43451",
+            "captured_context|normalized|unicode_nfkc": "62f36e8d7ebe763ec0f2962aedc480f5af3f99e0e4db2cd1b47b507abbd43451",
+            "captured_context|normalized|casefold": "3369ceac757c48ed178ba7eb7a1b869ccf3e10030bbda5b23324c3b8a15202c0",
+            "captured_context|normalized|collapse_whitespace": "62f36e8d7ebe763ec0f2962aedc480f5af3f99e0e4db2cd1b47b507abbd43451",
+            "captured_context|normalized|strip_punctuation": "b8b84e3b2a9255f25ec955a9bfe3b34f2162ae61d693738327f3f33b1bd0b447",
+            "captured_context|normalized|unicode_nfkc,casefold": "3369ceac757c48ed178ba7eb7a1b869ccf3e10030bbda5b23324c3b8a15202c0",
+            "captured_context|normalized|unicode_nfkc,collapse_whitespace": "62f36e8d7ebe763ec0f2962aedc480f5af3f99e0e4db2cd1b47b507abbd43451",
+            "captured_context|normalized|unicode_nfkc,strip_punctuation": "b8b84e3b2a9255f25ec955a9bfe3b34f2162ae61d693738327f3f33b1bd0b447",
+            "captured_context|normalized|casefold,collapse_whitespace": "3369ceac757c48ed178ba7eb7a1b869ccf3e10030bbda5b23324c3b8a15202c0",
+            "captured_context|normalized|casefold,strip_punctuation": "b19df00069845fa2de3fce83e49aaafc1772df4066fd000f38c0dda2625043a6",
+            "captured_context|normalized|collapse_whitespace,strip_punctuation": "b8b84e3b2a9255f25ec955a9bfe3b34f2162ae61d693738327f3f33b1bd0b447",
+            "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace": "3369ceac757c48ed178ba7eb7a1b869ccf3e10030bbda5b23324c3b8a15202c0",
+            "captured_context|normalized|unicode_nfkc,casefold,strip_punctuation": "b19df00069845fa2de3fce83e49aaafc1772df4066fd000f38c0dda2625043a6",
+            "captured_context|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "b8b84e3b2a9255f25ec955a9bfe3b34f2162ae61d693738327f3f33b1bd0b447",
+            "captured_context|normalized|casefold,collapse_whitespace,strip_punctuation": "b19df00069845fa2de3fce83e49aaafc1772df4066fd000f38c0dda2625043a6",
+            "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "b19df00069845fa2de3fce83e49aaafc1772df4066fd000f38c0dda2625043a6"
+          },
+          "param_token_indices": {},
+          "rests_on_confusable_identifier": false
+        },
+        "identifier_crop": "templates/identifiers/step_032.png",
+        "identifier_region": [
+          108,
+          449,
+          649,
+          23
+        ],
+        "landmarks": [
+          {
+            "relation": "below",
+            "ocr_text": "Show Inactive",
+            "distance_px": 96,
+            "dx_px": -52,
+            "dy_px": -81
+          },
+          {
+            "relation": "above",
+            "ocr_text": "Unassigned",
+            "distance_px": 160,
+            "dx_px": 65,
+            "dy_px": 146
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "field_label": null,
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": null,
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            885,
+            415,
+            302,
+            99
+          ],
+          "phash": "cad0ba36be2dc1c1",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0,
+          "template": "templates/step_032_expect.png"
+        }
+      ],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "control label has no retained consequential-write signal",
+      "risk_review_required": false,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": true,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_033",
+      "intent": "press Control+a",
+      "action": "key",
+      "anchor": null,
+      "text": null,
+      "param": null,
+      "secret": false,
+      "field_label": null,
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": "Control+a",
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "special key may navigate, edit, or invoke an application shortcut",
+      "risk_review_required": true,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_034",
+      "intent": "type <email>",
+      "action": "type",
+      "anchor": null,
+      "text": "elena.marsh@example.invalid",
+      "param": "email",
+      "secret": false,
+      "field_label": "form_email",
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": null,
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "action has no retained consequential commit signal",
+      "risk_review_required": false,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_035",
+      "intent": "click 'Jnassigned'",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_035.png",
+        "structural": {
+          "selector": "#form_country_code",
+          "frame_path": [
+            "div:nth-of-type(3) > iframe:nth-of-type(1)"
+          ],
+          "role": "combobox",
+          "name": "form_country_code",
+          "automation_id": null,
+          "window_name": null
+        },
+        "region": [
+          937,
+          284,
+          160,
+          64
+        ],
+        "click_point": [
+          1017,
+          316
+        ],
+        "ocr_text": "Jnassigned",
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": {
+          "schema_version": 1,
+          "salt": "2c2b0ae13e735d8eb142df708d892db7",
+          "band_len": 37,
+          "tokens": [
+            {
+              "c": "ae151dfdf992dcc7",
+              "r": "ae151dfdf992dcc7",
+              "n": 8,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "a80b24cf38e96190",
+              "r": "a80b24cf38e96190",
+              "n": 6,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "3550c347ac0d0fa9",
+              "r": "3550c347ac0d0fa9",
+              "n": 5,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "adb1f76644c3c9a3",
+              "r": "adb1f76644c3c9a3",
+              "n": 3,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "f8243e09650f249d",
+              "r": "641dae67f035c797",
+              "n": 5,
+              "alpha": false,
+              "name": false,
+              "digit": true,
+              "idsh": true,
+              "glyph": true,
+              "gen": false
+            },
+            {
+              "c": "ca01f178e95e19ba",
+              "r": "87d1b57908974f16",
+              "n": 10,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            }
+          ],
+          "concats": [
+            {
+              "i": 0,
+              "size": 2,
+              "c": "c27e939519ea396b",
+              "r": "c27e939519ea396b",
+              "digit": false,
+              "name": true,
+              "n": 14
+            },
+            {
+              "i": 0,
+              "size": 3,
+              "c": "6810179ad707b55d",
+              "r": "6810179ad707b55d",
+              "digit": false,
+              "name": true,
+              "n": 19
+            },
+            {
+              "i": 0,
+              "size": 4,
+              "c": "4cb5aee1af2e75d7",
+              "r": "4cb5aee1af2e75d7",
+              "digit": false,
+              "name": true,
+              "n": 22
+            },
+            {
+              "i": 1,
+              "size": 2,
+              "c": "1ed9c08a8fedbda8",
+              "r": "1ed9c08a8fedbda8",
+              "digit": false,
+              "name": true,
+              "n": 11
+            },
+            {
+              "i": 1,
+              "size": 3,
+              "c": "005e53062b7b2105",
+              "r": "005e53062b7b2105",
+              "digit": false,
+              "name": true,
+              "n": 14
+            },
+            {
+              "i": 1,
+              "size": 4,
+              "c": "ef9a13f2b9a21087",
+              "r": "7447e41ba0ce3dde",
+              "digit": true,
+              "name": false,
+              "n": 19
+            },
+            {
+              "i": 2,
+              "size": 2,
+              "c": "7c168fc090a05c10",
+              "r": "7c168fc090a05c10",
+              "digit": false,
+              "name": true,
+              "n": 8
+            },
+            {
+              "i": 2,
+              "size": 3,
+              "c": "59010f9b0fdc20f7",
+              "r": "4e155bf6d3e3aead",
+              "digit": true,
+              "name": false,
+              "n": 13
+            },
+            {
+              "i": 2,
+              "size": 4,
+              "c": "53b4692481052d75",
+              "r": "7117792ca21dab77",
+              "digit": true,
+              "name": false,
+              "n": 23
+            },
+            {
+              "i": 3,
+              "size": 2,
+              "c": "4e453253fa221a68",
+              "r": "179f986ab7c7bd05",
+              "digit": true,
+              "name": false,
+              "n": 8
+            },
+            {
+              "i": 3,
+              "size": 3,
+              "c": "955791fc26831458",
+              "r": "f7276a45f68ef667",
+              "digit": true,
+              "name": false,
+              "n": 18
+            },
+            {
+              "i": 4,
+              "size": 2,
+              "c": "93ab73ab2d4de712",
+              "r": "46cb0f0f66f396e6",
+              "digit": true,
+              "name": false,
+              "n": 15
+            }
+          ],
+          "structured": null,
+          "signal_hashes": {
+            "captured_context|exact|": "2435047cd19f817821ed771a1eeff4d089dc9ba4c6562306bbc02332fc4d27b7",
+            "captured_context|normalized|unicode_nfkc": "2435047cd19f817821ed771a1eeff4d089dc9ba4c6562306bbc02332fc4d27b7",
+            "captured_context|normalized|casefold": "b26cb131f15c66ea189fb97254e315562d48e039d7c145d916e80e2dcf0bcf0a",
+            "captured_context|normalized|collapse_whitespace": "2435047cd19f817821ed771a1eeff4d089dc9ba4c6562306bbc02332fc4d27b7",
+            "captured_context|normalized|strip_punctuation": "02b5c771016acaf8236e0a895eb1f7ac802448441fe47be59331f4bdf1dfd571",
+            "captured_context|normalized|unicode_nfkc,casefold": "b26cb131f15c66ea189fb97254e315562d48e039d7c145d916e80e2dcf0bcf0a",
+            "captured_context|normalized|unicode_nfkc,collapse_whitespace": "2435047cd19f817821ed771a1eeff4d089dc9ba4c6562306bbc02332fc4d27b7",
+            "captured_context|normalized|unicode_nfkc,strip_punctuation": "02b5c771016acaf8236e0a895eb1f7ac802448441fe47be59331f4bdf1dfd571",
+            "captured_context|normalized|casefold,collapse_whitespace": "b26cb131f15c66ea189fb97254e315562d48e039d7c145d916e80e2dcf0bcf0a",
+            "captured_context|normalized|casefold,strip_punctuation": "7adeccc11a6df2f17feb704a72482f6d4b1be5466d0f10242152f7de510841cf",
+            "captured_context|normalized|collapse_whitespace,strip_punctuation": "02b5c771016acaf8236e0a895eb1f7ac802448441fe47be59331f4bdf1dfd571",
+            "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace": "b26cb131f15c66ea189fb97254e315562d48e039d7c145d916e80e2dcf0bcf0a",
+            "captured_context|normalized|unicode_nfkc,casefold,strip_punctuation": "7adeccc11a6df2f17feb704a72482f6d4b1be5466d0f10242152f7de510841cf",
+            "captured_context|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "02b5c771016acaf8236e0a895eb1f7ac802448441fe47be59331f4bdf1dfd571",
+            "captured_context|normalized|casefold,collapse_whitespace,strip_punctuation": "7adeccc11a6df2f17feb704a72482f6d4b1be5466d0f10242152f7de510841cf",
+            "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "7adeccc11a6df2f17feb704a72482f6d4b1be5466d0f10242152f7de510841cf"
+          },
+          "context_params": [
+            "postal_code"
+          ],
+          "param_token_indices": {
+            "postal_code": [
+              4
+            ]
+          },
+          "rests_on_confusable_identifier": true
+        },
+        "identifier_crop": "templates/identifiers/step_035.png",
+        "identifier_region": [
+          107,
+          300,
+          1046,
+          28
+        ],
+        "landmarks": [
+          {
+            "relation": "below",
+            "ocr_text": "Show Inactive",
+            "distance_px": 239,
+            "dx_px": -70,
+            "dy_px": -229
+          },
+          {
+            "relation": "above",
+            "ocr_text": "Searchbyanydemogra",
+            "distance_px": 287,
+            "dx_px": -39,
+            "dy_px": 284
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "field_label": null,
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": null,
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "control label has no retained consequential-write signal",
+      "risk_review_required": false,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": true,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_036",
+      "intent": "type <country_code>",
+      "action": "type",
+      "anchor": null,
+      "text": "USA",
+      "param": "country_code",
+      "secret": false,
+      "field_label": "form_country_code",
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": null,
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "action has no retained consequential commit signal",
+      "risk_review_required": false,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_037",
+      "intent": "press Enter",
+      "action": "key",
+      "anchor": null,
+      "text": null,
+      "param": null,
+      "secret": false,
+      "field_label": null,
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": "Enter",
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "submission/deletion key may edit locally or commit application state",
+      "risk_review_required": true,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_038",
+      "intent": "scroll by (0, 600)",
+      "action": "scroll",
+      "anchor": null,
+      "text": null,
+      "param": null,
+      "secret": false,
+      "field_label": null,
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": null,
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": 0,
+      "scroll_dy": 600,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "action has no retained consequential commit signal",
+      "risk_review_required": false,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_039",
+      "intent": "click 'Create New Patient'",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_039.png",
+        "structural": {
+          "selector": "#create",
+          "frame_path": [
+            "div:nth-of-type(3) > iframe:nth-of-type(1)"
+          ],
+          "role": "button",
+          "name": "Create New Patient",
+          "automation_id": null,
+          "window_name": null
+        },
+        "region": [
+          204,
+          736,
+          160,
+          64
+        ],
+        "click_point": [
+          284,
+          772
+        ],
+        "ocr_text": "Create New Patient",
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": null,
+        "identifier_crop": null,
+        "identifier_region": null,
+        "landmarks": [
+          {
+            "relation": "left_of",
+            "ocr_text": "Search",
+            "distance_px": 132,
+            "dx_px": 132,
+            "dy_px": 0
+          },
+          {
+            "relation": "left_of",
+            "ocr_text": "Related",
+            "distance_px": 164,
+            "dx_px": 152,
+            "dy_px": 61
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "field_label": null,
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": null,
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "text_present",
+          "text": "Confirm Create New Patient",
+          "region": null,
+          "phash": null,
+          "phash_tolerance": 8,
+          "timeout_s": 10.0,
+          "template": null
+        },
+        {
+          "kind": "text_present",
+          "text": "No matches were found.",
+          "region": null,
+          "phash": null,
+          "phash_tolerance": 8,
+          "timeout_s": 10.0,
+          "template": null
+        }
+      ],
+      "effects": [],
+      "api_binding": null,
+      "risk": "irreversible",
+      "risk_explanation": "retained action context names a consequential state change",
+      "risk_review_required": false,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": false,
+      "identity_unarmed_reason": "row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)",
+      "identifier_crop_missing_reason": "identity is not armed on this step (see identity_unarmed_reason) — there is no identity evidence to crop"
+    },
+    {
+      "id": "step_040",
+      "intent": "click 'Confirm Create New Patient'",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_040.png",
+        "structural": {
+          "selector": "#confirmCreate",
+          "frame_path": [
+            "#modalframe"
+          ],
+          "role": "button",
+          "name": "Confirm Create New Patient",
+          "automation_id": null,
+          "window_name": null
+        },
+        "region": [
+          520,
+          248,
+          160,
+          64
+        ],
+        "click_point": [
+          600,
+          280
+        ],
+        "ocr_text": "Confirm Create New Patient",
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": {
+          "schema_version": 1,
+          "salt": "2c2b0ae13e735d8eb142df708d892db7",
+          "band_len": 36,
+          "tokens": [
+            {
+              "c": "56a3b2e128c7f701",
+              "r": "56a3b2e128c7f701",
+              "n": 7,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "ddf6a343ce18cc69",
+              "r": "8d772b09b12dd0b1",
+              "n": 7,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "99756e6741983ddb",
+              "r": "99756e6741983ddb",
+              "n": 6,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "dcc557d4105bdbbb",
+              "r": "dcc557d4105bdbbb",
+              "n": 3,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "10d860dd6490ab23",
+              "r": "86358f5fd6b709e2",
+              "n": 7,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "c38c1099977af90c",
+              "r": "c38c1099977af90c",
+              "n": 6,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            }
+          ],
+          "concats": [
+            {
+              "i": 0,
+              "size": 2,
+              "c": "a93ddcd2821aea92",
+              "r": "292a49077b88e09d",
+              "digit": false,
+              "name": true,
+              "n": 14
+            },
+            {
+              "i": 0,
+              "size": 3,
+              "c": "0c473e70373454d6",
+              "r": "36d23f3fb5fd54df",
+              "digit": false,
+              "name": true,
+              "n": 20
+            },
+            {
+              "i": 0,
+              "size": 4,
+              "c": "85f6e1caf8aa74bf",
+              "r": "77f90ffdca85c119",
+              "digit": false,
+              "name": true,
+              "n": 23
+            },
+            {
+              "i": 1,
+              "size": 2,
+              "c": "1de71a536c8d3d6f",
+              "r": "ed4cd377912fd259",
+              "digit": false,
+              "name": true,
+              "n": 13
+            },
+            {
+              "i": 1,
+              "size": 3,
+              "c": "b4244806a134b2f8",
+              "r": "f95458556c131187",
+              "digit": false,
+              "name": true,
+              "n": 16
+            },
+            {
+              "i": 1,
+              "size": 4,
+              "c": "8affb4b7f907df9c",
+              "r": "dd8394220a24bfb2",
+              "digit": false,
+              "name": true,
+              "n": 23
+            },
+            {
+              "i": 2,
+              "size": 2,
+              "c": "36f41ea702be41c7",
+              "r": "36f41ea702be41c7",
+              "digit": false,
+              "name": true,
+              "n": 9
+            },
+            {
+              "i": 2,
+              "size": 3,
+              "c": "648c1958b1ee5d2b",
+              "r": "b017cf39208fb75e",
+              "digit": false,
+              "name": true,
+              "n": 16
+            },
+            {
+              "i": 2,
+              "size": 4,
+              "c": "37512d199cac4721",
+              "r": "e233d81e37db88b0",
+              "digit": false,
+              "name": true,
+              "n": 22
+            },
+            {
+              "i": 3,
+              "size": 2,
+              "c": "7a45ec12f6f40b35",
+              "r": "b2880d539384193a",
+              "digit": false,
+              "name": true,
+              "n": 10
+            },
+            {
+              "i": 3,
+              "size": 3,
+              "c": "741ee6115132b8f5",
+              "r": "c83851e44d039e12",
+              "digit": false,
+              "name": true,
+              "n": 16
+            },
+            {
+              "i": 4,
+              "size": 2,
+              "c": "c70bc7605ca16d4d",
+              "r": "160d429b0b21b6d2",
+              "digit": false,
+              "name": true,
+              "n": 13
+            }
+          ],
+          "structured": null,
+          "signal_hashes": {
+            "captured_context|exact|": "7e1dfdc9a83202e1d6cbeb5fec6a638d2e1695b38157b8627adb7d74ceae7229",
+            "captured_context|normalized|unicode_nfkc": "7e1dfdc9a83202e1d6cbeb5fec6a638d2e1695b38157b8627adb7d74ceae7229",
+            "captured_context|normalized|casefold": "befc25d477339862889d25bf6217ba393b802db739c3ea9295559028f845c5a8",
+            "captured_context|normalized|collapse_whitespace": "7e1dfdc9a83202e1d6cbeb5fec6a638d2e1695b38157b8627adb7d74ceae7229",
+            "captured_context|normalized|strip_punctuation": "c9078533bc3fd11ee38b046d8f4a984e10e97983b62b0e7bee78c06602735816",
+            "captured_context|normalized|unicode_nfkc,casefold": "befc25d477339862889d25bf6217ba393b802db739c3ea9295559028f845c5a8",
+            "captured_context|normalized|unicode_nfkc,collapse_whitespace": "7e1dfdc9a83202e1d6cbeb5fec6a638d2e1695b38157b8627adb7d74ceae7229",
+            "captured_context|normalized|unicode_nfkc,strip_punctuation": "c9078533bc3fd11ee38b046d8f4a984e10e97983b62b0e7bee78c06602735816",
+            "captured_context|normalized|casefold,collapse_whitespace": "befc25d477339862889d25bf6217ba393b802db739c3ea9295559028f845c5a8",
+            "captured_context|normalized|casefold,strip_punctuation": "cf418d122eb7c83ad5596028aa6eaddf4521c00a1ef2207bffef0ab6e5864b28",
+            "captured_context|normalized|collapse_whitespace,strip_punctuation": "c9078533bc3fd11ee38b046d8f4a984e10e97983b62b0e7bee78c06602735816",
+            "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace": "befc25d477339862889d25bf6217ba393b802db739c3ea9295559028f845c5a8",
+            "captured_context|normalized|unicode_nfkc,casefold,strip_punctuation": "cf418d122eb7c83ad5596028aa6eaddf4521c00a1ef2207bffef0ab6e5864b28",
+            "captured_context|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "c9078533bc3fd11ee38b046d8f4a984e10e97983b62b0e7bee78c06602735816",
+            "captured_context|normalized|casefold,collapse_whitespace,strip_punctuation": "cf418d122eb7c83ad5596028aa6eaddf4521c00a1ef2207bffef0ab6e5864b28",
+            "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "cf418d122eb7c83ad5596028aa6eaddf4521c00a1ef2207bffef0ab6e5864b28"
+          },
+          "param_token_indices": {},
+          "rests_on_confusable_identifier": false
+        },
+        "identifier_crop": "templates/identifiers/step_040.png",
+        "identifier_region": [
+          107,
+          258,
+          678,
+          34
+        ],
+        "landmarks": [
+          {
+            "relation": "above",
+            "ocr_text": "Name",
+            "distance_px": 151,
+            "dx_px": 50,
+            "dy_px": 142
+          },
+          {
+            "relation": "above",
+            "ocr_text": "Name",
+            "distance_px": 152,
+            "dx_px": -54,
+            "dy_px": 142
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "field_label": null,
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": null,
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            0,
+            308,
+            1280,
+            451
+          ],
+          "phash": "fe4e96e0821d6969",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0,
+          "template": "templates/step_040_expect.png"
+        },
+        {
+          "kind": "text_present",
+          "text": "TreatmentInterventionPreferences?",
+          "region": null,
+          "phash": null,
+          "phash_tolerance": 8,
+          "timeout_s": 5.0,
+          "template": null
+        }
+      ],
+      "effects": [
+        {
+          "kind": "record_written",
+          "match": {
+            "email": {
+              "literal": null,
+              "param": "email"
+            },
+            "lname": {
+              "literal": null,
+              "param": "lname"
+            }
+          },
+          "field": null,
+          "value": null,
+          "expected_count": 1,
+          "new_records": [],
+          "identity_field": "id",
+          "idempotency_key": null,
+          "key_field": "key",
+          "count_new_only": false,
+          "forbid_collateral_loss": true,
+          "risk": "reversible",
+          "probe": "exactly one synthetic OpenEMR patient exists",
+          "timeout_s": 5.0,
+          "needs_operator_confirmation": false,
+          "readback": null
+        },
+        {
+          "kind": "field_equals",
+          "match": {
+            "email": {
+              "literal": null,
+              "param": "email"
+            },
+            "lname": {
+              "literal": null,
+              "param": "lname"
+            }
+          },
+          "field": "title",
+          "value": {
+            "literal": null,
+            "param": "title"
+          },
+          "expected_count": 1,
+          "new_records": [],
+          "identity_field": "id",
+          "idempotency_key": null,
+          "key_field": "key",
+          "count_new_only": false,
+          "forbid_collateral_loss": true,
+          "risk": "reversible",
+          "probe": "OpenEMR patient field 'title' read-back",
+          "timeout_s": 5.0,
+          "needs_operator_confirmation": false,
+          "readback": null
+        },
+        {
+          "kind": "field_equals",
+          "match": {
+            "email": {
+              "literal": null,
+              "param": "email"
+            },
+            "lname": {
+              "literal": null,
+              "param": "lname"
+            }
+          },
+          "field": "fname",
+          "value": {
+            "literal": null,
+            "param": "fname"
+          },
+          "expected_count": 1,
+          "new_records": [],
+          "identity_field": "id",
+          "idempotency_key": null,
+          "key_field": "key",
+          "count_new_only": false,
+          "forbid_collateral_loss": true,
+          "risk": "reversible",
+          "probe": "OpenEMR patient field 'fname' read-back",
+          "timeout_s": 5.0,
+          "needs_operator_confirmation": false,
+          "readback": null
+        },
+        {
+          "kind": "field_equals",
+          "match": {
+            "email": {
+              "literal": null,
+              "param": "email"
+            },
+            "lname": {
+              "literal": null,
+              "param": "lname"
+            }
+          },
+          "field": "DOB",
+          "value": {
+            "literal": null,
+            "param": "DOB"
+          },
+          "expected_count": 1,
+          "new_records": [],
+          "identity_field": "id",
+          "idempotency_key": null,
+          "key_field": "key",
+          "count_new_only": false,
+          "forbid_collateral_loss": true,
+          "risk": "reversible",
+          "probe": "OpenEMR patient field 'DOB' read-back",
+          "timeout_s": 5.0,
+          "needs_operator_confirmation": false,
+          "readback": null
+        },
+        {
+          "kind": "field_equals",
+          "match": {
+            "email": {
+              "literal": null,
+              "param": "email"
+            },
+            "lname": {
+              "literal": null,
+              "param": "lname"
+            }
+          },
+          "field": "sex",
+          "value": {
+            "literal": null,
+            "param": "sex"
+          },
+          "expected_count": 1,
+          "new_records": [],
+          "identity_field": "id",
+          "idempotency_key": null,
+          "key_field": "key",
+          "count_new_only": false,
+          "forbid_collateral_loss": true,
+          "risk": "reversible",
+          "probe": "OpenEMR patient field 'sex' read-back",
+          "timeout_s": 5.0,
+          "needs_operator_confirmation": false,
+          "readback": null
+        },
+        {
+          "kind": "field_equals",
+          "match": {
+            "email": {
+              "literal": null,
+              "param": "email"
+            },
+            "lname": {
+              "literal": null,
+              "param": "lname"
+            }
+          },
+          "field": "street",
+          "value": {
+            "literal": null,
+            "param": "street"
+          },
+          "expected_count": 1,
+          "new_records": [],
+          "identity_field": "id",
+          "idempotency_key": null,
+          "key_field": "key",
+          "count_new_only": false,
+          "forbid_collateral_loss": true,
+          "risk": "reversible",
+          "probe": "OpenEMR patient field 'street' read-back",
+          "timeout_s": 5.0,
+          "needs_operator_confirmation": false,
+          "readback": null
+        },
+        {
+          "kind": "field_equals",
+          "match": {
+            "email": {
+              "literal": null,
+              "param": "email"
+            },
+            "lname": {
+              "literal": null,
+              "param": "lname"
+            }
+          },
+          "field": "city",
+          "value": {
+            "literal": null,
+            "param": "city"
+          },
+          "expected_count": 1,
+          "new_records": [],
+          "identity_field": "id",
+          "idempotency_key": null,
+          "key_field": "key",
+          "count_new_only": false,
+          "forbid_collateral_loss": true,
+          "risk": "reversible",
+          "probe": "OpenEMR patient field 'city' read-back",
+          "timeout_s": 5.0,
+          "needs_operator_confirmation": false,
+          "readback": null
+        },
+        {
+          "kind": "field_equals",
+          "match": {
+            "email": {
+              "literal": null,
+              "param": "email"
+            },
+            "lname": {
+              "literal": null,
+              "param": "lname"
+            }
+          },
+          "field": "state",
+          "value": {
+            "literal": "MA",
+            "param": null
+          },
+          "expected_count": 1,
+          "new_records": [],
+          "identity_field": "id",
+          "idempotency_key": null,
+          "key_field": "key",
+          "count_new_only": false,
+          "forbid_collateral_loss": true,
+          "risk": "reversible",
+          "probe": "OpenEMR patient field 'state' read-back",
+          "timeout_s": 5.0,
+          "needs_operator_confirmation": false,
+          "readback": null
+        },
+        {
+          "kind": "field_equals",
+          "match": {
+            "email": {
+              "literal": null,
+              "param": "email"
+            },
+            "lname": {
+              "literal": null,
+              "param": "lname"
+            }
+          },
+          "field": "postal_code",
+          "value": {
+            "literal": null,
+            "param": "postal_code"
+          },
+          "expected_count": 1,
+          "new_records": [],
+          "identity_field": "id",
+          "idempotency_key": null,
+          "key_field": "key",
+          "count_new_only": false,
+          "forbid_collateral_loss": true,
+          "risk": "reversible",
+          "probe": "OpenEMR patient field 'postal_code' read-back",
+          "timeout_s": 5.0,
+          "needs_operator_confirmation": false,
+          "readback": null
+        },
+        {
+          "kind": "field_equals",
+          "match": {
+            "email": {
+              "literal": null,
+              "param": "email"
+            },
+            "lname": {
+              "literal": null,
+              "param": "lname"
+            }
+          },
+          "field": "phone_home",
+          "value": {
+            "literal": null,
+            "param": "phone_home"
+          },
+          "expected_count": 1,
+          "new_records": [],
+          "identity_field": "id",
+          "idempotency_key": null,
+          "key_field": "key",
+          "count_new_only": false,
+          "forbid_collateral_loss": true,
+          "risk": "reversible",
+          "probe": "OpenEMR patient field 'phone_home' read-back",
+          "timeout_s": 5.0,
+          "needs_operator_confirmation": false,
+          "readback": null
+        },
+        {
+          "kind": "field_equals",
+          "match": {
+            "email": {
+              "literal": null,
+              "param": "email"
+            },
+            "lname": {
+              "literal": null,
+              "param": "lname"
+            }
+          },
+          "field": "country_code",
+          "value": {
+            "literal": null,
+            "param": "country_code"
+          },
+          "expected_count": 1,
+          "new_records": [],
+          "identity_field": "id",
+          "idempotency_key": null,
+          "key_field": "key",
+          "count_new_only": false,
+          "forbid_collateral_loss": true,
+          "risk": "reversible",
+          "probe": "OpenEMR patient field 'country_code' read-back",
+          "timeout_s": 5.0,
+          "needs_operator_confirmation": false,
+          "readback": null
+        }
+      ],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": "retained action context names a consequential state change",
+      "risk_review_required": false,
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": true,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    }
+  ],
+  "interstitials": [],
+  "program": null,
+  "subflows": {},
+  "data_sources": {},
+  "manifest": {
+    "schema_version": 2,
+    "content_digest": "ac2d62ec5638cd6f018b5107809af43c2645ac798a3e4ea8e66153de09c4b7cc",
+    "file_hashes": {
+      "templates/identifiers/step_003.png": "b693196ac8edf83161d924fa56d49bc5fda779a2ad1d5702433cd7409827beab",
+      "templates/identifiers/step_006.png": "b6cd63e23d39342f17ec0bc0f12feff631c7b1c054d2b3cad8a93c2d1b99e71e",
+      "templates/identifiers/step_009.png": "b5c66e87286eb999d34c5c7f8658d955ad37d100dac0a21159e010fab9a86729",
+      "templates/identifiers/step_012.png": "e84a110767440459a2f208c2b4ad60858e7891fcfbeb159bfa27419e1aacf21b",
+      "templates/identifiers/step_017.png": "18cda86805432352ad97a1fb5bc468e3ea6614e8a773cb1b15b1eee0b8e339f3",
+      "templates/identifiers/step_020.png": "737b98cb243bfa956670f7f230c6c1578e588465ba647490063f6c46c0270d7a",
+      "templates/identifiers/step_023.png": "accaa210652c3ff1c7fc23ac6a4b653fade8e984c25acd9954c6292a6861963c",
+      "templates/identifiers/step_026.png": "d84feb23abebe58fe30aa227429317076fcaf4042f16418710a489b748ff379c",
+      "templates/identifiers/step_029.png": "59325888f26c87af708abc6f71966786cc6abb18a14e077e41074fd6115ad38f",
+      "templates/identifiers/step_032.png": "8b3b1ebf6837979e366e11d8139356ca04dbd821fe9c438b03f169e55f86ff3c",
+      "templates/identifiers/step_035.png": "53b4ab5acffa3c6a278c441459b85f23ecc84914d2e4ea9608d162c49eed9f87",
+      "templates/identifiers/step_040.png": "f00c8450d77b738ef0255988598de83555ff3e82e225af9f4747de6cc5afa994",
+      "templates/step_000.png": "a89624b03e7e50df70c3f3c706c4e4e17017ca31b979cf06e8c5aac699878761",
+      "templates/step_000_expect.png": "8e86ae2413addff68e89d6d37b9222e800654484caa1a28d04a756f87906ff02",
+      "templates/step_003.png": "1545b4b325728862ff38bbd0d82e71563212d5ec46fb1382c3bfd64827c1f336",
+      "templates/step_003_expect.png": "087fbc35f6f04062e7f557deea1c840d80623ae56998cd5f58de6c4aedf3b70a",
+      "templates/step_006.png": "0deb73c41ef344090022436bc577d8ff94a4bb74193b3392ceef19ccfb713602",
+      "templates/step_006_expect.png": "7cb7eeda6806270a30bfd093255fd401cc3b20935f2435b8543af2b961b747fc",
+      "templates/step_009.png": "517c77489043a2dd9ac5bb089144dff4b3a112a7e34037aad40d1f9751aee85e",
+      "templates/step_009_expect.png": "2454ab4aada80dcc299827a13760b47ee554ea05859bd000913d521c1d8b9857",
+      "templates/step_012.png": "3bdb5648e24835d3133040098c78b13817894ab347ee062f085aa06d47ea3cac",
+      "templates/step_012_expect.png": "17636f226bfdbd3b580dc2e6cac3e2f819e19ba8487a2b048d5cde32e95eaf18",
+      "templates/step_015.png": "7084e62d5c593657302b9a0c1f121549cedcdb969b6428e5ff2dc4b8041b1dc4",
+      "templates/step_015_expect.png": "a9641cf5e390e9a30bf1e391586601dcd0a591cff2f37a9fee9fc8c3e5255016",
+      "templates/step_017.png": "6ceb10078596b627ed12d71a5610de1a8fc94b97de392b86b34a66915e0aa07a",
+      "templates/step_017_expect.png": "090f13ec41c698966840d5372507b7e4da048085dbdfa9e0b0a2b271e8965329",
+      "templates/step_020.png": "810da56e4f05549d5c59b5002ffcbbab9677f031cf2a56e0549139d24f30b34e",
+      "templates/step_020_expect.png": "7b5504240529ca391f47e676e008ce13db954243b384f0e16a34664041393b20",
+      "templates/step_023.png": "3b8449493928ef24a570e1d7ac65b5b25584c8b3cd68eba071af842bfbae9399",
+      "templates/step_023_expect.png": "88b28b0dbe899bd8b46c165fe4ef53f4f2f8218a09f093a2ab619f8c48488374",
+      "templates/step_026.png": "c25ad4b941b8392ddd64223b9cddaab39f0f68a0fc25958441dc09b6943264f2",
+      "templates/step_029.png": "0e551c8fa8f8e2eb4cfef0ccef68c35862e8a3c1dd6e654ec0185edcab047b28",
+      "templates/step_029_expect.png": "1b71bfe520e1b6c8a1d41b990bca4f2f6dd5e15a4bf931595917894ad56d1c46",
+      "templates/step_032.png": "28ee56d03479ba76a938532854fbca55bab26ed8ba738b9a44185f4db04368aa",
+      "templates/step_032_expect.png": "298a1691c7832c2eeb29e00a15457b005b5222f304d6c41530cfc2dc91cbc36c",
+      "templates/step_035.png": "324ba84e4eaf0d3fbc6b18da3218de44da4f464f6a6b8bc7d0329e4f5f9fca67",
+      "templates/step_039.png": "01bd72ded2316233b66af4e50b63bdf54c3f2ca12d5aac2a5462a88893f30b43",
+      "templates/step_039_expect.png": "708ebf4bf36f854120956898f662dc030e64b12b6fc2362d3008a472114fa4f6",
+      "templates/step_040.png": "22dd0ae0fba63fbcaf4222de690199ef88fa71a386a186db9c03b813f981aa87",
+      "templates/step_040_expect.png": "dc945b1a646ff3809b036efec30c84208916a7846eec7bef975ca67e45f6c949"
+    },
+    "provenance": {
+      "compiler_version": "1.35.1",
+      "source_recording_sha256": "5437aed816f9bbab74104f6728af52d7a5b9ae13a37452eb6b18ca9cd6686f87",
+      "compiler_config_sha256": "7f0854cc6e462ab1e2527b5d14cecb0610dcb917bd84bb7611c75c3208de5c3e",
+      "created_at": "2026-10-10T05:21:26.052425+00:00",
+      "policy_name": null,
+      "certified": false,
+      "certification_status": null,
+      "certified_at": null,
+      "expires_at": null,
+      "certification_invalidated_at": null,
+      "certification_invalidation_reason": null,
+      "governed_authorization_template": null
+    },
+    "encrypted": false
+  }
+}

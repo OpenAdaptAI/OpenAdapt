@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "workflow_name": "mockmed-triage",
+  "step_index": 4,
+  "step_id": "step_004",
+  "intent": "type <note>",
+  "state_id": null,
+  "next_step_index": 5,
+  "params": {
+    "note": "Synthetic follow-up in two weeks"
+  },
+  "effect_verified": null,
+  "effect_approved_unverified": false,
+  "effect_contract_hashes": [],
+  "effect_evidence": [],
+  "identity": null,
+  "governed_authorization_id": "765eb6579e214433b28f716540db5ab9",
+  "governed_approval_source": "public-demo-qualified-campaign",
+  "postconditions_ok": true,
+  "skipped": false,
+  "actuation": null,
+  "resolution": null,
+  "drift_oracle_calls": 0,
+  "heal": null,
+  "created_at": "2026-07-25T19:28:50.813580+00:00"
+}

@@ -1,0 +1,169 @@
+{
+  "schema_version": 2,
+  "run_id": "openemr-referral-r5-grace-adeyemi-1792465453",
+  "namespace_id": "5ebe0d1adb39fd3420bb26d8b53501a8",
+  "canonical_run_dir": "/Users/abrichr/oa/scratch/qualify-referral/certified-referrals-qual10/3-r5-grace-adeyemi/engine",
+  "workflow_name": "openemr-create-synthetic-patient",
+  "bundle_dir": "/Users/abrichr/oa/scratch/qualify-referral/certified-referrals-qual10/bundle",
+  "params": {
+    "title": "Ms.",
+    "fname": "Grace",
+    "lname": "Adeyemi",
+    "DOB": "1990-02-08",
+    "sex": "Female",
+    "street": "402 CEDAR ROW",
+    "city": "EXAMPLETON",
+    "state_label": "Massachusetts",
+    "postal_code": "02139",
+    "phone_home": "555-0145",
+    "email": "grace.adeyemi@example.invalid",
+    "country_code": "USA"
+  },
+  "idempotency_key": null,
+  "worklists": {},
+  "governed_authorization": {
+    "authorization_id": "625efdeb6e924901b533c6789854a3fe",
+    "created_at": "2026-10-20T03:04:17.691335+00:00",
+    "bundle_content_digest": "ec096afa2b614326b00ec3155f256041c19d86f3998761ce9d772cfd911460b6",
+    "runtime_inputs_digest": "3ea2379e43ae96c8eac68d49a375043070458e210595c15b41cccbeb34bcd414",
+    "admitted_policy_name": "clinical-write",
+    "admitted_policy_contract_sha256": "f35a6a94b3f2787165f071ce8571de07095169b9632d394e9df719b35da52c0f",
+    "execution_profile": "standard",
+    "minimum_effect_tier": 1,
+    "qualified_effect_requirements": [
+      {
+        "step_id": "step_040",
+        "actuation_path": "gui",
+        "effect_index": 0,
+        "effect_contract_hash": "sha256:f64985856097097954250be6523fa260daf9fc5db495671c2548ead9a388577b",
+        "minimum_tier": 1
+      },
+      {
+        "step_id": "step_040",
+        "actuation_path": "gui",
+        "effect_index": 1,
+        "effect_contract_hash": "sha256:206d1d6fc27df6f24c02bb6b6f4419e0612e7935ec7e744fc8cc446f54558385",
+        "minimum_tier": 1
+      },
+      {
+        "step_id": "step_040",
+        "actuation_path": "gui",
+        "effect_index": 2,
+        "effect_contract_hash": "sha256:8f295459bdd868daf117ca9f77dd948cdc2c8c034a65184cb5418ccfab7f60e7",
+        "minimum_tier": 1
+      },
+      {
+        "step_id": "step_040",
+        "actuation_path": "gui",
+        "effect_index": 3,
+        "effect_contract_hash": "sha256:52c6884d06d82c4ccc14600150f2890bcd25d92cb7eb26bc53ef54033075ba3c",
+        "minimum_tier": 1
+      },
+      {
+        "step_id": "step_040",
+        "actuation_path": "gui",
+        "effect_index": 4,
+        "effect_contract_hash": "sha256:7732675a6e6123c0c3f51512496f695fa4ce503ab989993c520fb8a469bbdc3d",
+        "minimum_tier": 1
+      },
+      {
+        "step_id": "step_040",
+        "actuation_path": "gui",
+        "effect_index": 5,
+        "effect_contract_hash": "sha256:598fb97e12d3c0b537f0453e7fdaad453b969e249e888424e67fcd85a06741f0",
+        "minimum_tier": 1
+      },
+      {
+        "step_id": "step_040",
+        "actuation_path": "gui",
+        "effect_index": 6,
+        "effect_contract_hash": "sha256:ba109cf90077d7b20a37c2848fa7bee8ea0039747a5ae47465617b2ea1039a2b",
+        "minimum_tier": 1
+      },
+      {
+        "step_id": "step_040",
+        "actuation_path": "gui",
+        "effect_index": 7,
+        "effect_contract_hash": "sha256:f508b7fd1536726db75a0814fc439c65dbd6c0b637a7b619855c73a571bcfca9",
+        "minimum_tier": 1
+      },
+      {
+        "step_id": "step_040",
+        "actuation_path": "gui",
+        "effect_index": 8,
+        "effect_contract_hash": "sha256:b311b51ece1670a60f793b29aa3d28d40da196ffbcd26f2fdd620e380dedf97a",
+        "minimum_tier": 1
+      },
+      {
+        "step_id": "step_040",
+        "actuation_path": "gui",
+        "effect_index": 9,
+        "effect_contract_hash": "sha256:a33cf54165b96ce6d48014e6e68bac94cdc8f9c9176bae6f5c955123d20683c2",
+        "minimum_tier": 1
+      },
+      {
+        "step_id": "step_040",
+        "actuation_path": "gui",
+        "effect_index": 10,
+        "effect_contract_hash": "sha256:d2516eb0f6aa365b812e84fd754127d053d8e0b1a4b349a0b8ce71936bcec199",
+        "minimum_tier": 1
+      }
+    ],
+    "required_identity_step_ids": [
+      "step_000",
+      "step_003",
+      "step_006",
+      "step_009",
+      "step_012",
+      "step_016",
+      "step_018",
+      "step_021",
+      "step_024",
+      "step_027",
+      "step_030",
+      "step_033",
+      "step_036",
+      "step_039",
+      "step_040"
+    ],
+    "unverified_write_approvals": [],
+    "approval_source": "local-cli-explicit-flag",
+    "qualification_admission": null,
+    "qualification_admission_sha256": null,
+    "production_qualification_admission_id": null,
+    "production_qualification_admission_sha256": null,
+    "production_qualification_evidence_identity_sha256": null,
+    "production_qualification_runtime_validation_id": null,
+    "production_qualification_signer_registry_sha256": null,
+    "production_qualification_signer_registry_revision": null,
+    "production_qualification_signer_registry_expires_at": null,
+    "production_qualification_authority_sha256": null,
+    "qualification_project_id": null,
+    "qualification_project_revision": null,
+    "qualification_project_contract_sha256": null,
+    "qualification_case_id": null,
+    "qualification_campaign_id_sha256": null,
+    "qualification_case_input_sha256": null,
+    "qualification_run_id_sha256": null,
+    "qualification_campaign_permit_id": null,
+    "qualification_campaign_permit_sha256": null,
+    "qualification_campaign_signer_registry_sha256": null,
+    "qualification_campaign_signer_registry_revision": null,
+    "qualification_campaign_signer_registry_expires_at": null,
+    "qualification_campaign_authority_sha256": null,
+    "qualification_case_kind": null,
+    "qualification_case_action_paths": {},
+    "qualification_fault_driver_id": null,
+    "qualification_fault_driver_contract_sha256": null,
+    "qualification_fault_driver_key_id": null,
+    "qualification_fault_step_id_sha256": null
+  },
+  "delivery_authority_kind": "customer_local",
+  "remote_delivery_run_id": null,
+  "managed_dispatch_binding_sha256": null,
+  "screenshots_may_leave_box": false,
+  "model_calls": 0,
+  "external_network_calls": "none",
+  "save_healed_to": null,
+  "created_at": "2026-10-20T03:04:17.760541+00:00"
+}

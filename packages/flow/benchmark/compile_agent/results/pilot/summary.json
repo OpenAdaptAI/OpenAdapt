@@ -1,0 +1,59 @@
+{
+  "arms": {
+    "every_turn": {
+      "median_cache_creation_input_tokens": 25243.0,
+      "median_cache_read_input_tokens": 50763.0,
+      "median_cost_usd": 0.147,
+      "median_input_tokens": 12.0,
+      "median_model_calls": 5.0,
+      "median_model_seconds": 14.739,
+      "median_output_tokens": 538.0,
+      "median_prompt_tokens": 76018.0,
+      "median_run_seconds": 37.653,
+      "median_screenshots_sent": 15.0,
+      "passed": 1,
+      "runs": 1,
+      "total_cost_usd": 0.1472
+    },
+    "selective": {
+      "median_cache_creation_input_tokens": 3716.0,
+      "median_cache_read_input_tokens": 6561.0,
+      "median_cost_usd": 0.027,
+      "median_input_tokens": 12.0,
+      "median_model_calls": 5.0,
+      "median_model_seconds": 8.554,
+      "median_output_tokens": 369.0,
+      "median_prompt_tokens": 10289.0,
+      "median_run_seconds": 24.119,
+      "median_screenshots_sent": 1.0,
+      "passed": 1,
+      "runs": 1,
+      "total_cost_usd": 0.0273
+    }
+  },
+  "environment": {
+    "app": "MockMed fault server, ?fault=ok&idempotency=demo, 1280x800",
+    "computer_tool": "computer_toolset_20260801 (every_turn arm)",
+    "effort": "medium",
+    "engine_commit": "3140e831",
+    "measured_at": "2026-10-18T17:28:09Z",
+    "model": "claude-opus-5-5",
+    "platform": "macOS-15.7.3-arm64-arm-64bit",
+    "prices_per_mtok": "input 4.00, output 20.00, cache write 5.00, cache read 0.20",
+    "python": "3.12.7",
+    "total_cost_usd": 0.1745
+  },
+  "every_turn_over_selective": {
+    "median_cost_usd": 5.44,
+    "median_model_seconds": 1.72,
+    "median_output_tokens": 1.46,
+    "median_prompt_tokens": 7.39,
+    "median_run_seconds": 1.56
+  },
+  "replays": {
+    "median_seconds": 8.172,
+    "model_calls_total": 0,
+    "runs": 4,
+    "verified": 4
+  }
+}

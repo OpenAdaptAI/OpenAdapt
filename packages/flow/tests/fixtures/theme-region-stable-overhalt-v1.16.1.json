@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "title": "theme plus parameter substitution caused a region_stable over-halt",
+  "source_eval": {
+    "repository": "OpenAdaptAI/openadapt-evals",
+    "pull_request": 270,
+    "runner_commit": "574bcdf",
+    "runner_sha256": "ac58c0b9a02cfc991144a1f5c7a2814c6b6b748bcba27b87f8e1027ee575970f"
+  },
+  "flow": {
+    "version": "1.16.1",
+    "commit": "113ce992b491576d77236f495b983165ce7a63bd",
+    "wheel_sha256": "c7073283475e7ae722db2478b499d962364851104e09edb71f254ba21c1310cd"
+  },
+  "task": "MockMed triage save",
+  "condition": "?drift=theme",
+  "recording_note": "Exact-current setup 3",
+  "replay_notes": [
+    "Referral letter faxed to cardiology. [A03]",
+    "Home BP log reviewed; stable readings. [A04]",
+    "Flu shot offered; patient declined. [A05]"
+  ],
+  "failed_step": "step_010",
+  "failed_postcondition": "region_stable",
+  "region": [0, 43, 968, 169],
+  "observed_count": 3,
+  "outcomes": {
+    "independent_effect_success": 3,
+    "runtime_reported_success": 0,
+    "over_halt": 3,
+    "silent_incorrect_success": 0,
+    "wrong_action": 0
+  },
+  "artifact_policy": "metadata only; no screenshots or third-party application source"
+}

@@ -1,0 +1,116 @@
+{
+  "profile": {
+    "width": 1280,
+    "height": 800,
+    "color_depth": 24,
+    "scale": 100,
+    "desktop_scale": 100,
+    "dpi": 96,
+    "lossless": true,
+    "font_smoothing": false,
+    "wallpaper": false,
+    "themes": false,
+    "clipboard": true,
+    "keyboard_layout": "0x409"
+  },
+  "jobs_per_size": 60,
+  "machine": {
+    "platform": "Linux-6.12.94+-x86_64-with-glibc2.41",
+    "cpus": 8
+  },
+  "results": [
+    {
+      "sessions": 1,
+      "jobs": 60,
+      "ok": 51,
+      "failed": 9,
+      "wall_s": 73.601,
+      "jobs_per_minute": 41.58,
+      "median_job_s": 1.239,
+      "errors": [
+        "ValueError"
+      ],
+      "failures": [
+        "ocr_decimal_dropped: ['Holder:Hayes,Drew Balance:1563255', 'Holder: Hayes, Drew Balance:1563255'] vs ('Hayes, Drew', '15632.55')",
+        "ocr_decimal_dropped: ['Holder:Dalton,Finley Balance:8633875', 'Holder: Dalton, Finley Balance:86338 75'] vs ('Dalton, Finley', '86338.75')",
+        "ocr_decimal_dropped: ['Holder:Foster,Jordan Balance:61461_19', 'Holder: Foster, Jordan Balance: 61461 19'] vs ('Foster, Jordan', '61461.19')",
+        "ocr_decimal_dropped: ['Holder:Archer,Alex Balance:9863227', 'Holder: Archer, Alex Balance:9863227'] vs ('Archer, Alex', '98632.27')",
+        "ocr_decimal_dropped: ['Holder:Foster,Brook Balance:66761_85', 'Holder: Foster, Brook Balance: 66761 85'] vs ('Foster, Brook', '66761.85')",
+        "ocr_decimal_dropped: ['Holder:Ellis,Casey Balance:6057433', 'Holder: Ellis, Casey Balance: 6057433'] vs ('Ellis, Casey', '60574.33')",
+        "ocr_decimal_dropped: ['Holder:Dalton,Alex Balance:3238038', 'Holder: Dalton, Alex Balance:3238038'] vs ('Dalton, Alex', '32380.38')",
+        "ocr_decimal_dropped: ['Holder:Carver, Drew Balance:5585807', 'Holder: Carver, [ Drew Balance:55858.07'] vs ('Carver, Drew', '55858.07')",
+        "ocr_decimal_dropped: ['Holder:Dalton,Harper Balance:9825871', 'Holder: Dalton, Harper Balance:9825871'] vs ('Dalton, Harper', '98258.71')"
+      ],
+      "median_act_s": 0.315,
+      "median_read_s": 0.906,
+      "ocr_decimal_dropped": 9,
+      "reads": {
+        "native": 9,
+        "upscaled": 42
+      },
+      "profile_sha256": "aa9e114039316fbf97090145552bbeef82e78e784a146768ec2126f6c6728b58"
+    },
+    {
+      "sessions": 2,
+      "jobs": 60,
+      "ok": 51,
+      "failed": 9,
+      "wall_s": 55.824,
+      "jobs_per_minute": 54.81,
+      "median_job_s": 1.822,
+      "errors": [
+        "ValueError"
+      ],
+      "failures": [
+        "ocr_decimal_dropped: ['Holder:Hayes,Drew Balance:1563255', 'Holder: Hayes, Drew Balance:1563255'] vs ('Hayes, Drew', '15632.55')",
+        "ocr_decimal_dropped: ['Holder:Dalton,Finley Balance:8633875', 'Holder: Dalton, Finley Balance:86338 75'] vs ('Dalton, Finley', '86338.75')",
+        "ocr_decimal_dropped: ['Holder:Foster,Jordan Balance:61461_19', 'Holder: Foster, Jordan Balance: 61461 19'] vs ('Foster, Jordan', '61461.19')",
+        "ocr_decimal_dropped: ['Holder:Archer,Alex Balance:9863227', 'Holder: Archer, Alex Balance:9863227'] vs ('Archer, Alex', '98632.27')",
+        "ocr_decimal_dropped: ['Holder:Foster,Brook Balance:66761_85', 'Holder: Foster, Brook Balance: 66761 85'] vs ('Foster, Brook', '66761.85')",
+        "ocr_decimal_dropped: ['Holder:Ellis,Casey Balance:6057433', 'Holder: Ellis, Casey Balance: 6057433'] vs ('Ellis, Casey', '60574.33')",
+        "ocr_decimal_dropped: ['Holder:Dalton,Alex Balance:3238038', 'Holder: Dalton, Alex Balance:3238038'] vs ('Dalton, Alex', '32380.38')",
+        "ocr_decimal_dropped: ['Holder:Carver, Drew Balance:5585807', 'Holder: Carver, [ Drew Balance:55858.07'] vs ('Carver, Drew', '55858.07')",
+        "ocr_decimal_dropped: ['Holder:Dalton,Harper Balance:9825871', 'Holder: Dalton, Harper Balance:9825871'] vs ('Dalton, Harper', '98258.71')"
+      ],
+      "median_act_s": 0.478,
+      "median_read_s": 1.317,
+      "ocr_decimal_dropped": 9,
+      "reads": {
+        "native": 9,
+        "upscaled": 42
+      },
+      "profile_sha256": "aa9e114039316fbf97090145552bbeef82e78e784a146768ec2126f6c6728b58"
+    },
+    {
+      "sessions": 4,
+      "jobs": 60,
+      "ok": 51,
+      "failed": 9,
+      "wall_s": 59.53,
+      "jobs_per_minute": 51.4,
+      "median_job_s": 3.886,
+      "errors": [
+        "ValueError"
+      ],
+      "failures": [
+        "ocr_decimal_dropped: ['Holder:Hayes,Drew Balance:1563255', 'Holder: Hayes, Drew Balance:1563255'] vs ('Hayes, Drew', '15632.55')",
+        "ocr_decimal_dropped: ['Holder:Dalton,Finley Balance:8633875', 'Holder: Dalton, Finley Balance:86338 75'] vs ('Dalton, Finley', '86338.75')",
+        "ocr_decimal_dropped: ['Holder:Foster,Jordan Balance:61461_19', 'Holder: Foster, Jordan Balance: 61461 19'] vs ('Foster, Jordan', '61461.19')",
+        "ocr_decimal_dropped: ['Holder:Archer,Alex Balance:9863227', 'Holder: Archer, Alex Balance:9863227'] vs ('Archer, Alex', '98632.27')",
+        "ocr_decimal_dropped: ['Holder:Foster,Brook Balance:66761_85', 'Holder: Foster, Brook Balance: 66761 85'] vs ('Foster, Brook', '66761.85')",
+        "ocr_decimal_dropped: ['Holder:Ellis,Casey Balance:6057433', 'Holder: Ellis, Casey Balance: 6057433'] vs ('Ellis, Casey', '60574.33')",
+        "ocr_decimal_dropped: ['Holder:Dalton,Alex Balance:3238038', 'Holder: Dalton, Alex Balance:3238038'] vs ('Dalton, Alex', '32380.38')",
+        "ocr_decimal_dropped: ['Holder:Carver, Drew Balance:5585807', 'Holder: Carver, [ Drew Balance:55858.07'] vs ('Carver, Drew', '55858.07')",
+        "ocr_decimal_dropped: ['Holder:Dalton,Harper Balance:9825871', 'Holder: Dalton, Harper Balance:9825871'] vs ('Dalton, Harper', '98258.71')"
+      ],
+      "median_act_s": 0.79,
+      "median_read_s": 3.104,
+      "ocr_decimal_dropped": 9,
+      "reads": {
+        "native": 9,
+        "upscaled": 42
+      },
+      "profile_sha256": "aa9e114039316fbf97090145552bbeef82e78e784a146768ec2126f6c6728b58"
+    }
+  ]
+}

@@ -1,0 +1,917 @@
+{
+  "total_usd": 5.687285,
+  "entries": [
+    {
+      "usd": 0.038614,
+      "arm": "agent",
+      "note": "item 1",
+      "at": 1792427232.198258
+    },
+    {
+      "usd": 0.038654,
+      "arm": "agent",
+      "note": "item 2",
+      "at": 1792427256.533804
+    },
+    {
+      "usd": 0.038804,
+      "arm": "agent",
+      "note": "item 3",
+      "at": 1792427280.139343
+    },
+    {
+      "usd": 0.038624,
+      "arm": "agent",
+      "note": "item 4",
+      "at": 1792427309.645385
+    },
+    {
+      "usd": 0.038554,
+      "arm": "agent",
+      "note": "item 5",
+      "at": 1792427343.013219
+    },
+    {
+      "usd": 0.038684,
+      "arm": "agent",
+      "note": "item 6",
+      "at": 1792427371.779708
+    },
+    {
+      "usd": 0.013309,
+      "arm": "compile_agent",
+      "note": "item 1 recording (first run)",
+      "at": 1792427379.2599208
+    },
+    {
+      "usd": 0.038744,
+      "arm": "agent",
+      "note": "item 7",
+      "at": 1792427398.706548
+    },
+    {
+      "usd": 0.038664,
+      "arm": "agent",
+      "note": "item 8",
+      "at": 1792427423.201256
+    },
+    {
+      "usd": 0.038704,
+      "arm": "agent",
+      "note": "item 9",
+      "at": 1792427445.700691
+    },
+    {
+      "usd": 0.038634,
+      "arm": "agent",
+      "note": "item 10",
+      "at": 1792427470.834066
+    },
+    {
+      "usd": 0.038624,
+      "arm": "agent",
+      "note": "item 11",
+      "at": 1792427494.8295832
+    },
+    {
+      "usd": 0.038534,
+      "arm": "agent",
+      "note": "item 12",
+      "at": 1792427521.93842
+    },
+    {
+      "usd": 0.038534,
+      "arm": "agent",
+      "note": "item 13",
+      "at": 1792427548.537573
+    },
+    {
+      "usd": 0.038514,
+      "arm": "agent",
+      "note": "item 14",
+      "at": 1792427573.40916
+    },
+    {
+      "usd": 0.038514,
+      "arm": "agent",
+      "note": "item 15",
+      "at": 1792427599.2768588
+    },
+    {
+      "usd": 0.038574,
+      "arm": "agent",
+      "note": "item 16",
+      "at": 1792427622.27387
+    },
+    {
+      "usd": 0.038454,
+      "arm": "compile_agent",
+      "note": "item 26 recording (program halted: Postconditions failed for step 'step_000' (click 'Open'): expected screen state not reached (semantic drift) \u2014 failed: r)",
+      "at": 1792427634.2304902
+    },
+    {
+      "usd": 0.038514,
+      "arm": "agent",
+      "note": "item 17",
+      "at": 1792427645.953913
+    },
+    {
+      "usd": 0.038504,
+      "arm": "agent",
+      "note": "item 18",
+      "at": 1792427669.7830908
+    },
+    {
+      "usd": 0.038734,
+      "arm": "agent",
+      "note": "item 19",
+      "at": 1792427694.718953
+    },
+    {
+      "usd": 0.038504,
+      "arm": "agent",
+      "note": "item 20",
+      "at": 1792427719.9227011
+    },
+    {
+      "usd": 0.038554,
+      "arm": "agent",
+      "note": "item 21",
+      "at": 1792427745.669237
+    },
+    {
+      "usd": 0.038664,
+      "arm": "compile_agent",
+      "note": "item 36 recording (program halted: Postconditions failed for step 'step_000' (click 'Open'): expected screen state not reached (semantic drift) \u2014 failed: r)",
+      "at": 1792427754.977969
+    },
+    {
+      "usd": 0.038504,
+      "arm": "agent",
+      "note": "item 22",
+      "at": 1792427775.588851
+    },
+    {
+      "usd": 0.038654,
+      "arm": "agent",
+      "note": "item 23",
+      "at": 1792427800.949912
+    },
+    {
+      "usd": 0.038644,
+      "arm": "agent",
+      "note": "item 24",
+      "at": 1792427824.820671
+    },
+    {
+      "usd": 0.038734,
+      "arm": "agent",
+      "note": "item 25",
+      "at": 1792427847.943687
+    },
+    {
+      "usd": 0.013399,
+      "arm": "agent",
+      "note": "item 26",
+      "at": 1792427874.520941
+    },
+    {
+      "usd": 0.045637,
+      "arm": "compile_agent",
+      "note": "item 46 recording (program halted: Could not resolve target for step 'step_000' (click 'Open'): all resolution rungs failed)",
+      "at": 1792427889.0528681
+    },
+    {
+      "usd": 0.038384,
+      "arm": "agent",
+      "note": "item 27",
+      "at": 1792427903.516503
+    },
+    {
+      "usd": 0.045467,
+      "arm": "compile_agent",
+      "note": "item 47 recording (no admitted program)",
+      "at": 1792427911.3984692
+    },
+    {
+      "usd": 0.038364,
+      "arm": "agent",
+      "note": "item 28",
+      "at": 1792427928.008136
+    },
+    {
+      "usd": 0.045467,
+      "arm": "compile_agent",
+      "note": "item 48 recording (no admitted program)",
+      "at": 1792427934.7078028
+    },
+    {
+      "usd": 0.038594,
+      "arm": "agent",
+      "note": "item 29",
+      "at": 1792427951.946804
+    },
+    {
+      "usd": 0.045457,
+      "arm": "compile_agent",
+      "note": "item 49 recording (no admitted program)",
+      "at": 1792427956.853986
+    },
+    {
+      "usd": 0.038384,
+      "arm": "agent",
+      "note": "item 30",
+      "at": 1792427975.57044
+    },
+    {
+      "usd": 0.045627,
+      "arm": "compile_agent",
+      "note": "item 50 recording (no admitted program)",
+      "at": 1792427979.184473
+    },
+    {
+      "usd": 0.045507,
+      "arm": "compile_agent",
+      "note": "item 51 recording (no admitted program)",
+      "at": 1792428001.149226
+    },
+    {
+      "usd": 0.038744,
+      "arm": "agent",
+      "note": "item 31",
+      "at": 1792428004.509002
+    },
+    {
+      "usd": 0.045617,
+      "arm": "compile_agent",
+      "note": "item 52 recording (no admitted program)",
+      "at": 1792428022.344815
+    },
+    {
+      "usd": 0.038734,
+      "arm": "agent",
+      "note": "item 32",
+      "at": 1792428030.084171
+    },
+    {
+      "usd": 0.045617,
+      "arm": "compile_agent",
+      "note": "item 53 recording (no admitted program)",
+      "at": 1792428044.701035
+    },
+    {
+      "usd": 0.038774,
+      "arm": "agent",
+      "note": "item 33",
+      "at": 1792428053.512466
+    },
+    {
+      "usd": 0.045497,
+      "arm": "compile_agent",
+      "note": "item 54 recording (no admitted program)",
+      "at": 1792428064.6691258
+    },
+    {
+      "usd": 0.038384,
+      "arm": "agent",
+      "note": "item 34",
+      "at": 1792428077.070192
+    },
+    {
+      "usd": 0.045437,
+      "arm": "compile_agent",
+      "note": "item 55 recording (no admitted program)",
+      "at": 1792428088.720683
+    },
+    {
+      "usd": 0.038614,
+      "arm": "agent",
+      "note": "item 35",
+      "at": 1792428099.088783
+    },
+    {
+      "usd": 0.052794,
+      "arm": "compile_agent",
+      "note": "item 56 recording (no admitted program)",
+      "at": 1792428116.463951
+    },
+    {
+      "usd": 0.045312,
+      "arm": "compile_agent",
+      "note": "item 57 recording (no admitted program)",
+      "at": 1792428140.568715
+    },
+    {
+      "usd": 0.038594,
+      "arm": "agent",
+      "note": "item 36",
+      "at": 1792428143.0779462
+    },
+    {
+      "usd": 0.053068,
+      "arm": "compile_agent",
+      "note": "item 58 recording (no admitted program)",
+      "at": 1792428165.1225479
+    },
+    {
+      "usd": 0.038524,
+      "arm": "agent",
+      "note": "item 37",
+      "at": 1792428168.361424
+    },
+    {
+      "usd": 0.038664,
+      "arm": "agent",
+      "note": "item 38",
+      "at": 1792428192.932363
+    },
+    {
+      "usd": 0.053074,
+      "arm": "compile_agent",
+      "note": "item 59 recording (no admitted program)",
+      "at": 1792428193.670885
+    },
+    {
+      "usd": 0.038524,
+      "arm": "agent",
+      "note": "item 39",
+      "at": 1792428218.360547
+    },
+    {
+      "usd": 0.052961,
+      "arm": "compile_agent",
+      "note": "item 60 recording (no admitted program)",
+      "at": 1792428224.1689181
+    },
+    {
+      "usd": 0.038504,
+      "arm": "agent",
+      "note": "item 40",
+      "at": 1792428241.926102
+    },
+    {
+      "usd": 0.052909,
+      "arm": "compile_agent",
+      "note": "item 61 recording (no admitted program)",
+      "at": 1792428257.0854971
+    },
+    {
+      "usd": 0.038504,
+      "arm": "agent",
+      "note": "item 41",
+      "at": 1792428269.404466
+    },
+    {
+      "usd": 0.04523,
+      "arm": "compile_agent",
+      "note": "item 62 recording (no admitted program)",
+      "at": 1792428278.469758
+    },
+    {
+      "usd": 0.038504,
+      "arm": "agent",
+      "note": "item 42",
+      "at": 1792428295.339776
+    },
+    {
+      "usd": 0.045352,
+      "arm": "compile_agent",
+      "note": "item 63 recording (no admitted program)",
+      "at": 1792428301.435978
+    },
+    {
+      "usd": 0.038534,
+      "arm": "agent",
+      "note": "item 43",
+      "at": 1792428324.380325
+    },
+    {
+      "usd": 0.052931,
+      "arm": "compile_agent",
+      "note": "item 64 recording (no admitted program)",
+      "at": 1792428326.539972
+    },
+    {
+      "usd": 0.038494,
+      "arm": "agent",
+      "note": "item 44",
+      "at": 1792428348.094403
+    },
+    {
+      "usd": 0.053044,
+      "arm": "compile_agent",
+      "note": "item 65 recording (no admitted program)",
+      "at": 1792428354.804279
+    },
+    {
+      "usd": 0.038704,
+      "arm": "agent",
+      "note": "item 45",
+      "at": 1792428371.38925
+    },
+    {
+      "usd": 0.038534,
+      "arm": "compile_agent",
+      "note": "item 66 recording (no admitted program)",
+      "at": 1792428376.1079621
+    },
+    {
+      "usd": 0.045587,
+      "arm": "agent",
+      "note": "item 46",
+      "at": 1792428398.23068
+    },
+    {
+      "usd": 0.045437,
+      "arm": "agent",
+      "note": "item 47",
+      "at": 1792428432.641299
+    },
+    {
+      "usd": 0.045467,
+      "arm": "agent",
+      "note": "item 48",
+      "at": 1792428461.6508439
+    },
+    {
+      "usd": 0.038514,
+      "arm": "compile_agent",
+      "note": "item 76 recording (program halted: Structural safety refusal for step 'step_001' (click 'New Encounter'): visual point is not an identity-bearing actionabl)",
+      "at": 1792428478.560852
+    },
+    {
+      "usd": 0.045517,
+      "arm": "agent",
+      "note": "item 49",
+      "at": 1792428549.060817
+    },
+    {
+      "usd": 0.045557,
+      "arm": "agent",
+      "note": "item 50",
+      "at": 1792428587.689791
+    },
+    {
+      "usd": 0.045497,
+      "arm": "agent",
+      "note": "item 51",
+      "at": 1792428615.514972
+    },
+    {
+      "usd": 0.038634,
+      "arm": "compile_agent",
+      "note": "item 86 recording (program halted: Structural safety refusal for step 'step_001' (click 'Startvisit'): visual point is not an identity-bearing actionable D)",
+      "at": 1792428623.09996
+    },
+    {
+      "usd": 0.045527,
+      "arm": "agent",
+      "note": "item 52",
+      "at": 1792428647.461296
+    },
+    {
+      "usd": 0.045607,
+      "arm": "agent",
+      "note": "item 53",
+      "at": 1792428675.979839
+    },
+    {
+      "usd": 0.045497,
+      "arm": "agent",
+      "note": "item 54",
+      "at": 1792428703.971321
+    },
+    {
+      "usd": 0.045557,
+      "arm": "agent",
+      "note": "item 55",
+      "at": 1792428735.803021
+    },
+    {
+      "usd": 0.018711,
+      "arm": "compile_agent",
+      "note": "item 96 recording (program halted: Identity check failed for step 'step_000' (click 'Open'): a target was found positionally (rung 'template', confidence 1)",
+      "at": 1792428740.1826282
+    },
+    {
+      "usd": 0.018954,
+      "arm": "compile_agent",
+      "note": "item 97 recording (no admitted program)",
+      "at": 1792428745.763053
+    },
+    {
+      "usd": 0.019061,
+      "arm": "compile_agent",
+      "note": "item 98 recording (no admitted program)",
+      "at": 1792428753.5217888
+    },
+    {
+      "usd": 0.018374,
+      "arm": "compile_agent",
+      "note": "item 99 recording (no admitted program)",
+      "at": 1792428762.208478
+    },
+    {
+      "usd": 0.045422,
+      "arm": "agent",
+      "note": "item 56",
+      "at": 1792428767.063097
+    },
+    {
+      "usd": 0.018314,
+      "arm": "compile_agent",
+      "note": "item 100 recording (no admitted program)",
+      "at": 1792428768.840967
+    },
+    {
+      "usd": 0.045498,
+      "arm": "agent",
+      "note": "item 57",
+      "at": 1792428796.398057
+    },
+    {
+      "usd": 0.053044,
+      "arm": "agent",
+      "note": "item 58",
+      "at": 1792428838.632015
+    },
+    {
+      "usd": 0.052944,
+      "arm": "compile_agent",
+      "note": "item 60 recording (first run)",
+      "at": 1792428857.0544682
+    },
+    {
+      "usd": 0.052917,
+      "arm": "agent",
+      "note": "item 59",
+      "at": 1792428874.999233
+    },
+    {
+      "usd": 0.031156,
+      "arm": "agent",
+      "note": "item 60",
+      "at": 1792428911.3485708
+    },
+    {
+      "usd": 0.053068,
+      "arm": "agent",
+      "note": "item 61",
+      "at": 1792428960.2161448
+    },
+    {
+      "usd": 0.045482,
+      "arm": "agent",
+      "note": "item 62",
+      "at": 1792428988.262775
+    },
+    {
+      "usd": 0.045312,
+      "arm": "agent",
+      "note": "item 63",
+      "at": 1792429018.21721
+    },
+    {
+      "usd": 0.053021,
+      "arm": "agent",
+      "note": "item 64",
+      "at": 1792429051.364415
+    },
+    {
+      "usd": 0.053087,
+      "arm": "agent",
+      "note": "item 65",
+      "at": 1792429087.376252
+    },
+    {
+      "usd": 0.038694,
+      "arm": "agent",
+      "note": "item 66",
+      "at": 1792429122.493245
+    },
+    {
+      "usd": 0.038524,
+      "arm": "agent",
+      "note": "item 67",
+      "at": 1792429146.778114
+    },
+    {
+      "usd": 0.038604,
+      "arm": "agent",
+      "note": "item 68",
+      "at": 1792429170.1863282
+    },
+    {
+      "usd": 0.038714,
+      "arm": "agent",
+      "note": "item 69",
+      "at": 1792429196.6328661
+    },
+    {
+      "usd": 0.038504,
+      "arm": "agent",
+      "note": "item 70",
+      "at": 1792429217.222403
+    },
+    {
+      "usd": 0.038574,
+      "arm": "agent",
+      "note": "item 71",
+      "at": 1792429256.80897
+    },
+    {
+      "usd": 0.038674,
+      "arm": "agent",
+      "note": "item 72",
+      "at": 1792429283.751564
+    },
+    {
+      "usd": 0.038574,
+      "arm": "agent",
+      "note": "item 73",
+      "at": 1792429310.863852
+    },
+    {
+      "usd": 0.038544,
+      "arm": "agent",
+      "note": "item 74",
+      "at": 1792429332.273153
+    },
+    {
+      "usd": 0.038574,
+      "arm": "agent",
+      "note": "item 75",
+      "at": 1792429358.5589812
+    },
+    {
+      "usd": 0.038644,
+      "arm": "agent",
+      "note": "item 76",
+      "at": 1792429384.606098
+    },
+    {
+      "usd": 0.038544,
+      "arm": "agent",
+      "note": "item 77",
+      "at": 1792429409.746635
+    },
+    {
+      "usd": 0.038634,
+      "arm": "agent",
+      "note": "item 78",
+      "at": 1792429436.1742132
+    },
+    {
+      "usd": 0.038714,
+      "arm": "agent",
+      "note": "item 79",
+      "at": 1792429462.450604
+    },
+    {
+      "usd": 0.038704,
+      "arm": "agent",
+      "note": "item 80",
+      "at": 1792429486.542188
+    },
+    {
+      "usd": 0.038724,
+      "arm": "agent",
+      "note": "item 81",
+      "at": 1792429513.2518919
+    },
+    {
+      "usd": 0.038574,
+      "arm": "agent",
+      "note": "item 82",
+      "at": 1792429533.8823428
+    },
+    {
+      "usd": 0.038604,
+      "arm": "agent",
+      "note": "item 83",
+      "at": 1792429558.216258
+    },
+    {
+      "usd": 0.038654,
+      "arm": "agent",
+      "note": "item 84",
+      "at": 1792429579.094811
+    },
+    {
+      "usd": 0.038644,
+      "arm": "agent",
+      "note": "item 85",
+      "at": 1792429606.407419
+    },
+    {
+      "usd": 0.038554,
+      "arm": "agent",
+      "note": "item 86",
+      "at": 1792429627.334021
+    },
+    {
+      "usd": 0.038664,
+      "arm": "agent",
+      "note": "item 87",
+      "at": 1792429651.976324
+    },
+    {
+      "usd": 0.038704,
+      "arm": "agent",
+      "note": "item 88",
+      "at": 1792429680.119682
+    },
+    {
+      "usd": 0.038584,
+      "arm": "agent",
+      "note": "item 89",
+      "at": 1792429705.529439
+    },
+    {
+      "usd": 0.038584,
+      "arm": "agent",
+      "note": "item 90",
+      "at": 1792429732.194092
+    },
+    {
+      "usd": 0.038614,
+      "arm": "agent",
+      "note": "item 91",
+      "at": 1792429757.115326
+    },
+    {
+      "usd": 0.038514,
+      "arm": "agent",
+      "note": "item 92",
+      "at": 1792429780.561768
+    },
+    {
+      "usd": 0.038664,
+      "arm": "agent",
+      "note": "item 93",
+      "at": 1792429806.705951
+    },
+    {
+      "usd": 0.038544,
+      "arm": "agent",
+      "note": "item 94",
+      "at": 1792429831.383838
+    },
+    {
+      "usd": 0.038534,
+      "arm": "agent",
+      "note": "item 95",
+      "at": 1792429859.78238
+    },
+    {
+      "usd": 0.019009,
+      "arm": "agent",
+      "note": "item 96",
+      "at": 1792429871.5209548
+    },
+    {
+      "usd": 0.018799,
+      "arm": "agent",
+      "note": "item 97",
+      "at": 1792429887.4652438
+    },
+    {
+      "usd": 0.018914,
+      "arm": "agent",
+      "note": "item 98",
+      "at": 1792429905.3285189
+    },
+    {
+      "usd": 0.018244,
+      "arm": "agent",
+      "note": "item 99",
+      "at": 1792429921.507998
+    },
+    {
+      "usd": 0.018304,
+      "arm": "agent",
+      "note": "item 100",
+      "at": 1792429937.045641
+    },
+    {
+      "usd": 0.011138,
+      "arm": "program_repair",
+      "note": "item 46 repair agent",
+      "at": 1792437548.5632188
+    },
+    {
+      "usd": 0.011768,
+      "arm": "program_repair",
+      "note": "item 47 repair agent",
+      "at": 1792437565.0681422
+    },
+    {
+      "usd": 0.011298,
+      "arm": "program_repair",
+      "note": "item 48 repair agent",
+      "at": 1792437580.756306
+    },
+    {
+      "usd": 0.011848,
+      "arm": "program_repair",
+      "note": "item 49 repair agent",
+      "at": 1792437596.8379688
+    },
+    {
+      "usd": 0.011778,
+      "arm": "program_repair",
+      "note": "item 50 repair agent",
+      "at": 1792437612.859605
+    },
+    {
+      "usd": 0.011038,
+      "arm": "program_repair",
+      "note": "item 51 repair agent",
+      "at": 1792437628.343231
+    },
+    {
+      "usd": 0.011058,
+      "arm": "program_repair",
+      "note": "item 52 repair agent",
+      "at": 1792437644.9591491
+    },
+    {
+      "usd": 0.010788,
+      "arm": "program_repair",
+      "note": "item 53 repair agent",
+      "at": 1792437660.51139
+    },
+    {
+      "usd": 0.011098,
+      "arm": "program_repair",
+      "note": "item 54 repair agent",
+      "at": 1792437677.467482
+    },
+    {
+      "usd": 0.011548,
+      "arm": "program_repair",
+      "note": "item 55 repair agent",
+      "at": 1792437693.079838
+    },
+    {
+      "usd": 0.035508,
+      "arm": "program_repair",
+      "note": "item 76 repair agent",
+      "at": 1792438596.933389
+    },
+    {
+      "usd": 0.036578,
+      "arm": "program_repair",
+      "note": "item 77 repair agent",
+      "at": 1792438608.8157408
+    },
+    {
+      "usd": 0.037258,
+      "arm": "program_repair",
+      "note": "item 78 repair agent",
+      "at": 1792438621.921231
+    },
+    {
+      "usd": 0.036748,
+      "arm": "program_repair",
+      "note": "item 79 repair agent",
+      "at": 1792438634.6056519
+    },
+    {
+      "usd": 0.035938,
+      "arm": "program_repair",
+      "note": "item 80 repair agent",
+      "at": 1792438646.60729
+    },
+    {
+      "usd": 0.036668,
+      "arm": "program_repair",
+      "note": "item 81 repair agent",
+      "at": 1792438660.2621691
+    },
+    {
+      "usd": 0.035918,
+      "arm": "program_repair",
+      "note": "item 82 repair agent",
+      "at": 1792438672.720184
+    },
+    {
+      "usd": 0.035938,
+      "arm": "program_repair",
+      "note": "item 83 repair agent",
+      "at": 1792438684.502201
+    },
+    {
+      "usd": 0.035818,
+      "arm": "program_repair",
+      "note": "item 84 repair agent",
+      "at": 1792438696.4496052
+    },
+    {
+      "usd": 0.036928,
+      "arm": "program_repair",
+      "note": "item 85 repair agent",
+      "at": 1792438710.049856
+    }
+  ]
+}

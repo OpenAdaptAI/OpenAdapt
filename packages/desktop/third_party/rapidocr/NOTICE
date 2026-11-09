@@ -1,0 +1,13 @@
+OpenAdapt Desktop redistributes unmodified OCR model files from
+rapidocr-onnxruntime 1.4.4 as part of its frozen local runtime:
+
+- ch_PP-OCRv4_det_infer.onnx
+- ch_PP-OCRv4_rec_infer.onnx
+- ch_ppocr_mobile_v2.0_cls_infer.onnx
+
+RapidOCR states that the OCR model copyright is held by Baidu and the
+copyrights of the other engineering scripts are held by the repository owner.
+RapidOCR is distributed under the Apache License 2.0; see the accompanying
+LICENSE file. OpenAdapt has not modified these model files.
+
+Source: https://github.com/RapidAI/RapidOCR

@@ -1,0 +1,203 @@
+name: Tests
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: capture-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # Exercise the oldest Python on pre-2.80 GLib without adding a matrix leg.
+    runs-on: ${{ matrix.python-version == '3.10' && 'ubuntu-22.04' || 'ubuntu-latest' }}
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install system dependencies
+        timeout-minutes: 10
+        run: |
+          set -uo pipefail
+          # The hosted runner resolves its Ubuntu mirror through
+          # /etc/apt/apt-mirrors.txt, which points at azure.archive.ubuntu.com.
+          # That mirror fails intermittently. On 2026-08-19 it hung this step
+          # for over an hour on main, because the step had no bound of its own.
+          # Prefer the canonical archive, and keep this best-effort.
+          sudo sed -i \
+            's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
+            /etc/apt/apt-mirrors.txt 2>/dev/null || true
+          update_ok=""
+          for attempt in 1 2 3; do
+            if sudo apt-get update; then
+              update_ok=1
+              break
+            fi
+            echo "::warning::apt-get update failed (attempt ${attempt}/3); retrying"
+            sleep $((attempt * 10))
+          done
+          if [ -z "$update_ok" ]; then
+            echo "::error::apt-get update failed three times; the Ubuntu mirror is unreachable"
+            exit 1
+          fi
+          set -e
+          sudo apt-get install -y ffmpeg libportaudio2
+
+      - name: Install native AT-SPI build and smoke dependencies
+        if: matrix.python-version == '3.10'
+        run: |
+          sudo apt-get install -y libgirepository1.0-dev libcairo2-dev pkg-config \
+            gir1.2-atspi-2.0 gir1.2-gtk-3.0 at-spi2-core dbus-x11 xvfb
+          pkg-config --modversion glib-2.0 gobject-introspection-1.0
+
+      - name: Install dependencies
+        run: uv sync --locked --extra dev ${{ matrix.python-version == '3.10' && '--extra linux' || '' }}
+
+      - name: Verify native AT-SPI dependency compatibility
+        if: matrix.python-version == '3.10'
+        env:
+          OPENADAPT_TEST_LINUX_ATSPI: "1"
+          NO_AT_BRIDGE: "0"
+        run: dbus-run-session -- xvfb-run -a uv run --no-sync pytest tests/test_linux_atspi_integration.py -v --timeout=60
+
+      - name: Run tests
+        run: uv run pytest tests/ -v --timeout=120
+        timeout-minutes: 10
+
+  # Windows is the primary live-recording platform: this job runs the full
+  # unit suite AND the live Recorder integration tests (tests/test_performance.py,
+  # marked 'slow'), which start the real multiprocessing pipeline (native
+  # observers -> writer processes -> per-capture SQLite + video) and verify
+  # clean startup, bounded shutdown/memory, and db creation. The three
+  # listener-dependent tests (roundtrip/reuse/throughput) skip here via
+  # OPENADAPT_CI_NO_INPUT_INJECTION: hosted runners execute jobs in a
+  # non-interactive session, so injected input never reaches native hooks;
+  # run those on an interactive Windows desktop. These tests skip everywhere
+  # except Windows, so this job is the org's live-recording CI proof.
+  test-windows:
+    # Cross-platform recorder qualification runs on the exact main commit.
+    # PRs retain the required Python 3.10-3.12 Linux matrix and lint gate.
+    if: github.event_name != 'pull_request'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install external video tools
+        run: |
+          choco install ffmpeg -y --no-progress
+          Get-Command ffmpeg -ErrorAction Stop
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Run unit tests
+        run: uv run pytest tests/ -v -m "not slow" --timeout=120
+        timeout-minutes: 10
+
+      - name: Run live recorder integration tests
+        env:
+          # Non-interactive session: SendInput never reaches native
+          # low-level hooks, so the event-capture tests skip (see
+          # tests/test_performance.py); pipeline start/stop/db/memory
+          # tests still run the live recorder for real.
+          OPENADAPT_CI_NO_INPUT_INJECTION: "1"
+        run: uv run pytest tests/test_performance.py -v -m slow --timeout=300
+        timeout-minutes: 20
+
+  # macOS coverage: runs the unit suite (event processing, storage, external
+  # video boundary, headless-import invariant, Recorder API surface —
+  # CGWindowList-backed screen capture works on GitHub macOS runners). The
+  # 'slow' live-recording tests stay skipped here: synthetic input injection
+  # requires Accessibility permissions a hosted runner cannot grant, and the
+  # multiprocessing 'spawn' writer path is not yet validated on macOS (see
+  # tests/test_performance.py).
+  test-macos:
+    if: github.event_name != 'pull_request'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install external video tools
+        run: brew install ffmpeg
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Run unit tests
+        run: uv run pytest tests/ -v -m "not slow" --timeout=120
+        timeout-minutes: 10
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Run ruff
+        run: uv run ruff check openadapt_capture/
+
+  package-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Verify maintained changelog
+        run: python scripts/check_changelog.py
+
+      - name: Build wheel and source distribution
+        run: uv build
+
+      - name: Verify release archive boundaries
+        run: |
+          python scripts/verify_distribution.py dist/*
+          python scripts/check_source_boundary.py --require-dist

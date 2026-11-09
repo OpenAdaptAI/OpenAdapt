@@ -1,0 +1,24 @@
+# Synthetic TEST-mode example only. Production route maps are practice-scoped
+# deployment data. Each API route binds the exact request payer ID, stable Stedi
+# payer ID, reviewed payer-record digest, supported service types, account, and
+# application mode. Unknown or incomplete routes enter the attended queue.
+version: 2
+default_route: queue
+payers:
+  cigna_dental_mock:
+    display_name: Cigna Dental (Stedi test catalog)
+    route: api
+    aliases: [cigna dental test]
+    request_payer_id: "62308"
+    stedi_id: "HGJLR"
+    application_mode: test
+    practice_account_id: "openadapt-sandbox"
+    supported_service_type_codes: ["35"]
+    # SHA-256 of this canonical reviewed TEST record (without a trailing newline):
+    # {"coverageTypes":["dental"],"eligibilityCheck":"SUPPORTED","primaryPayerId":"62308","stediId":"HGJLR"}
+    # A live enrollment records the production payer record's own digest.
+    payer_record_sha256: "64ebef34642c651416428e365645a3fa5938cdc4a633cdab0af999fcbbe8f095"
+    portal_banned: false
+    portal_fallback_reviewed: false
+    verified_on: "2026-07-21"
+    notes: Stedi's published dental TEST request; no real member data.

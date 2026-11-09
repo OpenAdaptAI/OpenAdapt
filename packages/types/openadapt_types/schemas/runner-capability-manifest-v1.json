@@ -1,0 +1,217 @@
+{
+  "$defs": {
+    "ExecutionMode": {
+      "enum": [
+        "in_session",
+        "external"
+      ],
+      "title": "ExecutionMode",
+      "type": "string"
+    },
+    "ExecutionProfile": {
+      "enum": [
+        "demo",
+        "standard",
+        "regulated"
+      ],
+      "title": "ExecutionProfile",
+      "type": "string"
+    },
+    "ExecutionSurface": {
+      "enum": [
+        "web",
+        "windows",
+        "macos",
+        "linux",
+        "rdp",
+        "citrix"
+      ],
+      "title": "ExecutionSurface",
+      "type": "string"
+    },
+    "RunnerArchitecture": {
+      "enum": [
+        "x86_64",
+        "aarch64"
+      ],
+      "title": "RunnerArchitecture",
+      "type": "string"
+    },
+    "RunnerCapability": {
+      "description": "Closed capabilities that admission can require from a runner.",
+      "enum": [
+        "pixel_observation",
+        "structural_observation",
+        "playwright_dom",
+        "structural_resolution",
+        "visual_resolution",
+        "ocr_relational_resolution",
+        "actuation",
+        "physical_input_actuation",
+        "structural_actuation",
+        "playwright_actuation",
+        "api_actuation",
+        "external_executor_actuation",
+        "application_identity",
+        "session_identity",
+        "workflow_state_identity",
+        "record_identity",
+        "identity_verification",
+        "governed_authorization",
+        "settled_state_detection",
+        "session_continuity",
+        "durable_resume",
+        "postcondition_verification",
+        "evidence_export",
+        "effect_verification",
+        "independent_system_of_record",
+        "independent_session",
+        "persisted_state_reacquisition",
+        "immediate_screen_confirmation",
+        "effect_tier_1",
+        "effect_tier_2",
+        "effect_tier_3",
+        "effect_tier_4",
+        "local_secret_resolution",
+        "parameter_by_reference",
+        "no_external_egress",
+        "policy_controlled_egress"
+      ],
+      "title": "RunnerCapability",
+      "type": "string"
+    },
+    "RunnerCapabilityLaneV1": {
+      "additionalProperties": false,
+      "description": "Capabilities bound to one exact surface and execution mode.",
+      "properties": {
+        "capabilities": {
+          "items": {
+            "$ref": "#/$defs/RunnerCapability"
+          },
+          "maxItems": 36,
+          "minItems": 1,
+          "title": "Capabilities",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "execution_mode": {
+          "$ref": "#/$defs/ExecutionMode"
+        },
+        "supported_profiles": {
+          "items": {
+            "$ref": "#/$defs/ExecutionProfile"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "title": "Supported Profiles",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "surface": {
+          "$ref": "#/$defs/ExecutionSurface"
+        }
+      },
+      "required": [
+        "surface",
+        "execution_mode",
+        "capabilities",
+        "supported_profiles"
+      ],
+      "title": "RunnerCapabilityLaneV1",
+      "type": "object"
+    },
+    "RunnerHostOS": {
+      "enum": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "title": "RunnerHostOS",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "A PHI-free, time-bounded advertisement from one runner installation.",
+  "properties": {
+    "agent_version": {
+      "maxLength": 64,
+      "minLength": 5,
+      "pattern": "^(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})$",
+      "title": "Agent Version",
+      "type": "string"
+    },
+    "architecture": {
+      "$ref": "#/$defs/RunnerArchitecture"
+    },
+    "expires_at": {
+      "maxLength": 40,
+      "minLength": 20,
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(Z|[+-]\\d{2}:\\d{2})$",
+      "title": "Expires At",
+      "type": "string"
+    },
+    "flow_version": {
+      "maxLength": 64,
+      "minLength": 5,
+      "pattern": "^(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})$",
+      "title": "Flow Version",
+      "type": "string"
+    },
+    "generated_at": {
+      "maxLength": 40,
+      "minLength": 20,
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(Z|[+-]\\d{2}:\\d{2})$",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "host_os": {
+      "$ref": "#/$defs/RunnerHostOS"
+    },
+    "installation_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Installation Id",
+      "type": "string"
+    },
+    "lanes": {
+      "items": {
+        "$ref": "#/$defs/RunnerCapabilityLaneV1"
+      },
+      "maxItems": 12,
+      "minItems": 1,
+      "title": "Lanes",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "runner_id": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Runner Id"
+    },
+    "schema_version": {
+      "const": "openadapt.runner-capability-manifest/v1",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "installation_id",
+    "agent_version",
+    "flow_version",
+    "host_os",
+    "architecture",
+    "lanes",
+    "generated_at",
+    "expires_at"
+  ],
+  "title": "RunnerCapabilityManifestV1",
+  "type": "object"
+}

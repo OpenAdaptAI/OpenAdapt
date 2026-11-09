@@ -1,0 +1,69 @@
+# Local, real OpenEMR + MariaDB for the FHIR EffectVerifier live end-to-end
+# test. This stands up a REAL OpenEMR (not the public demo, not a fake) with
+# the REST + FHIR R4 APIs and OAuth2 enabled, so the verifier in
+# openadapt_flow/runtime/effects/fhir.py can be exercised against an actual
+# system of record: a real write through OpenEMR's API, then an INDEPENDENT
+# FHIR read-back.
+#
+#   docker compose -f benchmark/openemr_live/docker-compose.yml up -d
+#   benchmark/openemr_live/setup.sh          # waits, enables APIs, prints env
+#
+# See README.md for the one-command bring-up.
+#
+# Ports are offset (8390/9390/3390) to avoid colliding with any other local
+# OpenEMR / MySQL. FHIR base ends up at:
+#   https://localhost:9390/apis/default/fhir
+
+name: openemr-live
+
+services:
+  mysql:
+    image: mariadb:11.4
+    command:
+      - mariadbd
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_general_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - openemr_live_db:/var/lib/mysql
+
+  openemr:
+    image: openemr/openemr:7.0.3
+    ports:
+      - "8390:80"
+      - "9390:443"
+    environment:
+      # Triggers OpenEMR's automatic (unattended) install on first boot.
+      MYSQL_HOST: mysql
+      MYSQL_ROOT_PASS: root
+      MYSQL_USER: openemr
+      MYSQL_PASS: openemr
+      OE_USER: admin
+      OE_PASS: pass
+      # NOTE: do NOT set DOMAIN here — it makes the entrypoint run certbot
+      # against a public CA, which cannot validate "localhost" and exits the
+      # container. Omitting it uses a self-signed cert (the live test connects
+      # with TLS verification disabled: OPENEMR_FHIR_VERIFY_TLS=0).
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      # OpenEMR writes sqlconf.php only after the auto-install completes.
+      test: ["CMD", "test", "-f", "/var/www/localhost/htdocs/openemr/sites/default/sqlconf.php"]
+      interval: 15s
+      timeout: 5s
+      retries: 80
+    volumes:
+      - openemr_live_sites:/var/www/localhost/htdocs/openemr/sites
+      - openemr_live_logs:/var/log
+
+volumes:
+  openemr_live_db:
+  openemr_live_sites:
+  openemr_live_logs:

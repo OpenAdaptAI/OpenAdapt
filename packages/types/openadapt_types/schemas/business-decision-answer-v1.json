@@ -1,0 +1,125 @@
+{
+  "$defs": {
+    "BusinessDecisionRequiredAuthn": {
+      "description": "The exact authentication profile required by the qualified contract.",
+      "enum": [
+        "local_enterprise_identity",
+        "aal2",
+        "webauthn"
+      ],
+      "title": "BusinessDecisionRequiredAuthn",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "An authenticated route's signed relay of one finite mobile answer.\n\nThe client chooses only ``option_id`` and supplies one idempotency key.  The\nauthenticated route, not the client, must populate the principal, role, and\nauthentication-context references before it signs this contract.",
+  "properties": {
+    "answered_at": {
+      "maxLength": 40,
+      "minLength": 20,
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?(Z|[+-]\\d{2}:\\d{2})$",
+      "title": "Answered At",
+      "type": "string"
+    },
+    "authenticated_principal_ref": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Authenticated Principal Ref",
+      "type": "string"
+    },
+    "authenticated_role_ref": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Authenticated Role Ref",
+      "type": "string"
+    },
+    "authenticated_route_ref": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Authenticated Route Ref",
+      "type": "string"
+    },
+    "authentication_context_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Authentication Context Digest",
+      "type": "string"
+    },
+    "authn_assurance": {
+      "$ref": "#/$defs/BusinessDecisionRequiredAuthn"
+    },
+    "idempotency_key": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{15,199}$",
+      "title": "Idempotency Key",
+      "type": "string"
+    },
+    "issuer_key_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Issuer Key Id",
+      "type": "string"
+    },
+    "option_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "title": "Option Id",
+      "type": "string"
+    },
+    "request_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Request Digest",
+      "type": "string"
+    },
+    "role_mapping_digest": {
+      "pattern": "^hmac-sha256:[0-9a-f]{64}$",
+      "title": "Role Mapping Digest",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "openadapt.business-decision-answer/v1",
+      "default": "openadapt.business-decision-answer/v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "signature": {
+      "pattern": "^hmac-sha256:[0-9a-f]{64}$",
+      "title": "Signature",
+      "type": "string"
+    },
+    "signature_algorithm": {
+      "const": "hmac-sha256",
+      "default": "hmac-sha256",
+      "title": "Signature Algorithm",
+      "type": "string"
+    },
+    "task_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Task Digest",
+      "type": "string"
+    },
+    "task_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Task Id",
+      "type": "string"
+    },
+    "task_revision": {
+      "maximum": 2147483647,
+      "minimum": 1,
+      "title": "Task Revision",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "task_id",
+    "task_revision",
+    "task_digest",
+    "request_digest",
+    "option_id",
+    "idempotency_key",
+    "authenticated_principal_ref",
+    "authenticated_role_ref",
+    "authn_assurance",
+    "authenticated_route_ref",
+    "role_mapping_digest",
+    "authentication_context_digest",
+    "answered_at",
+    "issuer_key_id",
+    "signature"
+  ],
+  "title": "BusinessDecisionAnswerV1",
+  "type": "object"
+}

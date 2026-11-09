@@ -1,0 +1,10 @@
+{
+  "frame_count": 3,
+  "media_sha256": "59cdce33ff0fbbf0aadc78ebe9eabe6cf189dc7f8aa2e9f2d1724d90cf8270f1",
+  "presentation_times_us": [
+    0,
+    872000,
+    2622000
+  ],
+  "schema_version": "openadapt.media-frame-presentation-times/v1"
+}

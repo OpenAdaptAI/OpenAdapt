@@ -1,0 +1,126 @@
+{
+ "arm": "api",
+ "ref": "r8-priya-raman",
+ "mismatch": false,
+ "error": null,
+ "api_marks": {
+  "signed_in": 0.297,
+  "form_read": 0.487,
+  "prechecked": 0.523,
+  "save_sent": 0.523,
+  "save_done": 0.556
+ },
+ "api_log": [
+  {
+   "stage": "sign_in",
+   "status": 302,
+   "location_path": "/interface/main/tabs/main.php"
+  },
+  {
+   "stage": "read_form",
+   "status": 200,
+   "bytes": 341515
+  },
+  {
+   "stage": "precheck",
+   "status": 200,
+   "missing": []
+  },
+  {
+   "stage": "save",
+   "status": 200,
+   "success_signature": true
+  }
+ ],
+ "engine_success": true,
+ "outcome": "COMPLETED_UNVERIFIED",
+ "steps": 1,
+ "step_errors": [],
+ "actuation": [
+  "api"
+ ],
+ "effect_verified": [
+  true
+ ],
+ "new_charts": 1,
+ "readback": "12/12",
+ "correct": true,
+ "field_check": [
+  {
+   "field": "title",
+   "want": "Ms.",
+   "got": "Ms.",
+   "match": true
+  },
+  {
+   "field": "fname",
+   "want": "Priya",
+   "got": "Priya",
+   "match": true
+  },
+  {
+   "field": "lname",
+   "want": "Raman",
+   "got": "Raman",
+   "match": true
+  },
+  {
+   "field": "DOB",
+   "want": "1975-10-14",
+   "got": "1975-10-14",
+   "match": true
+  },
+  {
+   "field": "sex",
+   "want": "Female",
+   "got": "Female",
+   "match": true
+  },
+  {
+   "field": "street",
+   "want": "15 STATION AVENUE",
+   "got": "15 STATION AVENUE",
+   "match": true
+  },
+  {
+   "field": "city",
+   "want": "EXAMPLETON",
+   "got": "EXAMPLETON",
+   "match": true
+  },
+  {
+   "field": "state",
+   "want": "MA",
+   "got": "MA",
+   "match": true
+  },
+  {
+   "field": "postal_code",
+   "want": "02139",
+   "got": "02139",
+   "match": true
+  },
+  {
+   "field": "phone_home",
+   "want": "555-0167",
+   "got": "555-0167",
+   "match": true
+  },
+  {
+   "field": "email",
+   "want": "priya.raman@example.invalid",
+   "got": "priya.raman@example.invalid",
+   "match": true
+  },
+  {
+   "field": "country_code",
+   "want": "USA",
+   "got": "USA",
+   "match": true
+  }
+ ],
+ "wall_s": 2.103,
+ "setup_s": 0.487,
+ "task_s": 0.815,
+ "readback_s": 1.288
+}

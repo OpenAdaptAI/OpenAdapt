@@ -1,0 +1,9 @@
+run,outcome,halted_step,halt_kind,identity,route,if_routed_to_repair
+fast1/pool/items/00026,RECONCILIATION_REQUIRED,step_039,Postconditions failed,,reconciliation,"input reached step_039, a step that saves; never repaired"
+fast2/pool/items/00016,RECONCILIATION_REQUIRED,step_040,Identity check failed,mismatch,reconciliation,"input reached step_039, a step that saves; never repaired"
+par8b/pool/items/00002,RECONCILIATION_REQUIRED,step_040,Postconditions failed,verified,reconciliation,"input reached step_039, a step that saves; never repaired"
+par8b/pool/items/00007,RECONCILIATION_REQUIRED,step_040,Identity check failed,mismatch,reconciliation,"input reached step_039, a step that saves; never repaired"
+par8w1b/pool/items/00009,RECONCILIATION_REQUIRED,step_040,Postconditions failed,verified,reconciliation,"input reached step_039, a step that saves; never repaired"
+par8w1b/pool/items/00020,RECONCILIATION_REQUIRED,step_040,Postconditions failed,verified,reconciliation,"input reached step_039, a step that saves; never repaired"
+std1/pool/items/00026,RECONCILIATION_REQUIRED,step_039,Postconditions failed,,reconciliation,"input reached step_039, a step that saves; never repaired"
+std2/pool/items/00008,RECONCILIATION_REQUIRED,step_040,Identity check failed,mismatch,reconciliation,"input reached step_039, a step that saves; never repaired"

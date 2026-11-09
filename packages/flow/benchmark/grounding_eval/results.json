@@ -1,0 +1,433 @@
+{
+  "meta": {
+    "surface": "dense_surface.render_frame(build_dense_table(seed=1, n_rows=18), RECORD_CONDITION, top_offset_px=12)",
+    "rendered_rows": 51,
+    "viewport_px": [
+      2240,
+      3726
+    ],
+    "chosen_row_indices": [
+      0,
+      8,
+      16,
+      24,
+      32,
+      40
+    ],
+    "truth": "DOM centre of each row's Open button (frame.points[i][1])",
+    "tol_px": {
+      "strict": 40,
+      "loose": 60
+    },
+    "render_s": 1.44,
+    "ocr_s_once": 2.01,
+    "ocr_engine": "pytesseract (ElementLocator._run_ocr)",
+    "cost_usd": 0.0,
+    "gpu": false,
+    "paid_api_calls": 0
+  },
+  "baseline_bespoke_vlm": {
+    "source": "benchmark/appliance_validation/REPORT.md (PR #38)",
+    "model": "mlx-community/Qwen3-VL-4B-Instruct-4bit (served)",
+    "hit_rate@40": 0.0,
+    "n_hits": "0/6",
+    "median_error_px": 472,
+    "latency_s": "35 (native 2240x3726); faster but unusable downscaled",
+    "note": "correct column (x~=922 vs 919) but row wrong; y clusters at top"
+  },
+  "methods": {
+    "A_find_label": {
+      "n_targets": 6,
+      "returned_proposal_rate": 1.0,
+      "hit_rate@40": 0.16666666666666666,
+      "hit_rate@60": 0.16666666666666666,
+      "median_error_px": 1364.0003817494025,
+      "mean_error_px": 1364.0208657406333,
+      "clean_rows": {
+        "n": 4,
+        "hit_rate@40": 0.25,
+        "median_error_px": 820.0006851416807
+      },
+      "ocr_collision_rows": {
+        "n": 2,
+        "hit_rate@40": 0.0,
+        "median_error_px": 2452.0002064556884
+      },
+      "latency_s": {
+        "median": 1.9913314580917358,
+        "max": 2.021109104156494
+      },
+      "rows": [
+        {
+          "row": 0,
+          "name": "Halloran, Karen",
+          "mrn": "MG584224",
+          "ocr_mrn_collision": false,
+          "truth": [
+            2059,
+            251
+          ],
+          "proposed": [
+            2060,
+            247
+          ],
+          "error_px": 4.123105625617661,
+          "hit@40": true,
+          "hit@60": true,
+          "latency_s": 1.9790117740631104
+        },
+        {
+          "row": 8,
+          "name": "Ngyuen, Anh",
+          "mrn": "MG129724",
+          "ocr_mrn_collision": false,
+          "truth": [
+            2059,
+            795
+          ],
+          "proposed": [
+            2060,
+            247
+          ],
+          "error_px": 548.0009124079995,
+          "hit@40": false,
+          "hit@60": false,
+          "latency_s": 2.0174593925476074
+        },
+        {
+          "row": 16,
+          "name": "Okafor, Janet",
+          "mrn": "MG499721",
+          "ocr_mrn_collision": false,
+          "truth": [
+            2059,
+            1339
+          ],
+          "proposed": [
+            2060,
+            247
+          ],
+          "error_px": 1092.000457875362,
+          "hit@40": false,
+          "hit@60": false,
+          "latency_s": 1.9913349151611328
+        },
+        {
+          "row": 24,
+          "name": "Fitzgerald, Gregory",
+          "mrn": "MG536396",
+          "ocr_mrn_collision": false,
+          "truth": [
+            2059,
+            1883
+          ],
+          "proposed": [
+            2060,
+            247
+          ],
+          "error_px": 1636.0003056234434,
+          "hit@40": false,
+          "hit@60": false,
+          "latency_s": 2.021109104156494
+        },
+        {
+          "row": 32,
+          "name": "Whitfield, Daniel",
+          "mrn": "PLl9181",
+          "ocr_mrn_collision": true,
+          "truth": [
+            2059,
+            2427
+          ],
+          "proposed": [
+            2060,
+            247
+          ],
+          "error_px": 2180.000229357786,
+          "hit@40": false,
+          "hit@60": false,
+          "latency_s": 1.9913280010223389
+        },
+        {
+          "row": 40,
+          "name": "Bianchi, Gregory",
+          "mrn": "2OO633",
+          "ocr_mrn_collision": true,
+          "truth": [
+            2059,
+            2971
+          ],
+          "proposed": [
+            2060,
+            247
+          ],
+          "error_px": 2724.0001835535913,
+          "hit@40": false,
+          "hit@60": false,
+          "latency_s": 1.9450418949127197
+        }
+      ]
+    },
+    "B_find_name_row": {
+      "n_targets": 6,
+      "returned_proposal_rate": 0.8333333333333334,
+      "hit_rate@40": 0.0,
+      "hit_rate@60": 0.0,
+      "median_error_px": 1636.0003056234434,
+      "mean_error_px": 1457.6062526630224,
+      "clean_rows": {
+        "n": 4,
+        "hit_rate@40": 0.0,
+        "median_error_px": 1092.000457875362
+      },
+      "ocr_collision_rows": {
+        "n": 2,
+        "hit_rate@40": 0.0,
+        "median_error_px": 2246.0005472047633
+      },
+      "latency_s": {
+        "median": 1.9711989164352417,
+        "max": 1.994663953781128
+      },
+      "rows": [
+        {
+          "row": 0,
+          "name": "Halloran, Karen",
+          "mrn": "MG584224",
+          "ocr_mrn_collision": false,
+          "truth": [
+            2059,
+            251
+          ],
+          "proposed": null,
+          "error_px": null,
+          "hit@40": false,
+          "hit@60": false,
+          "latency_s": 1.9737060070037842
+        },
+        {
+          "row": 8,
+          "name": "Ngyuen, Anh",
+          "mrn": "MG129724",
+          "ocr_mrn_collision": false,
+          "truth": [
+            2059,
+            795
+          ],
+          "proposed": [
+            2057,
+            727
+          ],
+          "error_px": 68.0294054067798,
+          "hit@40": false,
+          "hit@60": false,
+          "latency_s": 1.994663953781128
+        },
+        {
+          "row": 16,
+          "name": "Okafor, Janet",
+          "mrn": "MG499721",
+          "ocr_mrn_collision": false,
+          "truth": [
+            2059,
+            1339
+          ],
+          "proposed": [
+            2060,
+            247
+          ],
+          "error_px": 1092.000457875362,
+          "hit@40": false,
+          "hit@60": false,
+          "latency_s": 1.9933600425720215
+        },
+        {
+          "row": 24,
+          "name": "Fitzgerald, Gregory",
+          "mrn": "MG536396",
+          "ocr_mrn_collision": false,
+          "truth": [
+            2059,
+            1883
+          ],
+          "proposed": [
+            2060,
+            247
+          ],
+          "error_px": 1636.0003056234434,
+          "hit@40": false,
+          "hit@60": false,
+          "latency_s": 1.9664571285247803
+        },
+        {
+          "row": 32,
+          "name": "Whitfield, Daniel",
+          "mrn": "PLl9181",
+          "ocr_mrn_collision": true,
+          "truth": [
+            2059,
+            2427
+          ],
+          "proposed": [
+            2060,
+            247
+          ],
+          "error_px": 2180.000229357786,
+          "hit@40": false,
+          "hit@60": false,
+          "latency_s": 1.9686918258666992
+        },
+        {
+          "row": 40,
+          "name": "Bianchi, Gregory",
+          "mrn": "2OO633",
+          "ocr_mrn_collision": true,
+          "truth": [
+            2059,
+            2971
+          ],
+          "proposed": [
+            2057,
+            659
+          ],
+          "error_px": 2312.000865051741,
+          "hit@40": false,
+          "hit@60": false,
+          "latency_s": 1.949876070022583
+        }
+      ]
+    },
+    "C_row_anchor": {
+      "n_targets": 6,
+      "returned_proposal_rate": 1.0,
+      "hit_rate@40": 0.6666666666666666,
+      "hit_rate@60": 0.6666666666666666,
+      "median_error_px": 3.0615528128088303,
+      "mean_error_px": 24.36365273986288,
+      "clean_rows": {
+        "n": 4,
+        "hit_rate@40": 1.0,
+        "median_error_px": 2.0
+      },
+      "ocr_collision_rows": {
+        "n": 2,
+        "hit_rate@40": 0.0,
+        "median_error_px": 68.0294054067798
+      },
+      "latency_s": {
+        "median": 0.0001990795135498047,
+        "max": 0.00027370452880859375
+      },
+      "rows": [
+        {
+          "row": 0,
+          "name": "Halloran, Karen",
+          "mrn": "MG584224",
+          "ocr_mrn_collision": false,
+          "truth": [
+            2059,
+            251
+          ],
+          "proposed": [
+            2060,
+            247
+          ],
+          "error_px": 4.123105625617661,
+          "hit@40": true,
+          "hit@60": true,
+          "latency_s": 0.00023698806762695312
+        },
+        {
+          "row": 8,
+          "name": "Ngyuen, Anh",
+          "mrn": "MG129724",
+          "ocr_mrn_collision": false,
+          "truth": [
+            2059,
+            795
+          ],
+          "proposed": [
+            2057,
+            795
+          ],
+          "error_px": 2.0,
+          "hit@40": true,
+          "hit@60": true,
+          "latency_s": 0.00019931793212890625
+        },
+        {
+          "row": 16,
+          "name": "Okafor, Janet",
+          "mrn": "MG499721",
+          "ocr_mrn_collision": false,
+          "truth": [
+            2059,
+            1339
+          ],
+          "proposed": [
+            2057,
+            1339
+          ],
+          "error_px": 2.0,
+          "hit@40": true,
+          "hit@60": true,
+          "latency_s": 0.00019884109497070312
+        },
+        {
+          "row": 24,
+          "name": "Fitzgerald, Gregory",
+          "mrn": "MG536396",
+          "ocr_mrn_collision": false,
+          "truth": [
+            2059,
+            1883
+          ],
+          "proposed": [
+            2057,
+            1883
+          ],
+          "error_px": 2.0,
+          "hit@40": true,
+          "hit@60": true,
+          "latency_s": 0.00027370452880859375
+        },
+        {
+          "row": 32,
+          "name": "Whitfield, Daniel",
+          "mrn": "PLl9181",
+          "ocr_mrn_collision": true,
+          "truth": [
+            2059,
+            2427
+          ],
+          "proposed": [
+            2057,
+            2359
+          ],
+          "error_px": 68.0294054067798,
+          "hit@40": false,
+          "hit@60": false,
+          "latency_s": 0.0001621246337890625
+        },
+        {
+          "row": 40,
+          "name": "Bianchi, Gregory",
+          "mrn": "2OO633",
+          "ocr_mrn_collision": true,
+          "truth": [
+            2059,
+            2971
+          ],
+          "proposed": [
+            2057,
+            2903
+          ],
+          "error_px": 68.0294054067798,
+          "hit@40": false,
+          "hit@60": false,
+          "latency_s": 0.0001289844512939453
+        }
+      ]
+    }
+  }
+}

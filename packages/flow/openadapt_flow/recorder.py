@@ -1,0 +1,1363 @@
+"""Recorder: wraps a Backend and captures frames + events for each action.
+
+Recording format (DESIGN.md):
+
+    <recording>/
+      meta.json          # {"id", "created_at", "viewport": [w,h],
+                         #  "coordinate_space": "page", "app_url",
+                         #  "params": {"<param_name>": "<value typed>"}}
+      events.jsonl       # {"i":0,"kind":"click","x":123,"y":45,"t":1.20}
+                         # x/y (and every recorded rect) are top-document
+                         # page-viewport coordinates, matching the frames.
+                         # right_click uses the same point; drag also carries
+                         # end_x/end_y for its independently resolved endpoint.
+                         # {"i":1,"kind":"type","text":"...","param":"note",...}
+                         # TYPE events also carry "field_label" (the receiving
+                         # field's DOM/a11y label, captured passively when the
+                         # backend exposes it) and, from the interactive
+                         # recorder, "field_rect" (the field's viewport rect,
+                         # for the compiler's nearby-OCR label fallback).
+                         # {"i":2,"kind":"key","key":"Enter","t":3.10}
+                         # hotkey carries explicit modifiers + trigger key.
+                         # {"i":3,"kind":"scroll","dx":0,"dy":400,"t":4.02}
+                         # Events additionally carry url/title/pages
+                         # _before/_after keys when the backend exposes
+                         # structural observations (StructuralBackend), and
+                         # sor_before/sor_after (a system-of-record snapshot)
+                         # when a recorder-only observer is configured.
+                         # Every frame-backed event also carries
+                         # viewport_before/viewport_after from the actual PNGs.
+                         # A click/double_click on a control with no
+                         # structural locator also carries "submit_binding":
+                         # how that control relates to the fields typed into
+                         # so far (structure only; openadapt_flow.
+                         # submit_binding), when the backend exposes it.
+      frames/{i:04d}_before.png
+      frames/{i:04d}_after.png   # captured after the action settled
+
+Multi-surface recordings (docs/MULTI_SURFACE.md) add, only once a second
+surface exists: ``"opens": [...]`` on an event whose action opened browser
+pages, a ``{"kind": "switch_surface", "surface": "<id>"}`` event for every
+surface change, ``"surface"`` on every later event, and ``"surfaces"`` in
+``meta.json`` (each page's opening event, opener relation, URL, and title, from
+which the compiler derives the replay-time patterns). A recording that never
+opens a page or switches is written exactly as before.
+
+The settle wait is implemented inline here (perceptual-hash polling) on purpose:
+this module must not depend on `openadapt_flow.vision`.
+"""
+
+from __future__ import annotations
+
+import io
+import json
+import time
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Callable, Optional
+
+from PIL import Image, ImageDraw
+
+from openadapt_flow import sealed_set as _sealed
+from openadapt_flow.backend import (
+    Backend,
+    PageCloseExpectationBackend,
+    RichPointerActionBackend,
+)
+from openadapt_flow.image_hash import perceptual_hash
+from openadapt_flow.ir import (
+    MAX_PAGES_OPENED_PER_STEP,
+    PRIMARY_SURFACE_ID,
+    StructuralLocator,
+)
+
+#: Bound on waiting for a newly opened page's first navigation.
+_NEW_PAGE_LOAD_TIMEOUT_S = 10.0
+
+# Mirrors openadapt_flow.runtime.hover_evidence.HOVER_DWELL_MS. Not imported:
+# the recorder must not pull in the runtime's vision dependencies.
+HOVER_DWELL_MS = 800
+
+# How long a recorded action that raises a browser dialog waits for it.
+_DIALOG_WAIT_S = 5.0
+
+#: Bound on waiting for an action's effect to reach the screen when the
+#: action has visibly started something (the URL or title changed, or the page
+#: is still loading) but the frame still shows the screen from before it. A
+#: slow app (#1378) keeps the old screen up while the server answers; two
+#: identical frames then are not a settled result, they are the wait.
+SETTLE_PENDING_TIMEOUT_S = 8.0
+
+#: Bound on the extension when only page activity (no URL change) says the
+#: action started something. Shorter than the route bound: a busy page with no
+#: route change may simply be doing its own work, and a longer wait could
+#: adopt an unrelated later screen (a toast fading, a rotating banner) as this
+#: action's result.
+SETTLE_PENDING_PROBE_ONLY_S = 3.0
+
+#: Quiet window for the browser's DOM + network probe (``page_quiescent``)
+#: while a change is pending. Mirrors the runtime's standard page-quiet window.
+_PENDING_QUIET_WINDOW_S = 0.1
+
+
+def _has_window_opener(page: Any) -> bool:
+    """Whether the page's own ``window.opener`` is set (False for noopener)."""
+
+    from openadapt_flow.runtime.surfaces import page_has_window_opener
+
+    return bool(page_has_window_opener(page))
+
+
+def _url_without_query(url: Any) -> str:
+    """``url`` with its query and fragment removed."""
+
+    from urllib.parse import urlsplit, urlunsplit
+
+    if not isinstance(url, str) or not url:
+        return ""
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return ""
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
+
+
+def _phash(png: bytes) -> str:
+    """Perceptual hash of a PNG frame."""
+    with Image.open(io.BytesIO(png)) as img:
+        return perceptual_hash(img)
+
+
+def _pixels(png: bytes) -> bytes:
+    """A digest of the decoded pixels: exact "same screen" test.
+
+    The perceptual hash is too coarse for "nothing changed yet": two pages
+    with the same chrome and different rows can share it.
+    """
+    import hashlib
+
+    with Image.open(io.BytesIO(png)) as image:
+        rgb = image.convert("RGB")
+        return hashlib.sha256(
+            f"{rgb.width}x{rgb.height}".encode() + rgb.tobytes()
+        ).digest()
+
+
+def _route(url: str) -> str:
+    """``url`` without an empty fragment (``href="#"`` adds a bare ``#``)."""
+    return url[:-1] if url.endswith("#") else url
+
+
+def _census_has_twin(census: dict[str, Any]) -> bool:
+    """Whether a teach-time census saw a look-alike no record id separates."""
+
+    candidates = census.get("candidates")
+    if not isinstance(candidates, list) or len(candidates) < 2:
+        return False
+    own = census.get("record_key")
+    if not isinstance(own, str) or not own:
+        return True
+    return any(
+        isinstance(c, dict) and not c.get("self") and c.get("record_key") == own
+        for c in candidates
+    )
+
+
+class Recorder:
+    """Records a demonstration by mirroring backend actions to disk.
+
+    Each action captures a before frame, performs the action on the wrapped
+    backend, waits for the screen to settle (polling screenshots until two
+    consecutive frames have identical perceptual hashes, with a timeout),
+    captures the after frame, and appends one event line to ``events.jsonl``.
+
+    Args:
+        backend: The `Backend` to act through and screenshot from.
+        out_dir: Recording directory; created if missing. `finish()` returns
+            this path.
+        app_url: Optional app URL stored in ``meta.json``.
+        settle_interval_s: Poll interval for the settle wait.
+        settle_stable_frames: Consecutive identical frames required.
+        settle_timeout_s: Max seconds to wait for the screen to settle.
+    """
+
+    def __init__(
+        self,
+        backend: Backend,
+        out_dir: Path | str,
+        *,
+        app_url: Optional[str] = None,
+        system_of_record_reader: Optional[
+            Callable[[], Optional[list[dict[str, Any]]]]
+        ] = None,
+        settle_interval_s: float = 0.1,
+        settle_stable_frames: int = 2,
+        settle_timeout_s: float = 3.0,
+        settle_pending_timeout_s: float = SETTLE_PENDING_TIMEOUT_S,
+        network_capture: Optional[Any] = None,
+        surface_id: str = PRIMARY_SURFACE_ID,
+        surface_kind: Optional[str] = None,
+        page_backend_factory: Optional[Callable[[Any], Backend]] = None,
+        encryption_key: Optional[str] = None,
+        finalize_on_finish: bool = True,
+        capture_hover: bool = False,
+    ) -> None:
+        # Pixel surfaces: before each click, rest the pointer on the target
+        # and keep that frame (frames/{i}_hover.png) so the compiler can store
+        # the hover response as identity evidence (runtime.hover_evidence).
+        # Needs a backend with ``hover(x, y)``; ignored otherwise.
+        self._capture_hover = capture_hover
+        # ``_backend`` is always the ACTIVE surface's backend; on a
+        # single-surface recording it never changes.
+        self._backend = backend
+        # Opt-in ``record --capture-network``: a started
+        # :class:`openadapt_flow.network_capture.NetworkCapture`, written beside
+        # the events by :meth:`finish`.
+        self._network_capture = network_capture
+        # Builds the backend for a browser page an action opened. The
+        # interactive recorder passes one that applies its privacy masking
+        # and scrubbed structural reads to every page it follows.
+        self._page_backend_factory = page_backend_factory
+        self._primary_backend = backend
+        self._primary_surface_id = surface_id
+        self._primary_surface_kind = surface_kind
+        self._active_surface = surface_id
+        self._surface_backends: dict[str, Backend] = {surface_id: backend}
+        self._surface_meta: list[dict[str, Any]] = []
+        self._multi_surface = False
+        # Set by expect_dialog(): how the NEXT action answers the dialog it
+        # raises (docs/MULTI_SURFACE.md, "Dialogs").
+        self._expected_dialog: Optional[str] = None
+        self._page_counters = {"popup": 0, "tab": 0}
+        self._known_pages: list[Any] = []
+        self._remember_pages(backend)
+        self._dir = Path(out_dir)
+        # Encrypted recording (docs/phi_at_rest.md): with a key, every frame,
+        # event line and the metadata are sealed in memory and only
+        # ciphertext is written, from the first frame on. The directory is a
+        # sealed set that is finalized (indexed) when the recording finishes.
+        self._sealed_writer: Optional[_sealed.SealedSetWriter] = None
+        self._finalize_on_finish = finalize_on_finish
+        if encryption_key:
+            self._sealed_writer = _sealed.SealedSetWriter(
+                self._dir, "recording", encryption_key
+            )
+            _sealed.register_writer(self._sealed_writer)
+        self._frames_dir = self._dir / "frames"
+        self._frames_dir.mkdir(parents=True, exist_ok=True)
+        self._events_path = self._dir / "events.jsonl"
+        # Truncate any stale file.
+        _sealed.write_bytes(self._events_path, b"")
+        self._app_url = app_url
+        # This observer belongs to recording, not the execution backend. A GUI
+        # backend must never advertise an authoritative business-effect oracle
+        # merely because the recorder can query a separate read-only source.
+        self._system_of_record_reader = system_of_record_reader
+        #: Set by :meth:`expect_write` for the next event only.
+        self._write_wait_s = 0.0
+        self._settle_interval_s = settle_interval_s
+        self._settle_stable_frames = settle_stable_frames
+        self._settle_timeout_s = settle_timeout_s
+        self._settle_pending_timeout_s = settle_pending_timeout_s
+        self._params: dict[str, str] = {}
+        # Names of parameters declared secret (never their values).
+        self._withheld_param_names: set[str] = set()
+        self._i = 0
+        self._t0 = time.monotonic()
+
+    # -- action API (mirrors Backend, plus param-aware type_text) -----------
+
+    def click(self, x: int, y: int) -> None:
+        """Click at pixel coordinates, recording the event and frames."""
+        self._record(
+            {"kind": "click", "x": int(x), "y": int(y)},
+            lambda: self._backend.click(int(x), int(y)),
+        )
+
+    def double_click(self, x: int, y: int) -> None:
+        """Double-click at pixel coordinates, recording the event."""
+        self._record(
+            {"kind": "double_click", "x": int(x), "y": int(y)},
+            lambda: self._backend.click(int(x), int(y), double=True),
+        )
+
+    def right_click(self, x: int, y: int) -> None:
+        """Right-click at pixel coordinates, recording the event."""
+
+        if not isinstance(self._backend, RichPointerActionBackend):
+            raise RuntimeError("recording backend does not support right-click input")
+        backend = self._backend
+        self._record(
+            {"kind": "right_click", "x": int(x), "y": int(y)},
+            lambda: backend.right_click(int(x), int(y)),
+        )
+
+    def drag(self, x: int, y: int, end_x: int, end_y: int) -> None:
+        """Drag between two points, retaining both endpoints as evidence."""
+
+        if not isinstance(self._backend, RichPointerActionBackend):
+            raise RuntimeError("recording backend does not support drag input")
+        backend = self._backend
+        self._record(
+            {
+                "kind": "drag",
+                "x": int(x),
+                "y": int(y),
+                "end_x": int(end_x),
+                "end_y": int(end_y),
+            },
+            lambda: backend.drag(int(x), int(y), int(end_x), int(end_y)),
+        )
+
+    def type_text(self, text: str, param: Optional[str] = None) -> None:
+        """Type text into the focused element, recording the event.
+
+        The receiving field's best available label is captured PASSIVELY when
+        the backend exposes the ``focused_field_label`` seam
+        (:class:`openadapt_flow.backend.FieldLabelBackend`) and stored as
+        ``field_label`` on the event -- pure evidence for the compile-time
+        parameter-proposal pass (no behavior change, no prompts, no model
+        calls; see ``compiler.annotate.FieldLabelAnnotator``).
+
+        Args:
+            text: The literal text typed during the demonstration.
+            param: If set, the typed value is a workflow parameter with this
+                name; it is included on the event and in ``meta.json`` params.
+        """
+        event: dict[str, Any] = {"kind": "type", "text": text}
+        # Read the label BEFORE acting: focus is already on the receiving
+        # field (the demonstrator clicked it), and typing may navigate.
+        field_label = self._focused_field_label()
+        if field_label:
+            event["field_label"] = field_label
+        if param is not None:
+            event["param"] = param
+            self._params[param] = text
+        self._record(event, lambda: self._backend.type_text(text))
+
+    def press(self, key: str) -> None:
+        """Press a key or chord (e.g. ``'Enter'``), recording the event."""
+        self._record({"kind": "key", "key": key}, lambda: self._backend.press(key))
+
+    def hotkey(self, modifiers: list[str], key: str) -> None:
+        """Press and record an explicit modifier chord."""
+
+        chord = "+".join([*modifiers, key])
+        self._record(
+            {"kind": "hotkey", "modifiers": list(modifiers), "key": key},
+            lambda: self._backend.press(chord),
+        )
+
+    def scroll(self, dx: int, dy: int) -> None:
+        """Scroll by (dx, dy) pixels via the wheel, recording the event."""
+        self._record(
+            {"kind": "scroll", "dx": int(dx), "dy": int(dy)},
+            lambda: self._backend.scroll(int(dx), int(dy)),
+        )
+
+    # -- lifecycle -----------------------------------------------------------
+
+    def mark_read(
+        self,
+        field: Any,
+        region: tuple[int, int, int, int],
+        *,
+        schema_name: str,
+        proof: Any = None,
+        label_region: Optional[tuple[int, int, int, int]] = None,
+        label_text: Optional[str] = None,
+        on_review: str = "halt",
+    ) -> None:
+        """Mark a field's value box on the current screen as an output to read.
+
+        Nothing is actuated. ``field`` is a
+        :class:`~openadapt_flow.records.schema.FieldSpec` and ``proof`` an
+        optional :class:`~openadapt_flow.records.schema.ReadProof`. A marked
+        ``label_region`` (the field's label) becomes the READ step's anchor
+        at compile time. Compiles to a READ step.
+        """
+
+        png = self._backend.screenshot()
+        event: dict[str, Any] = {
+            "kind": "read",
+            "region": [int(v) for v in region],
+            "schema_name": schema_name,
+            "field": field.model_dump(mode="json"),
+            "proof": proof.model_dump(mode="json") if proof is not None else {},
+            "on_review": on_review,
+        }
+        if label_region is not None:
+            event["label_region"] = [int(v) for v in label_region]
+            event["label_text"] = label_text
+        self.record_observed(event, before_png=png, structural_before={}, after_png=png)
+
+    def finish(self) -> Path:
+        """Write ``meta.json`` and return the recording directory."""
+        viewport = self._primary_backend.viewport
+        meta: dict[str, Any] = {
+            "id": uuid.uuid4().hex,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "viewport": [int(viewport[0]), int(viewport[1])],
+            # Every recorded x/y/rect is top-document (page viewport) space,
+            # the space page.screenshot() captures. Events that happen inside
+            # an iframe are composed into this space at capture time or
+            # refused. A recording without this marker does not declare its
+            # coordinate space: a framed target's point in one may be
+            # frame-local.
+            "coordinate_space": "page",
+            "app_url": self._app_url,
+            "params": dict(self._params),
+            "secret_params": sorted(self._withheld_param_names),
+        }
+        if self._network_capture is not None:
+            from openadapt_flow.network_capture import NETWORK_FILE
+
+            self._network_capture.stop()
+            self._network_capture.write(self._dir, self._t0)
+            meta["network_capture"] = {
+                "file": NETWORK_FILE,
+                "exchanges": self._network_capture.count,
+            }
+        if self._multi_surface:
+            meta["surfaces"] = [
+                {
+                    "id": self._primary_surface_id,
+                    "kind": self._primary_kind(),
+                },
+                *self._surface_meta,
+            ]
+        _sealed.write_text(self._dir / "meta.json", json.dumps(meta, indent=2))
+        if self._finalize_on_finish:
+            self.finalize_encryption()
+        return self._dir
+
+    @property
+    def encrypted(self) -> bool:
+        return self._sealed_writer is not None
+
+    def finalize_encryption(self) -> Optional[str]:
+        """Index and seal an encrypted recording; returns its set digest.
+
+        A no-op for a plaintext recording. Callers that still need to amend
+        ``meta.json`` construct the recorder with ``finalize_on_finish=False``
+        and call this once they are done.
+        """
+        writer, self._sealed_writer = self._sealed_writer, None
+        if writer is None:
+            return None
+        try:
+            return writer.finalize()
+        finally:
+            _sealed.unregister_writer(writer)
+
+    def abandon_encryption(self) -> None:
+        """Stop routing writes for an aborted encrypted recording."""
+        writer, self._sealed_writer = self._sealed_writer, None
+        if writer is not None:
+            _sealed.unregister_writer(writer)
+
+    # -- multi-surface (docs/MULTI_SURFACE.md) ---------------------------------
+
+    @property
+    def active_surface(self) -> str:
+        """Id of the surface the next action is recorded on."""
+
+        return self._active_surface
+
+    @property
+    def surface_ids(self) -> tuple[str, ...]:
+        """Every surface recorded so far, primary first."""
+
+        return tuple(self._surface_backends)
+
+    def surface_backend(self, surface_id: str) -> Backend:
+        """The backend recorded for ``surface_id`` (a page opened by a step)."""
+
+        return self._surface_backends[surface_id]
+
+    def surface_for_page(self, page: Any) -> Optional[str]:
+        """The surface id recorded for browser ``page``, or None."""
+
+        for surface_id, backend in self._surface_backends.items():
+            if self._browser_page(backend) is page:
+                return surface_id
+        return None
+
+    def knows_page(self, page: Any) -> bool:
+        """Whether ``page`` was open at the start or claimed by an action."""
+
+        return any(page is known for known in self._known_pages)
+
+    def expect_dialog(self, response: str = "accept") -> None:
+        """The next action raises a browser dialog; answer it with ``response``.
+
+        Browser backend only. The dialog's message is recorded as its identity
+        and the compiled step answers only a dialog that shows that message.
+        """
+
+        if response not in ("accept", "dismiss"):
+            raise ValueError("a dialog response is 'accept' or 'dismiss'")
+        self._expected_dialog = response
+
+    def switch_surface(
+        self,
+        surface_id: str,
+        *,
+        backend: Optional[Backend] = None,
+        kind: Optional[str] = None,
+        before_png: Optional[bytes] = None,
+        structural_before: Optional[dict[str, Any]] = None,
+    ) -> None:
+        """Record moving to another surface (a tab/popup, or another backend).
+
+        A page some earlier action opened is switched to by its id (see
+        ``surface_ids``). Another backend (a native app, an RDP/Citrix window)
+        is passed in with ``backend``; its kind is read from the backend class
+        or given as ``kind``. The event's before frame is the old surface and
+        its after frame the new one, settled.
+        """
+
+        import re as _re
+
+        from openadapt_flow.ir import SURFACE_ID_PATTERN
+
+        if surface_id == self._active_surface:
+            raise ValueError(f"surface {surface_id!r} is already active")
+        if backend is None:
+            if surface_id not in self._surface_backends:
+                raise ValueError(
+                    f"surface {surface_id!r} was not opened in this recording; "
+                    "pass backend= to record a switch to another backend"
+                )
+            target = self._surface_backends[surface_id]
+        else:
+            if surface_id in self._surface_backends:
+                if self._surface_backends[surface_id] is not backend:
+                    raise ValueError(f"surface {surface_id!r} is already recorded")
+            elif not _re.fullmatch(SURFACE_ID_PATTERN, surface_id):
+                raise ValueError(f"invalid surface id {surface_id!r}")
+            else:
+                self._surface_meta.append(
+                    {"id": surface_id, "kind": self._kind_of(backend, kind)}
+                )
+                self._surface_backends[surface_id] = backend
+                self._remember_pages(backend)
+            target = backend
+        # A caller that observed the switch (the interactive recorder) captured
+        # the old surface already; a driven recording captures it now.
+        before = before_png if before_png is not None else self._backend.screenshot()
+        if structural_before is None:
+            structural_before = self._structural_state()
+        self._multi_surface = True
+        self._backend = target
+        self._active_surface = surface_id
+        page = self._browser_page(target)
+        if page is not None:
+            try:
+                page.bring_to_front()
+            except Exception:
+                pass
+        after = self._wait_settled()
+        self._commit(
+            {"kind": "switch_surface", "surface": surface_id},
+            before,
+            after,
+            structural_before,
+        )
+
+    def _primary_kind(self) -> str:
+        return self._kind_of(self._primary_backend, self._primary_surface_kind)
+
+    @staticmethod
+    def _kind_of(backend: Backend, kind: Optional[str]) -> str:
+        from openadapt_flow.runtime.surfaces import backend_surface_kinds
+
+        if kind is not None:
+            return kind
+        kinds = backend_surface_kinds(backend)
+        if len(kinds) != 1:
+            raise ValueError(
+                "cannot tell this backend's surface kind; pass kind= "
+                "(web/windows/macos/linux/rdp/citrix)"
+            )
+        return next(iter(kinds))
+
+    @staticmethod
+    def _browser_page(backend: Any) -> Any:
+        page = getattr(backend, "page", None)
+        if page is None or not hasattr(page, "context"):
+            return None
+        return page
+
+    def _context_pages(self, backend: Any) -> list[Any]:
+        page = self._browser_page(backend)
+        if page is None:
+            return []
+        try:
+            return list(page.context.pages)
+        except Exception:
+            return [page]
+
+    def _remember_pages(self, backend: Any) -> None:
+        for page in self._context_pages(backend):
+            if not any(page is known for known in self._known_pages):
+                self._known_pages.append(page)
+
+    def _claim_new_pages(self, event_index: int) -> list[str]:
+        """Record every page opened since the last check, in creation order."""
+
+        new_pages = [
+            page
+            for page in self._context_pages(self._backend)
+            if not any(page is known for known in self._known_pages)
+        ]
+        opener_page = self._browser_page(self._backend)
+
+        def _opened_by_another_known_page(page: Any) -> bool:
+            # A page another recorded page opened belongs to THAT page's
+            # action; it is claimed when that action is recorded. (The
+            # interactive recorder can see a new page before it has written
+            # the pending action of the surface the user just left.)
+            try:
+                live_opener = page.opener()
+            except Exception:
+                return False
+            return (
+                live_opener is not None
+                and live_opener is not opener_page
+                and any(live_opener is known for known in self._known_pages)
+            )
+
+        new_pages = [p for p in new_pages if not _opened_by_another_known_page(p)]
+        if not new_pages:
+            return []
+        if len(new_pages) > MAX_PAGES_OPENED_PER_STEP:
+            raise RuntimeError(
+                f"one action opened {len(new_pages)} browser pages; at most "
+                f"{MAX_PAGES_OPENED_PER_STEP} can be recorded per step"
+            )
+        from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+        ids: list[str] = []
+        for order, page in enumerate(new_pages):
+            self._known_pages.append(page)
+            try:
+                page.wait_for_load_state(
+                    "domcontentloaded", timeout=_NEW_PAGE_LOAD_TIMEOUT_S * 1000
+                )
+            except Exception:
+                pass
+            try:
+                live_opener = page.opener()
+            except Exception:
+                live_opener = None
+            link = "window_opener" if _has_window_opener(page) else "none"
+            if live_opener is not None and live_opener is not opener_page:
+                raise RuntimeError(
+                    "a recorded page was opened by a page that is not the "
+                    "active surface; refusing to guess its opener"
+                )
+            prefix = "popup" if link == "window_opener" else "tab"
+            self._page_counters[prefix] += 1
+            surface_id = f"{prefix}_{self._page_counters[prefix]}"
+            try:
+                url = _url_without_query(page.url)
+            except Exception:
+                url = ""
+            # meta.json keeps only what identifies the page at replay: the
+            # URL without its query or fragment (OAuth code/state, search
+            # terms), and no title (titles carry record names).
+            self._surface_meta.append(
+                {
+                    "id": surface_id,
+                    "kind": "web",
+                    "opened_by_event": event_index,
+                    "opener": self._active_surface,
+                    "open_order": order,
+                    "opener_link": link,
+                    "url": url,
+                }
+            )
+            self._surface_backends[surface_id] = (
+                self._page_backend_factory(page)
+                if self._page_backend_factory is not None
+                else PlaywrightBackend(page, closed_page_frame=True)
+            )
+            ids.append(surface_id)
+        self._multi_surface = True
+        return ids
+
+    def _closed_its_page(self, event: dict[str, Any]) -> bool:
+        """Whether a click left the popup or tab it ran on closed."""
+        return (
+            event.get("kind") in ("click", "double_click")
+            and self._active_surface in self._opened_page_ids()
+            and isinstance(self._backend, PageCloseExpectationBackend)
+            and self._backend.page_closed()
+        )
+
+    def _opened_page_ids(self) -> set[str]:
+        """Ids of the page surfaces (popups, tabs) a recorded action opened."""
+        return {
+            str(meta["id"])
+            for meta in self._surface_meta
+            if meta.get("opened_by_event") is not None
+        }
+
+    @property
+    def event_count(self) -> int:
+        """Number of complete events already persisted."""
+
+        return self._i
+
+    def expect_write(self, wait_s: float = 3.0) -> None:
+        """The next action may write to the system of record: its after-read
+        waits up to ``wait_s`` for the records to change (see :meth:`_commit`).
+        Changes nothing else about the event."""
+
+        self._write_wait_s = max(float(wait_s), 0.0)
+
+    # -- internals -----------------------------------------------------------
+
+    def _record(self, event: dict[str, Any], act: Callable[[], None]) -> None:
+        """Capture before frame, act, wait settle, capture after, log event."""
+        before = self._backend.screenshot()
+        structural_before = self._structural_state()
+        # Who has the focus before and after a key press, for a key that moves
+        # the focus and changes nothing visible (the ``focus_on``
+        # postcondition). Key events only.
+        focus_before = self._focus_identity(event)
+        # Structured identity of the clicked target (DOM / a11y text), when
+        # the backend exposes it: captured on the BEFORE frame, before the
+        # action, so the compiler can store it on the anchor and the replayer
+        # can verify identity against the highest-fidelity signal (no OCR
+        # ambiguity). Pointer events only (they carry x/y); absent otherwise.
+        if event.get("kind") in (
+            "click",
+            "double_click",
+            "right_click",
+            "drag",
+        ):
+            # Structural locator (DOM selector / role+name, or UIA identifiers)
+            # for the clicked element, when the backend exposes it
+            # (StructuralActionBackend). Stored on the event so the compiler can
+            # put it on the anchor and the replayer's structural ACTION rung can
+            # re-find the SAME element deterministically (no pixel match). Absent
+            # on pixel-only backends; resolution then uses the visual anchor.
+            locator = self._structural_locator_at(int(event["x"]), int(event["y"]))
+            if locator is not None:
+                event = {
+                    **event,
+                    "structural": locator.model_dump(exclude_none=True),
+                }
+            structured = self._structured_identity_at(int(event["x"]), int(event["y"]))
+            if structured:
+                event = {**event, "structured_identity": structured}
+                census = self._identity_census_at(int(event["x"]), int(event["y"]))
+                if census is not None:
+                    # Whether the identity came from a record row. A replay
+                    # surface that cannot count look-alike rows still runs a
+                    # target that is not a row (a form field, a button).
+                    event = {**event, "structured_row": census.get("row") is not False}
+                    key = census.get("record_key")
+                    if isinstance(key, str) and key:
+                        event = {**event, "record_key": key}
+                    if _census_has_twin(census):
+                        # Another row read the same when the person clicked,
+                        # and no record id told them apart. If the twin later
+                        # scrolls out of a virtualized list, the text check
+                        # alone would pass on it: replay halts before a write.
+                        event = {**event, "structured_ambiguous": True}
+            # The active dialog holding the target, when it sits in one: the
+            # compiler cuts the identity band to its box, so a label of the
+            # page behind the dialog is not frozen into the identity.
+            dialog = self._dialog_region_at(int(event["x"]), int(event["y"]))
+            if dialog is not None:
+                event = {**event, "dialog_region": list(dialog)}
+                # A whole-dialog fallback is valid only for a control that
+                # positively has no record row, never for unreadable row text.
+                census = self._identity_census_at(int(event["x"]), int(event["y"]))
+                if census is not None:
+                    event = {**event, "dialog_row": census.get("row") is not False}
+            # The part of the form the target sits in (a legend, an accordion
+            # or tab header, a heading), for the program's named sections.
+            # Display only: the compiler never puts it on a step.
+            section = self._section_context_at(int(event["x"]), int(event["y"]))
+            if section:
+                event = {**event, "section": section}
+            # Observe how the control relates to the fields typed into so far
+            # (form ownership, submit role, position, uniqueness) so the
+            # compiler can bind an unlabeled control to the form it submits,
+            # or give a labelled save on a create-new form its form identity.
+            # Before the action: the click may submit it.
+            if event.get("kind") in ("click", "double_click"):
+                binding = self._submit_binding_at(int(event["x"]), int(event["y"]))
+                if binding:
+                    event = {**event, "submit_binding": binding}
+                    values = self._form_values_at(int(event["x"]), int(event["y"]))
+                    if values:
+                        event = {**event, "form_values": values}
+        dialog_response, self._expected_dialog = self._expected_dialog, None
+        if dialog_response is not None:
+            arm = getattr(self._backend, "arm_dialog", None)
+            if not callable(arm):
+                raise RuntimeError(
+                    "this backend cannot see browser dialogs; on a screen-driven "
+                    "backend record the clicks that answer the dialog instead"
+                )
+            arm(dialog_response, None)
+        # A popup or tab may close itself from the click that finishes it (an
+        # approval window). On a page surface, expect that close so the click
+        # counts as delivered, and record it so replay expects the same.
+        page_backend = (
+            self._backend
+            if event.get("kind") in ("click", "double_click")
+            and self._active_surface in self._opened_page_ids()
+            and isinstance(self._backend, PageCloseExpectationBackend)
+            else None
+        )
+        if page_backend is not None:
+            page_backend.expect_page_close()
+        hover_png = self._hover_frame(event)
+        # Was the page already busy before the action? Only a page that was
+        # quiet before can show activity this action started (_change_pending).
+        quiet_before = self._page_quiet()
+        if hover_png is not None:
+            event = {**event, "hover_dwell_ms": HOVER_DWELL_MS}
+        try:
+            act()
+        finally:
+            if page_backend is not None:
+                page_backend.cancel_page_close()
+        if dialog_response is not None:
+            seen = self._backend.take_dialogs(_DIALOG_WAIT_S)  # type: ignore[attr-defined]
+            if len(seen) != 1:
+                raise RuntimeError(
+                    f"the action raised {len(seen)} browser dialogs; exactly one "
+                    "was expected"
+                )
+            event = {
+                **event,
+                "dialog": {
+                    "response": dialog_response,
+                    "message": str(seen[0]["message"]),
+                },
+            }
+        after = self._wait_settled(
+            before=before,
+            structural_before=structural_before,
+            quiet_before=quiet_before,
+        )
+        if focus_before is not None:
+            focus_after = self._focus_identity(event)
+            if focus_after is not None:
+                event = {
+                    **event,
+                    "focus_before": focus_before,
+                    "focus_after": focus_after,
+                }
+        opened = self._claim_new_pages(self._i)
+        if opened:
+            event = {**event, "opens": opened}
+        # Checked after the settle: a page closes asynchronously after the
+        # click that closes it.
+        if self._closed_its_page(event):
+            event = {**event, "closes_surface": True}
+        if hover_png is not None:
+            _sealed.write_bytes(
+                self._frames_dir / f"{self._i:04d}_hover.png", hover_png
+            )
+        self._commit(event, before, after, structural_before)
+
+    def _hover_frame(self, event: dict[str, Any]) -> Optional[bytes]:
+        """Rest the pointer on a click target and capture the settled frame.
+
+        Only with ``capture_hover`` and a backend that can hover, and only for
+        click events. The pointer stays there for the click that follows.
+        """
+        if not self._capture_hover or event.get("kind") not in (
+            "click",
+            "double_click",
+            "right_click",
+        ):
+            return None
+        hover = getattr(self._backend, "hover", None)
+        if not callable(hover):
+            return None
+        hover(int(event["x"]), int(event["y"]))
+        time.sleep(HOVER_DWELL_MS / 1000.0)
+        return self._wait_settled()
+
+    def record_observed(
+        self,
+        event: dict[str, Any],
+        *,
+        before_png: bytes,
+        structural_before: dict[str, Any],
+        structured_identity: Optional[str] = None,
+        param: Optional[str] = None,
+        secret: bool = False,
+        redact_region: Optional[tuple[int, int, int, int]] = None,
+        after_png: Optional[bytes] = None,
+        structural_after: Optional[dict[str, Any]] = None,
+    ) -> None:
+        """Persist an event the USER already performed (no backend action).
+
+        The driving methods (``click`` / ``type_text`` / ...) perform the
+        action and screenshot around it. ``record_observed`` instead records
+        an action the caller OBSERVED in a live session the user is driving:
+        the action already happened, so nothing is performed on the backend.
+
+        Frame chaining mirrors a driven demonstration: ``before_png`` is the
+        pre-action frame the caller supplies (the previous step's settled
+        frame — the screen the user saw before acting), and the after frame is
+        captured now, once the screen settles.
+
+        Args:
+            event: The event dict (``{"kind": ..., ...}``) without ``i``/``t``.
+            before_png: Pre-action frame (the previous settled frame).
+            structural_before: URL/title/page-count observed before the action
+                (captured in-page at action time, pre-navigation).
+            structured_identity: DOM/a11y identity of the clicked row, captured
+                in-page at click time; stored on click/double_click events.
+            param: Parameter name for a TYPE event, if any.
+            secret: TYPE only. When True the value is a SECRET: the event
+                carries NO ``text`` (never persisted), ``param`` is registered
+                as a secret parameter, and the value is injected from the
+                environment at replay (see ir.Step.secret).
+            redact_region: (x, y, w, h) blacked out in BOTH the before and
+                after frames before they are written — a secret field's pixels
+                must never persist to disk.
+            after_png: Pre-captured settled after-frame. When None, the screen
+                is settled and captured now.
+        """
+        event = dict(event)
+        if (
+            event.get("kind")
+            in (
+                "click",
+                "double_click",
+                "right_click",
+                "drag",
+            )
+            and structured_identity
+        ):
+            event["structured_identity"] = structured_identity
+        if param is not None:
+            event["param"] = param
+            if secret:
+                event["secret"] = True
+                event.pop("text", None)
+                self._withheld_param_names.add(param)
+            else:
+                self._params[param] = str(event.get("text", ""))
+        # A caller that already captured the settled after-frame at the right
+        # moment (e.g. a typed field's value BEFORE a following navigating
+        # click) passes it in; otherwise we settle and capture now.
+        if after_png is None:
+            after_png = self._wait_settled()
+        # The observed action may have opened browser pages (a popup, a
+        # target=_blank tab): claim them for this event, exactly as a driven
+        # action does. A non-browser backend has no pages, so nothing changes.
+        opened = self._claim_new_pages(self._i)
+        if opened:
+            event = {**event, "opens": opened}
+        if self._closed_its_page(event):
+            event = {**event, "closes_surface": True}
+        self._commit(
+            event,
+            before_png,
+            after_png,
+            structural_before,
+            redact_region=redact_region,
+            structural_after=structural_after,
+        )
+
+    def _commit(
+        self,
+        event: dict[str, Any],
+        before_png: bytes,
+        after_png: bytes,
+        structural_before: dict[str, Any],
+        *,
+        redact_region: Optional[tuple[int, int, int, int]] = None,
+        structural_after: Optional[dict[str, Any]] = None,
+    ) -> None:
+        """Write this step's before/after frames and its events.jsonl line.
+
+        ``redact_region`` (when given) is blacked out in both frames before
+        they hit disk — the single choke point that keeps a secret field's
+        pixels out of every persisted frame. ``structural_after`` lets a
+        caller supply the post-action URL/title/page-count captured at the
+        right moment (a deferred type-run flush must not read a URL a LATER
+        navigating click produced); when None it is read now.
+        """
+        i = self._i
+        if redact_region is not None:
+            before_png = self._redact(before_png, redact_region)
+            after_png = self._redact(after_png, redact_region)
+        _sealed.write_bytes(self._frames_dir / f"{i:04d}_before.png", before_png)
+        _sealed.write_bytes(self._frames_dir / f"{i:04d}_after.png", after_png)
+        with Image.open(io.BytesIO(before_png)) as before_image:
+            before_viewport = [int(before_image.width), int(before_image.height)]
+        with Image.open(io.BytesIO(after_png)) as after_image:
+            after_viewport = [int(after_image.width), int(after_image.height)]
+        line: dict[str, Any] = {
+            "i": i,
+            **event,
+            "viewport_before": before_viewport,
+            "viewport_after": after_viewport,
+        }
+        if self._multi_surface and event.get("kind") != "switch_surface":
+            line["surface"] = self._active_surface
+        for key, value in structural_before.items():
+            line[f"{key}_before"] = value
+        if structural_after is None:
+            structural_after = self._structural_state()
+            wait_s, self._write_wait_s = self._write_wait_s, 0.0
+            if wait_s > 0 and "sor" in structural_before:
+                # The caller said this action may write (a save the gate let
+                # through). A system of record can show the write a moment
+                # after the screen settles; read again until it changes, so
+                # the write is bound to this event.
+                deadline = time.monotonic() + wait_s
+                while (
+                    structural_after.get("sor") == structural_before.get("sor")
+                    and time.monotonic() < deadline
+                ):
+                    time.sleep(0.25)
+                    structural_after = self._structural_state()
+        for key, value in structural_after.items():
+            line[f"{key}_after"] = value
+        line["t"] = round(time.monotonic() - self._t0, 3)
+        _sealed.append_line(self._events_path, json.dumps(line))
+        self._i += 1
+
+    def _structural_locator_at(self, x: int, y: int) -> Optional[StructuralLocator]:
+        """Stable structural locator for the element under (x, y), if any.
+
+        Backends MAY expose ``structural_locator_at``
+        (:class:`openadapt_flow.backend.StructuralActionBackend`): a stable DOM
+        selector / role+name (browser) or UIA AutomationId / role+name (native)
+        the replayer can re-resolve to act on the SAME element deterministically.
+        Pixel-only backends (no such method) or a momentary failure yield None,
+        and the step relies on the visual anchor alone.
+        """
+        getter = getattr(self._backend, "structural_locator_at", None)
+        if getter is None:
+            return None
+        try:
+            return getter(int(x), int(y))
+        except Exception:
+            return None
+
+    def _submit_binding_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
+        """Submit-binding observation for the control under (x, y), if any.
+
+        Backends MAY expose ``submit_binding_at``
+        (:class:`openadapt_flow.backend.SubmitBindingBackend`). Pixel-only
+        backends or a momentary failure yield None; the compiler then records
+        no binding and the runtime keeps refusing a consequential click on an
+        unlabeled control it cannot tie to a record.
+        """
+        getter = getattr(self._backend, "submit_binding_at", None)
+        if getter is None:
+            return None
+        try:
+            observation = getter(int(x), int(y))
+        except Exception:
+            return None
+        return observation if isinstance(observation, dict) else None
+
+    def _form_values_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
+        """A create-new form's untouched field values at (x, y), if any (the
+        backend's ``form_values_at``). The compiler keeps salted digests."""
+        getter = getattr(self._backend, "form_values_at", None)
+        if getter is None:
+            return None
+        try:
+            values = getter(int(x), int(y))
+        except Exception:
+            return None
+        return values if isinstance(values, dict) else None
+
+    @staticmethod
+    def _redact(png: bytes, region: tuple[int, int, int, int]) -> bytes:
+        """Return ``png`` with ``region`` (x, y, w, h) filled solid black."""
+        x, y, w, h = (int(v) for v in region)
+        with Image.open(io.BytesIO(png)) as img:
+            frame = img.convert("RGB")
+        ImageDraw.Draw(frame).rectangle(
+            [max(0, x), max(0, y), x + w, y + h], fill=(0, 0, 0)
+        )
+        out = io.BytesIO()
+        frame.save(out, format="PNG")
+        return out.getvalue()
+
+    def _focused_field_label(self) -> Optional[str]:
+        """Best available label of the focused field, if the backend can say.
+
+        Backends MAY expose ``focused_field_label``
+        (:class:`openadapt_flow.backend.FieldLabelBackend`): the focused
+        field's DOM/accessibility label, captured as passive TYPE-event
+        evidence so the compiler can PROPOSE (never silently apply) a
+        human-named parameter for the typed value. Pixel-only backends (no
+        such method) or a momentary failure yield None; recording proceeds
+        unchanged either way.
+        """
+        getter = getattr(self._backend, "focused_field_label", None)
+        if getter is None:
+            return None
+        try:
+            label = getter()
+        except Exception:
+            return None
+        if not isinstance(label, str):
+            return None
+        label = " ".join(label.split())
+        return label or None
+
+    def _section_context_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
+        """The section around the element under (x, y), if the backend can tell.
+
+        Backends MAY expose ``section_context_at`` (the browser backends do):
+        ``{"kind", "text", "header"?}`` from the nearest legend, accordion or
+        tab header, dialog, landmark or heading. Feeds
+        :mod:`openadapt_flow.sections` only; None on any failure.
+        """
+        getter = getattr(self._backend, "section_context_at", None)
+        if getter is None:
+            return None
+        try:
+            return getter(int(x), int(y))
+        except Exception:
+            return None
+
+    def _structured_identity_at(self, x: int, y: int) -> Optional[str]:
+        """Structured (DOM / a11y) identity text under (x, y), if available.
+
+        Backends MAY expose ``structured_text_at``
+        (``openadapt_flow.backend.IdentityBackend``): the REAL characters of
+        the target's row from the DOM / accessibility tree, captured so replay
+        verifies identity by exact/normalized compare with no OCR ambiguity.
+        Pixel-only backends (no such method) or a momentary failure yield
+        None, and identity falls back to the OCR context band.
+        """
+        getter = getattr(self._backend, "structured_text_at", None)
+        if getter is None:
+            return None
+        try:
+            return getter(int(x), int(y))
+        except Exception:
+            return None
+
+    def _dialog_region_at(self, x: int, y: int) -> Optional[tuple[int, ...]]:
+        """Box of the active dialog holding (x, y), if the backend can say.
+
+        Backends MAY expose ``dialog_region_at`` (the Playwright backend
+        does). None when the point is in no dialog, the backend cannot tell,
+        or the probe failed: the band then stays full width, as before.
+        """
+        getter = getattr(self._backend, "dialog_region_at", None)
+        if getter is None:
+            return None
+        try:
+            status, box = getter(int(x), int(y))
+        except Exception:
+            return None
+        return tuple(box) if status == "dialog" and box else None
+
+    def _identity_census_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
+        """The row census under (x, y), if the backend exposes one.
+
+        Backends MAY expose ``identity_candidates_at``
+        (``openadapt_flow.backend.IdentityCandidatesBackend``). It says
+        whether the target is a record row and reads the row's app-owned id
+        (a DOM ``data-*`` id, the row link's path), which lets replay tell
+        apart rows whose visible text is identical. None when the backend has
+        no census or it failed.
+        """
+        getter = getattr(self._backend, "identity_candidates_at", None)
+        if getter is None:
+            return None
+        try:
+            census = getter(int(x), int(y))
+        except Exception:
+            return None
+        return census if isinstance(census, dict) else None
+
+    def _focus_identity(self, event: dict[str, Any]) -> Optional[dict[str, Any]]:
+        """The focused element's identity around a key event, if readable."""
+
+        if event.get("kind") not in ("key", "hotkey"):
+            return None
+        reader = getattr(self._backend, "focus_identity", None)
+        if not callable(reader):
+            return None
+        try:
+            value = reader()
+        except Exception:
+            return None
+        return value if isinstance(value, dict) else None
+
+    def _structural_state(self) -> dict[str, Any]:
+        """Structural observations the backend can provide right now.
+
+        Backends MAY expose ``url`` / ``page_title`` / ``page_count`` (see
+        ``openadapt_flow.backend.StructuralBackend``); whatever is available
+        is captured per event so the compiler can mine structural
+        postconditions (URL/title change, new tab) for steps whose action
+        changed nothing visible in the frame. Missing observations are
+        simply absent from the event.
+        """
+        state: dict[str, Any] = {}
+        for attr, key in (
+            ("url", "url"),
+            ("page_title", "title"),
+            ("page_count", "pages"),
+        ):
+            try:
+                value = getattr(self._backend, attr, None)
+            except Exception:
+                value = None
+            if value is not None:
+                state[key] = value
+        if self._system_of_record_reader is not None:
+            try:
+                records = self._system_of_record_reader()
+            except Exception:
+                records = None
+            if records is not None:
+                state["sor"] = records
+                # When the snapshot was read (seconds since the recording
+                # started): the compiler's "store unchanged until the next
+                # action" proof needs a real gap between two snapshots.
+                state["sor_t"] = round(time.monotonic() - self._t0, 3)
+        return state
+
+    def _wait_settled(
+        self,
+        *,
+        before: Optional[bytes] = None,
+        structural_before: Optional[dict[str, Any]] = None,
+        quiet_before: Optional[bool] = None,
+    ) -> bytes:
+        """Poll screenshots until N consecutive identical hashes or timeout.
+
+        With ``before`` (the frame from before the action), stable frames whose
+        pixels still equal it exactly do not count as settled while a change
+        is pending (see :meth:`_change_pending`): a slow app keeps the old
+        screen up while it loads the next one. The wait then extends, up to
+        ``settle_pending_timeout_s`` when the URL changed and up to
+        ``SETTLE_PENDING_PROBE_ONLY_S`` when only page activity supports it.
+        On timeout the last frame is returned, exactly as without the
+        extension.
+
+        ``quiet_before`` is the page probe's verdict from just before the
+        action. Page activity counts as a change the action started only when
+        the page was quiet before it (keepalive polling, spinners and widgets
+        on an already busy page say nothing about this action).
+
+        Returns:
+            The last PNG frame captured (settled if achieved before timeout).
+        """
+        start = time.monotonic()
+        limit = start + self._settle_timeout_s
+        before_pixels = _pixels(before) if before is not None else None
+        png = self._backend.screenshot()
+        prev = _phash(png)
+        consecutive = 1
+        while True:
+            if consecutive >= self._settle_stable_frames:
+                if before_pixels is None:
+                    return png
+                pending = self._change_pending(
+                    png, before_pixels, structural_before or {}, quiet_before
+                )
+                if pending is None:
+                    return png
+                bound = (
+                    self._settle_pending_timeout_s
+                    if pending == "route"
+                    else min(
+                        SETTLE_PENDING_PROBE_ONLY_S, self._settle_pending_timeout_s
+                    )
+                )
+                limit = max(limit, start + bound)
+            if time.monotonic() >= limit:
+                return png
+            time.sleep(self._settle_interval_s)
+            png = self._backend.screenshot()
+            cur = _phash(png)
+            if cur == prev:
+                consecutive += 1
+            else:
+                consecutive = 1
+            prev = cur
+
+    def _page_quiet(self) -> Optional[bool]:
+        """The browser page's DOM + network probe, or None when it has none."""
+        probe = getattr(self._backend, "page_quiescent", None)
+        if not callable(probe):
+            return None
+        try:
+            # Playwright's sync API has no per-call timeout for the probe's
+            # evaluate; a blocked page main thread delays it like a screenshot.
+            quiet = probe(_PENDING_QUIET_WINDOW_S)
+        except Exception:
+            return None
+        return quiet if isinstance(quiet, bool) else None
+
+    def _change_pending(
+        self,
+        frame: bytes,
+        before_pixels: bytes,
+        structural_before: dict[str, Any],
+        quiet_before: Optional[bool],
+    ) -> Optional[str]:
+        """The action started a change the screen does not show yet, or None.
+
+        Only while the frame's pixels still equal, exactly, the frame from
+        before the action. Returns ``"route"`` when the URL changed to a
+        different page or client-side route (a bare ``#`` added by an
+        ``href="#"`` link does not count), and ``"activity"`` when the page
+        was quiet before the action and reports DOM or network activity now.
+        A click that changed nothing, on a quiet page, is settled at once, as
+        before.
+
+        The page title is not read here: it needs a browser round trip with
+        no timeout, and the URL (kept client-side) carries the route.
+        """
+        if _pixels(frame) != before_pixels:
+            return None
+        was = structural_before.get("url")
+        if isinstance(was, str):
+            try:
+                now = getattr(self._backend, "url", None)
+            except Exception:
+                now = None
+            if isinstance(now, str) and _route(now) != _route(was):
+                return "route"
+        if quiet_before is True and self._page_quiet() is False:
+            return "activity"
+        return None
+        for attr, key in (("url", "url"), ("page_title", "title")):
+            was = structural_before.get(key)
+            if was is None:
+                continue
+            try:
+                now = getattr(self._backend, attr, None)
+            except Exception:
+                now = None
+            if now is not None and now != was:
+                return True
+        probe = getattr(self._backend, "page_quiescent", None)
+        if callable(probe):
+            try:
+                quiet = probe(_PENDING_QUIET_WINDOW_S)
+            except Exception:
+                quiet = None
+            if quiet is False:
+                return True
+        return False

@@ -1,0 +1,20 @@
+{
+  "model": "claude-sonnet-5-5",
+  "agent_id": "agent:anthropic:claude-sonnet-5-5:scoreboard-repair",
+  "cost_usd": 0.011778,
+  "calls": [
+    {
+      "turn": 1,
+      "started_s": 1792437609.180196,
+      "ended_s": 1792437611.9633422,
+      "input_tokens": 4999,
+      "output_tokens": 178,
+      "cache_read_input_tokens": 0,
+      "cache_creation_input_tokens": 0,
+      "cost_usd": 0.011778,
+      "actions": [],
+      "request_id": "req_011CgC8vLYRLtbxt9UriQwu6",
+      "stop_reason": "end_turn"
+    }
+  ]
+}

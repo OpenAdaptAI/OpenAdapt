@@ -1,0 +1,69 @@
+{
+  "step_id": "step_000",
+  "kind": "anchor_refresh",
+  "rung_used": "geometry",
+  "old_anchor": {
+    "template": "templates/step_000.png",
+    "region": [
+      134,
+      163,
+      160,
+      64
+    ],
+    "click_point": [
+      214,
+      195
+    ],
+    "ocr_text": null,
+    "landmarks": [
+      {
+        "relation": "above",
+        "ocr_text": "Sign in to MockMed",
+        "distance_px": 131,
+        "dx_px": 77,
+        "dy_px": 106
+      },
+      {
+        "relation": "left_of",
+        "ocr_text": "Username",
+        "distance_px": 132,
+        "dx_px": 129,
+        "dy_px": 29
+      }
+    ],
+    "search_pad": 80
+  },
+  "new_anchor": {
+    "template": "templates/step_000.png",
+    "region": [
+      134,
+      163,
+      160,
+      64
+    ],
+    "click_point": [
+      214,
+      195
+    ],
+    "ocr_text": null,
+    "landmarks": [
+      {
+        "relation": "above",
+        "ocr_text": "Sign in to MockMed",
+        "distance_px": 131,
+        "dx_px": 77,
+        "dy_px": 106
+      },
+      {
+        "relation": "left_of",
+        "ocr_text": "Username",
+        "distance_px": 132,
+        "dx_px": 129,
+        "dy_px": 29
+      }
+    ],
+    "search_pad": 80
+  },
+  "screenshot": "heals/step_000/screen.png",
+  "applied": true
+}

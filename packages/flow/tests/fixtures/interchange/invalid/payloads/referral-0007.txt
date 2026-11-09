@@ -1,0 +1,6 @@
+SYNTHETIC REFERRAL (test data)
+Patient: TESTPATIENT, ALPHA
+DOB: 1970-01-01
+Health card: TEST-0000-0007
+Referring clinic: Example Family Practice
+Reason: sudden change in vision, test referral

@@ -1,0 +1,52 @@
+{
+  "cases": [
+    {
+      "confidence": 1.0,
+      "dist_true": 200.0,
+      "family": "repeated_icons",
+      "fixture_params": {
+        "glyph": "bars",
+        "n": 3,
+        "spacing": 100,
+        "true_idx": 0
+      },
+      "landed_on_decoy": true,
+      "perturbation": "local_drift",
+      "perturbation_params": {
+        "region_frac": [
+          0.0,
+          0.0,
+          0.5,
+          1.0
+        ]
+      },
+      "rung": "template_global"
+    },
+    {
+      "confidence": 1.0,
+      "dist_true": 100.0,
+      "family": "repeated_icons",
+      "fixture_params": {
+        "glyph": "bars",
+        "n": 3,
+        "spacing": 100,
+        "true_idx": 1
+      },
+      "landed_on_decoy": true,
+      "perturbation": "local_drift",
+      "perturbation_params": {
+        "region_frac": [
+          0.0,
+          0.0,
+          0.5,
+          1.0
+        ]
+      },
+      "rung": "template_global"
+    }
+  ],
+  "description": "Frozen catalog of silent-wrong-resolution cases discovered by the vision hardening flywheel over the TEMPLATE-tier (font-free, cv2-deterministic) fixture x perturbation sweep. Each case is a metamorphic violation: a perturbation that preserved the true target's identity/location still flipped the resolved target onto a look-alike decoy (or off-target). ratchet_max_silent_wrong is the CI ceiling -- it may only be LOWERED by a hardening fix.",
+  "ratchet_max_silent_wrong": 2,
+  "schema_version": "openadapt.vision-hardening-corpus.v1",
+  "silent_wrong_count": 2
+}

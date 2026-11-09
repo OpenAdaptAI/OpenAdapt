@@ -1,0 +1,42 @@
+{
+  "log": "runs/soak-after-policy-2/arms/openadapt-production-relabel/switch/log-1792911871.jsonl",
+  "record": {
+    "allowed_interstitials": {},
+    "bundle_content_digest": "959971d5e5efc1bbe5b0ffdc907d94be84c46fb0845b73ff1d9e492ff77aa75f",
+    "channel": "desktop_run_it_list_with_header",
+    "dedicated_user_ref": "hmac-sha256:416c28d5858aff6dc46c5f2e1f00ead21c20ceaa4a64e3d4a1b8330b23f89f7e",
+    "environment_digest": "sha256:2dc00aa5bd8d4cb971fc11d724d7bae63aaa300f8cfe636298f68d5500913df5",
+    "org_id": "org-lifecycle-proof",
+    "profile": "regulated",
+    "rung_floor": {
+      "step_000": "structural",
+      "step_003": "structural",
+      "step_006": "structural",
+      "step_009": "structural",
+      "step_012": "structural",
+      "step_016": "structural",
+      "step_018": "structural",
+      "step_021": "structural",
+      "step_024": "structural",
+      "step_027": "structural",
+      "step_030": "structural",
+      "step_033": "structural",
+      "step_036": "structural",
+      "step_039": "structural",
+      "step_040": "structural"
+    },
+    "runner_id": "lifecycle-proof-runner-1",
+    "schema_version": "openadapt.approval-mode-switch/v1",
+    "switch_id": "switch-lifecycle-proof-959971d5e5ef-1792911871",
+    "thresholds": {
+      "problems_in_a_row": 3,
+      "problems_in_window": 5,
+      "problems_window": 20,
+      "status_max_age_s": 900
+    },
+    "verifier_identities": [
+      "sha256:7b0a4449cf2d6e07c6d1b7ce218f052e7bc3dafb5008903b4cb79aa697062fd2"
+    ],
+    "workflow_id": "workflow-openemr-referral"
+  }
+}
