@@ -303,12 +303,16 @@ def cmd_verify(
 
 def add_seal_parser(sub: Any) -> None:
     seal = sub.add_parser(
-        "seal", help="Pin OpenAdapt Cloud's Seal keys and verify a Seal offline."
+        "seal",
+        help="Pin OpenAdapt Cloud's Seal keys and verify a Seal offline.",
+        allow_abbrev=False,
     )
     seal_sub = seal.add_subparsers(dest="seal_command", required=True)
 
     verify = seal_sub.add_parser(
-        "verify", help="Check a Seal (receipt, run report, or webhook JSON)."
+        "verify",
+        help="Check a Seal (receipt, run report, or webhook JSON).",
+        allow_abbrev=False,
     )
     verify.add_argument("target", help="Path, https:// URL, or - for stdin")
     verify.add_argument(
@@ -318,12 +322,15 @@ def add_seal_parser(sub: Any) -> None:
     verify.set_defaults(func=cmd_verify)
 
     keys = seal_sub.add_parser(
-        "keys", help="Pin or show the Cloud Seal keys this computer trusts."
+        "keys",
+        help="Pin or show the Cloud Seal keys this computer trusts.",
+        allow_abbrev=False,
     )
     keys_sub = keys.add_subparsers(dest="keys_command", required=True)
     pin = keys_sub.add_parser(
         "pin",
         help="Fetch /api/public/seal-keys and pin new keys after a person confirms each one.",
+        allow_abbrev=False,
     )
     pin.add_argument(
         "--url",
@@ -342,6 +349,8 @@ def add_seal_parser(sub: Any) -> None:
         help="Trust this key id without a prompt, after checking its fingerprint out of band. Repeatable.",
     )
     pin.set_defaults(func=cmd_keys_pin)
-    show = keys_sub.add_parser("show", help="List pinned keys with fingerprints.")
+    show = keys_sub.add_parser(
+        "show", help="List pinned keys with fingerprints.", allow_abbrev=False
+    )
     show.add_argument("--path", default=None)
     show.set_defaults(func=cmd_keys_show)

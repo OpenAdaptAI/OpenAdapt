@@ -230,7 +230,6 @@ def stop_card(
 
 def cmd_suite(args: argparse.Namespace) -> int:
     import yaml
-
     from openadapt_flow.ensure_record import load_contract
 
     raw = Path(args.suite).read_bytes()
@@ -297,12 +296,14 @@ def cmd_suite(args: argparse.Namespace) -> int:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     sub = ap.add_subparsers(dest="cmd", required=True)
-    t = sub.add_parser("teach")
+    t = sub.add_parser("teach", allow_abbrev=False)
     t.add_argument("--task", required=True)
     t.add_argument("--out", required=True)
-    s = sub.add_parser("suite")
+    s = sub.add_parser("suite", allow_abbrev=False)
     s.add_argument("--suite", required=True)
     s.add_argument("--sha256", required=True)
     s.add_argument("--contract", required=True)

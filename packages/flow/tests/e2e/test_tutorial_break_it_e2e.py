@@ -24,6 +24,7 @@ What is asserted, on one real browser run:
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Iterator
 
 import pytest
 
@@ -32,11 +33,20 @@ from openadapt_flow.ir import RunReport
 from openadapt_flow.tutorial import TutorialResult, run_tutorial
 
 
-@pytest.fixture(scope="module")
-def break_it_path(tmp_path_factory: pytest.TempPathFactory) -> TutorialResult:
-    """Run the tutorial once with ``break_it=True`` for the whole module."""
+@pytest.fixture
+def break_it_path(
+    tmp_path_factory: pytest.TempPathFactory, module_durable_authority
+) -> Iterator[TutorialResult]:
+    """Keep each isolated test's encrypted tutorial readable through its proof."""
 
-    return run_tutorial(tmp_path_factory.mktemp("break-it"), break_it=True)
+    # Function isolation changes the at-rest home and plaintext opt-out.
+    # This synthetic key keeps setup and the later proof reader consistent.
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv("OPENADAPT_BUNDLE_KEY", "tutorial-break-it-synthetic-test-key")
+        result = run_tutorial(tmp_path_factory.mktemp("break-it"), break_it=True)
+        pending = result.run_dir.parent / "run-broken" / "pending_escalation.json.enc"
+        assert pending.is_file()
+        yield result
 
 
 def _report(run_dir: Path) -> RunReport:
