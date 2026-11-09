@@ -34,3 +34,13 @@ regexes = [
   '''^Oaun30(1[5-9])deco$''',
   '''^Oaun30(21|24)sibl$''',
 ]
+
+# packages/desktop embeds PostHog's public project key for opt-in usage stats.
+# A phc_ project key can only send events, never read them; the same value is
+# shipped to every browser by openadapt.ai. Only this exact value is allowed.
+[[allowlists]]
+description = "The public, write-only PostHog project key used for Desktop usage stats"
+regexTarget = "secret"
+regexes = [
+  '''^phc_935iWKc6O7u6DCp2eFAmK5WmCwv35QXMa6LulTJ3uqh$''',
+]

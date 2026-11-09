@@ -8,7 +8,7 @@ The open-source, verified execution layer for computer-use agents.
 
 [![CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml) [![Packages CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml) [![PyPI](https://img.shields.io/pypi/v/openadapt.svg)](https://pypi.org/project/openadapt/) [![Python 3.10–3.12](https://img.shields.io/badge/python-3.10%E2%80%933.12-blue)](https://www.python.org/downloads/) [![License: MIT](https://img.shields.io/badge/license-MIT-3e6b4f.svg)](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/LICENSE) [![Discord](https://img.shields.io/badge/Discord-community-5865F2?logo=discord&logoColor=white)](https://discord.gg/yF527cQbDG)
 
-[What it can do](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CAPABILITIES.md) · [Documentation](https://docs.openadapt.ai) · [Quickstart](https://docs.openadapt.ai/tutorials/quickstart/) · [Live demo](https://app.openadapt.ai/demo) · [Website](https://openadapt.ai) · [Discord](https://discord.gg/yF527cQbDG)
+[What it can do](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CAPABILITIES.md) · [Documentation](https://docs.openadapt.ai) · [Quickstart](https://docs.openadapt.ai/tutorials/quickstart/) · [Live demo](https://app.openadapt.ai/demo) · [Website](https://openadapt.ai) · [Get updates](https://openadapt.ai/#updates) · [Discord](https://discord.gg/yF527cQbDG)
 
 </div>
 
@@ -184,6 +184,15 @@ openadapt run --replay bundle --url https://staging.your-app.example --run-dir r
 including saves you can't undo. It doesn't ask first and doesn't check the
 saved record. Point it at a test or staging copy, never at production data.
 
+The existing engine command remains available for scripts:
+
+```bash
+openadapt flow replay bundle --url https://staging.your-app.example --run-dir run
+```
+
+`flow replay` performs every recorded action, including real saves. Use a test
+or staging copy; it does not ask for approval or check the saved record.
+
 A program that writes to a real system also needs record checks, a deployment
 file, certification, qualification, and an admission; then `openadapt run`
 runs it. By default each save waits for a person to approve it in OpenAdapt
@@ -194,6 +203,10 @@ with branches and loops (`openadapt compile --induce`).
 To record a desktop app, install the recorder and your operating system's
 adapter, for example `python -m pip install "openadapt[capture,windows]"`, or
 use [OpenAdapt Desktop](https://openadapt.ai/download).
+
+`openadapt --help` lists the task commands. `openadapt wrap --help` shows the
+options for running an agent task once and reusing its checked compiled tool.
+The [CLI reference](docs/cli.md) lists task paths and their original aliases.
 
 ### Judge or train any agent
 

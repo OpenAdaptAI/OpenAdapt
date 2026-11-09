@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 TASKS = {
     "demo": "Try the demonstration and tutorial",
@@ -23,11 +23,17 @@ TASKS = {
     "research": "Run benchmarks and research tools",
 }
 
+# These tasks are implemented by launcher-native commands, not the Flow parser.
+LAUNCHER_TASKS = {
+    "wrap": "Run an agent task once, then reuse its checked compiled tool"
+}
+TASKS.update(LAUNCHER_TASKS)
+
 # The launcher supports released engines that predate the task view. Translate
 # to their original verbs here too; the source-parity test keeps this table in
 # step with Flow without raising the existing engine version floor.
 FLOW_NAMES = {
-    "admit": "run --admit",
+    "admit": "run --task-admit",
     "api": "compile --api",
     "approve": "approve",
     "approve-sanitized": "approve --sanitized",
@@ -131,28 +137,41 @@ NATIVE_ROUTES = {
 }
 
 
-def translate(argv: Sequence[str], native_commands: set[str]) -> list[str]:
-    """Resolve exact native prefixes first, then use Flow's task grammar."""
-    for prefix, target in NATIVE_ROUTES.items():
-        if tuple(argv[: len(prefix)]) == prefix:
-            return [*target, *argv[len(prefix) :]]
-    flow_argv = list(argv)
-    for old, new in FLOW_NAMES.items():
-        prefix = new.split()
-        if new != old and list(argv[: len(prefix)]) == prefix:
-            flow_argv = [old, *argv[len(prefix) :]]
-            break
-    if argv and argv[0] in TASKS:
-        # Bare setup and its options remain the legacy clients setup command.
-        # The existing verify ledger/serve command grammar also stays intact.
-        if argv[0] not in native_commands or (
-            argv[0] in {"verify", "setup"}
-            and len(argv) > 1
-            and not argv[1].startswith("-")
-            and argv[:2] != ["verify", "serve"]
+def translate(
+    argv: Sequence[str],
+    native_commands: set[str],
+    normalize: Callable[[str], str] | None = None,
+) -> list[str]:
+    """Match command prefixes only; preserve every unmatched argument byte-for-byte."""
+    raw = list(argv)
+
+    def matches(prefix: Sequence[str]) -> bool:
+        if len(raw) < len(prefix):
+            return False
+        return all(
+            (normalize(token) if normalize else token) == expected
+            for token, expected in zip(raw, prefix)
+        )
+
+    for prefix in sorted(NATIVE_ROUTES, key=len, reverse=True):
+        if matches(prefix):
+            return [*NATIVE_ROUTES[prefix], *raw[len(prefix) :]]
+    for old, new in sorted(
+        FLOW_NAMES.items(), key=lambda item: len(item[1].split()), reverse=True
+    ):
+        flow_prefix = new.split()
+        if new != old and matches(flow_prefix):
+            return ["flow", old, *raw[len(flow_prefix) :]]
+    name = normalize(raw[0]) if raw and normalize else (raw[0] if raw else "")
+    if name in TASKS:
+        if name not in native_commands or (
+            name in {"verify", "setup"}
+            and len(raw) > 1
+            and not raw[1].startswith("-")
+            and not matches(("verify", "serve"))
         ):
-            return ["flow", *flow_argv]
-    return list(argv)
+            return ["flow", name, *raw[1:]]
+    return raw
 
 
 def alias_notice(argv: Sequence[str], prog: str) -> None:
@@ -190,9 +209,13 @@ def legacy_names(argv: Sequence[str]) -> tuple[str, str] | None:
         old = argv[1]
         canonical = FLOW_NAMES.get(old, old)
         return (f"flow {old}", canonical) if canonical != old else None
-    for canonical, old in NATIVE_ROUTES.items():
-        if old != canonical and tuple(argv[: len(old)]) == old and old != ("setup",):
-            return " ".join(old), " ".join(canonical)
+    for native_canonical, native_old in NATIVE_ROUTES.items():
+        if (
+            native_old != native_canonical
+            and tuple(argv[: len(native_old)]) == native_old
+            and native_old != ("setup",)
+        ):
+            return " ".join(native_old), " ".join(native_canonical)
     return None
 
 
@@ -209,14 +232,15 @@ def group_help(prog: str, task: str) -> str:
     """Combine the engine's task view with launcher-only operations."""
     import argparse
 
-    aliases = {
+    aliases: dict[tuple[str, ...], tuple[str, ...]] = {
         tuple(new.split()): (old,) for old, new in FLOW_NAMES.items() if old != new
     }
-    aliases.update(NATIVE_ROUTES)
-    view = argparse.ArgumentParser(prog=f"{prog} {task}")
+    for native_route, native_alias in NATIVE_ROUTES.items():
+        aliases[native_route] = native_alias
+    view = argparse.ArgumentParser(prog=f"{prog} {task}", allow_abbrev=False)
     sub = view.add_subparsers(title="operations")
     for route in aliases:
         if route[0] == task:
-            sub.add_parser(route[1])
+            sub.add_parser(route[1], allow_abbrev=False)
     view.epilog = "Pass an operation followed by --help for its original arguments."
     return view.format_help()

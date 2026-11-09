@@ -2,17 +2,17 @@
 
 > **Canonical reference.** The complete current option list is at
 > [docs.openadapt.ai/reference/cli](https://docs.openadapt.ai/reference/cli/).
-> Run `openadapt <task> --help` for the exact installed engine version.
+> Run `openadapt <task> --help` for the installed command's options.
 
 The launcher command is `openadapt`. It delegates the product lifecycle to the
 installed `openadapt-flow` engine.
 
 ## Command tasks
 
-`openadapt --help` lists 15 tasks:
+`openadapt --help` lists 15 shared engine tasks and the launcher's `wrap` task:
 
 `demo`, `verify`, `record`, `teach`, `compile`, `run`, `approve`, `undo`,
-`qualify`, `repair`, `inspect`, `workflow`, `services`, `setup`, and `research`.
+`qualify`, `repair`, `inspect`, `workflow`, `services`, `setup`, `research`, and `wrap`.
 
 Run `<task> --help` to see its arguments or related operations. For example:
 
@@ -23,6 +23,7 @@ openadapt inspect lint bundle
 openadapt run --replay bundle --run-dir run
 openadapt services agent serve --bundles bundle --mode production
 openadapt setup doctor --backend web
+openadapt wrap --help
 ```
 
 `workflow` manages reusable libraries: pull, push, skills, and generated skill
@@ -34,12 +35,16 @@ appears only on interactive stderr; redirected streams and machine output keep
 their existing format. Commands that accept paths remain leaves. For example,
 `openadapt run replay` still names a bundle called `replay`. Select an alternate
 operation immediately after the task name: `openadapt run --replay bundle`.
-Use `--` before a literal path that starts with `-`.
+A `--` before the task ends launcher options: `openadapt -- run --replay bundle`.
+After the operation, `--` protects a literal path beginning with `-`:
+`openadapt run --replay -- --bundle` and `openadapt flow replay -- --bundle`
+pass the same literal path to Flow.
 
-`openadapt-flow` presents the same task names for engine capabilities. Launcher
-operations such as `demo quickstart`, `record capture`, `services agent`, and
-`setup doctor` stay in `openadapt`. The `openadapt-agent` command and other
-module entrypoints keep their existing grammar.
+`openadapt-flow` presents the 15 shared engine tasks. Launcher operations such
+as `demo quickstart`, `record capture`, `services agent`, `setup doctor`, and
+`wrap` stay in `openadapt`. `wrap` runs an agent task once and reuses its checked
+compiled tool. Run `openadapt wrap --help` for its installed options. The
+`openadapt-agent` command and other module entrypoints keep their existing grammar.
 
 ## First run
 
@@ -73,7 +78,7 @@ openadapt-agent serve --bundles <bundle or directory of bundles> --allow-run
 
 ## Flow lifecycle
 
-The launcher and engine forms are equivalent:
+For shared engine tasks, the launcher and engine forms are equivalent:
 
 ```bash
 openadapt <task> [options]
@@ -107,7 +112,7 @@ openadapt demo record --out rec
 openadapt compile rec --out bundle --name my-task
 openadapt inspect lint bundle --strict
 openadapt qualify --certify bundle --policy permissive
-openadapt run --replay bundle --run-dir run
+openadapt run --replay bundle --demo-app --run-dir run
 ```
 
 The strict lint step refuses the unarmed demo write. The permissive policy is a

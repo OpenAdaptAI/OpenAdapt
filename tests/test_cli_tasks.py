@@ -9,7 +9,13 @@ import pytest
 from click.testing import CliRunner
 
 from openadapt import cli
-from openadapt.cli_tasks import FLOW_NAMES, NATIVE_ROUTES, TASKS, translate
+from openadapt.cli_tasks import (
+    FLOW_NAMES,
+    LAUNCHER_TASKS,
+    NATIVE_ROUTES,
+    TASKS,
+    translate,
+)
 
 
 @pytest.mark.parametrize("canonical,legacy", NATIVE_ROUTES.items())
@@ -25,7 +31,7 @@ def test_native_alias_help_uses_original_command(canonical, legacy):
 
 
 @pytest.mark.parametrize(
-    "task", [name for name in TASKS if name not in {"verify", "setup"}]
+    "task", [name for name in TASKS if name not in {"verify", "setup", *LAUNCHER_TASKS}]
 )
 def test_task_forwards_exact_argv_to_flow(monkeypatch, task):
     seen = []
@@ -120,6 +126,14 @@ def test_launcher_route_table_matches_the_engine_source():
         if isinstance(target, ast.Name) and target.id in {"FLOW_NAMES", "TASKS"}
     }
     assert FLOW_NAMES == assignments["FLOW_NAMES"]
+    # Native-only tasks must bind actual launcher commands and must never
+    # masquerade as parser tasks supported by an older Flow.
+    assert set(LAUNCHER_TASKS) == {"wrap"}
+    assert set(LAUNCHER_TASKS) <= set(cli.main.commands)
+    assert cli.main.commands["wrap"] is cli.wrap
+    assert not set(LAUNCHER_TASKS) & set(assignments["TASKS"])
+    assert not set(LAUNCHER_TASKS) & set(FLOW_NAMES)
+    assignments["TASKS"].update(LAUNCHER_TASKS)
     assert TASKS == assignments["TASKS"]
 
 
@@ -129,6 +143,10 @@ def test_canonical_flow_names_route_to_released_engine_verbs(old, new):
     native = set(cli.main.commands)
     # Native wrappers deliberately take precedence (notably pull and shadow).
     if any(tuple(canonical[: len(prefix)]) == prefix for prefix in NATIVE_ROUTES):
+        return
+    if old == new and old in {"record", "compile", "run"}:
+        assert isinstance(cli.main.commands[old], cli._FlowAliasCommand)
+        assert translate(canonical, native) == canonical
         return
     if (
         old

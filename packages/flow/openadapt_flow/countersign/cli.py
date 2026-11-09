@@ -541,12 +541,14 @@ def add_countersign_parser(sub: Any) -> None:
     p = sub.add_parser(
         "countersign",
         help="Timestamp, countersign, selectively disclose, and export a dispute dossier for a Seal",
+        allow_abbrev=False,
     )
     nsub = p.add_subparsers(dest="countersign_cmd", required=True)
 
     n = nsub.add_parser(
         "add",
         help="Add a countersign block: field commitments, RFC 3161 timestamp, countersignature",
+        allow_abbrev=False,
     )
     n.add_argument(
         "document", help="Receipt, effect-receipt wire document, or report.json"
@@ -586,7 +588,9 @@ def add_countersign_parser(sub: Any) -> None:
     )
 
     q = nsub.add_parser(
-        "exceptions", help="List Seals queued on a REFUTED or INDETERMINATE outcome"
+        "exceptions",
+        help="List Seals queued on a REFUTED or INDETERMINATE outcome",
+        allow_abbrev=False,
     )
     q.add_argument(
         "--status",
@@ -600,6 +604,7 @@ def add_countersign_parser(sub: Any) -> None:
     r = nsub.add_parser(
         "resolve",
         help="Resolve an exception with a later verified Seal that links to it",
+        allow_abbrev=False,
     )
     r.add_argument("entry", help="receipt_sha256 of the open entry")
     r.add_argument(
@@ -624,6 +629,7 @@ def add_countersign_parser(sub: Any) -> None:
     c = nsub.add_parser(
         "close",
         help="Close an exception with a disposition signed by a person whose key is pinned",
+        allow_abbrev=False,
     )
     c.add_argument("entry", help="receipt_sha256 of the open entry")
     c.add_argument(
@@ -654,13 +660,16 @@ def add_countersign_parser(sub: Any) -> None:
     g = nsub.add_parser(
         "purge",
         help="Export, then delete, closed exceptions past their retention period",
+        allow_abbrev=False,
     )
     g.add_argument("--export", required=True, help="Export file to write first (0600)")
     g.add_argument("--vault")
     g.set_defaults(func=cmd_purge)
 
     b = nsub.add_parser(
-        "timestamp-baseline", help="Timestamp a baseline read before the executor runs"
+        "timestamp-baseline",
+        help="Timestamp a baseline read before the executor runs",
+        allow_abbrev=False,
     )
     src = b.add_mutually_exclusive_group(required=True)
     src.add_argument(
@@ -677,7 +686,9 @@ def add_countersign_parser(sub: Any) -> None:
     b.set_defaults(func=cmd_timestamp_baseline)
 
     d = nsub.add_parser(
-        "disclose", help="Write a disclosure bundle revealing chosen committed fields"
+        "disclose",
+        help="Write a disclosure bundle revealing chosen committed fields",
+        allow_abbrev=False,
     )
     d.add_argument("document", help="Countersigned document")
     d.add_argument(
@@ -694,6 +705,7 @@ def add_countersign_parser(sub: Any) -> None:
     v = nsub.add_parser(
         "verify",
         help="Check a Seal offline and show executor, verification tier, timestamps, and disclosures",
+        allow_abbrev=False,
     )
     v.add_argument(
         "document",
@@ -704,7 +716,9 @@ def add_countersign_parser(sub: Any) -> None:
     v.set_defaults(func=cmd_verify)
 
     x = nsub.add_parser(
-        "dossier", help="Export one offline-verifiable HTML or zip for a dispute"
+        "dossier",
+        help="Export one offline-verifiable HTML or zip for a dispute",
+        allow_abbrev=False,
     )
     x.add_argument("document", help="Countersigned document")
     x.add_argument("-o", "--out", required=True, help="Output .html or .zip")

@@ -32,7 +32,7 @@ TASKS = {
 
 # Values are presentation names. Keys always remain the original parser names.
 FLOW_NAMES = {
-    "admit": "run --admit",
+    "admit": "run --task-admit",
     "api": "compile --api",
     "approve": "approve",
     "approve-sanitized": "approve --sanitized",
@@ -186,7 +186,7 @@ def task_help(
     summaries: Mapping[str, str] | None = None,
 ) -> argparse.ArgumentParser:
     """Make a help view without adding arguments to an execution namespace."""
-    view = argparse.ArgumentParser(prog=" ".join([prog, *prefix]))
+    view = argparse.ArgumentParser(prog=" ".join([prog, *prefix]), allow_abbrev=False)
     if not prefix:
         entries = TASKS
     else:
@@ -198,7 +198,7 @@ def task_help(
     if entries:
         group = view.add_subparsers(title="commands" if not prefix else "operations")
         for name, help_text in entries.items():
-            group.add_parser(name, help=help_text)
+            group.add_parser(name, help=help_text, allow_abbrev=False)
     if not prefix:
         view.add_argument(
             "--version", action="store_true", help="Show the version and exit"
