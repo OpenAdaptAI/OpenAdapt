@@ -1,0 +1,61 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I couldn't book or check the appointment because Medplum is showing its sign-in page, not a signed-in session. The task said I'd already be signed in. I reloaded the page and it still asks for an email. I wasn't given any login details, and I won't register a new account, so I stopped without opening or changing any records.\n\nRESULT: NOT DONE Medplum is on the sign-in page, not signed in, and no credentials were provided.",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6283,
+   "out": 103,
+   "usd": 0.002294,
+   "cached": 6279
+  },
+  {
+   "in": 7759,
+   "out": 178,
+   "usd": 0.006735,
+   "cached": 6279
+  },
+  {
+   "in": 9333,
+   "out": 137,
+   "usd": 0.00686,
+   "cached": 7757
+  }
+ ]
+}

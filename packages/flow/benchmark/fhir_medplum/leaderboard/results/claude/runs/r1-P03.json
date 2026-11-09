@@ -1,0 +1,114 @@
+{
+ "id": "P03",
+ "class": "clean",
+ "type": "patient",
+ "expect": "create",
+ "note": "A look-alike (same name, born a day later) exists; a new record is right.",
+ "agent_s": 38.8,
+ "cost_usd": 0.074664,
+ "claim": {
+  "status": "not_done",
+  "id": "Patient/a0d14bb1-6c3e-4954-86d6-f5af740e1982",
+  "note": "RESULT: NOT DONE Only one Lena Okafor exists (Patient/a0d14bb1-6c3e-4954-86d6-f5af740e1982), but her birth date is 1988-04-23, not 1988-04-22, and she has no address, phone or email to confirm a match.",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/Patient/a0d14bb1-6c3e-4954-86d6-f5af740e1982",
+  "final_text": "I didn't create or change any record. The server has one Lena Okafor, and I can't tell whether she is this person.\n\nThe existing record is Patient/a0d14bb1-6c3e-4954-86d6-f5af740e1982. It matches on name and sex (female), but its birth date is 1988-04-23 and the task says 1988-04-22. It has no address, phone or email, so nothing else confirms or rules out a match. It could be the same person with a one-day data-entry error, or a different person. Creating a new record could duplicate her, and editing the existing one could overwrite someone else's record.\n\nRESULT: NOT DONE Only one Lena Okafor exists (Patient/a0d14bb1-6c3e-4954-86d6-f5af740e1982), but her birth date is 1988-04-23, not 1988-04-22, and she has no address, phone or email to confirm a match.",
+  "model_calls": 8,
+  "actions": 17,
+  "tokens_in": 94709,
+  "tokens_out": 1592
+ },
+ "verifier": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "no record is the person and the agent created none"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 0,
+   "agent_writes": 0,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": []
+  },
+  "unreadable": false
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "no record is the person and the agent created none"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 0,
+   "agent_writes": 0,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": []
+  },
+  "unreadable": false
+ },
+ "verify_s": 4.4,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "absent",
+  "reasons": [
+   "no Patient was written"
+  ],
+  "changes": {}
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AuditEvent",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 1
+}
