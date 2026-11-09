@@ -54,7 +54,6 @@ client automatically when none is injected.
 from __future__ import annotations
 
 import hashlib
-import importlib
 import io
 import struct
 import sys
@@ -1960,10 +1959,27 @@ def _pyobjc_missing_message(missing: list[str]) -> str:
     )
 
 
+def _load_pyobjc_module(name: str) -> Any:
+    """Load only a declared native framework, preserving raw ImportError."""
+    if name == "Quartz":
+        import Quartz
+
+        return Quartz
+    if name == "ApplicationServices":
+        import ApplicationServices
+
+        return ApplicationServices
+    if name == "AppKit":
+        import AppKit
+
+        return AppKit
+    raise ValueError("unknown macOS framework module")
+
+
 def _pyobjc_module(name: str) -> Any:
     """Import one pyobjc framework module, naming the extra when it's absent."""
     try:
-        return importlib.import_module(name)
+        return _load_pyobjc_module(name)
     except ImportError as exc:
         raise MacOSDependencyMissing(_pyobjc_missing_message([name])) from exc
 
@@ -1973,7 +1989,7 @@ def require_pyobjc() -> None:
     missing: list[str] = []
     for name in MACOS_PYOBJC_MODULES:
         try:
-            importlib.import_module(name)
+            _load_pyobjc_module(name)
         except ImportError:
             missing.append(name)
     if missing:
