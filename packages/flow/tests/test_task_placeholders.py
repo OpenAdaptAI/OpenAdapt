@@ -383,3 +383,22 @@ def test_openai_payload_has_no_raw_task_value(page, monkeypatch) -> None:
     )
     agent.drive(request, _harness(page))
     _assert_no_raw_value("\n".join(sent))
+
+
+def test_split_element_task_value_bound_in_listing(page) -> None:
+    from openadapt_flow.compile_agent.observe import observe
+
+    page.set_content(
+        "<!doctype html><html><body>"
+        "<p>Selected: <b>MRN</b> P1</p>"
+        "<div>Patient: <span>Jane</span> <span>Sample</span></div>"
+        "</body></html>"
+    )
+    bindings = privacy.task_bindings(identity=["Jane Sample", "MRN P1"])
+    obs = observe(page, bindings=bindings)
+
+    # Both values split across child inline elements match via parent joined text
+    assert f"Selected: {privacy.placeholder('identity_2')}" in obs.text
+    assert f"Patient: {privacy.placeholder('identity_1')}" in obs.text
+    assert "Jane Sample" not in obs.text
+    assert "MRN P1" not in obs.text

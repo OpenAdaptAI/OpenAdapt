@@ -81,9 +81,16 @@ function oaRow(el) {
 """
 
 _OBSERVE_JS = (
-    "(sel) => {"
+    "(args) => {"
     + _NAME_JS
     + """
+  var sel = Array.isArray(args) ? args[0] : args;
+  var values = (Array.isArray(args) && args[1]) ? args[1] : [];
+  function esc(s) { return s.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&'); }
+  var res = values.map(function (v) {
+    return new RegExp('(?<![\\\\p{L}\\\\p{N}_])' +
+      v.split(/\\\\s+/).map(esc).join('\\\\s+') + '(?![\\\\p{L}\\\\p{N}_])', 'gu');
+  });
   function visible(el) {
     var r = el.getBoundingClientRect();
     if (r.width <= 0 || r.height <= 0) return false;
@@ -103,6 +110,44 @@ _OBSERVE_JS = (
   var rows = Array.prototype.slice.call(document.querySelectorAll('tr'));
   var out = [];
   var all = document.body.querySelectorAll('*');
+  var matchedParents = new Set();
+  var skipDescendants = new Set();
+
+  if (res.length > 0) {
+    for (var j = 0; j < all.length; j++) {
+      var el = all[j];
+      if (!visible(el)) continue;
+      var tag = el.tagName.toLowerCase();
+      if (tag === 'script' || tag === 'style' || tag === 'noscript') continue;
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') continue;
+      var text = String(el.innerText || '');
+      for (var i = 0; i < res.length; i++) {
+        res[i].lastIndex = 0;
+        if (!res[i].test(text)) continue;
+        var inner = false;
+        for (var c = 0; c < el.children.length && !inner; c++) {
+          res[i].lastIndex = 0;
+          inner = res[i].test(String(el.children[c].innerText || ''));
+        }
+        if (inner) continue;
+        var ancestorMatched = false;
+        var p = el.parentElement;
+        while (p && p !== document.body) {
+          if (matchedParents.has(p)) { ancestorMatched = true; break; }
+          p = p.parentElement;
+        }
+        if (ancestorMatched) continue;
+
+        matchedParents.add(el);
+        var desc = el.querySelectorAll('*');
+        for (var d = 0; d < desc.length; d++) {
+          skipDescendants.add(desc[d]);
+        }
+        break;
+      }
+    }
+  }
+
   for (var i = 0; i < all.length; i++) {
     var el = all[i];
     var tag = el.tagName.toLowerCase();
@@ -132,7 +177,11 @@ _OBSERVE_JS = (
       continue;
     }
     if (el.closest(sel)) continue;
-    var text = ownText(el);
+    if (skipDescendants.has(el)) continue;
+
+    var text = matchedParents.has(el)
+      ? String(el.innerText || '').replace(/\\s+/g, ' ').trim()
+      : ownText(el);
     if (!text || !visible(el)) continue;
     out.push({kind: /^h[1-6]$/.test(tag) ? 'heading' : 'text', tag: tag,
               text: text.slice(0, 200), row: row});
@@ -494,7 +543,10 @@ def observe(
 ) -> StructuralObservation:
     """Read ``page``'s structure: one line per text, heading, row or control."""
 
-    raw = page.evaluate(_OBSERVE_JS, INTERACTIVE)
+    from openadapt_flow.privacy import listing_bindings
+
+    bound_values = list(listing_bindings(bindings or {}).values())
+    raw = page.evaluate(_OBSERVE_JS, [INTERACTIVE, bound_values])
     body, controls = _render(raw)
     header = f"page: {raw.get('title') or ''} ({raw.get('url') or ''})"
     text = scrub_lines(header + "\n" + body, keep, bindings)
