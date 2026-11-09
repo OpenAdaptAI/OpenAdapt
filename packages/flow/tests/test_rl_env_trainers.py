@@ -137,3 +137,89 @@ def test_verl_tool_runs_one_session_per_instance() -> None:
         return reward
 
     assert asyncio.run(episode()) == 1.0 and client.closed
+
+
+class DroppingClient(FakeClient):
+    """A session whose WebSocket drops on the given step (1-based)."""
+
+    def __init__(self, drop_on: int, reward: float = 1.0) -> None:
+        super().__init__(reward=reward)
+        self.drop_on = drop_on
+
+    def step(self, action: dict[str, Any]) -> Any:
+        if len(self.actions) + 1 == self.drop_on:
+            self.actions.append(action)
+            raise ConnectionError("websocket closed: 1006")
+        return super().step(action)
+
+
+def test_a_dropped_session_fails_closed_with_reward_zero() -> None:
+    client = DroppingClient(drop_on=2)
+    env = trainers.trl_environment("http://env", client_factory=_factory(client))()
+    env.reset(task_id="mockmed-01")
+    env.fill("#note", "x")
+    # The done step would have earned 1.0, but the session dropped under it.
+    with pytest.raises(trainers.SessionDropped, match="1006"):
+        env.done("success")
+    assert trainers.trl_reward([env]) == [0.0]
+    assert env.session.done is True and client.closed
+    assert env.outcome["dropped"]["during"] == "step"
+    assert "completion" not in env.outcome  # nothing read from the record
+    with pytest.raises(ValueError, match="over"):
+        env.click("#again")  # the dropped episode cannot continue
+
+
+def test_a_session_that_drops_at_reset_fails_closed() -> None:
+    class DeadOnReset(FakeClient):
+        def reset(self, **kwargs: Any) -> Any:
+            raise OSError("connection refused")
+
+    client = DeadOnReset()
+    session = trainers.Session("http://env", client_factory=_factory(client))
+    with pytest.raises(trainers.SessionDropped, match="reset"):
+        session.reset(task_id="mockmed-01")
+    assert (session.done, session.reward) == (True, 0.0) and client.closed
+    with pytest.raises(ValueError, match="over"):
+        session.act({"kind": "click", "selector": "#x"})
+
+
+def test_a_malformed_server_reply_fails_closed() -> None:
+    class Garbled(FakeClient):
+        def step(self, action: dict[str, Any]) -> Any:
+            return SimpleNamespace(observation=None, done=True, reward=1.0)
+
+    session = trainers.Session("http://env", client_factory=_factory(Garbled()))
+    session.reset()
+    with pytest.raises(trainers.SessionDropped):
+        session.act({"kind": "done", "claim": "success"})
+    assert session.reward == 0.0
+
+
+def test_each_rollout_gets_its_own_websocket_session() -> None:
+    made: list[FakeClient] = []
+
+    def factory(base_url: str) -> FakeClient:
+        made.append(DroppingClient(drop_on=1) if not made else FakeClient())
+        return made[-1]
+
+    env = trainers.trl_environment("http://env", client_factory=factory)()
+    env.reset(task_id="mockmed-01")
+    with pytest.raises(trainers.SessionDropped):
+        env.click("#x")
+    # The next rollout opens a fresh session and is not tainted by the drop.
+    env.reset(task_id="mockmed-01")
+    assert len(made) == 2 and made[0].closed and not made[1].closed
+    assert env.outcome == {} and env.session.done is False
+    env.done("success")
+    assert trainers.trl_reward([env]) == [1.0]
+    env.reset(task_id="mockmed-02")
+    assert len(made) == 3 and made[1].closed
+
+
+def test_a_non_object_action_is_refused_before_it_reaches_the_server() -> None:
+    client = FakeClient()
+    session = trainers.Session("http://env", client_factory=_factory(client))
+    session.reset()
+    with pytest.raises(TypeError):
+        session.act(["click"])  # type: ignore[arg-type]
+    assert client.actions == [] and session.done is False

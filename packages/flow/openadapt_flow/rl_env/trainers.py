@@ -32,8 +32,22 @@ def render(observation: dict[str, Any]) -> str:
     return json.dumps({k: observation.get(k) for k in TEXT_FIELDS}, ensure_ascii=False)
 
 
+class SessionDropped(RuntimeError):
+    """The environment server's session failed mid-episode.
+
+    The episode ends with reward 0 and the error in ``outcome``; the server's
+    record can no longer be read, so no other reward is trusted.
+    """
+
+
 class Session:
-    """One OpenEnv WebSocket session against an environment server."""
+    """One OpenEnv WebSocket session against an environment server.
+
+    Every rollout gets its own WebSocket session: ``reset`` closes the last
+    one and opens a fresh one. A session that fails mid-episode fails
+    closed: the episode ends with reward 0, later actions are refused, and
+    :class:`SessionDropped` is raised.
+    """
 
     def __init__(
         self, base_url: str, client_factory: Optional[Callable[[str], Any]] = None
@@ -47,31 +61,52 @@ class Session:
         self.steps = 0
 
     def reset(self, task_id: Optional[str] = None, **kwargs: Any) -> str:
-        if self._client is None:
-            self._client = self._factory(self.base_url)
+        self.close()
         self.reward, self.done, self.outcome, self.steps = 0.0, False, {}, 0
         args = {"task_id": task_id} if task_id else {}
-        result = self._client.reset(**args, **kwargs)
-        return render(result.observation)
+        try:
+            self._client = self._factory(self.base_url)
+            result = self._client.reset(**args, **kwargs)
+            return render(result.observation)
+        except Exception as exc:  # noqa: BLE001 - every failure ends the episode
+            raise self._drop("reset", exc) from exc
 
     def act(self, action: dict[str, Any]) -> str:
-        if self._client is None:
-            raise RuntimeError("reset the session first")
         if self.done:
             raise ValueError("The episode is over.")
-        result = self._client.step(action)
+        if self._client is None:
+            raise RuntimeError("reset the session first")
+        if not isinstance(action, dict):
+            raise TypeError("an action is a JSON object")
+        try:
+            result = self._client.step(action)
+            observation = render(result.observation)
+            done = bool(result.done)
+            if done:
+                reward = float(result.reward or 0.0)
+                meta = result.metadata or result.observation.get("metadata") or {}
+                outcome = dict(meta.get("outcome") or {})
+        except Exception as exc:  # noqa: BLE001 - every failure ends the episode
+            raise self._drop("step", exc) from exc
         self.steps += 1
-        self.done = bool(result.done)
-        if result.done:
-            self.reward = float(result.reward or 0.0)
-            meta = result.metadata or result.observation.get("metadata") or {}
-            self.outcome = dict(meta.get("outcome") or {})
-        return render(result.observation)
+        self.done = done
+        if done:
+            self.reward, self.outcome = reward, outcome
+        return observation
+
+    def _drop(self, during: str, exc: Exception) -> SessionDropped:
+        self.reward, self.done = 0.0, True
+        self.outcome = {"dropped": {"during": during, "error": repr(exc)}}
+        self.close()
+        return SessionDropped(f"the environment session failed during {during}: {exc}")
 
     def close(self) -> None:
-        if self._client is not None:
-            self._client.close()
-            self._client = None
+        client, self._client = self._client, None
+        if client is not None:
+            try:
+                client.close()
+            except Exception:  # noqa: BLE001 - a dropped socket may not close
+                pass
 
 
 def _openenv_client(base_url: str) -> Any:

@@ -45,6 +45,7 @@ from openenv.core.env_server.types import (
 from pydantic import Field, model_validator
 
 from openadapt_flow.rl_env import CONTRACT_VERSION, typed
+from openadapt_flow.rl_env.lifecycle import ProcessNotReaped, kill_child_tree
 from openadapt_flow.rl_env.reward import EpisodeJudge, Judgement, render_verify_config
 from openadapt_flow.rl_env.tasks import (
     PUBLIC_SPLIT,
@@ -267,38 +268,6 @@ def _driver_pid(pw: Any) -> Optional[int]:
         return None
 
 
-def _kill_tree(pid: int) -> None:
-    """SIGKILL ``pid`` and every process below it."""
-    import os
-    import signal
-    import subprocess
-
-    if os.name == "nt":
-        subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
-        return
-    try:
-        rows = subprocess.run(
-            ["ps", "-A", "-o", "pid=,ppid="], capture_output=True, text=True, check=True
-        ).stdout.split("\n")
-    except (OSError, subprocess.CalledProcessError):
-        rows = []
-    children: dict[int, list[int]] = {}
-    for row in rows:
-        parts = row.split()
-        if len(parts) == 2:
-            children.setdefault(int(parts[1]), []).append(int(parts[0]))
-    tree, todo = [], [pid]
-    while todo:
-        current = todo.pop()
-        tree.append(current)
-        todo.extend(children.get(current, []))
-    for target in tree:
-        try:
-            os.kill(target, signal.SIGKILL)
-        except (ProcessLookupError, PermissionError):
-            pass
-
-
 def _frame_selector(frame: Any) -> Optional[str]:
     """The iframe element's selector in its parent: by name, else by id."""
     if frame.name:
@@ -350,6 +319,8 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
         self._records_url: Optional[str] = None
         self._attempted = False
         self._records_stop: Optional[Callable[[], None]] = None
+        #: How the last abandoned browser was stopped, once it is reaped.
+        self._teardown: Optional[dict[str, Any]] = None
 
     def _on_worker(
         self,
@@ -373,25 +344,39 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
         app copy is also replaced, so a write that still escapes lands in a
         store no later episode reads. The next reset starts afresh.
         """
-        if self._driver_pid is not None:
-            _kill_tree(self._driver_pid)
-        self._driver_pid = None
-        if self.env.manifest.app.kind == "inprocess" and self._app_stop is not None:
-            try:
-                self._app_stop()
-            except Exception:  # noqa: BLE001 - it is being replaced either way
-                pass
-            self._app_stop = None
-            self._app_url = None
-        if self._worker is not None:
-            self._worker.shutdown(wait=False)
-        self._worker = None
-        self._pw = self._browser = self._context = self._page = None
-        if self._judge is not None:
-            self._judge.close()
-        self._judge = None
-        self._task = None
-        self._state.done = True
+        driver, self._driver_pid = self._driver_pid, None
+        had_browser, self._teardown = self._pw is not None, None
+        try:
+            # The browser goes first, so it cannot write after this point.
+            # The episode is over only once the driver is reaped and Chromium
+            # is gone; otherwise this raises rather than claim it is.
+            if driver is not None:
+                self._teardown = {
+                    "driver_pid": driver,
+                    "driver": kill_child_tree(driver),
+                }
+            elif had_browser:
+                raise ProcessNotReaped(
+                    "the browser driver's process id is unknown, so the stuck "
+                    "browser cannot be confirmed dead"
+                )
+        finally:
+            if self.env.manifest.app.kind == "inprocess" and self._app_stop is not None:
+                try:
+                    self._app_stop()
+                except Exception:  # noqa: BLE001 - it is being replaced either way
+                    pass
+                self._app_stop = None
+                self._app_url = None
+            if self._worker is not None:
+                self._worker.shutdown(wait=False)
+            self._worker = None
+            self._pw = self._browser = self._context = self._page = None
+            if self._judge is not None:
+                self._judge.close()
+            self._judge = None
+            self._task = None
+            self._state.done = True
 
     # -- task discovery (OpenEnv TaskProvider) ------------------------------
     def list_splits(self) -> list[str]:
@@ -520,6 +505,7 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
                 metadata={
                     "env": self.env.manifest.name,
                     "judgement": {"verdict": "INDETERMINATE", "error": "step timeout"},
+                    "teardown": self._teardown,
                 },
                 instruction=task.instruction if task else "",
                 step=self._state.step_count,

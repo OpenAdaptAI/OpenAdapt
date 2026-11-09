@@ -212,8 +212,13 @@ def test_a_stuck_step_that_wakes_later_cannot_touch_the_next_episode(
         env._step = stuck_then_late_write  # type: ignore[method-assign]
         obs = env.step(WebAction(kind="wait", seconds=1))
         assert (obs.done, obs.reward, obs.verdict) == (True, 0.0, "INDETERMINATE")
-        with pytest.raises(ProcessLookupError):
-            os.kill(driver, 0)  # the stuck browser's driver is gone
+        # The stuck browser's driver was killed and reaped before the episode
+        # ended: it is no longer an unreaped child of this process (a live or
+        # zombie child would be found by waitpid; a reused pid would not be
+        # our child at all), and the environment says how it was stopped.
+        assert obs.metadata["teardown"] == {"driver_pid": driver, "driver": "killed"}
+        with pytest.raises(ChildProcessError):
+            os.waitpid(driver, os.WNOHANG)
         del env._step
         monkeypatch.undo()  # the new episode runs under the normal watchdog
 
@@ -229,6 +234,7 @@ def test_a_stuck_step_that_wakes_later_cannot_touch_the_next_episode(
 
 
 def test_trl_adapter_over_a_live_server_reads_the_record_reward() -> None:
+    from openadapt_flow.rl_env import lifecycle
     from openadapt_flow.rl_env.trainers import trl_environment, trl_reward
     from openadapt_flow.rl_env.validate import _free_port, start_server
 
@@ -249,5 +255,5 @@ def test_trl_adapter_over_a_live_server_reads_the_record_reward() -> None:
         assert trl_reward([env]) == [1.0] and env.outcome["completion"] is True
         env.session.close()
     finally:
-        server.terminate()
-        server.wait(timeout=30)
+        stopped = lifecycle.stop(server, term_timeout=30)
+    assert stopped.how in ("terminated", "killed") and server.poll() is not None
