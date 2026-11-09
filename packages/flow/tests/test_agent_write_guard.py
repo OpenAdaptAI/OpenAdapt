@@ -16,8 +16,6 @@ import pytest
 from openadapt_flow.integrations.agents import WriteGuard
 from tests._orders_portal import Portal
 
-pytest_plugins = ("tests._orders_portal",)
-
 ORDER = {"customer": "Acme", "product": "Desk lamp", "units": "3"}
 
 
