@@ -285,15 +285,36 @@ class _NewSessionAsyncio:
 
     async def create_subprocess_exec(self, *args: Any, **kwargs: Any) -> Any:
         kwargs.setdefault("start_new_session", True)
-        supervised = SUPERVISE_DRIVER
-        if supervised:
-            # A child subreaper above the driver: the only way a stuck
-            # browser's whole tree can be proven gone (lifecycle docstring).
-            command, nonce = lifecycle.supervised_command([str(a) for a in args])
-            args = tuple(command)
-        proc = await self._real.create_subprocess_exec(*args, **kwargs)
-        if supervised:
-            _SUPERVISED[proc.pid] = lifecycle.SupervisedLaunch.of(proc.pid, nonce)
+        if not SUPERVISE_DRIVER:
+            return await self._real.create_subprocess_exec(*args, **kwargs)
+        # A child subreaper above the driver: the only way a stuck browser's
+        # whole tree can be proven gone. The supervisor hands its own pidfd
+        # back over this socketpair; only that handle ever signals it.
+        nonce, pair = lifecycle.new_nonce(), lifecycle.handoff_pair()
+        if pair is None:
+            command = lifecycle.supervised_command([str(a) for a in args], nonce, None)
+            proc = await self._real.create_subprocess_exec(*command, **kwargs)
+            # Off Linux: signalled by pid, never proven. On Linux without
+            # send_fds: unbound, never signalled.
+            _SUPERVISED[proc.pid] = (
+                lifecycle.SupervisedLaunch(pid=proc.pid, nonce=nonce, start=None)
+                if lifecycle.LINUX
+                else lifecycle.SupervisedLaunch.numeric(proc.pid, nonce)
+            )
+            return proc
+        parent, child = pair
+        try:
+            command = lifecycle.supervised_command(
+                [str(a) for a in args], nonce, child.fileno()
+            )
+            kwargs["pass_fds"] = (*kwargs.get("pass_fds", ()), child.fileno())
+            proc = await self._real.create_subprocess_exec(*command, **kwargs)
+        except BaseException:
+            parent.close()
+            raise
+        finally:
+            child.close()
+        _SUPERVISED[proc.pid] = lifecycle.bind_launch(proc.pid, nonce, parent)
         return proc
 
 
@@ -421,6 +442,11 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
                 launch = _SUPERVISED.pop(driver, None)
                 if launch is not None:
                     result = lifecycle.stop_supervised(launch)
+                elif SUPERVISE_DRIVER:
+                    # Supervision was expected but there is no launch for this
+                    # pid: nothing owned to signal it through, so it is not
+                    # signalled by number either.
+                    result = lifecycle.Teardown("unsignalled", proven=False)
                 else:
                     result = kill_child_tree(driver)
                 self._teardown = {

@@ -20,13 +20,14 @@ teardown kills what it can find and reports ``proven=False``; callers must
 treat that as unknown, never as gone. :func:`stop` covers a server's own
 process group only.
 
-Signalling. On Linux every signal to a supervisor goes through a pidfd
-opened at spawn (``pidfd_send_signal``), so it cannot reach a process that
-reused the pid, even when another reaper (asyncio's child watcher) collects
-the supervisor first. Without a pidfd (macOS, Windows, or ``pidfd_open``
-refused) a signal is sent by pid after a liveness check and can race a
-concurrent reaper; that is a development-platform limit, and teardown there
-is never proven.
+Signalling. On Linux every signal to a supervisor goes through a pidfd the
+supervisor opened for itself and handed to the parent over a socketpair
+(see :class:`SupervisedLaunch`), so it cannot reach a process that reused
+the pid, even when another reaper (asyncio's child watcher) collects the
+supervisor first. A Linux launch without a valid handoff is never
+signalled. Off Linux there is no pidfd: a signal is sent by pid after a
+liveness check and can race a concurrent reaper; that is a
+development-platform limit, and teardown there is never proven.
 """
 
 from __future__ import annotations
@@ -34,10 +35,12 @@ from __future__ import annotations
 import json
 import os
 import signal
+import socket
 import subprocess
+import sys
 import time
 from dataclasses import dataclass
-from typing import Any, Literal, Optional, Sequence
+from typing import Any, Callable, Literal, Optional, Sequence
 
 #: How long a server gets to exit after SIGTERM, then after SIGKILL.
 TERM_TIMEOUT_S = 10.0
@@ -49,7 +52,7 @@ class Teardown:
     """How a process tree was stopped. ``proven`` only when a subreaper saw
     every descendant gone (Linux, under :func:`supervised_command`)."""
 
-    how: Literal["killed", "exited"]
+    how: Literal["killed", "exited", "unsignalled"]
     proven: bool
 
 
@@ -384,31 +387,39 @@ def _report_dir() -> str:
     return _REPORT_DIR
 
 
+#: How long the parent waits for a supervisor's handle handoff.
+HANDOFF_TIMEOUT_S = 10.0
+LINUX = sys.platform.startswith("linux")
+
+
 @dataclass
 class SupervisedLaunch:
-    """One supervisor launch: its pid, the nonce its report must carry, its
-    start identity, and (Linux) a pidfd opened at spawn.
+    """One supervisor launch: its pid, the nonce its handoff and report must
+    carry, its start identity, and how it may be signalled.
 
-    A report counts only when nonce, pid and start all match, so a stale
-    report, or one left by an earlier process that had this pid, is never
-    read as this launch's. Every signal goes through the pidfd, so it can
-    only reach this process: once it is gone the kernel answers ESRCH, even
-    if another reaper collected it and the pid was reused. Without a pidfd
-    (macOS, Windows, or ``pidfd_open`` refused) the teardown is never proven.
+    On Linux the supervisor itself opens a pidfd for its own process and
+    hands it to the parent over a socketpair (SCM_RIGHTS) with
+    ``{nonce, pid, start}``. Only a handoff whose nonce, pid and pidfd all
+    match binds the launch (``bound``); the pidfd is then the only way it is
+    ever signalled, so no signal can reach a process that reused the pid.
+    An unbound Linux launch (no handoff in time, a mismatch, an invalid fd)
+    is never signalled at all, by pidfd or by number, and its teardown is
+    never proven. Off Linux (``numeric``) signals go by pid after a
+    liveness check and teardown is never proven either.
     """
 
     pid: int
     nonce: str
     start: Optional[str]
     pidfd: Optional[int] = None
+    bound: bool = False
 
     @classmethod
-    def of(cls, pid: int, nonce: str) -> "SupervisedLaunch":
+    def numeric(cls, pid: int, nonce: str) -> "SupervisedLaunch":
+        """A launch off Linux: no handle, start identity sampled by pid."""
         from openadapt_flow.rl_env._supervisor import start_identity
 
-        return cls(
-            pid=pid, nonce=nonce, start=start_identity(pid), pidfd=_pidfd_open(pid)
-        )
+        return cls(pid=pid, nonce=nonce, start=start_identity(pid))
 
     @property
     def report(self) -> str:
@@ -424,14 +435,74 @@ class SupervisedLaunch:
                 pass
 
 
-def _pidfd_open(pid: int) -> Optional[int]:
-    opener = getattr(os, "pidfd_open", None)
-    if opener is None:
+def new_nonce() -> str:
+    import secrets
+
+    return secrets.token_hex(16)
+
+
+def handoff_pair() -> Optional[tuple[socket.socket, socket.socket]]:
+    """(parent end, child end) for a supervisor's handle handoff; None off
+    Linux, where there is no pidfd to hand over."""
+    if not LINUX or not hasattr(socket, "recv_fds") or not hasattr(os, "pidfd_open"):
         return None
+    return socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
+
+
+def _pidfd_target(fd: int) -> Optional[int]:
+    """The pid a pidfd refers to, from /proc/self/fdinfo; None if ``fd`` is
+    not a pidfd."""
     try:
-        return int(opener(pid))
-    except OSError:
+        with open(f"/proc/self/fdinfo/{fd}") as handle:
+            for line in handle:
+                if line.startswith("Pid:"):
+                    return int(line.split()[1])
+    except (OSError, ValueError, IndexError):
         return None
+    return None
+
+
+def bind_launch(
+    pid: int,
+    nonce: str,
+    sock: socket.socket,
+    *,
+    timeout: Optional[float] = None,
+) -> SupervisedLaunch:
+    """Receive the supervisor's own pidfd over ``sock`` (closed here) and
+    bind the launch to it, or return it unbound."""
+    unbound = SupervisedLaunch(pid=pid, nonce=nonce, start=None)
+    fds: list[int] = []
+    try:
+        sock.settimeout(HANDOFF_TIMEOUT_S if timeout is None else timeout)
+        message, fds, _flags, _addr = socket.recv_fds(sock, 4096, 1)
+    except (OSError, ValueError):
+        return unbound
+    finally:
+        sock.close()
+    try:
+        data = json.loads(message)
+    except ValueError:
+        data = None
+    good = (
+        isinstance(data, dict)
+        and data.get("nonce") == nonce
+        and data.get("pid") == pid
+        and isinstance(data.get("start"), str)
+        and len(fds) == 1
+        and _pidfd_target(fds[0]) == pid
+    )
+    if not good:
+        for fd in fds:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        return unbound
+    assert isinstance(data, dict)
+    return SupervisedLaunch(
+        pid=pid, nonce=nonce, start=data["start"], pidfd=fds[0], bound=True
+    )
 
 
 def _pidfd_signal(pidfd: int, sig: int) -> bool:
@@ -459,29 +530,46 @@ def _pidfd_reaped(pidfd: int) -> bool:
     return result is not None
 
 
-def supervised_command(args: Sequence[str]) -> tuple[list[str], str]:
-    """``args`` run under the subreaper supervisor (``_supervisor.py``), and
-    the launch's fresh random nonce.
+def supervised_command(
+    args: Sequence[str], nonce: str, handoff_fd: Optional[int]
+) -> list[str]:
+    """``args`` run under the subreaper supervisor (``_supervisor.py``).
 
-    Start the command in a new session, record
-    ``SupervisedLaunch.of(pid, nonce)`` at once, and stop it with
-    :func:`stop_supervised`.
+    Start it in a new session with ``handoff_fd`` (the child end of
+    :func:`handoff_pair`) in ``pass_fds``, then bind it with
+    :func:`bind_launch`; or use :func:`spawn_supervised`.
     """
-    import secrets
-    import sys
+    fd = "-" if handoff_fd is None else str(handoff_fd)
+    return [sys.executable, "-I", SUPERVISOR, _report_dir(), nonce, fd, "--", *args]
 
-    nonce = secrets.token_hex(16)
-    command = [sys.executable, "-I", SUPERVISOR, _report_dir(), nonce, "--", *args]
-    return command, nonce
+
+def launch_supervised(
+    command_for: Callable[[str, Optional[int]], Sequence[str]], **kwargs: Any
+) -> tuple[subprocess.Popen[bytes], SupervisedLaunch]:
+    """:func:`spawn` ``command_for(nonce, handoff_fd)`` and bind its launch."""
+    nonce, pair = new_nonce(), handoff_pair()
+    if pair is None:
+        proc = spawn(command_for(nonce, None), **kwargs)
+        return proc, SupervisedLaunch.numeric(proc.pid, nonce)
+    parent, child = pair
+    try:
+        kwargs["pass_fds"] = (*kwargs.get("pass_fds", ()), child.fileno())
+        proc = spawn(command_for(nonce, child.fileno()), **kwargs)
+    except BaseException:
+        parent.close()
+        raise
+    finally:
+        child.close()
+    return proc, bind_launch(proc.pid, nonce, parent)
 
 
 def spawn_supervised(
     args: Sequence[str], **kwargs: Any
 ) -> tuple[subprocess.Popen[bytes], SupervisedLaunch]:
     """:func:`spawn` of ``args`` under the supervisor, with its launch."""
-    command, nonce = supervised_command(args)
-    proc = spawn(command, **kwargs)
-    return proc, SupervisedLaunch.of(proc.pid, nonce)
+    return launch_supervised(
+        lambda nonce, fd: supervised_command(args, nonce, fd), **kwargs
+    )
 
 
 #: The verdicts ``_supervisor.py`` writes.
@@ -524,22 +612,25 @@ def stop_supervised(
 ) -> Teardown:
     """Stop a supervisor started from :func:`supervised_command`.
 
-    SIGTERM asks it to kill and reap the command's whole tree; it reports
-    the verdict in a file before it exits. ``proven`` only for a supervisor
-    with a pidfd that is reaped and reported ``proven`` for this launch. A
-    supervisor that does not finish in time is SIGKILLed and
+    The binding is checked before anything is signalled. A bound launch
+    (Linux) is signalled only through the pidfd its supervisor handed over:
+    SIGTERM asks it to kill and reap the command's whole tree, and it
+    reports the verdict in a file before it exits. ``proven`` only for a
+    bound launch that is reaped and reported ``proven`` for this launch. An
+    unbound Linux launch is never signalled (``how="unsignalled"``,
+    unproven); cleanup is left to the supervisor's own exit. Off Linux a
+    signal goes by pid after a liveness check, can race a concurrent
+    reaper, and is never proven.
+
+    A supervisor that does not finish in time is SIGKILLed and
     :class:`ProcessNotReaped` is raised; a report that is missing,
     malformed, not this launch's or reports survivors raises
     :class:`DescendantsUnknown`. The pidfd is closed at the end.
-
-    Signals go through the launch's pidfd (Linux), which cannot reach any
-    other process. Without one, a signal is sent by pid only after
-    ``proc.poll()`` (or a non-blocking ``waitpid``) shows the supervisor
-    still unreaped, and a concurrent reaper in this process (such as
-    asyncio's child watcher) can still collect it in between; that path is
-    therefore never proven.
     """
     pid, pidfd = launch.pid, launch.pidfd
+    if LINUX and not (launch.bound and pidfd is not None):
+        launch.close()
+        return Teardown("unsignalled", proven=False)
 
     def reaped() -> bool:
         if pidfd is not None:
@@ -553,7 +644,7 @@ def stop_supervised(
         if pidfd is not None:
             _pidfd_signal(pidfd, sig)
         elif not reaped():
-            _signal(pid, sig)  # poll-guarded; may race a concurrent reaper
+            _signal(pid, sig)  # off Linux: poll-guarded; may race a reaper
 
     try:
         deadline = time.monotonic() + timeout
@@ -572,7 +663,7 @@ def stop_supervised(
         launch.close()
     verdict = _read_verdict(launch)
     if verdict == "proven":
-        return Teardown("killed", proven=pidfd is not None)
+        return Teardown("killed", proven=launch.bound)
     if verdict == "unproven":
         return Teardown("killed", proven=False)
     raise DescendantsUnknown(

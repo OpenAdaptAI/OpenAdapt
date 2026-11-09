@@ -1,6 +1,12 @@
 """Run one command under a child subreaper and prove its whole tree gone.
 
-    python -I _supervisor.py REPORT_DIR NONCE -- COMMAND [ARGS...]
+    python -I _supervisor.py REPORT_DIR NONCE HANDOFF_FD -- COMMAND [ARGS...]
+
+First, on Linux, it opens a pidfd for its own process and sends it, with
+``{nonce, pid, start}``, over the inherited socket ``HANDOFF_FD`` (``-`` for
+none) to the parent: a handle the process made for itself, so it can never
+refer to a process that later reused the pid. The parent signals it only
+through that handle.
 
 Run as a file with ``-I`` (standard library only, nothing from the package
 is imported). On Linux the supervisor marks itself a child subreaper
@@ -39,6 +45,7 @@ import ctypes
 import json
 import os
 import signal
+import socket
 import subprocess
 import sys
 import time
@@ -70,6 +77,35 @@ def start_identity(pid: int) -> Optional[str]:
     except (OSError, subprocess.SubprocessError):
         return None
     return f"ps:{out}" if out else None
+
+
+def handoff(fd: str, nonce: str) -> None:
+    """Send this process's own pidfd and identity to the parent over the
+    inherited socket ``fd``; nothing when there is none or it fails (the
+    parent then treats the launch as unbound and never signals it)."""
+    if fd == "-":
+        return
+    try:
+        sock = socket.socket(fileno=int(fd))
+    except (OSError, ValueError):
+        return
+    try:
+        own = getattr(os, "pidfd_open")(os.getpid())
+        try:
+            message = json.dumps(
+                {
+                    "nonce": nonce,
+                    "pid": os.getpid(),
+                    "start": start_identity(os.getpid()),
+                }
+            ).encode()
+            getattr(socket, "send_fds")(sock, [message], [own])
+        finally:
+            os.close(own)
+    except (OSError, AttributeError):
+        pass
+    finally:
+        sock.close()
 
 
 def _subreaper() -> bool:
@@ -162,10 +198,14 @@ def _teardown(
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) < 4 or argv[2] != "--":
-        print("usage: _supervisor.py REPORT_DIR NONCE -- COMMAND...", file=sys.stderr)
+    if len(argv) < 5 or argv[3] != "--":
+        print(
+            "usage: _supervisor.py REPORT_DIR NONCE HANDOFF_FD -- COMMAND...",
+            file=sys.stderr,
+        )
         return 2
-    report_dir, nonce, command = argv[0], argv[1], argv[3:]
+    report_dir, nonce, fd, command = argv[0], argv[1], argv[2], argv[4:]
+    handoff(fd, nonce)
     identity = start_identity(os.getpid())
     subreaper = _subreaper()
     stop = {"requested": False}

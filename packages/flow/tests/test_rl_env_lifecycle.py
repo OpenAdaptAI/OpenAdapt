@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import secrets
 import signal
 import subprocess
 import sys
@@ -589,7 +588,9 @@ def test_without_a_subreaper_the_supervisor_reports_unproven() -> None:
 def test_a_supervisor_that_leaves_no_report_is_unknown() -> None:
     # Not a supervisor at all: SIGTERM ends it without a verdict.
     proc = lifecycle.spawn([sys.executable, "-c", "import time; time.sleep(600)"])
-    launch = lifecycle.SupervisedLaunch.of(proc.pid, secrets.token_hex(16))
+    proc.kill()
+    proc.wait(timeout=30)
+    proc, launch = _fake_supervisor()
     with pytest.raises(lifecycle.DescendantsUnknown, match="reported nothing"):
         lifecycle.stop_supervised(launch, proc=proc, timeout=10)
 
@@ -616,11 +617,36 @@ def test_an_unproven_teardown_makes_later_episodes_indeterminate(monkeypatch) ->
 # -- a malformed supervisor report, or any teardown failure, is never proof ---
 
 
-def _fake_supervisor() -> tuple[subprocess.Popen[bytes], lifecycle.SupervisedLaunch]:
-    """A process that stands in for a supervisor; its report is written by
-    the test."""
-    proc = lifecycle.spawn([sys.executable, "-c", "import time; time.sleep(600)"])
-    return proc, lifecycle.SupervisedLaunch.of(proc.pid, secrets.token_hex(16))
+#: Stands in for a supervisor: does (or skips, or garbles) the handoff with
+#: the real ``handoff`` and then sleeps; its report is written by the test.
+FAKE_SUPERVISOR = """
+import runpy, sys, time
+supervisor = runpy.run_path(sys.argv[1])
+mode, nonce, fd = sys.argv[2], sys.argv[3], sys.argv[4]
+if mode == "ok":
+    supervisor["handoff"](fd, nonce)
+elif mode == "wrong-nonce":
+    supervisor["handoff"](fd, "0" * 32)
+# "silent": keep the socket open and never send
+time.sleep(600)
+"""
+
+
+def _fake_supervisor(
+    mode: str = "ok",
+) -> tuple[subprocess.Popen[bytes], lifecycle.SupervisedLaunch]:
+    return lifecycle.launch_supervised(
+        lambda nonce, fd: [
+            sys.executable,
+            "-I",
+            "-c",
+            FAKE_SUPERVISOR,
+            lifecycle.SUPERVISOR,
+            mode,
+            nonce,
+            "-" if fd is None else str(fd),
+        ]
+    )
 
 
 def _write(path: str, body: object) -> None:
@@ -704,8 +730,17 @@ def test_a_launch_whose_start_is_unknown_is_never_proven() -> None:
     proc, launch = _fake_supervisor()
     blind = lifecycle.SupervisedLaunch(pid=launch.pid, nonce=launch.nonce, start=None)
     _write(blind.report, _receipt(blind))
-    with pytest.raises(lifecycle.DescendantsUnknown):
-        lifecycle.stop_supervised(blind, proc=proc, timeout=10)
+    if LINUX:
+        # Unbound on Linux: never signalled, never proven.
+        assert lifecycle.stop_supervised(blind, proc=proc) == lifecycle.Teardown(
+            "unsignalled", proven=False
+        )
+        proc.kill()
+        proc.wait(timeout=30)
+        launch.close()
+    else:
+        with pytest.raises(lifecycle.DescendantsUnknown):
+            lifecycle.stop_supervised(blind, proc=proc, timeout=10)
 
 
 def test_a_reaped_supervisor_is_never_signalled(monkeypatch) -> None:
@@ -809,8 +844,7 @@ def test_a_pidfd_signal_after_another_reaper_collected_it_is_esrch(
     monkeypatch,
 ) -> None:
     proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
-    pidfd = lifecycle._pidfd_open(proc.pid)
-    assert pidfd is not None
+    pidfd = os.pidfd_open(proc.pid)
     try:
         # Another reaper (as asyncio's watcher thread would) collects it.
         def reap() -> None:
@@ -865,3 +899,97 @@ def test_without_a_pidfd_a_proven_receipt_is_still_unproven() -> None:
     assert launch.pidfd is None
     _write(launch.report, _receipt(launch))
     assert lifecycle.stop_supervised(launch, proc=proc, timeout=10) == UNPROVEN_KILL
+
+
+# -- Linux: a launch is signalled only through the pidfd its supervisor sent --
+
+
+def _no_signals(monkeypatch) -> list[tuple[str, int]]:
+    sent: list[tuple[str, int]] = []
+    monkeypatch.setattr(lifecycle.os, "kill", lambda p, s: sent.append(("kill", p)))
+    monkeypatch.setattr(lifecycle.os, "killpg", lambda p, s: sent.append(("killpg", p)))
+    monkeypatch.setattr(
+        lifecycle, "_pidfd_signal", lambda fd, s: sent.append(("pidfd", fd)) or True
+    )
+    return sent
+
+
+@pytest.mark.skipif(not LINUX, reason="pidfd handoff is Linux-only")
+def test_the_handoff_binds_the_launch_and_teardown_is_proven() -> None:
+    proc, launch = lifecycle.spawn_supervised(
+        [sys.executable, "-c", "import time; time.sleep(600)"]
+    )
+    assert launch.bound and launch.pidfd is not None
+    assert lifecycle._pidfd_target(launch.pidfd) == proc.pid
+    assert launch.start is not None
+    assert lifecycle.stop_supervised(launch, proc=proc, timeout=20) == (
+        lifecycle.Teardown("killed", proven=True)
+    )
+    assert launch.pidfd is None
+
+
+@pytest.mark.skipif(not LINUX, reason="pidfd handoff is Linux-only")
+@pytest.mark.parametrize("mode", ["silent", "wrong-nonce"])
+def test_a_launch_without_a_valid_handoff_is_never_signalled(
+    mode: str, monkeypatch
+) -> None:
+    monkeypatch.setattr(lifecycle, "HANDOFF_TIMEOUT_S", 0.5)
+    proc, launch = _fake_supervisor(mode)
+    try:
+        assert launch.bound is False and launch.pidfd is None
+        sent = _no_signals(monkeypatch)
+        assert lifecycle.stop_supervised(launch, proc=proc, timeout=5) == (
+            lifecycle.Teardown("unsignalled", proven=False)
+        )
+        assert sent == [] and proc.poll() is None  # untouched, by any route
+    finally:
+        monkeypatch.undo()
+        proc.kill()
+        proc.wait(timeout=30)
+
+
+@pytest.mark.skipif(not LINUX, reason="pidfd handoff is Linux-only")
+def test_an_unbound_driver_taints_the_environment_and_is_not_signalled(
+    monkeypatch,
+) -> None:
+    env = _environment()
+    from openadapt_flow.rl_env import environment as E
+
+    monkeypatch.setattr(lifecycle, "HANDOFF_TIMEOUT_S", 0.5)
+    proc, launch = _fake_supervisor("silent")
+    try:
+        monkeypatch.setitem(E._SUPERVISED, proc.pid, launch)
+        sent = _no_signals(monkeypatch)
+        env._pw, env._driver_pid = object(), proc.pid
+        env._abandon_worker()
+        assert env._teardown == {
+            "driver_pid": proc.pid,
+            "driver": "unsignalled",
+            "proven": False,
+        }
+        assert sent == [] and proc.poll() is None
+        assert env._unproven is not None
+        out = _judged(env, monkeypatch)
+        assert (out["verdict"], out["reward"]) == ("INDETERMINATE", 0.0)
+    finally:
+        proc.kill()
+        proc.wait(timeout=30)
+
+
+@pytest.mark.skipif(not LINUX, reason="pidfd handoff is Linux-only")
+def test_a_pid_now_held_by_another_live_child_is_never_signalled(monkeypatch) -> None:
+    # As if the supervisor's pid were reused by another child of this
+    # process: an unbound launch naming that pid must not touch it.
+    other = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
+    try:
+        stale = lifecycle.SupervisedLaunch(
+            pid=other.pid, nonce=lifecycle.new_nonce(), start=None
+        )
+        sent = _no_signals(monkeypatch)
+        assert lifecycle.stop_supervised(stale, timeout=5).how == "unsignalled"
+        assert sent == []
+        monkeypatch.undo()
+        assert other.poll() is None  # alive and not reaped behind its back
+    finally:
+        other.kill()
+        other.wait(timeout=30)
