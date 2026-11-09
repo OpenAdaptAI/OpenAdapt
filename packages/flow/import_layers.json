@@ -40,24 +40,5 @@
       "openadapt_flow.teach_authorization_fixture"
     ]
   },
-  "exceptions": [
-    {
-      "importer": "openadapt_flow.qualification_oracle_gate",
-      "imported": "openadapt_flow.mockmed.fault_server",
-      "reason": "The qualification oracle gate runs its break-it fault against the bundled MockMed fault server, its only fixture. Core reaches the gate through receipt > repair.standard_change > repair.self_repair > agent.repair > agent.authoring > agent.bridge > agent.admission > admit_pipeline > qualification_proposal. Removing the edge means passing the fault fixture in from the caller, which changes the gate and its callers.",
-      "issue": "https://github.com/OpenAdaptAI/OpenAdapt/issues/1876"
-    },
-    {
-      "importer": "openadapt_flow.mockmed",
-      "imported": "openadapt_flow.mockmed.server",
-      "reason": "Runs only because the excepted qualification_oracle_gate > mockmed.fault_server import loads the mockmed package, whose __init__ re-exports the MockMed server. It goes away with that edge.",
-      "issue": "https://github.com/OpenAdaptAI/OpenAdapt/issues/1876"
-    },
-    {
-      "importer": "openadapt_flow.mockmed.fault_server",
-      "imported": "openadapt_flow.mockmed.chart_pages",
-      "reason": "The fault server renders MockMed's chart pages. It runs only because of the excepted qualification_oracle_gate > mockmed.fault_server import, and goes away with that edge.",
-      "issue": "https://github.com/OpenAdaptAI/OpenAdapt/issues/1876"
-    }
-  ]
+  "exceptions": []
 }
