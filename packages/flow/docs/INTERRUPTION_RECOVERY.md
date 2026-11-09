@@ -52,8 +52,13 @@ A run clears an interruption only when all four of these hold:
    script, so its capture-phase listeners on `window` run before any page
    listener. It is dormant until a dismissal arms it on the bound control.
    While armed, it watches the control, the nodes its `aria-labelledby` and
-   `aria-describedby` name, its labels, and the page's stylesheets. If any
-   of them changed before a press or click arrives, or the input is not on
+   `aria-describedby` name, its labels, and the page's stylesheets. At
+   every press and click it also re-reads how each of them renders: the
+   computed `::before` and `::after` content, their own computed content,
+   and `display` and `visibility`, so a stylesheet rule added through the
+   CSSOM (`insertRule`, `adoptedStyleSheets`) that relabels or hides the
+   text counts as a change. If any of them changed before a press or click
+   arrives, or the input is not on
    the control, the guard cancels that input before the page sees it. The
    run then halts with the dismissal reported as delivered and its outcome
    uncertain (`LabelChangedDuringClick`), so it is reconciled, never

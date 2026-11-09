@@ -2173,7 +2173,10 @@ def _normalize_chord(key: str) -> str:
 #: Dormant until armed for one click on one element; armed, it blocks the
 #: press and the click whenever the element's label inputs changed since it
 #: was armed (a MutationObserver, flushed with ``takeRecords`` in every
-#: listener, and a fresh snapshot compared with the armed one), or the input
+#: listener, and a fresh snapshot compared with the armed one: attributes,
+#: text, and the computed ``::before``/``::after`` and own ``content``,
+#: ``display`` and ``visibility`` of the element, its label nodes and their
+#: first descendants, so a CSSOM relabel counts), or the input
 #: is not on the element. A page that erases window listeners
 #: (``document.open``) fails the guard's heartbeat. Formatted with the key.
 _CLICK_GUARD_JS = r"""
@@ -2198,6 +2201,33 @@ _CLICK_GUARD_JS = r"""
   const dispatch = EventTarget.prototype.dispatchEvent;
   const Ev = window.Event;
   const stringify = JSON.stringify;
+  const computed = window.getComputedStyle;
+  const propOf = CSSStyleDeclaration.prototype.getPropertyValue;
+  const elQsa = Element.prototype.querySelectorAll;
+  const isEl = n => n instanceof Element;
+  // How a node renders its label: generated ::before/::after text, its own
+  // computed content, and whether it is shown at all. Read for the node and
+  // its first descendants, so a CSSOM rule (insertRule, adoptedStyleSheets)
+  // that relabels or hides the text is a change too.
+  const LOOK = ['content', 'display', 'visibility', 'content-visibility'];
+  const MAX_LOOK = 64;
+  const look = (node, parts) => {
+    if (!isEl(node)) return;
+    const all = [node, ...R(elQsa, node, ['*'])];
+    parts.push(all.length);
+    for (const n of all.slice(0, MAX_LOOK)) {
+      try {
+        const own = R(computed, window, [n]);
+        for (const p of LOOK) parts.push(R(propOf, own, [p]));
+        for (const pseudo of ['::before', '::after']) {
+          const ps = R(computed, window, [n, pseudo]);
+          for (const p of LOOK) parts.push(R(propOf, ps, [p]));
+        }
+      } catch (err) {
+        parts.push('unreadable');
+      }
+    }
+  };
   const ATTRS = ['role', 'aria-label', 'aria-labelledby', 'aria-describedby',
     'title', 'alt', 'value', 'hidden', 'aria-hidden', 'class', 'style', 'id',
     'type', 'disabled'];
@@ -2226,11 +2256,18 @@ _CLICK_GUARD_JS = r"""
     for (const a of ATTRS) parts.push(attr(el, a));
     parts.push(text(el));
     if ('value' in el) parts.push(String(el.value));
+    look(el, parts);
     for (const [id, n] of refs(el)) {
       parts.push(id, n ? text(n) : null);
       if (n) for (const a of ATTRS) parts.push(attr(n, a));
+      if (n) look(n, parts);
     }
-    if (el.labels) for (const l of el.labels) parts.push(text(l), attr(l, 'class'), attr(l, 'style'));
+    if (el.labels) {
+      for (const l of el.labels) {
+        parts.push(text(l), attr(l, 'class'), attr(l, 'style'));
+        look(l, parts);
+      }
+    }
     return stringify(parts);
   };
   const styled = records => records.some(r => {

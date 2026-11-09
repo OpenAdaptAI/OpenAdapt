@@ -21,6 +21,9 @@ mislabeled     class says "Close", its selector is "Sign out"   halt, no click
 relabel        external label turns "Close" into "Sign out"     halt, no GET
                on pointerover
 external       a stable external label "Close"                  saved
+cssom-rule     insertRule turns the ::before "Close" into       halt, no GET
+               "Sign out" on pointerover
+cssom-adopted  an adopted stylesheet does the same              halt, no GET
 =============  ===============================================  ============
 """
 
@@ -107,6 +110,30 @@ if (kind === 'session') {
   } else {
     b.onclick = () => d.remove();
   }
+} else if (kind === 'cssom-rule' || kind === 'cssom-adopted') {
+  // The name is generated CSS content; a CSSOM change relabels it without
+  // any DOM mutation.
+  const st = document.createElement('style');
+  st.textContent = '.l::before { content: "Close"; }';
+  document.head.appendChild(st);
+  const d = document.createElement('div');
+  d.setAttribute('role', 'dialog');
+  d.style = 'position:fixed;inset:0;background:#fff;padding:40px;font-size:28px';
+  d.innerHTML = '<p>Update available now</p><span id="lbl" class="l"></span> '
+    + '<button id="x" aria-labelledby="lbl" style="font-size:22px">x</button>';
+  document.body.appendChild(d);
+  const b = d.querySelector('#x');
+  const rule = '.l::before { content: "Sign out" !important; }';
+  b.addEventListener('pointerover', () => {
+    if (kind === 'cssom-rule') {
+      st.sheet.insertRule(rule, st.sheet.cssRules.length);
+    } else {
+      const sheet = new CSSStyleSheet();
+      sheet.replaceSync(rule);
+      document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+    }
+  });
+  b.onclick = () => { fetch('/logout-everywhere'); d.remove(); };
 } else if (kind === 'banner') {
   const b = document.createElement('div');
   b.style = 'position:fixed;top:0;left:0;right:0;height:120px;background:#ffd;'
@@ -365,3 +392,33 @@ def test_learning_refuses_a_label_that_changes_as_the_pointer_arrives(
 def test_learning_keeps_a_stable_external_label(server: str) -> None:
     learned = _learn(server, "external")
     assert learned.watchers == ("network",)
+
+
+CSSOM = ["cssom-rule", "cssom-adopted"]
+
+
+@pytest.mark.parametrize("kind", CSSOM)
+def test_a_cssom_relabel_as_the_pointer_arrives_halts_with_no_request(
+    server: str, kind: str, tmp_path: Any
+) -> None:
+    report = _run(server, kind, tmp_path, classes=[LABELLED])
+    assert report.success is False
+    result = report.results[0]
+    assert result.safety_halt is True, result.error
+    assert result.delivery_uncertainty is not None
+    assert result.delivery_uncertainty.cause_type == "LabelChangedDuringClick"
+    assert result.interstitial_actions[0].label_violations
+    assert not any("/logout-everywhere" in seen for seen in _Server.seen)
+    assert not any(seen.startswith("POST") for seen in _Server.seen)
+
+
+@pytest.mark.parametrize("kind", CSSOM)
+def test_learning_refuses_a_cssom_relabel_as_the_pointer_arrives(
+    server: str, kind: str
+) -> None:
+    from openadapt_flow.interruptions import LearnRefused
+
+    with pytest.raises(LearnRefused, match="label changed during the click"):
+        _learn(server, kind)
+    assert not any("/logout-everywhere" in seen for seen in _Server.seen)
+    assert not any(seen.startswith("POST") for seen in _Server.seen)
