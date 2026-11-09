@@ -402,7 +402,7 @@ def run_lifecycle(
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--launcher-wheel", required=True)
     parser.add_argument(
         "--flow-wheel",

@@ -229,7 +229,9 @@ def _project_version(root: Path) -> str:
 def main(
     argv: list[str] | None = None, fetch: Callable[[str], bytes] = _download
 ) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("--root", type=Path, default=Path("."))
     parser.add_argument("--manifest", type=Path, default=None)
     args = parser.parse_args(argv)

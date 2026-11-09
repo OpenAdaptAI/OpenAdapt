@@ -59,6 +59,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "benchmark"))
 
+from openadapt_flow.backends.playwright_backend import PlaywrightBackend  # noqa: E402
+from openadapt_flow.ir import StructuralLocator  # noqa: E402
 from openimis_claims.fixture import (  # noqa: E402
     ACTOR_PASSWORD,
     ACTOR_USER,
@@ -71,9 +73,6 @@ from openimis_claims.fixture import (  # noqa: E402
     FixtureError,
     OpenIMISFixture,
 )
-
-from openadapt_flow.backends.playwright_backend import PlaywrightBackend  # noqa: E402
-from openadapt_flow.ir import StructuralLocator  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 DEPLOYMENT_YAML = (
@@ -211,6 +210,7 @@ class OpenIMISEligibilityBackend(PlaywrightBackend):
                 return None
             context["insurance_no"] = dialogs[0][0]
         return json.dumps(context, separators=(",", ":"))
+
 
 def eligibility_effects() -> list[Any]:
     """The eligibility outcome bound to the run's ``insurance_no``.
@@ -532,7 +532,7 @@ def cmd_replay(args: argparse.Namespace) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument(
         "--port",
         type=int,
@@ -547,7 +547,9 @@ def main() -> int:
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p = sub.add_parser("up", help="start the pinned stack and wait until ready")
+    p = sub.add_parser(
+        "up", help="start the pinned stack and wait until ready", allow_abbrev=False
+    )
     p.set_defaults(func=cmd_up)
 
     p = sub.add_parser(
@@ -556,10 +558,13 @@ def main() -> int:
             "create the synthetic policyholders (eligible + expired + future) "
             "and the read-only SQL-oracle role (idempotent)"
         ),
+        allow_abbrev=False,
     )
     p.set_defaults(func=cmd_bootstrap)
 
-    p = sub.add_parser("record", help="record the scripted eligibility check")
+    p = sub.add_parser(
+        "record", help="record the scripted eligibility check", allow_abbrev=False
+    )
     p.add_argument("--out", required=True, help="recording output directory")
     p.add_argument(
         "--insuree",
@@ -578,6 +583,7 @@ def main() -> int:
     p = sub.add_parser(
         "compile",
         help="compile a recording into a bundle with the coverage contracts",
+        allow_abbrev=False,
     )
     p.add_argument("--recording", required=True)
     p.add_argument("--bundle", required=True)
@@ -590,6 +596,7 @@ def main() -> int:
             "effect verifier certifies (or refuses) the coverage answer. "
             f"--insuree {LAPSED_CHF} --expect-halt demonstrates the halt"
         ),
+        allow_abbrev=False,
     )
     p.add_argument("--bundle", required=True)
     p.add_argument(
@@ -618,7 +625,7 @@ def main() -> int:
     )
     p.set_defaults(func=cmd_replay)
 
-    p = sub.add_parser("down", help="stop the stack")
+    p = sub.add_parser("down", help="stop the stack", allow_abbrev=False)
     p.add_argument("--volumes", action="store_true", help="also remove data volumes")
     p.set_defaults(func=cmd_down)
 

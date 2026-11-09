@@ -14,13 +14,15 @@ import json
 import os
 import sqlite3
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from openadapt_flow import verifier
+from openadapt_flow import verifier, verify_run
 from openadapt_flow.runtime.effects.frame import FrameSpec
+from openadapt_flow.runtime.effects.late_write import format_time, parse_time
 from openadapt_flow.verifier import (
     Actor,
     Contract,
@@ -68,9 +70,28 @@ def _used_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 @pytest.fixture
 def due_now(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The recheck is due: the tests don't wait out the window."""
+    """Advance one coherent test clock to the issued deadline before reading."""
 
-    monkeypatch.setattr(verifier, "seconds_until", lambda due: 0.0)
+    utc_start = datetime.now(timezone.utc)
+    monotonic_start = time.monotonic()
+    advance = timedelta()
+
+    def now() -> datetime:
+        return (
+            utc_start + timedelta(seconds=time.monotonic() - monotonic_start) + advance
+        )
+
+    def reach_due(due: str) -> float:
+        nonlocal advance
+        remaining = (parse_time(due) - now()).total_seconds()
+        if remaining > 0:
+            advance += timedelta(seconds=remaining)
+        return (parse_time(due) - now()).total_seconds()
+
+    # Baseline, settled-post-state, receipt issuance and recheck read stamps
+    # all use this clock. Ledger event/lease/retry-age wall times stay real.
+    monkeypatch.setattr(verify_run, "_now", lambda: format_time(now()))
+    monkeypatch.setattr(verifier, "seconds_until", reach_due)
 
 
 def _db(tmp_path: Path) -> Path:
@@ -506,14 +527,15 @@ def test_a_database_still_moving_is_uncertain(
     real = verify_run._read_database
     calls = {"n": 0}
 
-    def moving(cfg: Any, salt: bytes, before: Any = None) -> Any:
+    def moving(cfg: Any, salt: bytes, before: Any = None, errors: Any = None) -> Any:
         calls["n"] += 1
         if calls["n"] == 2:  # between the two reads, a job writes
             _sql(db, "INSERT INTO calendar (pid, title) VALUES (1, 'x')")
-        return real(cfg, salt, before=before)
+        return real(cfg, salt, before=before, errors=errors)
 
     monkeypatch.setattr(verify_run, "_read_database", moving)
     assert _recheck(contract, first).outcome == "UNCERTAIN"
+    assert calls["n"] == 2
 
 
 def test_a_saved_state_round_trips(tmp_path: Path, due_now: None) -> None:
@@ -701,11 +723,11 @@ def _moving(
     real = verify_run._read_database
     calls = {"n": 0}
 
-    def read(cfg: Any, salt: bytes, before: Any = None) -> Any:
+    def read(cfg: Any, salt: bytes, before: Any = None, errors: Any = None) -> Any:
         calls["n"] += 1
         if writes.get(calls["n"]) or writes.get(0):
             _sql(db, *(writes.get(calls["n"]) or writes[0]))
-        return real(cfg, salt, before=before)
+        return real(cfg, salt, before=before, errors=errors)
 
     monkeypatch.setattr(verify_run, "_read_database", read)
     return calls

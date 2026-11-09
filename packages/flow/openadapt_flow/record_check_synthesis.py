@@ -43,12 +43,13 @@ No model calls, nothing sent anywhere. The only network read is the optional
 from __future__ import annotations
 
 import json
+import math
 import re
 import sqlite3
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Optional
+from typing import TYPE_CHECKING, Any, Iterable, Mapping, Optional
 from urllib.parse import parse_qsl, quote, urlsplit
 
 from openadapt_flow import sealed_set as _sealed
@@ -63,6 +64,9 @@ from openadapt_flow.runtime.effects.effect import (
 )
 from openadapt_flow.runtime.effects.sql import read_cell
 from openadapt_flow.runtime.effects.surfaces import surface_probe
+
+if TYPE_CHECKING:
+    from openadapt_flow.rest_setup import RestReadContext, RestReadSetup
 
 #: The network capture ``record --capture-network`` writes. Read here without
 #: importing the recorder side, so the format has one owner
@@ -232,6 +236,11 @@ class ReadSearch:
     closed_world_basis: Optional[str] = None
     #: Surface names in use, across every source.
     taken: set[str] = field(default_factory=set)
+    #: Detached learning observations; never a reader authorization or admission.
+    rest_setup_observations: list[dict[str, Any]] = field(default_factory=list)
+    rest_read_contexts: dict[str, RestReadContext] = field(
+        default_factory=dict, repr=False
+    )
 
 
 # -- network capture ---------------------------------------------------------
@@ -249,19 +258,101 @@ def _json_body(line: Mapping[str, Any]) -> Any:
         return None
 
 
-def _flat(node: Any, prefix: str = "") -> dict[str, Any]:
-    """Dotted scalar paths of a JSON node; a list contributes its first item."""
+def _flat(
+    node: Any, prefix: str = "", *, excluded_values: Iterable[str] = ()
+) -> dict[str, Any]:
+    """Scalar paths, selecting repeated objects by unique exact discriminators.
+
+    Single-item lists retain their existing unfiltered paths. A repeated list
+    without a representable discriminator contributes no bindings. Recorded
+    inputs and the selected leaf itself cannot be used to select that leaf.
+    Filters keep the reader's existing scalar-string comparison policy.
+    """
+
+    from openadapt_flow.runtime.effects.fhir import extract_path, filter_matches
+
+    excluded = {str(value) for value in excluded_values}
+
+    def scalar(value: Any) -> bool:
+        return isinstance(value, (str, bool, int, float)) and not (
+            isinstance(value, float) and not math.isfinite(value)
+        )
+
+    def named(key: Any) -> bool:
+        return isinstance(key, str) and bool(key) and not any(c in key for c in ".[]")
+
+    def selectors(item: dict[str, Any], path: str = "") -> Iterable[tuple[str, str]]:
+        for key in sorted(key for key in item if named(key)):
+            value = item[key]
+            if "=" in key or key.endswith("^"):
+                continue
+            dotted = f"{path}.{key}" if path else key
+            if isinstance(value, dict):
+                yield from selectors(value, dotted)
+            elif (
+                isinstance(value, list)
+                and len(value) == 1
+                and isinstance(value[0], dict)
+            ):
+                yield from selectors(value[0], dotted)
+            elif scalar(value):
+                text = str(value)
+                if (
+                    text
+                    and text not in excluded
+                    and not ("/" in text and text.rsplit("/", 1)[1] in excluded)
+                    and not _SESSION_VALUE.search(text)
+                    and not any(c in text for c in "[]\r\n")
+                ):
+                    yield dotted, text
+
+    def walk(current: Any, path: str) -> Iterable[tuple[str, Any]]:
+        if isinstance(current, dict):
+            for key, value in current.items():
+                if not named(key):
+                    continue
+                dotted = f"{path}.{key}" if path else key
+                if isinstance(value, (dict, list)):
+                    yield from walk(value, dotted)
+                elif scalar(value):
+                    yield dotted, value
+        elif isinstance(current, list) and current:
+            if len(current) == 1:
+                yield from walk(current[0], path)
+            elif path and all(isinstance(item, dict) for item in current):
+                for item in current:
+                    candidates = [
+                        (key, text)
+                        for key, text in selectors(item)
+                        if sum(
+                            filter_matches(other, (key, text, False))
+                            for other in current
+                        )
+                        == 1
+                    ]
+                    for tail, value in walk(item, ""):
+                        choice = next(
+                            (
+                                (key, text)
+                                for key, text in candidates
+                                if text != str(value)
+                            ),
+                            None,
+                        )
+                        if choice is not None:
+                            key, text = choice
+                            yield f"{path}[{key}={text}].{tail}", value
 
     out: dict[str, Any] = {}
-    if isinstance(node, dict):
-        for key, value in node.items():
-            path = f"{prefix}.{key}" if prefix else str(key)
-            if isinstance(value, (dict, list)):
-                out.update(_flat(value, path))
-            elif value is not None:
-                out[path] = value
-    elif isinstance(node, list) and node:
-        out.update(_flat(node[0], prefix))
+    for path, value in walk(node, "_root"):
+        observed = extract_path({"_root": node}, path)
+        if type(observed) is not type(value) or observed != value:
+            continue
+        tail = path[len("_root") :]
+        if tail.startswith("."):
+            out[f"{prefix}{tail}" if prefix else tail[1:]] = value
+        elif prefix:
+            out[f"{prefix}{tail}"] = value
     return out
 
 
@@ -313,19 +404,33 @@ def _bind_fields(
     flat: Mapping[str, Any], lookup: Mapping[str, str]
 ) -> tuple[dict[str, str], dict[str, str]]:
     """``(exact, reference)``: fields equal to a recorded value, and FHIR
-    references (``Patient/<value>``) that end in one."""
+    references (``Patient/<value>``) that end in one. Scalars retain their
+    string representation, including whitespace; this is not typed equality.
+    """
 
     exact: dict[str, str] = {}
     reference: dict[str, str] = {}
     for path, value in flat.items():
         if isinstance(value, bool):
             continue
-        text = str(value).strip()
+        text = str(value)
         if text in lookup:
             exact[path] = lookup[text]
         elif "/" in text and text.rsplit("/", 1)[1] in lookup:
             reference[path] = lookup[text.rsplit("/", 1)[1]]
-    return exact, reference
+    # Competing repeated leaves do not establish which field the input names.
+    paths: dict[str, list[str]] = {}
+    for path, param in {**exact, **reference}.items():
+        paths.setdefault(param, []).append(path)
+    ambiguous = {
+        param
+        for param, matches in paths.items()
+        if len(matches) > 1 and any("[" in path for path in matches)
+    }
+    return (
+        {path: param for path, param in exact.items() if param not in ambiguous},
+        {path: param for path, param in reference.items() if param not in ambiguous},
+    )
 
 
 def _unique_name(raw: str, taken: set[str]) -> str:
@@ -406,7 +511,9 @@ def _templated(url: str, lookup: Mapping[str, str]) -> _Templated:
     )
 
 
-def _write_values(line: Mapping[str, Any]) -> dict[str, str]:
+def _write_values(
+    line: Mapping[str, Any], *, excluded_values: Iterable[str] = ()
+) -> dict[str, str]:
     """Field -> value the write sent (form or JSON body)."""
 
     values: dict[str, str] = {}
@@ -420,7 +527,7 @@ def _write_values(line: Mapping[str, Any]) -> dict[str, str]:
         except ValueError:
             parsed = None
         if isinstance(parsed, dict):
-            for key, value in _flat(parsed).items():
+            for key, value in _flat(parsed, excluded_values=excluded_values).items():
                 values[key] = str(value)
     for key, value in parse_qsl(urlsplit(str(line.get("url") or "")).query):
         values.setdefault(key, value)
@@ -512,6 +619,7 @@ def _surface_from_listing(
     *,
     before_line: Optional[Mapping[str, Any]],
     taken: set[str],
+    excluded_values: Iterable[str] = (),
 ) -> tuple[Optional[Surface], Optional[str]]:
     """A surface for one listing that holds the saved record, or why not."""
 
@@ -520,9 +628,12 @@ def _surface_from_listing(
     if _SESSION_VALUE.search(url):
         return None, f"GET {tpl.safe}: the URL carries a session token"
 
+    excluded = set(lookup) | set(excluded_values)
     best: Optional[tuple[dict[str, Any], dict[str, str], dict[str, str]]] = None
     for resource in listing.resources:
-        exact, reference = _bind_fields(_flat(resource), lookup)
+        exact, reference = _bind_fields(
+            _flat(resource, excluded_values=excluded), lookup
+        )
         if not exact:
             continue
         if best is None or len(exact) > len(best[1]):
@@ -728,7 +839,12 @@ def reads_from_network(
                     before_line = earlier
         for listing in _listings(_json_body(line)):
             surface, why = _surface_from_listing(
-                line, listing, lookup, before_line=before_line, taken=names
+                line,
+                listing,
+                lookup,
+                before_line=before_line,
+                taken=names,
+                excluded_values=params.values(),
             )
             if why:
                 rejected.append(why)
@@ -760,7 +876,7 @@ def reads_from_network(
         )
     read_back = {str((chosen.target or {}).get(fld)) for fld in chosen.bound}
     for line in writes:
-        sent = set(_write_values(line).values())
+        sent = set(_write_values(line, excluded_values=params.values()).values())
         if not sent & read_back:
             tpl = _templated(str(line.get("url") or ""), lookup)
             search.uncovered.append(
@@ -989,7 +1105,10 @@ def _apply_sent_constants(search: ReadSearch, params: Mapping[str, str]) -> None
     records of the same subject."""
 
     lookup, _ = param_lookup(params)
-    sent = [_write_values(line) for line in search.write_requests]
+    sent = [
+        _write_values(line, excluded_values=params.values())
+        for line in search.write_requests
+    ]
     for surface in search.surfaces:
         if not surface.is_target:
             continue
@@ -1123,7 +1242,11 @@ def _signature(records: list[dict[str, Any]]) -> Counter:
 
 
 def check_reads(
-    surfaces: list[Surface], section: Mapping[str, Any], params: Mapping[str, str]
+    surfaces: list[Surface],
+    section: Mapping[str, Any],
+    params: Mapping[str, str],
+    *,
+    read_contexts: Mapping[str, RestReadContext] | None = None,
 ) -> list[str]:
     """Build every generated read; run each database read and compare it with
     what the scan saw. Returns the problems (no record values)."""
@@ -1142,13 +1265,42 @@ def check_reads(
             if name not in configs:
                 continue
             try:
+                cfg = EffectsConfig.model_validate(configs[name])
                 verifier = build_effect_verifier(
-                    EffectsConfig.model_validate(configs[name]), params
+                    cfg, params, read_context=(read_contexts or {}).get(name)
                 )
             except Exception as exc:  # noqa: BLE001 - any build failure is a problem
                 problems.append(f"{name}: the generated read does not build ({exc})")
                 continue
-            if configs[name].get("kind") != "sql" or verifier is None:
+            if (cfg.kind or "none").strip().lower() == "rest":
+                has_paging_or_complete_contract = (
+                    bool(cfg.records_next_path and cfg.records_next_path.strip())
+                    or bool(cfg.records_total_path and cfg.records_total_path.strip())
+                    or cfg.records_complete is True
+                )
+                if not has_paging_or_complete_contract:
+                    problems.append(
+                        f"{name}: REST read completeness is not declared; configure "
+                        "records_next_path, records_total_path, or validated "
+                        "records_complete semantics"
+                    )
+                if (
+                    cfg.records_next_path
+                    and not cfg.records_snapshot_path
+                    and cfg.records_consistency is None
+                ):
+                    problems.append(
+                        f"{name}: a paged REST read needs reviewed immutable "
+                        "snapshot semantics in records_snapshot_path"
+                    )
+                if cfg.records_read_context is None:
+                    continue
+            if (
+                configs[name].get("kind") not in ("sql", "rest", "fhir")
+                or verifier is None
+            ):
+                continue
+            if cfg.kind == "fhir" and cfg.records_read_context is None:
                 continue
             state = verifier.capture_pre_state()
             expected = surface.after
@@ -1508,6 +1660,11 @@ class Proposal:
             "status": "working" if self.working else "draft",
             "approved": False,
             "reads": reads,
+            **(
+                {"rest_setup_observations": self.search.rest_setup_observations}
+                if self.search.rest_setup_observations
+                else {}
+            ),
             "not_read_back": sorted(
                 set(self.params) - {p for s in targets for p in s.bound.values()}
             ),
@@ -1540,6 +1697,8 @@ def synthesize(
     verifier: Optional[Mapping[str, Any]] = None,
     complete_read: bool = False,
     fault_gate: bool = False,
+    rest_setups: Optional[list[RestReadSetup]] = None,
+    rest_read_contexts: Optional[Mapping[str, RestReadContext]] = None,
 ) -> Proposal:
     """Find the read, build the check, and run the recorded-state fault test.
 
@@ -1575,6 +1734,12 @@ def synthesize(
         reads_from_sqlite(Path(db_path), params, search)
     if not any(s.is_target for s in search.surfaces):
         return Proposal(params, search, [], {}, [])
+    if rest_setups is not None:
+        from openadapt_flow.rest_setup import apply_rest_setups
+
+        apply_rest_setups(
+            search, rest_setups, contexts=rest_read_contexts, params=params
+        )
     _apply_sent_constants(search, params)
     if complete_read and not search.closed_world:
         search.closed_world = True
@@ -1591,7 +1756,11 @@ def synthesize(
             )
     effects = effects_for(search.surfaces)
     section = verifier_section(search.surfaces)
-    search.problems.extend(check_reads(search.surfaces, section, params))
+    search.problems.extend(
+        check_reads(
+            search.surfaces, section, params, read_contexts=search.rest_read_contexts
+        )
+    )
     faults = prove_against_faults(
         search.surfaces,
         effects_for(search.surfaces, confirmed=True),
