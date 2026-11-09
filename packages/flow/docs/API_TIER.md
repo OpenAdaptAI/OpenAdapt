@@ -6,8 +6,10 @@ keystrokes that filled it. The POST is `application/x-www-form-urlencoded`
 or `multipart/form-data` with no file attached, and either the browser
 submits the form or the page's script sends the form's fields to another
 endpoint (see [Saves the page's script sends](#saves-the-pages-script-sends)).
-It is not a general API client: JSON and GraphQL bodies, uploads and
-multi-page server state stay on the GUI. Other writes during the replaced steps are a
+A save the page's script sends as JSON, a GraphQL mutation included, is
+covered too (see [JSON and GraphQL saves](#json-and-graphql-saves)). It is
+not a general API client: uploads and multi-page server state stay on the
+GUI. Other writes during the replaced steps are a
 declared sequence (below): the page's own background requests are listed
 and left to the page, and a write a step caused is sent in its recorded
 place before the save and read back. A form whose script
@@ -159,6 +161,73 @@ blocked request to the endpoint is the save compared, and it gets an empty
 sends exactly the body the API step built. A page that no longer has script
 keeps the save on the GUI. There is no redirect to read, so success is the
 recorded status and then the record check.
+
+## JSON and GraphQL saves
+
+A single-page app saves by sending JSON from its script (`POST
+/api/v1/Contact`, a FHIR resource, a GraphQL mutation). There is no form, so
+the compiler binds each value the person typed on the page to the one JSON
+leaf that carries it, by its JSON pointer. Everything else in the body is
+sent as recorded. The typed values aren't kept in the bundle: their leaves
+hold an empty value of the recorded type, and a leaf recorded as a number
+takes the run's value as a number.
+
+The page is the one the person saved from (the save step's own address:
+a single-page app may already show the new record's address when the
+request is logged). When the app opened its form by changing its route
+rather than loading a document, every recorded step must be on that page,
+and the API step stands in for all of them. A save the app's script sends
+to the app's own API host, on another origin, goes only there, and only
+with the headers the app's script sent that host in the session.
+
+A GraphQL client that batches sends a list; a list holding one mutation is
+that mutation, and its answer is a list of one. GraphQL queries are POSTed
+too, but a request whose every operation is a query is a read. Writes sent
+while the page loaded, before the first recorded step, aren't caused by
+any step.
+
+Nothing is proposed when:
+
+- a typed value was blank, equals another input's, is in the body twice or
+  not at all, or is inside a GraphQL operation's text rather than its
+  variables;
+- a value in the body equals an input no step typed;
+- the body carries a session or secret value, or a value the page makes on
+  each save (a UUID, a date and time), which can't be sent again;
+- the body isn't a JSON object (a batch), was cut at capture, or the recorded
+  save wasn't accepted (2xx);
+- the steps on the page also sent another write, including one captured
+  after the selected save, or a step checks text that
+  a request's response carries (a JSON save is repeated alone, with no
+  pre-checks); a step's other on-screen checks are listed as screen-only;
+- the recording doesn't say which headers the save carried (a capture from
+  before `request_headers` existed).
+
+Many apps sign their API calls with a header their script adds
+(`Authorization: Bearer ...`, a CSRF header), which the session's cookies
+don't carry. The capture keeps the names of those headers, never their
+values. While a run's browser is open, the runtime keeps, in memory only, the
+last value of each such header the app's own script sent to its origin
+(`runtime/actuators/session_headers.py`). The API step sends those values. A
+header the app hasn't sent in this session keeps the save on the GUI. The
+values are in the approval digest and never shown.
+
+A run value that is blank keeps a JSON save on the GUI: a page often leaves
+a blank field out of the body, so the recorded shape can't be assumed.
+
+A JSON save succeeds on its recorded status. A GraphQL server answers 200
+with errors in the body, so a GraphQL save also needs a response with data
+and no `errors`; anything else halts it and it is not retried. The record
+check reads the record back, as for every API step.
+
+`api_footprint.footprint_verdict` compares paired GUI/API database changes.
+Changed rows retain their complete before/after values, including unchanged
+row IDs. Every field is compared after normalizing each run's marker.
+Variation between GUI saves does not prove server ownership: counters and
+other business values can vary too. Unexplained differences keep the save
+on the GUI, including generated insert IDs or times that the dumps alone
+cannot justify omitting. A matching footprint is optional at admission;
+known additional JSON writes refuse the proposal even without one.
 
 ## Other writes in the span
 
@@ -481,9 +550,9 @@ recording.
 
 - Web only. A desktop app, an RDP session or a Citrix session has no page
   requests to capture (`record --capture-network` refuses those backends).
-- One form save, URL-encoded or multipart with no file. JSON and GraphQL
-  bodies, file uploads, signed or computed fields, and saves over a
-  websocket aren't proposed. Step writes in the span must be URL-encoded.
+- One save: a form posted URL-encoded or as multipart with no file, or a
+  JSON body. File uploads, signed or computed fields, saves over a
+  websocket, and JSON values the page makes on each save aren't proposed. Step writes in the span must be URL-encoded.
 - A field the server fills in on every page load (a page-load time, a
   per-record code, a date defaulting to today) is a form default that
   differs on the next load, so the API step doesn't run and the GUI steps

@@ -33,8 +33,10 @@ from openadapt_flow.compile_agent.agents import (
     ModelCall,
     ToolInvocation,
     _exact_ledger_cost,
+    _task_text,
 )
 from openadapt_flow.integrations.agents.skills import BrowserTools
+from openadapt_flow.privacy import PLACEHOLDER_HELP
 
 __all__ = ["agent_usage", "build_agent", "provider_status"]
 
@@ -43,6 +45,16 @@ _PRICE_FIELDS = ("input", "output", "cache_write", "cache_read")
 OPENAI_PRICING_URL = "https://developers.openai.com/api/docs/pricing"
 PRICING_REVIEWED_AT = "2026-11-07"
 MAX_AGENT_RUN_SECONDS = 120.0
+#: Claude's default ceiling on one rendered request. The Claude adapter sends a
+#: screenshot every turn and keeps the conversation, so a 64 KiB ceiling ends
+#: the run on turn 2; 4 MiB holds a few dozen redacted screenshots.
+CLAUDE_MAX_INPUT_BYTES = 4 * 1024 * 1024
+#: The OpenAI adapter's default. Its run cap treats each byte as a token, so a
+#: larger default would exceed every reasonable spend cap.
+OPENAI_MAX_INPUT_BYTES = 65536
+#: The hard ceiling on any request: the provider's own request size limit.
+#: A larger setting is refused, and a request above the setting is never sent.
+MAX_INPUT_BYTES_CEILING = 32 * 1024 * 1024
 
 
 def provider_status(
@@ -136,7 +148,7 @@ def build_agent(
     price_model: Optional[str] = None,
     pricing_source_url: Optional[str] = None,
     pricing_verified_at: Optional[str] = None,
-    max_input_bytes: int = 65536,
+    max_input_bytes: Optional[int] = None,
     max_output_tokens: int = 1024,
     max_run_seconds: float = 110.0,
     request_timeout_seconds: float = 25.0,
@@ -153,9 +165,16 @@ def build_agent(
     ``client`` injects Claude's existing client object; for OpenAI it is an
     optional client factory called with the request's customer key and
     ``max_retries=0``. It cannot bypass the request's model-key provenance.
+    ``max_input_bytes`` bounds each rendered request; the default is
+    :data:`CLAUDE_MAX_INPUT_BYTES` for Claude and :data:`OPENAI_MAX_INPUT_BYTES`
+    for OpenAI, and no setting may exceed :data:`MAX_INPUT_BYTES_CEILING`.
     """
 
     _require_cap(max_cost_usd)
+    if max_input_bytes is None:
+        max_input_bytes = (
+            CLAUDE_MAX_INPUT_BYTES if provider == "claude" else OPENAI_MAX_INPUT_BYTES
+        )
     if isinstance(max_turns, bool) or not isinstance(max_turns, int) or max_turns < 1:
         raise ValueError("max_turns must be a positive integer")
     _validate_deadlines(max_run_seconds, request_timeout_seconds)
@@ -165,6 +184,10 @@ def build_agent(
     ):
         if isinstance(value, bool) or not isinstance(value, int) or value < 1:
             raise ValueError(f"{name} must be a positive integer")
+    if max_input_bytes > MAX_INPUT_BYTES_CEILING:
+        raise ValueError(
+            f"max_input_bytes must be at most {MAX_INPUT_BYTES_CEILING} bytes"
+        )
     if provider == "claude":
         selected_model = model or "claude-opus-5-5"
         built_in_reviewed = prices is None and selected_model in PRICES_PER_MTOK
@@ -478,7 +501,8 @@ class OpenAIBrowserAgent:
                 "Complete the user's task using only the supplied browser tools. "
                 "Use observe to inspect the page, act through the named controls, "
                 "and call finish with a concise outcome when done or blocked. "
-                "Do not claim a write succeeded unless the tool's readback shows it."
+                "Do not claim a write succeeded unless the tool's readback shows it. "
+                + PLACEHOLDER_HELP
             ),
             "tools": tools,
             "model_settings": ModelSettings(
@@ -510,7 +534,7 @@ class OpenAIBrowserAgent:
                 return await asyncio.wait_for(
                     Runner.run(
                         agent,
-                        f"Task: {request.instruction}",
+                        f"Task: {_task_text(harness, request)}",
                         max_turns=self.max_turns,
                         hooks=UsageHooks(),
                         run_config=RunConfig(tracing_disabled=True),

@@ -430,6 +430,55 @@ store really holds everything the save can change (MockMed's `/api/db`), a
 person can say so with `--complete-read`. The proof records that as
 `closed_world: declared`, not as proven.
 
+A REST read returns INDETERMINATE until its completeness is established
+(`records_complete`, `records_next_path` or `records_total_path`). The
+generated read gets `records_complete: true` in two cases, and the proof
+records which one under each read's `records_complete`:
+
+- `declared`: `--complete-read` was given and nothing in the request or
+  response says it is paged;
+- `observed`: one response held the whole collection as the recording saw
+  it. The URL has no paging parameter, the body has no paging field and no
+  stated total that differs from what it holds, the body was not cut, it
+  holds the saved record and every record the same read returned before the
+  save, and its length is not a common page size.
+
+Otherwise the read is left without it, so the check stays a draft and
+`verify-run` fails closed.
+
+### Which step is the save
+
+A step is a write when its before/after snapshots differ, when the network
+capture shows the page sending a POST, PUT, PATCH or DELETE to its own origin
+for that step, when its label is write-shaped (Save, Submit, ...), or when it
+is an Enter key. So a button labelled with an unfamiliar verb still counts
+when the traffic shows it wrote.
+
+### When the app never reads the record back
+
+Many apps show the saved record from page memory and make no read after the
+save. `--probe-reads` then derives reads from the captured write: for a POST,
+PUT or PATCH to `/api/<collection>` or `/api/<collection>/<id>`, the
+collection (`GET /api/<collection>`, plus its plural or singular spelling)
+and the item (`GET .../<id>`, the id from the URL or the write's response).
+Each is probed once with GET, after the save, on the local machine only: the
+recorded origin when it is local, or `--probe-base <local URL>`. No cookies or
+credentials are sent and redirects are not followed.
+
+A collection read is used only when it returns a record holding every
+parameter value the write sent. A probe finds the collection the save wrote,
+not the store, so a probed read that would pass a write outside it (the
+fault test's `collateral_unaudited`, or a captured write no read covers) is
+refused: no runnable check is written, the TODO draft is, and
+`read_discovery.json` and `record_check.proof.json` say `refused` with the
+reason and `needs_operator_confirmation: true`. `--complete-read` (the read
+is the whole store) or `--db` lifts it. An item read that does is recorded but not
+used, because it can't count new records. When no probe confirms, nothing is
+proposed: `read_discovery.json` lists every probe, marks the read
+`unavailable` and `needs_operator_confirmation: true`, and the TODO draft is
+written. Every probe is also recorded in `record_check.proof.json` under
+`read_discovery`.
+
 ### What a person still does
 
 Every effect carries `needs_operator_confirmation: true`. `verify-run`
