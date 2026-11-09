@@ -255,7 +255,7 @@
     {
       "wave": 2,
       "protocol": "onboarding-effort/v2",
-      "frozen_at": "2026-11-09T00:44:29-0500",
+      "frozen_at": "2026-11-09T05:29:24-0500",
       "workflows": [
         "tr-ticket-new",
         "tr-ticket-resolve",
@@ -264,26 +264,26 @@
         "nb-ip-paginated",
         "nb-vlan-conditional"
       ],
-      "note": "protocol v2: implementer v2, paced recorder, repo-relative Trac read path, VLAN collateral oracle; supersedes wave 1",
+      "note": "protocol v2 (amended before any run): implementer v2, paced recorder, repo-relative Trac read path, one complete-state collateral check across every oracle; supersedes wave 1",
       "files": {
-        "PROTOCOL.md": "35f3476cdb05a791fd71f791ff08c94e25666b609da463622289ca5506bce42a",
+        "PROTOCOL.md": "d4879e9fb37b4154765b050d4f6f7054716e404f8332faf735c5489b25b2d820",
         "apps/netbox_app.py": "8a99401eee9db1100714020e21f5e4d40b46cb8cee974b32fabba43884735201",
         "apps/trac_app.py": "0a6158e9faed50ebfb4ff06612bfd3662191c70f161242ce8bb878da672033e6",
-        "heldout.py": "4b9e7965d0e49dab0f6a75143f30599c7bea04e00548fd37dcb723fbc6fe4303",
+        "heldout.py": "0a1555719b0e7db44c1df35219366e5009f5a5eb8711a243cf54864eb1679cb2",
         "hooks.py": "962ea2722616c2f9e106840984ffb4fdaf00fd949c1b293bf82ecbd9d5d00b65",
         "implementer.py": "2aa6c38dd01cd7953fc5bd3988fa421b6e8dcb8a150d575900f0710423f5c5c9",
         "ledger.py": "b749707ad9ab086b36c286968d92ec045cc0cac73aafed599d5656736448e1ae",
-        "pool/base.py": "01afdc92122008695a1fb152c98f2710495c1cb6a384dd21db624ac99cf3f7d5",
-        "pool/netbox.py": "6b7c95cb57d40eeda47f835946f5df1169908ba35056e0f19fb4fd5cd2e01c03",
-        "pool/specs/nb-device-add.json": "bdc4c7a67803e992436a49894c6bc7a6c27c0b5120fb99bdb592633cf6905a55",
-        "pool/specs/nb-ip-paginated.json": "49a3f5df3643878b5309b9f3fb70020a3c0539d7d6612766968afd19e35efc1e",
-        "pool/specs/nb-vlan-conditional.json": "5a5b0c6773e23a02599dc24411d10f60f738e701291d08e782e43d6d926ca80f",
-        "pool/specs/tr-ticket-new.json": "6f0e6f6b8c0987fd8c49b902e03eb34c7b680a4a82e37cd46a900de1b227f5c4",
-        "pool/specs/tr-ticket-resolve.json": "121b12db5726c66313371bbb0d653da20163456f707d3f2b37e55dca2c919ab9",
-        "pool/specs/tr-triage-loop.json": "be042d5b6e7f11b0edac43e114ca46d6a8ca247017049bcdff7682f5112d1bbd",
-        "pool/trac.py": "1c96e9e1a2ff9e4dedf18f79207a9f304c538d245c9136ffbd26726b07fc59f9",
+        "pool/base.py": "694ca549004145e47bac79530f5c7b6ac758c364e51c7cc4cd0f4ec401635602",
+        "pool/netbox.py": "3e22f3862caa231b6de47eb79bfdcd4707ae76eeafc999e2536f55690bfe67b3",
+        "pool/specs/nb-device-add.json": "9834700fa832f031bcb7a033f1c23b3c25de0bc0b009e771b3d33d3b5b323e0b",
+        "pool/specs/nb-ip-paginated.json": "62dbd97e12b213a90991decdcb975d21f9efc4d8d2fc8a2c213d2a74c7f60378",
+        "pool/specs/nb-vlan-conditional.json": "c0a84043c746cc982ec28d342d1e48016d2af52e07aa3a04645e9af8a2b8ba27",
+        "pool/specs/tr-ticket-new.json": "28eed0e698d8f2f20a4584be2078c38c0e94a1fc6626ee6ca30a8e609dae1753",
+        "pool/specs/tr-ticket-resolve.json": "902df76c7d0dc2e7970ad4054496918e8247ba1b58c3367fb5ea985d96790800",
+        "pool/specs/tr-triage-loop.json": "8d3d7c7b91cd8f74b5f10753b981cabb78cb2c6faf0da62377581e866f8e8d2d",
+        "pool/trac.py": "2999c73af7ae6bf09b186e9d15f02f8b18c8c5ccdbc45f4a5129a77c24931d7a",
         "registry.py": "711f5305897867e656ecab8798bb7251f9c9557048434045854850795e84b6d1",
-        "validate.py": "59a2cc02d3b0fe507794a627802de8f0acbdd543e2de7e686f120dc289311525"
+        "validate.py": "6593e6e2a17d80078602cfe78fd44bd0e6d6646a0a8bd5ce4cde3775e5ffcc81"
       },
       "validation": [],
       "validation_pending": true

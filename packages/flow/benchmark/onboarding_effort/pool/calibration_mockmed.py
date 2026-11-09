@@ -126,7 +126,14 @@ campaign:
     def snapshot(self) -> Any:
         return _json("/api/db")["records"]
 
-    def judge(self, item: dict[str, str], before: Any, after: Any) -> Verdict:
+    def entities(self, snapshot: Any) -> dict[Any, Any]:
+        return {r["id"]: r for r in snapshot}
+
+    def target_keys(self, item: dict[str, str], before: Any, after: Any) -> set[Any]:
+        old = {r["id"] for r in before}
+        return {r["id"] for r in after if r["id"] not in old and r.get("note") == item["note"]}
+
+    def judge_target(self, item: dict[str, str], before: Any, after: Any) -> Verdict:
         old = {r["id"] for r in before}
         new = [r for r in after if r["id"] not in old]
         mine = [r for r in new if r.get("note") == item["note"]]

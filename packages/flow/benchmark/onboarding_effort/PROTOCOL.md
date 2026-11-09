@@ -19,8 +19,18 @@ after the freeze commit needs a new protocol version and a note in the report.
   - the engineer's Trac read path comes from `OE_TRAC_DB_DIR`, default
     `benchmark/onboarding_effort/.state/trac-db` under `packages/flow`;
     frozen specs carry only the default;
-  - the NetBox VLAN oracle judges any change to another VLAN `WRONG`
-    (collateral), as the Oracle section requires.
+  - every oracle checks collateral the same way (`pool/base.py`,
+    `Workflow.collateral`): it compares the complete before and after entity
+    key sets and values against the exact targets the item selects (the
+    record it names, or the one it creates); any entity outside them that was
+    inserted, changed or deleted makes the item `WRONG`. For a loop run the
+    selected set is every item the run processed, and nothing broader;
+  - the report identifies a run by its workflow, installation and run name
+    together, so runs with the same local name in other contexts stay apart.
+
+  Wave 2 was amended in place before any validation or run under it, to add
+  the shared collateral check; the first wave-2 freeze is in this file's Git
+  history.
 
   The wave must pass `validate.py` on the live applications again before any
   teaching (`validation_pending` in the manifest).

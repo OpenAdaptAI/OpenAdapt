@@ -27,13 +27,15 @@ def load(path: Path) -> list[dict[str, Any]]:
 
 
 def runs(rows: list[dict[str, Any]]) -> dict[tuple[str, str], list[list[dict[str, Any]]]]:
-    by_run: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    # A run is identified by its whole context: the same local run name under
+    # another workflow or installation is another run.
+    by_run: dict[tuple[str, str, str], list[dict[str, Any]]] = defaultdict(list)
     for r in rows:
-        by_run[r.get("run") or f"{r['workflow']}/{r['installation']}"].append(r)
+        by_run[(r["workflow"], r["installation"], r.get("run") or "")].append(r)
     out: dict[tuple[str, str], list[list[dict[str, Any]]]] = defaultdict(list)
-    for rs in by_run.values():
+    for (workflow, installation, _run), rs in by_run.items():
         rs.sort(key=lambda r: r["ts"])
-        out[(rs[0]["workflow"], rs[0]["installation"])].append(rs)
+        out[(workflow, installation)].append(rs)
     for v in out.values():
         v.sort(key=lambda rs: rs[0]["ts"])
     return out

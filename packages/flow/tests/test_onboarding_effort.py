@@ -271,7 +271,7 @@ def test_trac_triage_loop_verdicts() -> None:
     decoy_touched = _trac(
         _ticket(1, milestone="2027-Q1"), _ticket(2, milestone="2027-Q1")
     )
-    assert wf.judge_batch_collateral(before, decoy_touched, {2}) == [1]
+    assert wf.collateral(before, decoy_touched, [item]) == [("ticket", 1)]
 
 
 # -- NetBox oracles -------------------------------------------------------------
@@ -322,7 +322,7 @@ def test_netbox_ip_paginated_verdicts() -> None:
         **done,
         decoy: {**before[decoy], "description": item["description"]},
     }
-    assert wf.judge_batch_collateral(before, decoy_touched, set()) == [decoy]
+    assert wf.collateral(before, decoy_touched, [item]) == [decoy]
 
 
 def test_netbox_vlan_conditional_verdicts() -> None:
@@ -363,10 +363,384 @@ def test_netbox_vlan_conditional_collateral_is_wrong() -> None:
     renamed = {**other, "name": "voice-2"}
     verdict = wf.judge(item, before, {7: renamed, 8: row})
     assert verdict.verdict == "WRONG"
-    assert verdict.detail["changed"] == [7]
+    assert verdict.detail["collateral"] == [7]
     # A deleted VLAN is collateral too, and so is damage with nothing created.
     assert wf.judge(item, before, {8: row}).verdict == "WRONG"
     assert wf.judge(item, before, {7: renamed}).verdict == "WRONG"
+
+
+# -- collateral, the same check in every oracle ---------------------------------
+#
+# Each case is a target-only change the oracle must call VERIFIED, plus one
+# bystander entity. Inserting, changing or deleting anything outside the
+# selected targets must make the item WRONG.
+
+
+def _trac_case(wid: str) -> tuple[dict[str, str], Any, Any, Any]:
+    def comment(tid: int, text: str) -> dict[str, Any]:
+        return {
+            "ticket": tid,
+            "time": 5,
+            "author": "a",
+            "field": "comment",
+            "oldvalue": "",
+            "newvalue": text,
+        }
+
+    bystander = _ticket(1, summary="The router drops the connection [heldout-first-00]")
+    if wid == "tr-ticket-new":
+        item = _registry().get(wid).items("heldout", 1)[0]
+        fields = {
+            k: item[k]
+            for k in ("summary", "description", "type", "priority", "component")
+        }
+        return item, _trac(bystander), _trac(bystander, _ticket(2, **fields)), bystander
+    if wid == "tr-ticket-resolve":
+        item = {"ticket": "#2", "resolution": "fixed", "duplicate_of": ""}
+        after = _trac(bystander, _ticket(2, status="closed", resolution="fixed"))
+        return item, _trac(bystander, _ticket(2)), after, bystander
+    item = {"ticket": "#2", "milestone": "2027-Q1"}
+    after = _trac(
+        bystander, _ticket(2, milestone="2027-Q1"), changes=[comment(2, "Triaged.")]
+    )
+    return item, _trac(bystander, _ticket(2)), after, bystander
+
+
+def _trac_mutations(after: Any, bystander: dict[str, Any]) -> dict[str, Any]:
+    tickets = after["tickets"]
+    rest = {k: v for k, v in tickets.items() if k != bystander["id"]}
+    return {
+        "insert": {
+            **after,
+            "tickets": {**tickets, 99: _ticket(99, summary="unselected")},
+        },
+        "change": {
+            **after,
+            "tickets": {**tickets, 1: {**bystander, "priority": "critical"}},
+        },
+        "delete": {**after, "tickets": rest},
+        "history": {
+            **after,
+            "changes": [
+                *after["changes"],
+                {
+                    "ticket": 1,
+                    "time": 9,
+                    "author": "a",
+                    "field": "comment",
+                    "oldvalue": "",
+                    "newvalue": "Triaged.",
+                },
+            ],
+        },
+    }
+
+
+def _netbox_case(wid: str) -> tuple[dict[str, str], Any, Any, dict[str, Any]]:
+    """Target-only change plus insert / change / delete of an unselected row."""
+    wf = _registry().get(wid)
+    if wid == "nb-ip-paginated":
+        item = wf.items("heldout", 1)[0]
+        addr = item["address"]
+        third = addr.split(".")[2]
+        # Unselected addresses sharing the target's broad prefix.
+        near, nearer = f"198.51.{third}.250/24", f"198.51.{third}.251/24"
+        bystander = {"id": 2, "address": near, "description": ""}
+        before = {addr: {"id": 1, "address": addr, "description": ""}, near: bystander}
+        after = {**before, addr: {**before[addr], "description": item["description"]}}
+        return (
+            item,
+            before,
+            after,
+            {
+                "insert": {
+                    **after,
+                    nearer: {"id": 3, "address": nearer, "description": ""},
+                },
+                "change": {
+                    **after,
+                    near: {**bystander, "description": item["description"]},
+                },
+                "delete": {addr: after[addr]},
+            },
+        )
+    if wid == "nb-device-add":
+        item = wf.items("heldout", 1)[0]
+        row = {
+            "id": 2,
+            **{k: item[k] for k in ("name", "site", "role", "device_type", "serial")},
+        }
+        bystander = {
+            "id": 1,
+            "name": "core-1",
+            "site": "Oslo Edge",
+            "role": "Core Switch",
+            "device_type": "SX-24",
+            "serial": "SYN1",
+        }
+    else:
+        item = {"vid": "301", "name": "onb-heldout-first-01", "group": "Campus"}
+        row = {
+            "id": 2,
+            "vid": "301",
+            "name": item["name"],
+            "grp": "Campus",
+            "cost_center": "",
+        }
+        bystander = {
+            "id": 1,
+            "vid": "20",
+            "name": "voice",
+            "grp": "",
+            "cost_center": "",
+        }
+    after = {1: bystander, 2: row}
+    return (
+        item,
+        {1: bystander},
+        after,
+        {
+            "insert": {**after, 99: {**bystander, "id": 99, "name": "unselected"}},
+            "change": {**after, 1: {**bystander, "name": "renamed"}},
+            "delete": {2: row},
+        },
+    )
+
+
+ORACLE_CASES = [
+    *(("trac", w) for w in ("tr-ticket-new", "tr-ticket-resolve", "tr-triage-loop")),
+    *(
+        ("netbox", w)
+        for w in ("nb-device-add", "nb-ip-paginated", "nb-vlan-conditional")
+    ),
+]
+
+
+def _case(app: str, wid: str) -> tuple[Any, Any, Any, dict[str, Any]]:
+    if app == "trac":
+        item, before, after, bystander = _trac_case(wid)
+        return item, before, after, _trac_mutations(after, bystander)
+    return _netbox_case(wid)
+
+
+def test_collateral_cases_cover_the_frozen_pool() -> None:
+    assert sorted(w for _, w in ORACLE_CASES) == sorted(FROZEN)
+
+
+@pytest.mark.parametrize(("app", "wid"), ORACLE_CASES)
+def test_target_only_change_is_verified(app: str, wid: str) -> None:
+    wf = _registry().get(wid)
+    item, before, after, _ = _case(app, wid)
+    assert wf.collateral(before, after, [item]) == []
+    assert wf.judge(item, before, after).verdict == "VERIFIED"
+    assert wf.judge(item, before, after, batch=[item]).verdict == "VERIFIED"
+    assert wf.judge(item, before, before).verdict == "MISSING"
+
+
+@pytest.mark.parametrize(("app", "wid"), ORACLE_CASES)
+@pytest.mark.parametrize("kind", ["insert", "change", "delete"])
+def test_any_change_outside_the_targets_is_wrong(app: str, wid: str, kind: str) -> None:
+    wf = _registry().get(wid)
+    item, before, _after, mutations = _case(app, wid)
+    damaged = mutations[kind]
+    assert wf.collateral(before, damaged, [item]), kind
+    verdict = wf.judge(item, before, damaged)
+    assert verdict.verdict == "WRONG", (kind, verdict.detail)
+    assert verdict.detail["collateral"]
+    # The same damage with the target left as it was is WRONG too, never MISSING.
+    if app == "netbox":
+        untouched = dict(damaged)
+        for key in wf.target_keys(item, before, _after):
+            if key in before:
+                untouched[key] = before[key]
+            else:
+                untouched.pop(key, None)
+        assert wf.judge(item, before, untouched).verdict == "WRONG", kind
+
+
+@pytest.mark.parametrize(
+    "wid", ["tr-ticket-new", "tr-ticket-resolve", "tr-triage-loop"]
+)
+def test_trac_history_on_another_ticket_is_wrong(wid: str) -> None:
+    wf = _registry().get(wid)
+    item, before, _after, mutations = _case("trac", wid)
+    assert wf.judge(item, before, mutations["history"]).verdict == "WRONG"
+
+
+def test_batch_selected_set_is_exactly_the_batch_items() -> None:
+    wf = _registry().get("tr-triage-loop")
+    items = [
+        {"ticket": "#2", "milestone": "2027-Q1"},
+        {"ticket": "#3", "milestone": "2027-Q1"},
+    ]
+
+    def done(tid: int) -> dict[str, Any]:
+        return {
+            "ticket": tid,
+            "time": tid,
+            "author": "a",
+            "field": "comment",
+            "oldvalue": "",
+            "newvalue": "Triaged.",
+        }
+
+    before = _trac(_ticket(1), _ticket(2), _ticket(3))
+    after = _trac(
+        _ticket(1),
+        _ticket(2, milestone="2027-Q1"),
+        _ticket(3, milestone="2027-Q1"),
+        changes=[done(2), done(3)],
+    )
+    assert [wf.judge(i, before, after, batch=items).verdict for i in items] == [
+        "VERIFIED"
+    ] * 2
+    assert wf.collateral(before, after, items) == []
+    # Alone, the other batch item's change is outside the selected set.
+    assert wf.judge(items[0], before, after).verdict == "WRONG"
+    inserted = {
+        **after,
+        "tickets": {**after["tickets"], 4: _ticket(4, summary="unselected")},
+    }
+    assert wf.collateral(before, inserted, items) == [("ticket", 4)]
+    assert {wf.judge(i, before, inserted, batch=items).verdict for i in items} == {
+        "WRONG"
+    }
+
+
+def test_address_batch_refuses_an_unselected_address_with_the_same_prefix() -> None:
+    wf = _registry().get("nb-ip-paginated")
+    items = wf.items("heldout", 2)
+    third = items[0]["address"].split(".")[2]
+    near = f"198.51.{third}.250/24"
+    before = {
+        i["address"]: {"id": n, "address": i["address"], "description": ""}
+        for n, i in enumerate(items)
+    }
+    before[near] = {"id": 9, "address": near, "description": ""}
+    after = {
+        **before,
+        **{
+            i["address"]: {**before[i["address"]], "description": i["description"]}
+            for i in items
+        },
+    }
+    assert {wf.judge(i, before, after, batch=items).verdict for i in items} == {
+        "VERIFIED"
+    }
+    cases = {
+        "insert": {
+            **after,
+            f"198.51.{third}.251/24": {
+                "id": 10,
+                "address": f"198.51.{third}.251/24",
+                "description": "",
+            },
+        },
+        "change": {
+            **after,
+            near: {**before[near], "description": items[0]["description"]},
+        },
+        "delete": {k: v for k, v in after.items() if k != near},
+    }
+    for kind, damaged in cases.items():
+        assert wf.collateral(before, damaged, items), kind
+        assert {wf.judge(i, before, damaged, batch=items).verdict for i in items} == {
+            "WRONG"
+        }, kind
+
+
+def test_calibration_oracle_uses_the_same_collateral_check() -> None:
+    wf = _registry().get("cal-mockmed-triage")
+    item = {"note": "Synthetic review lab panel"}
+    old = {"id": 1, "note": "x", "patient_id": "p2", "type": "Triage"}
+    mine = {"id": 2, "note": item["note"], "patient_id": "p1", "type": "Triage"}
+    assert wf.judge(item, [old], [old, mine]).verdict == "VERIFIED"
+    assert wf.judge(item, [old], [mine]).verdict == "WRONG"
+    assert wf.judge(item, [old], [{**old, "note": "y"}, mine]).verdict == "WRONG"
+    assert (
+        wf.judge(item, [old], [old, mine, {**mine, "id": 3, "note": "z"}]).verdict
+        == "WRONG"
+    )
+
+
+# -- report: run identity -----------------------------------------------------------
+
+
+def _rows(
+    workflow: str, installation: str, run: str, ts: float
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "workflow": workflow,
+            "installation": installation,
+            "run": run,
+            "ts": ts,
+            "phase": "start",
+            "action": "begin",
+        },
+        {
+            "workflow": workflow,
+            "installation": installation,
+            "run": run,
+            "ts": ts + 1,
+            "phase": "end",
+            "action": "endpoint",
+        },
+    ]
+
+
+def _run_names(seed: int) -> list[str]:
+    rng = random.Random(seed)
+    return [f"first-2026{rng.randrange(10**8):08d}" for _ in range(5)] + ["", "run"]
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_report_keeps_runs_with_the_same_name_in_other_workflows(seed: int) -> None:
+    from benchmark.onboarding_effort.report import runs
+
+    for name in _run_names(seed):
+        rows = _rows("tr-ticket-new", "first", name, 1.0) + _rows(
+            "nb-device-add", "first", name, 5.0
+        )
+        got = runs(rows)
+        assert sorted(got) == [("nb-device-add", "first"), ("tr-ticket-new", "first")]
+        assert all(len(v) == 1 and len(v[0]) == 2 for v in got.values()), name
+        assert {r["workflow"] for r in got[("tr-ticket-new", "first")][0]} == {
+            "tr-ticket-new"
+        }
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_report_keeps_runs_with_the_same_name_in_other_installations(seed: int) -> None:
+    from benchmark.onboarding_effort.report import runs
+
+    for name in _run_names(seed):
+        rows = _rows("tr-ticket-new", "first", name, 1.0) + _rows(
+            "tr-ticket-new", "second", name, 5.0
+        )
+        got = runs(rows)
+        assert sorted(got) == [("tr-ticket-new", "first"), ("tr-ticket-new", "second")]
+        assert all(len(v) == 1 and len(v[0]) == 2 for v in got.values()), name
+
+
+def test_report_run_identity_controls() -> None:
+    from benchmark.onboarding_effort.report import runs
+
+    single = runs(_rows("tr-ticket-new", "first", "a", 1.0))
+    assert (
+        list(single) == [("tr-ticket-new", "first")]
+        and len(single[("tr-ticket-new", "first")]) == 1
+    )
+    two = runs(
+        _rows("tr-ticket-new", "first", "a", 1.0)
+        + _rows("tr-ticket-new", "first", "b", 5.0)
+    )
+    assert [rs[0]["run"] for rs in two[("tr-ticket-new", "first")]] == ["a", "b"]
+    apart = runs(
+        _rows("tr-ticket-new", "first", "a", 1.0)
+        + _rows("nb-device-add", "first", "b", 5.0)
+    )
+    assert all(len(v) == 1 for v in apart.values())
 
 
 # -- ledger -----------------------------------------------------------------------

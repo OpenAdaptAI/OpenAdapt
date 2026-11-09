@@ -66,6 +66,21 @@ class TracBase(Workflow):
         changes = T.tsql("SELECT ticket, time, author, field, oldvalue, newvalue FROM ticket_change")
         return {"tickets": tickets, "changes": changes}
 
+    def entities(self, snapshot: Any) -> dict[Any, Any]:
+        """Each ticket's row, and each ticket's change history, as separate entities."""
+        out: dict[Any, Any] = {("ticket", k): t for k, t in snapshot["tickets"].items()}
+        history: dict[Any, list[Any]] = {}
+        for c in snapshot["changes"]:
+            history.setdefault(c["ticket"], []).append(sorted(c.items()))
+        for tid, rows in history.items():
+            out[("changes", tid)] = sorted(rows, key=repr)
+        return out
+
+    def target_keys(self, item: dict[str, str], before: Any, after: Any) -> set[Any]:
+        """A ticket the item names by number: its row and its history."""
+        tid = int(str(item["ticket"]).lstrip("#"))
+        return {("ticket", tid), ("changes", tid)}
+
     def _sql_verifier(self, query: str) -> str:
         return f"""verifier:
   kind: sql
@@ -143,7 +158,13 @@ campaign:
   policy: {self.policy}
 """
 
-    def judge(self, item: dict[str, str], before: Any, after: Any) -> Verdict:
+    def target_keys(self, item: dict[str, str], before: Any, after: Any) -> set[Any]:
+        """The tickets created with the item's summary (more than one is a duplicate)."""
+        ids = [k for k, t in after["tickets"].items()
+               if k not in before["tickets"] and t["summary"] == item["summary"]]
+        return {key for k in ids for key in (("ticket", k), ("changes", k))}
+
+    def judge_target(self, item: dict[str, str], before: Any, after: Any) -> Verdict:
         new = [t for k, t in after["tickets"].items() if k not in before["tickets"]]
         mine = [t for t in new if t["summary"] == item["summary"]]
         changed = [k for k, t in before["tickets"].items() if after["tickets"].get(k) != t]
@@ -230,7 +251,7 @@ campaign:
   policy: {self.policy}
 """
 
-    def judge(self, item: dict[str, str], before: Any, after: Any) -> Verdict:
+    def judge_target(self, item: dict[str, str], before: Any, after: Any) -> Verdict:
         tid = int(item["ticket"].lstrip("#"))
         t0, t1 = before["tickets"].get(tid), after["tickets"].get(tid)
         if t1 is None:
@@ -330,7 +351,7 @@ campaign:
   policy: {self.policy}
 """
 
-    def judge(self, item: dict[str, str], before: Any, after: Any) -> Verdict:
+    def judge_target(self, item: dict[str, str], before: Any, after: Any) -> Verdict:
         tid = int(item["ticket"].lstrip("#"))
         t1 = after["tickets"].get(tid)
         if t1 is None:
@@ -343,10 +364,6 @@ campaign:
             comments[0]["newvalue"].strip() == "Triaged."
         return Verdict("VERIFIED" if ok else "WRONG", {"milestone": t1.get("milestone"),
                                                        "comments": len(comments)})
-
-    def judge_batch_collateral(self, before: Any, after: Any, item_ids: set[int]) -> list[int]:
-        return [k for k, t in before["tickets"].items()
-                if k not in item_ids and after["tickets"].get(k) != t]
 
 
 def _baseline_config() -> None:

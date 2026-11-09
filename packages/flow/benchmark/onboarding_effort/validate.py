@@ -33,7 +33,7 @@ def validate(wf_id: str, installation: str = FIRST, shot_dir: Path | None = None
     wf.reset(installation)
     wf.prepare_items(items, installation)
     before = wf.snapshot()
-    idle = [wf.judge(i, before, wf.snapshot()).verdict for i in items]
+    idle = [wf.judge(i, before, wf.snapshot(), batch=items).verdict for i in items]
     page, close = open_page(wf, installation)
     t0 = time.time()
     err = None
@@ -60,7 +60,7 @@ def validate(wf_id: str, installation: str = FIRST, shot_dir: Path | None = None
         close()
     time.sleep(0.5)
     after = wf.snapshot()
-    done = per_item if not wf.batch_run and err is None else [wf.judge(i, before, after) for i in items]
+    done = per_item if not wf.batch_run and err is None else [wf.judge(i, before, after, batch=items) for i in items]
     keyed = None
     if hasattr(wf, "demonstrate_keyed"):
         kitems = wf.items("qual", 2, installation)[1:]

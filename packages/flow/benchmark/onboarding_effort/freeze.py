@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import inspect
 import json
 import sys
 import time
@@ -65,7 +64,7 @@ def _spec(wid: str) -> dict:
         "viewport": {inst: list(wf.installation_viewport(inst)) for inst in ("first", "second")},
         "device_scale": {inst: wf.device_scale(inst) for inst in ("first", "second")},
         "verify_yaml": {inst: wf.verify_yaml(inst) for inst in ("first", "second")},
-        "oracle_source_sha256": hashlib.sha256(inspect.getsource(type(wf).judge).encode()).hexdigest(),
+        "oracle_source_sha256": hashlib.sha256(type(wf).oracle_sources().encode()).hexdigest(),
         "heldout_items_sha256": {
             inst: hashlib.sha256(json.dumps(v, sort_keys=True).encode()).hexdigest()
             for inst, v in items.items()

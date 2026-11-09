@@ -188,11 +188,10 @@ def _run_one_batch(wf, installation, workflow, certified, config, hooks, setup, 
     after = wf.snapshot()
     hooks.reset = reset
     engine = _engine_outcome(summary) if summary else "REFUSED"
-    ids = {int(str(i["ticket"]).lstrip("#")) for i in items if str(i.get("ticket", "")).lstrip("#").isdigit()}
-    collateral = wf.judge_batch_collateral(before, after, ids) if hasattr(wf, "judge_batch_collateral") else []
+    collateral = wf.collateral(before, after, items)
     rows = []
     for n, item in enumerate(items, start=1):
-        verdict = wf.judge(item, before, after)
+        verdict = wf.judge(item, before, after, batch=items)
         rows.append({
             "n": n, "item": item, "engine": engine, "oracle": verdict.verdict,
             "oracle_detail": verdict.detail, "failed_step_id": summary.get("failed_step_id"),

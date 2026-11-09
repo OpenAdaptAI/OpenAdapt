@@ -118,8 +118,48 @@ class Workflow:
     def snapshot(self) -> Any:
         raise NotImplementedError
 
-    def judge(self, item: dict[str, str], before: Any, after: Any) -> Verdict:
+    def entities(self, snapshot: Any) -> dict[Any, Any]:
+        """The snapshot as one map of entity key -> state (every entity the oracle reads)."""
         raise NotImplementedError
+
+    def target_keys(self, item: dict[str, str], before: Any, after: Any) -> set[Any]:
+        """The entity keys ``item`` may change: the record it names or the one it creates."""
+        raise NotImplementedError
+
+    def collateral(self, before: Any, after: Any, items: list[dict[str, str]]) -> list[Any]:
+        """Every entity outside the selected targets that was inserted, changed or deleted.
+
+        Compares the complete before and after key sets and values; only the
+        exact targets of ``items`` may differ.
+        """
+        targets: set[Any] = set()
+        for item in items:
+            targets |= self.target_keys(item, before, after)
+        b, a = self.entities(before), self.entities(after)
+        return sorted((k for k in b.keys() | a.keys() if k not in targets and b.get(k) != a.get(k)),
+                      key=repr)
+
+    def judge(self, item: dict[str, str], before: Any, after: Any,
+              batch: Optional[list[dict[str, str]]] = None) -> Verdict:
+        """The oracle: any collateral is WRONG; otherwise the item's own verdict.
+
+        ``batch`` is every item one run processed (loop workflows); their
+        targets are the selected set. Alone, the item is the whole set.
+        """
+        changed = self.collateral(before, after, batch if batch is not None else [item])
+        if changed:
+            return Verdict("WRONG", {"collateral": changed})
+        return self.judge_target(item, before, after)
+
+    def judge_target(self, item: dict[str, str], before: Any, after: Any) -> Verdict:
+        """VERIFIED, MISSING or WRONG for the item's own target, collateral excluded."""
+        raise NotImplementedError
+
+    @classmethod
+    def oracle_sources(cls) -> str:
+        """The source of every method the oracle's verdict depends on (frozen as a digest)."""
+        names = ("entities", "target_keys", "collateral", "judge", "judge_target")
+        return "\n".join(inspect.getsource(getattr(cls, n)) for n in names)
 
 
 class _PlainRecorder:

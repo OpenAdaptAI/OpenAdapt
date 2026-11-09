@@ -51,6 +51,14 @@ class NetBoxBase(Workflow):
         page.goto(self.entry_url(installation))
         page.wait_for_load_state("load")
 
+    def entities(self, snapshot: Any) -> dict[Any, Any]:
+        """Snapshots are already one map of key -> row."""
+        return dict(snapshot)
+
+    def target_keys(self, item: dict[str, str], before: Any, after: Any) -> set[Any]:
+        """The rows created with the item's name (more than one is a duplicate)."""
+        return {k for k, r in after.items() if k not in before and r["name"] == item["name"]}
+
     def _verifier(self, query: str) -> str:
         return f"""verifier:
   kind: sql
@@ -139,7 +147,7 @@ class NetBoxDeviceAdd(NetBoxBase):
             "ON r.id=d.role_id JOIN dcim_devicetype t ON t.id=d.device_type_id")
         return {r["id"]: r for r in rows}
 
-    def judge(self, item: dict[str, str], before: Any, after: Any) -> Verdict:
+    def judge_target(self, item: dict[str, str], before: Any, after: Any) -> Verdict:
         new = [r for k, r in after.items() if k not in before]
         mine = [r for r in new if r["name"] == item["name"]]
         changed = [k for k, r in before.items() if after.get(k) != r]
@@ -239,7 +247,11 @@ class NetBoxIpPaginated(NetBoxBase):
                        "FROM ipam_ipaddress")
         return {r["address"]: r for r in rows}
 
-    def judge(self, item: dict[str, str], before: Any, after: Any) -> Verdict:
+    def target_keys(self, item: dict[str, str], before: Any, after: Any) -> set[Any]:
+        """Exactly the address the item names."""
+        return {item["address"]}
+
+    def judge_target(self, item: dict[str, str], before: Any, after: Any) -> Verdict:
         b, a = before.get(item["address"]), after.get(item["address"])
         if a is None:
             return Verdict("WRONG", {"reason": "address gone"})
@@ -247,9 +259,6 @@ class NetBoxIpPaginated(NetBoxBase):
             return Verdict("MISSING", {})
         return Verdict("VERIFIED" if a["description"] == item["description"] else "WRONG",
                        {"description": a["description"]})
-
-    def judge_batch_collateral(self, before: Any, after: Any, item_ids: set[int]) -> list[str]:
-        return [k for k, r in before.items() if after.get(k) != r and not r["address"].startswith("198.51.")]
 
 
 class NetBoxVlanConditional(NetBoxBase):
@@ -323,13 +332,9 @@ class NetBoxVlanConditional(NetBoxBase):
                        "FROM ipam_vlan v LEFT JOIN ipam_vlangroup g ON g.id=v.group_id")
         return {r["id"]: r for r in rows}
 
-    def judge(self, item: dict[str, str], before: Any, after: Any) -> Verdict:
+    def judge_target(self, item: dict[str, str], before: Any, after: Any) -> Verdict:
         new = [r for k, r in after.items() if k not in before]
         mine = [r for r in new if r["name"] == item["name"]]
-        # Any change to a VLAN the item did not name is collateral (PROTOCOL.md).
-        changed = [k for k, r in before.items() if after.get(k) != r]
-        if changed:
-            return Verdict("WRONG", {"changed": changed, "new": len(new)})
         if not mine:
             return Verdict("MISSING", {"new": len(new)})
         r = mine[0]
