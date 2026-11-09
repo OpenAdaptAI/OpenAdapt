@@ -391,6 +391,29 @@ def spawn_supervised(args: Sequence[str], **kwargs: Any) -> subprocess.Popen[byt
     return spawn(supervised_command(args), **kwargs)
 
 
+#: The verdicts ``_supervisor.py`` writes.
+VERDICTS = ("proven", "unproven", "survivors")
+
+
+def _read_verdict(report: str) -> Optional[str]:
+    """The supervisor's verdict, or None for a missing, unreadable or
+    malformed report (anything but an object with a known ``verdict``)."""
+    try:
+        with open(report) as handle:
+            data = json.load(handle)
+    except (OSError, ValueError):
+        return None
+    finally:
+        try:
+            os.unlink(report)
+        except OSError:
+            pass
+    if not isinstance(data, dict):
+        return None
+    verdict = data.get("verdict")
+    return verdict if isinstance(verdict, str) and verdict in VERDICTS else None
+
+
 def stop_supervised(pid: int, *, timeout: float = KILL_TIMEOUT_S * 2) -> Teardown:
     """Stop a supervisor started from :func:`supervised_command`.
 
@@ -412,12 +435,7 @@ def stop_supervised(pid: int, *, timeout: float = KILL_TIMEOUT_S * 2) -> Teardow
                 f"supervisor {pid} did not finish its teardown in {timeout:.0f} s"
             )
         time.sleep(0.02)
-    try:
-        with open(report) as handle:
-            verdict = json.load(handle).get("verdict")
-        os.unlink(report)
-    except (OSError, ValueError):
-        verdict = None
+    verdict = _read_verdict(report)
     if verdict == "proven":
         return Teardown("killed", proven=True)
     if verdict == "unproven":

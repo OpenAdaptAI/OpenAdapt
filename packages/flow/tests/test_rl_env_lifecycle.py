@@ -608,3 +608,95 @@ def test_an_unproven_teardown_makes_later_episodes_indeterminate(monkeypatch) ->
     out = env._finish("success")
     assert (out["verdict"], out["reward"]) == ("INDETERMINATE", 0.0)
     assert "unproven" in out["extra"]["judgement"]["error"]
+
+
+# -- a malformed supervisor report, or any teardown failure, is never proof ---
+
+
+@pytest.mark.parametrize(
+    "report",
+    [
+        "[]",
+        "null",
+        "42",
+        '"proven"',
+        "{}",
+        '{"verdict": "maybe"}',
+        '{"verdict": ["proven"]}',
+        '{"verdict": null}',
+        "not json",
+    ],
+)
+def test_a_malformed_supervisor_report_is_unknown(report: str) -> None:
+    proc = lifecycle.spawn([sys.executable, "-c", "import time; time.sleep(600)"])
+    with open(os.path.join(lifecycle._report_dir(), str(proc.pid)), "w") as handle:
+        handle.write(report)
+    with pytest.raises(lifecycle.DescendantsUnknown, match="reported"):
+        lifecycle.stop_supervised(proc.pid, timeout=10)
+    proc.returncode = -signal.SIGTERM
+
+
+def test_a_well_formed_proven_report_is_read_as_proven() -> None:
+    proc = lifecycle.spawn([sys.executable, "-c", "import time; time.sleep(600)"])
+    with open(os.path.join(lifecycle._report_dir(), str(proc.pid)), "w") as handle:
+        handle.write('{"verdict": "proven", "subreaper": true}')
+    assert lifecycle.stop_supervised(proc.pid, timeout=10) == lifecycle.Teardown(
+        "killed", proven=True
+    )
+    proc.returncode = -signal.SIGTERM
+
+
+class _Confirming:
+    def judge(self, claim, feasible, attempted=True):
+        from openadapt_flow.rl_env.reward import Judgement
+
+        return Judgement("CONFIRMED", claim, feasible, 1.0, attempted)
+
+    def close(self) -> None:
+        pass
+
+
+def _judged(env, monkeypatch) -> dict:
+    env._task = env.env.task("mockmed-01")
+    env._judge = _Confirming()
+    monkeypatch.setattr(env.env.manifest.agent, "settle_s", 0.0)
+    monkeypatch.setattr(env, "_observe", lambda **kw: kw)
+    return env._finish("success")
+
+
+def test_any_teardown_failure_leaves_later_episodes_indeterminate(
+    monkeypatch,
+) -> None:
+    env = _environment()
+    from openadapt_flow.rl_env import environment as E
+
+    def broken(pid: int, **_: object) -> lifecycle.Teardown:
+        raise RuntimeError("kill failed in an unexpected way")
+
+    monkeypatch.setattr(E, "kill_child_tree", broken)
+    env._pw, env._driver_pid = object(), 424242
+    with pytest.raises(RuntimeError, match="unexpected"):
+        env._abandon_worker()
+    assert env._unproven is not None and env._teardown is None
+    out = _judged(env, monkeypatch)
+    assert (out["verdict"], out["reward"]) == ("INDETERMINATE", 0.0)
+
+
+def test_only_a_proven_teardown_lifts_its_taint_and_never_an_earlier_one(
+    monkeypatch,
+) -> None:
+    env = _environment()
+    from openadapt_flow.rl_env import environment as E
+
+    monkeypatch.setattr(
+        E, "kill_child_tree", lambda pid, **_: lifecycle.Teardown("killed", True)
+    )
+    env._pw, env._driver_pid = object(), 424242
+    env._abandon_worker()
+    assert env._unproven is None
+    assert _judged(env, monkeypatch)["verdict"] == "CONFIRMED"
+
+    env._unproven = "an earlier browser was not proven gone"
+    env._pw, env._driver_pid = object(), 424243
+    env._abandon_worker()
+    assert env._unproven == "an earlier browser was not proven gone"

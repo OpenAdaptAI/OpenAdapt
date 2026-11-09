@@ -403,34 +403,36 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
         """
         driver, self._driver_pid = self._driver_pid, None
         had_browser, self._teardown = self._pw is not None, None
+        # Pessimistic: the environment is tainted (every later episode is
+        # INDETERMINATE) before any teardown step can fail, and the taint
+        # this teardown adds is lifted only on positive proof. An earlier
+        # unproven teardown stays: what it left might still write.
+        earlier = self._unproven
+        if had_browser or driver is not None:
+            self._unproven = f"the stuck browser (driver {driver}) was not proven gone"
         try:
             # The browser goes first, so it cannot write after this point.
             # The episode is over only once the driver is reaped and Chromium
             # is gone; otherwise this raises rather than claim it is.
-            # Anything short of a proven teardown taints every later episode
-            # of this environment: their verdicts are INDETERMINATE.
             if driver is not None:
-                try:
-                    if driver in _SUPERVISED:
-                        _SUPERVISED.discard(driver)
-                        result = lifecycle.stop_supervised(driver)
-                    else:
-                        result = kill_child_tree(driver)
-                except ProcessNotReaped as exc:
-                    self._unproven = str(exc)
-                    raise
+                if driver in _SUPERVISED:
+                    _SUPERVISED.discard(driver)
+                    result = lifecycle.stop_supervised(driver)
+                else:
+                    result = kill_child_tree(driver)
                 self._teardown = {
                     "driver_pid": driver,
                     "driver": result.how,
                     "proven": result.proven,
                 }
-                if not result.proven:
+                if result.proven is True:
+                    self._unproven = earlier
+                else:
                     self._unproven = (
                         f"the stuck browser (driver {driver}) was killed, but "
                         "its descendants could not be proven gone on this platform"
                     )
             elif had_browser:
-                self._unproven = "the stuck browser's driver process id is unknown"
                 raise ProcessNotReaped(
                     "the browser driver's process id is unknown, so the stuck "
                     "browser cannot be confirmed dead"
