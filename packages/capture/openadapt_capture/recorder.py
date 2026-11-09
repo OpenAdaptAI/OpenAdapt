@@ -80,6 +80,7 @@ from openadapt_capture.input_observer import (
     create_input_observer,
 )
 from openadapt_capture.live import LiveEventTap, publish_live
+from openadapt_capture.locale_facts import observe_locale_facts
 from openadapt_capture.structural import (
     StructuralObservationRequest,
     StructuralObserver,
@@ -1792,6 +1793,14 @@ def write_video_event(
         raise ValueError(
             f"video frame {screenshot_image.size} differs from fixed stream {stream_size}"
         )
+    if "last_frame" not in kwargs:
+        # The encoded stream starts at its first frame, and frame lookups map
+        # a wall-clock time to video time by subtracting video_start_time. A
+        # source that only delivers frames when the screen changes (macOS
+        # ScreenCaptureKit) can send its first frame long after the writer
+        # opened, so anchor the video start to that first frame instead.
+        video_start_timestamp = screenshot_timestamp
+        crud.update_video_start_time(db, recording_timestamp, video_start_timestamp)
     force_key_frame = last_pts == 0
     # ensure that the first frame is available (otherwise occasionally it is not)
     # TODO: why isn't force_key_frame sufficient?
@@ -2589,13 +2598,17 @@ def create_recording(
         "platform": sys.platform,
         "task_description": task_description,
     }
-    capture_config: dict[str, Any] = {}
+    # The keyboard layout, locale and date order the user records under
+    # (#1897). Replay types by keycode, so it refuses on another layout or
+    # date order. Read now, on the recording computer, and persisted even
+    # when every fact is unknown: an incomplete observation must refuse at
+    # replay, not look like a recording from before these facts existed.
+    capture_config: dict[str, Any] = {"capture_locale": observe_locale_facts()}
     if window_capture_info is not None:
         capture_config["capture_window"] = window_capture_info
     if desktop_capture_info is not None:
         capture_config["capture_desktop"] = desktop_capture_info
-    if capture_config:
-        recording_data["config"] = capture_config
+    recording_data["config"] = capture_config
     # Several writer processes share this file: give it a write log.
     engine, Session = create_db(db_path, journal_mode=SQLITE_CAPTURE_JOURNAL_MODE)
     session = Session()

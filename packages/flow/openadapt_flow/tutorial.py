@@ -487,14 +487,19 @@ def run_tutorial_workflow(
     """
 
     from openadapt_flow.backends.playwright_backend import PlaywrightBackend
-    from openadapt_flow.deployment import DeploymentConfig, PolicySection
+    from openadapt_flow.deployment import (
+        DeploymentConfig,
+        EffectsConfig,
+        PolicySection,
+        build_effect_verifier,
+    )
     from openadapt_flow.execution_profiles import (
         ExecutionProfile,
         execution_profile_contract,
     )
+    from openadapt_flow.mockmed.fault_server import MOCKMED_RECORDS_READ_CONTRACT
     from openadapt_flow.run_gate import build_runtime_authorization, evaluate_run_gate
     from openadapt_flow.runtime import Replayer
-    from openadapt_flow.runtime.effects import RestRecordVerifier
 
     if entry_query is None:
         entry_query = TUTORIAL_ENTRY_QUERY
@@ -504,13 +509,18 @@ def run_tutorial_workflow(
 
     # The independent oracle: it reads the backend store over HTTP, never the
     # screen, so an optimistic banner cannot make it confirm anything.
-    verifier = RestRecordVerifier(
-        base_url,
-        records_path="/api/db",
-        records_key="records",
-        timeout_s=2.0,
-        poll_interval_s=0.05,
+    verifier = build_effect_verifier(
+        EffectsConfig.model_validate(
+            {
+                **MOCKMED_RECORDS_READ_CONTRACT,
+                "base_url": base_url,
+                "timeout_s": 2.0,
+                "poll_interval_s": 0.05,
+            }
+        )
     )
+    if verifier is None:
+        raise ValueError("the fixture record contract built no verifier")
     gate = evaluate_run_gate(
         workflow,
         bundle_dir=bundle_dir,

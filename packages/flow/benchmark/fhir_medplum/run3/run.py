@@ -38,7 +38,6 @@ from pathlib import Path
 from typing import Any, Optional
 
 import yaml
-
 from benchmark.contract_autogen.blind import stop_card
 from benchmark.fhir_medplum.fixture import MedplumFixture, _http
 from benchmark.fhir_medplum.public import agents as agent_mod
@@ -431,7 +430,9 @@ def items_range(spec: str, n: int) -> range:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     ap.add_argument("--faultset", required=True)
     ap.add_argument("--sha256", required=True, help="the fault set's frozen digest")
     ap.add_argument("--contracts", required=True, help="B's frozen contracts")

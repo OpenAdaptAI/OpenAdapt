@@ -171,7 +171,9 @@ class SurfaceRoutedVerifier:
         reachable = True
         for name, verifier in self._verifiers.items():
             state = verifier.capture_pre_state(context)
-            detail[name] = {"reachable": state.reachable, "records": state.records}
+            # Keep the captured scope, time and verifier-specific facts together.
+            # Reconstructing only records/reachability loses read authority.
+            detail[name] = state.model_dump(mode="python")
             reachable = reachable and state.reachable
         return EffectState(
             substrate=self.substrate, reachable=reachable, records=[], detail=detail
@@ -183,11 +185,7 @@ class SurfaceRoutedVerifier:
         name = surface_of(expected, self._default)
         verifier = self._verifiers[name]
         sub = before.detail.get(name, {})
-        sub_before = EffectState(
-            substrate=verifier.substrate,
-            reachable=bool(sub.get("reachable", False)),
-            records=list(sub.get("records", [])),
-        )
+        sub_before = EffectState.model_validate(sub)
         return verifier.verify(expected, sub_before, context)
 
 

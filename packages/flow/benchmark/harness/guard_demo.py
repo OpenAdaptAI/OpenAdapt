@@ -33,6 +33,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from openadapt_flow.guard import GuardedSave, GuardRefused, GuardTask
 from openadapt_flow.mockmed.chart_pages import READER_PASSWORD, READER_USERNAME
+from openadapt_flow.mockmed.fault_server import MOCKMED_RECORDS_READ_CONTRACT
 from openadapt_flow.verify_run import parse_verify_config
 
 if TYPE_CHECKING:
@@ -46,7 +47,7 @@ def verify_yaml(base_url: str) -> dict[str, Any]:
 
     return {
         "schema_version": "openadapt.verify/v1",
-        "verifier": {"kind": "rest", "base_url": base_url, "records_path": "/api/db"},
+        "verifier": {"base_url": base_url, **MOCKMED_RECORDS_READ_CONTRACT},
         "effects": [
             {
                 "kind": "record_written",

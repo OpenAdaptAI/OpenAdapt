@@ -75,7 +75,9 @@ def tables() -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args(argv)
     text = tables()
