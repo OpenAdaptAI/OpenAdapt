@@ -121,7 +121,12 @@ def unsealed_write(artifact: str, path: Path | str, *, refuse: bool = True) -> N
             raise
         # After records changed, the report is the only account of what was
         # written: keep it, and say loudly that the ledger missed it.
-        print(f"ERROR: {exc} The report is written anyway.", file=sys.stderr)
+        print(
+            f"ERROR: {artifact} at {path} is kept in plaintext so the account "
+            f"of what changed isn't lost, but the plaintext ledger at "
+            f"{ledger_path()} could not record it ({exc.__cause__ or exc}).",
+            file=sys.stderr,
+        )
 
 
 HOME_ENV: Final[str] = "OPENADAPT_FLOW_AT_REST_HOME"
