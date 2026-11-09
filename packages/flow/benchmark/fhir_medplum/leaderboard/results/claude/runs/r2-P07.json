@@ -1,0 +1,199 @@
+{
+ "id": "P07",
+ "class": "duplicate",
+ "type": "patient",
+ "expect": "create",
+ "note": "The write path sends the create twice.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 370.8,
+ "cost_usd": 0.95346,
+ "claim": {
+  "status": "done",
+  "id": "Patient/d0d70d50-5a4d-4d1e-bca7-42f5b909bd05",
+  "note": "RESULT: DONE Patient/d0d70d50-5a4d-4d1e-bca7-42f5b909bd05",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/Patient?_count=20&_fields=id,_lastUpdated,name,birthDate,gender&_sort=-_lastUpdated",
+  "final_text": "Lena Okafor now has exactly one Patient record: Patient/d0d70d50-5a4d-4d1e-bca7-42f5b909bd05. I created it, since none existed before.\n\nThe patient list showed \"No results\" when I first checked, but it was still loading, so that check was unreliable. When it finished loading, the only records were the two I had just created, so there was no earlier record for her.\n\nMy first Create saved a blank Patient, and the same click appears to have created a second blank one. I filled in the first with Lena's details through the Edit form. I then deleted the other blank record (Patient/5293dcd9-8048-4212-92d9-12b0492b9bb7), which I had created. The list now shows one patient only.\n\nThe record holds only the values you gave:\n- **Name:** Lena Okafor\n- **Date of birth:** 1988-04-22\n- **Sex:** female\n- **Address:** 14 Birch Lane, Springfield, MA 01103\n- **Telecom:** home phone 413-555-0187 and email lena.okafor@example.org\n\nRESULT: DONE Patient/d0d70d50-5a4d-4d1e-bca7-42f5b909bd05",
+  "model_calls": 59,
+  "actions": 718,
+  "tokens_in": 3116276,
+  "tokens_out": 11613
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "Patient/d0d70d50-5a4d-4d1e-bca7-42f5b909bd05"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "Patient/d0d70d50-5a4d-4d1e-bca7-42f5b909bd05": "created"
+  }
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "Patient",
+   "write": 1,
+   "faulted": true
+  },
+  {
+   "fault": "duplicate"
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ServiceRequest",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "PUT",
+   "type": "Patient",
+   "write": 2,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ServiceRequest",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "PUT",
+   "type": "Patient",
+   "write": 3,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "DELETE",
+   "type": "Patient",
+   "write": 4,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 2,
+ "host_load": {
+  "start": 25.6,
+  "end": 50.8,
+  "waited_s": 120
+ }
+}

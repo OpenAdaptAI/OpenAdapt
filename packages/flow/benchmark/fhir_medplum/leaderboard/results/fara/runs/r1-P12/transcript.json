@@ -1,0 +1,1300 @@
+{
+ "transcript": [
+  {
+   "reply": "To search for an existing Patient record with the given details, enter the patient's name in the search bar and submit the query.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [204, 32], \"text\": \"Lena Okafor\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "To perform a more precise search by name, clear the existing query and enter 'Lena' in the search bar, then submit\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [295, 32], \"text\": \"Lena\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "To perform a comprehensive search for the patient by name, birth date, and gender, first open the advanced filter panel by clicking the 'Filters' button\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [163, 170]}}\n</tool_call>"
+  },
+  {
+   "reply": "To perform a comprehensive search for the patient by name, birth date, and gender, add filters for Name, Birth Date, and Gender fields\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [192, 289]}}\n</tool_call>"
+  },
+  {
+   "reply": "To configure the first filter combination, open the Field dropdown in the first filter row\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [318, 230]}}\n</tool_call>"
+  },
+  {
+   "reply": "Select the 'Name' field as the filter field for the first filter combination\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [318, 330]}}\n</tool_call>"
+  },
+  {
+   "reply": "To configure the first filter combination, open the Field dropdown in the first filter row\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [318, 230]}}\n</tool_call>"
+  },
+  {
+   "reply": "Select the 'Name' field as the filter field for the first filter combination\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [318, 330]}}\n</tool_call>"
+  },
+  {
+   "reply": "To configure the first filter combination, open the Field dropdown in the first filter row\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [318, 230]}}\n</tool_call>"
+  },
+  {
+   "reply": "Select the 'Name' field as the filter field for the first filter combination\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [318, 330]}}\n</tool_call>"
+  },
+  {
+   "reply": "To configure the first filter combination, open the Field dropdown in the first filter row\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [318, 230]}}\n</tool_call>"
+  },
+  {
+   "reply": "Select the 'Name' field as the filter field for the first filter combination\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [318, 330]}}\n</tool_call>"
+  },
+  {
+   "reply": "To search for patients with the given name, open the 'Where' filter's field dropdown\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [318, 230]}}\n</tool_call>"
+  },
+  {
+   "reply": "To search for patients by name, select the 'Name' field from the dropdown\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [318, 330]}}\n</tool_call>"
+  },
+  {
+   "reply": "To search for patients with the specified address, enter the address into the 'Search value' field and submit the filter\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [771, 230], \"text\": \"14 Birch Lane, Springfield, MA 01103\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "To search for patients by birth date, first open the 'Where' filter's field dropdown so we can select the 'Birth Date' field\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [318, 230]}}\n</tool_call>"
+  },
+  {
+   "reply": "To search for patients by birth date, select the 'Birth Date' field from the dropdown\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [318, 330]}}\n</tool_call>"
+  },
+  {
+   "reply": "To search for patients by birth date, enter the birth date '1988-04-22' into the 'Search value' field and submit the filter\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [771, 230], \"text\": \"1988-04-22\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "To search for patients by gender, open the 'FilterWhere' filter's field dropdown so we can select the 'Gender' field\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [318, 230]}}\n</tool_call>"
+  },
+  {
+   "reply": "To search for patients by gender, select the 'Gender' field from the dropdown\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [318, 330]}}\n</tool_call>"
+  },
+  {
+   "reply": "To search for patients by gender, enter 'female' into the 'Search value' field and submit the filter\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [771, 230], \"text\": \"female\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "To create a new Patient record for Lena Okafor, click the 'New Patient' button\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [1236, 170]}}\n</tool_call>"
+  },
+  {
+   "reply": "To add the patient's name, open the 'Add Name' section by clicking its button\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [270, 630]}}\n</tool_call>"
+  },
+  {
+   "reply": "Enter the patient's given name into the 'Given' field\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [630, 637], \"text\": \"Lena\", \"press_enter\": false, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Enter the patient's family name into the 'Family' field\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [800, 637], \"text\": \"Okafor\", \"press_enter\": false, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to bring the 'Telecom' section into view so we can add the patient's home phone number\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "To add the patient's home phone number, click the 'Add Telecom' button to open the telecom section\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [270, 748]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to bring the 'Telecom' section into view so we can add the patient's home phone number\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 800}}\n</tool_call>"
+  },
+  {
+   "reply": "To add the patient's home phone number, click the 'Add Telecom' button to open the telecom section\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [270, 800]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to bring the 'Telecom' section into view so we can add the patient's home phone number\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to bring the 'Telecom' section into view so we can add the patient's home phone number\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "To add the patient's home phone number, click the 'Add Telecom' button to open the telecom section\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [270, 263]}}\n</tool_call>"
+  },
+  {
+   "reply": "To add the patient's home phone number, open the 'Value' field by clicking the 'c' button in the telecom section\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [714, 263]}}\n</tool_call>"
+  },
+  {
+   "reply": "Enter the patient's home phone number into the Value field\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [840, 263], \"text\": \"413-555-0187\", \"press_enter\": false, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to bring the 'Address' section into view so we can fill in the patient's address\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to bring the 'Address' section into view so we can fill in the patient's address\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 800}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to bring the 'Address' section into view so we can fill in the patient's address\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to bring the 'Address' section into view so we can fill in the patient's address\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 800}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to bring the 'Address' section into view so we can fill in the patient's address\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "The address section is above the telecom section; scroll up to bring the address section into view so we can fill in the patient's address\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 800}}\n</tool_call>"
+  },
+  {
+   "reply": "To enter the patient's address, open the 'Address' section by clicking its 'Add Address' button\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [270, 673]}}\n</tool_call>"
+  },
+  {
+   "reply": "Enter the patient's address into the address form fields\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [276, 711], \"text\": \"14\", \"press_enter\": false, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Enter the patient's street address into the 'Line 1' field\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [514, 711], \"text\": \"14 Birch Lane\", \"press_enter\": false, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Enter the patient's city into the 'City' field\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [756, 711], \"text\": \"Springfield\", \"press_enter\": false, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Enter the patient's state into the 'State' field\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [874, 711], \"text\": \"MA\", \"press_enter\": false, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Enter the patient's postal code into the 'Postal Code' field\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [1002, 711], \"text\": \"01103\", \"press_enter\": false, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to bring the Gender section into view so we can select the 'Female' option\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to bring the Gender section into view so we can select the 'Female' option\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 800}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to bring the Gender section into view so we can select the 'Female' option\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to bring the Gender section into view so we can select the 'Female' option\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 800}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to bring the Gender section into view so we can select the 'Female' option\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to bring the Gender section into view so we can select the 'Female' option\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 800}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to bring the Gender section into view so we can select the 'Female' option\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to bring the Gender section into view so we can select the 'Female' option\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 800}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to bring the Gender section into view so we can select the 'Female' option\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to bring the Gender section into view so we can select the 'Female' option\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 800}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to bring the Gender section into view so we can select the 'Female' option\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to bring the Gender section into view so we can select the 'Female' option\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 800}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to bring the Gender section into view so we can select the 'Female' option\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "The Gender section is likely above the current view; scroll up to bring it into view so we can select 'Female'\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 800}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to bring the Gender section into view so we can select the 'Female' option\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 800}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to bring the Gender section into view so we can select the 'Female' option\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to bring the Gender section into view so we can select the 'Female' option\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "The Gender section is likely above the current view; scroll up to bring it into view so we can select 'Female'\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 800}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to bring the Gender section into view so we can select the 'Female' option\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 800}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to bring the Gender section into view so we can select the 'Female' option\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to bring the Gender section into view so we can select the 'Female' option\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 202.73291925465838,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Lena Okafor"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 293.167701863354,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Lena"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 161.98757763975155,
+   "y": 167.48768472906403,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 190.80745341614906,
+   "y": 284.72906403940885,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 316.0248447204969,
+   "y": 226.60098522167488,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 316.0248447204969,
+   "y": 325.1231527093596,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 316.0248447204969,
+   "y": 226.60098522167488,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 316.0248447204969,
+   "y": 325.1231527093596,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 316.0248447204969,
+   "y": 226.60098522167488,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 316.0248447204969,
+   "y": 325.1231527093596,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 316.0248447204969,
+   "y": 226.60098522167488,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 316.0248447204969,
+   "y": 325.1231527093596,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 316.0248447204969,
+   "y": 226.60098522167488,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 316.0248447204969,
+   "y": 325.1231527093596,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 766.2111801242236,
+   "y": 226.60098522167488,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "14 Birch Lane, Springfield, MA 01103"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 316.0248447204969,
+   "y": 226.60098522167488,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 316.0248447204969,
+   "y": 325.1231527093596,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 766.2111801242236,
+   "y": 226.60098522167488,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "1988-04-22"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 316.0248447204969,
+   "y": 226.60098522167488,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 316.0248447204969,
+   "y": 325.1231527093596,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 766.2111801242236,
+   "y": 226.60098522167488,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "female"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 1228.3229813664595,
+   "y": 167.48768472906403,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 268.3229813664596,
+   "y": 620.6896551724138,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 626.0869565217391,
+   "y": 627.5862068965517,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Lena"
+  },
+  {
+   "a": "click",
+   "x": 795.0310559006211,
+   "y": 627.5862068965517,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Okafor"
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "click",
+   "x": 268.3229813664596,
+   "y": 736.9458128078818,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -800.0
+  },
+  {
+   "a": "click",
+   "x": 268.3229813664596,
+   "y": 788.1773399014778,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "click",
+   "x": 268.3229813664596,
+   "y": 259.11330049261085,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 709.5652173913044,
+   "y": 259.11330049261085,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 834.7826086956521,
+   "y": 259.11330049261085,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "413-555-0187"
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -800.0
+  },
+  {
+   "a": "click",
+   "x": 268.3229813664596,
+   "y": 663.0541871921182,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 274.2857142857143,
+   "y": 700.4926108374384,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "14"
+  },
+  {
+   "a": "click",
+   "x": 510.8074534161491,
+   "y": 700.4926108374384,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "14 Birch Lane"
+  },
+  {
+   "a": "click",
+   "x": 751.304347826087,
+   "y": 700.4926108374384,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Springfield"
+  },
+  {
+   "a": "click",
+   "x": 868.5714285714286,
+   "y": 700.4926108374384,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "MA"
+  },
+  {
+   "a": "click",
+   "x": 995.776397515528,
+   "y": 700.4926108374384,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "01103"
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 3014,
+   "out": 81,
+   "usd": 0.0
+  },
+  {
+   "in": 4491,
+   "out": 79,
+   "usd": 0.0
+  },
+  {
+   "in": 5966,
+   "out": 66,
+   "usd": 0.0
+  },
+  {
+   "in": 6092,
+   "out": 64,
+   "usd": 0.0
+  },
+  {
+   "in": 6216,
+   "out": 52,
+   "usd": 0.0
+  },
+  {
+   "in": 6328,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 6439,
+   "out": 52,
+   "usd": 0.0
+  },
+  {
+   "in": 6551,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 6662,
+   "out": 52,
+   "usd": 0.0
+  },
+  {
+   "in": 6774,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 6885,
+   "out": 52,
+   "usd": 0.0
+  },
+  {
+   "in": 6997,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 7108,
+   "out": 54,
+   "usd": 0.0
+  },
+  {
+   "in": 7222,
+   "out": 52,
+   "usd": 0.0
+  },
+  {
+   "in": 7334,
+   "out": 89,
+   "usd": 0.0
+  },
+  {
+   "in": 7483,
+   "out": 64,
+   "usd": 0.0
+  },
+  {
+   "in": 7607,
+   "out": 54,
+   "usd": 0.0
+  },
+  {
+   "in": 7721,
+   "out": 97,
+   "usd": 0.0
+  },
+  {
+   "in": 7878,
+   "out": 61,
+   "usd": 0.0
+  },
+  {
+   "in": 7999,
+   "out": 52,
+   "usd": 0.0
+  },
+  {
+   "in": 8111,
+   "out": 75,
+   "usd": 0.0
+  },
+  {
+   "in": 8246,
+   "out": 56,
+   "usd": 0.0
+  },
+  {
+   "in": 8339,
+   "out": 54,
+   "usd": 0.0
+  },
+  {
+   "in": 8430,
+   "out": 66,
+   "usd": 0.0
+  },
+  {
+   "in": 8533,
+   "out": 67,
+   "usd": 0.0
+  },
+  {
+   "in": 8637,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 8725,
+   "out": 57,
+   "usd": 0.0
+  },
+  {
+   "in": 8819,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 8907,
+   "out": 57,
+   "usd": 0.0
+  },
+  {
+   "in": 9001,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 9089,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 9177,
+   "out": 57,
+   "usd": 0.0
+  },
+  {
+   "in": 9271,
+   "out": 62,
+   "usd": 0.0
+  },
+  {
+   "in": 9370,
+   "out": 75,
+   "usd": 0.0
+  },
+  {
+   "in": 9482,
+   "out": 49,
+   "usd": 0.0
+  },
+  {
+   "in": 9568,
+   "out": 49,
+   "usd": 0.0
+  },
+  {
+   "in": 9654,
+   "out": 49,
+   "usd": 0.0
+  },
+  {
+   "in": 9740,
+   "out": 49,
+   "usd": 0.0
+  },
+  {
+   "in": 9826,
+   "out": 49,
+   "usd": 0.0
+  },
+  {
+   "in": 9912,
+   "out": 56,
+   "usd": 0.0
+  },
+  {
+   "in": 10005,
+   "out": 57,
+   "usd": 0.0
+  },
+  {
+   "in": 10099,
+   "out": 64,
+   "usd": 0.0
+  },
+  {
+   "in": 10200,
+   "out": 70,
+   "usd": 0.0
+  },
+  {
+   "in": 10307,
+   "out": 65,
+   "usd": 0.0
+  },
+  {
+   "in": 10409,
+   "out": 64,
+   "usd": 0.0
+  },
+  {
+   "in": 10510,
+   "out": 71,
+   "usd": 0.0
+  },
+  {
+   "in": 10618,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 10702,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 10786,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 10870,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 10954,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 11038,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 11122,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 11206,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 11290,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 11374,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 11458,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 11542,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 11626,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 11710,
+   "out": 52,
+   "usd": 0.0
+  },
+  {
+   "in": 11799,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 11883,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 11967,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 12051,
+   "out": 52,
+   "usd": 0.0
+  },
+  {
+   "in": 12140,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 12224,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 12308,
+   "out": 47,
+   "usd": 0.0
+  }
+ ]
+}

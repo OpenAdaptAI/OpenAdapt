@@ -2484,9 +2484,17 @@ def _compile_recording(
 
     recording = Path(recording_dir)
     bundle = Path(out_bundle_dir)
+    meta = json.loads(_sealed.read_text(recording / "meta.json"))
+    review = meta.get("multi_surface_record")
+    if isinstance(review, dict) and review.get("confirmed") is not True:
+        # A cross-window recording's surfaces are what replay will drive. A
+        # person confirms them (record's prompt, or confirm-surfaces) first.
+        raise ValueError(
+            "this recording's surfaces have not been confirmed by a person; "
+            f"review them with 'openadapt-flow confirm-surfaces {recording}'"
+        )
     (bundle / "templates").mkdir(parents=True, exist_ok=True)
 
-    meta = json.loads(_sealed.read_text(recording / "meta.json"))
     backend_hints_raw = meta.get("backend_hints")
     backend_hints: Optional[BackendHints] = None
     if backend_hints_raw is not None:

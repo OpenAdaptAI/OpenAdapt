@@ -1,0 +1,56 @@
+{
+ "id": "A11",
+ "class": "clean",
+ "type": "allergy",
+ "expect": "create",
+ "note": "A plain allergy record, without the sentence that says which elements to write.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/AllergyIntolerance returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/AllergyIntolerance returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 10.8,
+ "cost_usd": 0.030686,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "RESULT: NOT DONE Medplum is on the sign-in page rather than signed in, and I have no credentials to log in.",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/signin?next=%2F",
+  "final_text": "I couldn't get into the record, so I haven't checked Rosa Delgado's chart or added anything. Medplum is showing its sign-in page instead of a signed-in session, even after a page reload. I don't have login credentials, and registering a new account isn't something I should do here. If you sign in or give me credentials, I can find the right Rosa Delgado (born 1979-06-14), check whether the penicillin allergy is already recorded, and add it only if it's missing.\n\nRESULT: NOT DONE Medplum is on the sign-in page rather than signed in, and I have no credentials to log in.",
+  "model_calls": 3,
+  "actions": 2,
+  "tokens_in": 23485,
+  "tokens_out": 446
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "absent",
+  "reasons": [
+   "no AllergyIntolerance was written"
+  ],
+  "changes": {}
+ },
+ "proxy": [],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 33.3,
+  "end": 31.7,
+  "waited_s": 0
+ }
+}

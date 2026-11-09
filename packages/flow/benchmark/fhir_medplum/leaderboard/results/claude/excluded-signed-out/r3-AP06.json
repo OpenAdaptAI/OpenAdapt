@@ -1,0 +1,56 @@
+{
+ "id": "AP06",
+ "class": "lost_response",
+ "type": "appointment",
+ "expect": "create",
+ "note": "The booking lands, but the agent gets a 504 instead of the reply.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Appointment returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Appointment returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 10.7,
+ "cost_usd": 0.01701,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "RESULT: NOT DONE Medplum is on the sign-in page with no active session or credentials, so I couldn't access any records.",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/signin?next=%2F",
+  "final_text": "I couldn't book the appointment because Medplum is showing its sign-in page, not the signed-in app. The task said I was already signed in, but the session isn't there, and reloading the page didn't bring it back. I wasn't given any credentials, and I won't guess them or register a new account.\n\nBecause of that, I haven't searched for Tomasz Wren's Patient record or Dr Ama Osei's Practitioner record. I also haven't checked for an existing booking, and I haven't created or changed anything.\n\nIf you sign in, or give me credentials to use, I can look for an existing appointment first. I'd create one only if none exists.\n\nRESULT: NOT DONE Medplum is on the sign-in page with no active session or credentials, so I couldn't access any records.",
+  "model_calls": 3,
+  "actions": 2,
+  "tokens_in": 23370,
+  "tokens_out": 529
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "absent",
+  "reasons": [
+   "no Appointment was written"
+  ],
+  "changes": {}
+ },
+ "proxy": [],
+ "fault_delivered": false,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 23.3,
+  "end": 21.7,
+  "waited_s": 0
+ }
+}

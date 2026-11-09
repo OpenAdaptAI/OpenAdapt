@@ -1,0 +1,61 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I couldn't start the task: Medplum is showing its \"Sign in to Medplum\" page, not a signed-in session. I reloaded the page and it still asks for an email. I wasn't given any credentials. I also didn't use the Register link, because creating an account isn't something I can do. I haven't looked up Rosa Delgado or changed any records.\n\nIf you sign in or give me a working session, I can check for an existing penicillin allergy and add one if it's missing.\n\nRESULT: NOT DONE Medplum is on the sign-in page and I have no credentials, so I couldn't reach any patient records.",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6329,
+   "out": 93,
+   "usd": 0.016751,
+   "cached": 0
+  },
+  {
+   "in": 7795,
+   "out": 155,
+   "usd": 0.006489,
+   "cached": 6325
+  },
+  {
+   "in": 9346,
+   "out": 193,
+   "usd": 0.00737,
+   "cached": 7793
+  }
+ ]
+}
