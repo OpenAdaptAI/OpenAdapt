@@ -268,7 +268,9 @@ def evaluate_effect_model(
         results = transforms.evaluate_effect_predicates(model.obligations, bindings)
         if len(results) != len(model.obligations):
             return CandidateResult(identity=identity, reason="language_refused")
-        outcomes = tuple(result.outcome for result in results)
+        outcomes: tuple[Literal["true", "false", "unknown"], ...] = tuple(
+            result.outcome.value for result in results
+        )
         if "unknown" in outcomes:
             return CandidateResult(
                 identity=identity,

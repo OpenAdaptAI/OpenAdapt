@@ -83,6 +83,9 @@ def _isolate_durable_authority(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
         "OPENADAPT_DURABLE_AUTHORITY_DB",
         str(tmp_path / ".durable-authority.sqlite3"),
     )
+    # Sealed-set cooperative locks stay outside authenticated inventories and
+    # outside the real per-user lock directory, including in subprocesses.
+    monkeypatch.setenv("OPENADAPT_SEALED_LOCK_DIR", str(tmp_path / ".sealed-locks"))
     # Offline Seals are on by default; keep each test's Seal key and batch
     # queue out of the real home directory.
     monkeypatch.setenv("OPENADAPT_SEAL_HOME", str(tmp_path / ".seal-home"))
@@ -120,3 +123,11 @@ def pytest_runtest_makereport(item, call):
 
     if is_pytest_timeout(call.excinfo.value):
         clear_leaked_running_loop()
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    # A package-local pyproject.toml cuts off ancestor conftest discovery.
+    if not config.pluginmanager.hasplugin("openadapt-headless"):
+        from tests import headless_guard
+
+        config.pluginmanager.register(headless_guard, "openadapt-headless")

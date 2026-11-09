@@ -1386,6 +1386,7 @@ def _eval(node: Node, ctx: _Ctx) -> Value:
             return args[1] if _as_bool(args[0]) else args[2]
         if node.fn == "fuzzy_match":
             return _fuzzy(args[0], args[1], float(args[2]), ctx)  # type: ignore[arg-type]
+        value: Value
         if node.fn == "matches":
             value = _matches(args[0], args[1], ctx)  # type: ignore[arg-type]
         elif node.fn == "extract":
@@ -2025,7 +2026,9 @@ def evaluate_effect_predicates(
             _effect_text(name, budget)
             values[name] = _freeze_value(value, budget)
     except ExpressionRefused as exc:
-        return tuple(PredicateResult("unknown", exc.code, exc.reason) for _ in sources)
+        return tuple(
+            PredicateResult(Outcome.UNKNOWN, exc.code, exc.reason) for _ in sources
+        )
     types = {name: _value_type(value) for name, value in values.items()}
     results = []
     for source in sources:
@@ -2035,12 +2038,16 @@ def evaluate_effect_predicates(
             _effect_profile(node, budget)  # before type checking any function
             if check(node, types) != B:
                 raise _refuse(RefusalCode.TYPE, "effect predicate must be Boolean")
-            value = _as_bool(_eval(node, _Ctx(params=values, budget=budget)))
+            ctx = _Ctx(params=values, budget=budget)
+            value = _as_bool(_eval(node, ctx))
+            ctx.spend(0)
             results.append(
-                PredicateResult("true" if value else "false", inputs=tuple(refs(node)))
+                PredicateResult(
+                    Outcome.TRUE if value else Outcome.FALSE, inputs=tuple(refs(node))
+                )
             )
         except ExpressionRefused as exc:
-            results.append(PredicateResult("unknown", exc.code, exc.reason))
+            results.append(PredicateResult(Outcome.UNKNOWN, exc.code, exc.reason))
     return tuple(results)
 
 
