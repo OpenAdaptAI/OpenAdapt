@@ -211,8 +211,27 @@ def _record_native_select(
         # a person's selection is, at a person's pace: a change that arrives
         # before the click's frame is kept is refused, by design.
         page.wait_for_timeout(300)
+        kept = pump.__self__.events_kept
         page.keyboard.type("Label Beta", delay=120)
+        # Linux Chromium opens a popup on the click; type-ahead only
+        # highlights an option there, and the change fires when the popup
+        # closes. Closed by the next click, the change and that click share
+        # one batch, which the recorder refuses, by design. Enter commits the
+        # choice first (and is no step: the change records it). Elsewhere the
+        # change has already fired and Enter does nothing (no form here).
+        page.keyboard.press("Enter")
         _settle(pump)
+        # Pump until a change is kept and none has arrived for a settle
+        # window, as a person pauses before the next click.
+        quiet = 0
+        for _ in range(400):
+            before = pump.__self__.events_kept
+            pump()
+            after = pump.__self__.events_kept
+            quiet = quiet + 1 if after == before and after > kept else 0
+            if quiet >= 12:
+                break
+        assert pump.__self__.events_kept > kept, "the select change was never kept"
         page.locator("#single").click()
         _settle(pump)
 
@@ -233,7 +252,10 @@ def test_native_select_records_its_label(fixture_url: str, tmp_path: Path) -> No
 
 def _replay_native_select(
     fixture_url: str, tmp_path: Path, value: str
-) -> tuple[Any, Optional[str]]:
+) -> tuple[Any, Optional[str], int]:
+    """Replay the recorded select with ``value``: the report, the select's
+    value once the run ends, and how many key events reached the select."""
+
     from openadapt_flow.backends.playwright_backend import PlaywrightBackend
     from openadapt_flow.ir import Workflow
     from openadapt_flow.runtime import Replayer
@@ -248,6 +270,11 @@ def _replay_native_select(
         browser = pw.chromium.launch(headless=True)
         try:
             page = browser.new_page(viewport={"width": 1280, "height": 800})
+            page.add_init_script(
+                "window.__selKeys = 0; document.addEventListener('keydown',"
+                " (e) => { if (e.target.id === 'sel') window.__selKeys += 1; },"
+                " true);"
+            )
             page.goto(fixture_url)
             page.wait_for_selector("#sel", state="visible")
             report = Replayer(PlaywrightBackend(page)).run(
@@ -257,52 +284,39 @@ def _replay_native_select(
                 run_dir=tmp_path / "run",
             )
             chosen = page.evaluate("document.getElementById('sel').value")
+            keys = page.evaluate("window.__selKeys")
         finally:
             browser.close()
-    return report, chosen
+    return report, chosen, keys
 
 
-def test_native_select_stops_when_typeahead_lands_on_another_option(
+def test_native_select_replay_chooses_the_labelled_option(
     fixture_url: str, tmp_path: Path
 ) -> None:
-    # "Label" is no option: type-ahead stops on the first option it prefixes
-    # (Label Alpha). The read-back names another label, so the step fails.
-    report, _chosen = _replay_native_select(fixture_url, tmp_path, "Label")
-    assert not report.success
-    typed = next(r for r in report.results if not r.ok)
-    assert typed.step_id.startswith("step_")
-
-
-def test_native_select_replays_another_option(fixture_url: str, tmp_path: Path) -> None:
-    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
-    from openadapt_flow.ir import Workflow
-    from openadapt_flow.runtime import Replayer
-
-    sync_api = pytest.importorskip("playwright.sync_api")
-    rec = _record_native_select(fixture_url, tmp_path / "rec", ("sel",))
-    bundle = tmp_path / "bundle"
-    workflow = compile_recording(rec, bundle, name="select")
-    typed = next(step for step in workflow.steps if step.action.value == "type")
-    assert typed.param == "sel"
-    params = {"sel": "Label Alpha"}
-    with sync_api.sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=True)
-        try:
-            page = browser.new_page(viewport={"width": 1280, "height": 800})
-            page.goto(fixture_url)
-            page.wait_for_selector("#sel", state="visible")
-            report = Replayer(PlaywrightBackend(page)).run(
-                Workflow.load(bundle),
-                params=params,
-                bundle_dir=bundle,
-                run_dir=tmp_path / "run",
-            )
-            chosen = page.evaluate("document.getElementById('sel').value")
-        finally:
-            browser.close()
+    # Recorded as Label Beta; replayed with another option. The option is
+    # chosen by its exact label (select_option), with no keystrokes, so a
+    # popup the click opened (Linux Chromium) commits nothing stale when the
+    # next click closes it.
+    report, chosen, keys = _replay_native_select(fixture_url, tmp_path, "Label Alpha")
     assert report.success, [(r.step_id, r.ok, r.error) for r in report.results]
-    # Recorded as Label Beta; replayed with another option.
     assert chosen == "v-alpha"
+    assert keys == 0
+
+
+def test_native_select_replay_refuses_a_missing_label(
+    fixture_url: str, tmp_path: Path
+) -> None:
+    # "Label" names no option exactly (it only prefixes two). Replay refuses
+    # the step instead of typing, so type-ahead never lands on a near match,
+    # and the run stops before the next click.
+    report, chosen, keys = _replay_native_select(fixture_url, tmp_path, "Label")
+    assert not report.success
+    failed = [r for r in report.results if not r.ok]
+    assert len(failed) == 1 and failed[0].safety_halt
+    assert "labelled" in (failed[0].error or "")
+    assert report.results[-1] is failed[0]
+    assert chosen == ""
+    assert keys == 0
 
 
 def test_native_select_with_a_shared_label_is_refused(

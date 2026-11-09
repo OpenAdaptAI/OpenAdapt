@@ -1157,6 +1157,44 @@ def _fill_iso_date(target: Any, text: str) -> bool:
     return True
 
 
+#: How many enabled options of a native single ``<select>`` carry exactly
+#: ``label`` (``option.label``, which Playwright's ``select_option(label=)``
+#: also matches exactly). ``null`` when the target is not a native select;
+#: ``-1`` when it is one that a label cannot choose (multiple or disabled).
+_NATIVE_SELECT_LABEL_COUNT_JS = r"""(e, label) => {
+    if (e.tagName !== 'SELECT') return null;
+    if (e.multiple || e.disabled) return -1;
+    return Array.from(e.options).filter(
+        (o) => o.label === label && !o.disabled).length;
+}"""
+
+
+def _select_native_option(target: Any, text: str) -> bool:
+    """Choose the option labelled exactly ``text`` in a native ``<select>``.
+
+    Typing into a select only highlights an option where the browser opens a
+    popup for it (Linux Chromium), and commits nothing until the popup
+    closes; Enter to commit could submit a form. ``select_option(label=)``
+    sets the choice on the element itself and fires ``input`` and
+    ``change``, with no key events. ``target`` is an element handle. Returns
+    ``False``, with nothing delivered, when the target is no native select.
+    Once it is, a label that names no single enabled option (or a multiple or
+    disabled select) is refused with nothing delivered: replay never falls
+    back to typing. The caller's read-back still checks the shown label.
+    """
+
+    count = target.evaluate(_NATIVE_SELECT_LABEL_COUNT_JS, text)
+    if count is None:
+        return False
+    if count != 1:
+        raise StructuralResolutionRefused(
+            "the focused native <select> has no single enabled option labelled "
+            "exactly as the step's value; refusing to choose one"
+        )
+    target.select_option(label=text, timeout=1000)
+    return True
+
+
 _TEXT_AT_POINT_JS = r"""([px, py, target]) => {
     // Recorded texts come from OCR, which drops spaces and misreads
     // punctuation ("October-2026-" for "October 2026"): keep letters and
@@ -4994,6 +5032,7 @@ class PlaywrightBackend:
                     _is_iso_date(text)
                     and _fill_iso_date(locator.element_handle(timeout=1000), text)
                 )
+                or _select_native_option(locator.element_handle(timeout=1000), text)
                 or locator.press_sequentially(text, timeout=1000)
             ),
         )
@@ -5582,6 +5621,32 @@ class PlaywrightBackend:
         except Exception:  # noqa: BLE001 - unreadable focus: type as before
             return False
         return target is not None and _fill_iso_date(target, text)
+
+    def select_focused_native_option(self, text: str) -> bool:
+        """Choose ``text`` by its exact label when the focused element is a
+        native ``<select>``, with no keystrokes; ``False`` (nothing delivered)
+        when it is not one. A label no single option carries raises
+        :class:`StructuralResolutionRefused` (see
+        :func:`_select_native_option`). The replayer calls this for a type
+        step before typing; recording and other callers keep ``type_text``.
+        """
+
+        self._assert_qualification_environment_current()
+        try:
+            target = self._focused_element_handle()
+            is_select = target is not None and target.evaluate(
+                "e => e.tagName === 'SELECT'"
+            )
+        except Exception:  # noqa: BLE001 - unreadable focus: not a select
+            return False
+        if is_select is not True:
+            return False
+        # As type_text does: submit bindings and create-form identity checks
+        # see the select as a field this program filled.
+        self._register_focused_field()
+        _select_native_option(target, text)
+        self._snapshot_focused_field(text)
+        return True
 
     def _deliver_text(self, text: str, per_key: Callable[[], None]) -> None:
         """Insert ``text`` at the caret in one call when the focused element

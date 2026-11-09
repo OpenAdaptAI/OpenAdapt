@@ -12346,6 +12346,22 @@ class Replayer:
             )
         return result.png
 
+    def _deliver_type_text(self, text: str) -> None:
+        """Deliver a type step's text to the focused field.
+
+        A native ``<select>`` takes the option labelled exactly ``text`` from
+        the backend's ``select_focused_native_option`` with no keystrokes:
+        typing there only highlights an option where the browser opens a
+        popup (Linux Chromium), and Enter could submit a form. A label no
+        option carries is refused by the backend, never typed. The read-back
+        in :meth:`_typed_input_landed` checks the result unchanged.
+        """
+
+        chooser = getattr(self.backend, "select_focused_native_option", None)
+        if text and callable(chooser) and chooser(text) is True:
+            return
+        self.backend.type_text(text)
+
     def _deliver_backend_call(
         self,
         result: StepResult,
@@ -14455,7 +14471,9 @@ class Replayer:
                 if refusal is not None:
                     return refusal
                 self._require_qualification_environment_current()
-                self._deliver_backend_call(result, lambda: self.backend.type_text(text))
+                self._deliver_backend_call(
+                    result, lambda: self._deliver_type_text(text)
+                )
             if not text:
                 return None  # nothing typed, nothing to verify
             return self._verify_typed_input(
@@ -18128,7 +18146,7 @@ class Replayer:
             result.failure_category = "safety_halt"
             return locale_refusal
         self._require_qualification_environment_current()
-        self._deliver_backend_call(result, lambda: self.backend.type_text(text))
+        self._deliver_backend_call(result, lambda: self._deliver_type_text(text))
         landed, _changed = self._typed_input_landed(
             text,
             field_point,

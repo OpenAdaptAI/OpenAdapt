@@ -398,11 +398,12 @@ gesture compiles to one `DOUBLE_CLICK` step), right click, drag, text entry
 shortcuts, and wheel scrolling.
 
 A native `<select>` choice, by mouse or by typing, is recorded as the chosen
-option's label typed into the select. Replay types the label and reads the
-select's chosen option back; a select that ends on another option stops the
-run. Parameterize it like any field (`--param` with the select's `name`) to
-choose a different option on each run; a value that is no option stops the
-run too, since type-ahead lands on another option. No Enter is recorded for it. A choice made from a widget drawn over a
+option's label typed into the select. Replay chooses the option with exactly
+that label, with no keystrokes, and reads the select's chosen option back; a
+select that ends on another option stops the run. Parameterize it like any
+field (`--param` with the select's `name`) to choose a different option on
+each run; a value that is no option's exact label stops the run before
+anything is chosen. No Enter is recorded for it. A choice made from a widget drawn over a
 hidden select (TomSelect, Select2) is recorded as the clicks and typing on the
 widget; the change the widget's script then sends to the hidden select is not
 recorded again. A multiple-choice select is refused.
