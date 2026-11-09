@@ -1,0 +1,61 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I couldn't check or record the allergy because Medplum is showing its sign-in page, not a signed-in session. Reloading the page didn't change that. I wasn't given an email or password, and I won't use the Register link to create an account. So I haven't looked at Rosa Delgado's record or changed anything.\n\nRESULT: NOT DONE Medplum is on the sign-in page and I have no credentials, so I couldn't reach the patient's records.",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6357,
+   "out": 103,
+   "usd": 0.002309,
+   "cached": 6353
+  },
+  {
+   "in": 7833,
+   "out": 147,
+   "usd": 0.00644,
+   "cached": 6353
+  },
+  {
+   "in": 9381,
+   "out": 144,
+   "usd": 0.00688,
+   "cached": 7831
+  }
+ ]
+}

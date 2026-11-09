@@ -160,4 +160,11 @@ def _result(run: SkillRun, agent: Any) -> dict[str, Any]:
         "receipt": run.replay.get("receipt"),
         "receipt_outcome": run.replay.get("receipt_outcome"),
     }
+    if run.status == "CACHE_HALTED":
+        # The engine's own halt reason (a step and a check), scrubbed under
+        # the local posture like any logged text.
+        from openadapt_flow.privacy import scrub_text
+
+        reason = run.replay.get("halt_reason")
+        result["halt_reason"] = scrub_text(str(reason)) if reason else None
     return result

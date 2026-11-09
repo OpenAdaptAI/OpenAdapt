@@ -18,6 +18,7 @@ import time
 from pathlib import Path
 from typing import Any, Optional
 
+from openadapt_flow.rl_env import lifecycle
 from openadapt_flow.rl_env.agents import scripted
 from openadapt_flow.rl_env.tasks import load_environment
 from openadapt_flow.rl_env.validate import _free_port
@@ -49,7 +50,7 @@ def run(
     proc: Optional[subprocess.Popen[bytes]] = None
     if base_url is None:
         port = _free_port()
-        proc = subprocess.Popen(
+        proc = lifecycle.spawn(
             [
                 sys.executable,
                 "-m",
@@ -110,8 +111,7 @@ def run(
         thread.join()
     wall = time.monotonic() - started
     if proc is not None:
-        proc.terminate()
-        proc.wait(timeout=30)
+        lifecycle.stop(proc)
     done = [r for r in rows if "error" not in r]
     resets = [r["reset_s"] for r in done]
     episodes_s = [r["episode_s"] for r in done]

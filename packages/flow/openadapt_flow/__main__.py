@@ -2697,6 +2697,15 @@ def _attached_web_page(backend_cfg, *, url: Optional[str], workflow=None):
             )
         except BrowserAttachError as exc:
             raise SystemExit(f"REFUSED: {exc}. Nothing was executed.") from None
+        from openadapt_flow._browser_readiness import (
+            BrowserReadinessError,
+            require_rendering_ready,
+        )
+
+        try:
+            require_rendering_ready(browser, attached_page=page)
+        except BrowserReadinessError as exc:
+            raise SystemExit(f"REFUSED: {exc}. Nothing was executed.") from None
         from openadapt_flow.backends.playwright_backend import prepare_ws_guard
 
         # Documents the tab loads from now on are guarded from their start.
@@ -4239,6 +4248,16 @@ def _cmd_run(args: argparse.Namespace) -> int:
             if refused is not None:
                 return refused
     policy_source = args.policy or cfg.policy.policy
+    subroutine_library = None
+    library_path = getattr(args, "subroutine_library", None)
+    if library_path:
+        from openadapt_flow.subroutines import SubroutineError, load_library
+
+        try:
+            subroutine_library = load_library(library_path)
+        except SubroutineError as exc:
+            print(f"run REFUSED: {exc}. Nothing was executed.")
+            return 2
 
     report = evaluate_run_gate(
         workflow,
@@ -4259,6 +4278,10 @@ def _cmd_run(args: argparse.Namespace) -> int:
             effective_require_settled if profile is not None else None
         ),
         qualification_evidence_only=qualification_case is not None,
+        # Re-admit embedded subroutines against the CURRENT library: a
+        # certificate cannot know a newer version was published since.
+        subroutine_library=subroutine_library,
+        subroutine_workflow_id=getattr(args, "subroutine_workflow_id", None),
     )
     print(report.render())
 
@@ -7219,18 +7242,36 @@ def _save_subroutine_library(library: Any, path: Optional[str], before: str) -> 
     save_library(library, path)
 
 
-def _add_subroutine_library_flags(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument(
-        "--subroutine-library",
-        default=None,
-        metavar="JSON",
-        help=(
+def _add_subroutine_library_flags(
+    parser: argparse.ArgumentParser, *, for_run: bool = False
+) -> None:
+    if for_run:
+        help_text = (
+            "Current subroutine library to re-admit embedded subroutines "
+            "against before this run. Required when the bundle embeds a "
+            "subroutine; a certification made before a newer version was "
+            "published does not let the old version run."
+        )
+    else:
+        help_text = (
             "Subroutine library to admit embedded subroutines against. "
             "Certifying registers this workflow in it, so a new version of a "
             "subroutine it uses re-qualifies it. Required when the bundle "
             "embeds a subroutine."
-        ),
+        )
+    parser.add_argument(
+        "--subroutine-library", default=None, metavar="JSON", help=help_text
     )
+    if for_run:
+        parser.add_argument(
+            "--subroutine-workflow-id",
+            default=None,
+            metavar="ID",
+            help=(
+                "Id this workflow was registered under when it was certified "
+                "(default: the workflow name)"
+            ),
+        )
 
 
 def _cmd_qualify_proposal(args: argparse.Namespace) -> int:
@@ -9170,8 +9211,9 @@ def _cmd_qualify_campaign(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     """Build the top-level argument parser."""
     from openadapt_flow.cli_hints import command
+    from openadapt_flow.cli_tasks import TaskParser
 
-    parser = argparse.ArgumentParser(
+    parser = TaskParser(
         prog="openadapt-flow",
         description=(
             "Record a task and compile it into a program that runs on "
@@ -9192,7 +9234,9 @@ def build_parser() -> argparse.ArgumentParser:
         action="version",
         version=f"%(prog)s {_package_version()}",
     )
-    sub = parser.add_subparsers(dest="command", required=True)
+    sub = parser.add_subparsers(
+        dest="command", required=True, parser_class=argparse.ArgumentParser
+    )
 
     p = sub.add_parser(
         "demo",
@@ -10233,6 +10277,7 @@ def build_parser() -> argparse.ArgumentParser:
     # Set by the agent runner for an intake-granted run (#1890): the exact
     # bundle digest the grant admitted. Not an operator knob.
     p.add_argument("--admitted-bundle-sha256", default=None, help=argparse.SUPPRESS)
+    _add_subroutine_library_flags(p, for_run=True)
     p.add_argument("--managed-dispatch-file", default=None, help=argparse.SUPPRESS)
     p.add_argument(
         "--permission-trust",
@@ -11629,6 +11674,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_browser_session_flags(q)
     _add_deployment_flags(q)
     _add_approval_flags(q)
+    _add_subroutine_library_flags(q, for_run=True)
     q.set_defaults(func=_cmd_qualify)
 
     q = qsub.add_parser(
@@ -13004,6 +13050,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     _register_learn(sub)
 
+    from openadapt_flow.cli_reconcile import register as _register_reconcile
+
+    _register_reconcile(sub)
+
     from openadapt_flow.cli_cleanup import register as _register_cleanup
 
     _register_cleanup(sub)
@@ -13024,6 +13074,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     register_fleet_parser(sub)
 
+    parser.add_task_help()
     return parser
 
 
@@ -14017,8 +14068,11 @@ def _sealed_input_refusal(args: argparse.Namespace) -> Optional[str]:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """CLI entry point. Returns a process exit code."""
+    from openadapt_flow.cli_tasks import alias_notice, translate
+
     raw = list(sys.argv[1:] if argv is None else argv)
-    if raw[:1] in (["demo"], ["tutorial"]) and not _PREWARM_SKIP_FLAGS & set(raw):
+    routed = translate(raw)
+    if routed[:1] in (["demo"], ["tutorial"]) and not _PREWARM_SKIP_FLAGS & set(routed):
         # Building the parser imports for a second or two on a new install;
         # start loading OCR and checking the browser driver meanwhile.
         from openadapt_flow import _prewarm
@@ -14027,8 +14081,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     from openadapt_flow._browser_setup import BrowserSupportMissing
 
-    argv = list(sys.argv[1:] if argv is None else argv)
-    argv = _qualify_default_form(argv)
+    argv = _qualify_default_form(routed)
     from openadapt_flow.cli_admit import admit_default_form
 
     argv = admit_default_form(argv)
@@ -14039,7 +14092,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     from openadapt_flow import no_outbound
 
     no_outbound.enforce_from_env()
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    alias_notice(raw, getattr(parser, "task_names", {}), "openadapt-flow")
     if getattr(args, "config_sha256", None):
         if not getattr(args, "config", None):
             print("REFUSED: --config-sha256 needs --config", file=sys.stderr)

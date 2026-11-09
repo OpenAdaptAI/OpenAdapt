@@ -40,6 +40,7 @@ from typing import Any, ClassVar, Mapping, Optional, Sequence
 from openadapt_flow.compile_agent.harness import GateRefused, Harness, StaleRef
 from openadapt_flow.jit.adapters import UnsupportedAction
 from openadapt_flow.jit.compile_agent import TaskRequest
+from openadapt_flow.privacy import PLACEHOLDER_HELP
 from openadapt_flow.teach_scope import ScopeViolation
 
 __all__ = [
@@ -230,7 +231,11 @@ class ScriptedAgent:
         for step in self.steps:
             obs = harness.observe()
             if "click" in step:
-                control = obs.find(str(step["click"]), near=step.get("near"))
+                near = step.get("near")
+                if near is not None and hasattr(harness, "shown_as"):
+                    # The listing shows a task's own value as its placeholder.
+                    near = harness.shown_as(str(near))
+                control = obs.find(str(step["click"]), near=near)
                 if control is None:
                     raise LookupError(f"no single control named {step['click']!r}")
                 harness.click(control.ref)
@@ -254,7 +259,8 @@ class ScriptedAgent:
 
 # -- Claude -----------------------------------------------------------------------
 
-_SELECTIVE_SYSTEM = """\
+_SELECTIVE_SYSTEM = (
+    """\
 You operate a web application for the user through a harness. You see the \
 page as a structural listing: one line per heading, text, table row or \
 control. Controls carry refs such as [e3]; act on them with click, type_text \
@@ -264,16 +270,24 @@ not enough to decide what to do. Before any save, the harness checks that the \
 right record is on screen; a save on the wrong record is refused and ends the \
 run. Do exactly the task, with the values given, and nothing else. When the \
 task is done, or cannot be done, call finish with a one-line summary."""
+    + " "
+    + PLACEHOLDER_HELP
+)
 
-_EVERY_TURN_SYSTEM = """\
+_EVERY_TURN_SYSTEM = (
+    """\
 You operate a web application for the user with the computer tools. After \
 every action you get a screenshot of the screen. Before any save, the \
 harness checks that the right record is on screen; a save on the wrong \
 record is refused and ends the run. Do exactly the task, with the values \
 given, and nothing else. When the task is done, or cannot be done, call \
 finish with a one-line summary."""
+    + " "
+    + PLACEHOLDER_HELP
+)
 
-_CODE_SYSTEM = """\
+_CODE_SYSTEM = (
+    """\
 You operate an application for the user through a terminal-style tool, run. \
 Each call takes a short script, one command per line, and returns what each \
 line printed. Read the app's structure with tree, find, text and read; act on \
@@ -287,6 +301,9 @@ right record is on screen; a save on the wrong record is refused and ends the \
 run. Do exactly the task, with the values given, and nothing else. After the \
 save, read the screen to confirm it. When the task is done, or cannot be \
 done, call finish with a one-line summary."""
+    + " "
+    + PLACEHOLDER_HELP
+)
 
 _FINISH_TOOL = {
     "name": "finish",
@@ -304,7 +321,10 @@ _FINISH_TOOL = {
 _SELECTIVE_TOOLS = [
     {
         "name": "observe",
-        "description": "Read the current page's structural listing again.",
+        "description": (
+            "Read the current page's structural listing again. The task's own "
+            "values appear in it as \u27e6task.NAME\u27e7 placeholders."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {},
@@ -315,7 +335,9 @@ _SELECTIVE_TOOLS = [
         "name": "screenshot",
         "description": (
             "Get a screenshot of the page. Costs far more than a listing; use it "
-            "only when the listing is not enough."
+            "only when the listing is not enough. The task's own values are "
+            "labelled boxes such as \u27e6task.identity_1\u27e7; other personal "
+            "data is covered by dark boxes."
         ),
         "input_schema": {
             "type": "object",
@@ -339,7 +361,9 @@ _SELECTIVE_TOOLS = [
         "name": "type_text",
         "description": (
             "Type text. With a ref, click that field first; without one, type "
-            "into the focused field. Typing appends to what the field holds."
+            "into the focused field. Typing appends to what the field holds. "
+            "A \u27e6task.NAME\u27e7 placeholder in the text is typed as that "
+            "task value."
         ),
         "input_schema": {
             "type": "object",
@@ -370,7 +394,9 @@ def _run_tool_spec() -> dict[str, Any]:
 
     return {
         "name": "run",
-        "description": "Run a short script against the app.\n" + COMMANDS,
+        "description": "Run a short script against the app. The task's own "
+        "values appear in output as \u27e6task.NAME\u27e7 placeholders, and a "
+        "placeholder in typed text is typed as that value.\n" + COMMANDS,
         "input_schema": {
             "type": "object",
             "properties": {
@@ -399,16 +425,20 @@ def _get(block: Any, name: str, default: Any = None) -> Any:
     return getattr(block, name, default)
 
 
-def _image(png: bytes) -> dict[str, Any]:
+def _image(png: bytes, harness: Any = None) -> dict[str, Any]:
     """An image block for the model. Every screenshot the model sees leaves
     the machine, so it is redacted first (or sent raw under the recorded
     ``OPENADAPT_FLOW_SEND_UNSCRUBBED`` opt-out); without the privacy extra
-    this raises and nothing is sent."""
+    this raises and nothing is sent. With the ``harness`` it came from, each
+    place the screen shows a value bound to the task is covered by a box
+    labelled with that value's placeholder."""
     import base64
 
     from openadapt_flow.privacy import prepare_outbound_image
 
-    png = prepare_outbound_image(png, "a compile-agent screenshot")
+    regions = getattr(harness, "placeholder_regions", None)
+    labels = regions(png) if callable(regions) else []
+    png = prepare_outbound_image(png, "a compile-agent screenshot", labels)
 
     return {
         "type": "image",
@@ -418,6 +448,16 @@ def _image(png: bytes) -> dict[str, Any]:
             "data": base64.standard_b64encode(png).decode("ascii"),
         },
     }
+
+
+def _task_text(harness: Any, request: TaskRequest) -> str:
+    """The instruction as the model sees it: the record identity the task
+    names is its placeholder (see :meth:`Harness.task_text`)."""
+
+    task_text = getattr(harness, "task_text", None)
+    return (
+        task_text(request.instruction) if callable(task_text) else request.instruction
+    )
 
 
 def _count_images(messages: Sequence[Mapping[str, Any]]) -> int:
@@ -581,7 +621,7 @@ class ClaudeAgent:
             system = _CODE_SYSTEM
             tools = [_run_tool_spec(), _FINISH_TOOL]
             first = [
-                {"type": "text", "text": f"Task: {request.instruction}"},
+                {"type": "text", "text": f"Task: {_task_text(harness, request)}"},
                 {
                     "type": "text",
                     "text": "The harness ran `tree` for you. Its output:\n\n"
@@ -592,7 +632,7 @@ class ClaudeAgent:
             system = _SELECTIVE_SYSTEM
             tools = list(_SELECTIVE_TOOLS)
             first = [
-                {"type": "text", "text": f"Task: {request.instruction}"},
+                {"type": "text", "text": f"Task: {_task_text(harness, request)}"},
                 {"type": "text", "text": "Current page:\n" + harness.observe().text},
             ]
         else:
@@ -602,8 +642,8 @@ class ClaudeAgent:
                 _FINISH_TOOL,
             ]
             first = [
-                {"type": "text", "text": f"Task: {request.instruction}"},
-                _image(harness.screenshot("every_turn")),
+                {"type": "text", "text": f"Task: {_task_text(harness, request)}"},
+                _image(harness.screenshot("every_turn"), harness),
             ]
         messages: list[dict[str, Any]] = [{"role": "user", "content": first}]
         extra: dict[str, Any] = {"cache_control": {"type": "ephemeral"}}
@@ -846,7 +886,7 @@ class ClaudeAgent:
         if name == "observe":
             return [{"type": "text", "text": harness.observe().text}]
         if name == "screenshot":
-            return [_image(harness.screenshot("requested"))]
+            return [_image(harness.screenshot("requested"), harness)]
         if name == "click":
             harness.click(str(args["ref"]))
         elif name == "type_text":
@@ -859,7 +899,7 @@ class ClaudeAgent:
         out: list[dict[str, Any]] = [{"type": "text", "text": harness.observe().text}]
         if harness.stats.gate_checks > gates_before:
             # A write was committed: show the screen it left (verification gate).
-            out.append(_image(harness.screenshot("gate")))
+            out.append(_image(harness.screenshot("gate"), harness))
         return out
 
     def _computer(
@@ -867,7 +907,7 @@ class ClaudeAgent:
     ) -> list[dict[str, Any]]:
         obs = harness.act({"action": name, **args})
         harness.stats.screenshots_every_turn += 1
-        out: list[dict[str, Any]] = [_image(obs.png)]
+        out: list[dict[str, Any]] = [_image(obs.png, harness)]
         if obs.notes:
             out.insert(0, {"type": "text", "text": "; ".join(obs.notes)})
         return out

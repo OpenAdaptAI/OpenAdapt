@@ -1,0 +1,39 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_086cba97a842b2a0016ae963db32e087d2b043812bfb8f1041",
+     "call_id": "call_KvqpisKMktzgGPrftRrh3AhE",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE The app displays a sign-in screen; I cannot find the patient or verify the allergy without access.",
+   "calls": []
+  }
+ ],
+ "actions": [],
+ "usage": [
+  {
+   "in": 2343,
+   "out": 23,
+   "usd": 0.000704,
+   "cached": 2340
+  },
+  {
+   "in": 3560,
+   "out": 50,
+   "usd": 0.001217,
+   "cached": 3557
+  }
+ ]
+}

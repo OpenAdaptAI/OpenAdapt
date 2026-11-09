@@ -1,0 +1,118 @@
+{
+ "id": "A11",
+ "class": "clean",
+ "type": "allergy",
+ "expect": "create",
+ "note": "A plain allergy record, without the sentence that says which elements to write.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9810/fhir/R4/AllergyIntolerance returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9810/fhir/R4/AllergyIntolerance returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 94.4,
+ "cost_usd": 0.149543,
+ "claim": {
+  "status": "done",
+  "id": "AllergyIntolerance/d73cbd89-26a6-4b25-98bb-b6d542760951",
+  "note": "RESULT: DONE AllergyIntolerance/d73cbd89-26a6-4b25-98bb-b6d542760951",
+  "claim_line": true,
+  "end_url": "http://localhost:9811/AllergyIntolerance/d73cbd89-26a6-4b25-98bb-b6d542760951",
+  "final_text": "RESULT: DONE AllergyIntolerance/d73cbd89-26a6-4b25-98bb-b6d542760951",
+  "model_calls": 24,
+  "actions": 25,
+  "tokens_in": 404789,
+  "tokens_out": 1163
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "AllergyIntolerance/d73cbd89-26a6-4b25-98bb-b6d542760951"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "AllergyIntolerance/d73cbd89-26a6-4b25-98bb-b6d542760951": "created"
+  }
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "AllergyIntolerance",
+   "write": 1,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 20.9,
+  "end": 9.8,
+  "waited_s": 0
+ }
+}

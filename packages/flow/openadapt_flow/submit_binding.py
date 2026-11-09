@@ -185,17 +185,20 @@ _OBSERVE_SUBMIT_BINDING_TEMPLATE = r"""(control, fields, baseline) => {
         // Where and how the form submits (origin, path and query), the
         // name and type of every control the submission would carry, and
         // the values of the controls the run did not type into.
+        // A control named action or method masks the form's own property.
+        const formValue = (name) => Object.getOwnPropertyDescriptor(
+            win.HTMLFormElement.prototype, name).get.call(form);
         let action = '';
         const query = [];
         try {
             const target = submitter.hasAttribute('formaction')
-                ? submitter.formAction : form.action;
+                ? submitter.formAction : formValue('action');
             const url = new URL(target, doc.baseURI);
             action = url.origin + url.pathname;
             for (const [key, value] of url.searchParams) query.push([key, value]);
         } catch (_) {}
         const method = String((submitter.hasAttribute('formmethod')
-            ? submitter.formMethod : form.method) || 'get').toLowerCase();
+            ? submitter.formMethod : formValue('method')) || 'get').toLowerCase();
         const controls = [];
         const values = [];
         // Hidden values that changed since the first field was filled in.

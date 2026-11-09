@@ -19,10 +19,17 @@
 
 ### Changed
 
+- The model never sees the task's own identity or inputs. Where a listing or screenshot shows a value bound to the task (a declared `on_screen` identity string or a task input), it is sent as a typed placeholder such as `⟦task.identity_1⟧` or `⟦task.note⟧`: in text, and as a labelled box in the redacted screenshot. Before, the scrubber redacted the task's own patient name and MRN, and Claude stopped at read-back because it could not tell the task's row from any other. Unbound personal data is still redacted generically. The agent may type a placeholder; the harness types the value. The save gate and the read-back still check the real values locally.
+- `openadapt wrap` takes `--max-input-bytes`. Claude's default ceiling on one rendered request is now 4 MiB (was 64 KiB, which ended every screenshot-per-turn run on turn 2); OpenAI keeps 64 KiB. No setting may exceed 32 MiB, and a request above the setting is still never sent.
+
 - No command falls back to the demo app on its own. `replay` needs a target: `--url`, `backend.url` in `--config`, or `--demo-app` to serve the bundled MockMed (the tutorial and quickstart commands pass it; `--drift` needs it). The variant router's first-screen probe captures nothing without a URL. `qualify accept`'s break-it check no longer runs every workflow's oracle against MockMed: it builds the lie from the workflow itself (a store that did not change, and a screen showing the workflow's own success text and every value the run typed). The reference Execute worker refuses, before running anything, an admission whose `target_url` it cannot drive, instead of resetting and reading that app as if it were the demo.
 
 ### Fixes
 
+- The scrubber no longer rewrites a listing's element refs: `[e3] button "Open"` came back as `[<US_DRIVER_LICENSE>] button "Open"`. Only page text is scrubbed, cell by cell; ref tokens never reach the scrubber.
+- `openadapt wrap` on a held task reports `CACHE_HALTED` with the halt reason and exits 1. It used to treat the hold as a cache miss and exit 2 asking for `--max-cost-usd`. A held task never runs the agent.
+
+- FHIR collection compatibility refuses query parameters in configured searches, requests, effective URLs, and self links. Capped or otherwise unqualified query results cannot establish complete readback; standard searchset paging is unchanged.
 - Record-frame setup can learn field-to-column correspondence from paired reads. Target columns without a binding are listed as unverified coverage, while bound values and changes to other records remain checked.
 - A headed browser launch no longer hangs before the browser opens. Flow's first-launch check held its guard while calling a function that takes the same guard, so every first headed launch with auto-install on (including `record --url`) waited forever.
 - Setup can learn the correspondence between a selected record reader and the database frame from their observed values. Missing or ambiguous identities refuse setup; later records use the learned column mapping without changing audit or collateral-write checks.
@@ -62,6 +69,17 @@ refuses a write when the record or its outcome cannot be established.
   to its recorded identity band.
 
 ### Features
+
+- A teach authorization's forbidden controls are read from Chromium's accessibility tree, not by a script in the page. Every key (Enter, Space, any key, typing) is checked against the control that has focus when it arrives, in any frame, and Enter in a form field against the form's default button too, so a forbidden control reached by Tab or by implicit submission is refused like a click. Key chords are refused while controls are forbidden. A click is matched by every name its target goes by: the accessible name, the text of a control with no role (a `div` with a click handler), and the control a `<label>` is for; the default button is the browser's own (`:default`), read in an isolated world. Behaviour change: on surfaces without a web page, a statement that forbids any control now refuses clicks and keys.
+
+- Browser teach writes again, bound to a person's signed teach authorization (`serve --teach-browser --teach-authorization`), for task `browser-tool.<name>`. Run 1 opens no WebSocket and reaches only the statement's origins. Run 1 of a write starts only when the statement covers it: the app's origin, the contract as its record kind, a write adapter, run 1's inputs, and exactly the record fields the contract checks, with run 1's values. During run 1 the write adapter reads every write before it is sent. A taught tool keeps the statement and is signed with the local admission key; every call checks the statement again (signature, roster, purpose, task, expiry). The example app ships its write adapter (`openadapt_flow.agent.example_app:OrderWrites`). Docs: `docs/TEACH_AUTHORIZATION.md`, `docs/VERIFY_WRITES.md`.
+
+  Teaching and every later call stop on missing worker containment or an
+  observed worker violation and connect no WebSocket. Redirect hops receive
+  the wire check, and declared GET writes pin query field names, including
+  empty fields. Requests from independently targeted frames are refused.
+  Guarded clicks use the exact fragment point checked; keyboard checks also
+  read visible text.
 
 - A code-as-action agent is now the default for the first run. Every save is
   read back before that run becomes a replayable program. Form scripts can run

@@ -2405,6 +2405,9 @@ class InteractiveRecorder:
                     app_url=self._url,
                     page_url=self._browser_page_url,
                 )
+                from openadapt_flow._browser_readiness import require_rendering_ready
+
+                require_rendering_ready(self._browser, attached_page=self.page)
 
             self._context = self.page.context
             if self._capture_network:
@@ -2525,7 +2528,7 @@ class InteractiveRecorder:
                 self._last_structural = self._structural_state()
             else:
                 self._rebaseline_attached_viewport()
-        except Exception:
+        except BaseException:
             self.abort()
             raise
 
