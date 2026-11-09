@@ -85,7 +85,9 @@ def check(root: Path) -> tuple[list[str], list[str]]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument(
         "--root", type=Path, default=Path(__file__).resolve().parents[1]
     )
