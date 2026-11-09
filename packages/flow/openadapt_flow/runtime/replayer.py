@@ -511,16 +511,28 @@ def _pipeline_safe_verifier(verifier: Any) -> bool:
     ):
         return False
     safe: list[type] = []
-    for module, name in (
-        ("openadapt_flow.runtime.effects.rest", "RestRecordVerifier"),
-        ("openadapt_flow.runtime.effects.fhir", "FhirEffectVerifier"),
-        ("openadapt_flow.runtime.effects.graphql", "GraphQLRecordVerifier"),
-        ("openadapt_flow.runtime.effects.sql", "SqlRecordVerifier"),
+    for load, name in (
+        (
+            lambda: importlib.import_module("openadapt_flow.runtime.effects.rest"),
+            "RestRecordVerifier",
+        ),
+        (
+            lambda: importlib.import_module("openadapt_flow.runtime.effects.fhir"),
+            "FhirEffectVerifier",
+        ),
+        (
+            lambda: importlib.import_module("openadapt_flow.runtime.effects.graphql"),
+            "GraphQLRecordVerifier",
+        ),
+        (
+            lambda: importlib.import_module("openadapt_flow.runtime.effects.sql"),
+            "SqlRecordVerifier",
+        ),
     ):
         try:
             import importlib
 
-            safe.append(getattr(importlib.import_module(module), name))
+            safe.append(getattr(load(), name))
         except Exception:  # noqa: BLE001 - an unavailable kind is not safe
             continue
     return isinstance(verifier, tuple(safe))

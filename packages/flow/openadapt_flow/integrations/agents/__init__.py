@@ -165,7 +165,9 @@ class WriteGuard:
             await asyncio.sleep(0.01)
         try:
             try:
-                pending, refusal = await _off_loop(self._begin, arguments)
+                pending, refusal = await _off_loop(
+                    self._begin, arguments, cancel_if_queued=True
+                )
             except _Cancelled as stop:
                 pending, refusal = stop.value
                 if refusal is None:
@@ -281,13 +283,16 @@ class _Cancelled(Exception):
         self.value = value
 
 
-async def _off_loop(fn: Callable[..., Any], *args: Any) -> Any:
+async def _off_loop(
+    fn: Callable[..., Any], *args: Any, cancel_if_queued: bool = False
+) -> Any:
     """``fn(*args)`` on the pool; a cancelled caller still gets its result.
 
     The pool job is shielded, so cancelling the caller never cancels the
-    job. On cancellation, a job that hasn't started is taken back and run
-    here; one that has is waited for. Either way the result comes back in
-    :class:`_Cancelled`, so a read-back is never skipped.
+    job. A queued preflight may be discarded before it creates an attempt.
+    Other queued jobs are taken back and run here; started jobs are waited
+    for. Their result comes back in :class:`_Cancelled`, so a required
+    read-back is never skipped.
     """
 
     job = _POOL.submit(fn, *args)
@@ -295,6 +300,10 @@ async def _off_loop(fn: Callable[..., Any], *args: Any) -> Any:
         return await asyncio.shield(asyncio.wrap_future(job))
     except asyncio.CancelledError:
         if job.cancel():
+            if cancel_if_queued:
+                # Future.cancel() succeeded before the preflight ran: no
+                # ledger attempt or write callback exists to settle.
+                raise
             raise _Cancelled(fn(*args)) from None
         try:
             raise _Cancelled(job.result()) from None

@@ -1,6 +1,6 @@
 {
   "__main__.py": {
-    "mockmed": 43,
+    "mockmed": 42,
     "textedit": 1
   },
   "backend.py": {
@@ -147,11 +147,6 @@
   },
   "record_check_identity.py": {
     "openemr": 1
-  },
-  "record_check_proof.py": {
-    "mockmed": 12,
-    "mockmed-records": 1,
-    "mockmed-write": 1
   },
   "record_check_synthesis.py": {
     "mockmed": 1

@@ -6665,6 +6665,12 @@ def _ws_guard_secrets(target: Any) -> tuple[str, str, str]:
     context = target
     if not hasattr(target, "new_page"):  # a page: guard its context
         context = getattr(target, "context", None)
+    if context is not None:
+        # The headers the app's own script sends, kept in memory for an API
+        # step that must send them too (runtime/actuators/session_headers.py).
+        from openadapt_flow.runtime.actuators import session_headers
+
+        session_headers.arm(context)
     known = getattr(context, "_oaflow_ws_guard", None)
     if (
         isinstance(known, tuple)

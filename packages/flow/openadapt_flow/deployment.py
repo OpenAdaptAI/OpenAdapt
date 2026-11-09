@@ -2487,16 +2487,13 @@ def _build_effect_verifier_unredacted(
         from openadapt_flow.runtime.effects.sql import (
             READ_ONLY_DRIVERS,
             read_only_connection,
+            sqlite_read_connection,
         )
 
         connect: Callable[[], Any]
         if cfg.sqlite_database:
-            import sqlite3
-
             database = cfg.sqlite_database
-            connect = lambda: read_only_connection(  # noqa: E731
-                sqlite3.connect(database), "sqlite3"
-            )
+            connect = lambda: sqlite_read_connection(database)  # noqa: E731
         elif cfg.sql_driver:
             import importlib
 
@@ -2530,6 +2527,7 @@ def _build_effect_verifier_unredacted(
             timeout_s=cfg.timeout_s,
             poll_interval_s=cfg.poll_interval_s,
             drop_fields=tuple(cfg.records_drop_fields),
+            source_metadata=True,
         )
 
     if kind == "file":

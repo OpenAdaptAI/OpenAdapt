@@ -1,0 +1,312 @@
+{
+  "schema": 1,
+  "kind": "unresolved-import-debt-not-admission",
+  "follow_up": "unresolved-import-provider-migration",
+  "observed_receipt": {
+    "source_head": "0a372ff24a665c128366f4ab89657855718000a1",
+    "module_count": 648,
+    "edge_digest": "bc6dfb3d6baaa76a79d96e7c0b414e1f140409e78ea761749079ce1e1c81b5b5"
+  },
+  "entries": [
+    {
+      "module": "openadapt_flow.runtime.effects.fresh_session",
+      "path": "packages/flow/openadapt_flow/runtime/effects/fresh_session.py",
+      "line": 257,
+      "edge_kind": "direct",
+      "diagnostic": "openadapt_flow.runtime.effects.fresh_session:257: unresolvable dynamic import (importer value escape)",
+      "reason": "vision-transfer",
+      "follow_up": "unresolved-import-provider-migration",
+      "source_statement_sha256": "7409d6b48d60343ebc02665d6bb724ef150f7573f732bf0741bdc6701984ea42"
+    },
+    {
+      "module": "openadapt_flow.runtime.effects.onscreen",
+      "path": "packages/flow/openadapt_flow/runtime/effects/onscreen.py",
+      "line": 344,
+      "edge_kind": "direct",
+      "diagnostic": "openadapt_flow.runtime.effects.onscreen:344: unresolvable dynamic import (importer value escape)",
+      "reason": "vision-transfer",
+      "follow_up": "unresolved-import-provider-migration",
+      "source_statement_sha256": "7409d6b48d60343ebc02665d6bb724ef150f7573f732bf0741bdc6701984ea42"
+    },
+    {
+      "module": "openadapt_flow.runtime.effects.ui_readback",
+      "path": "packages/flow/openadapt_flow/runtime/effects/ui_readback.py",
+      "line": 972,
+      "edge_kind": "direct",
+      "diagnostic": "openadapt_flow.runtime.effects.ui_readback:972: unresolvable dynamic import (importer value escape)",
+      "reason": "vision-transfer",
+      "follow_up": "unresolved-import-provider-migration",
+      "source_statement_sha256": "7409d6b48d60343ebc02665d6bb724ef150f7573f732bf0741bdc6701984ea42"
+    },
+    {
+      "module": "openadapt_flow.runtime.program_predicates",
+      "path": "packages/flow/openadapt_flow/runtime/program_predicates.py",
+      "line": 71,
+      "edge_kind": "direct",
+      "diagnostic": "openadapt_flow.runtime.program_predicates:71: unresolvable dynamic import (importer value escape)",
+      "reason": "namespace-query",
+      "follow_up": "unresolved-import-provider-migration",
+      "source_statement_sha256": "add0c4d3fb42697a618f34966887e40895bda5dbe75115a7953a3e4aed7a486c"
+    },
+    {
+      "module": "openadapt_flow.runtime.replayer",
+      "path": "packages/flow/openadapt_flow/runtime/replayer.py",
+      "line": 1067,
+      "edge_kind": "direct",
+      "diagnostic": "openadapt_flow.runtime.replayer:1067: unresolvable dynamic import (importer value escape)",
+      "reason": "vision-transfer",
+      "follow_up": "unresolved-import-provider-migration",
+      "source_statement_sha256": "96c55d12f7cc7a5bf8d66ad65e1bd9345ac809c26a0edfad73989ec1e17f0f82"
+    },
+    {
+      "module": "openadapt_flow.runtime.replayer",
+      "path": "packages/flow/openadapt_flow/runtime/replayer.py",
+      "line": 7729,
+      "edge_kind": "direct",
+      "diagnostic": "openadapt_flow.runtime.replayer:7729: unresolvable dynamic import (importer value escape)",
+      "reason": "namespace-query",
+      "follow_up": "unresolved-import-provider-migration",
+      "source_statement_sha256": "3d40e6e86e6b643d97f8503b9aea981169e8f3accba562b5fec81fb78019cd37"
+    },
+    {
+      "module": "openadapt_flow.runtime.variant_router",
+      "path": "packages/flow/openadapt_flow/runtime/variant_router.py",
+      "line": 192,
+      "edge_kind": "direct",
+      "diagnostic": "openadapt_flow.runtime.variant_router:192: unresolvable dynamic import (importer value escape)",
+      "reason": "vision-transfer",
+      "follow_up": "unresolved-import-provider-migration",
+      "source_statement_sha256": "78498777d67ea31f0e55d33011392c9f759b8752d9e2222eed9afa92b4d64ac2"
+    },
+    {
+      "module": "openadapt_flow.runtime.worklist_pool",
+      "path": "packages/flow/openadapt_flow/runtime/worklist_pool.py",
+      "line": 1013,
+      "edge_kind": "direct",
+      "diagnostic": "openadapt_flow.runtime.worklist_pool:1013: unresolvable dynamic import (nonliteral or unresolved import target)",
+      "reason": "unbounded-config",
+      "follow_up": "unresolved-import-provider-migration",
+      "source_statement_sha256": "83a6aa3da3dcc8c54aef753d8f6ecb06b27de89a35df307132d5efb189250758"
+    },
+    {
+      "module": "openadapt_flow.verify_run",
+      "path": "packages/flow/openadapt_flow/verify_run.py",
+      "line": 719,
+      "edge_kind": "direct",
+      "diagnostic": "openadapt_flow.verify_run:719: unresolvable dynamic import (nonliteral or unresolved import target)",
+      "reason": "unbounded-config",
+      "follow_up": "unresolved-import-provider-migration",
+      "source_statement_sha256": "8c512ea9cf6f4dcfcb2dbb07904849468f9b705c898ff08ac216394b655eaf53"
+    },
+    {
+      "module": "openadapt_flow.compiler.readback_authoring",
+      "path": "packages/flow/openadapt_flow/compiler/readback_authoring.py",
+      "line": 434,
+      "edge_kind": "transitive",
+      "diagnostic": "openadapt_flow.compiler.readback_authoring:434: unresolvable dynamic import (importer value escape)",
+      "reason": "vision-transfer",
+      "follow_up": "unresolved-import-provider-migration",
+      "source_statement_sha256": "b0142e8585933ffb0811f5d9f099b983e39d5718774c98a07229e5d35cf87443"
+    },
+    {
+      "module": "openadapt_flow.deployment",
+      "path": "packages/flow/openadapt_flow/deployment.py",
+      "line": 2489,
+      "edge_kind": "transitive",
+      "diagnostic": "openadapt_flow.deployment:2489: unresolvable dynamic import (nonliteral or unresolved import target)",
+      "reason": "unbounded-config",
+      "follow_up": "unresolved-import-provider-migration",
+      "source_statement_sha256": "80e7f8f4414906b23171823e392bace356b7432ae492e0b56ad794d1b8f65d1b"
+    },
+    {
+      "module": "openadapt_flow.emit.python_names",
+      "path": "packages/flow/openadapt_flow/emit/python_names.py",
+      "line": 18,
+      "edge_kind": "transitive",
+      "diagnostic": "openadapt_flow.emit.python_names:18: unresolvable dynamic import (importer value escape)",
+      "reason": "namespace-query",
+      "follow_up": "unresolved-import-provider-migration",
+      "source_statement_sha256": "dece9c79daff297019195bfafeaf711de578116991a9329407d99e39c77e9af9"
+    },
+    {
+      "module": "openadapt_flow.execution_profiles",
+      "path": "packages/flow/openadapt_flow/execution_profiles.py",
+      "line": 523,
+      "edge_kind": "transitive",
+      "diagnostic": "openadapt_flow.execution_profiles:523: unresolvable dynamic import (importer value escape)",
+      "reason": "vision-transfer",
+      "follow_up": "unresolved-import-provider-migration",
+      "source_statement_sha256": "5528c797faca7b2e50c54965c51344ddd6bc2b7b9ee64776ba18d79940980df2"
+    },
+    {
+      "module": "openadapt_flow.locale_invariants",
+      "path": "packages/flow/openadapt_flow/locale_invariants.py",
+      "line": 373,
+      "edge_kind": "transitive",
+      "diagnostic": "openadapt_flow.locale_invariants:373: unresolvable dynamic import (importer value escape)",
+      "reason": "namespace-query",
+      "follow_up": "unresolved-import-provider-migration",
+      "source_statement_sha256": "f4c2b1fc65339961cddfc26f4d75e07fe66139aa56a378ab677a05efaf074731"
+    },
+    {
+      "module": "openadapt_flow.qualification",
+      "path": "packages/flow/openadapt_flow/qualification.py",
+      "line": 2928,
+      "edge_kind": "transitive",
+      "diagnostic": "openadapt_flow.qualification:2928: unresolvable dynamic import (importer value escape)",
+      "reason": "vision-transfer",
+      "follow_up": "unresolved-import-provider-migration",
+      "source_statement_sha256": "817c0e8b4d2e627aa0d849e212b0788ac0e2ec16186e281f12e58fef134f0628"
+    },
+    {
+      "module": "openadapt_flow.qualify.session",
+      "path": "packages/flow/openadapt_flow/qualify/session.py",
+      "line": 33,
+      "edge_kind": "transitive",
+      "diagnostic": "openadapt_flow.qualify.session:33: unresolvable dynamic import (nonliteral or unresolved import target)",
+      "reason": "unbounded-config",
+      "follow_up": "unresolved-import-provider-migration",
+      "source_statement_sha256": "85e8b02e9e671d5f6afd67b34d0273409b63ac6c13d94a800c8fd74eb6c0f145"
+    },
+    {
+      "module": "openadapt_flow.repair.cli",
+      "path": "packages/flow/openadapt_flow/repair/cli.py",
+      "line": 241,
+      "edge_kind": "transitive",
+      "diagnostic": "openadapt_flow.repair.cli:241: unresolvable dynamic import (importer value escape)",
+      "reason": "vision-transfer",
+      "follow_up": "unresolved-import-provider-migration",
+      "source_statement_sha256": "d824e945c72f42d0636e5c16fdb7f7b03d6d1d9513d082c0e28a691f7744b02d"
+    },
+    {
+      "module": "openadapt_flow.repair.cli",
+      "path": "packages/flow/openadapt_flow/repair/cli.py",
+      "line": 246,
+      "edge_kind": "transitive",
+      "diagnostic": "openadapt_flow.repair.cli:246: unresolvable dynamic import (importer value escape)",
+      "reason": "vision-transfer",
+      "follow_up": "unresolved-import-provider-migration",
+      "source_statement_sha256": "c41cc99d442dd0ecb03eef5126fe119119972cdd65b66314a54c2db09c058d9c"
+    },
+    {
+      "module": "openadapt_flow.repair.self_repair",
+      "path": "packages/flow/openadapt_flow/repair/self_repair.py",
+      "line": 721,
+      "edge_kind": "transitive",
+      "diagnostic": "openadapt_flow.repair.self_repair:721: unresolvable dynamic import (importer value escape)",
+      "reason": "vision-transfer",
+      "follow_up": "unresolved-import-provider-migration",
+      "source_statement_sha256": "962de8f3ad482c300118ded9b3fc146df326b8638580c17d0660631ae45508e8"
+    },
+    {
+      "module": "openadapt_flow.runtime.effects.fresh_session",
+      "path": "packages/flow/openadapt_flow/runtime/effects/fresh_session.py",
+      "line": 257,
+      "edge_kind": "transitive",
+      "diagnostic": "openadapt_flow.runtime.effects.fresh_session:257: unresolvable dynamic import (importer value escape)",
+      "reason": "vision-transfer",
+      "follow_up": "unresolved-import-provider-migration",
+      "source_statement_sha256": "7409d6b48d60343ebc02665d6bb724ef150f7573f732bf0741bdc6701984ea42"
+    },
+    {
+      "module": "openadapt_flow.runtime.effects.onscreen",
+      "path": "packages/flow/openadapt_flow/runtime/effects/onscreen.py",
+      "line": 344,
+      "edge_kind": "transitive",
+      "diagnostic": "openadapt_flow.runtime.effects.onscreen:344: unresolvable dynamic import (importer value escape)",
+      "reason": "vision-transfer",
+      "follow_up": "unresolved-import-provider-migration",
+      "source_statement_sha256": "7409d6b48d60343ebc02665d6bb724ef150f7573f732bf0741bdc6701984ea42"
+    },
+    {
+      "module": "openadapt_flow.runtime.effects.ui_readback",
+      "path": "packages/flow/openadapt_flow/runtime/effects/ui_readback.py",
+      "line": 972,
+      "edge_kind": "transitive",
+      "diagnostic": "openadapt_flow.runtime.effects.ui_readback:972: unresolvable dynamic import (importer value escape)",
+      "reason": "vision-transfer",
+      "follow_up": "unresolved-import-provider-migration",
+      "source_statement_sha256": "7409d6b48d60343ebc02665d6bb724ef150f7573f732bf0741bdc6701984ea42"
+    },
+    {
+      "module": "openadapt_flow.runtime.program_predicates",
+      "path": "packages/flow/openadapt_flow/runtime/program_predicates.py",
+      "line": 71,
+      "edge_kind": "transitive",
+      "diagnostic": "openadapt_flow.runtime.program_predicates:71: unresolvable dynamic import (importer value escape)",
+      "reason": "namespace-query",
+      "follow_up": "unresolved-import-provider-migration",
+      "source_statement_sha256": "add0c4d3fb42697a618f34966887e40895bda5dbe75115a7953a3e4aed7a486c"
+    },
+    {
+      "module": "openadapt_flow.runtime.replayer",
+      "path": "packages/flow/openadapt_flow/runtime/replayer.py",
+      "line": 1067,
+      "edge_kind": "transitive",
+      "diagnostic": "openadapt_flow.runtime.replayer:1067: unresolvable dynamic import (importer value escape)",
+      "reason": "vision-transfer",
+      "follow_up": "unresolved-import-provider-migration",
+      "source_statement_sha256": "96c55d12f7cc7a5bf8d66ad65e1bd9345ac809c26a0edfad73989ec1e17f0f82"
+    },
+    {
+      "module": "openadapt_flow.runtime.replayer",
+      "path": "packages/flow/openadapt_flow/runtime/replayer.py",
+      "line": 7729,
+      "edge_kind": "transitive",
+      "diagnostic": "openadapt_flow.runtime.replayer:7729: unresolvable dynamic import (importer value escape)",
+      "reason": "namespace-query",
+      "follow_up": "unresolved-import-provider-migration",
+      "source_statement_sha256": "3d40e6e86e6b643d97f8503b9aea981169e8f3accba562b5fec81fb78019cd37"
+    },
+    {
+      "module": "openadapt_flow.runtime.variant_router",
+      "path": "packages/flow/openadapt_flow/runtime/variant_router.py",
+      "line": 192,
+      "edge_kind": "transitive",
+      "diagnostic": "openadapt_flow.runtime.variant_router:192: unresolvable dynamic import (importer value escape)",
+      "reason": "vision-transfer",
+      "follow_up": "unresolved-import-provider-migration",
+      "source_statement_sha256": "78498777d67ea31f0e55d33011392c9f759b8752d9e2222eed9afa92b4d64ac2"
+    },
+    {
+      "module": "openadapt_flow.runtime.worklist_pool",
+      "path": "packages/flow/openadapt_flow/runtime/worklist_pool.py",
+      "line": 1013,
+      "edge_kind": "transitive",
+      "diagnostic": "openadapt_flow.runtime.worklist_pool:1013: unresolvable dynamic import (nonliteral or unresolved import target)",
+      "reason": "unbounded-config",
+      "follow_up": "unresolved-import-provider-migration",
+      "source_statement_sha256": "83a6aa3da3dcc8c54aef753d8f6ecb06b27de89a35df307132d5efb189250758"
+    },
+    {
+      "module": "openadapt_flow.teach_scope",
+      "path": "packages/flow/openadapt_flow/teach_scope.py",
+      "line": 186,
+      "edge_kind": "transitive",
+      "diagnostic": "openadapt_flow.teach_scope:186: unresolvable dynamic import (nonliteral or unresolved import target)",
+      "reason": "unbounded-config",
+      "follow_up": "unresolved-import-provider-migration",
+      "source_statement_sha256": "dd5fa568e83cc31e2ddd461824692f79231c66d7a21de6d74ffd7a38a54a3d3c"
+    },
+    {
+      "module": "openadapt_flow.verify_run",
+      "path": "packages/flow/openadapt_flow/verify_run.py",
+      "line": 719,
+      "edge_kind": "transitive",
+      "diagnostic": "openadapt_flow.verify_run:719: unresolvable dynamic import (nonliteral or unresolved import target)",
+      "reason": "unbounded-config",
+      "follow_up": "unresolved-import-provider-migration",
+      "source_statement_sha256": "8c512ea9cf6f4dcfcb2dbb07904849468f9b705c898ff08ac216394b655eaf53"
+    },
+    {
+      "module": "openadapt_flow.vision",
+      "path": "packages/flow/openadapt_flow/vision/__init__.py",
+      "line": 149,
+      "edge_kind": "transitive",
+      "diagnostic": "openadapt_flow.vision:149: unresolvable dynamic import (nonliteral or unresolved import target)",
+      "reason": "namespace-query",
+      "follow_up": "unresolved-import-provider-migration",
+      "source_statement_sha256": "281d88aeb06abd3ae205c86dc0f9c6651f8614e22b2849c51af8897952ab9591"
+    }
+  ]
+}
