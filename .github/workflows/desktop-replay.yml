@@ -120,6 +120,7 @@ jobs:
             ${{ runner.temp }}/windows-governed-evidence.json
             ${{ runner.temp }}/wg/**/report.json
             ${{ runner.temp }}/wg/**/agent.log
+            ${{ runner.temp }}/wg/**/item-approval/*
             ${{ runner.temp }}/wr/**/*.png
             ${{ runner.temp }}/wr/**/agent.log
             ${{ runner.temp }}/wr/**/report.json

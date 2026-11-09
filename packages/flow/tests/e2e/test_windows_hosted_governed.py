@@ -316,6 +316,75 @@ def _report(run_dir: Path):
     )
 
 
+def _form_state_probe(backend, run_dir: Path, frame_png: bytes) -> dict[str, Any]:
+    """Which form-state read reproduces the approval request's digest.
+
+    Diagnostics only (the run decides; this never fails the test): the
+    request's digest is recomputed from ``frame_png`` both over the whole
+    screen and over the app window the replayer would bound the read to,
+    and the window lookup under the earlier steps' points is recorded.
+    """
+
+    from openadapt_flow import vision
+    from openadapt_flow.approval_mode.form_state import _words, screen_text_state
+
+    out: dict[str, Any] = {}
+    try:
+        requests = sorted((run_dir / "item-approval").glob("request-*.json"))
+        request = json.loads(requests[-1].read_text(encoding="utf-8"))
+        expected = (request["form_state_kind"], request["form_state_sha256"])
+        report = _report(run_dir)
+        points = [
+            (int(r.resolution.point[0]), int(r.resolution.point[1]))
+            for r in report.results
+            if r.step_id != request["step_id"] and r.resolution is not None
+        ]
+        out["points"] = points
+        out["root_at"] = [backend._root_window_at(x, y) for x, y in points]
+        backend.clear_verified_windows()
+        region = backend.approval_form_region(request["step_id"], points)
+        out["window_region"] = region
+        whole = screen_text_state(vision, frame_png)
+        out["whole_screen_matches"] = whole == expected
+        out["whole_screen_words"] = _words(vision, frame_png)
+        if region is not None:
+            import io
+
+            from PIL import Image
+
+            with Image.open(io.BytesIO(frame_png)) as image:
+                width, height = image.size
+            x, y, w, h = region
+            left, top = max(0, x), max(0, y)
+            right, bottom = min(width, x + w), min(height, y + h)
+            clamped = (left, top, right - left, bottom - top)
+            out["clamped_region"] = clamped
+            out["window_matches"] = (
+                screen_text_state(vision, frame_png, [clamped]) == expected
+            )
+            from openadapt_flow.approval_mode.form_state import _crop
+
+            out["window_words"] = _words(vision, _crop(frame_png, clamped))
+    except Exception as exc:  # noqa: BLE001 - diagnostics never fail the test
+        out["probe_error"] = f"{type(exc).__name__}: {exc}"
+    return out
+
+
+def _request_frame(run_dir: Path) -> bytes:
+    requests = sorted((run_dir / "item-approval").glob("request-*.json"))
+    request = json.loads(requests[-1].read_text(encoding="utf-8"))
+    return (run_dir / request["screenshot"]).read_bytes()
+
+
+def _save_frame(run_dir: Path) -> bytes:
+    from openadapt_flow import sealed_set
+
+    report = _report(run_dir)
+    last = report.results[-1]
+    assert last.before_png, "the save step kept no frame"
+    return sealed_set.read_bytes(run_dir / last.before_png)
+
+
 def test_standard_run_with_approval_hold_and_resume(host, tmp_path) -> None:
     evidence: dict[str, Any] = {}
     try:
@@ -497,12 +566,28 @@ def _governed(host, tmp_path, evidence: dict[str, Any]) -> None:
     evidence["held"]["answer"] = person.answers
     assert person.answers[0]["decision"] == "approve"
     assert person.answers[0]["resume_required"] is True, evidence["held"]
+    # Which read (window or whole screen) the held run's request used, and
+    # whether the window can still be named now, as the resume will.
+    try:
+        evidence["held"]["form_state_probe"] = _form_state_probe(
+            backend, run_dir, _request_frame(run_dir)
+        )
+    except Exception as exc:  # noqa: BLE001 - diagnostics never fail the test
+        evidence["held"]["form_state_probe"] = {"probe_error": repr(exc)}
     resumed = _flow("resume", str(run_dir), "--config", str(config), env=env)
     rows = {r["id"]: r for r in host.rows()}
     evidence["resumed"] = {
         "exit": resumed.returncode,
         "tail": (resumed.stdout + resumed.stderr)[-3000:],
     }
+    if resumed.returncode != 0:
+        # The resumed save's own frame, read both ways against the request.
+        try:
+            evidence["resumed"]["form_state_probe"] = _form_state_probe(
+                backend, run_dir, _save_frame(run_dir)
+            )
+        except Exception as exc:  # noqa: BLE001 - diagnostics never fail the test
+            evidence["resumed"]["form_state_probe"] = {"probe_error": repr(exc)}
     assert resumed.returncode == 0, evidence["resumed"]
     assert rows[TARGET_ID]["note"] == DEMO_NOTE
     assert all(r["note"] == "" for i, r in rows.items() if i != TARGET_ID)
