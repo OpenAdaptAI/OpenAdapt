@@ -3,8 +3,6 @@
 # or add the missing ones, then run scaffold-verifier again.
 #
 # MISS: collateral_unaudited: a stray row written to a table this check does not read (the check reads only api_db; a write anywhere else passes it (give a database read path with --db, or more reads))
-# MISS: read: api_db: REST read completeness is not declared; configure records_next_path, records_total_path, or validated records_complete semantics
-# MISS: read: api_db.content: REST read completeness is not declared; configure records_next_path, records_total_path, or validated records_complete semantics
 #
 # verify-run refuses this file until every `needs_operator_confirmation: true`
 # line is gone; do not remove them while misses remain.
@@ -17,11 +15,13 @@ verifier:
       base_url: ${APP_URL}
       records_path: /api/db
       records_key: records
+      records_complete: true
     api_db.content:
       kind: rest
       base_url: ${APP_URL}
       records_path: /api/db
       records_key: records
+      records_complete: true
       records_drop_fields:
       - id
 effects:

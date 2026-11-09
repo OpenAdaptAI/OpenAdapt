@@ -1,12 +1,11 @@
-# DRAFT record check from `openadapt-flow scaffold-verifier`. It is NOT working:
-# its fault test found misses (listed below and in record_check.proof.json). Fix the reads
-# or add the missing ones, then run scaffold-verifier again.
-#
-# MISS: read: api_db: REST read completeness is not declared; configure records_next_path, records_total_path, or validated records_complete semantics
-# MISS: read: api_db.content: REST read completeness is not declared; configure records_next_path, records_total_path, or validated records_complete semantics
-#
-# verify-run refuses this file until every `needs_operator_confirmation: true`
-# line is gone; do not remove them while misses remain.
+# Record check built by `openadapt-flow scaffold-verifier` from the reads the
+# app made after the save. It caught every injected bad write in its fault test
+# and passed the clean save (recorded-state faults). It is NOT approved: a person must
+#   - confirm each read is the system of record, with its own read-only
+#     credential (the recording's reads used the browser's sign-in);
+#   - check that each {param: ...} is the input that should fill that field;
+#   - delete every `needs_operator_confirmation: true` line.
+# verify-run refuses this file, and qualify reports a problem, until then.
 schema_version: openadapt.verify/v1
 verifier:
   kind: surfaces
@@ -16,11 +15,13 @@ verifier:
       base_url: ${APP_URL}
       records_path: /api/db
       records_key: records
+      records_complete: true
     api_db.content:
       kind: rest
       base_url: ${APP_URL}
       records_path: /api/db
       records_key: records
+      records_complete: true
       records_drop_fields:
       - id
 effects:

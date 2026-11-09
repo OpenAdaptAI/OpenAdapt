@@ -18,7 +18,7 @@ draft_status: requires-human-edit
 steps:
   - step_id: step_007
     action: click
-    evidence_basis: 'write-shaped control label'
+    evidence_basis: observed mutating request to the app (POST /api/encounter)
     label: Save Encounter Save Encounter
 
 # Proposed per-step effect contracts (what the oracle must prove).
@@ -26,10 +26,12 @@ effects:
   - step_id: step_007
     kind: record_written
     expected_count: 1  # at-most-once for this write
-    # Evidence basis: write-shaped control label; no system-of-record
-    # snapshot was captured for this step, so a human must bind it.
-    match: {}  # TODO bind the intended record in the system of record
-    postconditions: {}  # TODO expected post-write field values
+    match:
+      TODO: stable-identifier  # fields that identify the intended record across runs
+    postconditions:
+      patient_id: p1  # TODO confirm
+      type: Triage  # TODO confirm
+      note: 'Demo run: sore throat, fluids and rest'  # TODO confirm
 
 # Deployment wiring: copy into your deployment.yaml (docs/EFFECT_KIT.md).
 deployment:

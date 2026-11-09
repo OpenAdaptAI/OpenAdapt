@@ -1,0 +1,52 @@
+# DRAFT record check from `openadapt-flow scaffold-verifier`. It is NOT working:
+# its fault test found misses (listed below and in record_check.proof.json). Fix the reads
+# or add the missing ones, then run scaffold-verifier again.
+#
+# MISS: collateral_unaudited: a stray row written to a table this check does not read (the check reads only api_disbursements; a write anywhere else passes it (give a database read path with --db, or more reads))
+#
+# verify-run refuses this file until every `needs_operator_confirmation: true`
+# line is gone; do not remove them while misses remain.
+schema_version: openadapt.verify/v1
+verifier:
+  kind: surfaces
+  surfaces:
+    api_disbursements:
+      kind: rest
+      base_url: ${APP_URL}
+      records_path: /api/disbursements
+      records_key: records
+      records_complete: true
+    api_disbursements.content:
+      kind: rest
+      base_url: ${APP_URL}
+      records_path: /api/disbursements
+      records_key: records
+      records_complete: true
+      records_drop_fields:
+      - id
+effects:
+- kind: record_written
+  match:
+    amount:
+      param: amount
+    loan_id:
+      param: loan_id
+    memo:
+      param: memo
+    product:
+      param: product
+  count_new_only: true
+  risk: irreversible
+  probe: surface=api_disbursements|exactly one new record with the run's values; no
+    record that was there before may disappear
+  needs_operator_confirmation: true
+- kind: record_written
+  match:
+    _openadapt_no_such_field:
+      literal: '-'
+  expected_count: 0
+  count_new_only: true
+  risk: irreversible
+  probe: surface=api_disbursements.content|no record that was there before changes
+    or disappears (records compared by content, not id)
+  needs_operator_confirmation: true
