@@ -117,10 +117,11 @@ def start_proxy(app: AppBase) -> None:
 
 
 def cmd_record(a: argparse.Namespace, app: AppBase) -> None:
+    from playwright.sync_api import sync_playwright
+
     from openadapt_flow.backends.playwright_backend import PlaywrightBackend
     from openadapt_flow.network_capture import NetworkCapture
     from openadapt_flow.recorder import Recorder
-    from playwright.sync_api import sync_playwright
 
     out = Path(a.out)
     if out.exists():
@@ -130,7 +131,9 @@ def cmd_record(a: argparse.Namespace, app: AppBase) -> None:
     if a.tag:
         # A fresh demonstration never collides with a record an earlier run
         # made (made unique the app's own way, as each run's values are).
-        values = dict(app.unique(Case("recording", "normal", values, 1, {}), a.tag).params)
+        values = dict(
+            app.unique(Case("recording", "normal", values, 1, {}), a.tag).params
+        )
     before = app.rows()
     pw = sync_playwright().start()
     browser = pw.chromium.launch(headless=True)
@@ -234,9 +237,13 @@ def cmd_compile(a: argparse.Namespace, app: AppBase) -> None:
     if step is not None:
         # The person admitting it names the parameter that identifies the
         # record: the one the record check selects on.
-        identity = getattr(app, "api_identity", None) or {"subject_name": app.unique_param}
+        identity = getattr(app, "api_identity", None) or {
+            "subject_name": app.unique_param
+        }
         result["identity"] = identity
-        wf, admitted = admit_api_step(wf, admitted_by="benchmark-fixture", identity=identity)
+        wf, admitted = admit_api_step(
+            wf, admitted_by="benchmark-fixture", identity=identity
+        )
         result["admitted"] = admitted
         result["describe"] = describe_api_step(
             next(s for s in wf.steps if s.id == step.id)
@@ -523,14 +530,32 @@ def cmd_footprint(a: argparse.Namespace, app: AppBase) -> None:
 
     def readmit(footprint: Any) -> Any:
         wf = Workflow.load(bundle)
-        step = next((s for s in wf.steps if s.api_binding is not None and s.api_binding.kind == "web_form"), None)
+        step = next(
+            (
+                s
+                for s in wf.steps
+                if s.api_binding is not None and s.api_binding.kind == "web_form"
+            ),
+            None,
+        )
         if step is None:
             return wf, None
         clean = step.api_binding.model_copy(update={"admission": None})
-        wf = wf.model_copy(update={"steps": [s.model_copy(update={"api_binding": clean}) if s is step else s
-                                             for s in wf.steps]})
+        wf = wf.model_copy(
+            update={
+                "steps": [
+                    s.model_copy(update={"api_binding": clean}) if s is step else s
+                    for s in wf.steps
+                ]
+            }
+        )
         try:
-            wf, _ = admit_api_step(wf, admitted_by="benchmark-fixture", identity=identity, footprint=footprint)
+            wf, _ = admit_api_step(
+                wf,
+                admitted_by="benchmark-fixture",
+                identity=identity,
+                footprint=footprint,
+            )
             return wf, "admitted"
         except ApiProposalError as exc:
             return wf, f"stays on the GUI: {exc}"
@@ -549,29 +574,67 @@ def cmd_footprint(a: argparse.Namespace, app: AppBase) -> None:
         for k in range(a.reps):
             base = normal[0]  # the same inputs every time; only the run marker differs
             pair: dict[str, Any] = {}
-            for arm in (["gui", "api"] if k % 2 == 0 else ["api", "gui"]):
+            for arm in ["gui", "api"] if k % 2 == 0 else ["api", "gui"]:
                 marker = f"fp{k}{arm[0]}{a.tag}"
-                res = run_one(env, app, app.unique(base, marker), arm, bundle, out / f"fp{k}-{arm}", rep=k + 1)
-                pair[arm] = (res, marker, env["footprint"].get(str(out / f"fp{k}-{arm}")))
+                res = run_one(
+                    env,
+                    app,
+                    app.unique(base, marker),
+                    arm,
+                    bundle,
+                    out / f"fp{k}-{arm}",
+                    rep=k + 1,
+                )
+                pair[arm] = (
+                    res,
+                    marker,
+                    env["footprint"].get(str(out / f"fp{k}-{arm}")),
+                )
             (gres, gmark, gch), (ares, amark, ach) = pair["gui"], pair["api"]
             if not gres.get("correct") or gch is None:
-                problems.append(f"pair {k + 1}: the GUI save didn't make the expected record, so there is nothing to compare")
-            elif not ares.get("correct") or ares.get("save_actuation") != "api" or ach is None:
-                problems.append(f"pair {k + 1}: the API step didn't make the save ({ares.get('api_fallback') or ares.get('halt')})")
+                problems.append(
+                    f"pair {k + 1}: the GUI save didn't make the expected record, so there is nothing to compare"
+                )
+            elif (
+                not ares.get("correct")
+                or ares.get("save_actuation") != "api"
+                or ach is None
+            ):
+                problems.append(
+                    f"pair {k + 1}: the API step didn't make the save ({ares.get('api_fallback') or ares.get('halt')})"
+                )
             else:
-                gui.append(gch); api.append(ach); gm.append(gmark); am.append(amark)
+                gui.append(gch)
+                api.append(ach)
+                gm.append(gmark)
+                am.append(amark)
     finally:
         env["browser"].close()
         env["pw"].stop()
-    verdict = footprint_verdict(gui, api, gm, am) if len(gui) >= 2 else {
-        "equivalent": False, "differences": [], "server_owned": [], "tables": {}}
+    verdict = (
+        footprint_verdict(gui, api, gm, am)
+        if len(gui) >= 2
+        else {"equivalent": False, "differences": [], "server_owned": [], "tables": {}}
+    )
     verdict["differences"] = problems + verdict["differences"]
     verdict["equivalent"] = bool(verdict["equivalent"]) and not problems
     _, gate = readmit(verdict)
     gate = gate or "no API step"
-    report = verdict | {"gate": gate, "verdict_sha256": verdict_digest(verdict)} | frozen_check()
+    report = (
+        verdict
+        | {"gate": gate, "verdict_sha256": verdict_digest(verdict)}
+        | frozen_check()
+    )
     (out / "footprint.json").write_text(json.dumps(report, indent=1, default=str))
-    print(json.dumps({k: report[k] for k in ("equivalent", "gate", "differences", "server_owned")}, indent=1))
+    print(
+        json.dumps(
+            {
+                k: report[k]
+                for k in ("equivalent", "gate", "differences", "server_owned")
+            },
+            indent=1,
+        )
+    )
 
 
 def cmd_timing(a: argparse.Namespace, app: AppBase) -> None:
