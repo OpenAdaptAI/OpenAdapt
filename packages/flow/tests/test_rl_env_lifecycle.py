@@ -16,6 +16,10 @@ from openadapt_flow.rl_env import lifecycle
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX signals")
 
+LINUX = sys.platform.startswith("linux")
+#: Without the subreaper supervisor, no teardown is proven complete.
+UNPROVEN_KILL = lifecycle.Teardown("killed", proven=False)
+
 #: A "server" that ignores SIGTERM and starts a child that ignores it too.
 STUBBORN = """
 import signal, subprocess, sys, time
@@ -109,7 +113,7 @@ def test_kill_child_tree_reaps_a_child_that_ignores_sigterm_and_its_children() -
     )
     assert proc.stdout is not None
     grandchild = int(proc.stdout.readline())
-    assert lifecycle.kill_child_tree(proc.pid, timeout=10) == "killed"
+    assert lifecycle.kill_child_tree(proc.pid, timeout=10) == UNPROVEN_KILL
     # Reaped by kill_child_tree itself: nothing left for waitpid to find.
     with pytest.raises(ChildProcessError):
         os.waitpid(proc.pid, os.WNOHANG)
@@ -131,7 +135,9 @@ def test_kill_child_tree_does_not_signal_an_already_reaped_pid(monkeypatch) -> N
 
     monkeypatch.setattr(lifecycle.os, "kill", lambda pid, sig: sent.append(pid))
     monkeypatch.setattr(lifecycle.os, "killpg", killpg)
-    assert lifecycle.kill_child_tree(proc.pid) == "exited"
+    assert lifecycle.kill_child_tree(proc.pid) == lifecycle.Teardown(
+        "exited", proven=False
+    )
     assert sent == []  # the pid may already belong to someone else
 
 
@@ -201,7 +207,12 @@ def test_an_abandoned_browser_reports_how_its_driver_was_stopped(monkeypatch) ->
     child = lifecycle.spawn([sys.executable, "-c", "import time; time.sleep(600)"])
     env._pw, env._driver_pid = object(), child.pid
     env._abandon_worker()
-    assert env._teardown == {"driver_pid": child.pid, "driver": "killed"}
+    assert env._teardown == {
+        "driver_pid": child.pid,
+        "driver": "killed",
+        "proven": False,
+    }
+    assert env._unproven is not None  # later episodes are INDETERMINATE
     with pytest.raises(ChildProcessError):
         os.waitpid(child.pid, os.WNOHANG)
     child.returncode = -signal.SIGKILL
@@ -271,7 +282,7 @@ def test_a_census_that_fails_once_then_confirms_empty_reports_killed(
     proc = _live_child()
     calls = _failing_census(monkeypatch, fail={1})
     try:
-        assert lifecycle.kill_child_tree(proc.pid, timeout=10) == "killed"
+        assert lifecycle.kill_child_tree(proc.pid, timeout=10) == UNPROVEN_KILL
         assert len(calls) >= 3  # the failure, its retry and the confirmation
     finally:
         monkeypatch.undo()
@@ -389,7 +400,7 @@ def test_a_census_missing_a_grandchild_still_kills_it_through_the_group(
     proc, grandchild = _stubborn_with_grandchild()
     _truncated_census(monkeypatch, keep=lambda pid: pid != grandchild)
     try:
-        assert lifecycle.kill_child_tree(proc.pid, timeout=10) == "killed"
+        assert lifecycle.kill_child_tree(proc.pid, timeout=10) == UNPROVEN_KILL
     finally:
         monkeypatch.undo()
     # "killed" rests on the empty group, not on the census that missed it.
@@ -443,7 +454,7 @@ def test_a_descendant_that_left_the_group_is_killed_and_its_group_checked() -> N
     escaped = int(proc.stdout.readline())
     assert os.getpgid(escaped) == escaped != proc.pid
     try:
-        assert lifecycle.kill_child_tree(proc.pid, timeout=10) == "killed"
+        assert lifecycle.kill_child_tree(proc.pid, timeout=10) == UNPROVEN_KILL
         assert not _running(escaped)
         with pytest.raises(ProcessLookupError):
             os.killpg(escaped, 0)
@@ -466,3 +477,134 @@ def test_a_census_without_its_header_is_incomplete(monkeypatch) -> None:
         lambda *a, **k: SimpleNamespace(stdout="\n".join(real.splitlines()[1:])),
     )
     assert lifecycle._ps_rows() is None
+
+
+# -- escaped (setsid) descendants: only a Linux subreaper proves them gone ----
+
+#: A child that starts a setsid grandchild, reports its pid, then exits so the
+#: grandchild is orphaned out of every group the caller knows about.
+ORPHANING = """
+import subprocess, sys
+child = subprocess.Popen([sys.executable, "-c",
+    "import time; print(flush=True); time.sleep(600)"],
+    stdout=subprocess.PIPE, start_new_session=True)
+child.stdout.readline()
+print(child.pid, flush=True)
+"""
+
+
+def _kill_quietly(pid: int) -> None:
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+
+
+def test_an_omitted_escaped_descendant_is_never_reported_proven(monkeypatch) -> None:
+    # Codex's control: the target leads its own group, its grandchild left
+    # with setsid, and a complete-looking census omits the grandchild.
+    proc = lifecycle.spawn(
+        [sys.executable, "-c", ESCAPING],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+    )
+    assert proc.stdout is not None
+    escaped = int(proc.stdout.readline())
+    _truncated_census(monkeypatch, keep=lambda pid: pid != escaped)
+    try:
+        result = lifecycle.kill_child_tree(proc.pid, timeout=10)
+        # The root group is empty, but that proves nothing about the escapee.
+        assert result == UNPROVEN_KILL
+        with pytest.raises(ProcessLookupError):
+            os.killpg(proc.pid, 0)
+    finally:
+        monkeypatch.undo()
+        proc.returncode = -signal.SIGKILL
+        _kill_quietly(escaped)
+
+
+@pytest.mark.skipif(not LINUX, reason="PR_SET_CHILD_SUBREAPER is Linux-only")
+def test_the_subreaper_supervisor_reaps_an_orphaned_setsid_descendant() -> None:
+    proc = lifecycle.spawn_supervised(
+        [sys.executable, "-c", ORPHANING + "import time; time.sleep(600)\n"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+    )
+    assert proc.stdout is not None
+    escaped = int(proc.stdout.readline())
+    try:
+        assert os.getpgid(escaped) == escaped
+        result = lifecycle.stop_supervised(proc.pid, timeout=20)
+        assert result == lifecycle.Teardown("killed", proven=True), (
+            "PR_SET_CHILD_SUBREAPER could not be set or did not reap the escapee"
+        )
+        assert not _running(escaped)
+    finally:
+        proc.returncode = proc.returncode or -signal.SIGTERM
+        _kill_quietly(escaped)
+
+
+@pytest.mark.skipif(not LINUX, reason="PR_SET_CHILD_SUBREAPER is Linux-only")
+def test_the_subreaper_supervisor_reaps_an_already_orphaned_escapee() -> None:
+    # The intermediate exits first: the escapee is orphaned and, under the
+    # subreaper, comes back to the supervisor instead of init, which kills
+    # and reaps it as soon as the command has exited.
+    proc = lifecycle.spawn_supervised(
+        [sys.executable, "-c", ORPHANING],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+    )
+    assert proc.stdout is not None
+    escaped = int(proc.stdout.readline())
+    try:
+        # The command has exited, so the supervisor tears down on its own.
+        assert lifecycle.stop_supervised(proc.pid, timeout=20).proven is True
+        assert not _running(escaped)
+    finally:
+        proc.returncode = proc.returncode or 0
+        _kill_quietly(escaped)
+
+
+@pytest.mark.skipif(LINUX, reason="the unproven path is the non-Linux one")
+def test_without_a_subreaper_the_supervisor_reports_unproven() -> None:
+    proc = lifecycle.spawn_supervised(
+        [sys.executable, "-c", ORPHANING + "import time; time.sleep(600)\n"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+    )
+    assert proc.stdout is not None
+    escaped = int(proc.stdout.readline())
+    try:
+        result = lifecycle.stop_supervised(proc.pid, timeout=20)
+        # Killed what it could reach, but never claims the escapee is gone.
+        assert result == UNPROVEN_KILL
+    finally:
+        proc.returncode = proc.returncode or -signal.SIGTERM
+        _kill_quietly(escaped)
+
+
+def test_a_supervisor_that_leaves_no_report_is_unknown() -> None:
+    # Not a supervisor at all: SIGTERM ends it without a verdict.
+    proc = lifecycle.spawn([sys.executable, "-c", "import time; time.sleep(600)"])
+    with pytest.raises(lifecycle.DescendantsUnknown, match="reported nothing"):
+        lifecycle.stop_supervised(proc.pid, timeout=10)
+    proc.returncode = -signal.SIGTERM
+
+
+def test_an_unproven_teardown_makes_later_episodes_indeterminate(monkeypatch) -> None:
+    env = _environment()
+    from openadapt_flow.rl_env.reward import Judgement
+
+    class Confirming:
+        def judge(self, claim, feasible, attempted=True):
+            return Judgement("CONFIRMED", claim, feasible, 1.0, attempted)
+
+    env._task = env.env.task("mockmed-01")
+    env._judge = Confirming()
+    monkeypatch.setattr(env.env.manifest.agent, "settle_s", 0.0)
+    monkeypatch.setattr(env, "_observe", lambda **kw: kw)
+    assert env._finish("success")["verdict"] == "CONFIRMED"
+    env._unproven = "the stuck browser could not be proven gone"
+    out = env._finish("success")
+    assert (out["verdict"], out["reward"]) == ("INDETERMINATE", 0.0)
+    assert "unproven" in out["extra"]["judgement"]["error"]

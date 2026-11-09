@@ -6,10 +6,24 @@ bounded time with ``Popen.wait`` (which also reaps the child), escalates to
 SIGKILL and waits again. A process that is still there after both waits
 raises :class:`ProcessNotReaped`; nothing reports it stopped until it has
 been reaped.
+
+Platform limit. An empty process group does not prove a tree gone: a
+descendant that called ``setsid`` has left the group, and once its parent
+dies it is reparented to init (or launchd), where no parent-pid walk finds
+it. Only Linux can prove the whole tree gone: a command run under
+:func:`supervised_command` has a child subreaper above it
+(``PR_SET_CHILD_SUBREAPER``), every orphan comes back to that supervisor,
+and its ``waitpid(-1)`` reaching ``ECHILD`` is the proof
+(:func:`stop_supervised` returns a :class:`Teardown` with ``proven=True``).
+On macOS and Windows, and for anything not started under the supervisor,
+teardown kills what it can find and reports ``proven=False``; callers must
+treat that as unknown, never as gone. :func:`stop` covers a server's own
+process group only.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import signal
 import subprocess
@@ -20,6 +34,15 @@ from typing import Any, Literal, Optional, Sequence
 #: How long a server gets to exit after SIGTERM, then after SIGKILL.
 TERM_TIMEOUT_S = 10.0
 KILL_TIMEOUT_S = 10.0
+
+
+@dataclass(frozen=True)
+class Teardown:
+    """How a process tree was stopped. ``proven`` only when a subreaper saw
+    every descendant gone (Linux, under :func:`supervised_command`)."""
+
+    how: Literal["killed", "exited"]
+    proven: bool
 
 
 class ProcessNotReaped(RuntimeError):
@@ -233,21 +256,21 @@ def _killpg(pgid: int, sig: int) -> None:
         ) from exc
 
 
-def kill_child_tree(
-    pid: int, *, timeout: float = KILL_TIMEOUT_S
-) -> Literal["killed", "exited"]:
+def kill_child_tree(pid: int, *, timeout: float = KILL_TIMEOUT_S) -> Teardown:
     """SIGKILL ``pid``, a child of this process that leads its own process
     group, and everything it started.
 
-    Returns ``"killed"`` only once ``pid`` is reaped, its group (and the
+    Returns ``how="killed"`` only once ``pid`` is reaped, its group (and the
     group of any descendant that left it) is confirmed empty with
     ``killpg(pgid, 0)``, and a complete census found every process it listed
     gone. Raises :class:`DescendantsUnknown` when that cannot be shown: the
     target does not lead its own group, or the process table looks
     incomplete. Anything still there at the bound raises
     :class:`ProcessNotReaped`. Either way everything known is killed first.
-    ``"exited"`` means ``pid`` had already exited and been reaped and its
+    ``how="exited"`` means ``pid`` had already exited and been reaped and its
     group is empty; nothing was signalled, so a reused id is never hit.
+    ``proven`` is always False: an orphaned ``setsid`` descendant cannot be
+    found from here (see the module docstring); use :func:`stop_supervised`.
     """
     deadline = time.monotonic() + timeout
     if os.name == "nt":
@@ -266,7 +289,7 @@ def kill_child_tree(
                 f"process {pid} had already exited, but a process group with "
                 "its id is still there and may not be its own"
             )
-        return "exited"
+        return Teardown("exited", proven=False)
     unknown: Optional[str] = None
     groups: set[int] = set()
     if pgid == pid and pgid != os.getpgrp():
@@ -320,7 +343,9 @@ def kill_child_tree(
             running = {p for p, _pp, _pg, stat in rows if not stat.startswith("Z")}
             survivors = extras & running
             if not survivors:
-                return "killed"
+                # Empty groups and a complete census, but a descendant that
+                # left with setsid and was orphaned is out of reach here.
+                return Teardown("killed", proven=False)
         else:
             survivors = set()
         if time.monotonic() > deadline:
@@ -334,3 +359,70 @@ def kill_child_tree(
                 f"{what} still running {timeout:.0f} s after SIGKILL"
             )
         time.sleep(0.05)
+
+
+# -- Linux: a child subreaper proves the whole tree gone ----------------------
+
+SUPERVISOR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_supervisor.py")
+_REPORT_DIR: Optional[str] = None
+
+
+def _report_dir() -> str:
+    global _REPORT_DIR
+    if _REPORT_DIR is None:
+        import tempfile
+
+        _REPORT_DIR = tempfile.mkdtemp(prefix="openadapt-supervisor-")
+    return _REPORT_DIR
+
+
+def supervised_command(args: Sequence[str]) -> list[str]:
+    """``args`` run under the subreaper supervisor (``_supervisor.py``).
+
+    Start the result in a new session; stop it with :func:`stop_supervised`.
+    """
+    import sys
+
+    return [sys.executable, "-I", SUPERVISOR, _report_dir(), "--", *args]
+
+
+def spawn_supervised(args: Sequence[str], **kwargs: Any) -> subprocess.Popen[bytes]:
+    """:func:`spawn` of ``args`` under the supervisor."""
+    return spawn(supervised_command(args), **kwargs)
+
+
+def stop_supervised(pid: int, *, timeout: float = KILL_TIMEOUT_S * 2) -> Teardown:
+    """Stop a supervisor started from :func:`supervised_command`.
+
+    SIGTERM asks it to kill and reap the command's whole tree; it reports
+    the verdict in a file before it exits. ``proven`` only for a supervisor
+    that is gone (reaped, its group empty) and reported ``proven``. A
+    supervisor that does not finish in time is SIGKILLed with its group and
+    :class:`ProcessNotReaped` is raised; one that reports survivors or no
+    report raises :class:`DescendantsUnknown`.
+    """
+    report = os.path.join(_report_dir(), str(pid))
+    deadline = time.monotonic() + timeout
+    _signal(pid, signal.SIGTERM)
+    while not _reap_child(pid) or _group_alive(pid):
+        if time.monotonic() > deadline:
+            _killpg(pid, signal.SIGKILL)
+            _signal(pid, signal.SIGKILL)
+            raise ProcessNotReaped(
+                f"supervisor {pid} did not finish its teardown in {timeout:.0f} s"
+            )
+        time.sleep(0.02)
+    try:
+        with open(report) as handle:
+            verdict = json.load(handle).get("verdict")
+        os.unlink(report)
+    except (OSError, ValueError):
+        verdict = None
+    if verdict == "proven":
+        return Teardown("killed", proven=True)
+    if verdict == "unproven":
+        return Teardown("killed", proven=False)
+    raise DescendantsUnknown(
+        f"supervisor {pid} reported {verdict or 'nothing'}: its command's "
+        "descendants may still be running"
+    )

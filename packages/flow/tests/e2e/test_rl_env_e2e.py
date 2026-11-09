@@ -9,6 +9,7 @@ the record the reward reads.
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -216,7 +217,14 @@ def test_a_stuck_step_that_wakes_later_cannot_touch_the_next_episode(
         # ended: it is no longer an unreaped child of this process (a live or
         # zombie child would be found by waitpid; a reused pid would not be
         # our child at all), and the environment says how it was stopped.
-        assert obs.metadata["teardown"] == {"driver_pid": driver, "driver": "killed"}
+        # Only Linux, where a subreaper supervises the driver, can prove the
+        # whole browser tree gone; elsewhere the teardown says unproven.
+        linux = sys.platform.startswith("linux")
+        assert obs.metadata["teardown"] == {
+            "driver_pid": driver,
+            "driver": "killed",
+            "proven": linux,
+        }
         with pytest.raises(ChildProcessError):
             os.waitpid(driver, os.WNOHANG)
         del env._step
@@ -228,7 +236,13 @@ def test_a_stuck_step_that_wakes_later_cannot_touch_the_next_episode(
         assert httpx.get(env._app_url + "/api/db").json()["records"] == []
         for action in task.solution:
             obs = env.step(WebAction(**action))
-        assert (obs.verdict, obs.reward) == ("CONFIRMED", 1.0)
+        if linux:
+            assert (obs.verdict, obs.reward) == ("CONFIRMED", 1.0)
+        else:
+            # What survived the unproven teardown might still write, so no
+            # later episode of this environment is trusted.
+            assert (obs.verdict, obs.reward) == ("INDETERMINATE", 0.0)
+            assert "unproven" in obs.metadata["judgement"]["error"]
     finally:
         env.close()
 
