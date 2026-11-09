@@ -281,9 +281,9 @@
     {
       "module": "openadapt_flow.teach_scope",
       "path": "packages/flow/openadapt_flow/teach_scope.py",
-      "line": 164,
+      "line": 186,
       "edge_kind": "transitive",
-      "diagnostic": "openadapt_flow.teach_scope:164: unresolvable dynamic import (nonliteral or unresolved import target)",
+      "diagnostic": "openadapt_flow.teach_scope:186: unresolvable dynamic import (nonliteral or unresolved import target)",
       "reason": "unbounded-config",
       "follow_up": "unresolved-import-provider-migration",
       "source_statement_sha256": "dd5fa568e83cc31e2ddd461824692f79231c66d7a21de6d74ffd7a38a54a3d3c"
