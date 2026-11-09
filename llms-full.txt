@@ -183,16 +183,34 @@ covers other clients.
 
 ### Record a task by hand
 
+Recording works the same way on every surface; only the target differs:
+`--url` for a web app, `--window` (and `--window-title`) for a Windows or macOS
+app window or a local RDP or Citrix client window. Linux and network RDP record
+the whole local desktop, so they take no target.
+
 ```bash
 python -m pip install --upgrade openadapt
-openadapt record --url https://staging.your-app.example --out rec
+openadapt record --backend <web|windows|macos|linux|rdp|citrix> <target> --out rec
+
+# A web app
+openadapt record --backend web --url https://staging.your-app.example --out rec
 openadapt compile rec --out bundle --name my-first-workflow
 openadapt run --replay bundle --url https://staging.your-app.example --run-dir run
+
+# A desktop app (macOS here; Windows and Citrix take --window too).
+# Desktop recording and macOS replay are separate extras.
+python -m pip install --upgrade 'openadapt[capture,macos]'
+openadapt record --backend macos --window "Your App" --out rec
+openadapt compile rec --out bundle --name my-first-workflow
+openadapt run --replay bundle --macos-app "Your App" --run-dir run
 ```
 
-`run --replay` drives the app at `--url` and performs every recorded action,
+`run --replay` drives the app and performs every recorded action,
 including saves you can't undo. It doesn't ask first and doesn't check the
 saved record. Point it at a test or staging copy, never at production data.
+
+The commands for every surface, including Linux, RDP and Citrix, are in
+[SURFACES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/SURFACES.md#first-workflow-per-surface).
 
 The existing engine command remains available for scripts:
 
@@ -708,7 +726,7 @@ improvising or retrying when something is off.
 | Code as action is the default run-1 agent (compile-agent, and `teach_run` in the MCP teach tools): one terminal tool (structure first, actions by role and name, a sandboxed read-only shell, screenshots on request); every action is a structured step checked against the compiled program, and every save the gate detects is read back from the system of record | Released ([#1305](https://github.com/OpenAdaptAI/OpenAdapt/pull/1305)) | Real app (local OpenEMR) and synthetic | `ClaudeAgent(vision="code")`, `CODE_AS_ACTION.md` ([#1305](https://github.com/OpenAdaptAI/OpenAdapt/pull/1305)) |
 | Admit a draft by a person, an admitter key, or an agent under a person-signed policy, including self-admission when the policy allows it | Released | Unit tests | [JIT_ADMISSION.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/JIT_ADMISSION.md) |
 | MCP server: your agent decides what to enter, OpenAdapt makes the entry and checks it | Released | Synthetic sandbox | `openadapt-agent`, [packages/agent](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/agent/README.md) |
-| Teach over MCP: an agent does a new task once through OpenAdapt; the run is read back, compiled and admitted (a person confirms the record check; the agent admits only under a person-signed policy), and becomes a tool it calls with no model calls. Web, and Windows, macOS, Linux, RDP and Citrix with a person approving each save | On main ([#1335](https://github.com/OpenAdaptAI/OpenAdapt/pull/1335)) | Synthetic (MockMed over MCP, and through the real RDP and Citrix backends) | `openadapt-agent serve --teach`, [packages/agent](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/agent/README.md#teach-a-new-workflow-from-your-agent) |
+| Teach over MCP: an agent does a new task once through OpenAdapt; the run is read back, compiled and admitted (a person confirms the record check; the agent admits only under a person-signed policy), and becomes a tool it calls with no model calls. Web, and Windows, macOS, Linux, RDP and Citrix with a person approving each save | On main ([#1335](https://github.com/OpenAdaptAI/OpenAdapt/pull/1335)) | Synthetic (MockMed over MCP, and through the real RDP and Citrix backends); a native Cocoa app with SQLite through `MacOSBackend`, taught, confirmed, admitted under a signed policy and called (canary and taught run `VERIFIED`, 0 model calls; [teach_desktop](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/teach_desktop/README.md)) | `openadapt-agent serve --teach`, [packages/agent](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/agent/README.md#teach-a-new-workflow-from-your-agent) |
 | Turn a read-only browser task into a tool for the coding agent you already use: `openadapt setup` registers the MCP server and a skill in Claude Code, Cursor, Codex and Gemini CLI (idempotent, `--dry-run`, `--undo`); the agent does the task once through `teach_start`/`teach_act`/`teach_finish`, the task must end in a download, the file is checked (columns, a column between two inputs or equal to one, fewest rows), the compiled steps are replayed once with no model, and the agent gets a `taught_<name>` tool that downloads a checked file with new inputs. The browser sends no POST, PUT, PATCH or DELETE and stays on one site; a compiled run stops when a control is missing, matches more than one element, or is relabelled | Released ([#1502](https://github.com/OpenAdaptAI/OpenAdapt/pull/1502)) | Real headless Chromium on the local example portal (scripted MCP client, in CI); a real Claude Code agent taught the export from the guide's prompt and called the tool with new dates (2026-10-24, one run) | `openadapt setup`, `openadapt-agent serve --teach-browser`, [FIRST_TOOL.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/FIRST_TOOL.md) |
 | Verify any agent's own writes: `openadapt verify` reads the system of record before and after a write, against a contract the operator owns (REST, FHIR, SQL, GraphQL), and returns a verified receipt (`openadapt.effect-receipt/v1`) or a refusal (`REFUTED`, `UNCERTAIN`), never an unverified success. Python SDK (`openadapt.verify`, which is `openadapt_flow.verifier`: `begin_write`, `verify_write`, `verified_write`) wraps a write in any agent framework; the MCP server (`openadapt verify serve`) offers `verify_begin`, `verify_check` and `verify_recheck` to any MCP client | Released ([#1589](https://github.com/OpenAdaptAI/OpenAdapt/pull/1589)) | Synthetic (MockMed's fault server over real HTTP: correct write, wrong record, not saved, saved twice, unreadable store) | `openadapt verify`, [VERIFY_WRITES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/VERIFY_WRITES.md) |
 | See what your own agent gets wrong, with no risk: `openadapt shadow` is a loopback pass-through proxy beside the agent. It checks each write against the system of record (FHIR through `ensure_record`; SQL through the verifier's whole-database frame), checks each `CONFIRMED` again later, and writes `report.html` and `report.json`. It never blocks, changes or resends a write; the only delay is the read before a write (at most `hold_ms`) | [#1678](https://github.com/OpenAdaptAI/OpenAdapt/pull/1678) | Real app (Medplum 5.2.8, 37 cases through a fault proxy: scripted agent 18 of 18 harms caught, 0 correct writes refuted; Claude Sonnet 5.5 9 of 9 caught, 4 correct but corrected writes refuted; 0 writes by the shadow; 15 to 25 ms median added per write; setup 76.5 s machine time, 3 decisions); real app, SQL mode (Dolibarr 21 on MariaDB 11.4, 13 cases: 8 of 8 harms caught, 5 of 5 correct writes confirmed, 292 ms median added); synthetic (SQLite) | `openadapt shadow`, [SHADOW_MODE.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/SHADOW_MODE.md), [SHADOW_RESULTS.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/fhir_medplum/public/SHADOW_RESULTS.md) |

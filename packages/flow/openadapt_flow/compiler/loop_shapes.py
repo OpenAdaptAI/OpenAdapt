@@ -282,13 +282,16 @@ def band_identity(
 
 
 def _hashed_indices(tmpl: Any, value: str) -> Optional[list[int]]:
+    from openadapt_flow.ir import IdentityTemplate
     from openadapt_flow.runtime import identity as _id
     from openadapt_flow.runtime import identity_template as _it
 
+    if not isinstance(tmpl, IdentityTemplate) or not _it._strict_template_ready(tmpl):
+        return None
     salt = _it._salt_bytes(tmpl.salt)
     out: list[int] = []
     for tok in _id.tokenize(value):
-        key = _it._hash(salt, _id.squash(tok))
+        key = _it._hash(salt, _id.comparison_squash(tok))
         hits = [j for j, t in enumerate(tmpl.tokens) if t.r == key and j not in out]
         if not hits:
             return None

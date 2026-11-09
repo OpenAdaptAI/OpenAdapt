@@ -16717,7 +16717,7 @@ class Replayer:
                 for line in lines
             ):
                 return ""
-            return identity_mod.squash(
+            return identity_mod.comparison_squash(
                 " ".join(str(getattr(line, "text", "") or "") for line in lines)
             )
 
@@ -17892,7 +17892,7 @@ class Replayer:
     def _ocr_squashed(self, png: bytes, region: Optional[Region]) -> str:
         """Squashed OCR text of a (region of a) frame."""
         lines = self.vision.ocr(png, region=region)
-        return identity_mod.squash(" ".join(line.text for line in lines))
+        return identity_mod.comparison_squash(" ".join(line.text for line in lines))
 
     def _readable_chars(self, png: bytes, region: Optional[Region]) -> int:
         """Confidently readable alphanumeric characters in a region.
@@ -18018,22 +18018,22 @@ class Replayer:
                     label = None
             if (
                 isinstance(label, str)
-                and identity_mod.squash(text)
-                and identity_mod.squash(label).casefold()
-                == identity_mod.squash(text).casefold()
+                and identity_mod.comparison_squash(text)
+                and identity_mod.comparison_squash(label).casefold()
+                == identity_mod.comparison_squash(text).casefold()
             ):
                 return True, True
         if not changed:
             return False, False
-        needle = identity_mod.squash(text)
+        needle = identity_mod.comparison_squash(text)
 
         def exact_ocr_value(
             before: bytes, after: bytes, crop: Optional[Region]
         ) -> bool:
             observed = [
-                identity_mod.squash(line.text)
+                identity_mod.comparison_squash(line.text)
                 for line in self.vision.ocr(after, region=crop)
-                if identity_mod.squash(line.text)
+                if identity_mod.comparison_squash(line.text)
             ]
             if needle and "".join(observed) == needle:
                 return True
@@ -18043,7 +18043,7 @@ class Replayer:
             # field. Remove whole unchanged OCR lines, with multiplicity;
             # every remaining character must belong to the complete value.
             previous = Counter(
-                identity_mod.squash(line.text)
+                identity_mod.comparison_squash(line.text)
                 for line in self.vision.ocr(before, region=crop)
             )
             added = []
@@ -18408,12 +18408,14 @@ class Replayer:
             )
         exact = self._text_value_at(resolution.point)
         if exact is not None:
-            verified = identity_mod.squash(exact) == identity_mod.squash(text)
+            verified = identity_mod.comparison_squash(
+                exact
+            ) == identity_mod.comparison_squash(text)
         else:
-            needle = identity_mod.squash(text)
+            needle = identity_mod.comparison_squash(text)
             verified = any(
                 getattr(line, "confidence", 1.0) >= 0.5
-                and identity_mod.squash(line.text) == needle
+                and identity_mod.comparison_squash(line.text) == needle
                 for line in self.vision.ocr(after_png, region=live_readback)
             )
             if not verified:
@@ -18421,7 +18423,7 @@ class Replayer:
                 if upscaled is not None:
                     verified = any(
                         getattr(line, "confidence", 1.0) >= 0.5
-                        and identity_mod.squash(line.text) == needle
+                        and identity_mod.comparison_squash(line.text) == needle
                         for line in self.vision.ocr(upscaled, region=None)
                     )
         result.input_verified = verified
