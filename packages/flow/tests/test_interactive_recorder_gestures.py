@@ -250,22 +250,43 @@ def test_native_select_records_its_label(fixture_url: str, tmp_path: Path) -> No
     assert [step.action.value for step in workflow.steps] == ["click", "type", "click"]
 
 
+def _compile_native_select(fixture_url: str, out: Path) -> Path:
+    """Record the select demonstration with ``sel`` as a parameter and
+    compile it; returns the bundle directory."""
+
+    rec = _record_native_select(fixture_url, out / "rec", ("sel",))
+    bundle = out / "bundle"
+    workflow = compile_recording(rec, bundle, name="select")
+    typed = next(step for step in workflow.steps if step.action.value == "type")
+    assert typed.param == "sel"
+    return bundle
+
+
+@pytest.fixture(scope="module")
+def select_bundle(fixture_url: str, tmp_path_factory: pytest.TempPathFactory) -> Path:
+    return _compile_native_select(fixture_url, tmp_path_factory.mktemp("select"))
+
+
 def _replay_native_select(
-    fixture_url: str, tmp_path: Path, value: str
+    fixture_url: str,
+    tmp_path: Path,
+    value: str,
+    *,
+    bundle: Optional[Path] = None,
+    page_js: str = "",
 ) -> tuple[Any, Optional[str], int]:
     """Replay the recorded select with ``value``: the report, the select's
-    value once the run ends, and how many key events reached the select."""
+    value once the run ends, and how many key events reached the select.
+    ``page_js`` runs in the replay page before its own scripts (a handler
+    the app might have)."""
 
     from openadapt_flow.backends.playwright_backend import PlaywrightBackend
     from openadapt_flow.ir import Workflow
     from openadapt_flow.runtime import Replayer
 
     sync_api = pytest.importorskip("playwright.sync_api")
-    rec = _record_native_select(fixture_url, tmp_path / "rec", ("sel",))
-    bundle = tmp_path / "bundle"
-    workflow = compile_recording(rec, bundle, name="select")
-    typed = next(step for step in workflow.steps if step.action.value == "type")
-    assert typed.param == "sel"
+    if bundle is None:
+        bundle = _compile_native_select(fixture_url, tmp_path)
     with sync_api.sync_playwright() as pw:
         browser = pw.chromium.launch(headless=True)
         try:
@@ -273,7 +294,7 @@ def _replay_native_select(
             page.add_init_script(
                 "window.__selKeys = 0; document.addEventListener('keydown',"
                 " (e) => { if (e.target.id === 'sel') window.__selKeys += 1; },"
-                " true);"
+                " true);" + page_js
             )
             page.goto(fixture_url)
             page.wait_for_selector("#sel", state="visible")
@@ -316,6 +337,73 @@ def test_native_select_replay_refuses_a_missing_label(
     assert "labelled" in (failed[0].error or "")
     assert report.results[-1] is failed[0]
     assert chosen == ""
+    assert keys == 0
+
+
+# Handlers an app might attach to the select, run once when Label Alpha is
+# chosen. Each but the last leaves an option other than the one replay chose.
+_ON_ALPHA = (
+    "document.addEventListener('DOMContentLoaded', () => {"
+    " const sel = document.getElementById('sel'); let done = false;"
+    " const act = () => {"
+    "  if (done || sel.value !== 'v-alpha') return; done = true; %s };"
+    " sel.addEventListener('%s', () => { %s }); });"
+)
+_REPLACE = (
+    "const old = sel.selectedOptions[0]; const twin = new Option("
+    "'Label Alpha', 'v-shadow', true, true); sel.replaceChild(twin, old);"
+)
+_SELECT_HANDLERS = {
+    # Codex's case: the chosen option swapped for a same-label, same-index
+    # twin with another value.
+    "replace-on-change": _ON_ALPHA % (_REPLACE, "change", "act();"),
+    "replace-on-input": _ON_ALPHA % (_REPLACE, "input", "act();"),
+    "value-only": _ON_ALPHA
+    % ("sel.selectedOptions[0].value = 'v-shadow';", "change", "act();"),
+    "remove": _ON_ALPHA % ("sel.selectedOptions[0].remove();", "change", "act();"),
+    # After the events: only the read-back can see it.
+    "replace-later": _ON_ALPHA % (_REPLACE, "change", "setTimeout(act, 0);"),
+}
+
+
+@pytest.mark.parametrize("handler", sorted(_SELECT_HANDLERS))
+def test_native_select_replay_refuses_when_the_page_swaps_the_choice(
+    fixture_url: str, select_bundle: Path, tmp_path: Path, handler: str
+) -> None:
+    report, _chosen, keys = _replay_native_select(
+        fixture_url,
+        tmp_path,
+        "Label Alpha",
+        bundle=select_bundle,
+        page_js=_SELECT_HANDLERS[handler],
+    )
+    assert not report.success
+    failed = [r for r in report.results if not r.ok]
+    assert len(failed) == 1, [(r.step_id, r.ok, r.error) for r in report.results]
+    assert failed[0].input_verified is False
+    assert failed[0].delivery_attempted is True
+    # The run halted on the select: the click after it never ran.
+    assert report.results[-1] is failed[0]
+    assert keys == 0
+
+
+def test_native_select_replay_verifies_with_a_benign_handler(
+    fixture_url: str, select_bundle: Path, tmp_path: Path
+) -> None:
+    # A handler that touches unrelated DOM leaves the choice as chosen.
+    benign = _ON_ALPHA % (
+        "document.body.appendChild(document.createElement('div'))"
+        ".textContent = 'saved';",
+        "change",
+        "act();",
+    )
+    report, chosen, keys = _replay_native_select(
+        fixture_url, tmp_path, "Label Alpha", bundle=select_bundle, page_js=benign
+    )
+    assert report.success, [(r.step_id, r.ok, r.error) for r in report.results]
+    typed = next(r for r in report.results if r.input_verified is not None)
+    assert typed.input_verified is True
+    assert chosen == "v-alpha"
     assert keys == 0
 
 

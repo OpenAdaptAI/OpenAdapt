@@ -12385,6 +12385,7 @@ class Replayer:
             delivered = call()
         except StructuralRefusalAfterDelivery:
             result.delivery_attempted = True
+            result.input_verified = False
             raise
         except (FreshActuationRequired, StructuralResolutionRefused):
             result.delivery_attempted = attempted_before
@@ -17823,6 +17824,14 @@ class Replayer:
             retyping is only safe when nothing changed).
         """
         after_png = self._settle_seeded()
+        # A native <select> choice the backend delivered holds only while the
+        # option element it chose is still the select's one selected option,
+        # with the value and label captured before delivery. A page that
+        # replaced, removed or changed it is an unknown state: not landed, and
+        # nothing is retyped.
+        holds = getattr(self.backend, "native_select_choice_holds", None)
+        if callable(holds) and holds() is False:
+            return False, True
         # Masked input has no readable value: keep its pixel-only change
         # evidence local, so an unrelated change elsewhere cannot confirm it.
         region = self._field_region(field_point, field_region, masked=allow_masked)

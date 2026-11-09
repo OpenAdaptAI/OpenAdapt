@@ -1169,10 +1169,12 @@ NATIVE_OPTION_LABEL_JS = (
 
 #: Choose, in a native single ``<select>``, the one option whose label
 #: (``NATIVE_OPTION_LABEL_JS``) is exactly ``label``, and fire ``input`` and
-#: ``change`` as ``select_option`` does. Returns ``{kind: 'none'}`` when the target is no
-#: native select, ``{kind: 'refused'}`` (nothing changed) when it is a
-#: multiple or disabled select or not exactly one option matches (or the one
-#: match is disabled), else ``{kind: 'selected', index, value}``.
+#: ``change`` as ``select_option`` does. Returns a record: ``{kind: 'none'}``
+#: when the target is no native select; ``{kind: 'refused'}`` (nothing
+#: changed) for a multiple or disabled select, zero or several matches, or a
+#: disabled match; else ``{kind: 'selected'}`` with the chosen option ELEMENT,
+#: its value and label captured BEFORE the events ran (a page handler cannot
+#: reach this record), and ``held``: the choice check right after them.
 _SELECT_EXACT_LABEL_JS = (
     r"""(e, label) => {
     if (e.tagName !== 'SELECT') return {kind: 'none'};
@@ -1180,73 +1182,87 @@ _SELECT_EXACT_LABEL_JS = (
     const optionLabel = """
     + NATIVE_OPTION_LABEL_JS
     + r""";
-    const matches = [];
-    Array.from(e.options).forEach((o, i) => {
-        if (optionLabel(o) === label) matches.push(i);
-    });
-    if (matches.length !== 1) return {kind: 'refused'};
-    const index = matches[0];
-    if (e.options[index].disabled) return {kind: 'refused'};
-    e.selectedIndex = index;
+    const matches = Array.from(e.options).filter((o) => optionLabel(o) === label);
+    if (matches.length !== 1 || matches[0].disabled) return {kind: 'refused'};
+    const option = matches[0];
+    const record = {
+        kind: 'selected', select: e, option: option,
+        value: option.value, label: optionLabel(option),
+    };
+    option.selected = true;
     e.dispatchEvent(new Event('input', {bubbles: true, composed: true}));
     e.dispatchEvent(new Event('change', {bubbles: true}));
-    return {kind: 'selected', index: index, value: e.options[index].value};
+    record.held = (__HOLDS__)(record);
+    return record;
 }"""
 )
 
-#: The selected option of a native select, read again after the events ran.
-_SELECTED_OPTION_JS = (
-    r"""(e) => {
+#: Does a choice record still hold? The same option element (not one at the
+#: same index or with the same label) is connected, inside the select, its
+#: only selected option, with the value and label captured before delivery.
+_NATIVE_CHOICE_HOLDS_JS = (
+    r"""(r) => {
     const optionLabel = """
     + NATIVE_OPTION_LABEL_JS
     + r""";
-    const o = e.selectedIndex >= 0 ? e.options[e.selectedIndex] : null;
-    return o ? {index: e.selectedIndex, label: optionLabel(o), value: o.value} : null;
+    const e = r.select, o = r.option;
+    const selected = e.selectedOptions;
+    return e.isConnected && o.isConnected && e.contains(o)
+        && selected.length === 1 && selected[0] === o
+        && o.value === r.value && optionLabel(o) === r.label;
 }"""
+)
+_SELECT_EXACT_LABEL_JS = _SELECT_EXACT_LABEL_JS.replace(
+    "__HOLDS__", _NATIVE_CHOICE_HOLDS_JS
 )
 
 
-def _select_native_option(target: Any, text: str) -> bool:
+def _select_native_option(target: Any, text: str) -> Optional[Any]:
     """Choose the option labelled exactly ``text`` in a native ``<select>``.
 
     Typing into a select only highlights an option where the browser opens a
     popup for it (Linux Chromium), and commits nothing until the popup
     closes; Enter to commit could submit a form. The option is chosen on the
-    element itself, by index, firing ``input`` and ``change`` with no key
-    events. The match is on the label as the recorder stores it
+    element itself, firing ``input`` and ``change`` with no key events. The
+    match is on the label as the recorder stores it
     (``NATIVE_OPTION_LABEL_JS``), so a multi-line ``<option>`` recorded as
     "Dog" matches, and an option that only differs in whitespace from another
     ("Label  Alpha" beside "Label Alpha") makes two matches. ``target`` is an
-    element handle. Returns ``False``, with nothing delivered, when the
-    target is no native select. Once it is, zero or several matches, a
-    disabled match, or a multiple or disabled select are refused with nothing
-    delivered: replay never falls back to typing. After the choice the
-    selected option is read again, and anything but that option (index,
-    value, and exactly that label) is refused. The
-    caller's read-back still checks the shown label.
+    element handle.
+
+    Returns ``None``, with nothing delivered, when the target is no native
+    select. Once it is, zero or several matches, a disabled match, or a
+    multiple or disabled select are refused with nothing delivered: replay
+    never falls back to typing. The chosen option element, value and label
+    are captured in the page before the events run; the expected value is
+    never read from the page after them. Unless that same element is still
+    connected and the select's only selected option, with the captured value
+    and the requested label (checked right after the events and again
+    here), :class:`StructuralRefusalAfterDelivery` is raised. Otherwise
+    returns the choice record's handle, which ``_NATIVE_CHOICE_HOLDS_JS``
+    rechecks at the caller's read-back.
     """
 
-    outcome = target.evaluate(_SELECT_EXACT_LABEL_JS, text)
-    kind = outcome.get("kind") if isinstance(outcome, dict) else None
+    record = target.evaluate_handle(_SELECT_EXACT_LABEL_JS, text)
+    meta = record.evaluate("r => ({kind: r.kind, label: r.label, held: r.held})")
+    kind = meta.get("kind") if isinstance(meta, dict) else None
     if kind == "none":
-        return False
+        return None
     if kind != "selected":
         raise StructuralResolutionRefused(
             "the focused native <select> has no single enabled option labelled "
             "exactly as the step's value; refusing to choose one"
         )
-    chosen = target.evaluate(_SELECTED_OPTION_JS)
     if not (
-        isinstance(chosen, dict)
-        and chosen.get("index") == outcome.get("index")
-        and chosen.get("label") == text
-        and chosen.get("value") == outcome.get("value")
+        meta.get("label") == text
+        and meta.get("held") is True
+        and record.evaluate(_NATIVE_CHOICE_HOLDS_JS) is True
     ):
         raise StructuralRefusalAfterDelivery(
-            "the native <select> did not keep the option labelled exactly as "
-            "the step's value after it was chosen"
+            "the native <select> did not keep the option chosen for the step's "
+            "value (the page replaced, removed or changed it)"
         )
-    return True
+    return record
 
 
 _TEXT_AT_POINT_JS = r"""([px, py, target]) => {
@@ -2334,6 +2350,10 @@ class PlaywrightBackend:
         # references only) for submit bindings. A new backend starts empty.
         self._fill_store_key = f"__oaflow_filled_{uuid.uuid4().hex}"
         self._fill_value_slot = f"__oaflow_filled_values_{uuid.uuid4().hex}"
+        # The last native <select> choice this backend delivered (a page-side
+        # record of the option element and its pre-delivery value), for the
+        # replayer's read-back; cleared by every text delivery.
+        self._native_select_choice: Optional[Any] = None
         self._form_wire: Any = None
         # The page-side guard (see _arm_wire_check): one per browser context,
         # kept in each document under a private key, installed by an init
@@ -5080,6 +5100,7 @@ class PlaywrightBackend:
     ) -> ActionDeliveryReceipt:
         """Type through the pre-identity focused-element lease."""
 
+        self._native_select_choice = None
         self._register_focused_field()
         receipt = self._act_guarded_keyboard(
             expected_frame_sha256=expected_frame_sha256,
@@ -5091,7 +5112,9 @@ class PlaywrightBackend:
                     _is_iso_date(text)
                     and _fill_iso_date(locator.element_handle(timeout=1000), text)
                 )
-                or _select_native_option(locator.element_handle(timeout=1000), text)
+                or self._choose_native_option(
+                    locator.element_handle(timeout=1000), text
+                )
                 or locator.press_sequentially(text, timeout=1000)
             ),
         )
@@ -5690,6 +5713,7 @@ class PlaywrightBackend:
         step before typing; recording and other callers keep ``type_text``.
         """
 
+        self._native_select_choice = None
         self._assert_qualification_environment_current()
         try:
             target = self._focused_element_handle()
@@ -5703,9 +5727,38 @@ class PlaywrightBackend:
         # As type_text does: submit bindings and create-form identity checks
         # see the select as a field this program filled.
         self._register_focused_field()
-        _select_native_option(target, text)
+        self._choose_native_option(target, text)
         self._snapshot_focused_field(text)
         return True
+
+    def _choose_native_option(self, target: Any, text: str) -> bool:
+        """:func:`_select_native_option`, keeping its choice record for
+        :meth:`native_select_choice_holds`."""
+
+        self._native_select_choice = None
+        record = _select_native_option(target, text)
+        if record is None:
+            return False
+        self._native_select_choice = record
+        return True
+
+    def native_select_choice_holds(self) -> Optional[bool]:
+        """Does the last native ``<select>`` choice still hold?
+
+        ``None`` when the last text delivery chose no native option. Else
+        ``True`` only while the option element chosen then is connected, the
+        select's only selected option, with the value and label captured
+        before delivery; an unreadable record is ``False``. The expected value
+        is never read from the page after delivery.
+        """
+
+        record = self._native_select_choice
+        if record is None:
+            return None
+        try:
+            return record.evaluate(_NATIVE_CHOICE_HOLDS_JS) is True
+        except Exception:  # noqa: BLE001 - unreadable after delivery: not held
+            return False
 
     def _deliver_text(self, text: str, per_key: Callable[[], None]) -> None:
         """Insert ``text`` at the caret in one call when the focused element
@@ -5722,6 +5775,7 @@ class PlaywrightBackend:
 
     def type_text(self, text: str) -> None:
         """Type text into the currently focused element."""
+        self._native_select_choice = None
         self._assert_qualification_environment_current()
         self._register_focused_field()
         self._deliver_text(text, lambda: self.page.keyboard.type(text))
