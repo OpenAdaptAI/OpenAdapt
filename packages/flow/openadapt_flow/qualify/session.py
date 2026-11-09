@@ -58,7 +58,9 @@ def playwright_session(config: VerifyConfig) -> SessionOpener:
 
         pw = sync_playwright().start()
         try:
-            browser = pw.chromium.launch(headless=app.headless)
+            from openadapt_flow._browser_readiness import launch_rendering_ready
+
+            browser = launch_rendering_ready(pw.chromium, headless=app.headless)
             context = browser.new_context(
                 viewport={"width": app.viewport[0], "height": app.viewport[1]},
                 device_scale_factor=1,
@@ -71,7 +73,7 @@ def playwright_session(config: VerifyConfig) -> SessionOpener:
             # Guard the page's WebSockets from its first document (wire check).
             prepare_ws_guard(page)
             page.goto(app.entry_url or app.url)
-        except Exception:
+        except BaseException:
             pw.stop()
             raise
 

@@ -2697,6 +2697,15 @@ def _attached_web_page(backend_cfg, *, url: Optional[str], workflow=None):
             )
         except BrowserAttachError as exc:
             raise SystemExit(f"REFUSED: {exc}. Nothing was executed.") from None
+        from openadapt_flow._browser_readiness import (
+            BrowserReadinessError,
+            require_rendering_ready,
+        )
+
+        try:
+            require_rendering_ready(browser, attached_page=page)
+        except BrowserReadinessError as exc:
+            raise SystemExit(f"REFUSED: {exc}. Nothing was executed.") from None
         from openadapt_flow.backends.playwright_backend import prepare_ws_guard
 
         # Documents the tab loads from now on are guarded from their start.

@@ -496,7 +496,9 @@ def render_frame(
     )
     dsf = cond.device_scale_factor
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=True)
+        from openadapt_flow._browser_readiness import launch_rendering_ready
+
+        browser = launch_rendering_ready(pw.chromium, headless=True)
         # Tall viewport so the whole dense table is on one screenshot (no
         # scroll) — every target/sibling row is present and readable.
         page = browser.new_page(

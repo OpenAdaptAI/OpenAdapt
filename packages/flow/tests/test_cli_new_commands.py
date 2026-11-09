@@ -45,6 +45,7 @@ from openadapt_flow.runtime.durable.checkpoint import (
 )
 from openadapt_flow.runtime.durable.program_checkpoint import bundle_version
 from tests._approver_keys import approvers_yaml
+from tests.browser_readiness import ReadyBrowserMixin
 
 # ---------------------------------------------------------------------------
 # worklist loading + relation binding
@@ -385,7 +386,7 @@ class _FakePage:
         self.url = url
 
 
-class _FakeBrowser:
+class _FakeBrowser(ReadyBrowserMixin):
     def new_page(self, viewport=None, **_options):
         return _FakePage()
 

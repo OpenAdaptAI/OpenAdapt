@@ -593,13 +593,22 @@ class _Browser:
         self.dialogs: list[str] = []
         self._pw = sync_playwright().start()
         try:
-            self._browser = self._pw.chromium.launch(headless=headless)
+            from openadapt_flow._browser_readiness import launch_rendering_ready
+
+            self._browser = launch_rendering_ready(self._pw.chromium, headless=headless)
         except Exception as exc:
             self._pw.stop()
+            from openadapt_flow._browser_readiness import BrowserReadinessError
+
+            if isinstance(exc, BrowserReadinessError):
+                raise BridgeError(str(exc)) from None
             raise BridgeError(
                 "could not start Chromium; run `python -m playwright install "
                 f"chromium` and try again ({type(exc).__name__})"
             ) from None
+        except BaseException:
+            self._pw.stop()
+            raise
         # No service workers: their requests would skip the wire check.
         self.context = self._browser.new_context(
             accept_downloads=True, service_workers="block"
