@@ -38,9 +38,20 @@ import os
 import secrets
 import threading
 import time
+from contextlib import contextmanager
+from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping, Optional, Protocol, Sequence
+from typing import (
+    Any,
+    Callable,
+    ContextManager,
+    Iterator,
+    Mapping,
+    Optional,
+    Protocol,
+    Sequence,
+)
 
 __all__ = [
     "Attempt",
@@ -49,6 +60,7 @@ __all__ = [
     "Ledger",
     "LedgerBackend",
     "LedgerError",
+    "Journal",
     "MemoryLedger",
     "default_ledger",
 ]
@@ -66,9 +78,35 @@ class Lease(Protocol):
     def release(self) -> None: ...
 
 
+class Journal(Protocol):
+    """A key's journal while its short event lock is held."""
+
+    def events(self) -> list[dict[str, Any]]: ...
+
+    def append(self, event: Mapping[str, Any]) -> None: ...
+
+
+@dataclass
+class _Journal:
+    read: Callable[[], list[dict[str, Any]]]
+    write: Callable[[Mapping[str, Any]], None]
+
+    def events(self) -> list[dict[str, Any]]:
+        return self.read()
+
+    def append(self, event: Mapping[str, Any]) -> None:
+        self.write(event)
+
+
 class LedgerBackend(Protocol):
     """Where the ledger lives. Implement it for a shared store (a database)
-    when workers run on several hosts; :class:`FileLedger` is one machine."""
+    when workers run on several hosts; :class:`FileLedger` is one machine.
+
+    Mutations require transaction(). A backend without this primitive fails
+    closed; an events()/append() pair is not an atomic substitute. Low-level
+    append observations carry their observed ``based_on`` journal revision.
+    Without one, a weak observation is retained but cannot grant permission.
+    """
 
     def secret(self) -> bytes:
         """The HMAC key for write identities, the same for every worker."""
@@ -78,6 +116,13 @@ class LedgerBackend(Protocol):
 
     def append(self, key: str, event: Mapping[str, Any]) -> None:
         """Append one event durably before returning."""
+
+    def transaction(self, key: str) -> ContextManager[Journal]:
+        """Serialize a read, decision and durable append for one key.
+
+        This short lock must be independent of the lifecycle lease. Every
+        append, including low-level append(), must participate in it.
+        """
 
     def lease(self, key: str) -> Optional[Lease]:
         """An exclusive lease on ``key`` without waiting, or None when
@@ -130,6 +175,7 @@ class FileLedger:
 
     ``root``/``entries/<key>.jsonl`` holds each key's events, one JSON object
     per line, appended and fsynced. ``locks/<key>.lock`` carries the lease,
+    and ``locks/<key>.events.lock`` serializes short journal decisions,
     ``attempts/<id>/`` each attempt's baseline and values, and
     ``ledger.key`` the HMAC key (all private to this user). ``flock`` locks
     don't hold across hosts or on network file systems.
@@ -170,13 +216,22 @@ class FileLedger:
         )
 
     def events(self, key: str) -> list[dict[str, Any]]:
+        with self.transaction(key) as journal:
+            return journal.events()
+
+    def _events(self, key: str) -> list[dict[str, Any]]:
         path = self._entries / f"{_check_key(key)}.jsonl"
         try:
-            lines = path.read_text(encoding="utf-8").splitlines()
+            data = path.read_text(encoding="utf-8")
         except FileNotFoundError:
             return []
         except OSError as exc:
             raise LedgerError(f"can't read the write ledger: {exc}") from exc
+        lines = data.splitlines()
+        if data and not data.endswith("\n"):
+            # A complete JSON object without its terminating newline may be
+            # a short write whose append never completed.
+            lines = lines[:-1]
         out: list[dict[str, Any]] = []
         for line in lines:
             try:
@@ -190,6 +245,26 @@ class FileLedger:
         return out
 
     def append(self, key: str, event: Mapping[str, Any]) -> None:
+        basis = event.get("based_on", None if event.get("event") == "begun" else -1)
+        Ledger(self)._update(key, event, expected_revision=basis)
+
+    @contextmanager
+    def transaction(self, key: str) -> Iterator[Journal]:
+        path = self._locks / f"{_check_key(key)}.events.lock"
+        try:
+            with open(path, "a") as handle:
+                os.chmod(path, 0o600)
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+                try:
+                    yield _Journal(
+                        lambda: self._events(key), lambda e: self._append(key, e)
+                    )
+                finally:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        except OSError as exc:
+            raise LedgerError(f"can't update the write ledger: {exc}") from exc
+
+    def _append(self, key: str, event: Mapping[str, Any]) -> None:
         path = self._entries / f"{_check_key(key)}.jsonl"
         line = json.dumps(dict(event), sort_keys=True, separators=(",", ":"))
         try:
@@ -197,7 +272,16 @@ class FileLedger:
             try:
                 size = os.fstat(fd).st_size
                 torn = size > 0 and os.pread(fd, 1, size - 1) != b"\n"
-                os.write(fd, (("\n" if torn else "") + line + "\n").encode("utf-8"))
+                # Preserve a torn tail without making a previously complete
+                # but unterminated JSON object effective on the next append.
+                data = ((" [incomplete]\n" if torn else "") + line + "\n").encode(
+                    "utf-8"
+                )
+                while data:
+                    written = os.write(fd, data)
+                    if written <= 0:
+                        raise OSError("the journal append made no progress")
+                    data = data[written:]
                 os.fsync(fd)
             finally:
                 os.close(fd)
@@ -260,11 +344,19 @@ class MemoryLedger:
 
     def events(self, key: str) -> list[dict[str, Any]]:
         with self._guard:
-            return [dict(e) for e in self._events.get(key, [])]
+            return deepcopy(self._events.get(key, []))
 
     def append(self, key: str, event: Mapping[str, Any]) -> None:
+        basis = event.get("based_on", None if event.get("event") == "begun" else -1)
+        Ledger(self)._update(key, event, expected_revision=basis)
+
+    @contextmanager
+    def transaction(self, key: str) -> Iterator[Journal]:
         with self._guard:
-            self._events.setdefault(_check_key(key), []).append(dict(event))
+            events = self._events.setdefault(_check_key(key), [])
+            yield _Journal(
+                lambda: deepcopy(events), lambda e: events.append(deepcopy(dict(e)))
+            )
 
     def lease(self, key: str) -> Optional[Lease]:
         with self._guard:
@@ -287,12 +379,15 @@ class Attempt:
 
     attempt_id: str
     begun: dict[str, Any]
+    #: Effective settlement. Rejected observations remain in events.
     resolved: Optional[dict[str, Any]] = None
     delivered: bool = False
     released: bool = False
     #: The ``rechecked`` event: a recheck confirmed a provisional result.
     rechecked: Optional[dict[str, Any]] = None
     events: list[dict[str, Any]] = field(default_factory=list)
+    #: Journal length at this observation, not a native-write proof.
+    revision: int = 0
 
     @property
     def state(self) -> str:
@@ -317,8 +412,10 @@ class Attempt:
         r = self.resolved
         if r is None:
             return "open"
-        if r.get("retry_safe"):
-            return "free"
+        if r.get("outcome") == "REFUTED":
+            return "held"
+        # Legacy retry_safe flags are observations, not a complete
+        # dispatch/channel proof. They cannot release an unresolved attempt.
         if r.get("outcome") == "CONFIRMED" or r.get("landed"):
             if (
                 r.get("write_key_bound")
@@ -331,8 +428,6 @@ class Attempt:
                 # attempt hides it from the list.
                 return "undelivered"
             return "free" if _age(r.get("at")) >= repeat_s else "undelivered"
-        if r.get("outcome") == "REFUTED":
-            return "held"
         return "uncertain"
 
     @property
@@ -388,29 +483,56 @@ def prune(folder: Path) -> None:
 def fold(events: Sequence[Mapping[str, Any]]) -> Optional[Attempt]:
     """The latest attempt in ``events``, or None when there is none."""
 
-    latest: Optional[Attempt] = None
+    attempts = _fold_attempts(events)
+    return attempts[-1] if attempts else None
+
+
+def _fold_attempts(events: Sequence[Mapping[str, Any]]) -> list[Attempt]:
+    """One projection for latest, history, and recovery.
+
+    A recorded refutation is a workflow hold, not proof of native absence.
+    A weaker observation cannot clear that hold. Only an explicit person
+    decision can do so. Rejected concurrent observations remain in events.
+    """
+
+    attempts: dict[str, Attempt] = {}
     for event in events:
         kind = event.get("event")
+        identity = str(event.get("attempt"))
         if kind == "begun":
-            latest = Attempt(str(event.get("attempt")), dict(event))
+            if event.get("applied") is not False and identity not in attempts:
+                attempts[identity] = Attempt(identity, dict(event))
             continue
-        if latest is None or event.get("attempt") != latest.attempt_id:
+        attempt = attempts.get(identity)
+        if attempt is None:
             continue
+        if event.get("applied") is False:
+            continue
+        prior = attempt.resolved or {}
         if kind == "resolved":
-            latest.resolved = dict(event)
-            latest.delivered = bool(event.get("delivered"))
-            latest.rechecked = None  # a new outcome; any recheck was of the old
+            if (
+                prior.get("outcome") == "REFUTED"
+                and event.get("outcome") != "REFUTED"
+                and not (event.get("via") == "person" and event.get("applied") is True)
+                and not attempt.released
+            ):
+                continue
+            attempt.resolved = dict(event)
+            attempt.delivered = bool(event.get("delivered"))
+            attempt.rechecked = None
+            attempt.released = False
         elif kind == "delivered":
-            latest.delivered = True
+            attempt.delivered = True
         elif kind == "released":
-            latest.released = True
-        elif kind == "rechecked":
-            latest.rechecked = dict(event)
-    if latest is not None:
-        latest.events = [
-            dict(e) for e in events if e.get("attempt") == latest.attempt_id
+            attempt.released = True
+        elif kind == "rechecked" and prior.get("outcome") == "CONFIRMED":
+            attempt.rechecked = dict(event)
+    for attempt in attempts.values():
+        attempt.revision = len(events)
+        attempt.events = [
+            dict(e) for e in events if e.get("attempt") == attempt.attempt_id
         ]
-    return latest
+    return list(attempts.values())
 
 
 #: A null's form in a write's identity. Every other leaf becomes text, so no
@@ -448,10 +570,9 @@ def _canonical(value: Any) -> bytes:
 class Ledger:
     """The ledger's logic over a :class:`LedgerBackend`.
 
-    ``settle_s``: how long after an attempt began a read-back that shows
-    nothing proves the write never landed. Default None: such an attempt
-    stays held until a person releases it, because a queued write can land
-    late.
+    ``settle_s`` is retained for constructor compatibility but grants no
+    retry permission. Elapsed time and an absent read cannot exclude a
+    queued write or another delivery channel. Unresolved attempts stay held.
 
     ``repeat_s``: how long a landed write without a write key is handed
     back to an identical call instead of being sent again (an agent's retry
@@ -469,6 +590,94 @@ class Ledger:
         self.backend = backend
         self.settle_s = settle_s
         self.repeat_s = repeat_s
+
+    def _transaction(self, key: str) -> ContextManager[Journal]:
+        transaction: Optional[Callable[[str], ContextManager[Journal]]] = getattr(
+            self.backend, "transaction", None
+        )
+        if not callable(transaction):
+            raise LedgerError(
+                "the ledger backend does not support atomic journal updates"
+            )
+        return transaction(_check_key(key))
+
+    def _update(
+        self,
+        key: str,
+        event: Mapping[str, Any],
+        *,
+        expected_revision: Optional[int] = None,
+        cleanup: Optional[Path] = None,
+        require_applied: bool = False,
+        person_decision: bool = False,
+    ) -> Attempt:
+        """Append an observation and project it under one journal lock.
+
+        Revision rejection never discards the observation, and never grants
+        retry, delivery, or cleanup permission. A same-attempt refutation
+        may tighten a concurrent hold; it cannot affect a newer attempt.
+        """
+
+        with self._transaction(key) as journal:
+            events = journal.events()
+            prior = fold(events)
+            identity = str(event.get("attempt"))
+            kind = event.get("event")
+            current = prior is not None and prior.attempt_id == identity
+            fresh = expected_revision is None or (
+                type(expected_revision) is int and expected_revision == len(events)
+            )
+            refuted = (
+                current
+                and prior is not None
+                and (prior.resolved or {}).get("outcome") == "REFUTED"
+            )
+            tightening = kind == "resolved" and event.get("outcome") == "REFUTED"
+            person = kind == "released" or event.get("via") == "person"
+            # A current positive recheck is an observation, not a release.
+            # The fold leaves earlier non-confirmed settlements unchanged.
+            positive_recheck = (
+                kind == "rechecked" and event.get("outcome") == "CONFIRMED"
+            )
+            if kind == "begun":
+                applied = fresh and (prior is None or self.state(prior) == "free")
+                applied = applied and not any(
+                    e.get("event") == "begun" and str(e.get("attempt")) == identity
+                    for e in events
+                )
+            else:
+                applied = bool(current and (fresh or (tightening and not person)))
+                if person and not person_decision:
+                    applied = False
+                if refuted and not tightening and not person and not positive_recheck:
+                    applied = False
+                if kind == "rechecked" and (
+                    prior is None
+                    or (
+                        (prior.resolved or {}).get("outcome") != "CONFIRMED"
+                        and not positive_recheck
+                    )
+                ):
+                    applied = False
+            stored = {
+                **event,
+                "revision": len(events) + 1,
+                "based_on": len(events)
+                if expected_revision is None
+                else expected_revision,
+                "applied": applied,
+            }
+            journal.append(stored)
+            if require_applied and not applied:
+                raise LedgerError("the attempt changed before the journal update")
+            after = fold([*events, stored])
+            if after is None:
+                raise LedgerError("the journal has no current attempt")
+            if cleanup is not None and applied and current and fresh:
+                # Keep the short lock through cleanup: a newer hold cannot
+                # interleave after permission was checked but before unlink.
+                prune(cleanup)
+            return after
 
     def key_for(
         self,
@@ -500,24 +709,27 @@ class Ledger:
     def attempts(self) -> list[tuple[str, dict[str, Any], Optional[dict[str, Any]]]]:
         """Every attempt in the ledger: (key, begun event, resolved event).
 
-        A released attempt counts as resolved when a person released it.
+        A release counts as settlement only when there was no read outcome.
+        A workflow release must not erase an existing observation from the
+        overlap check.
         """
 
         out = []
         for key in self.backend.keys():
-            begun: dict[str, dict[str, Any]] = {}
-            resolved: dict[str, dict[str, Any]] = {}
-            for event in self.backend.events(key):
-                attempt = str(event.get("attempt"))
-                if event.get("event") == "begun":
-                    begun[attempt] = dict(event)
-                elif event.get("event") in ("resolved", "released"):
-                    resolved.setdefault(attempt, dict(event))
-            out += [(key, b, resolved.get(a)) for a, b in begun.items()]
+            for attempt in _fold_attempts(self.backend.events(key)):
+                resolved = attempt.resolved
+                if attempt.released and resolved is None:
+                    resolved = next(
+                        e
+                        for e in reversed(attempt.events)
+                        if e.get("event") == "released"
+                        and e.get("applied") is not False
+                    )
+                out.append((key, attempt.begun, resolved))
         return out
 
     def begun(self, key: str, attempt_id: str, **fields: Any) -> None:
-        self.backend.append(
+        self._update(
             key,
             {
                 "event": "begun",
@@ -526,10 +738,19 @@ class Ledger:
                 "t": time.time(),
                 **fields,
             },
+            require_applied=True,
         )
 
-    def resolved(self, key: str, attempt_id: str, **fields: Any) -> None:
-        self.backend.append(
+    def resolved(
+        self,
+        key: str,
+        attempt_id: str,
+        *,
+        expected_revision: Optional[int] = None,
+        cleanup: Optional[Path] = None,
+        **fields: Any,
+    ) -> Attempt:
+        return self._update(
             key,
             {
                 "event": "resolved",
@@ -538,13 +759,22 @@ class Ledger:
                 "t": time.time(),
                 **fields,
             },
+            expected_revision=expected_revision,
+            cleanup=cleanup,
         )
 
-    def rechecked(self, key: str, attempt_id: str, **fields: Any) -> None:
+    def rechecked(
+        self,
+        key: str,
+        attempt_id: str,
+        *,
+        expected_revision: Optional[int] = None,
+        **fields: Any,
+    ) -> Attempt:
         """A recheck confirmed the attempt's provisional result: no
         recheck is owed any more (:attr:`Attempt.recheck_owed`)."""
 
-        self.backend.append(
+        return self._update(
             key,
             {
                 "event": "rechecked",
@@ -553,11 +783,21 @@ class Ledger:
                 "t": time.time(),
                 **fields,
             },
+            expected_revision=expected_revision,
         )
 
-    def delivered(self, key: str, attempt_id: str) -> None:
-        self.backend.append(
-            key, {"event": "delivered", "attempt": attempt_id, "at": _now()}
+    def delivered(
+        self,
+        key: str,
+        attempt_id: str,
+        *,
+        expected_revision: Optional[int] = None,
+    ) -> Attempt:
+        return self._update(
+            key,
+            {"event": "delivered", "attempt": attempt_id, "at": _now()},
+            expected_revision=expected_revision,
+            require_applied=True,
         )
 
     def release(self, key: str, *, by: str, reason: str, found: str) -> Attempt:
@@ -587,7 +827,7 @@ class Ledger:
             ):
                 raise LedgerError("nothing to release for that key")
             if found == "landed":
-                self.backend.append(
+                return self._update(
                     key,
                     {
                         "event": "resolved",
@@ -608,10 +848,12 @@ class Ledger:
                             "reason": "a person found the write in the store",
                         },
                     },
+                    expected_revision=attempt.revision,
+                    cleanup=attempt.folder,
+                    require_applied=True,
+                    person_decision=True,
                 )
-                prune(attempt.folder)
-                return attempt
-            self.backend.append(
+            return self._update(
                 key,
                 {
                     "event": "released",
@@ -621,10 +863,11 @@ class Ledger:
                     "by": by.strip()[:128],
                     "reason": reason.strip()[:500],
                 },
+                expected_revision=attempt.revision,
+                cleanup=attempt.folder,
+                require_applied=True,
+                person_decision=True,
             )
-            attempt.released = True
-            prune(attempt.folder)
-            return attempt
         finally:
             lease.release()
 
