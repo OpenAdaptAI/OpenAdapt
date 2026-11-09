@@ -313,8 +313,15 @@ def test_statement_rules():
         "nonce": "a" * 64,
     }
     ta.TeachAuthorizationV1.model_validate({**base, **fields})
+    # A desktop or remote app is named by its surface origin.
+    desktop = ta.TeachAuthorizationV1.model_validate(
+        {**base, **fields, "origins": ["macos://chart", "rdp://ehr.example.org"]}
+    )
+    assert desktop.origins == ["macos://chart", "rdp://ehr.example.org"]
     bad = [
         {**base, "origins": ["http://127.0.0.1:8765/path"]},
+        {**base, "origins": ["MACOS://Chart"]},
+        {**base, "origins": ["vnc://host"]},
         {**base, "inputs": {"note": {"value": NOTE, "sha256": "a" * 64}}},
         {**base, "writes": {**base["writes"], "identity": {}}},
         {**base, "writes": {**base["writes"], "fields": {"note": {"input": "nope"}}}},

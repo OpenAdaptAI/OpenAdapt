@@ -122,12 +122,30 @@ smoke gate. The replay uses the Demo profile and returns
 ## Record and replay one surface
 
 ```bash
-openadapt record --out rec
-openadapt record --url https://your-app.example --out rec
-openadapt run --replay bundle --url https://your-app.example --run-dir run
+openadapt record --backend <web|windows|macos|linux|rdp|citrix> <target> --out rec
 ```
 
-Omit `--backend`. No `--url` records this OS. `--url` records the browser.
+The target is `--url` for a web app and `--window` (plus `--window-title`) for
+a desktop app or a local RDP or Citrix client window. Network RDP is recorded
+inside the remote session, and Linux records the local desktop. Side by side:
+
+```bash
+# A web app
+openadapt record --backend web --url https://your-app.example --out rec
+openadapt run --replay bundle --url https://your-app.example --run-dir run
+
+# A desktop app (macOS here; Windows and Citrix take --window too).
+# Desktop recording and macOS replay are separate extras.
+python -m pip install --upgrade 'openadapt[capture,macos]'
+openadapt record --backend macos --window "Your App" --out rec
+openadapt run --replay bundle --macos-app "Your App" --run-dir run
+```
+
+`run --replay` performs every recorded action, including real saves; point it
+at a test or staging copy. `--backend` can be left out: with `--url` it records
+the browser, and without it records this computer's desktop. The commands for
+every surface are in
+[SURFACES.md](../packages/flow/docs/SURFACES.md#first-workflow-per-surface).
 
 Supported selectors are `web`, `windows`, `macos`, `linux`, `rdp`, and
 `citrix`. The required target flags differ by surface. Run these commands for

@@ -51,7 +51,7 @@ A command picks the surface from, in order: the bundle's recorded surface, the
 | [Write verifier](#write-verifier) | QUALIFIED | TESTED | TESTED | | QUALIFIED | TESTED |
 | [Shadow mode](#shadow-mode) | QUALIFIED (HTTP writes) | QUALIFIED (HTTP writes) | QUALIFIED (HTTP writes) | QUALIFIED (HTTP writes) | QUALIFIED (HTTP writes) | QUALIFIED (HTTP writes) |
 | [Agent guard](#agent-guard) | TESTED (real browser) | TESTED (guarded save) | TESTED (guarded save) | TESTED (guarded save) | TESTED (guarded save) | TESTED (guarded save) |
-| [MCP and agent adapters](#mcp-and-agent-adapters) | TESTED (real browser) | TESTED | TESTED | TESTED | TESTED | TESTED |
+| [MCP and agent adapters](#mcp-and-agent-adapters) | TESTED (real browser) | TESTED | TESTED (real OS) | TESTED | TESTED | TESTED |
 
 The third-party apps behind the QUALIFIED cells are OpenEMR, Odoo, Frappe
 Lending, openIMIS and Medplum in a browser, and OpenEMR shown in Edge inside a
@@ -294,6 +294,15 @@ text and a screenshot from the agent and reads the record back with
   `benchmark/native_authoring/results/windows-execute-refusal-20261103.json`). `compile-agent --config
   DEPLOY_YAML` drives a desktop, RDP or Citrix app through `build_backend`
   (`tests/test_compile_agent.py`).
+- **macOS, TESTED (real OS).** `serve --teach` on a native Cocoa app with
+  SQLite through `MacOSBackend`: run 1, the person's confirmation,
+  self-admission under a signed policy (canary `VERIFIED`) and a
+  `taught_<name>` call with a new value (`VERIFIED`, 0 model calls)
+  (`tests/e2e/test_mcp_teach_desktop_e2e.py`,
+  [benchmark/teach_desktop](../benchmark/teach_desktop/README.md)).
+- **Read-only teaching** (`serve --teach-browser`) is web only by design: it
+  needs a guard that stops writes before they leave, and only a browser has
+  one. A desktop or remote app is taught as saves, each read back.
 
 ## Commands that compile or check files
 

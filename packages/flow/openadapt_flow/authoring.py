@@ -1085,6 +1085,7 @@ class AuthoringSession:
         name: str = "authoring",
         distill: bool = True,
         mine_effects: bool = False,
+        before_compile: Optional[Callable[[Path], None]] = None,
     ) -> CompileResult:
         """Compile via :func:`compile_recording`; never paints ``VERIFIED``.
 
@@ -1100,6 +1101,9 @@ class AuthoringSession:
         ``mine_effects`` proposes an effect contract from the system-of-record
         delta the recording kept (see ``system_of_record_reader``). It is a
         proposal: compile still returns ``needs_human_admit``.
+
+        ``before_compile`` is called with the finished recording's folder
+        before anything reads it (to add operator marks to its ``meta.json``).
         """
 
         self._require_not_halted()
@@ -1114,6 +1118,8 @@ class AuthoringSession:
         if recording_dir is None:
             raise AuthoringError("no recording to compile", code="not_recording")
         self._refuse_missing_secret_type(recording_dir)
+        if before_compile is not None:
+            before_compile(recording_dir)
         out_bundle = (
             Path(bundle_dir)
             if bundle_dir is not None

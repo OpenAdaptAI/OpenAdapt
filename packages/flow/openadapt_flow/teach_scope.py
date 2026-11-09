@@ -68,6 +68,7 @@ __all__ = [
     "load_write_adapter",
     "origin_of",
     "provenance_for",
+    "scope_origin",
 ]
 
 TEACH_SCOPE_SCHEMA = "openadapt.teach-scope/v1"
@@ -107,6 +108,27 @@ def origin_of(url: Optional[str]) -> Optional[str]:
     if port is None or port == _DEFAULT_PORTS.get(scheme):
         return f"{scheme}://{host}"
     return f"{scheme}://{host}:{port}"
+
+
+#: A desktop or remote app's origin, as
+#: :func:`~openadapt_flow.surface_selection.surface_target_origin` names it.
+_SURFACE_ORIGIN = re.compile(r"^(windows|macos|linux|rdp|citrix)://[a-z0-9.:_ %-]+$")
+
+
+def scope_origin(raw: Optional[str]) -> Optional[str]:
+    """An app origin a teach scope may name, normalized, or None.
+
+    A web app is ``scheme://host[:port]`` (:func:`origin_of`). A desktop or
+    remote app is ``<kind>://<target>`` (``macos://chart``,
+    ``rdp://ehr-host``): it has no browser, so the scope names the app the
+    run must be on instead of the addresses a browser may reach.
+    """
+
+    web = origin_of(raw)
+    if web is not None:
+        return web
+    text = (raw or "").strip().lower().rstrip("/")
+    return text if _SURFACE_ORIGIN.fullmatch(text) else None
 
 
 def _is_local_url(url: Optional[str]) -> bool:
@@ -192,9 +214,11 @@ class TeachScope:
     Args:
         task_id: The task this scope belongs to.
         origins: The app's origins (``scheme://host[:port]``). The browser may
-            reach only these; any URL is reduced to its origin. Empty for an
-            app with no browser (a native or remote-desktop surface); a
-            browser under an empty scope may reach nothing.
+            reach only these; any URL is reduced to its origin. A desktop or
+            remote app has no browser: it is named ``<kind>://<target>``
+            (:func:`scope_origin`), and a run on any other app is refused.
+            Empty when no one named the app; a browser under an empty scope
+            may reach nothing.
         record: The record the save belongs to, as the record reader names
             it (``{"patient_id": "p1"}``).
         fields: The fields the save may write and the exact value of each
@@ -235,9 +259,12 @@ class TeachScope:
             raise ValueError("a teach scope names its task")
         origins = []
         for raw in self.origins:
-            origin = origin_of(raw)
+            origin = scope_origin(raw)
             if origin is None:
-                raise ValueError(f"not an http(s) origin: {raw!r}")
+                raise ValueError(
+                    f"not an app origin (scheme://host[:port], or "
+                    f"<kind>://<target> for a desktop or remote app): {raw!r}"
+                )
             origins.append(origin)
         object.__setattr__(self, "origins", tuple(dict.fromkeys(origins)))
         if not self.record:
