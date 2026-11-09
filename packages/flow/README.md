@@ -18,6 +18,17 @@ openadapt-flow compile rec --out bundle --name my-task                          
 openadapt-flow replay bundle --url https://your-test-app.example                     # 3. run
 ```
 
+A desktop app records the same way, with `--window` as its target:
+
+```bash
+pip install 'openadapt-flow[capture,macos]'
+openadapt-flow record --backend macos --window "Your App" --out rec
+openadapt-flow compile rec --out bundle --name my-task
+openadapt-flow replay bundle --macos-app "Your App"
+```
+
+Windows, Linux, RDP and Citrix: [SURFACES.md](docs/SURFACES.md#first-workflow-per-surface).
+
 `replay` is a rehearsal that doesn't read the record back. A production run
 (`openadapt-flow run`) also checks each save; see
 [Try it on your app](#try-it-on-your-app).
@@ -59,6 +70,16 @@ or Edge. Without either, it downloads Playwright's headless Chromium once
 `bundled` to choose. With the
 [OpenAdapt launcher](https://github.com/OpenAdaptAI/OpenAdapt) installed,
 `openadapt flow demo` runs the same command.
+
+Browser startup requires two advancing animation-frame callbacks before an
+application is opened or driven. A new browser is checked on its own blank
+page. An attached browser is checked on the explicitly selected page without
+navigation, focus changes or DOM changes. If progress or cleanup cannot be
+established, startup refuses with `browser_rendering_unavailable` or
+`browser_readiness_unavailable`. The probe never closes an attached browser or
+its existing pages. This checks startup callback progress; it does not replace
+actionability checks or record verification, and an attached page's RAF API
+is not a native rendering attestation.
 
 On macOS, most of a first run in a new environment goes to loading OpenCV,
 which RapidOCR, the default OCR engine, needs. macOS checks each copy of a

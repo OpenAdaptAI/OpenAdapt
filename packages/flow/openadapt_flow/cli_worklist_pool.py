@@ -226,6 +226,13 @@ class WebPoolWorker:
     _pipeline: Optional[ReadbackPipeline] = None
 
     def open(self) -> None:
+        try:
+            self._open()
+        except BaseException:
+            self.close()
+            raise
+
+    def _open(self) -> None:
         from playwright.sync_api import sync_playwright
 
         self._pw = sync_playwright().start()
@@ -236,6 +243,9 @@ class WebPoolWorker:
                 raise RuntimeError("the attached browser has no signed-in context")
             self._context = contexts[0]
             self._page = self._context.new_page()
+            from openadapt_flow._browser_readiness import require_rendering_ready
+
+            require_rendering_ready(self._browser, attached_page=self._page)
             self._page.set_viewport_size(dict(self.viewport))
             from openadapt_flow.backends.playwright_backend import prepare_ws_guard
 
