@@ -1,0 +1,114 @@
+# DRAFT record check from `openadapt-flow scaffold-verifier`. It is NOT working:
+# its fault test found misses (listed below and in record_check.proof.json). Fix the reads
+# or add the missing ones, then run scaffold-verifier again.
+#
+# MISS: fault gate unrelated_edit: another record in the slice edited (the copy holds no other record to edit) (untestable)
+# MISS: fault gate side_write: a row in another table added for the saved record (no subject_field: which column of the other tables names the saved record is unknown) (untestable)
+#
+# verify-run refuses this file until every `needs_operator_confirmation: true`
+# line is gone; do not remove them while misses remain.
+schema_version: openadapt.verify/v1
+verifier:
+  kind: surfaces
+  surfaces:
+    metadata:
+      kind: sql
+      sqlite_database: ${STORE_DB}
+      sql_query: SELECT * FROM "metadata"
+    records:
+      kind: sql
+      sqlite_database: ${STORE_DB}
+      sql_query: SELECT * FROM "records" WHERE "amount" = :p0 AND "loan_id" = :p1
+        AND "product" = :p2
+      sql_query_params: &id001
+        p0:
+          param: amount
+        p1:
+          param: loan_id
+        p2:
+          param: product
+    records.content:
+      kind: sql
+      sqlite_database: ${STORE_DB}
+      sql_query: SELECT * FROM "records" WHERE "amount" = :p0 AND "loan_id" = :p1
+        AND "product" = :p2
+      sql_query_params: *id001
+      records_drop_fields:
+      - id
+    records_all:
+      kind: sql
+      sqlite_database: ${STORE_DB}
+      sql_query: SELECT * FROM "records"
+    records_all.content:
+      kind: sql
+      sqlite_database: ${STORE_DB}
+      sql_query: SELECT * FROM "records"
+      records_drop_fields:
+      - id
+effects:
+- kind: record_written
+  expected_count: 0
+  count_new_only: true
+  forbid_collateral_loss: false
+  risk: irreversible
+  probe: surface=metadata|the save adds no row here
+  needs_operator_confirmation: true
+- kind: record_written
+  match:
+    _openadapt_no_such_field:
+      literal: '-'
+  expected_count: 0
+  count_new_only: true
+  risk: irreversible
+  probe: surface=metadata|no row here changes or disappears
+  needs_operator_confirmation: true
+- kind: record_written
+  match:
+    amount:
+      param: amount
+    loan_id:
+      param: loan_id
+    memo:
+      param: memo
+    product:
+      param: product
+  count_new_only: true
+  risk: irreversible
+  probe: surface=records|exactly one new record with the run's values; no record that
+    was there before may disappear
+  needs_operator_confirmation: true
+- kind: record_written
+  match:
+    _openadapt_no_such_field:
+      literal: '-'
+  expected_count: 0
+  count_new_only: true
+  risk: irreversible
+  probe: surface=records.content|no record that was there before changes or disappears
+    (records compared by content, not id)
+  needs_operator_confirmation: true
+- kind: record_written
+  match:
+    amount:
+      param: amount
+    loan_id:
+      param: loan_id
+    memo:
+      param: memo
+    product:
+      param: product
+  count_new_only: true
+  risk: irreversible
+  probe: surface=records_all|exactly one new record with the run's values; no record
+    that was there before may disappear
+  needs_operator_confirmation: true
+- kind: record_written
+  match:
+    _openadapt_no_such_field:
+      literal: '-'
+  expected_count: 0
+  count_new_only: true
+  risk: irreversible
+  probe: surface=records_all.content|no record that was there before changes or disappears
+    (records compared by content, not id)
+  needs_operator_confirmation: true

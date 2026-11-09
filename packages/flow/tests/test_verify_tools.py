@@ -412,6 +412,50 @@ def test_the_recheck_tool_says_another_agent_id_is_not_excused(sqlite_bridge) ->
     assert "another agent_id" in spec.description
 
 
+def test_recheck_reply_identifies_its_validated_receipt_context(
+    sqlite_bridge, due_now
+) -> None:
+    bridge, db = sqlite_bridge
+    first = _provisional(bridge, db)
+    second = _second(bridge, db)
+    reply = bridge.dispatch("verify_recheck", {"write_id": first["write_id"]})
+    assert reply["verified"] is True
+    assert reply["excuse_receipt_sha256s"] == [second["receipt_sha256"]]
+    assert reply["recheck_claim_sha256"] == verifier._recheck_claim_id(
+        first["receipt_sha256"], [second["receipt_sha256"]]
+    )
+
+
+@pytest.mark.parametrize("write_attempted", [False, True])
+def test_mcp_absence_without_dispatch_proof_never_advertises_retry(
+    sqlite_bridge, write_attempted: bool
+) -> None:
+    bridge, db = sqlite_bridge
+    server = build_server(teach=bridge)
+
+    async def steps(call):
+        begun = await call("verify_begin", {"contract": "patient", "values": VALUES})
+        assert begun["ok_to_write"] is True
+        checked = await call(
+            "verify_check",
+            {"write_id": begun["write_id"], "write_attempted": write_attempted},
+        )
+        retry = await call("verify_begin", {"contract": "patient", "values": VALUES})
+        return checked, retry
+
+    checked, retry = anyio.run(_session, server, steps)
+    assert checked["retry_safe"] is False and checked["verified"] is False
+    assert checked["outcome"] == ("UNCERTAIN" if write_attempted else "REFUTED")
+    assert retry["ok_to_write"] is False and "earlier_result" not in retry
+    with sqlite3.connect(db) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM patient_data").fetchone() == (
+            1,
+        )
+    retained = verifier.default_ledger().unresolved()
+    assert len(retained) == 1 and retained[0][1].resolved is not None
+    assert retained[0][1].resolved["retry_safe"] is False
+
+
 def test_verify_check_uncertain_is_not_final(sqlite_bridge) -> None:
     bridge, _db = sqlite_bridge
     begun = bridge.dispatch("verify_begin", {"contract": "patient", "values": VALUES})

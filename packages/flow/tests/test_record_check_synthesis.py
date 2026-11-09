@@ -129,10 +129,11 @@ def test_one_rest_read_misses_the_billing_write_and_stays_a_draft(
         write_requests=proposal.search.write_requests,
         work_dir=tmp_path / "live",
     )
-    assert all(not row["reported_done"] for row in proposal.live["runs"])
-    assert any(
-        "REST read completeness is not declared" in p for p in proposal.search.problems
-    )
+    # The read was seen whole before and after the save, so it is complete;
+    # what it can't see is the billing table.
+    assert proposal.search.surfaces[0].complete_basis == "observed"
+    assert proposal.live["runs"][0]["result"] == "clean pass"
+    assert any(row["result"] == "MISSED" for row in proposal.live["runs"])
     assert not proposal.live["passed"]
     assert not proposal.working
     text = render(proposal)
@@ -161,12 +162,9 @@ def test_database_read_path_covers_every_table_and_passes_the_suite(
         write_requests=proposal.search.write_requests,
         work_dir=tmp_path / "live",
     )
-    assert all(not row["reported_done"] for row in proposal.live["runs"])
-    assert not proposal.live["passed"]
-    assert not proposal.working
-    assert any(
-        "REST read completeness is not declared" in p for p in proposal.search.problems
-    )
+    assert proposal.live["passed"], proposal.live["misses"]
+    assert proposal.working
+    assert not any("completeness" in p for p in proposal.search.problems)
 
 
 def test_frozen_demo_value_fails_the_live_clean_save(tmp_path, e2e_service):
@@ -190,11 +188,8 @@ def test_frozen_demo_value_fails_the_live_clean_save(tmp_path, e2e_service):
         write_requests=proposal.search.write_requests,
         work_dir=tmp_path / "live",
     )
-    assert all(not row["reported_done"] for row in live["runs"])
+    assert live["runs"][0]["result"] != "clean pass"
     assert not live["passed"]
-    assert any(
-        "REST read completeness is not declared" in p for p in proposal.search.problems
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -202,12 +197,13 @@ def test_frozen_demo_value_fails_the_live_clean_save(tmp_path, e2e_service):
 # ---------------------------------------------------------------------------
 
 
-def test_mockmed_needs_a_declared_complete_read(tmp_path, mockmed):
+def test_mockmed_complete_read_declared_passes_the_live_suite(tmp_path, mockmed):
     url, db = mockmed
     rec = mockmed_recording(tmp_path / "rec", url, db)
 
     plain = synthesize(rec)
     assert plain.search.surfaces[0].config["records_path"] == "/api/db"
+    assert plain.search.surfaces[0].complete_basis == "observed"
     assert not plain.working
     assert any("collateral_unaudited" in miss for miss in plain.misses)
 
@@ -222,13 +218,12 @@ def test_mockmed_needs_a_declared_complete_read(tmp_path, mockmed):
         write_requests=declared.search.write_requests,
         work_dir=tmp_path / "live",
     )
-    assert all(not row["reported_done"] for row in declared.live["runs"])
-    assert not declared.live["passed"]
-    assert not declared.working
+    assert declared.live["passed"], declared.live["misses"]
+    assert declared.working
     assert declared.proof()["closed_world"] == "declared"
-    assert any(
-        "REST read completeness is not declared" in p for p in declared.search.problems
-    )
+    assert {r.get("records_complete") for r in declared.proof()["reads"]} == {
+        "declared"
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -673,12 +668,11 @@ def test_cli_writes_a_working_check_and_its_proof(tmp_path, e2e_service, capsys)
         ]
     )
     out = capsys.readouterr().out
-    assert code == 1, out
-    assert "Record check: DRAFT (not working)" in out
+    assert code == 0, out
+    assert "Record check: WORKING (not approved)" in out
     proof = json.loads((tmp_path / "out" / PROOF_NAME).read_text())
-    assert proof["status"] != "working" and proof["approved"] is False
-    assert not proof["live"]["passed"]
-    assert "REST read completeness is not declared" in out
+    assert proof["status"] == "working" and proof["approved"] is False
+    assert proof["live"]["passed"]
     assert (tmp_path / "out" / PROPOSED_NAME).is_file()
 
 
@@ -712,8 +706,9 @@ def _capture(rec: Path, lines: list[dict]) -> None:
             fh.write(json.dumps(line) + "\n")
 
 
-def test_captured_rest_read_without_completeness_stays_a_draft(tmp_path):
-    """A captured page alone cannot establish that the whole set was read."""
+def test_captured_paged_rest_read_stays_a_draft(tmp_path):
+    """A response that says it is one page never gets records_complete,
+    whether observed or declared."""
     params = {"patient_id": "p1", "note": NOTE}
     rec = write_recording(tmp_path / "rec", params)
     _capture(
@@ -736,15 +731,16 @@ def test_captured_rest_read_without_completeness_stays_a_draft(tmp_path):
                     {
                         "records": [
                             {"id": "enc-1", **params},
-                        ]
+                        ],
+                        "next": "http://app.test/api/records?cursor=2",
                     }
                 ),
             },
         ],
     )
 
-    # A whole-write declaration does not declare that this REST response was
-    # complete; the captured body and its length are not pagination evidence.
+    # The body links to a next page: neither the observation nor a person's
+    # whole-write declaration makes this one response complete.
     proposal = synthesize(rec, complete_read=True)
 
     assert proposal.effects

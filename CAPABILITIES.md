@@ -180,6 +180,7 @@ improvising or retrying when something is off.
 | Review stops: every stop as one card with the evidence side by side (the item next to each possible match, field by field), answered with one key or tap on the computer or a paired phone, signed with the approver key, with batches for similar stops. The queue presents and collects; a changed or expired card changes nothing | Released ([#1519](https://github.com/OpenAdaptAI/OpenAdapt/pull/1519)) | Unit tests; a keystroke-level estimate on 20 soak stops (26.7 s to 8.2 s to decide, a model, not a person) | `packages/desktop/openadapt_desktop/stop_queue.py`, [benchmark/stop_queue](packages/desktop/benchmark/stop_queue/README.md) |
 | Draft a record check from the demonstration's write steps (`scaffold-verifier`) | Released | Synthetic | `openadapt-flow scaffold-verifier` (a person fills in the draft) |
 | Build a working record check from the reads the app made while the person viewed the saved record, and test it against injected bad writes before anyone reviews it | Released ([#1284](https://github.com/OpenAdaptAI/OpenAdapt/pull/1284)) | Synthetic (MockMed, OpenEMR fixture) | `openadapt-flow scaffold-verifier` |
+| When the demonstration never reads the saved record back, find the read by probing the collection and item reads the captured write implies (GET only, local copy of the app only, every probe in the proof) and use one only when it returns the written values and no write outside it could pass unseen; otherwise refuse or leave the read unavailable for a person. Also sees a save with an unfamiliar button label from its POST, and marks a generated REST read complete when it was declared or seen whole and unpaged | On main | Synthetic (local test app; zero-config benchmark on MockMed and MockLoan) | `openadapt-flow scaffold-verifier --probe-reads`, `openadapt_flow/read_discovery.py` |
 | Check a save on desktop, RDP or Citrix by looking the record up in a separate read-only session | Released ([#1280](https://github.com/OpenAdaptAI/OpenAdapt/pull/1280)) | Synthetic (WinForms, RDP and Citrix stand-ins) | `runtime/effects/` |
 | Learn the record check from the recording, when the person looks the record up after saving | Released ([#1290](https://github.com/OpenAdaptAI/OpenAdapt/pull/1290)) | Synthetic | `record --verify` |
 | A record check's duplicate key can be several fields together, such as last name, first name and birth date: the check fails when more than one record carries all of them, counting records that were already there | Released ([#1393](https://github.com/OpenAdaptAI/OpenAdapt/issues/1393)) | Synthetic (OpenEMR-shaped patient rows) | verify.yaml `record.duplicate_key: [lname, fname, DOB]`, `confirm_params(idempotency_key=[...])`, `Effect.composite_key` |
@@ -347,9 +348,11 @@ A test fails when a command has no file or this list is out of date.
 
 **Record and build a program:**
 
+- `browser-accessibility`: On Linux, make Chrome, Chromium, Edge and Brave start with their page readable to accessibility tools, so `record` can read what you click in your everyday browser. It writes launcher entries in your own `~/.local/share/applications` only; `--disable` removes them. On Windows and macOS, `record` does this by itself.
 - `compile-agent`: With `--config DEPLOY_YAML`, the agent drives a desktop, RDP or Citrix app built by `build_backend`. With `admit TASK_DIR`, a person confirms and admits a waiting draft, such as one an agent taught over MCP (`openadapt-agent serve --teach`).
 - `compile`
 - `compose`
+- `confirm-surfaces`: Show the windows and apps a cross-window recording used, with the steps on each, and confirm them. `compile` refuses a cross-window recording until a person has confirmed its surfaces, either at the end of `record` or with this command. `--yes` confirms without asking.
 - `demo-record`
 - `disambiguate`
 - `for-each`
