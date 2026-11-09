@@ -15,20 +15,20 @@ import cv2
 import numpy as np
 import pytest
 
-from openadapt_flow.benchmark import agent_baseline
-from openadapt_flow.benchmark.agent_baseline import (
+from benchmark.harness import agent_baseline
+from benchmark.harness.agent_baseline import (
     _truncate_screenshots,
     compute_cost,
     load_api_key,
     run_agent,
     triage_task_prompt,
 )
-from openadapt_flow.benchmark.run_benchmark import (
+from benchmark.harness.run_benchmark import (
     aggregate_results,
     render_markdown,
     write_outputs,
 )
-from openadapt_flow.benchmark.verify import verify_encounter_saved
+from benchmark.harness.verify import verify_encounter_saved
 
 NOTE = "Follow-up in 2 weeks; BP recheck."
 
@@ -521,7 +521,7 @@ class TestVerifyEncounterType:
         # line. TestVerify above retains a real-OCR smoke for the benchmark's
         # actual 32-character note; these four cases pin the verifier logic.
         monkeypatch.setattr(
-            "openadapt_flow.benchmark.verify.ocr",
+            "benchmark.harness.verify.ocr",
             lambda _screen: [SimpleNamespace(text=f"Triage - {note[:60]}")],
         )
         verdict = verify_encounter_saved(screen, note)
@@ -542,7 +542,7 @@ class TestVerifyEncounterType:
             f"Consult - {note[:60]}",
         )
         monkeypatch.setattr(
-            "openadapt_flow.benchmark.verify.ocr",
+            "benchmark.harness.verify.ocr",
             lambda _screen: [SimpleNamespace(text=f"Consult - {note[:60]}")],
         )
         verdict = verify_encounter_saved(screen, note)
@@ -599,7 +599,7 @@ class TestVerifyEncounterType:
         # the note itself starts with a known categorical value.
         screen = self.make_screen(f"Encounter saved - {note[:40]}", note[:60])
         monkeypatch.setattr(
-            "openadapt_flow.benchmark.verify.ocr",
+            "benchmark.harness.verify.ocr",
             lambda _screen: [SimpleNamespace(text=note[:60])],
         )
         verdict = verify_encounter_saved(screen, note)

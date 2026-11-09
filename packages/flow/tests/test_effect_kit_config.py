@@ -27,6 +27,7 @@ from openadapt_flow.runtime.effects import (
     RestRecordVerifier,
     SqlRecordVerifier,
 )
+from openadapt_flow.runtime.effects.fhir import DEFAULT_OBSERVATION_PATHS
 
 
 class TestAuthRef:
@@ -114,7 +115,13 @@ class TestRestKitConfig:
 
         with_auth = _Session()
         RestRecordVerifier(
-            "http://x", session=with_auth, headers={"Authorization": "Bearer t"}
+            "http://x",
+            records_path="/api/db",
+            records_key="records",
+            session=with_auth,
+            headers={"Authorization": "Bearer t"},
+            # This owned transport stub returns its complete fixed empty store.
+            records_complete=True,
         ).capture_pre_state()
         assert with_auth.calls == [{"Authorization": "Bearer t"}]
 
@@ -125,7 +132,13 @@ class TestRestKitConfig:
                 return _Session.get(self, url, timeout=timeout)
 
         narrow = _NarrowSession()
-        state = RestRecordVerifier("http://x", session=narrow).capture_pre_state()
+        state = RestRecordVerifier(
+            "http://x",
+            records_path="/api/db",
+            records_key="records",
+            session=narrow,
+            records_complete=True,
+        ).capture_pre_state()
         assert state.reachable
         assert "narrow" in narrow.calls
 
@@ -175,6 +188,8 @@ class TestFhirKitConfig:
     def test_search_param_exprs_and_token_env(self, monkeypatch):
         monkeypatch.setenv("KIT_FHIR_TOKEN", "oauth-token")
         cfg = EffectsConfig(
+            resource_type="Observation",
+            field_paths=dict(DEFAULT_OBSERVATION_PATHS),
             kind="fhir",
             base_url="https://emr.local/fhir",
             search_params={"category": "vital-signs"},
@@ -192,6 +207,8 @@ class TestFhirKitConfig:
     def test_token_env_missing_fails_loud(self, monkeypatch):
         monkeypatch.delenv("KIT_FHIR_ABSENT", raising=False)
         cfg = EffectsConfig(
+            resource_type="Observation",
+            field_paths=dict(DEFAULT_OBSERVATION_PATHS),
             kind="fhir",
             base_url="https://emr.local/fhir",
             access_token_env="KIT_FHIR_ABSENT",
@@ -202,6 +219,8 @@ class TestFhirKitConfig:
     def test_token_env_wins_over_literal(self, monkeypatch):
         monkeypatch.setenv("KIT_FHIR_TOKEN", "from-env")
         cfg = EffectsConfig(
+            resource_type="Observation",
+            field_paths=dict(DEFAULT_OBSERVATION_PATHS),
             kind="fhir",
             base_url="https://emr.local/fhir",
             access_token="literal-should-lose",
@@ -329,6 +348,7 @@ class TestVerifierCandidates:
             candidates=[
                 EffectsConfig(
                     kind="rest",
+                    records_path="/api/db",
                     base_url="https://oracle.invalid",
                     auth={"bearer_env": "MISSING_ORACLE_TOKEN"},
                 ),
@@ -370,3 +390,53 @@ class TestOnScreenKitConfig:
     def test_onscreen_listed_in_unknown_kind_message(self):
         with pytest.raises(ValueError, match="onscreen"):
             build_effect_verifier(EffectsConfig(kind="bogus"))
+
+
+def test_rest_needs_the_apps_records_path():
+    """No app's records path is assumed: kind rest names its own."""
+    cfg = EffectsConfig(kind="rest", base_url="http://app.local")
+    with pytest.raises(ValueError, match="records_path"):
+        build_effect_verifier(cfg)
+    # A config without a rest read does not carry the field at all.
+    assert "records_path" not in EffectsConfig(kind="none").model_dump()
+
+    # MockMed's shape and Frappe's both work once named.
+    for path, key in (
+        ("/api/db", "records"),
+        ("/api/resource/Loan Application", "data"),
+    ):
+        v = build_effect_verifier(
+            EffectsConfig(
+                kind="rest",
+                base_url="http://app.local",
+                records_path=path,
+                records_key=key,
+            )
+        )
+        assert isinstance(v, RestRecordVerifier)
+        assert (v.records_path, v.records_key) == (path, key)
+
+
+def test_fhir_needs_the_apps_resource_and_field_paths():
+    """No app's FHIR layout is assumed: kind fhir names its resource and paths."""
+    with pytest.raises(ValueError, match="resource_type and"):
+        build_effect_verifier(EffectsConfig(kind="fhir", base_url="https://fhir.local"))
+    assert "resource_type" not in EffectsConfig(kind="none").model_dump()
+    # A note kept as an Observation (OpenEMR) and a Patient (Epic, Medplum)
+    # both work once named.
+    for resource, paths in (
+        ("Observation", dict(DEFAULT_OBSERVATION_PATHS)),
+        ("Patient", {"id": "id", "family": "name.family", "birthDate": "birthDate"}),
+    ):
+        v = build_effect_verifier(
+            EffectsConfig(
+                kind="fhir",
+                base_url="https://fhir.local",
+                resource_type=resource,
+                field_paths=paths,
+            )
+        )
+        assert isinstance(v, FhirEffectVerifier)
+        assert (v.resource_type, v.field_paths) == (resource, paths)
+    with pytest.raises(TypeError):
+        FhirEffectVerifier("https://fhir.local")  # type: ignore[call-arg]

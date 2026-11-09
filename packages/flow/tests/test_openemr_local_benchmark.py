@@ -9,22 +9,14 @@ import stat
 import subprocess
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from benchmark.openemr_local.fixture import (
-    ACTOR_SCOPE,
-    EXPECTED_TABLE_DELTAS,
-    ORACLE_SCOPE,
-    FixtureError,
-    OpenEMRFixture,
-    _jwt_scope_set,
-    audit_table_deltas,
-    unexpected_table_deltas,
-)
-from openadapt_flow.benchmark.openemr_local import (
+from benchmark.harness.openemr_local import (
     ARMS,
     CONDITIONS,
+    PATIENT_DUPLICATE_KEY,
     OpenEMRPatientOracle,
     PrimaryOutcome,
     SyntheticPatientSpec,
@@ -37,7 +29,17 @@ from openadapt_flow.benchmark.openemr_local import (
     patient_records_sha256,
     publication_gate,
 )
-from openadapt_flow.ir import StructuralLocator
+from benchmark.openemr_local.fixture import (
+    ACTOR_SCOPE,
+    EXPECTED_TABLE_DELTAS,
+    ORACLE_SCOPE,
+    FixtureError,
+    OpenEMRFixture,
+    _jwt_scope_set,
+    audit_table_deltas,
+    unexpected_table_deltas,
+)
+from openadapt_flow.ir import Postcondition, PostconditionKind, StructuralLocator
 from openadapt_flow.runtime.effects import EffectKind
 from scripts.openemr_local_demo import (
     AGENT_STANDARD_INPUT_LIMIT,
@@ -50,8 +52,6 @@ from scripts.openemr_local_demo import (
     _capture_post_evidence,
     _confirm_create_locator,
     _duplicate_dialog_postconditions,
-    _saved_chart_postcondition,
-    apply_referral_rules,
     _form_frame,
     _marked_save_step_id,
     _persist_evidence,
@@ -59,9 +59,11 @@ from scripts.openemr_local_demo import (
     _preauthenticate_browser,
     _reset_recording_state,
     _row,
+    _saved_chart_postcondition,
     _stable_pre_trial_counts,
     _tree_manifest_sha256,
     _validate_benchmark_bundle,
+    apply_referral_rules,
     record,
     run_matrix,
 )
@@ -132,6 +134,23 @@ class FakeSession:
     def get(self, url: str, *, timeout: float) -> FakeResponse:
         self.urls.append(url)
         return FakeResponse(self.body)
+
+
+def _complete_array_oracle(*args: Any, **kwargs: Any) -> OpenEMRPatientOracle:
+    """The FakeSession above returns its entire literal array in one response."""
+    oracle = OpenEMRPatientOracle(*args, **kwargs)
+    oracle.verifier.records_complete = True
+    return oracle
+
+
+def test_bounded_live_oracle_has_no_implicit_completeness_declaration() -> None:
+    oracle = OpenEMRPatientOracle(
+        "http://fixture", FakeSession({"data": []}), timeout_s=0.1
+    )
+    state = oracle.capture()
+    assert state.reachable is False
+    assert state.readback_complete is None
+    assert state.records == []
 
 
 def test_lock_pins_exact_release_image_source_and_runtime_proofs() -> None:
@@ -354,9 +373,42 @@ def test_effects_and_api_binding_cover_same_synthetic_fields() -> None:
     assert "state" not in spec.params()
 
 
+def test_compiled_save_check_carries_the_duplicate_key_qualification_adds() -> None:
+    """A fresh compile and qualification describe the save the same way (#1534)."""
+    from openadapt_flow.ir import ActionKind, Step
+    from openadapt_flow.policy import effect_has_idempotency_key
+    from openadapt_flow.qualify.campaign import record_effects
+    from openadapt_flow.qualify.config import load_verify_config
+
+    written = patient_effects()[0]
+    assert written.kind is EffectKind.RECORD_WRITTEN
+    assert written.idempotency_key is not None
+    assert written.idempotency_key.param == PATIENT_DUPLICATE_KEY
+    assert written.key_field == PATIENT_DUPLICATE_KEY
+    resolved = patient_effects(SyntheticPatientSpec(), resolved=True)[0]
+    assert str(resolved.idempotency_key) == SyntheticPatientSpec().email
+
+    save = Step(
+        id="step_040",
+        intent="save the new patient",
+        action=ActionKind.CLICK,
+        effects=patient_effects(),
+    )
+    assert effect_has_idempotency_key(save)
+
+    config = load_verify_config(
+        Path(__file__).resolve().parents[1] / "benchmark/openemr_local/verify.yaml"
+    )
+    assert config.record.duplicate_key == PATIENT_DUPLICATE_KEY
+    qualified = record_effects(config)[0]
+    assert qualified.kind is EffectKind.RECORD_WRITTEN
+    assert qualified.key_field == written.key_field
+    assert qualified.idempotency_key == written.idempotency_key
+
+
 def test_oracle_filters_reserved_identity_through_read_only_record_shape() -> None:
     session = FakeSession({"data": [exact_record()]})
-    oracle = OpenEMRPatientOracle("https://fixture", session, timeout_s=0.1)
+    oracle = _complete_array_oracle("https://fixture", session, timeout_s=0.1)
     state = oracle.capture()
     assert state.reachable
     assert state.records == [exact_record()]
@@ -683,29 +735,79 @@ def test_iframe_confirm_locator_and_explicit_save_event_marker(tmp_path: Path) -
     assert no_match.text == "No matches were found."
 
 
-def test_referral_rules_guard_duplicates_and_drop_the_mined_tab_strip() -> None:
-    """The duplicate rule is on #create, and the save step checks the chart
-    heading instead of the tab strip the recorder mined (the strip changes
-    when OpenEMR opens the new patient's tab)."""
+def _mined_confirm_guard(exact: bool = True) -> Any:
+    from openadapt_flow.ir import Guard, Predicate, PredicateKind
+
+    return Guard(
+        predicate=Predicate(
+            kind=PredicateKind.TEXT_PRESENT,
+            text="No matches were found.",
+            exact=exact,
+        )
+    )
+
+
+def test_referral_rules_keep_the_mined_duplicate_guard_and_drop_the_tab_strip() -> None:
+    """The duplicate rule on #create is the compiler's mined check, and the save
+    step checks the chart heading instead of the tab strip the recorder mined
+    (the strip changes when OpenEMR opens the new patient's tab)."""
 
     from types import SimpleNamespace
-
-    from openadapt_flow.ir import Postcondition, PostconditionKind
 
     region = Postcondition(
         kind=PostconditionKind.REGION_STABLE, region=(0, 255, 1280, 545)
     )
+    stray = Postcondition(kind=PostconditionKind.TEXT_PRESENT, text="Additional Add")
+    mined = Postcondition(
+        kind=PostconditionKind.TEXT_PRESENT,
+        text="No matches were found.",
+        timeout_s=10.0,
+        exact=True,
+    )
     tabs = Postcondition(
         kind=PostconditionKind.TEXT_PRESENT, text="CalendarxMessageCenterx"
     )
-    open_step = SimpleNamespace(expect=[region])
-    save_step = SimpleNamespace(expect=[region, tabs])
+    open_step = SimpleNamespace(expect=[region, stray, mined])
+    save_step = SimpleNamespace(expect=[region, tabs], guard=_mined_confirm_guard())
 
     apply_referral_rules(open_step, save_step)
 
     assert open_step.expect == _duplicate_dialog_postconditions()
+    assert open_step.expect[1] is mined
     assert save_step.expect == [region, _saved_chart_postcondition()]
     assert _saved_chart_postcondition().text == "Medical Record Dashboard"
+
+
+def test_referral_rules_refuse_a_compile_without_the_mined_guard() -> None:
+    """The guard is not added by hand: a bundle whose compile did not mine it
+    is refused."""
+
+    from types import SimpleNamespace
+
+    region = Postcondition(
+        kind=PostconditionKind.REGION_STABLE, region=(0, 255, 1280, 545)
+    )
+    open_step = SimpleNamespace(expect=[region])
+    save_step = SimpleNamespace(expect=[region], guard=_mined_confirm_guard())
+    with pytest.raises(FixtureError, match="did not mine"):
+        apply_referral_rules(open_step, save_step)
+    assert open_step.expect == [region]
+    # A fuzzy (not exact) check is not the mined one either.
+    fuzzy = Postcondition(
+        kind=PostconditionKind.TEXT_PRESENT,
+        text="No matches were found.",
+        timeout_s=10.0,
+    )
+    with pytest.raises(FixtureError, match="did not mine"):
+        apply_referral_rules(SimpleNamespace(expect=[fuzzy]), save_step)
+    # The re-check before #confirmCreate is required too.
+    mined = fuzzy.model_copy(update={"exact": True})
+    for guard in (None, _mined_confirm_guard(exact=False)):
+        with pytest.raises(FixtureError, match="re-check"):
+            apply_referral_rules(
+                SimpleNamespace(expect=[mined]),
+                SimpleNamespace(expect=[], guard=guard),
+            )
 
 
 def test_recording_opens_real_contact_accordion_before_address_fields() -> None:
@@ -784,7 +886,7 @@ window.openDuplicateCheck = () => {
 </iframe>
 </body></html>"""
 _FORM_HTML = """<!doctype html><html><body>
-<p>Name: <input id="form_fname" onclick="top.actions.push('fname')">
+<p>Name: <input id="form_fname" name="form_fname" onclick="top.actions.push('fname')">
 <input id="form_lname" onclick="top.actions.push('lname')"></p>
 <button id="create"
   onclick="top.actions.push('create'); top.openDuplicateCheck()">Create New Patient</button>
@@ -862,6 +964,10 @@ def test_openemr_adapter_delivers_guarded_dom_actions_in_the_form_frame(
         locator, handle, receipt = _act(backend, point)
         assert locator.selector == selector
         assert locator.frame_path  # bound to the exact hit-tested frame chain
+        if selector == "#form_fname":
+            assert locator.name == "form_fname"
+        elif selector == "#create":
+            assert locator.name == "Create New Patient"
         assert handle.target_fingerprint
         assert receipt.target_fingerprint == handle.target_fingerprint
     assert json.loads(
@@ -1011,7 +1117,7 @@ def test_free_token_count_guard_refuses_before_paid_cap_overshoot() -> None:
         "max_tokens": 4096,
     }
     ledger = __import__(
-        "openadapt_flow.benchmark.agent_baseline", fromlist=["UsageLedger"]
+        "benchmark.harness.agent_baseline", fromlist=["UsageLedger"]
     ).UsageLedger()
 
     allowed_messages = Messages(10_000)
@@ -1090,7 +1196,7 @@ def test_target_history_auxiliary_is_bound_to_created_patient_pid() -> None:
             assert pid == 11
             return 1
 
-    oracle = OpenEMRPatientOracle(
+    oracle = _complete_array_oracle(
         "https://fixture", FakeSession({"data": [exact_record()]}), timeout_s=0.1
     )
     evidence = _capture_post_evidence(
@@ -1138,7 +1244,7 @@ def test_no_target_history_is_readable_for_a_halted_no_write() -> None:
             assert exclude_pid is None
             return "h" * 64
 
-    oracle = OpenEMRPatientOracle(
+    oracle = _complete_array_oracle(
         "https://fixture", FakeSession({"data": []}), timeout_s=0.1
     )
     evidence = _capture_post_evidence(
@@ -1400,7 +1506,15 @@ def test_compiled_confirm_create_is_the_declared_consequential_write(
     while #create, which only opens the duplicate check, stayed irreversible.
     """
 
-    from openadapt_flow.ir import ActionKind, Anchor, ParamKind, ParamSpec, Step
+    from openadapt_flow.ir import (
+        ActionKind,
+        Anchor,
+        ParamKind,
+        ParamSpec,
+        Postcondition,
+        PostconditionKind,
+        Step,
+    )
     from openadapt_flow.ir import Workflow as FlowWorkflow
     from scripts.openemr_local_demo import compile_recording as compile_openemr
 
@@ -1449,23 +1563,33 @@ def test_compiled_confirm_create_is_the_declared_consequential_write(
             )
             for index, param in enumerate(params)
         ]
-        steps.append(
-            click(
-                f"step_{len(params):03d}",
-                "#create",
-                "Create New Patient",
-                "irreversible",
-            )
+        opener = click(
+            f"step_{len(params):03d}",
+            "#create",
+            "Create New Patient",
+            "irreversible",
         )
-        # What the compiler infers for the confirm click on its own.
-        steps.append(
-            click(
-                f"step_{save_index:03d}",
-                "#confirmCreate",
-                "Confirm Create New Patient",
-                "irreversible",
+        # What the compiler mines from the duplicate dialog
+        # (compiler.empty_result_guard; tests/test_empty_result_guard.py).
+        opener.expect = [
+            Postcondition(
+                kind=PostconditionKind.TEXT_PRESENT,
+                text="No matches were found.",
+                timeout_s=10.0,
+                exact=True,
             )
+        ]
+        steps.append(opener)
+        # What the compiler infers for the confirm click on its own, with
+        # the dialog's no-match check repeated before it.
+        confirm = click(
+            f"step_{save_index:03d}",
+            "#confirmCreate",
+            "Confirm Create New Patient",
+            "irreversible",
         )
+        confirm.guard = _mined_confirm_guard()
+        steps.append(confirm)
         workflow = FlowWorkflow(
             name=name,
             params=dict(params),

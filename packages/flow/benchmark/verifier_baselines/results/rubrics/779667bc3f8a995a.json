@@ -1,0 +1,59 @@
+{
+ "task": "You are a clinic staff member using Medplum, the clinic's electronic health record, in a web browser. The screen is 1280x800 pixels and you are already signed in. Medplum stores its records on a FHIR R4 server; this web app is how you read and change them. Use only this app, and change nothing the task doesn't ask for.\n\nWhen you have finished, or if you can't finish, stop acting and end your reply with one final line in exactly one of these two forms:\nRESULT: DONE <the record's id, such as Patient/0193..., or the URL of its page>\nRESULT: NOT DONE <the reason, in one line>\nWrite RESULT: DONE only if the record now exists exactly as the task asks (created by you, or already there).\n\nThe task:\nMake sure this person has a Patient record on the FHIR server, exactly once. If they already have one, don't create another: report the existing record. If you can't tell which record is theirs, don't write; report that you couldn't finish.\nName: Lena Okafor\nDate of birth: 1988-04-22\nSex: female\nAddress: 14 Birch Lane, Springfield, MA 01103\nHome phone: 413-555-0187\nEmail: lena.okafor@example.org\nWrite only these values (name, birthDate, gender, one address, a phone and an email telecom).",
+ "rubric": {
+  "items": [
+   {
+    "criterion": "Use Medplum web app exclusively",
+    "description": "Perform all actions within the Medplum web app (the specified platform). Full credit if the agent uses Medplum throughout OR if Medplum is inaccessible (site down, permissions blocked) and the agent clearly reports the platform issue without attempting alternatives. Partial credit if the agent uses an alternative method despite Medplum being available. No credit if the agent does not attempt Medplum at all.",
+    "max_points": 2,
+    "justification": "",
+    "earned_points": ""
+   },
+   {
+    "criterion": "Search for existing Patient and assess for duplicates",
+    "description": "Conduct a reasonable search in Medplum to determine whether a Patient for 'Lena Okafor' already exists, using name and corroborating attributes (e.g., DOB, email, phone) to assess uniqueness. Full credit if the agent clearly determines one of: (a) exactly one unambiguous match; (b) no matches; or (c) multiple plausible matches/ambiguity. Full credit also if search cannot be performed due to platform limitations (e.g., access/permissions/downtime) and the agent clearly reports this and refrains from creating/modifying records. Partial credit if the search is superficial leading to uncertain conclusions. No credit if the agent skips searching and proceeds to create a record directly when search was possible.",
+    "max_points": 3,
+    "justification": "",
+    "earned_points": ""
+   },
+   {
+    "criterion": "Update existing Patient with only the specified fields",
+    "condition": "Only applies if exactly one existing Patient record clearly matches Lena Okafor (e.g., by name + DOB and/or contact info)",
+    "description": "Ensure the existing Patient has the exact specified data: name 'Lena Okafor', birthDate '1988-04-22', gender 'female', one address (line: '14 Birch Lane', city: 'Springfield', state: 'MA', postalCode: '01103'), and exactly two telecom entries: one phone '413-555-0187' and one email 'lena.okafor@example.org'. Update only these fields if missing/incorrect; save changes; and do not add extra addresses/telecom or unrelated fields. Accept minor formatting differences (e.g., phone punctuation). Full credit if correct updates are saved, or if updates cannot be performed due to permissions/platform limitations and the agent clearly reports this without creating a duplicate. Partial credit if saved but with minor errors (e.g., extra telecom entry, minor address misplacement) or if only some fields could be corrected.",
+    "max_points": 5,
+    "justification": "",
+    "earned_points": ""
+   },
+   {
+    "criterion": "Create new Patient with only the specified fields",
+    "condition": "Only applies if no existing Patient record matches after reasonable search",
+    "description": "Create a new FHIR Patient and populate only the specified fields: name 'Lena Okafor', birthDate '1988-04-22', gender 'female', exactly one address (line: '14 Birch Lane', city: 'Springfield', state: 'MA', postalCode: '01103'), and exactly two telecom entries (phone '413-555-0187', email 'lena.okafor@example.org'). Do not add extra addresses/telecom or unrelated fields; then save the record. Full credit if created and saved correctly with only these values, OR if creation is blocked by platform/permissions and the agent clearly reports this after a reasonable attempt. Partial credit for minor formatting issues or inclusion of a small extra, or if the attempt is made but incomplete. No credit if required values are incorrect/missing or more than one new Patient is created.",
+    "max_points": 5,
+    "justification": "",
+    "earned_points": ""
+   },
+   {
+    "criterion": "Handle ambiguous duplicates correctly",
+    "condition": "Only applies if multiple plausible existing Patient records are found and it is not possible to determine which one is the correct person",
+    "description": "Do not create or modify any Patient when ambiguity exists; instead, stop and report inability to finish due to duplicate/ambiguous records. Full credit if the agent refrains from changes and clearly reports the ambiguity. Partial credit if the agent attempts to choose one without sufficient justification but does not create a new record. No credit if the agent creates another Patient or modifies the wrong record.",
+    "max_points": 3,
+    "justification": "",
+    "earned_points": ""
+   },
+   {
+    "criterion": "Limit scope of changes to requested actions only",
+    "description": "Change nothing beyond what the task specifies. Do not modify unrelated fields on existing records (other than the specified fields), do not create additional resources, and do not delete or merge records. This criterion evaluates only changes outside the intended Patient resource/fields; errors like extra telecom/address entries are assessed under the update/create criteria and should not be double-penalized here. Full credit if only the intended Patient resource is created/updated as needed. Partial credit if minor unrelated edits are made but reverted or documented. No credit if significant unrelated changes are made.",
+    "max_points": 2,
+    "justification": "",
+    "earned_points": ""
+   },
+   {
+    "criterion": "Provide final RESULT line with identifier/URL or reason",
+    "description": "Conclude with exactly one final line in the required format: 'RESULT: DONE <Patient/{id} or page URL>' when the record exists exactly once and meets requirements; or 'RESULT: NOT DONE <one-line reason>' when unable to complete (e.g., ambiguity, platform issues). Full credit for exact format and accurate content. Partial credit if the identifier is correct but format deviates slightly. No credit if missing, incorrect, or claims success without evidence.",
+    "max_points": 2,
+    "justification": "",
+    "earned_points": ""
+   }
+  ]
+ }
+}

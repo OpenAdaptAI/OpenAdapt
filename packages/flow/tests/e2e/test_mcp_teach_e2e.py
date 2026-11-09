@@ -34,6 +34,8 @@ from typing import Any, Iterator, Optional
 import anyio
 import pytest
 
+from tests._rest_read_contract_fixtures import mockmed_effects_yaml
+
 pytest.importorskip("mcp")
 
 import mcp.types as types  # noqa: E402
@@ -46,6 +48,7 @@ from openadapt_flow.agent.runner import RunnerConfig  # noqa: E402
 from openadapt_flow.agent.teach import TeachBridge, TeachConfig  # noqa: E402
 from openadapt_flow.mockmed.fault_server import serve  # noqa: E402
 from openadapt_flow.tutorial import _http_json, _records  # noqa: E402
+from tests._teach_authorization_support import mockmed_note
 
 TASK = (
     "Open the referral for Jane Sample, start a Triage encounter, and save "
@@ -72,10 +75,7 @@ def _verify_yaml(tmp_path: Path, base: str) -> Path:
     path = tmp_path / "verify.yaml"
     path.write_text(
         "verifier:\n"
-        "  kind: rest\n"
-        f"  base_url: {base}\n"
-        "  records_path: /api/db\n"
-        "  records_key: records\n"
+        f"{mockmed_effects_yaml(base)}"
         "  timeout_s: 2.0\n"
         "  poll_interval_s: 0.05\n"
     )
@@ -139,6 +139,16 @@ def _server(
             key_dir=tmp_path / "keys",
             admitter=admitter,
             reset=_reset(base),
+            # The operator's signed teach authorization: what run 1 may do.
+            teach_authorization=mockmed_note(
+                tmp_path / "keys",
+                tmp_path / "teach-authorization",
+                "taught.triage_note",
+                base,
+                note=NOTE,
+                record={"patient_id": "p1", "type": "Triage"},
+                constants=["Jane Sample", "MRN P1"],
+            ),
         ),
         workflows=workflows,
     )
@@ -380,9 +390,10 @@ def test_a_save_on_the_wrong_record_fails_the_read_back(
         server, teach, _ = _server(tmp_path, mockmed, fault="wrong_record")
         async with connect(server) as client:
             result = await _teach_once(client)
-            # The teach scope's own read-back of run 1 refuses it first.
-            assert result["status"] == "readback_refused", result
-            assert "readback_wrong_record" in result["detail"]
+            # The read-back right after the save stops run 1 at the save,
+            # before the teach scope's read-back at the end of run 1.
+            assert result["status"] == "readback_wrong_record", result
+            assert "the task does not name" in result["detail"]
             assert result["needs_person"] == []
             status = await client.call("teach_status", {"task_key": result["task_key"]})
             assert status["status"] == "no_draft"

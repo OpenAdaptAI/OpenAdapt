@@ -93,6 +93,7 @@ Touch-points (kept minimal per the stacking constraint on PR #79):
 
 from __future__ import annotations
 
+import functools
 import tempfile
 import warnings
 from difflib import SequenceMatcher
@@ -213,7 +214,7 @@ class Uncertainty(BaseModel):
             "'ambiguous_branch' | 'ambiguous_loop' | 'unconfirmed_branch' | "
             "'unconfirmed_optional' | 'underdetermined_order' | "
             "'ambiguous_selection' | 'alignment_failure' | "
-            "'unconfirmed_loop_branch'"
+            "'unconfirmed_loop_branch' | 'ambiguous_guard'"
         )
     )
     location: str = Field(description="Column / position the ambiguity is at")
@@ -414,6 +415,14 @@ class InductionResult(BaseModel):
         default_factory=list,
         description="Bound and per-row checks of every emitted loop.",
     )
+    guard_notes: list[dict[str, str]] = Field(
+        default_factory=list,
+        description=(
+            "Dialog empty-result checks (compiler.empty_result_guard): each "
+            "one the demonstrations agreed on (empty_result_guard), and each "
+            "one not added and why (no_empty_result_guard)."
+        ),
+    )
 
     @property
     def underdetermined(self) -> bool:
@@ -519,24 +528,31 @@ class HeldOutValidation(BaseModel):
 # ===========================================================================
 
 
-def _as_workflow(trace: TraceInput) -> Workflow:
+def _as_workflow(
+    trace: TraceInput, notes: Optional[list[dict[str, Any]]] = None
+) -> Workflow:
     """Normalize a trace to a linear ``Workflow``. A recording DIRECTORY is
     compiled through the single-trace bootstrap ``compile_recording`` (RFC §3
-    [1]); a ``Workflow`` is used as-is."""
+    [1]); a ``Workflow`` is used as-is. ``notes``, when given, receives the
+    bootstrap compile's ``compile_notes.json`` entries."""
     if isinstance(trace, Workflow):
         return trace
     from openadapt_flow.compiler.compile import compile_recording
+    from openadapt_flow.compiler.fixup_passes import read_compile_notes
 
     recording = Path(trace)
     with tempfile.TemporaryDirectory(prefix="induce-boot-") as tmp:
         # Identity bands stay readable until induction has named every row
         # column; induce_program hashes them before returning.
-        return compile_recording(
+        workflow = compile_recording(
             recording,
             Path(tmp) / "bundle",
             name=recording.name,
             phi_free_identity=False,
         )
+        if notes is not None:
+            notes.extend(read_compile_notes(Path(tmp) / "bundle"))
+        return workflow
 
 
 def phi_free_program_identity(workflow: Workflow) -> None:
@@ -672,10 +688,21 @@ def _trace_sigs(steps: list[Step]) -> list[tuple[str, str]]:
     then a click on the result) selects the record that value names. Its
     label differs row to row, so its signature is the value-free
     ``select:typed`` instead of the label.
+
+    The Confirm click of a confirmation dialog
+    (:func:`openadapt_flow.risk.compiled_confirmation_pairs`) is marked
+    ``confirm:``: the opener and its Confirm are two buttons in a row, not two
+    rows of a loop.
     """
+    from openadapt_flow.risk import compiled_confirmation_pairs
+
+    confirm_ids = {confirm for _opener, confirm in compiled_confirmation_pairs(steps)}
     sigs: list[tuple[str, str]] = []
     for i, step in enumerate(steps):
         sig = _sig(step)
+        if step.id in confirm_ids:
+            sigs.append((sig[0], f"confirm:{sig[1]}"))
+            continue
         if step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK) and not sig[
             1
         ].startswith("select:"):
@@ -1279,6 +1306,7 @@ def induce_program(
     interpreter: Optional[Any] = None,
     accepted_narration: Optional[dict[str, str]] = None,
     accepted_loop_guards: Optional[dict[str, str]] = None,
+    compile_notes: Optional[Sequence[Optional[Sequence[dict[str, Any]]]]] = None,
 ) -> InductionResult:
     """Induce a parameterized :class:`ProgramGraph` from multiple demonstrations
     of the same task -- the RFC §3 induction loop (step [4] + [5]).
@@ -1320,12 +1348,22 @@ def induce_program(
             -- a write a loop body makes for some rows only, run when that
             screen text shows. The report proposes the text; a person
             accepts it. Without acceptance such a loop is refused.
+        compile_notes: One list of ``compile_notes.json`` entries (or None)
+            per trace, for traces given as compiled ``Workflow``s. A recording
+            directory's come from its bootstrap compile. They carry each
+            dialog's candidate empty-result line (``dialog_line``), which is
+            mined only when every demonstration shows the same one.
 
     Returns:
         An :class:`InductionResult` with the induced program (or a refusal) and
         the full audit trail.
     """
-    workflows = [_as_workflow(t) for t in traces]
+    trace_notes: list[list[dict[str, Any]]] = [[] for _ in traces]
+    workflows = [_as_workflow(t, trace_notes[i]) for i, t in enumerate(traces)]
+    for i, given in enumerate(compile_notes or ()):
+        # A recording directory's notes come from its own bootstrap compile.
+        if i < len(traces) and isinstance(traces[i], Workflow) and given:
+            trace_notes[i].extend(given)
     n = len(workflows)
     result = InductionResult(n_traces=n)
     if n == 0:
@@ -1364,6 +1402,7 @@ def induce_program(
     divergences: dict[int, tuple[list[_Column], int]] = {}
     # Loop identity columns no demonstration shows (each run's rows name them).
     identity_only: set[str] = set()
+    singles: dict[int, _Node] = {}
 
     for idx, col in enumerate(columns):
         present = sorted(col.tokens)
@@ -1410,6 +1449,8 @@ def induce_program(
             )
             nodes.append(node)
             decisions.append(dec)
+            if col.kind == "single":
+                singles[idx] = node
             continue
 
         # --- single step present in SOME traces: branch or optional -------
@@ -1420,6 +1461,10 @@ def induce_program(
             nodes.append(node)
             optional_nodes[idx] = node
         decisions.append(dec)
+
+    _reconcile_dialog_guards(
+        columns, singles, workflows, trace_notes, decisions, result
+    )
 
     guard_sources: dict[str, GuardSource] = {}
     if narration and any(narration):
@@ -1471,6 +1516,232 @@ def induce_program(
     result.program = program
     result.workflow = workflow
     return result
+
+
+def _exact_guard_text(step: Step) -> Optional[str]:
+    """The exact text a step's guard checks (a mined dialog check), if any."""
+
+    guard = step.guard
+    if (
+        guard is not None
+        and guard.predicate.kind is PredicateKind.TEXT_PRESENT
+        and guard.predicate.exact
+        and guard.predicate.text
+    ):
+        return guard.predicate.text
+    return None
+
+
+def _dialog_line(notes: Sequence[dict[str, Any]], opener_id: str) -> Optional[str]:
+    """The candidate line a trace's compile kept for the dialog ``opener_id`` opens."""
+
+    for note in notes:
+        if (
+            note.get("change") == "no_empty_result_guard"
+            and note.get("step") == opener_id
+        ):
+            line = note.get("dialog_line")
+            return line if isinstance(line, str) and line else None
+    return None
+
+
+def _col_steps(col: _Column) -> list[Step]:
+    """Every step of every trace at one aligned column (loop rows included)."""
+
+    return [step for tok in col.tokens.values() for step in _tok_steps(tok)]
+
+
+def _guard_note(
+    result: InductionResult, opener_sid: str, confirm_sid: str, change: str, why: str
+) -> None:
+    entry = {"change": change, "step": opener_sid, "confirm_step": confirm_sid}
+    entry["evidence" if change == "empty_result_guard" else "warning"] = why
+    result.guard_notes.append(entry)
+
+
+def _reconcile_dialog_guards(
+    columns, singles, workflows, trace_notes, decisions, result
+):
+    """Decide each confirmation dialog's empty-result check from every trace.
+
+    A step is copied from the first trace that has it, and with it the check
+    that trace's compile mined. That check is kept only when every trace
+    mined the same one. When they differ, induction refuses
+    (``ambiguous_guard``): dropping the check would let a run click through a
+    dialog that lists a match, and keeping it would pick one trace's dialog.
+
+    When no trace mined one, the candidate line each trace's compile kept
+    (``dialog_line``, in any language) becomes the check when every trace has
+    the same line, there are two or more traces, and every value typed
+    before the opener differs between them. Record data changes with the
+    search; the dialog's own statement does not. A value chosen by a click
+    (a list row) is not seen here: the same row clicked in every
+    demonstration does not stop the line from being mined.
+    """
+
+    from openadapt_flow.compiler.empty_result_guard import exact_checks
+    from openadapt_flow.risk import compiled_confirmation_pairs
+    from openadapt_flow.vision.ocr import text_key
+
+    n = len(workflows)
+    pairs = [set(compiled_confirmation_pairs(wf.steps)) for wf in workflows]
+    kinds = {dec.index: dec.kind for dec in decisions}
+    handled: set[int] = set()
+    for idx in sorted(singles):
+        if idx - 1 not in singles:
+            continue
+        openers = [columns[idx - 1].tokens[t].step for t in range(n)]
+        confirms = [columns[idx].tokens[t].step for t in range(n)]
+        paired = [(openers[t].id, confirms[t].id) in pairs[t] for t in range(n)]
+        if not any(paired):
+            continue
+        handled.update((idx - 1, idx))
+        opener_sid, confirm_sid = f"s{idx - 1}", f"s{idx}"
+        opener = singles[idx - 1].states[opener_sid].step
+        confirm = singles[idx].states[confirm_sid].step
+        texts = [_exact_guard_text(step) for step in confirms]
+        keys = {text_key(text) if text else "" for text in texts}
+        note = functools.partial(_guard_note, result, opener.id, confirm.id)
+        if any(texts):
+            if all(paired) and len(keys) == 1:
+                note(
+                    "empty_result_guard",
+                    f"every one of the {n} demonstrations showed the same "
+                    "empty-result statement",
+                )
+                continue
+            mined = [t for t in range(n) if texts[t]]
+            why = (
+                f"the demonstrations disagree on the dialog's empty-result "
+                f"check (recordings {mined} mined one, "
+                f"{len({k for k in keys if k})} different; the others none)"
+            )
+            note("no_empty_result_guard", f"induction refused: {why}")
+            _add_uncertainty(
+                result,
+                kind="ambiguous_guard",
+                location=confirm_sid,
+                detail=why,
+                consequential=True,
+            )
+            continue
+        if not all(paired):
+            note(
+                "no_empty_result_guard",
+                "no check that the dialog found nothing: the click opens a "
+                "confirmation dialog in only some demonstrations",
+            )
+            continue
+        lines = [_dialog_line(trace_notes[t], openers[t].id) for t in range(n)]
+        line_keys = {text_key(line) for line in lines if line}
+        # Every value typed before the opener: the search is one of them,
+        # and any of them may feed the dialog.
+        typed = [
+            j
+            for j in range(idx - 1)
+            if any(
+                step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION)
+                for step in _col_steps(columns[j])
+            )
+        ]
+        why = ""
+        if n < 2:
+            why = "one demonstration cannot tell the dialog's line from record data"
+        elif not all(lines):
+            why = "not every demonstration's dialog showed one candidate line"
+        elif len(line_keys) != 1:
+            why = "the dialog's line differs between demonstrations (record data)"
+        elif not typed or any(kinds.get(j) != "param" for j in typed):
+            why = (
+                "a value typed before the dialog is the same in every "
+                "demonstration, so a line that stays the same proves nothing"
+            )
+        elif confirm.guard is not None:
+            why = "the Confirm step already has a guard"
+        if why:
+            note(
+                "no_empty_result_guard",
+                f"no check that the dialog found nothing: {why}",
+            )
+            continue
+        text = lines[0]
+        assert text is not None
+        postcondition, guard = exact_checks(text)
+        opener.expect = [*opener.expect, postcondition]
+        confirm.guard = guard
+        note(
+            "empty_result_guard",
+            f"the same dialog line in all {n} demonstrations, while every "
+            "value typed before the dialog differed between them; checked "
+            "after the opener and before the Confirm click",
+        )
+    _refuse_unreconciled_guards(columns, handled, result, pairs)
+
+
+def _refuse_unreconciled_guards(columns, handled, result, pairs=None) -> None:
+    """Refuse a mined dialog check the traces disagree on off the straight path.
+
+    An optional, divergent or loop column copies one trace's step, and with
+    it that trace's check. It is kept only when every step at that place, in
+    every trace and every loop row, has the same check (or none has one).
+    A Confirm click there with no check is noted (``no_empty_result_guard``).
+    """
+
+    confirms = {
+        (t, confirm): opener
+        for t, trace_pairs in enumerate(pairs or [])
+        for opener, confirm in trace_pairs
+    }
+
+    from openadapt_flow.vision.ocr import text_key
+
+    def checks(steps: Sequence[Step]) -> tuple[str, ...]:
+        # A Confirm click's guard, and an opener's exact postcondition.
+        return tuple(
+            text_key(_exact_guard_text(step) or "")
+            + "|"
+            + ",".join(
+                sorted(text_key(pc.text or "") for pc in step.expect if pc.exact)
+            )
+            for step in steps
+        )
+
+    for idx, col in enumerate(columns):
+        if idx in handled:
+            continue
+        shapes: set[tuple[str, ...]] = set()
+        for tok in col.tokens.values():
+            rows = [[tok.step]] if tok.kind == "single" else tok.iterations
+            shapes.update(checks(row) for row in rows)
+        if all(check == "|" for shape in shapes for check in shape):
+            # One note per column, naming the step the program copied (the
+            # first trace's, its first row's).
+            t, tok = min(col.tokens.items())
+            first = [[tok.step]] if tok.kind == "single" else tok.iterations[:1]
+            for step in (step for row in first for step in row):
+                if (t, step.id) in confirms:
+                    _guard_note(
+                        result,
+                        confirms[(t, step.id)],
+                        step.id,
+                        "no_empty_result_guard",
+                        "no check that the dialog found nothing: the dialog "
+                        "is not on every demonstration's straight path",
+                    )
+            continue
+        if len(shapes) == 1:
+            continue
+        _add_uncertainty(
+            result,
+            kind="ambiguous_guard",
+            location=f"s{idx}",
+            detail=(
+                "the demonstrations disagree on a confirmation dialog's "
+                "empty-result check in a step not every trace or row repeats "
+                "the same way"
+            ),
+            consequential=True,
+        )
 
 
 def _emit_loop(

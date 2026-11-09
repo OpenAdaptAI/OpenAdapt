@@ -193,26 +193,113 @@ def test_delivery_thread_balances_callback_lifecycle_hooks() -> None:
     assert len({thread_id for _name, thread_id in lifecycle}) == 1
 
 
-def test_delivery_setup_can_use_a_larger_bound_than_native_setup() -> None:
-    """A bounded cold service start must not weaken native-hook readiness."""
-    delivery_started = threading.Event()
+def _check_setup_budget_routing(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    native_bound: float,
+    delivery_bound: float,
+    native_ready_after: float,
+    delivery_ready_after: float,
+    expired: str | None,
+) -> None:
+    """Model readiness deterministically; real thread hooks are tested above.
 
-    class Callback:
-        def _openadapt_delivery_thread_start(self) -> None:
-            time.sleep(0.05)
-            delivery_started.set()
+    A sleep is a minimum delay, not a scheduling guarantee. This control tests
+    which bound start() passes to each readiness wait, not how fast the host
+    schedules two threads. Thread lifetime is modeled so a loaded runner
+    cannot consume either readiness budget or the cleanup bound.
+    """
+    threads = []
 
-        def __call__(self, _event) -> None:
-            return
+    class ControlledThread:
+        def __init__(self, *, target, name, daemon):
+            self.alive = False
+            threads.append(self)
 
-    observer = _ReadyObserver(Callback())
-    observer.startup_timeout = 0.02
-    observer.delivery_startup_timeout = 0.2
+        def start(self):
+            self.alive = True
 
-    observer.start()
-    observer.stop()
+        def is_alive(self):
+            return self.alive
 
-    assert delivery_started.is_set()
+        def join(self, timeout):
+            self.alive = False
+
+    monkeypatch.setattr(threading, "Thread", ControlledThread)
+    observer = _ReadyObserver()
+    observer.startup_timeout = native_bound
+    observer.delivery_startup_timeout = delivery_bound
+    waits = []
+
+    def native_wait(timeout):
+        assert observer._delivery_state == "pending"
+        waits.append(("native", timeout))
+        return timeout is not None and native_ready_after <= timeout
+
+    def delivery_wait(timeout):
+        assert observer._delivery_state == "committed"
+        waits.append(("delivery", timeout))
+        return timeout is not None and delivery_ready_after <= timeout
+
+    monkeypatch.setattr(observer._ready, "wait", native_wait)
+    monkeypatch.setattr(observer._delivery_ready, "wait", delivery_wait)
+    if expired is None:
+        observer.start()
+        observer.stop()
+        assert observer._startup_failure is None
+    else:
+        message = (
+            "delivery setup did not become ready"
+            if expired == "delivery"
+            else "did not become ready"
+        )
+        with pytest.raises(InputObserverError, match=message) as failure:
+            observer.start()
+        assert observer._startup_failure is failure.value
+    expected = [("native", native_bound)]
+    if expired != "native":
+        expected.append(("delivery", delivery_bound))
+    assert waits == expected
+    assert len(threads) == 2
+    assert not any(thread.is_alive() for thread in threads)
+    assert observer._thread is None
+    assert observer._delivery_thread is None
+    assert observer._delivery_state == "inactive"
+
+
+@pytest.mark.parametrize(
+    ("native_ready_after", "delivery_ready_after", "expired"),
+    [(0.01, 0.05, None), (0.03, 0.05, "native"), (0.01, 0.21, "delivery")],
+    ids=["independent-bounds", "native-expired", "delivery-expired"],
+)
+def test_delivery_setup_can_use_a_larger_bound_than_native_setup(
+    monkeypatch: pytest.MonkeyPatch,
+    native_ready_after: float,
+    delivery_ready_after: float,
+    expired: str | None,
+) -> None:
+    """A larger delivery budget neither replaces nor bypasses the native one."""
+    _check_setup_budget_routing(
+        monkeypatch,
+        native_bound=0.02,
+        delivery_bound=0.2,
+        native_ready_after=native_ready_after,
+        delivery_ready_after=delivery_ready_after,
+        expired=expired,
+    )
+
+
+def test_native_setup_can_use_a_larger_bound_than_delivery_setup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _check_setup_budget_routing(
+        monkeypatch,
+        native_bound=0.2,
+        delivery_bound=0.02,
+        native_ready_after=0.05,
+        delivery_ready_after=0.01,
+        expired=None,
+    )
 
 
 def test_setup_events_are_discarded_when_start_fails() -> None:
@@ -477,9 +564,7 @@ def test_terminal_frame_seal_keeps_prior_receipts_and_drops_later_input() -> Non
         pytest.fail("reserved input must use the receipt consumer")
 
     def deliver(event, receipt) -> None:
-        receipt.complete(
-            recorder_module.Event(event.timestamp, "action", {"key": event.key_char})
-        )
+        receipt.complete(recorder_module.Event(event.timestamp, "action", {"key": event.key_char}))
 
     setattr(consume, "_openadapt_input_receipt", journal.reserve)
     setattr(consume, "_openadapt_input_delivery", deliver)
@@ -515,9 +600,7 @@ def test_generic_frame_cut_rejects_dirty_pixels_and_orders_post_cut_input() -> N
         pytest.fail("reserved input must use the receipt consumer")
 
     def deliver(event, receipt) -> None:
-        receipt.complete(
-            recorder_module.Event(event.timestamp, "action", {"key": event.key_char})
-        )
+        receipt.complete(recorder_module.Event(event.timestamp, "action", {"key": event.key_char}))
 
     setattr(consume, "_openadapt_input_receipt", journal.reserve)
     setattr(consume, "_openadapt_input_delivery", deliver)

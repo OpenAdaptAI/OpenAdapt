@@ -41,7 +41,8 @@ from benchmark.effectbench.task_pack.mockmed_tasks import (
     _note_effect,
     _record_effect,
 )
-from openadapt_flow.benchmark.effectbench import RestRecordVerifier, Verdict
+from benchmark.harness.effectbench import RestRecordVerifier, Verdict
+from openadapt_flow.mockmed.fault_server import mockmed_rest_read_kwargs
 
 _HTTP_TIMEOUT_S = 5.0
 TRIAL_NOTE = "triage note trial-unique-AUDIT"
@@ -107,7 +108,7 @@ def audit_mockmed_oracle() -> AuditReport:
     attacks: list[AttackResult] = []
 
     with serve_mockmed() as (base, _db):
-        oracle = RestRecordVerifier(base, records_path="/api/db", records_key="records")
+        oracle = RestRecordVerifier(base, **mockmed_rest_read_kwargs())
 
         def attack(name, effect, action, *, preseed=None, seed_concurrent=False):
             _reset(base, seed_concurrent=seed_concurrent)

@@ -23,6 +23,7 @@ Python 3.10–3.12 are supported and exercised in CI.
 ruff check openadapt_flow          # lint
 ruff format --check openadapt_flow # format (drop --check to auto-apply)
 mypy                               # type-check (config in pyproject.toml)
+python scripts/check_engine_generality.py  # no app names in the engine
 pytest -q                          # tests
 ```
 
@@ -42,6 +43,15 @@ pytest -q                          # tests
   instead. The check reports any tracked file that changed during the run, so
   editing files yourself while a long suite runs also trips it — set
   `OPENADAPT_FLOW_ALLOW_DIRTY_TREE=1` for that case.
+
+### Local browser tests
+
+Local pytest runs force headless mode for synchronous and asynchronous
+Playwright launches, including persistent contexts. An explicit headed
+launch fails before starting a browser. To run a deliberate headed test on
+your own machine, mark it `@pytest.mark.headed` and set
+`OPENADAPT_ALLOW_HEADED=1`. Both are required. The guard also applies to
+session and module fixtures. CI keeps its configured launch options.
 
 ### CI execution lanes
 
@@ -174,6 +184,28 @@ surface from permissively licensed package artifacts.
 The release-consistency gate inspects the actual wheel and sdist. A source-tree
 notice alone is not sufficient.
 
+## App knowledge lives in data
+
+The engine (`openadapt_flow/`) works the same way for every application. App
+knowledge lives in data:
+
+- its bookkeeping writes: an app profile in `openadapt_flow/app_profiles/`,
+  loaded by name;
+- its endpoints, tables, keys and field paths: the generated contract or the
+  deployment config (`deploy.yaml`);
+- tests and benchmarks for it: fixtures under `tests/` and harnesses under
+  `benchmark/`, outside the shipped package.
+
+`scripts/check_engine_generality.py` runs in CI and fails when engine source
+names an application or one of its identifiers from the denylist in
+`scripts/generality.toml`. Add new applications and identifiers to that list
+when you meet them. A comment that only gives an example may name an
+application on a line marked `# example:`. Hits that predate the check are
+counted in `scripts/generality_baseline.json`, which only shrinks: when you
+remove one, lower it with `--update-baseline`. OpenAdapt's own demo apps
+(MockMed) may be named only in the demo modules listed in the denylist. The
+audit behind the rule is `docs/GENERALITY_AUDIT.md`.
+
 ## Safety-sensitive areas
 
 The identity gate, the resolution ladder, and the postcondition/halt logic are
@@ -189,3 +221,9 @@ See [SECURITY.md](SECURITY.md) — do not file security problems as public issue
 ## Code of Conduct
 
 This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md).
+
+The local guard also refuses launches when `PWDEBUG` is set unless both headed
+opt-ins are present: Playwright's inspector can override `headless=True`.
+Only `CI=true` or `CI=1` disables the local guard. Processes started outside
+Playwright (including browsers reached through `connect_over_cdp`) must pass
+the browser's headless flag themselves.

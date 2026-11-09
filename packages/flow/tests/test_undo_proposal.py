@@ -41,6 +41,7 @@ from openadapt_flow.ir import (
     UndoStep,
     Workflow,
 )
+from openadapt_flow.mockmed.fault_server import MOCKMED_RECORDS_READ_CONTRACT
 from openadapt_flow.mockmed.fault_server import serve as fault_serve
 from openadapt_flow.runtime.actuators import ApiActuator
 from openadapt_flow.runtime.effects import Effect, EffectKind, RestRecordVerifier
@@ -56,6 +57,10 @@ from openadapt_flow.undo_proposal import (
     proposal_problem,
     propose_undos,
     write_proposals,
+)
+from tests._rest_read_contract_fixtures import (
+    mockmed_effects_yaml,
+    mockmed_rest_read_kwargs,
 )
 from tests.test_replayer import FakeBackend, FakeVision, Match
 
@@ -178,7 +183,7 @@ class MockMedCopy:
         replayer = Replayer(
             SavingBackend(self.url),
             vision=_vision(),
-            effect_verifier=RestRecordVerifier(self.url),
+            effect_verifier=RestRecordVerifier(self.url, **mockmed_rest_read_kwargs()),
             api_actuator=ApiActuator(self.url),
             poll_interval_s=0.01,
         )
@@ -255,7 +260,7 @@ def test_network_undo_is_verified_written_as_a_proposal_and_waits_for_a_person(
     stopping = Replayer(
         _RejectSecond(mockmed),
         vision=_vision(),
-        effect_verifier=RestRecordVerifier(mockmed),
+        effect_verifier=RestRecordVerifier(mockmed, **mockmed_rest_read_kwargs()),
         poll_interval_s=0.01,
     )
     stopped = stopping.run(run_wf, bundle_dir=bundle, run_dir=run_dir)
@@ -323,7 +328,7 @@ def _undo_replayer(url: str) -> Replayer:
     return Replayer(
         SavingBackend(url),
         vision=_vision(),
-        effect_verifier=RestRecordVerifier(url),
+        effect_verifier=RestRecordVerifier(url, **mockmed_rest_read_kwargs()),
         api_actuator=ApiActuator(url),
         poll_interval_s=0.01,
     )
@@ -581,7 +586,7 @@ class FieldCopy:
         replayer = Replayer(
             EditingBackend(self.url, also_touch_p2=self.also_touch_p2),
             vision=_vision(),
-            effect_verifier=RestRecordVerifier(self.url),
+            effect_verifier=RestRecordVerifier(self.url, **mockmed_rest_read_kwargs()),
             poll_interval_s=0.01,
         )
         return replayer.run(
@@ -891,13 +896,13 @@ def test_deployment_test_copy_resets_and_reads_every_record(tmp_path, mockmed):
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
     from openadapt_flow.deployment import load_deployment
-    from openadapt_flow.reward.seed import write_bundle
+    from openadapt_flow.reward.bundle import write_bundle
     from openadapt_flow.undo_proposal import DeploymentUndoTestCopy
 
     write_bundle(
         tmp_path / "contract",
         contract_id="undo_copy",
-        oracle={"kind": "rest", "base_url": mockmed},
+        oracle={**MOCKMED_RECORDS_READ_CONTRACT, "base_url": mockmed},
         channel="api",
         key=Ed25519PrivateKey.generate(),
         issuer_key_id="self_signed:test",
@@ -916,7 +921,8 @@ def test_deployment_test_copy_resets_and_reads_every_record(tmp_path, mockmed):
     config.write_text(
         "name: copy\n"
         f"backend:\n  kind: web\n  url: {mockmed}/\n"
-        f"effects:\n  kind: rest\n  base_url: {mockmed}\n"
+        "effects:\n"
+        f"{mockmed_effects_yaml(mockmed)}"
         "test_copy:\n  declared: true\n"
         f"  reset_url: {mockmed}/api/reset\n"
         "  reward_contract: contract\n"

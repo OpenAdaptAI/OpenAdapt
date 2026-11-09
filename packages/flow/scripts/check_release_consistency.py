@@ -383,6 +383,7 @@ PUBLIC_ARTIFACT_APPROVED_DIRECTORIES = (
     "benchmark/run_player/",
     "benchmark/scoreboard/",
     "benchmark/silent_saves/",
+    "benchmark/verifier_baselines/results/",
     "docs/showcase-encounter-loop/",
     "docs/showcase-loop/",
     "docs/showcase-openemr/",
@@ -1701,7 +1702,7 @@ def validate_distribution_directory(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument("--sync", action="store_true")
     parser.add_argument("--require-dist", action="store_true")
     parser.add_argument(

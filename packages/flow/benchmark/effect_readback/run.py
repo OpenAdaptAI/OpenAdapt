@@ -53,7 +53,6 @@ from types import SimpleNamespace
 from typing import Optional
 
 import requests
-
 from openadapt_flow.mockmed.fault_server import serve as fault_serve
 from openadapt_flow.runtime.effects.effect import (
     Effect,
@@ -93,7 +92,9 @@ CASES = [
     FaultCase("session", "Session expired (401, nothing persisted)", False, False),
     FaultCase("timeout", "Commit then client timeout", True, True),
     FaultCase("duplicate", "Duplicate submission (value present)", True, False),
-    FaultCase("stale", "Lost update (value present)", True, False, seed_concurrent=True),
+    FaultCase(
+        "stale", "Lost update (value present)", True, False, seed_concurrent=True
+    ),
 ]
 
 
@@ -130,11 +131,12 @@ class _ScreenBackend:
 def _same_surface_screen(case: FaultCase) -> str:
     """What the write's OWN surface shows after the save (optimistic UI).
 
-    The user's typed note is still painted for every accepted/optimistic path;
-    a session expiry bounces to a login screen (no note)."""
+    The note box still paints the user's typed note for every
+    accepted/optimistic path; a session expiry bounces to a login screen (no
+    note)."""
     if case.mode == "session":
         return "Session expired. Please sign in again."
-    return f"Saved. Encounter note: {NOTE}"
+    return NOTE
 
 
 def _different_path_note(records: list[dict]) -> str:
@@ -224,12 +226,18 @@ def _tally(rows: list[dict]) -> dict:
         true_confirms = confirmed(value_present)
         blind_spots = confirmed(struct_dirty)
         out[path] = {
-            "false_confirm_rate": round(len(false_confirms) / max(1, len(value_absent)), 3),
+            "false_confirm_rate": round(
+                len(false_confirms) / max(1, len(value_absent)), 3
+            ),
             "false_confirm_count": len(false_confirms),
             "false_confirm_of": [r["mode"] for r in false_confirms],
-            "false_halt_rate": round(len(false_halts) / max(1, len(genuinely_correct)), 3),
+            "false_halt_rate": round(
+                len(false_halts) / max(1, len(genuinely_correct)), 3
+            ),
             "false_halt_of": [r["mode"] for r in false_halts],
-            "true_confirm_rate": round(len(true_confirms) / max(1, len(value_present)), 3),
+            "true_confirm_rate": round(
+                len(true_confirms) / max(1, len(value_present)), 3
+            ),
             "structural_blind_spot_of": [r["mode"] for r in blind_spots],
         }
     return out
@@ -317,7 +325,7 @@ def to_markdown(result: dict) -> str:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument(
         "--print", action="store_true", help="print results, do not write files"
     )

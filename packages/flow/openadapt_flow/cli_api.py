@@ -37,9 +37,12 @@ def register_api_parser(sub: argparse._SubParsersAction) -> None:
             "Show or admit API steps compiled from a recording's network "
             "capture. None runs until a person admits it."
         ),
+        allow_abbrev=False,
     )
     verbs = parser.add_subparsers(dest="api_cmd", required=True)
-    show = verbs.add_parser("show", help="List a bundle's proposed API steps")
+    show = verbs.add_parser(
+        "show", help="List a bundle's proposed API steps", allow_abbrev=False
+    )
     show.add_argument("bundle", help="Bundle directory")
     show.add_argument("--json", action="store_true", dest="as_json")
     show.set_defaults(func=cmd_api_show)
@@ -49,6 +52,7 @@ def register_api_parser(sub: argparse._SubParsersAction) -> None:
             "Propose the API step again from the recording (after editing the "
             "program's checks); drops any earlier admission"
         ),
+        allow_abbrev=False,
     )
     propose.add_argument("bundle", help="Bundle directory")
     propose.add_argument(
@@ -56,7 +60,9 @@ def register_api_parser(sub: argparse._SubParsersAction) -> None:
     )
     propose.set_defaults(func=cmd_api_propose)
     admit = verbs.add_parser(
-        "admit", help="Admit a bundle's API steps (a person, at a terminal)"
+        "admit",
+        help="Admit a bundle's API steps (a person, at a terminal)",
+        allow_abbrev=False,
     )
     admit.add_argument("bundle", help="Bundle directory")
     admit.add_argument("--step", default=None, help="Admit only this save step")
@@ -84,7 +90,7 @@ def cmd_api_show(args: argparse.Namespace) -> int:
     reasons: list[str] = []
     sidecar = bundle / "api_proposal.json"
     if sidecar.is_file():
-        reasons = json.loads(sidecar.read_text()).get("reasons") or []
+        reasons = json.loads(sidecar.read_text(encoding="utf-8")).get("reasons") or []
     if args.as_json:
         rows = []
         for s in found:
@@ -144,7 +150,8 @@ def cmd_api_propose(args: argparse.Namespace) -> int:
             },
             indent=2,
         )
-        + "\n"
+        + "\n",
+        encoding="utf-8",
     )
     if step is None:
         print(f"No API step proposed: {'; '.join(reasons)}.")
@@ -196,13 +203,28 @@ def cmd_api_admit(
     except (ApiProposalError, ValueError) as exc:
         print(f"api admit: {exc}", file=sys.stderr)
         return 2
+    ambient = []
     for step in updated.steps:
         if step.id in steps:
             print(describe_api_step(step))
             print()
+            spec = step.api_binding.web_form if step.api_binding else None
+            ambient += [w for w in (spec.writes if spec else []) if w.role == "ambient"]
+    if ambient:
+        # The person decides that these are the page's own requests: the API
+        # step won't send them, and admitting says so.
+        print("The API step will NOT send these requests; they are the page's own:")
+        for write in ambient:
+            print(f"  {write.method} {write.path}: {write.evidence}")
+        print()
     answer = ask(
-        f"Type '{ADMIT_WORD}' to let these requests save in place of the GUI steps "
-        "(the record check still confirms every save): "
+        f"Type '{ADMIT_WORD}' to let these requests save in place of the GUI steps"
+        + (
+            f" and leave the {len(ambient)} request(s) above to the page"
+            if ambient
+            else ""
+        )
+        + " (the record check still confirms every save): "
     )
     if answer.strip().lower() != ADMIT_WORD:
         print("Not admitted. Nothing changed.")

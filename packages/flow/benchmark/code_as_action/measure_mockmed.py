@@ -36,6 +36,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import common  # noqa: E402
+from openadapt_flow.teach_authorization_fixture import demo_authority
 
 PROMPT = (
     "Open the referral for Jane Sample, start a Triage encounter, and save "
@@ -104,7 +105,9 @@ def _admitter(work: Path) -> Any:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("--env-file", type=Path, required=True)
     parser.add_argument("--trials", type=int, default=3)
     parser.add_argument("--arms", default=",".join(ARMS))
@@ -149,6 +152,17 @@ def main() -> int:
                 load_before = common.load_1m()
                 started = time.time()
                 try:
+                    # A throwaway approver signs what run 1 may do.
+                    compiler.teach_authorization = demo_authority(
+                        work,
+                        task_id=compiler.task.task_id,
+                        url=base,
+                        record={"patient_id": "p1", "type": "Triage"},
+                        inputs={"note": note},
+                        fields={"note": note},
+                        constants=["Jane Sample", "MRN P1"],
+                        record_kind="encounter",
+                    )
                     result = compiler.record(agent, {"note": note})
                     status, detail, run1 = result.status, result.detail, result.run1
                 except Exception as exc:  # noqa: BLE001 - a failed run is a row

@@ -24,6 +24,8 @@ from typing import Any, Iterator, Optional
 
 import pytest
 
+from tests._rest_read_contract_fixtures import mockmed_effects_yaml
+
 pytest.importorskip("langgraph")
 pytest.importorskip("mcp")
 
@@ -41,6 +43,7 @@ from openadapt_flow.integrations.agents.skills import (  # noqa: E402
 from openadapt_flow.jit.keys import CustomerModelKey  # noqa: E402
 from openadapt_flow.mockmed.fault_server import serve  # noqa: E402
 from openadapt_flow.tutorial import _http_json, _records  # noqa: E402
+from tests._teach_authorization_support import mockmed_note
 
 PROMPT = (
     "Open the referral for Jane Sample, start a Triage encounter, and save "
@@ -118,7 +121,14 @@ class ScriptedChat(BaseChatModel):
                 content="",
                 tool_calls=[{"name": name, "args": args, "id": f"c{self.calls}"}],
             )
-        usage = {"input_tokens": 1000, "output_tokens": 20, "total_tokens": 1020}
+        # This deterministic scripted producer has no prompt-cache operation.
+        usage = {
+            "input_tokens": 1000,
+            "output_tokens": 20,
+            "total_tokens": 1020,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+        }
         message.usage_metadata = usage
         return ChatResult(generations=[ChatGeneration(message=message)])
 
@@ -165,10 +175,7 @@ def _cache(tmp_path: Path, base: str, monkeypatch: pytest.MonkeyPatch, offered: 
     verify = tmp_path / "verify.yaml"
     verify.write_text(
         "verifier:\n"
-        "  kind: rest\n"
-        f"  base_url: {base}\n"
-        "  records_path: /api/db\n"
-        "  records_key: records\n"
+        f"{mockmed_effects_yaml(base)}"
         "  timeout_s: 2.0\n"
         "  poll_interval_s: 0.05\n"
     )
@@ -195,11 +202,30 @@ def _cache(tmp_path: Path, base: str, monkeypatch: pytest.MonkeyPatch, offered: 
     )
 
 
+def _authorize(
+    cache: SkillCache, prompt: str, note: str, patient: str, mrn: str, pid: str
+) -> None:
+    """A person signs what run 1 of this prompt may do (its own task id)."""
+
+    key_dir = Path(cache.common["key_dir"])
+    task_id = cache.task_id(prompt, {"note": note})
+    cache.common["teach_authorization"] = mockmed_note(
+        key_dir,
+        key_dir.parent / f"teach-authorization-{task_id}",
+        task_id,
+        cache.common["url"],
+        note=note,
+        record={"patient_id": pid, "type": "Triage"},
+        constants=[patient, mrn],
+    )
+
+
 def test_run_1_is_compiled_and_run_2_calls_the_skill(
     mockmed: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     offered: list = []
     cache = _cache(tmp_path, mockmed, monkeypatch, offered)
+    _authorize(cache, PROMPT, NOTE, "Jane Sample", "MRN P1", "p1")
     chat = ScriptedChat(patient="Jane Sample", note=NOTE)
     first = cache.run(PROMPT, {"note": NOTE}, _agent(chat))
     assert first.path == "agent" and first.status == "admitted", first.detail
@@ -227,6 +253,7 @@ def test_a_wrong_patient_is_refused_and_not_cached(
     _http_json(f"{mockmed}/api/reset", method="POST", body={})
     offered: list = []
     cache = _cache(tmp_path, mockmed, monkeypatch, offered)
+    _authorize(cache, PROMPT, NOTE, "Jane Sample", "MRN P1", "p1")
     chat = ScriptedChat(patient="Alex Testcase", note=NOTE)
     first = cache.run(PROMPT, {"note": NOTE}, _agent(chat))
     assert first.path == "agent" and first.status == "refused_wrong_record"
@@ -245,7 +272,7 @@ def _for_alex(jane: SkillCache) -> SkillCache:
         expect={"patient_id": "p2", "type": "Triage"},
         on_screen=["Alex Testcase", "MRN P2"],
     )
-    return SkillCache(
+    alex = SkillCache(
         **common,
         offer=jane.offer,
         admitter=jane.admitter,
@@ -253,6 +280,8 @@ def _for_alex(jane: SkillCache) -> SkillCache:
         drop_fields=jane.drop_fields,
         model_key=jane.model_key,
     )
+    _authorize(alex, P_ALEX, "Alex note", "Alex Testcase", "MRN P2", "p2")
+    return alex
 
 
 def test_a_skill_never_serves_another_record(
@@ -264,6 +293,7 @@ def test_a_skill_never_serves_another_record(
     reset()
     jane = _cache(tmp_path, mockmed, monkeypatch, [])
     jane.common.pop("task_id")
+    _authorize(jane, P_JANE, "Jane note", "Jane Sample", "MRN P1", "p1")
     first = jane.run(
         P_JANE,
         {"note": "Jane note"},
@@ -283,7 +313,7 @@ def test_a_skill_never_serves_another_record(
     assert second.record_check["passed"] and second.record_check["created"] == 1
 
     # Even a program served for Alex's task by a key collision is caught:
-    # this task's record check fails, and the program is evicted.
+    # this task's record check fails, and the program stays held.
     reset()
     poisoned = _for_alex(jane)
     jane_key = jane.key(P_JANE, {"note": "x"})
@@ -299,8 +329,12 @@ def test_a_skill_never_serves_another_record(
     assert "wrong record" in (served.detail or "")
     assert served.record_check["created"] == 0
     assert served.record_check["outside_run"]["created"] == 1
-    assert jane.server(P_JANE, {"note": "x"}) is None  # evicted
-    assert list((tmp_path / "cache" / "evicted").iterdir())
+    assert jane.server(P_JANE, {"note": "x"}) is None  # held, not silently re-recorded
+    chat = ScriptedChat(patient="Jane Sample", note="Do not repeat")
+    held = jane.run(P_JANE, {"note": "Do not repeat"}, _agent(chat))
+    assert held.status == "CACHE_HALTED" and not held.verified
+    assert chat.calls == 0 and held.model_calls == 0
+    assert Path(first.compile["emitted"]["mcp_server"]).is_file()
 
 
 def test_the_cache_is_per_user_by_default(tmp_path: Path) -> None:
@@ -338,6 +372,7 @@ def test_another_users_write_elsewhere_does_not_fail_the_skill(
 
     _http_json(f"{mockmed}/api/reset", method="POST", body={})
     cache = _cache(tmp_path, mockmed, monkeypatch, [])
+    _authorize(cache, PROMPT, NOTE, "Jane Sample", "MRN P1", "p1")
     first = cache.run(
         PROMPT, {"note": NOTE}, _agent(ScriptedChat(patient="Jane Sample", note=NOTE))
     )

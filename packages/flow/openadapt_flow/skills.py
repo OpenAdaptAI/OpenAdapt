@@ -75,11 +75,13 @@ def _write_json(path: Path, value: Any, *, private: bool = False) -> None:
 
 
 def read_lock(bundle_dir: Path | str) -> Optional[dict[str, Any]]:
+    from openadapt_flow import artifacts
+
     path = Path(bundle_dir) / LOCK
-    if not path.is_file():
+    if not artifacts.is_file(path):
         return None
     try:
-        lock = json.loads(path.read_text())
+        lock = json.loads(artifacts.read_text(path))
     except json.JSONDecodeError as exc:
         raise SkillError(f"{path} is not JSON: {exc}") from exc
     if not isinstance(lock, dict) or lock.get("schema") != LOCK_SCHEMA:
@@ -88,10 +90,12 @@ def read_lock(bundle_dir: Path | str) -> Optional[dict[str, Any]]:
 
 
 def read_binding(bundle_dir: Path | str) -> dict[str, str]:
+    from openadapt_flow import artifacts
+
     path = Path(bundle_dir) / BINDING
-    if not path.is_file():
+    if not artifacts.is_file(path):
         return {}
-    data = json.loads(path.read_text())
+    data = json.loads(artifacts.read_text(path))
     if not isinstance(data, dict) or data.get("schema") != BINDING_SCHEMA:
         raise SkillError(f"{path} is not a skill binding ({BINDING_SCHEMA})")
     return {str(k): str(v) for k, v in (data.get("values") or {}).items()}
@@ -871,10 +875,14 @@ def cmd_skill(args: Any) -> int:
 
 def add_parser(sub: Any) -> None:
     p = sub.add_parser(
-        "skill", help="Bind and qualify a skill pulled from the registry"
+        "skill",
+        help="Bind and qualify a skill pulled from the registry",
+        allow_abbrev=False,
     )
     ssub = p.add_subparsers(dest="skill_cmd", required=True)
-    b = ssub.add_parser("bind", help="Record your values for the skill's contract")
+    b = ssub.add_parser(
+        "bind", help="Record your values for the skill's contract", allow_abbrev=False
+    )
     b.add_argument("bundle")
     b.add_argument(
         "--set",
@@ -882,7 +890,9 @@ def add_parser(sub: Any) -> None:
         metavar="NAME=VALUE",
         help="A contract variable: a URL, an environment variable NAME, a path or a command",
     )
-    q = ssub.add_parser("qualify", help="Qualify the skill on your instance")
+    q = ssub.add_parser(
+        "qualify", help="Qualify the skill on your instance", allow_abbrev=False
+    )
     q.add_argument("bundle")
     q.add_argument("--certify", required=True, help="Policy to certify under")
     q.add_argument("--out", default=None)
@@ -897,7 +907,9 @@ def add_parser(sub: Any) -> None:
         action="store_true",
         help="Qualify with --verify even though the skill ships its own record check",
     )
-    s = ssub.add_parser("status", help="Whether the pulled skill may run")
+    s = ssub.add_parser(
+        "status", help="Whether the pulled skill may run", allow_abbrev=False
+    )
     s.add_argument("bundle")
     for parser in (b, q, s):
         parser.set_defaults(func=cmd_skill)

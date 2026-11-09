@@ -267,7 +267,10 @@ def cmd_jit(
                 authority.load_encrypted_key(args.key), _keys(args), policy=policy_doc
             )
             decision = lifecycle.admit_with_key(
-                program, principal=principal, key_dir=_keys(args)
+                program,
+                principal=principal,
+                key_dir=_keys(args),
+                approver_root=getattr(args, "approver_root", None),
             )
             if decision["outcome"] == "needs_person":
                 print(
@@ -293,6 +296,7 @@ def cmd_jit(
                 confirm=confirm(f"Admit as {args.principal}?"),
                 key_dir=_key_dir(args),
                 require_distinct_reviewer_and_admitter=args.require_distinct,
+                approver_root=getattr(args, "approver_root", None),
             )
             print(
                 f"ADMITTED by {manifest['admitted_by_principal_id']} at "
@@ -326,6 +330,7 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     parser = sub.add_parser(
         "jit",
         help="Review, admit or reject a DRAFT compiled from a computer-use agent run",
+        allow_abbrev=False,
     )
     verbs = parser.add_subparsers(dest="jit_cmd", required=True)
 
@@ -343,12 +348,15 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         )
 
     p = verbs.add_parser(
-        "status", help="Print the state, steps and what admission needs"
+        "status",
+        help="Print the state, steps and what admission needs",
+        allow_abbrev=False,
     )
     common(p)
     p = verbs.add_parser(
         "review",
         help="Confirm the parameters, then record that you reviewed every step",
+        allow_abbrev=False,
     )
     common(p)
     p.add_argument("--principal", help="Your name or user id")
@@ -389,6 +397,7 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         "admit",
         help="Admit a draft whose canary passed: with a registered key, as an "
         "agent under a signed policy, or as a person at a terminal",
+        allow_abbrev=False,
     )
     common(p)
     p.add_argument("--principal", help="A person admitting at a terminal")
@@ -403,17 +412,26 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         action="store_true",
         help="Refuse if you also reviewed the draft",
     )
-    p = verbs.add_parser("reject", help="Set the draft aside")
+    p.add_argument(
+        "--approver-root",
+        default=None,
+        help="The approver root the draft's teach authorization is checked "
+        "under (default OPENADAPT_APPROVER_ROOT)",
+    )
+    p = verbs.add_parser("reject", help="Set the draft aside", allow_abbrev=False)
     common(p)
     p.add_argument("--principal", help="Your name or user id")
     p.add_argument("--reason")
-    p = verbs.add_parser("keygen", help="Write a new encrypted Ed25519 key")
+    p = verbs.add_parser(
+        "keygen", help="Write a new encrypted Ed25519 key", allow_abbrev=False
+    )
     common(p, program=False)
     p.add_argument("--out", required=True)
     p = verbs.add_parser(
         "register",
         help="Register a key as a policy signer, admitter key or agent "
         "(approvers: jit approver)",
+        allow_abbrev=False,
     )
     common(p, program=False)
     p.add_argument(
@@ -427,6 +445,7 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         "approver",
         help="The signed approver roster: who may approve a save. Every change "
         "is signed by an approver already on it",
+        allow_abbrev=False,
     )
     approver_verbs = p.add_subparsers(dest="approver_cmd", required=True)
     for name, verb_help in (
@@ -435,7 +454,7 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         ("remove", "Remove an approver, signed by an approver on the roster"),
         ("list", "Print the approvers the pinned root vouches for"),
     ):
-        q = approver_verbs.add_parser(name, help=verb_help)
+        q = approver_verbs.add_parser(name, help=verb_help, allow_abbrev=False)
         common(q, program=False)
         if name == "init":
             q.add_argument("--principal", required=True)
@@ -460,7 +479,9 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
                 help="An approver's encrypted key that signs this change",
             )
     p = verbs.add_parser(
-        "sign-policy", help="Sign an admission policy with your policy-signer key"
+        "sign-policy",
+        help="Sign an admission policy with your policy-signer key",
+        allow_abbrev=False,
     )
     common(p, program=False)
     p.add_argument("policy", help="Unsigned AdmissionPolicy JSON")

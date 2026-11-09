@@ -1,7 +1,7 @@
 """In-guest WAA-contract HTTP shim (runs INSIDE the Windows VM).
 
 Serves the desktop benchmark harness
-(``openadapt_flow.benchmark.desktop_benchmark``):
+(``benchmark.harness.desktop_benchmark``):
 
     GET  /screenshot          -> raw PNG bytes of the desktop (Flask send_file)
     GET  /health              -> ``{"status": "ok", ...}`` liveness probe
@@ -259,7 +259,9 @@ def uia() -> object:
 
 def main() -> None:
     """Run the shim server."""
-    parser = argparse.ArgumentParser(description="In-guest WAA HTTP shim")
+    parser = argparse.ArgumentParser(
+        description="In-guest WAA HTTP shim", allow_abbrev=False
+    )
     parser.add_argument(
         "--host",
         default="127.0.0.1",

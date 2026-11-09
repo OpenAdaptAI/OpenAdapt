@@ -14,13 +14,15 @@ import json
 import os
 import sqlite3
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from openadapt_flow import verifier
+from openadapt_flow import verifier, verify_run
 from openadapt_flow.runtime.effects.frame import FrameSpec
+from openadapt_flow.runtime.effects.late_write import format_time, parse_time
 from openadapt_flow.verifier import (
     Actor,
     Contract,
@@ -68,9 +70,28 @@ def _used_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 @pytest.fixture
 def due_now(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The recheck is due: the tests don't wait out the window."""
+    """Advance one coherent test clock to the issued deadline before reading."""
 
-    monkeypatch.setattr(verifier, "seconds_until", lambda due: 0.0)
+    utc_start = datetime.now(timezone.utc)
+    monotonic_start = time.monotonic()
+    advance = timedelta()
+
+    def now() -> datetime:
+        return (
+            utc_start + timedelta(seconds=time.monotonic() - monotonic_start) + advance
+        )
+
+    def reach_due(due: str) -> float:
+        nonlocal advance
+        remaining = (parse_time(due) - now()).total_seconds()
+        if remaining > 0:
+            advance += timedelta(seconds=remaining)
+        return (parse_time(due) - now()).total_seconds()
+
+    # Baseline, settled-post-state, receipt issuance and recheck read stamps
+    # all use this clock. Ledger event/lease/retry-age wall times stay real.
+    monkeypatch.setattr(verify_run, "_now", lambda: format_time(now()))
+    monkeypatch.setattr(verifier, "seconds_until", reach_due)
 
 
 def _db(tmp_path: Path) -> Path:
@@ -506,14 +527,15 @@ def test_a_database_still_moving_is_uncertain(
     real = verify_run._read_database
     calls = {"n": 0}
 
-    def moving(cfg: Any, salt: bytes, before: Any = None) -> Any:
+    def moving(cfg: Any, salt: bytes, before: Any = None, errors: Any = None) -> Any:
         calls["n"] += 1
         if calls["n"] == 2:  # between the two reads, a job writes
             _sql(db, "INSERT INTO calendar (pid, title) VALUES (1, 'x')")
-        return real(cfg, salt, before=before)
+        return real(cfg, salt, before=before, errors=errors)
 
     monkeypatch.setattr(verify_run, "_read_database", moving)
     assert _recheck(contract, first).outcome == "UNCERTAIN"
+    assert calls["n"] == 2
 
 
 def test_a_saved_state_round_trips(tmp_path: Path, due_now: None) -> None:
@@ -701,11 +723,11 @@ def _moving(
     real = verify_run._read_database
     calls = {"n": 0}
 
-    def read(cfg: Any, salt: bytes, before: Any = None) -> Any:
+    def read(cfg: Any, salt: bytes, before: Any = None, errors: Any = None) -> Any:
         calls["n"] += 1
         if writes.get(calls["n"]) or writes.get(0):
             _sql(db, *(writes.get(calls["n"]) or writes[0]))
-        return real(cfg, salt, before=before)
+        return real(cfg, salt, before=before, errors=errors)
 
     monkeypatch.setattr(verify_run, "_read_database", read)
     return calls
@@ -938,3 +960,183 @@ def test_a_wrong_ledger_says_nothing_was_held(tmp_path: Path, due_now: None) -> 
         "re-resolved" in late.reasons[-1]
         and "hold this write by hand" in late.reasons[-1]
     )
+
+
+# -- review #1670, round 2 (reported by yunusarda-sudo in #1690 and #1692) ------
+
+
+def test_a_later_write_whose_frame_was_not_judged_leaves_the_earlier_uncertain(
+    tmp_path: Path, due_now: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A later write whose own frame wasn't judged has no window, so its rows
+    # aren't excused. They may be its own change, not the earlier write's
+    # harm: the earlier write is UNCERTAIN for review, never REFUTED by them
+    # and never left at its provisional CONFIRMED.
+    from openadapt_flow import verify_run
+
+    contract, db, first = _first(tmp_path)
+    second = _save(contract, db, 3)
+    assert second.verified and second.recheck is not None
+    assert _recheck(contract, first, excused_by=[second]).outcome == "CONFIRMED"
+    monkeypatch.setattr(verify_run, "_later_window", lambda state: None)
+    late = _recheck(contract, first, excused_by=[second])
+    assert late.outcome == "UNCERTAIN", late.reasons
+    assert "frame was not judged" in late.reasons[0]
+
+
+def test_without_an_unjudged_later_write_a_late_change_still_refutes(
+    tmp_path: Path, due_now: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openadapt_flow import verify_run
+
+    contract, db, first = _first(tmp_path)
+    monkeypatch.setattr(verify_run, "_later_window", lambda state: None)
+    _sql(db, "INSERT INTO calendar (pid, title) VALUES (2, 'New Patient')")
+    assert _recheck(contract, first).outcome == "REFUTED"
+
+
+def test_an_unvalidated_saved_state_does_not_re_resolve_a_ledger_attempt(
+    tmp_path: Path, due_now: None
+) -> None:
+    # A saved state that fails validation (here: other params) could name
+    # another write's attempt by its correlation_id; it re-resolves nothing.
+    contract, db, result = _keyed(tmp_path, "k-safe")
+    assert result.recheck is not None and result.recheck.path is not None
+    wrong = {"wrong": "params"}
+    saved = RecheckState.load(result.recheck.path, params=wrong)
+    late = recheck(contract, saved, params=wrong, actor=BOT)
+    assert late.outcome == "UNCERTAIN"
+    assert "the saved recheck state failed validation" in late.reasons[-1]
+    assert "hold this write by hand" in late.reasons[-1]
+    from openadapt_flow.write_ledger import default_ledger
+
+    attempt = default_ledger().latest(result.write_key)
+    assert attempt is not None and attempt.resolved.get("outcome") == "CONFIRMED"
+
+
+def test_a_write_result_with_wrong_params_is_still_held_in_the_ledger(
+    tmp_path: Path, due_now: None
+) -> None:
+    # A WriteResult names its own attempt, so an UNCERTAIN recheck still
+    # re-resolves it: a retry is never handed the earlier CONFIRMED.
+    contract, db, result = _keyed(tmp_path, "k-own")
+    late = recheck(contract, result, params={"wrong": "params"}, actor=BOT)
+    assert late.outcome == "UNCERTAIN"
+    assert not any("re-resolved" in r for r in late.reasons)
+    with pytest.raises(verifier.WriteBlocked) as raised:
+        begin_write(contract, _params(2), actor=BOT, write_key="k-own")
+    assert not isinstance(raised.value, verifier.AlreadyWritten)
+
+
+# -- review #1670: owed rechecks in the ledger, call faults, a held REFUTED ----
+
+
+def test_a_recheck_owed_is_in_the_ledger_until_a_recheck_confirms_it(
+    tmp_path: Path, due_now: None
+) -> None:
+    from openadapt_flow.write_ledger import default_ledger
+
+    contract, _, result = _keyed(tmp_path, "k-owed")
+    owed = dict(default_ledger().rechecks_owed())
+    assert owed[result.write_key].recheck_owed == result.recheck_due_at
+    with pytest.raises(verifier.AlreadyWritten) as raised:
+        begin_write(contract, _params(2), actor=BOT, write_key="k-owed")
+    assert raised.value.result["provisional"] is True
+
+    assert _recheck(contract, result).outcome == "CONFIRMED"
+    assert default_ledger().rechecks_owed() == []
+    with pytest.raises(verifier.AlreadyWritten) as raised:
+        begin_write(contract, _params(2), actor=BOT, write_key="k-owed")
+    earlier = raised.value.result
+    assert earlier["outcome"] == "CONFIRMED"
+    assert earlier["provisional"] is False and earlier["recheck_due_at"] is None
+    assert earlier["rechecked_at"]
+
+
+def test_an_owed_recheck_outlives_the_repeat_window_and_a_restart(
+    tmp_path: Path, due_now: None
+) -> None:
+    # No write key: past the repeat window a retry of the same values would
+    # start a new attempt and hide the owed recheck. It is handed the
+    # provisional result instead until the recheck settles it.
+    from openadapt_flow.write_ledger import FileLedger, Ledger
+
+    def ledger() -> Ledger:  # a fresh one each time, as after a restart
+        return Ledger(FileLedger(tmp_path / "ledger"), repeat_s=0)
+
+    db = _db(tmp_path)
+    contract = Contract.from_dict(_doc(db, recheck_after_s=3600))
+    before = begin_write(contract, _params(2), actor=BOT, ledger=ledger())
+    _sql(db, *_save_sql(2))
+    result = verify_write(before)
+    assert result.verified and result.provisional, result.reasons
+    for _ in range(2):
+        with pytest.raises(verifier.AlreadyWritten) as raised:
+            begin_write(contract, _params(2), actor=BOT, ledger=ledger())
+        assert raised.value.result["provisional"] is True
+    [(key, owed)] = ledger().rechecks_owed()
+    assert owed.recheck_owed == result.recheck_due_at
+    assert ledger().find_attempt(owed.attempt_id) == (key, owed)
+
+    assert _recheck(contract, result).outcome == "CONFIRMED"
+    assert ledger().rechecks_owed() == []
+    # Settled: the same values may be written again.
+    begin_write(contract, _params(2), actor=BOT, ledger=ledger())
+
+
+def test_a_confirming_recheck_from_a_saved_state_settles_the_owed_recheck(
+    tmp_path: Path, due_now: None
+) -> None:
+    from openadapt_flow.write_ledger import default_ledger
+
+    contract, _, result = _keyed(tmp_path, "k-owed-saved")
+    assert result.recheck is not None and result.recheck.path is not None
+    saved = RecheckState.load(result.recheck.path, params=_params(2))
+    assert _recheck(contract, saved).outcome == "CONFIRMED"
+    assert default_ledger().rechecks_owed() == []
+
+
+def test_a_refuting_recheck_settles_the_owed_recheck_and_holds_the_write(
+    tmp_path: Path, due_now: None
+) -> None:
+    from openadapt_flow.write_ledger import default_ledger
+
+    contract, db, result = _keyed(tmp_path, "k-owed-ref")
+    _sql(db, "INSERT INTO calendar (pid, title) VALUES (2, 'New Patient')")
+    assert _recheck(contract, result).outcome == "REFUTED"
+    led = default_ledger()
+    assert led.rechecks_owed() == []
+    assert result.write_key in dict(led.unresolved())
+
+
+def test_a_recheck_call_with_other_params_or_actor_says_the_call_was_wrong(
+    tmp_path: Path, due_now: None
+) -> None:
+    contract, _, first = _first(tmp_path)
+    for late in (
+        _recheck(contract, first, n=7),
+        recheck(
+            contract, first, params=_params(2), actor=Actor("agent", "someone-else")
+        ),
+    ):
+        assert late.outcome == "UNCERTAIN"
+        assert "the recheck call doesn't match the write" in late.reasons[0]
+        assert "says nothing about the write itself" in late.reasons[0]
+
+
+def test_a_later_uncertain_recheck_does_not_replace_a_held_refuted(
+    tmp_path: Path, due_now: None
+) -> None:
+    from openadapt_flow.write_ledger import default_ledger
+
+    contract, db, result = _keyed(tmp_path, "k-keep")
+    _sql(db, "INSERT INTO calendar (pid, title) VALUES (2, 'New Patient')")
+    assert _recheck(contract, result).outcome == "REFUTED"
+    db.unlink()  # a second recheck can't read the database: UNCERTAIN
+    late = _recheck(contract, result)
+    assert late.outcome == "UNCERTAIN"
+    assert "already holds this write as REFUTED" in late.reasons[-1]
+    attempt = default_ledger().latest(result.write_key)
+    assert attempt is not None and attempt.resolved["outcome"] == "REFUTED"
+    with pytest.raises(verifier.WriteHeld):
+        begin_write(contract, _params(2), actor=BOT, write_key="k-keep")

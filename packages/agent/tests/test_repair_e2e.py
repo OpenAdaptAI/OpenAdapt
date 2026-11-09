@@ -75,7 +75,9 @@ class ReplayEngine:
     def __init__(self, tmp: Path, desk: RepairDesk, bundle: Path, held: HeldPage) -> None:
         self.tmp, self.desk, self.bundle, self.held = tmp, desk, bundle, held
 
-    def execute(self, entry, run_id, inputs, raw) -> EngineResult:
+    def execute(
+        self, entry, run_id, inputs, raw, *, admitted_bundle_sha256=None
+    ) -> EngineResult:
         bundle = self.desk.active_bundle(entry.name, self.bundle)
         run_dir = self.tmp / "runs" / run_id
         app = fx.DialogApp()
@@ -95,7 +97,33 @@ class ReplayEngine:
         return None
 
 
-def test_halt_teach_approve_replay(tmp_path: Path) -> None:
+def _teach_authority(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """A person on a real approver roster signs that an agent may repair it."""
+
+    from openadapt_flow.teach_authorization_fixture import LocalAuthorizer
+
+    keys = tmp_path / "keys"
+    person = LocalAuthorizer(keys, "clinic-lead")
+    statement = person.issue(
+        tmp_path / "teach-authorization",
+        {
+            # The program's own workflow name, which approval checks.
+            "task": {"task_id": fx.WORKFLOW_NAME, "summary": "Repair the save step"},
+            "purposes": ["repair"],
+            "origins": ["http://127.0.0.1:9"],
+            "writes": {
+                "record_kind": "encounter",
+                "identity": {"type": {"value": "encounter"}},
+            },
+        },
+    )
+    # Approval checks it again against the roster the operator pins.
+    monkeypatch.setenv("OPENADAPT_JIT_KEY_DIR", str(keys))
+    monkeypatch.setenv("OPENADAPT_APPROVER_ROOT", person.root)
+    return person.authority(statement)
+
+
+def test_halt_teach_approve_replay(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     bundle = fx.base_bundle(tmp_path / "bundle")
     access = tmp_path / "access.json"
     set_access(access, workflow=WORKFLOW, mode="scrubbed_only", enabled_by="admin")
@@ -106,6 +134,7 @@ def test_halt_teach_approve_replay(tmp_path: Path) -> None:
         demonstrator=screen,
         scrubber_factory=Scrubber,
         agent_id=AGENT,
+        teach_authorization=_teach_authority(tmp_path, monkeypatch),
     )
     bridge = AgentBridge(
         None, RunnerConfig(runs_dir=tmp_path / "runs"), allow_run=True, repair_desk=desk
@@ -173,6 +202,7 @@ def test_halt_teach_approve_replay(tmp_path: Path) -> None:
     assert provenance.screens_shared == 1
     assert provenance.screens_scrubbed is True
     assert provenance.scrub_evidence.provider == "test"
+    assert provenance.teach_authorization["authorizer"] == "clinic-lead"
 
     # 4. The agent can't review or approve its own repair, even as a "human".
     with pytest.raises(RepairLifecycleError):

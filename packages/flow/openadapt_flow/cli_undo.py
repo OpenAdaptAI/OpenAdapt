@@ -59,12 +59,14 @@ def register(
             "Declared undo steps after a stop: declare, list what a stopped "
             "run offers, approve (a person), and run once with verification"
         ),
+        allow_abbrev=False,
     )
     verbs = parser.add_subparsers(dest="undo_cmd", required=True)
 
     p = verbs.add_parser(
         "declare",
         help="Add a compensating step for one step's effect to a bundle",
+        allow_abbrev=False,
     )
     p.add_argument("bundle", help="Workflow bundle directory to add the undo to")
     p.add_argument("--id", required=True, dest="undo_id", help="Undo id")
@@ -97,6 +99,7 @@ def register(
             "Find an undo for each saving step, verify it on a declared test "
             "copy, and write the verified ones as proposals"
         ),
+        allow_abbrev=False,
     )
     p.add_argument("bundle", help="Workflow bundle directory")
     p.add_argument(
@@ -147,12 +150,15 @@ def register(
     p = verbs.add_parser(
         "accept",
         help="A person approves a proposed undo once (interactive terminal only)",
+        allow_abbrev=False,
     )
     p.add_argument("bundle", help="Workflow bundle directory")
     p.add_argument("--undo", required=True, dest="undo_id", help="Undo id")
     p.set_defaults(func=_cmd_undo_accept)
 
-    p = verbs.add_parser("list", help="Show the undos a stopped run offers")
+    p = verbs.add_parser(
+        "list", help="Show the undos a stopped run offers", allow_abbrev=False
+    )
     p.add_argument("run_dir", help="The stopped run's directory")
     p.add_argument("--bundle", required=True, help="The run's bundle directory")
     p.add_argument("--json", action="store_true", help="Print JSON")
@@ -161,6 +167,7 @@ def register(
     p = verbs.add_parser(
         "approve",
         help="A person approves one offered undo (interactive terminal only)",
+        allow_abbrev=False,
     )
     p.add_argument("run_dir", help="The stopped run's directory")
     p.add_argument("--bundle", required=True, help="The run's bundle directory")
@@ -171,6 +178,7 @@ def register(
     p = verbs.add_parser(
         "run",
         help="Run one approved undo once and check it in the system of record",
+        allow_abbrev=False,
     )
     p.add_argument("run_dir", help="The stopped run's directory")
     p.add_argument("--bundle", required=True, help="The run's bundle directory")
@@ -178,7 +186,7 @@ def register(
     p.add_argument(
         "--url",
         default=None,
-        help="URL of the target app (default: the bundled MockMed demo app)",
+        help="URL of the target app (required unless the config names one)",
     )
     p.add_argument("--headed", action="store_true", help="Run the browser headed")
     for add in add_run_flags:
@@ -535,9 +543,8 @@ def _cmd_undo_accept(args: argparse.Namespace) -> int:
 def _cmd_undo_run(args: argparse.Namespace) -> int:
     run_dir = Path(args.run_dir)
     workflow = Workflow.load(args.bundle)
-    # Without a target, replay would start the bundled MockMed demo app: the
-    # undo would act on the demo, leave the real record alone and use up the
-    # approval. Refuse before claiming it.
+    # Without a target, replay has nowhere to act: the undo would use up the
+    # approval and change nothing. Refuse before claiming it.
     problem = args._undo_target_problem(args, workflow)
     if problem:
         print(

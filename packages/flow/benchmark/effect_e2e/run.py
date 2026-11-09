@@ -1,7 +1,7 @@
 """End-to-end silent-wrong-effect (SWER) harness through the REAL replayer.
 
 This is the genuinely independent, end-to-end version of the silent-wrong-action
-result. The older ``openadapt_flow.benchmark.silent_wrong_action`` is
+result. The older ``benchmark.harness.silent_wrong_action`` is
 *definitional*: it issues raw ``requests.post`` (bypassing the
 :class:`~openadapt_flow.runtime.replayer.Replayer`), and its effect verifier and
 ground-truth judge both read the SAME in-process ``FaultDB`` object while the
@@ -71,9 +71,10 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 import requests
-
 from benchmark.effect_e2e import ground_truth
 from benchmark.effect_e2e.record_service import (
+    BANNER_READ_CONTRACT,
+    ENCOUNTERS_READ_CONTRACT,
     TARGET_PATIENT,
     TARGET_TYPE,
     serve,
@@ -325,8 +326,7 @@ def _build_verifier(arm: str, base_url: str, db_path: Path) -> Any:
         # The app's self-reported banner: the weak, vision-style oracle.
         return RestRecordVerifier(
             base_url,
-            records_path="/api/ui/last-save",
-            records_key="records",
+            **BANNER_READ_CONTRACT,
             timeout_s=EFFECT_TIMEOUT_S,
             poll_interval_s=0.02,
         )
@@ -334,8 +334,7 @@ def _build_verifier(arm: str, base_url: str, db_path: Path) -> Any:
         # Out-of-band record oracle over the encounters surface only.
         return RestRecordVerifier(
             base_url,
-            records_path="/api/records",
-            records_key="records",
+            **ENCOUNTERS_READ_CONTRACT,
             timeout_s=EFFECT_TIMEOUT_S,
             poll_interval_s=0.02,
         )
@@ -629,7 +628,7 @@ def render_markdown(results: dict[str, Any]) -> str:
 
 Date: {date}. This is the genuinely independent, end-to-end measurement of the
 silent-wrong-effect (SWER) result. Unlike the definitional
-`openadapt_flow.benchmark.silent_wrong_action` (raw `requests.post`; effect
+`benchmark.harness.silent_wrong_action` (raw `requests.post`; effect
 verifier and ground truth read the SAME in-process object; the effect contract
 restates the ground-truth definition -- so its `0/90` is circular by
 construction), every write below goes through the ACTUAL governed replay path
@@ -774,7 +773,7 @@ The claims are pinned in CI by `tests/test_effect_e2e_harness.py`.
 
 def render_chart(results: dict[str, Any], out_png: Path) -> Path:
     """Bar chart: silent-wrong-effect rate per arm (large -> small -> zero)."""
-    from openadapt_flow.benchmark.chart_fonts import configure_bundled_font
+    from benchmark.harness.chart_fonts import configure_bundled_font
 
     plt = configure_bundled_font()
     m = results["metrics"]["per_arm"]
@@ -827,13 +826,13 @@ def write_outputs(results: dict[str, Any], out_dir: Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "results.json").write_text(json.dumps(results, indent=2) + "\n")
     (out_dir / "EFFECT_E2E.md").write_text(render_markdown(results))
-    from openadapt_flow.benchmark.chart_fonts import safe_render
+    from benchmark.harness.chart_fonts import safe_render
 
     safe_render(render_chart, results, out_dir / "effect_e2e.png")
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--n", type=int, default=DEFAULT_N, help="trials per fault/arm")
     parser.add_argument("--out", default=str(DEFAULT_OUT_DIR), help="output directory")
     parser.add_argument(

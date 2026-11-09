@@ -386,7 +386,7 @@ def test_default_mockmed_replay_warns_for_arbitrary_phi_bundle(
     monkeypatch.setattr(cli, "_build_and_run_replayer", fake_run)
 
     args = cli.build_parser().parse_args(
-        ["replay", str(bundle), "--run-dir", str(run_dir)]
+        ["replay", str(bundle), "--demo-app", "--run-dir", str(run_dir)]
     )
 
     with pytest.warns(PlaintextPHIWarning):

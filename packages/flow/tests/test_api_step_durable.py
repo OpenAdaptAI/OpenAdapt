@@ -42,6 +42,7 @@ from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
 from openadapt_flow.runtime.durable.program_checkpoint import bundle_version
 from openadapt_flow.runtime.effects import RestRecordVerifier
 from openadapt_flow.runtime.replayer import Replayer
+from tests._rest_read_contract_fixtures import mockmed_rest_read_kwargs
 from tests.test_api_tier_web_form import (
     TARGET,
     EnterWritesBackend,
@@ -122,7 +123,7 @@ class SecondReadFails(RestRecordVerifier):
     """Reads the record check's pre-state once, then can't reach it."""
 
     def __init__(self, base_url: str) -> None:
-        super().__init__(base_url)
+        super().__init__(base_url, **mockmed_rest_read_kwargs())
         self.reads = 0
 
     def capture_pre_state(self, context: Any = None):
@@ -148,7 +149,10 @@ class Fixture:
         return Replayer(
             self.backend,
             vision=FakeVision(),
-            effect_verifier=verifier or RestRecordVerifier(verifier_url or self.url),
+            effect_verifier=verifier
+            or RestRecordVerifier(
+                verifier_url or self.url, **mockmed_rest_read_kwargs()
+            ),
             web_form_actuator=actuator,
             poll_interval_s=0.01,
             durable=True,
@@ -379,3 +383,76 @@ def test_an_identity_checked_save_with_a_right_record_contract_runs_durably(tmp_
         assert [c.actuation for c in fx.store().checkpoints()] == ["api_folded", "api"]
     finally:
         fx.stop()
+
+
+class Crash(BaseException):
+    """The process dies: nothing after this point runs in this leg."""
+
+
+class WritesOnceThenDies(ScriptedActuator):
+    """The span's first write lands, then the process dies before the save.
+
+    Prepares and sends like the live-session actuator, so the replayer writes
+    the span's write-ahead checkpoint between the two.
+    """
+
+    def prepare(self, binding, params):
+        return object()
+
+    def send(self, binding, prepared):
+        return self.actuate(binding, {})
+
+    def actuate(self, binding, params):
+        self.calls += 1
+        requests.post(
+            f"{self.sor_url}/api/encounter",
+            json={**TARGET, "note": "write 1"},
+            timeout=5,
+        )
+        raise Crash()
+
+
+def test_a_crash_between_the_first_write_and_the_save_is_reconciled_not_resent(fx):
+    first = WritesOnceThenDies(fx.url, ActuationStatus.ACTUATED)
+    with pytest.raises(Crash):
+        fx.run(first)
+    assert first.calls == 1 and [r["note"] for r in fx.records()] == ["write 1"]
+
+    # The write-ahead checkpoint was persisted before the first request: the
+    # folded steps are done and the save is paused as delivery-uncertain.
+    store = fx.store()
+    assert [c.actuation for c in store.checkpoints()] == ["api_folded"]
+    pending = store.read_pending()
+    assert pending is not None and pending.step_id == "step_001"
+    assert pending.resume_from_index == 1 and pending.delivery_uncertainty is not None
+    assert "began sending its requests" in pending.reason
+
+    # An ordinary resume can't repeat a delivery that may have landed.
+    second = ScriptedActuator(fx.url, ActuationStatus.ACTUATED)
+    with pytest.raises(ApprovalRequired, match="may already have actuated"):
+        resume(fx.run_dir, fx.replayer(second), approval=fx.approval())
+    # Nor can one that authorizes an uncertain retry: nothing is sent again.
+    resumed = resume(
+        fx.run_dir,
+        fx.replayer(second),
+        approval=fx.approval(authorize_uncertain_retry=True),
+    )
+    assert second.calls == 0 and fx.backend.actions == []
+    assert (
+        resumed.success is False and "never sends it again" in resumed.results[-1].error
+    )
+    assert [r["note"] for r in fx.records()] == ["write 1"]
+
+
+class PreparesThenSaves(ScriptedActuator):
+    def prepare(self, binding, params):
+        return object()
+
+    def send(self, binding, prepared):
+        return self.actuate(binding, {})
+
+
+def test_a_finished_durable_span_leaves_no_provisional_pause(fx):
+    report = fx.run(PreparesThenSaves(fx.url, ActuationStatus.ACTUATED))
+    assert report.success is True
+    assert fx.store().read_pending() is None

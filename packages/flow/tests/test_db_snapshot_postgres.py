@@ -36,6 +36,7 @@ from openadapt_flow.runtime.effects.db_snapshot import (
     is_default,
     take_snapshot,
 )
+from tests.test_verifier_recheck import due_now as due_now
 
 # -- rules: no database ---------------------------------------------------------
 
@@ -117,6 +118,50 @@ def test_a_type_without_a_rule_is_refused(oid: int, message: str) -> None:
 )
 def test_a_default_is_read_only_from_a_literal(expr: Any, stored: Any) -> None:
     assert db_snapshot._default_text(expr, "postgresql") == stored
+
+
+def test_pg_definitions_refuses_table_name_collision() -> None:
+    class FakeSession:
+        def rows(self, sql: str) -> list[tuple[Any, ...]]:
+            if "pg_class" in sql and "pg_namespace" in sql and "attrelid" not in sql:
+                # Two tables that map to the same name "s.t":
+                # 1) table "s.t" in schema "public" (default) -> name "s.t"
+                # 2) table "t" in schema "s" -> name "s.t"
+                return [
+                    (101, "public", "s.t", "r", "p", False, False, True, False),
+                    (102, "s", "t", "r", "p", False, False, True, False),
+                ]
+            return []
+
+    with pytest.raises(SnapshotError, match=r"table name collision: 's\.t'"):
+        db_snapshot._pg_definitions(FakeSession(), ["public", "s"], "public")
+
+
+def test_pg_sequences_refuses_sequence_name_collision() -> None:
+    class FakeSession:
+        def rows(self, sql: str) -> list[tuple[Any, ...]]:
+            if "pg_sequence" in sql:
+                return [
+                    (
+                        "public",
+                        "s.q",
+                        1,
+                        1,
+                        1,
+                        1000,
+                        False,
+                        "bigint",
+                        True,
+                        None,
+                        None,
+                        None,
+                    ),
+                    ("s", "q", 1, 1, 1, 1000, False, "bigint", True, None, None, None),
+                ]
+            return []
+
+    with pytest.raises(SnapshotError, match=r"sequence name collision: 's\.q'"):
+        db_snapshot._pg_sequences(FakeSession(), ["public", "s"], "public")
 
 
 def test_a_numeric_without_scale_keeps_it_and_equals_its_value() -> None:
@@ -632,6 +677,25 @@ def test_a_change_to_types_rules_or_views_shows(pg: Pg, change: str) -> None:
 
 
 @live
+def test_disabling_a_rule_shows(pg: Pg) -> None:
+    pg.sql("CREATE RULE r AS ON INSERT TO pairs DO INSTEAD NOTHING")
+    a = pg.snap()
+    pg.sql("ALTER TABLE pairs DISABLE RULE r")
+    assert "(database code)" in diff(a, pg.snap(before=a), key=KEY)
+
+
+@live
+def test_a_unique_index_made_or_dropped_shows(pg: Pg) -> None:
+    a = pg.snap()
+    # pairs holds a duplicate a = 1, so the index covers only a = 2.
+    pg.sql("CREATE UNIQUE INDEX pairs_a ON pairs (a) WHERE a = 2")
+    b = pg.snap(before=a)
+    assert "(database code)" in diff(a, b, key=KEY)
+    pg.sql("DROP INDEX pairs_a")
+    assert "(database code)" in diff(b, pg.snap(before=b), key=KEY)
+
+
+@live
 def test_a_column_default_is_read_from_the_catalog(pg: Pg) -> None:
     pg.sql(
         "CREATE TABLE d (id serial PRIMARY KEY, s varchar(9) DEFAULT 'open', "
@@ -652,7 +716,7 @@ def test_a_column_default_is_read_from_the_catalog(pg: Pg) -> None:
 
 @live
 def test_the_frame_refutes_a_late_write_and_an_extra_record_on_postgresql(
-    pg: Pg, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    pg: Pg, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, due_now: None
 ) -> None:
     from psycopg2.extensions import parse_dsn
 
@@ -668,7 +732,6 @@ def test_the_frame_refutes_a_late_write_and_an_extra_record_on_postgresql(
     monkeypatch.setenv("OPENADAPT_LEDGER_DIR", str(tmp_path / "ledger"))
     monkeypatch.setenv("OPENADAPT_SEAL_HOME", str(tmp_path / "seal"))
     monkeypatch.setattr(verifier, "USED_DIR", tmp_path / "used")
-    monkeypatch.setattr(verifier, "seconds_until", lambda due: 0.0)
     monkeypatch.setenv("PG_READER_PW", pg.password)
     pg.sql(
         "CREATE TABLE contact (id serial PRIMARY KEY, name text, email text)",

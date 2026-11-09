@@ -8,7 +8,7 @@ reproducibly and for $0:
     inject drift -> HALT -> teach the fix -> re-run clean
 
 Unlike the existing OpenEMR *benchmark*
-(:mod:`openadapt_flow.benchmark.openemr_benchmark`), which measures the compiled
+(:mod:`benchmark.harness.openemr_benchmark`), which measures the compiled
 arm vs. a paid agent arm on the LIVE public demo and is explicitly NOT
 CI-reproducible, this harness proves the pipeline *wiring* end to end on a
 deterministic, offline fixture (the in-process MockMed ``fault_server`` as the
@@ -57,9 +57,11 @@ from openadapt_flow.learning import (
     promoted_workflow,
     resolution_demonstration,
 )
-from openadapt_flow.learning.synth_stream import StructuralDiffInducer
+from openadapt_flow.learning.induce import StructuralDiffInducer
+from openadapt_flow.mockmed.fault_server import mockmed_rest_read_kwargs
 from openadapt_flow.mockmed.fault_server import serve as fault_serve
 from openadapt_flow.runtime.effects import RestRecordVerifier
+from openadapt_flow.runtime.effects.fhir import DEFAULT_OBSERVATION_PATHS
 from openadapt_flow.runtime.replayer import Replayer
 
 #: Distinct per-phase note values (unique so a pass proves parameter
@@ -231,7 +233,9 @@ def _replay(
         replayer = Replayer(
             backend,
             vision=vision,
-            effect_verifier=RestRecordVerifier(url.rstrip("/")),
+            effect_verifier=RestRecordVerifier(
+                url.rstrip("/"), **mockmed_rest_read_kwargs()
+            ),
             poll_interval_s=0.01,
         )
         report = replayer.run(
@@ -272,7 +276,12 @@ def _live_probe(
     from openadapt_flow.runtime.effects import FhirEffectVerifier
 
     token = os.environ.get("OPENEMR_FHIR_TOKEN")
-    verifier = FhirEffectVerifier(base.rstrip("/"), access_token=token)
+    verifier = FhirEffectVerifier(
+        base.rstrip("/"),
+        resource_type="Observation",
+        field_paths=dict(DEFAULT_OBSERVATION_PATHS),
+        access_token=token,
+    )
     try:
         state = verifier.capture_pre_state()
         reachable = bool(state.reachable)

@@ -1,0 +1,23 @@
+task,arm,run_id,item,attempt,fault,reported_success,readback,outcome,model_calls,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,cost_usd,item_s,wall_s,approvals_asked,host_load_1m,timed,detail
+mockmed,program,2026-10-25-rb,21,1,none,True,correct,correct,0,0,0,0,0,0.0,5.844,9.154,0,78.96,False,VERIFIED
+mockmed,program,2026-10-25-rb,22,1,none,True,correct,correct,0,0,0,0,0,0.0,4.248,8.633,0,69.81,False,VERIFIED
+mockmed,program,2026-10-25-rb,23,1,none,True,correct,correct,0,0,0,0,0,0.0,5.64,9.811,0,69.08,False,VERIFIED
+mockmed,program,2026-10-25-rb,24,1,none,True,correct,correct,0,0,0,0,0,0.0,9.478,12.633,0,64.63,False,VERIFIED
+mockmed,program,2026-10-25-rb,25,1,none,True,correct,correct,0,0,0,0,0,0.0,4.922,8.121,0,61.08,False,VERIFIED
+mockmed,program,2026-10-25-rb,26,1,none,True,correct,correct,0,0,0,0,0,0.0,3.798,6.56,0,56.83,False,VERIFIED
+mockmed,program,2026-10-25-rb,27,1,none,True,correct,correct,0,0,0,0,0,0.0,3.124,5.7,0,55.4,False,VERIFIED
+mockmed,program,2026-10-25-rb,28,1,none,True,correct,correct,0,0,0,0,0,0.0,3.375,6.02,0,52.09,False,VERIFIED
+mockmed,program,2026-10-25-rb,29,1,none,True,correct,correct,0,0,0,0,0,0.0,3.141,5.874,0,51.46,False,VERIFIED
+mockmed,program,2026-10-25-rb,30,1,optimistic,False,missing,safe_stop,0,0,0,0,0,0.0,8.361,11.8,0,49.42,False,"System-of-record effect verification HALTED step 'step_005' (click 'Save Encounter'): record_written refuted against the rest system of record and could not be reconciled (escalated) — [rest] record_written: 0 records match the target selector, expected 1 (missing / phantom / rejected write -- the s"
+mockmed,program,2026-10-25-rb,30,2,optimistic,False,missing,safe_stop,0,0,0,0,0,0.0,9.378,12.177,0,43.57,False,"System-of-record effect verification HALTED step 'step_005' (click 'Save Encounter'): record_written refuted against the rest system of record and could not be reconciled (escalated) — [rest] record_written: 0 records match the target selector, expected 1 (missing / phantom / rejected write -- the s"
+mockmed,program,2026-10-25-rb,30,3,optimistic,False,missing,safe_stop,0,0,0,0,0,0.0,11.355,14.586,0,38.6,False,"System-of-record effect verification HALTED step 'step_005' (click 'Save Encounter'): record_written refuted against the rest system of record and could not be reconciled (escalated) — [rest] record_written: 0 records match the target selector, expected 1 (missing / phantom / rejected write -- the s"
+mockmed,program,2026-10-25-rb,31,1,none,True,correct,correct,0,0,0,0,0,0.0,4.966,8.141,0,42.9,False,VERIFIED
+mockmed,program,2026-10-25-rb,32,1,none,True,correct,correct,0,0,0,0,0,0.0,7.771,11.894,0,44.83,False,VERIFIED
+mockmed,program,2026-10-25-rb,33,1,none,True,correct,correct,0,0,0,0,0,0.0,7.175,11.827,0,48.56,False,VERIFIED
+mockmed,program,2026-10-25-rb,34,1,none,True,correct,correct,0,0,0,0,0,0.0,4.584,16.139,0,76.77,False,VERIFIED
+mockmed,program,2026-10-25-rb,35,1,none,True,correct,correct,0,0,0,0,0,0.0,8.386,17.2,0,89.21,False,VERIFIED
+mockmed,program,2026-10-25-rb,36,1,none,True,correct,correct,0,0,0,0,0,0.0,7.912,14.521,0,111.13,False,VERIFIED
+mockmed,program,2026-10-25-rb,37,1,none,True,correct,correct,0,0,0,0,0,0.0,5.923,18.042,0,110.44,False,VERIFIED
+mockmed,program,2026-10-25-rb,38,1,none,True,correct,correct,0,0,0,0,0,0.0,10.188,17.077,0,140.76,False,VERIFIED
+mockmed,program,2026-10-25-rb,39,1,none,True,correct,correct,0,0,0,0,0,0.0,4.909,11.099,0,127.23,False,VERIFIED
+mockmed,program,2026-10-25-rb,40,1,wrong_record,False,wrong,flagged_wrong,0,0,0,0,0,0.0,10.542,16.609,0,137.54,False,"System-of-record effect verification HALTED step 'step_005' (click 'Save Encounter'): record_written refuted against the rest system of record and could not be reconciled (escalated) — [rest] record_written: 0 records match the target selector, expected 1 (missing / phantom / rejected write -- the s"
