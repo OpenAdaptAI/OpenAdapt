@@ -15,7 +15,10 @@ import pytest
 from PIL import Image, ImageDraw, ImageFont
 
 import openadapt_flow.vision as vision
-from openadapt_flow.approval_mode.form_state import screen_text_state
+from openadapt_flow.approval_mode.form_state import (
+    approval_window_regions,
+    screen_text_state,
+)
 from openadapt_flow.backends.windows_backend import WindowsBackend
 from openadapt_flow.runtime.replayer import Replayer
 
@@ -100,23 +103,15 @@ def test_a_window_that_reads_nothing_is_unreadable_not_unchanged():
     assert screen_text_state(vision, blank.getvalue(), [WINDOW]) is None
 
 
+_RESULTS = [
+    SimpleNamespace(step_id="s1", resolution=SimpleNamespace(point=(40, 50))),
+    SimpleNamespace(step_id="s2", resolution=None),
+    SimpleNamespace(step_id="save", resolution=SimpleNamespace(point=(9, 9))),
+]
+
+
 def _regions(backend, frame=None, save_step="save"):
-    replayer = SimpleNamespace(
-        backend=backend,
-        _approval_form_step_id=save_step,
-        _approval_report=SimpleNamespace(
-            results=[
-                SimpleNamespace(
-                    step_id="s1", resolution=SimpleNamespace(point=(40, 50))
-                ),
-                SimpleNamespace(step_id="s2", resolution=None),
-                SimpleNamespace(
-                    step_id=save_step, resolution=SimpleNamespace(point=(9, 9))
-                ),
-            ]
-        ),
-    )
-    return Replayer._approval_form_regions(replayer, frame or _frame())
+    return approval_window_regions(backend, frame or _frame(), save_step, _RESULTS)
 
 
 def test_the_replayer_reads_the_window_the_backend_names_without_the_save_step():
@@ -128,6 +123,27 @@ def test_the_replayer_reads_the_window_the_backend_names_without_the_save_step()
 
     assert _regions(SimpleNamespace(approval_form_region=region)) == [WINDOW]
     assert asked == [("save", [(40, 50)])]
+
+
+def test_the_replayer_reads_its_approval_form_in_the_window_without_the_save_step():
+    asked = []
+
+    def region(exclude_step, points):
+        asked.append((exclude_step, points))
+        return (-8, 0, 2000, 728)
+
+    frame = _frame()
+    replayer = SimpleNamespace(
+        backend=SimpleNamespace(approval_form_region=region),
+        vision=vision,
+        _web_form_form_state_set=False,
+        _approval_form_step_id="save",
+        _approval_report=SimpleNamespace(results=_RESULTS),
+    )
+    state = Replayer._approval_form_state(replayer, frame)
+    assert asked == [("save", [(40, 50)])]
+    assert state is not None
+    assert state == screen_text_state(vision, frame, [WINDOW])
 
 
 @pytest.mark.parametrize(

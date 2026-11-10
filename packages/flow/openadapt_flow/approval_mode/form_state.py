@@ -11,10 +11,11 @@ the pause halts the item before the save").
   Password fields contribute only whether they're empty.
 - Elsewhere it reads the text on the screen with the engine's local OCR,
   as a sorted list of words, so a cursor blink or hover doesn't count as a
-  change but a changed value does. When the run knows where the item's
-  fields are (the rows of the steps it has already resolved), only those
-  rows are read, so text elsewhere on the screen that changes by itself (a
-  clock in a taskbar, a notification) is not mistaken for an edited form.
+  change but a changed value does. When the backend names the app window the
+  item's verified steps were in (``approval_form_region``), only that window
+  is read, in reading order and with its frame in the digest, so text
+  elsewhere on the screen that changes by itself (a clock in a taskbar, a
+  notification) is not mistaken for an edited form.
 
 Only a digest leaves this module. The digest stays in the run directory; it
 never enters the report or anything sent to Cloud.
@@ -23,6 +24,7 @@ never enters the report or anything sent to Cloud.
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import re
 from typing import Any, Optional, Sequence
@@ -181,8 +183,55 @@ def capture_form_state(
     return screen_text_state(vision, frame_png, regions)
 
 
+def approval_window_regions(
+    backend: Any,
+    frame_png: Optional[bytes],
+    save_step: Optional[str],
+    results: Sequence[Any] = (),
+) -> Optional[list[Region]]:
+    """The app window's part of the frame, for a screen-text form state.
+
+    A backend that knows the window this item's verified steps were in
+    (``approval_form_region``) bounds the read to that window, so the whole
+    form the person saw is read, and the clock or a notification outside it
+    is not. The save step is left out, so the approval request (taken before
+    the save resolves) and the recheck after the answer ask about the same
+    window; its frame is part of the digest, so a moved or resized window
+    halts the save. The earlier steps' points (``results``, the run's step
+    results so far) let a resumed run, which verified nothing in this process
+    yet, name the same window. None, and the whole screen is read, when the
+    backend cannot say. Never raises.
+    """
+
+    region_of = getattr(backend, "approval_form_region", None)
+    if not callable(region_of) or frame_png is None:
+        return None
+    try:
+        points = [
+            (int(prior.resolution.point[0]), int(prior.resolution.point[1]))
+            for prior in results
+            if prior.step_id != save_step and prior.resolution is not None
+        ]
+        region = region_of(save_step, points)
+        if region is None:
+            return None
+        from PIL import Image
+
+        with Image.open(io.BytesIO(frame_png)) as image:
+            width, height = image.size
+        x, y, w, h = (int(v) for v in region)
+    except Exception:  # noqa: BLE001 - no window means the whole screen
+        return None
+    left, top = max(0, x), max(0, y)
+    right, bottom = min(width, x + w), min(height, y + h)
+    if right <= left or bottom <= top:
+        return None
+    return [(left, top, right - left, bottom - top)]
+
+
 __all__ = [
     "FormState",
+    "approval_window_regions",
     "capture_form_state",
     "dom_form_state",
     "screen_text_state",
