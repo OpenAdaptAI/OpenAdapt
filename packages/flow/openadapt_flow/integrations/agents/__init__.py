@@ -308,6 +308,10 @@ async def _off_loop(
         try:
             raise _Cancelled(job.result()) from None
         except concurrent.futures.CancelledError:
+            if cancel_if_queued:
+                # The pool cancelled the queued job (e.g. on shutdown): discard
+                # the queued preflight rather than running it inline.
+                raise asyncio.CancelledError from None
             raise _Cancelled(fn(*args)) from None
 
 

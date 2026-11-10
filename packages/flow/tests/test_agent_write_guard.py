@@ -287,3 +287,59 @@ def test_a_cancelled_dispatched_write_with_absent_readback_stays_held(
     assert retry["verdict"] == "RECONCILIATION_REQUIRED"
     assert retry["not_sent_again"] is True
     assert portal.posts == 1 and portal.orders() == []
+
+
+def test_off_loop_pool_cancelled_preflight_does_not_rerun_inline() -> None:
+    import concurrent.futures
+    from unittest.mock import patch
+
+    from openadapt_flow.integrations.agents import _Cancelled, _off_loop
+
+    called: list[str] = []
+
+    def preflight() -> str:
+        called.append("ran")
+        return "value"
+
+    job: concurrent.futures.Future = concurrent.futures.Future()
+    job.cancel()
+
+    with (
+        patch.object(job, "cancel", return_value=False),
+        patch("openadapt_flow.integrations.agents._POOL.submit", return_value=job),
+    ):
+
+        async def cancel_preflight() -> None:
+            loop = asyncio.get_running_loop()
+            cur = asyncio.current_task()
+            assert cur is not None
+            loop.call_soon(cur.cancel)
+            with pytest.raises(asyncio.CancelledError):
+                await _off_loop(preflight, cancel_if_queued=True)
+
+        asyncio.run(cancel_preflight())
+
+    assert called == [], (
+        "preflight must not be rerun inline when the pool cancelled the job"
+    )
+
+    # In contrast, a required read-back (cancel_if_queued=False) still runs inline:
+    with (
+        patch.object(job, "cancel", return_value=False),
+        patch("openadapt_flow.integrations.agents._POOL.submit", return_value=job),
+    ):
+
+        async def cancel_readback() -> None:
+            loop = asyncio.get_running_loop()
+            cur = asyncio.current_task()
+            assert cur is not None
+            loop.call_soon(cur.cancel)
+            with pytest.raises(_Cancelled) as exc_info:
+                await _off_loop(preflight, cancel_if_queued=False)
+            assert exc_info.value.value == "value"
+
+        asyncio.run(cancel_readback())
+
+    assert called == ["ran"], (
+        "read-back must run inline to ensure verification never skips"
+    )
