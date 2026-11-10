@@ -323,3 +323,71 @@ def test_a_qualified_bundle_can_be_qualified_again():
     assert again.revision_digest() != first_digest
     assert again.last_certification is None
     assert sorted(c.id for c in again.cases) == sorted(c.id for c in first.cases)
+
+
+def test_effects_composite_key_checks_read_problems():
+    """composite_key given in effects must run composite_key_read_problems (#2172)."""
+    # 1. verifier filters by extra field (drops existing records) -> refuses
+    bad_cfg = {
+        "schema_version": "openadapt.verify/v1",
+        "app": {**APP, "reset": {"command": "true"}},
+        "verifier": {
+            "kind": "rest",
+            "base_url": "http://127.0.0.1:9300",
+            "records_path": "/api/patient?dept=cardio",
+            "records_key": "data",
+        },
+        "effects": [
+            {
+                "kind": "record_written",
+                "match": {"email": "a@example.com"},
+                "composite_key": {"email": "a@example.com", "dob": "1990-01-01"},
+            }
+        ],
+    }
+    with pytest.raises(QualifyConfigError, match="filtered by key fields only"):
+        parse_verify_config(bad_cfg, env={})
+
+    # 2. verifier has row limit without total/next paging path -> refuses
+    limited_cfg = {
+        "schema_version": "openadapt.verify/v1",
+        "app": {**APP, "reset": {"command": "true"}},
+        "verifier": {
+            "kind": "rest",
+            "base_url": "http://127.0.0.1:9300",
+            "records_path": "/api/patient?limit=100",
+            "records_key": "data",
+        },
+        "effects": [
+            {
+                "kind": "record_written",
+                "match": {"email": "a@example.com"},
+                "composite_key": {"email": "a@example.com", "dob": "1990-01-01"},
+            }
+        ],
+    }
+    with pytest.raises(QualifyConfigError, match="needs the whole read"):
+        parse_verify_config(limited_cfg, env={})
+
+    # 3. verifier with complete read covering key fields only -> accepted
+    good_cfg = {
+        "schema_version": "openadapt.verify/v1",
+        "app": {**APP, "reset": {"command": "true"}},
+        "verifier": {
+            "kind": "rest",
+            "base_url": "http://127.0.0.1:9300",
+            "records_path": "/api/patient",
+            "records_key": "data",
+        },
+        "effects": [
+            {
+                "kind": "record_written",
+                "match": {"email": "a@example.com"},
+                "composite_key": {"email": "a@example.com", "dob": "1990-01-01"},
+            }
+        ],
+    }
+    cfg = parse_verify_config(good_cfg, env={})
+    assert cfg.effects is not None
+    assert len(cfg.effects) == 1
+    assert set(cfg.effects[0].composite_key.keys()) == {"email", "dob"}
