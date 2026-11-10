@@ -140,7 +140,9 @@ def _stamp() -> str:
 
 def _write_json(path: Path, data: Any) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2, sort_keys=True, default=str) + "\n")
+    path.write_text(
+        json.dumps(data, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8"
+    )
     return path
 
 
@@ -628,7 +630,7 @@ class FirstRunCompiler:
         open_backend: Optional[Callable[[Any], Any]] = None,
         before_capture: Optional[Callable[[Any], None]] = None,
     ) -> "FirstRunCompiler":
-        spec = json.loads((Path(task_dir) / SPEC_FILE).read_text())
+        spec = json.loads((Path(task_dir) / SPEC_FILE).read_text(encoding="utf-8"))
         if spec.get("schema") != SPEC_SCHEMA:
             raise ValueError(f"{task_dir} is not a compiled agent task")
         task = spec["task"]
@@ -859,7 +861,9 @@ class FirstRunCompiler:
             render_contract,
         )
 
-        proposal = propose_effects(diff_snapshots(before, after), values)
+        proposal = propose_effects(
+            diff_snapshots(before, after), values, record_fields=self.expect
+        )
         path = self.out_dir / PROPOSED_FILE
         path.parent.mkdir(parents=True, exist_ok=True)
         _write_private(path, render_contract(self.verifier_section, proposal.effects))
@@ -871,7 +875,7 @@ class FirstRunCompiler:
 
         import yaml
 
-        doc = yaml.safe_load((self.out_dir / PROPOSED_FILE).read_text())
+        doc = yaml.safe_load((self.out_dir / PROPOSED_FILE).read_text(encoding="utf-8"))
         effects = doc.get("effects") or []
         extra: dict[str, Any] = {}
         verifier = doc.get("verifier")
@@ -887,7 +891,7 @@ class FirstRunCompiler:
         if reads.is_file():
             # What a code-as-action agent read: the identity before the save,
             # and its inputs read back after it. Evidence for the person.
-            extra["agent_read"] = json.loads(reads.read_text())
+            extra["agent_read"] = json.loads(reads.read_text(encoding="utf-8"))
         return {
             **extra,
             "file": str(self.out_dir / PROPOSED_FILE),
@@ -907,6 +911,32 @@ class FirstRunCompiler:
                     **(
                         {"expected_count": e["expected_count"]}
                         if "expected_count" in e
+                        else {}
+                    ),
+                    **(
+                        {
+                            "idempotency_key": (
+                                f"{{param: {e['idempotency_key']['param']}}}"
+                                if isinstance(e.get("idempotency_key"), dict)
+                                and "param" in e["idempotency_key"]
+                                else (e.get("idempotency_key") or {}).get("literal")
+                            )
+                        }
+                        if e.get("idempotency_key")
+                        else {}
+                    ),
+                    **(
+                        {
+                            "composite_key": {
+                                k: (
+                                    f"{{param: {v['param']}}}"
+                                    if "param" in v
+                                    else v.get("literal")
+                                )
+                                for k, v in (e.get("composite_key") or {}).items()
+                            }
+                        }
+                        if e.get("composite_key")
                         else {}
                     ),
                 }
@@ -934,6 +964,7 @@ class FirstRunCompiler:
         import yaml
 
         from openadapt_flow.record_sor import _write_private
+        from openadapt_flow.runtime.effects.effect import DEFAULT_IDEMPOTENCY_KEY_FIELD
         from openadapt_flow.verify_run import parse_verify_config, sha256_tagged
 
         jit = self._jit()
@@ -944,7 +975,7 @@ class FirstRunCompiler:
         if pinned:
             raise ValueError(f"{pinned} identify the record; they can't be dropped")
         proposed_path = self.out_dir / PROPOSED_FILE
-        doc = yaml.safe_load(proposed_path.read_text())
+        doc = yaml.safe_load(proposed_path.read_text(encoding="utf-8"))
         effects = []
         for effect in doc.get("effects") or []:
             effect = dict(effect)
@@ -954,6 +985,34 @@ class FirstRunCompiler:
                 for k, v in (effect.get("match") or {}).items()
                 if k not in drop_fields
             }
+            if effect.get("composite_key"):
+                effect["composite_key"] = {
+                    k: v
+                    for k, v in (effect.get("composite_key") or {}).items()
+                    if k not in drop_fields
+                }
+                if not effect["composite_key"]:
+                    effect.pop("composite_key", None)
+            key_field = effect.get("key_field") or DEFAULT_IDEMPOTENCY_KEY_FIELD
+            idem = effect.get("idempotency_key")
+            idem_param = None
+            if isinstance(idem, dict):
+                idem_param = idem.get("param")
+            elif (
+                isinstance(idem, str)
+                and idem.startswith("{param:")
+                and idem.endswith("}")
+            ):
+                idem_param = idem[7:-1].strip()
+            elif hasattr(idem, "param"):
+                idem_param = getattr(idem, "param", None)
+            if (
+                key_field in drop_fields
+                or "key" in drop_fields
+                or (idem_param and idem_param in drop_fields)
+            ):
+                effect.pop("idempotency_key", None)
+                effect.pop("key_field", None)
             if _claims_new_record(effect, count_new_only=False):
                 # A check routed to one read (scaffold-verifier's
                 # ``surface=<name>|...``) keeps its route.
@@ -1060,6 +1119,7 @@ class FirstRunCompiler:
         judge the confirmed checks against the system of record."""
 
         from openadapt_flow import __version__
+        from openadapt_flow.request_binding import current_request_context
         from openadapt_flow.verify_run import verify_run, write_result
 
         cfg = self._confirmed_config()
@@ -1083,6 +1143,9 @@ class FirstRunCompiler:
             },
             authorization_ref=f"compile-agent:{self.task.key}:{kind}",
             baseline_path=self._receipt_baseline,
+            # A canary is a distinct operation, even during first admission.
+            # Never relabel its receipt as the outer request's effect.
+            request_context=current_request_context() if kind == "run" else None,
         )
         return result, receipt, write_result(receipt, work)
 
@@ -1341,7 +1404,7 @@ def _repeats_run1(
             "run 1's input digests are missing, so canary values can't be "
             "checked against run 1's; record run 1 again"
         )
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     salt, digests = data.get("salt"), data.get("digests") or {}
     if not isinstance(salt, str) or not isinstance(digests, dict):
         return "run 1's input digests are unreadable; record run 1 again"

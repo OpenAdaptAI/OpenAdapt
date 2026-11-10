@@ -6,7 +6,7 @@
           "class": "declared",
           "generated_file": "generated/mockloan.D-net-read-complete.yaml",
           "generator_misses": [],
-          "generator_output": "Record check: WORKING (not approved)\n  read api_db: GET /api/db (t=3.826) -> saved record\n  read api_db.content: GET /api/db (t=3.826), compared by content -> no record changed or removed\nFault test: 12 of 12 bad writes caught; clean save passed\nWrote <work>/out-D-net-read-complete/record_check.proposed.yaml and <work>/out-D-net-read-complete/record_check.proof.json\nNext: a person reviews it and deletes each `needs_operator_confirmation: true` line, then `openadapt-flow qualify <bundle> --verify record_check.proposed.yaml`.",
+          "generator_output": "Record check: WORKING (not approved)\n  read api_db: GET /api/db (t=3.767) -> saved record\n  read api_db.content: GET /api/db (t=3.767), compared by content -> no record changed or removed\nFault test: 12 of 12 bad writes caught; clean save passed\nWrote <work>/out-D-net-read-complete/record_check.proposed.yaml and <work>/out-D-net-read-complete/record_check.proof.json\nNext: a person reviews it and deletes each `needs_operator_confirmation: true` line, then `openadapt-flow qualify <bundle> --verify record_check.proposed.yaml`.",
           "generator_status": "working",
           "inputs": [
             "Z-net-read inputs",
@@ -401,7 +401,7 @@
           "class": "zero-config",
           "generated_file": "generated/mockloan.Z-net-probed.yaml",
           "generator_misses": [],
-          "generator_output": "Read discovery: REFUSED. A probed read confirmed the written values but can't see the whole save, so no check was written: the probed read /api/disbursements covers only the written collection, and a write outside it would pass the check (collateral_unaudited: a stray row written to a table this check does not read). No runnable check was written; confirm the read covers everything the save can change (--complete-read), give --db, or name a fuller read (<work>/out-Z-net-probed/read_discovery.json).\nNo read in the recording returns the saved record (no network capture, --db or --verifier), so this is a TODO draft.\nDraft written to <work>/out-Z-net-probed/effect_contract.yaml (1 write-shaped step(s))\n\nThis is a DRAFT oracle, not an approved contract: it verifies nothing until a\nperson resolves every TODO, wires the deployment section, and qualifies the\nbundle.\n\nNext commands:\n  1. edit <work>/out-Z-net-probed/effect_contract.yaml\n  2. openadapt-flow lint <bundle-dir>\n  3. openadapt-flow certify <bundle-dir> --policy <policy>\n  4. openadapt-flow qualify init <bundle-dir> --target <surface> ...",
+          "generator_output": "Read discovery: REFUSED. A probed read confirmed the written values but can't see the whole save, so no check was written: the probed read /api/disbursements covers only the written collection, and a write outside it would pass the check (collateral_unaudited: a stray row written to a table this check does not read). No read covering the whole save was found: GET /api: no read here (status 404); GET /api/: no read here (status 404); the app read no other collection under /api. No runnable check was written; confirm the read covers everything the save can change (--complete-read), give --db, or name a fuller read (<work>/out-Z-net-probed/read_discovery.json).\nNo read in the recording returns the saved record (no network capture, --db or --verifier), so this is a TODO draft.\nDraft written to <work>/out-Z-net-probed/effect_contract.yaml (1 write-shaped step(s))\n\nThis is a DRAFT oracle, not an approved contract: it verifies nothing until a\nperson resolves every TODO, wires the deployment section, and qualifies the\nbundle.\n\nNext commands:\n  1. edit <work>/out-Z-net-probed/effect_contract.yaml\n  2. openadapt-flow lint <bundle-dir>\n  3. openadapt-flow certify <bundle-dir> --policy <policy>\n  4. openadapt-flow qualify init <bundle-dir> --target <surface> ...",
           "generator_status": "todo-draft",
           "inputs": [
             "events.jsonl",
@@ -417,6 +417,10 @@
           },
           "parse_error": "VerifyRunError: invalid effect_contract.yaml: 7 validation errors for VerifyConfig\nverifier\n  Field required [type=missing, input_value={'workflow': 'rec-plain',...cords_key': 'records'}}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/missing\nworkflow\n  Extra inputs are not permitted [type=extra_forbidden, input_value='rec-plain', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden\nsource\n  Extra inputs are not permitted [type=extra_forbidden, input_value='<work>', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden\nsource_kind\n  Extra inputs are not permitted [type=extra_forbidden, input_value='recording', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden\ndraft_status\n  Extra inputs are not permitted [type=extra_forbidden, input_value='requires-human-edit', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden\nsteps\n  Extra inputs are not permitted [type=extra_forbidden, input_value=[{'step_id': 'step_007', ...uthorize Disbursement'}], input_type=list]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden\ndeployment\n  Extra inputs are not permitted [type=extra_forbidden, input_value={'effects': {'kind': 'res...ecords_key': 'records'}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden",
           "read_discovery": {
+            "covering_read": {
+              "reason": "GET /api: no read here (status 404); GET /api/: no read here (status 404); the app read no other collection under /api",
+              "status": "not found"
+            },
             "method": "GET only, local machine only, after the save",
             "needs_operator_confirmation": true,
             "probes": [
@@ -439,10 +443,26 @@
                 "outcome": "confirmed: holds a record with every written value",
                 "path": "/api/disbursements",
                 "status": 200
+              },
+              {
+                "kind": "root",
+                "method": "GET",
+                "outcome": "no read here",
+                "path": "/api",
+                "purpose": "a read that covers the whole save",
+                "status": 404
+              },
+              {
+                "kind": "root",
+                "method": "GET",
+                "outcome": "no read here",
+                "path": "/api/",
+                "purpose": "a read that covers the whole save",
+                "status": 404
               }
             ],
             "read": "/api/disbursements",
-            "reason": "the probed read /api/disbursements covers only the written collection, and a write outside it would pass the check (collateral_unaudited: a stray row written to a table this check does not read). No runnable check was written; confirm the read covers everything the save can change (--complete-read), give --db, or name a fuller read",
+            "reason": "the probed read /api/disbursements covers only the written collection, and a write outside it would pass the check (collateral_unaudited: a stray row written to a table this check does not read). No read covering the whole save was found: GET /api: no read here (status 404); GET /api/: no read here (status 404); the app read no other collection under /api. No runnable check was written; confirm the read covers everything the save can change (--complete-read), give --db, or name a fuller read",
             "schema": "openadapt.read-discovery/v1",
             "status": "refused",
             "surface": "api_disbursements"
@@ -455,7 +475,7 @@
           "generator_misses": [
             "collateral_unaudited: a stray row written to a table this check does not read (the check reads only api_db; a write anywhere else passes it (give a database read path with --db, or more reads))"
           ],
-          "generator_output": "Record check: DRAFT (not working)\n  read api_db: GET /api/db (t=3.826) -> saved record\n  read api_db.content: GET /api/db (t=3.826), compared by content -> no record changed or removed\nFault test: 12 of 13 bad writes caught; clean save passed\n  MISS: collateral_unaudited: a stray row written to a table this check does not read (the check reads only api_db; a write anywhere else passes it (give a database read path with --db, or more reads))\nWrote <work>/out-Z-net-read/record_check.proposed.yaml and <work>/out-Z-net-read/record_check.proof.json\nNext: fix the misses above, then run scaffold-verifier again.",
+          "generator_output": "Record check: DRAFT (not working)\n  read api_db: GET /api/db (t=3.767) -> saved record\n  read api_db.content: GET /api/db (t=3.767), compared by content -> no record changed or removed\nFault test: 12 of 13 bad writes caught; clean save passed\n  MISS: collateral_unaudited: a stray row written to a table this check does not read (the check reads only api_db; a write anywhere else passes it (give a database read path with --db, or more reads))\nWrote <work>/out-Z-net-read/record_check.proposed.yaml and <work>/out-Z-net-read/record_check.proof.json\nNext: fix the misses above, then run scaffold-verifier again.",
           "generator_status": "draft",
           "inputs": [
             "events.jsonl",
@@ -530,63 +550,53 @@
         "tally": {
           "per_fault": {
             "collateral": {
-              "indeterminate": 3,
               "runs": 3,
               "true_reject": 3
             },
             "double": {
-              "indeterminate": 3,
               "runs": 3,
               "true_reject": 3
             },
             "duplicate": {
-              "indeterminate": 3,
               "runs": 3,
               "true_reject": 3
             },
             "idempotent": {
-              "false_reject": 3,
-              "indeterminate": 3,
-              "runs": 3
+              "runs": 3,
+              "true_accept": 3
             },
             "ok": {
-              "false_reject": 6,
-              "indeterminate": 6,
-              "runs": 6
+              "runs": 6,
+              "true_accept": 6
             },
             "optimistic": {
-              "indeterminate": 3,
               "runs": 3,
               "true_reject": 3
             },
             "partial": {
-              "indeterminate": 3,
               "runs": 3,
               "true_reject": 3
             },
             "session": {
-              "indeterminate": 3,
               "runs": 3,
               "true_reject": 3
             },
             "stale": {
-              "indeterminate": 3,
               "runs": 3,
               "true_reject": 3
             },
             "timeout": {
-              "false_reject": 3,
-              "indeterminate": 3,
-              "runs": 3
+              "runs": 3,
+              "true_accept": 3
             }
           },
           "total": {
             "correct_runs": 12,
             "false_accept": 0,
-            "false_reject": 12,
-            "indeterminate": 33,
+            "false_reject": 0,
+            "indeterminate": 0,
             "runs": 33,
-            "true_accept": 0,
+            "true_accept": 12,
             "true_reject": 21,
             "wrong_runs": 21
           }
@@ -663,7 +673,7 @@
             "memo": "Vehicle purchase, dealer invoice 4471",
             "product": "Auto"
           },
-          "seconds": 8.96,
+          "seconds": 3.79,
           "seed_concurrent": false,
           "task": "mockloan-01",
           "verdicts": {
@@ -693,7 +703,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "CONFIRMED"
             },
             "hand-written+complete": {
               "error": null,
@@ -713,7 +723,7 @@
             "memo": "Home repairs, roof contractor",
             "product": "Personal"
           },
-          "seconds": 9.0,
+          "seconds": 3.78,
           "seed_concurrent": false,
           "task": "mockloan-02",
           "verdicts": {
@@ -743,7 +753,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "CONFIRMED"
             },
             "hand-written+complete": {
               "error": null,
@@ -763,7 +773,7 @@
             "memo": "Second tranche, title received",
             "product": "Auto"
           },
-          "seconds": 8.97,
+          "seconds": 3.8,
           "seed_concurrent": false,
           "task": "mockloan-03",
           "verdicts": {
@@ -793,7 +803,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "CONFIRMED"
             },
             "hand-written+complete": {
               "error": null,
@@ -813,7 +823,7 @@
             "memo": "Debt consolidation, card payoff",
             "product": "Personal"
           },
-          "seconds": 8.97,
+          "seconds": 3.8,
           "seed_concurrent": true,
           "task": "mockloan-04",
           "verdicts": {
@@ -843,7 +853,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "CONFIRMED"
             },
             "hand-written+complete": {
               "error": null,
@@ -863,7 +873,7 @@
             "memo": "Used car, private sale",
             "product": "Auto"
           },
-          "seconds": 8.89,
+          "seconds": 3.77,
           "seed_concurrent": true,
           "task": "mockloan-05",
           "verdicts": {
@@ -893,7 +903,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "CONFIRMED"
             },
             "hand-written+complete": {
               "error": null,
@@ -913,7 +923,7 @@
             "memo": "Tuition payment, spring term",
             "product": "Personal"
           },
-          "seconds": 9.06,
+          "seconds": 3.78,
           "seed_concurrent": true,
           "task": "mockloan-06",
           "verdicts": {
@@ -943,7 +953,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "CONFIRMED"
             },
             "hand-written+complete": {
               "error": null,
@@ -963,7 +973,7 @@
             "memo": "Lease buyout, final payment",
             "product": "Auto"
           },
-          "seconds": 8.96,
+          "seconds": 3.77,
           "seed_concurrent": false,
           "task": "mockloan-07",
           "verdicts": {
@@ -993,7 +1003,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "CONFIRMED"
             },
             "hand-written+complete": {
               "error": null,
@@ -1013,7 +1023,7 @@
             "memo": "Medical bills, clinic invoice",
             "product": "Personal"
           },
-          "seconds": 9.0,
+          "seconds": 3.78,
           "seed_concurrent": false,
           "task": "mockloan-08",
           "verdicts": {
@@ -1043,7 +1053,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "CONFIRMED"
             },
             "hand-written+complete": {
               "error": null,
@@ -1063,7 +1073,7 @@
             "memo": "Motorcycle purchase",
             "product": "Auto"
           },
-          "seconds": 8.96,
+          "seconds": 3.84,
           "seed_concurrent": true,
           "task": "mockloan-09",
           "verdicts": {
@@ -1093,7 +1103,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "CONFIRMED"
             },
             "hand-written+complete": {
               "error": null,
@@ -1113,7 +1123,7 @@
             "memo": "Truck down payment",
             "product": "Auto"
           },
-          "seconds": 9.01,
+          "seconds": 3.79,
           "seed_concurrent": false,
           "task": "mockloan-10",
           "verdicts": {
@@ -1143,7 +1153,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "CONFIRMED"
             },
             "hand-written+complete": {
               "error": null,
@@ -1163,7 +1173,7 @@
             "memo": "Wedding venue deposit",
             "product": "Personal"
           },
-          "seconds": 8.95,
+          "seconds": 3.79,
           "seed_concurrent": false,
           "task": "mockloan-11",
           "verdicts": {
@@ -1193,7 +1203,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "CONFIRMED"
             },
             "hand-written+complete": {
               "error": null,
@@ -1213,7 +1223,7 @@
             "memo": "Moving costs, freight quote",
             "product": "Personal"
           },
-          "seconds": 8.99,
+          "seconds": 3.82,
           "seed_concurrent": true,
           "task": "mockloan-12",
           "verdicts": {
@@ -1243,7 +1253,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "CONFIRMED"
             },
             "hand-written+complete": {
               "error": null,
@@ -1263,7 +1273,7 @@
             "memo": "Furniture order 2290",
             "product": "Personal"
           },
-          "seconds": 55.36,
+          "seconds": 55.3,
           "seed_concurrent": false,
           "task": "mockloan-13",
           "verdicts": {
@@ -1293,7 +1303,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -1313,7 +1323,7 @@
             "memo": "Camper van purchase",
             "product": "Auto"
           },
-          "seconds": 54.99,
+          "seconds": 55.13,
           "seed_concurrent": false,
           "task": "mockloan-14",
           "verdicts": {
@@ -1343,7 +1353,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -1363,7 +1373,7 @@
             "memo": "Fleet vehicle, unit 7",
             "product": "Auto"
           },
-          "seconds": 55.02,
+          "seconds": 55.15,
           "seed_concurrent": true,
           "task": "mockloan-15",
           "verdicts": {
@@ -1393,7 +1403,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -1413,7 +1423,7 @@
             "memo": "Dental work, phase one",
             "product": "Personal"
           },
-          "seconds": 65.3,
+          "seconds": 65.35,
           "seed_concurrent": false,
           "task": "mockloan-16",
           "verdicts": {
@@ -1443,7 +1453,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -1463,7 +1473,7 @@
             "memo": "Electric car, charger included",
             "product": "Auto"
           },
-          "seconds": 65.28,
+          "seconds": 65.34,
           "seed_concurrent": false,
           "task": "mockloan-17",
           "verdicts": {
@@ -1493,7 +1503,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -1513,7 +1523,7 @@
             "memo": "Boat trailer purchase",
             "product": "Auto"
           },
-          "seconds": 65.18,
+          "seconds": 65.36,
           "seed_concurrent": true,
           "task": "mockloan-18",
           "verdicts": {
@@ -1543,7 +1553,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -1563,7 +1573,7 @@
             "memo": "Bridge loan, closing costs",
             "product": "Personal"
           },
-          "seconds": 55.01,
+          "seconds": 54.97,
           "seed_concurrent": false,
           "task": "mockloan-19",
           "verdicts": {
@@ -1593,7 +1603,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -1613,7 +1623,7 @@
             "memo": "Hybrid sedan purchase",
             "product": "Auto"
           },
-          "seconds": 54.8,
+          "seconds": 54.79,
           "seed_concurrent": false,
           "task": "mockloan-20",
           "verdicts": {
@@ -1643,7 +1653,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -1663,7 +1673,7 @@
             "memo": "Solar panels, installer deposit",
             "product": "Personal"
           },
-          "seconds": 54.6,
+          "seconds": 54.71,
           "seed_concurrent": true,
           "task": "mockloan-21",
           "verdicts": {
@@ -1693,7 +1703,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -1713,7 +1723,7 @@
             "memo": "Delivery van, invoice 882",
             "product": "Auto"
           },
-          "seconds": 54.94,
+          "seconds": 54.75,
           "seed_concurrent": false,
           "task": "mockloan-22",
           "verdicts": {
@@ -1743,7 +1753,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -1763,7 +1773,7 @@
             "memo": "Home office equipment",
             "product": "Personal"
           },
-          "seconds": 55.25,
+          "seconds": 54.91,
           "seed_concurrent": false,
           "task": "mockloan-23",
           "verdicts": {
@@ -1793,7 +1803,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -1813,7 +1823,7 @@
             "memo": "Business licence fees",
             "product": "Personal"
           },
-          "seconds": 55.12,
+          "seconds": 54.68,
           "seed_concurrent": true,
           "task": "mockloan-24",
           "verdicts": {
@@ -1843,7 +1853,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -1863,7 +1873,7 @@
             "memo": "Pickup truck, trade-in applied",
             "product": "Auto"
           },
-          "seconds": 55.35,
+          "seconds": 54.63,
           "seed_concurrent": false,
           "task": "mockloan-25",
           "verdicts": {
@@ -1893,7 +1903,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -1913,7 +1923,7 @@
             "memo": "Vet bills, emergency visit",
             "product": "Personal"
           },
-          "seconds": 55.01,
+          "seconds": 54.65,
           "seed_concurrent": false,
           "task": "mockloan-26",
           "verdicts": {
@@ -1943,7 +1953,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -1963,7 +1973,7 @@
             "memo": "Compact car, cash balance",
             "product": "Auto"
           },
-          "seconds": 54.97,
+          "seconds": 55.11,
           "seed_concurrent": true,
           "task": "mockloan-27",
           "verdicts": {
@@ -1993,7 +2003,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -2013,7 +2023,7 @@
             "memo": "Renovation draw two",
             "product": "Personal"
           },
-          "seconds": 49.97,
+          "seconds": 49.35,
           "seed_concurrent": true,
           "task": "mockloan-28",
           "verdicts": {
@@ -2043,7 +2053,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -2063,7 +2073,7 @@
             "memo": "Replacement vehicle after accident",
             "product": "Auto"
           },
-          "seconds": 50.25,
+          "seconds": 49.06,
           "seed_concurrent": true,
           "task": "mockloan-29",
           "verdicts": {
@@ -2093,7 +2103,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -2113,7 +2123,7 @@
             "memo": "Inventory purchase, spring stock",
             "product": "Personal"
           },
-          "seconds": 50.02,
+          "seconds": 49.22,
           "seed_concurrent": true,
           "task": "mockloan-30",
           "verdicts": {
@@ -2143,7 +2153,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -2163,7 +2173,7 @@
             "memo": "Course fees, evening classes",
             "product": "Personal"
           },
-          "seconds": 49.68,
+          "seconds": 49.88,
           "seed_concurrent": false,
           "task": "mockloan-31",
           "verdicts": {
@@ -2193,7 +2203,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -2213,7 +2223,7 @@
             "memo": "Classic car restoration",
             "product": "Auto"
           },
-          "seconds": 49.83,
+          "seconds": 49.66,
           "seed_concurrent": false,
           "task": "mockloan-32",
           "verdicts": {
@@ -2243,7 +2253,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -2263,7 +2273,7 @@
             "memo": "Kitchen appliances",
             "product": "Personal"
           },
-          "seconds": 50.01,
+          "seconds": 49.7,
           "seed_concurrent": true,
           "task": "mockloan-33",
           "verdicts": {
@@ -2293,7 +2303,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -2309,7 +2319,7 @@
           "class": "declared",
           "generated_file": "generated/mockmed.D-net-read-complete.yaml",
           "generator_misses": [],
-          "generator_output": "Record check: WORKING (not approved)\n  read api_db: GET /api/db (t=3.769) -> saved record\n  read api_db.content: GET /api/db (t=3.769), compared by content -> no record changed or removed\nFault test: 10 of 10 bad writes caught; clean save passed\nWrote <work>/out-D-net-read-complete/record_check.proposed.yaml and <work>/out-D-net-read-complete/record_check.proof.json\nNext: a person reviews it and deletes each `needs_operator_confirmation: true` line, then `openadapt-flow qualify <bundle> --verify record_check.proposed.yaml`.",
+          "generator_output": "Record check: WORKING (not approved)\n  read api_db: GET /api/db (t=3.787) -> saved record\n  read api_db.content: GET /api/db (t=3.787), compared by content -> no record changed or removed\nFault test: 10 of 10 bad writes caught; clean save passed\nWrote <work>/out-D-net-read-complete/record_check.proposed.yaml and <work>/out-D-net-read-complete/record_check.proof.json\nNext: a person reviews it and deletes each `needs_operator_confirmation: true` line, then `openadapt-flow qualify <bundle> --verify record_check.proposed.yaml`.",
           "generator_status": "working",
           "inputs": [
             "Z-net-read inputs",
@@ -2667,7 +2677,7 @@
           "generator_misses": [
             "collateral_unaudited: a stray row written to a table this check does not read (the check reads only api_db; a write anywhere else passes it (give a database read path with --db, or more reads))"
           ],
-          "generator_output": "Record check: DRAFT (not working)\n  read api_db: GET /api/db (t=3.769) -> saved record\n  read api_db.content: GET /api/db (t=3.769), compared by content -> no record changed or removed\nFault test: 10 of 11 bad writes caught; clean save passed\n  MISS: collateral_unaudited: a stray row written to a table this check does not read (the check reads only api_db; a write anywhere else passes it (give a database read path with --db, or more reads))\nWrote <work>/out-Z-net-read/record_check.proposed.yaml and <work>/out-Z-net-read/record_check.proof.json\nNext: fix the misses above, then run scaffold-verifier again.",
+          "generator_output": "Record check: DRAFT (not working)\n  read api_db: GET /api/db (t=3.787) -> saved record\n  read api_db.content: GET /api/db (t=3.787), compared by content -> no record changed or removed\nFault test: 10 of 11 bad writes caught; clean save passed\n  MISS: collateral_unaudited: a stray row written to a table this check does not read (the check reads only api_db; a write anywhere else passes it (give a database read path with --db, or more reads))\nWrote <work>/out-Z-net-read/record_check.proposed.yaml and <work>/out-Z-net-read/record_check.proof.json\nNext: fix the misses above, then run scaffold-verifier again.",
           "generator_status": "draft",
           "inputs": [
             "events.jsonl",
@@ -2746,57 +2756,46 @@
         "tally": {
           "per_fault": {
             "double": {
-              "indeterminate": 3,
               "runs": 3,
               "true_reject": 3
             },
             "duplicate": {
-              "indeterminate": 3,
               "runs": 3,
               "true_reject": 3
             },
             "idempotent": {
-              "false_reject": 3,
-              "indeterminate": 3,
-              "runs": 3
+              "runs": 3,
+              "true_accept": 3
             },
             "no_persist": {
-              "indeterminate": 3,
               "runs": 3,
               "true_reject": 3
             },
             "ok": {
-              "false_reject": 6,
-              "indeterminate": 6,
-              "runs": 6
+              "runs": 6,
+              "true_accept": 6
             },
             "optimistic": {
-              "indeterminate": 3,
               "runs": 3,
               "true_reject": 3
             },
             "partial": {
-              "indeterminate": 3,
               "runs": 3,
               "true_reject": 3
             },
             "session": {
-              "indeterminate": 3,
               "runs": 3,
               "true_reject": 3
             },
             "stale": {
-              "indeterminate": 3,
               "runs": 3,
               "true_reject": 3
             },
             "timeout": {
-              "false_reject": 3,
-              "indeterminate": 3,
-              "runs": 3
+              "runs": 3,
+              "true_accept": 3
             },
             "wrong_record": {
-              "indeterminate": 3,
               "runs": 3,
               "true_reject": 3
             }
@@ -2804,10 +2803,10 @@
           "total": {
             "correct_runs": 12,
             "false_accept": 0,
-            "false_reject": 12,
-            "indeterminate": 36,
+            "false_reject": 0,
+            "indeterminate": 0,
             "runs": 36,
-            "true_accept": 0,
+            "true_accept": 12,
             "true_reject": 24,
             "wrong_runs": 24
           }
@@ -2887,7 +2886,7 @@
             "patient_id": "p2",
             "type": "Consult"
           },
-          "seconds": 9.01,
+          "seconds": 3.85,
           "seed_concurrent": false,
           "task": "mockmed-01",
           "verdicts": {
@@ -2909,7 +2908,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "CONFIRMED"
             },
             "hand-written+complete": {
               "error": null,
@@ -2928,7 +2927,7 @@
             "patient_id": "p3",
             "type": "Triage"
           },
-          "seconds": 8.95,
+          "seconds": 3.81,
           "seed_concurrent": false,
           "task": "mockmed-02",
           "verdicts": {
@@ -2950,7 +2949,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "CONFIRMED"
             },
             "hand-written+complete": {
               "error": null,
@@ -2969,7 +2968,7 @@
             "patient_id": "p1",
             "type": "Consult"
           },
-          "seconds": 8.96,
+          "seconds": 3.83,
           "seed_concurrent": false,
           "task": "mockmed-03",
           "verdicts": {
@@ -2991,7 +2990,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "CONFIRMED"
             },
             "hand-written+complete": {
               "error": null,
@@ -3010,7 +3009,7 @@
             "patient_id": "p2",
             "type": "Triage"
           },
-          "seconds": 8.93,
+          "seconds": 3.8,
           "seed_concurrent": true,
           "task": "mockmed-04",
           "verdicts": {
@@ -3032,7 +3031,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "CONFIRMED"
             },
             "hand-written+complete": {
               "error": null,
@@ -3051,7 +3050,7 @@
             "patient_id": "p3",
             "type": "Consult"
           },
-          "seconds": 8.94,
+          "seconds": 3.8,
           "seed_concurrent": true,
           "task": "mockmed-05",
           "verdicts": {
@@ -3073,7 +3072,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "CONFIRMED"
             },
             "hand-written+complete": {
               "error": null,
@@ -3092,7 +3091,7 @@
             "patient_id": "p1",
             "type": "Triage"
           },
-          "seconds": 8.94,
+          "seconds": 3.83,
           "seed_concurrent": true,
           "task": "mockmed-06",
           "verdicts": {
@@ -3114,7 +3113,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "CONFIRMED"
             },
             "hand-written+complete": {
               "error": null,
@@ -3133,7 +3132,7 @@
             "patient_id": "p2",
             "type": "Consult"
           },
-          "seconds": 8.98,
+          "seconds": 3.83,
           "seed_concurrent": false,
           "task": "mockmed-07",
           "verdicts": {
@@ -3155,7 +3154,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "CONFIRMED"
             },
             "hand-written+complete": {
               "error": null,
@@ -3174,7 +3173,7 @@
             "patient_id": "p3",
             "type": "Triage"
           },
-          "seconds": 8.96,
+          "seconds": 3.83,
           "seed_concurrent": false,
           "task": "mockmed-08",
           "verdicts": {
@@ -3196,7 +3195,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "CONFIRMED"
             },
             "hand-written+complete": {
               "error": null,
@@ -3215,7 +3214,7 @@
             "patient_id": "p1",
             "type": "Consult"
           },
-          "seconds": 8.93,
+          "seconds": 3.82,
           "seed_concurrent": true,
           "task": "mockmed-09",
           "verdicts": {
@@ -3237,7 +3236,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "CONFIRMED"
             },
             "hand-written+complete": {
               "error": null,
@@ -3256,7 +3255,7 @@
             "patient_id": "p3",
             "type": "Consult"
           },
-          "seconds": 9.02,
+          "seconds": 3.78,
           "seed_concurrent": false,
           "task": "mockmed-10",
           "verdicts": {
@@ -3278,7 +3277,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "CONFIRMED"
             },
             "hand-written+complete": {
               "error": null,
@@ -3297,7 +3296,7 @@
             "patient_id": "p1",
             "type": "Triage"
           },
-          "seconds": 8.94,
+          "seconds": 3.8,
           "seed_concurrent": false,
           "task": "mockmed-11",
           "verdicts": {
@@ -3319,7 +3318,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "CONFIRMED"
             },
             "hand-written+complete": {
               "error": null,
@@ -3338,7 +3337,7 @@
             "patient_id": "p2",
             "type": "Triage"
           },
-          "seconds": 8.92,
+          "seconds": 3.8,
           "seed_concurrent": true,
           "task": "mockmed-12",
           "verdicts": {
@@ -3360,7 +3359,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "CONFIRMED"
             },
             "hand-written+complete": {
               "error": null,
@@ -3379,7 +3378,7 @@
             "patient_id": "p2",
             "type": "Triage"
           },
-          "seconds": 34.86,
+          "seconds": 34.64,
           "seed_concurrent": false,
           "task": "mockmed-13",
           "verdicts": {
@@ -3401,7 +3400,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -3420,7 +3419,7 @@
             "patient_id": "p3",
             "type": "Consult"
           },
-          "seconds": 34.74,
+          "seconds": 34.79,
           "seed_concurrent": false,
           "task": "mockmed-14",
           "verdicts": {
@@ -3442,7 +3441,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -3461,7 +3460,7 @@
             "patient_id": "p1",
             "type": "Consult"
           },
-          "seconds": 34.79,
+          "seconds": 34.77,
           "seed_concurrent": true,
           "task": "mockmed-15",
           "verdicts": {
@@ -3483,7 +3482,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -3502,7 +3501,7 @@
             "patient_id": "p3",
             "type": "Triage"
           },
-          "seconds": 34.86,
+          "seconds": 34.79,
           "seed_concurrent": false,
           "task": "mockmed-16",
           "verdicts": {
@@ -3524,7 +3523,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -3543,7 +3542,7 @@
             "patient_id": "p1",
             "type": "Consult"
           },
-          "seconds": 34.84,
+          "seconds": 34.79,
           "seed_concurrent": false,
           "task": "mockmed-17",
           "verdicts": {
@@ -3565,7 +3564,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -3584,7 +3583,7 @@
             "patient_id": "p2",
             "type": "Consult"
           },
-          "seconds": 34.81,
+          "seconds": 34.74,
           "seed_concurrent": true,
           "task": "mockmed-18",
           "verdicts": {
@@ -3606,7 +3605,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -3625,7 +3624,7 @@
             "patient_id": "p1",
             "type": "Triage"
           },
-          "seconds": 34.3,
+          "seconds": 34.67,
           "seed_concurrent": false,
           "task": "mockmed-19",
           "verdicts": {
@@ -3647,7 +3646,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -3666,7 +3665,7 @@
             "patient_id": "p2",
             "type": "Consult"
           },
-          "seconds": 34.79,
+          "seconds": 34.77,
           "seed_concurrent": false,
           "task": "mockmed-20",
           "verdicts": {
@@ -3688,7 +3687,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -3707,7 +3706,7 @@
             "patient_id": "p3",
             "type": "Triage"
           },
-          "seconds": 34.76,
+          "seconds": 34.74,
           "seed_concurrent": true,
           "task": "mockmed-21",
           "verdicts": {
@@ -3729,7 +3728,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -3748,7 +3747,7 @@
             "patient_id": "p3",
             "type": "Consult"
           },
-          "seconds": 34.81,
+          "seconds": 34.73,
           "seed_concurrent": false,
           "task": "mockmed-22",
           "verdicts": {
@@ -3770,7 +3769,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -3811,7 +3810,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -3830,7 +3829,7 @@
             "patient_id": "p1",
             "type": "Triage"
           },
-          "seconds": 34.72,
+          "seconds": 34.74,
           "seed_concurrent": true,
           "task": "mockmed-24",
           "verdicts": {
@@ -3852,7 +3851,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -3871,7 +3870,7 @@
             "patient_id": "p2",
             "type": "Consult"
           },
-          "seconds": 34.8,
+          "seconds": 34.78,
           "seed_concurrent": false,
           "task": "mockmed-25",
           "verdicts": {
@@ -3893,7 +3892,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -3912,7 +3911,7 @@
             "patient_id": "p3",
             "type": "Triage"
           },
-          "seconds": 34.77,
+          "seconds": 34.73,
           "seed_concurrent": false,
           "task": "mockmed-26",
           "verdicts": {
@@ -3934,7 +3933,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -3953,7 +3952,7 @@
             "patient_id": "p1",
             "type": "Consult"
           },
-          "seconds": 34.76,
+          "seconds": 34.86,
           "seed_concurrent": true,
           "task": "mockmed-27",
           "verdicts": {
@@ -3975,7 +3974,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -3994,7 +3993,7 @@
             "patient_id": "p1",
             "type": "Triage"
           },
-          "seconds": 50.31,
+          "seconds": 50.15,
           "seed_concurrent": true,
           "task": "mockmed-28",
           "verdicts": {
@@ -4016,7 +4015,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -4035,7 +4034,7 @@
             "patient_id": "p1",
             "type": "Consult"
           },
-          "seconds": 50.25,
+          "seconds": 50.21,
           "seed_concurrent": true,
           "task": "mockmed-29",
           "verdicts": {
@@ -4057,7 +4056,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -4076,7 +4075,7 @@
             "patient_id": "p1",
             "type": "Triage"
           },
-          "seconds": 50.22,
+          "seconds": 50.08,
           "seed_concurrent": true,
           "task": "mockmed-30",
           "verdicts": {
@@ -4098,7 +4097,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -4117,7 +4116,7 @@
             "patient_id": "p3",
             "type": "Triage"
           },
-          "seconds": 34.83,
+          "seconds": 34.75,
           "seed_concurrent": false,
           "task": "mockmed-31",
           "verdicts": {
@@ -4139,7 +4138,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -4158,7 +4157,7 @@
             "patient_id": "p2",
             "type": "Consult"
           },
-          "seconds": 34.92,
+          "seconds": 34.67,
           "seed_concurrent": false,
           "task": "mockmed-32",
           "verdicts": {
@@ -4180,7 +4179,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -4199,7 +4198,7 @@
             "patient_id": "p1",
             "type": "Triage"
           },
-          "seconds": 34.74,
+          "seconds": 34.71,
           "seed_concurrent": true,
           "task": "mockmed-33",
           "verdicts": {
@@ -4221,7 +4220,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -4240,7 +4239,7 @@
             "patient_id": "p1",
             "type": "Consult"
           },
-          "seconds": 34.75,
+          "seconds": 34.71,
           "seed_concurrent": false,
           "task": "mockmed-34",
           "verdicts": {
@@ -4262,7 +4261,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -4303,7 +4302,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -4322,7 +4321,7 @@
             "patient_id": "p1",
             "type": "Triage"
           },
-          "seconds": 34.7,
+          "seconds": 34.76,
           "seed_concurrent": true,
           "task": "mockmed-36",
           "verdicts": {
@@ -4344,7 +4343,7 @@
             },
             "hand-written": {
               "error": null,
-              "verdict": "INDETERMINATE"
+              "verdict": "REFUTED"
             },
             "hand-written+complete": {
               "error": null,
@@ -4355,12 +4354,12 @@
       ]
     }
   },
-  "git_head": "cfa11472b7cb656764577b599ddf66874db446bc",
+  "git_head": "ae4ecc75e9d447df132a9224ce4a05ecd2f513d5",
   "platform": "macOS-15.7.3-arm64-arm-64bit",
   "protocol": "PROTOCOL.md",
   "python": "3.12.13",
   "schema": "openadapt.zero-config-verify-results/v1",
-  "started": "2026-11-09T17:28:57Z",
+  "started": "2026-11-10T00:35:57Z",
   "verdict": {
     "zero_config_ready_arms": {
       "mockloan": [

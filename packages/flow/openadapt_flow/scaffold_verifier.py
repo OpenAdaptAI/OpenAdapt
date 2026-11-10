@@ -820,6 +820,14 @@ def build_record_check(
             proposals, destination
         )
     check, proof = rcs.write(proposal, destination)
+    if proposal.search.read_discovery is not None:
+        import json
+
+        # Every probe, also when one was promoted (the proof holds it too).
+        _sealed.write_text(
+            destination / READ_DISCOVERY_FILE,
+            json.dumps(proposal.search.read_discovery, indent=2, sort_keys=True) + "\n",
+        )
     return RecordCheckResult(
         working=proposal.working,
         check_path=check,

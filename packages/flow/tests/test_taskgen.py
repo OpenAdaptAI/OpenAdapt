@@ -343,6 +343,20 @@ def test_private_splits_need_the_salt(
     assert secret.load_salt("public") is None
 
 
+@pytest.mark.parametrize("flag", ["--write", "--write-c"])
+def test_salt_check_cli_refuses_abbreviated_options(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, flag: str
+) -> None:
+    from openadapt_flow.taskgen import secret
+
+    monkeypatch.delenv(secret.SALT_ENV, raising=False)
+    output = tmp_path / "check.json"
+    with pytest.raises(SystemExit) as refused:
+        secret.main([flag, str(output)])
+    assert refused.value.code == 2
+    assert not output.exists()
+
+
 def _throwaway_salt(tmp_path: Path, name: str, byte: bytes) -> Path:
     # A throwaway salt for tests only; the real salt never enters a test.
     path = tmp_path / name

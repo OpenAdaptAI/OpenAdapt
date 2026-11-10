@@ -998,7 +998,7 @@ class CompiledAgent:
 
     def candidate(self) -> Optional[dict[str, Any]]:
         path = self.program_dir / CANDIDATE_FILE
-        return json.loads(path.read_text()) if path.is_file() else None
+        return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
 
     @property
     def admitted(self) -> bool:
@@ -1253,12 +1253,14 @@ class CompiledAgent:
         # Who made the recording, signed with the bundle digest, so editing
         # candidate.json can't turn the recorder into someone else.
         candidate = lifecycle.sign_recorder(program, candidate, key_dir=self.key_dir)
-        (program / "capture.json").write_text(json.dumps(computer.log, indent=2) + "\n")
+        (program / "capture.json").write_text(
+            json.dumps(computer.log, indent=2) + "\n", encoding="utf-8"
+        )
         # Stage the signed record, then finish fallible retention before the
         # one atomic publication. A failed event never exposes a candidate.
         staged = program / f"candidate-pending-{uuid.uuid4().hex}.json"
         descriptor = os.open(staged, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        with os.fdopen(descriptor, "w") as stream:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
             json.dump(candidate, stream, indent=2)
             stream.write("\n")
             stream.flush()
@@ -1284,14 +1286,18 @@ class CompiledAgent:
         readback: Any = None,
     ) -> JitResult:
         program = self.program_dir
-        (program / "capture.json").write_text(json.dumps(computer.log, indent=2) + "\n")
+        (program / "capture.json").write_text(
+            json.dumps(computer.log, indent=2) + "\n", encoding="utf-8"
+        )
         refused: dict[str, Any] = {"status": status, "detail": detail}
         if guard is not None:
             refused["teach_scope"] = {
                 **guard.report(),
                 "readback": readback.to_dict() if readback is not None else None,
             }
-        (program / "refused.json").write_text(json.dumps(refused, indent=2) + "\n")
+        (program / "refused.json").write_text(
+            json.dumps(refused, indent=2) + "\n", encoding="utf-8"
+        )
         kept = self.task_dir / f"refused-{_stamp()}"
         program.rename(kept)
         return JitResult(
@@ -1702,7 +1708,8 @@ class CompiledAgent:
                 },
                 indent=2,
             )
-            + "\n"
+            + "\n",
+            encoding="utf-8",
         )
         result.inbox_item = item
         if self.on_halt is not None:

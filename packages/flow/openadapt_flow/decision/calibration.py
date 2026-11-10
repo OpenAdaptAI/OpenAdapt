@@ -255,7 +255,9 @@ class CalibrationArtifact(BaseModel):
 
 
 def load_artifact(path: Path, *, pinned_sha256: str) -> CalibrationArtifact:
-    artifact = CalibrationArtifact.model_validate_json(Path(path).read_text())
+    artifact = CalibrationArtifact.model_validate_json(
+        Path(path).read_text(encoding="utf-8")
+    )
     artifact.verify(pinned_sha256)
     return artifact
 

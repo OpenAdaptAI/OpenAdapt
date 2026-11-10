@@ -99,7 +99,7 @@ class AppWorldTarget:
         self.timeout = float(timeout)
         self._next_id = 0
         Path(cache_dir).mkdir(parents=True, exist_ok=True)
-        self._log = open(Path(cache_dir) / "worker.log", "a")  # noqa: SIM115
+        self._log = open(Path(cache_dir) / "worker.log", "a", encoding="utf-8")  # noqa: SIM115
         self._proc = subprocess.Popen(
             [python, "-I", str(WORKER), appworld_root, cache_dir],
             stdin=subprocess.PIPE,

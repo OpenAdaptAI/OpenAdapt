@@ -190,7 +190,9 @@ def task_id(salt: Optional[bytes], name: str, prefix: str) -> str:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    ap = argparse.ArgumentParser(description="Write the private salt check file.")
+    ap = argparse.ArgumentParser(
+        description="Write the private salt check file.", allow_abbrev=False
+    )
     ap.add_argument(
         "--write-check",
         required=True,

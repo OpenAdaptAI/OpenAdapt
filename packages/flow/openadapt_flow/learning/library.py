@@ -164,7 +164,7 @@ class SkillLibrary:
             self._writer.write(_LIBRARY_FILE, text.encode("utf-8"))
             self._writer.finalize()
         else:
-            self.path.write_text(text)
+            self.path.write_text(text, encoding="utf-8")
         return self.path
 
     # -- read ---------------------------------------------------------------

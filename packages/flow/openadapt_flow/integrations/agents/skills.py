@@ -422,6 +422,11 @@ class SkillCache:
         )
         return compiler, key
 
+    def receipt_root(self, prompt: str, params: Mapping[str, Any]) -> Path:
+        """The producer's receipt subtree, without opening a halted server."""
+        compiler, _key = self._compiler(prompt, params)
+        return compiler.dir
+
     def server(self, prompt: str, params: Mapping[str, Any]) -> Optional[Path]:
         """The task's compiled MCP server, when it has an admitted one."""
 
@@ -441,13 +446,13 @@ class SkillCache:
         stored = compiler.dir / _KEY_FILE
         if not compiler._jit().admitted or not stored.is_file():
             return None
-        if json.loads(stored.read_text()) != key:
+        if json.loads(stored.read_text(encoding="utf-8")) != key:
             # Never serve a program compiled for another task or record.
             return None
         emitted = compiler.out_dir / "emitted.json"
         if not emitted.is_file():
             compiler.emit()
-        return Path(json.loads(emitted.read_text())["mcp_server"])
+        return Path(json.loads(emitted.read_text(encoding="utf-8"))["mcp_server"])
 
     def held(self, prompt: str, params: Mapping[str, Any]) -> bool:
         """True when a previous cached attempt of this task is held.
@@ -853,7 +858,9 @@ class SkillCache:
             **common,
         )
         if result.admitted:
-            (compiler.dir / _KEY_FILE).write_text(json.dumps(key, sort_keys=True))
+            (compiler.dir / _KEY_FILE).write_text(
+                json.dumps(key, sort_keys=True), encoding="utf-8"
+            )
         agent_run = result.run1.get("agent") or {}
         check = result.record_check or {}
         usage_known = bool(agent_run.get("usage_known", False))
@@ -1051,7 +1058,14 @@ async def _call_skill(python: str, server: Path, params: dict[str, Any]) -> dict
             tools = (await session.list_tools()).tools
             if len(tools) != 1:
                 raise RuntimeError("a compiled skill's server has exactly one tool")
-            result = await session.call_tool(tools[0].name, params)
+            from openadapt_flow.request_binding import request_meta
+
+            metadata = request_meta()
+            if metadata is None:
+                result = await session.call_tool(tools[0].name, params)
+            else:
+                # Unsupported metadata APIs refuse; never retry without context.
+                result = await session.call_tool(tools[0].name, params, meta=metadata)
     # mcp 2 names these fields in snake case, mcp 1 in camel case.
     if getattr(result, "is_error", None) or getattr(result, "isError", None):
         text = " ".join(getattr(c, "text", "") for c in result.content)

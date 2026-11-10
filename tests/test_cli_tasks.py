@@ -215,8 +215,14 @@ def test_root_help_lists_every_registered_public_legacy_command_without_dispatch
     legacy = result.stdout.partition("Legacy commands:")[2]
     assert legacy
     for name, command in cli.main.commands.items():
-        if not command.hidden:
+        if not command.hidden and name not in TASKS:
             assert any(
+                line.strip().split()[0] == name
+                for line in legacy.splitlines()
+                if line.strip()
+            )
+        elif not command.hidden and name in TASKS:
+            assert not any(
                 line.strip().split()[0] == name
                 for line in legacy.splitlines()
                 if line.strip()

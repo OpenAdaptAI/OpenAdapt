@@ -406,6 +406,14 @@ class EffectsConfig(BaseModel):
     #: number of returned records. Prefer ``records_next_path`` or
     #: ``records_total_path`` when the endpoint exposes pagination metadata.
     records_complete: Optional[StrictBool] = None
+    #: ``rest`` only: the top-level keys whose value is a list, for a
+    #: whole-store read with one list per collection, as it was reviewed. A
+    #: body without a list under one of these reads as unreadable.
+    records_list_keys: Optional[list[StrictStr]] = None
+    #: ``rest`` only, with ``records_list_keys`` and no ``records_key``: the
+    #: read returns the records of every list under any OTHER key, so a row
+    #: written to a collection that appeared after review is seen.
+    records_other_lists: Optional[StrictBool] = None
     #: ``rest`` / ``fhir``: response-body path to a token whose reviewed
     #: endpoint semantics bind every page to one immutable result snapshot.
     #: A next link or total alone is not a consistent multi-page read.
@@ -650,6 +658,8 @@ class EffectsConfig(BaseModel):
             "records_next_path",
             "records_total_path",
             "records_complete",
+            "records_list_keys",
+            "records_other_lists",
             "records_snapshot_path",
             "records_read_context",
             "records_consistency",
@@ -679,6 +689,14 @@ class EffectsConfig(BaseModel):
             )
         if self.records_complete is not None and kind != "rest":
             raise ValueError("effects.records_complete applies only to kind rest")
+        if self.records_list_keys is not None and kind != "rest":
+            raise ValueError("effects.records_list_keys applies only to kind rest")
+        if self.records_other_lists and (
+            self.records_list_keys is None or self.records_key is not None
+        ):
+            raise ValueError(
+                "effects.records_other_lists needs records_list_keys and no records_key"
+            )
         if self.records_snapshot_path is not None and kind not in ("rest", "fhir"):
             raise ValueError(
                 "effects.records_snapshot_path applies only to kinds rest and fhir"
@@ -839,6 +857,12 @@ class RuntimeSection(BaseModel):
     #: ``known_ids_max_age_hours``. See :mod:`openadapt_flow.runtime.known_ids`.
     #: None (default) keeps the halt.
     known_ids_path: Optional[str] = None
+    #: Per-app interruption classes (YAML; :mod:`openadapt_flow.interruptions`):
+    #: session warnings, banners, tours and toasts the run may clear itself,
+    #: each only when the dismissal is proven read-only. A file with any entry
+    #: that fails that policy stops the run before it starts. None (default)
+    #: halts on every interruption.
+    interruptions_path: Optional[str] = None
     #: Identifier column when ``known_ids_path`` is a CSV/TSV export.
     known_ids_column: Optional[str] = None
     #: Confirmation record; default ``<known_ids_path>.confirmation.json``.
@@ -1884,6 +1908,11 @@ def build_replayer(
             confirmation_path=runtime_config.known_ids_confirmation_path,
             max_age_s=runtime_config.known_ids_max_age_hours * 3600.0,
         )
+    interruptions = None
+    if runtime_config is not None and runtime_config.interruptions_path:
+        from openadapt_flow.interruptions import load_interruption_classes
+
+        interruptions = load_interruption_classes(runtime_config.interruptions_path)
     identity_copy = None
     read_clipboard = None
     copy_cfg = runtime_config.identity_copy_look if runtime_config is not None else None
@@ -1924,6 +1953,7 @@ def build_replayer(
         qualification_environment_observer=qualification_environment_observer,
         approval_gate=approval_gate,
         deployment_surface=deployment_surface,
+        interstitials=interruptions,
     )
 
 
@@ -2240,6 +2270,8 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
         "records_next_path",
         "records_total_path",
         "records_complete",
+        "records_list_keys",
+        "records_other_lists",
         "records_snapshot_path",
         "records_read_context",
         "records_consistency",
@@ -2417,6 +2449,10 @@ def _build_effect_verifier_unredacted(
             snapshot_path=cfg.records_snapshot_path,
             consistency=cfg.records_consistency,
             quiescence=quiescence,
+            list_keys=(
+                None if cfg.records_list_keys is None else tuple(cfg.records_list_keys)
+            ),
+            other_lists=bool(cfg.records_other_lists),
         )
 
     if kind == "fhir":

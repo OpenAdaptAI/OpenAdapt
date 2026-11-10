@@ -325,4 +325,4 @@ def load_profile(name: str) -> AppProfile:
     path = HERE / f"{name}.yaml"
     if not path.exists():
         raise ValueError(f"no app profile named {name!r}")
-    return AppProfile.model_validate(yaml.safe_load(path.read_text()))
+    return AppProfile.model_validate(yaml.safe_load(path.read_text(encoding="utf-8")))
