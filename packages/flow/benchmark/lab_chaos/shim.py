@@ -66,7 +66,10 @@ def make_handler(args: argparse.Namespace) -> type[BaseHTTPRequestHandler]:
         ) -> None:
             self.send_response(status)
             for k, v in headers:
-                self.send_header(k, v)
+                # Upstream header values never carry a CR or LF into ours.
+                if "\r" in k or "\n" in k:
+                    continue
+                self.send_header(k, v.replace("\r", " ").replace("\n", " "))
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)

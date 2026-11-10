@@ -363,3 +363,22 @@ def test_explicit_zero_lag_is_a_primary_view_single_read(tmp_path) -> None:
     settled = settle_ui_readback(spec, driver=driver, environ=ENV)
     assert [(s.id, s.state) for s in settled] == [(first.deferred_check, "verified")]
     assert len(driver.sessions[0].reads) == 1
+
+
+def test_settle_cli_labels_a_ui_settlement_screen_grade(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    # A UI final read never reads as a record-store verification.
+    from openadapt_flow import cli_deferred
+    from openadapt_flow.__main__ import build_parser
+    from openadapt_flow.runtime.effects import ui_readback
+    from openadapt_flow.runtime.effects.deferred_report import Settlement
+
+    spec = _spec(index_lag_s=0, final=_final(tmp_path))
+    settled = Settlement("deferred:" + "a" * 32, "verified", "final", "unchanged")
+    monkeypatch.setattr(cli_deferred, "_ui_final_from_config", lambda _path: [spec])
+    monkeypatch.setattr(ui_readback, "settle_ui_readback", lambda _spec: [settled])
+    args = build_parser().parse_args(["deferred", "settle", "--config", "x.yaml"])
+    assert args.func(args) == 0
+    out = capsys.readouterr().out
+    assert f"{settled.id}: VERIFIED (screen_readback)" in out

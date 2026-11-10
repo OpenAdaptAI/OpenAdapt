@@ -724,9 +724,10 @@ and it isn't a system-of-record read: the adapter sets
 halt message names the read as a record page read in a separate session. Under
 the Standard and Regulated profiles a tier-2 confirmation can end `VERIFIED`,
 as before. The `regulated` policy pack needs tier 1, so this check doesn't
-qualify a workflow for it. The `regulated-ui-read` pack is the same pack with
-this check admitted: choosing it is the profile's declaration that the
-application has no read API, and every other `regulated` requirement stays.
+qualify a workflow for it, and no pack relaxes that. A UI read is a second
+read through the same interface: it can refute a save or add evidence, but
+it is never the record check of last resort, and its grade stays
+`screen_readback` whatever rules it passed.
 
 ### When a UI read counts
 
@@ -818,7 +819,8 @@ value, a rejected status or a missing record still reconciles, because a UI
 read may add evidence against a save but never for one it can't date. Set it from the
 application's observed behavior. A rejected status at the provisional read is
 REFUTED at once. `openadapt-flow deferred status RUN` gives the run's settled
-outcome.
+outcome. A save a UI read settles is still checked at `screen_readback`
+grade, and `deferred settle` prints it as `VERIFIED (screen_readback)`.
 
 The ledger is on disk, so the provisional state survives a restart or a
 laptop that slept. While an item's entry waits, a new run of the same item

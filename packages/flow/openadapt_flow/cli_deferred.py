@@ -152,7 +152,12 @@ def cmd_deferred_settle(args: argparse.Namespace) -> int:
             print(f"deferred settle: {exc}", file=sys.stderr)
             return 2
         for item in settled_ui:
-            word = "VERIFIED" if item.state == "verified" else "RECONCILIATION_REQUIRED"
+            # A UI read settles at screen grade, never as a record-store read.
+            word = (
+                "VERIFIED (screen_readback)"
+                if item.state == "verified"
+                else "RECONCILIATION_REQUIRED"
+            )
             print(f"{item.id}: {word} ({item.reason}; code {item.code})")
         waiting_count = sum(
             1

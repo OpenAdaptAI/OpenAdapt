@@ -10,8 +10,10 @@ guard's count was 0 in every run).
 
 ## Summary
 
-- No planted fault ended CONFIRMED, in any run, direct or behind the chaos
-  proxy.
+- Apart from the expected miss below (F6a), no planted fault ended CONFIRMED,
+  in any run, direct or behind the chaos proxy. These runs predate the
+  `sign_in.post_url` binding and the `index_lag_s` re-read at settle; they
+  were not rerun after those changes.
 - Correct saves: 10 of 10 confirmed direct. Behind the `vpn-bad+replica-lag`
   proxy, after the fixes below (run 2), 8 of 10 confirmed. Two OpenEMR saves
   stopped: one record read timed out, and one audit-log read failed. Before

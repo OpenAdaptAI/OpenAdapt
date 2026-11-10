@@ -4878,18 +4878,11 @@ class EffectVerificationEvidence(BaseModel):
     #: of the serialized record, so evidence written before this field existed
     #: keeps its exact bytes.
     endpoint_scope: Literal["loopback", "external", "unknown"] = "unknown"
-    #: Set when this effect's check is a declared later report: the pending
-    #: entry the report settles (:mod:`openadapt_flow.runtime.effects.deferred_report`).
-    #: Left out of the serialized record when unset, so existing evidence keeps
-    #: its exact bytes.
-    deferred_check: Optional[str] = Field(
-        default=None, pattern=r"^deferred:[0-9a-f]{32}$"
-    )
-    #: Why a read through the application's own screens counts as
-    #: independent: separate session, re-query, distinct view, and the
-    #: history and provisional checks it ran
-    #: (:mod:`openadapt_flow.runtime.effects.ui_read_checks`). No record
-    #: values. Left out of the serialized record when unset.
+    #: The pending entry a declared later report settles
+    #: (:mod:`openadapt_flow.runtime.effects.deferred_report`). This and
+    #: ``read_evidence`` are left out of the record when unset (same bytes).
+    deferred_check: Optional[str] = Field(None, pattern=r"^deferred:[0-9a-f]{32}$")
+    #: A UI read's independence rules and checks (no record values), or None.
     read_evidence: Optional[dict[str, Any]] = None
 
     @property
@@ -4917,10 +4910,9 @@ class EffectVerificationEvidence(BaseModel):
         data: dict[str, Any] = handler(self)
         if self.endpoint_scope == "unknown":
             data.pop("endpoint_scope", None)
-        if self.deferred_check is None:
-            data.pop("deferred_check", None)
-        if self.read_evidence is None:
-            data.pop("read_evidence", None)
+        for key in ("deferred_check", "read_evidence"):
+            if getattr(self, key) is None:
+                data.pop(key, None)
         return data
 
 

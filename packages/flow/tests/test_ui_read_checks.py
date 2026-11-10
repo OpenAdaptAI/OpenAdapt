@@ -19,7 +19,7 @@ from openadapt_flow.mockmed.chart_pages import (
     READER_USERNAME,
     chart_readback_spec,
 )
-from openadapt_flow.policy_packs import load_policy_pack
+from openadapt_flow.policy_packs import POLICY_PACKS, load_policy_pack
 from openadapt_flow.runtime.effects import (
     Effect,
     EffectKind,
@@ -384,13 +384,15 @@ def test_a_record_gone_at_the_final_read_reconciles(tmp_path) -> None:
 # -- policy and receipts -----------------------------------------------------------------
 
 
-def test_regulated_ui_read_pack_admits_tier_two_only_by_name() -> None:
+def test_no_policy_pack_admits_a_ui_read_as_the_record_check() -> None:
+    # A UI read is a second read, never the record check of last resort: the
+    # regulated pack needs a system-of-record read, and no pack relaxes that.
     assert load_policy_pack("regulated").minimum_effect_tier is (
         VerificationTier.INDEPENDENT_SYSTEM
     )
-    pack = load_policy_pack("regulated-ui-read")
-    assert pack.minimum_effect_tier is VerificationTier.INDEPENDENT_SESSION
-    assert not pack.allow_local_dev_signer and pack.require_identity_on_writes
+    assert set(POLICY_PACKS) == {"community", "cloud", "regulated"}
+    with pytest.raises(ValueError):
+        load_policy_pack("regulated-ui-read")
 
 
 def test_evidence_without_a_ui_read_keeps_its_bytes() -> None:

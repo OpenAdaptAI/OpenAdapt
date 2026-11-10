@@ -46,6 +46,7 @@ __all__ = [
     "UNCHECKED",
     "Assurance",
     "assurance_for",
+    "effect_read_wording",
     "weakest_assurance",
 ]
 
@@ -89,3 +90,21 @@ def weakest_assurance(grades: list[Assurance]) -> Assurance:
     if not grades:
         return UNCHECKED
     return max(grades, key=ASSURANCE_GRADES.index)
+
+
+def effect_read_wording(tier: object) -> tuple[str, str]:
+    """Name an effect check in a halt message by its evidence tier.
+
+    A separate-session record-page read (tier 2) and a screen read-back
+    (tiers 3 and 4) are not system-of-record reads, so their halt messages
+    must not call them that. Untyped legacy verifiers keep the old wording.
+    """
+
+    if tier is VerificationTier.INDEPENDENT_SESSION:
+        return "Effect verification", "record page read in a separate session"
+    if tier in (
+        VerificationTier.PERSISTED_STATE_REACQUISITION,
+        VerificationTier.IMMEDIATE_SCREEN,
+    ):
+        return "Effect verification", "screen read-back"
+    return "System-of-record effect verification", "system of record"
