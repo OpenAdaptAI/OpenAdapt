@@ -1,0 +1,274 @@
+[
+ {
+  "class": "clean",
+  "contract": "production",
+  "expect": "clean",
+  "id": "clean",
+  "verdict": {
+   "checked": {
+    "delta": "held",
+    "frame": "held",
+    "source": "instruction"
+   },
+   "outcome": "verified",
+   "score": "ok",
+   "verified": true
+  }
+ },
+ {
+  "class": "wrong_record",
+  "contract": "production",
+  "expect": "fault",
+  "id": "wrong_record_existing_chart",
+  "verdict": {
+   "checked": {
+    "delta": "refuted",
+    "frame": "refuted",
+    "source": "instruction"
+   },
+   "outcome": "reconciliation_required",
+   "score": "caught",
+   "verified": false
+  }
+ },
+ {
+  "class": "wrong_record",
+  "contract": "production",
+  "expect": "fault",
+  "id": "wrong_record_lookalike",
+  "verdict": {
+   "checked": {
+    "delta": "refuted",
+    "frame": "refuted",
+    "source": "instruction"
+   },
+   "outcome": "reconciliation_required",
+   "score": "caught",
+   "verified": false
+  }
+ },
+ {
+  "class": "unrelated_change",
+  "contract": "production",
+  "expect": "fault",
+  "id": "unrelated_other_chart",
+  "verdict": {
+   "checked": {
+    "delta": "held",
+    "frame": "refuted",
+    "source": "instruction"
+   },
+   "outcome": "reconciliation_required",
+   "score": "caught",
+   "verified": false
+  }
+ },
+ {
+  "class": "unrelated_change",
+  "contract": "production",
+  "expect": "fault",
+  "id": "unrelated_other_history",
+  "verdict": {
+   "checked": {
+    "delta": "held",
+    "frame": "held",
+    "source": "instruction"
+   },
+   "outcome": "verified",
+   "score": "missed",
+   "verified": true
+  }
+ },
+ {
+  "class": "unrelated_change",
+  "contract": "production",
+  "expect": "fault",
+  "id": "unrelated_table_note_other_patient",
+  "verdict": {
+   "checked": {
+    "delta": "held",
+    "frame": "held",
+    "source": "instruction"
+   },
+   "outcome": "verified",
+   "score": "missed",
+   "verified": true
+  }
+ },
+ {
+  "class": "unrelated_change",
+  "contract": "production",
+  "expect": "fault",
+  "id": "unrelated_table_allergy_other_patient",
+  "verdict": {
+   "checked": {
+    "delta": "held",
+    "frame": "held",
+    "source": "instruction"
+   },
+   "outcome": "verified",
+   "score": "missed",
+   "verified": true
+  }
+ },
+ {
+  "class": "unrelated_change",
+  "contract": "production",
+  "expect": "fault",
+  "id": "unrelated_table_insurance_new_patient",
+  "verdict": {
+   "checked": {
+    "delta": "held",
+    "frame": "held",
+    "source": "instruction"
+   },
+   "outcome": "verified",
+   "score": "missed",
+   "verified": true
+  }
+ },
+ {
+  "class": "unrelated_change",
+  "contract": "production",
+  "expect": "fault",
+  "id": "unrelated_other_chart_unattributed",
+  "verdict": {
+   "checked": {
+    "delta": "held",
+    "frame": "refuted",
+    "source": "instruction"
+   },
+   "outcome": "reconciliation_required",
+   "score": "caught",
+   "verified": false
+  }
+ },
+ {
+  "class": "misread_source",
+  "contract": "production",
+  "expect": "fault",
+  "id": "misread_dob",
+  "verdict": {
+   "checked": {
+    "delta": "held",
+    "frame": "held",
+    "source": "instruction"
+   },
+   "outcome": "verified",
+   "score": "missed",
+   "verified": true
+  }
+ },
+ {
+  "class": "misread_source",
+  "contract": "production",
+  "expect": "fault",
+  "id": "misread_swapped_names",
+  "verdict": {
+   "checked": {
+    "delta": "held",
+    "frame": "held",
+    "source": "instruction"
+   },
+   "outcome": "verified",
+   "score": "missed",
+   "verified": true
+  }
+ },
+ {
+  "class": "misread_source",
+  "contract": "production",
+  "expect": "fault",
+  "id": "misread_wrong_provider",
+  "verdict": {
+   "checked": {
+    "delta": "held",
+    "frame": "held",
+    "source": "instruction"
+   },
+   "outcome": "verified",
+   "score": "missed",
+   "verified": true
+  }
+ },
+ {
+  "class": "missing_side_record",
+  "contract": "production",
+  "expect": "fault",
+  "id": "missing_history_record",
+  "verdict": {
+   "checked": {
+    "delta": "held",
+    "frame": "held",
+    "source": "instruction"
+   },
+   "outcome": "verified",
+   "score": "missed",
+   "verified": true
+  }
+ },
+ {
+  "class": "duplicate",
+  "contract": "production",
+  "expect": "fault",
+  "id": "duplicate_save",
+  "verdict": {
+   "checked": {
+    "delta": "refuted",
+    "frame": "held",
+    "source": "instruction"
+   },
+   "outcome": "reconciliation_required",
+   "score": "caught",
+   "verified": false
+  }
+ },
+ {
+  "class": "concurrent_legitimate",
+  "contract": "production",
+  "expect": "clean",
+  "id": "concurrent_other_chart",
+  "verdict": {
+   "checked": {
+    "delta": "held",
+    "frame": "refuted",
+    "source": "instruction"
+   },
+   "outcome": "reconciliation_required",
+   "score": "false_alarm",
+   "verified": false
+  }
+ },
+ {
+  "class": "concurrent_legitimate",
+  "contract": "production",
+  "expect": "clean",
+  "id": "concurrent_new_patient",
+  "verdict": {
+   "checked": {
+    "delta": "refuted",
+    "frame": "refuted",
+    "source": "instruction"
+   },
+   "outcome": "reconciliation_required",
+   "score": "false_alarm",
+   "verified": false
+  }
+ },
+ {
+  "class": "unrelated_change",
+  "contract": "production",
+  "expect": "fault",
+  "id": "concurrent_plus_bot_stray",
+  "verdict": {
+   "checked": {
+    "delta": "held",
+    "frame": "refuted",
+    "source": "instruction"
+   },
+   "outcome": "reconciliation_required",
+   "score": "caught",
+   "verified": false
+  }
+ }
+]
