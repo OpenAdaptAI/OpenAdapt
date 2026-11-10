@@ -839,6 +839,12 @@ class RuntimeSection(BaseModel):
     #: ``known_ids_max_age_hours``. See :mod:`openadapt_flow.runtime.known_ids`.
     #: None (default) keeps the halt.
     known_ids_path: Optional[str] = None
+    #: Per-app interruption classes (YAML; :mod:`openadapt_flow.interruptions`):
+    #: session warnings, banners, tours and toasts the run may clear itself,
+    #: each only when the dismissal is proven read-only. A file with any entry
+    #: that fails that policy stops the run before it starts. None (default)
+    #: halts on every interruption.
+    interruptions_path: Optional[str] = None
     #: Identifier column when ``known_ids_path`` is a CSV/TSV export.
     known_ids_column: Optional[str] = None
     #: Confirmation record; default ``<known_ids_path>.confirmation.json``.
@@ -1884,6 +1890,11 @@ def build_replayer(
             confirmation_path=runtime_config.known_ids_confirmation_path,
             max_age_s=runtime_config.known_ids_max_age_hours * 3600.0,
         )
+    interruptions = None
+    if runtime_config is not None and runtime_config.interruptions_path:
+        from openadapt_flow.interruptions import load_interruption_classes
+
+        interruptions = load_interruption_classes(runtime_config.interruptions_path)
     identity_copy = None
     read_clipboard = None
     copy_cfg = runtime_config.identity_copy_look if runtime_config is not None else None
@@ -1924,6 +1935,7 @@ def build_replayer(
         qualification_environment_observer=qualification_environment_observer,
         approval_gate=approval_gate,
         deployment_surface=deployment_surface,
+        interstitials=interruptions,
     )
 
 
