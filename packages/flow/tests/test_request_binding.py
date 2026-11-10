@@ -439,6 +439,32 @@ def test_no_follow_refuses_symlinks_at_every_owned_path_component(tmp_path, comp
         _read_receipt(str(path), root)
 
 
+def test_no_follow_refuses_when_root_ancestor_is_symlink(tmp_path):
+    import os
+    from pathlib import Path
+
+    from openadapt_flow.request_binding import BindingError, _read_receipt
+
+    real_dir = tmp_path / "real_dir"
+    real_dir.mkdir()
+    symlink_ancestor = tmp_path / "symlink_dir"
+    symlink_ancestor.symlink_to(real_dir, target_is_directory=True)
+
+    root = symlink_ancestor / "owner"
+    path = receipt_file(root)
+
+    # Calling with unresolved symlink path refuses because an ancestor is a symlink
+    with pytest.raises(BindingError) as exc_info:
+        _read_receipt(str(path), root)
+    assert exc_info.value.args[0] == "receipt_owner"
+
+    # Resolving with realpath at configuration time succeeds
+    resolved_root = Path(os.path.realpath(root))
+    resolved_path = Path(os.path.realpath(path))
+    actual_bytes, doc = _read_receipt(str(resolved_path), resolved_root)
+    assert set(doc) == {"receipt", "evidence"}
+
+
 @pytest.mark.parametrize(
     "change", ["directory-symlink", "directory-rename", "leaf-replace", "leaf-grow"]
 )
