@@ -1,0 +1,99 @@
+{
+ "app": "wordpress_comment",
+ "workflow": "post-comment",
+ "steps": 10,
+ "params": [
+  "author",
+  "comment",
+  "email",
+  "url"
+ ],
+ "compile_proposal": {
+  "proposed": true,
+  "step": "step_009",
+  "reasons": []
+ },
+ "proposed": true,
+ "reasons": [],
+ "compile_s": 12.0,
+ "frozen": "",
+ "head": "3cb70fa649407782f150ae4b0f65058fcd84ec30",
+ "engine_diff_vs_frozen": "",
+ "admitted": [
+  "step_009"
+ ],
+ "describe": "step_009: save with one request, POST /wp-comments-post.php, in place of 10 GUI steps (step_000 to step_009).\n  sign-in: the replaying browser's own session; form read again from /?p=1\n  fields: 2 form_default, 4 param\n  run values: comment={comment}, author={author}, email={email}, url={url}\n  accepted when: HTTP [302] and the response matches '.*?p=\\\\d+.*?unapproved=\\\\d+.*?moderation\\\\-hash=e995d4ec71c477832a7f6b9e06afca6b'\n  record check after: 4 effect(s) copied from the save step\n  screen-only checks, not repeated: ['step_000: region_stable', 'step_002: region_stable', 'step_004: region_stable', 'step_006: region_stable']\n  if the form or a check differs at run time, the GUI steps run instead",
+ "binding": {
+  "form_path": "/?p=1",
+  "fields": [
+   {
+    "name": "comment",
+    "source": "param",
+    "param": "comment",
+    "value": null
+   },
+   {
+    "name": "author",
+    "source": "param",
+    "param": "author",
+    "value": null
+   },
+   {
+    "name": "email",
+    "source": "param",
+    "param": "email",
+    "value": null
+   },
+   {
+    "name": "url",
+    "source": "param",
+    "param": "url",
+    "value": null
+   },
+   {
+    "name": "comment_post_ID",
+    "source": "form_default",
+    "param": null,
+    "value": "1"
+   },
+   {
+    "name": "comment_parent",
+    "source": "form_default",
+    "param": null,
+    "value": "0"
+   }
+  ],
+  "controls": [
+   "author",
+   "comment",
+   "comment_parent",
+   "comment_post_ID",
+   "email",
+   "url",
+   "wp-comment-cookies-consent"
+  ],
+  "client_rules": null,
+  "prechecks": [],
+  "success_pattern": ".*?p=\\d+.*?unapproved=\\d+.*?moderation\\-hash=e995d4ec71c477832a7f6b9e06afca6b",
+  "replaces_steps": [
+   "step_000",
+   "step_001",
+   "step_002",
+   "step_003",
+   "step_004",
+   "step_005",
+   "step_006",
+   "step_007",
+   "step_008",
+   "step_009"
+  ],
+  "other_writes_seen": [],
+  "screen_only_checks": [
+   "step_000: region_stable",
+   "step_002: region_stable",
+   "step_004: region_stable",
+   "step_006: region_stable"
+  ],
+  "folded_checks_digest": "sha256:c9fb896e230332f276c456a95c5deddfac55b05bc5a24cd59c8bc777baefc769"
+ }
+}

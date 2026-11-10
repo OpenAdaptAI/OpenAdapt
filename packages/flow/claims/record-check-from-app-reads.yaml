@@ -23,13 +23,21 @@ evidence:
     proves: >-
       A check built from one REST read misses the stray billing write,
       both in the recorded-state fault test and end to end, and is
-      written as a draft with that miss listed.
+      written as a draft with that miss listed. The read itself is
+      inferred complete (complete_basis: observed) because it was seen
+      whole before and after the save, so the clean save passes end to
+      end instead of reading as indeterminate.
   - path: tests/test_record_check_synthesis.py
-    node: test_mockmed_needs_a_declared_complete_read
+    node: test_mockmed_complete_read_declared_passes_the_live_suite
     proves: >-
       On the MockMed --break-it fault server, the check built from the
-      app's /api/db read catches every fault end to end once a person
-      declares the read complete, and stays a draft until then.
+      app's /api/db read is inferred complete (complete_basis: observed)
+      but is still a draft without a declaration, because its fault test
+      lists a write outside the read as a miss. Once a person declares
+      the read complete (--complete-read), every read carries
+      records_complete on the declared basis, the check catches every
+      fault end to end, and it is labelled working. Working is not
+      approved: every effect still needs a person's confirmation.
   - path: tests/test_record_check_synthesis.py
     node: test_openemr_fhir_check_refutes_store_level_faults
     proves: >-
@@ -56,8 +64,12 @@ caveats:
     record service, an OpenEMR-shaped FHIR fake). A check built from API
     reads alone cannot see writes to tables it does not read, so it stays
     a draft unless a database path covers them or a person declares the
-    read complete. The fault classes are the effect_e2e taxonomy, not a
-    measured field incident rate.
+    read complete. A REST read inferred complete (complete_basis:
+    observed) means one unpaged response held the saved record and, when
+    a read before the save was recorded, every record it returned; that
+    is an inference from the
+    recording, not a guarantee from the server. The fault classes are the
+    effect_e2e taxonomy, not a measured field incident rate.
   - >-
     Saves that update an existing record are not handled yet: the check
     expects one new record. The read's credential is the operator's job;

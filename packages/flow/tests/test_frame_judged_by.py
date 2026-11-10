@@ -25,6 +25,7 @@ from openadapt_flow.verifier import (
     recheck,
     verify_write,
 )
+from tests.test_verifier_recheck import due_now as due_now
 
 BOT = Actor(kind="agent", id="bot")
 
@@ -45,11 +46,10 @@ CHECKOUT = (
 
 
 @pytest.fixture(autouse=True)
-def _used_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def _used_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, due_now: None) -> None:
     monkeypatch.setenv("OPENADAPT_LEDGER_DIR", str(tmp_path / "ledger"))
     monkeypatch.setenv("OPENADAPT_SEAL_HOME", str(tmp_path / "seal"))
     monkeypatch.setattr(verifier, "USED_DIR", tmp_path / "used")
-    monkeypatch.setattr(verifier, "seconds_until", lambda due: 0.0)
 
 
 def _db(tmp_path: Path) -> Path:
@@ -122,7 +122,8 @@ def test_a_correct_checkout_holds_and_its_recheck_confirms(tmp_path: Path) -> No
     contract = _contract(db)
     result = _write(contract, db, CHECKOUT.format("LT-1"))
     assert result.verified, result.reasons
-    late = recheck(contract, result, params=PARAMS, actor=BOT)
+    # The write used no ledger, so neither does its recheck.
+    late = recheck(contract, result, params=PARAMS, actor=BOT, ledger=None)
     assert late.outcome == "CONFIRMED", late.reasons
 
 

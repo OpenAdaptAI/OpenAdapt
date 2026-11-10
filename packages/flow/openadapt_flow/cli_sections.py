@@ -22,6 +22,7 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
             "the bundle digests, so editing them never changes a "
             "certification."
         ),
+        allow_abbrev=False,
     )
     p.add_argument("bundle", help="Workflow bundle directory")
     p.add_argument(

@@ -1,0 +1,25 @@
+{
+ "app": "wordpress_category",
+ "workflow": "add-category",
+ "steps": 8,
+ "params": [
+  "description",
+  "name",
+  "parent"
+ ],
+ "compile_proposal": {
+  "proposed": false,
+  "step": null,
+  "reasons": [
+   "the page that serves the form is not in the capture; start recording before opening it"
+  ]
+ },
+ "proposed": false,
+ "reasons": [
+  "the page that serves the form is not in the capture; start recording before opening it"
+ ],
+ "compile_s": 12.1,
+ "frozen": "",
+ "head": "3cb70fa649407782f150ae4b0f65058fcd84ec30",
+ "engine_diff_vs_frozen": ""
+}

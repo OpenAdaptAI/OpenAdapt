@@ -12,7 +12,9 @@ the read-back contract, the same shape ``verify-run`` reads:
   screen. Exactly the deployment ``effects`` section (``kind: rest``, ``sql``,
   ``fhir``, ``graphql`` or a plugin kind). ``none`` and ``onscreen`` are
   refused. ``session`` (``module:function``) may add an authenticated client
-  for ``kind: rest``; it is not part of the verifier's identity;
+  for ``kind: rest``, ``fhir`` or ``graphql``, built again for every trial's
+  read-back so an expiring token is renewed; it is not part of the
+  verifier's identity;
 - ``effects``: the effect contract list (``effect_contract.yaml``
   ``effects:``), bound to the save step. Or ``record``, a shorthand that
   expands to that list (record fields from inputs, the selecting fields, the
@@ -175,11 +177,16 @@ class AppConfig(BaseModel):
         return self.url.rstrip("/")
 
 
+#: The read-back kinds a ``verifier.session`` hook can authenticate.
+SESSION_KINDS = ("rest", "fhir", "graphql")
+
+
 class SystemOfRecordConfig(BaseModel):
     """The independent read-back, as a deployment ``effects`` section.
 
     ``session`` (``module:function``) may supply an authenticated HTTP client
-    for ``kind: rest`` when ``auth`` cannot (for example an OAuth flow).
+    for ``kind: rest``, ``fhir`` or ``graphql`` when ``auth`` cannot (for
+    example an OAuth flow). It is called again for every trial's read-back.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -205,8 +212,10 @@ class SystemOfRecordConfig(BaseModel):
                 "(rest, sql, fhir, graphql, ui_readback or a plugin), not "
                 f"{self.verifier.kind!r}"
             )
-        if self.session is not None and self.verifier.kind != "rest":
-            raise ValueError("verifier.session is supported for kind: rest")
+        if self.session is not None and self.verifier.kind not in SESSION_KINDS:
+            raise ValueError(
+                "verifier.session is supported for kind: " + ", ".join(SESSION_KINDS)
+            )
         return self
 
 
@@ -236,7 +245,47 @@ _SQL_BINDS = re.compile(r"(?<![:\w]):([A-Za-z_]\w*)|%\(([A-Za-z_]\w*)\)s")
 _SQL_LIMIT = re.compile(r"\b(LIMIT|TOP|FETCH\s+FIRST|ROWNUM)\b", re.IGNORECASE)
 
 
-def composite_key_read_problems(fields: list[str], verifier: Any) -> list[str]:
+def record_reader(verifier: Any, surface: Optional[str]) -> tuple[Any, list[str]]:
+    """The read that judges the record, and why it cannot be found.
+
+    With ``verifier.kind: surfaces`` the record's checks are routed to
+    ``record.surface``, so read coverage is a property of that surface's
+    read, not of the outer ``surfaces`` verifier. A surfaces verifier with no
+    ``record.surface``, an unknown surface, or a selected read that is itself
+    a surfaces read leaves no single read to check; that is a problem, not a
+    pass.
+    """
+
+    if getattr(verifier, "kind", None) != "surfaces":
+        if surface:
+            return verifier, [
+                "record.surface needs verifier.kind: surfaces; "
+                f"verifier.kind is {getattr(verifier, 'kind', None)!r}"
+            ]
+        return verifier, []
+    surfaces = getattr(verifier, "surfaces", None) or {}
+    if not surface:
+        return verifier, [
+            "a verifier.kind: surfaces read needs record.surface to name the "
+            "surface the record is read from"
+        ]
+    selected = surfaces.get(surface)
+    if selected is None:
+        return verifier, [
+            f"record.surface names {surface!r}, which verifier.surfaces does not "
+            f"declare ({', '.join(sorted(surfaces)) or 'none'})"
+        ]
+    if getattr(selected, "kind", None) == "surfaces":
+        return selected, [
+            f"record.surface {surface!r} is itself a surfaces read; name one "
+            "system-of-record read"
+        ]
+    return selected, []
+
+
+def composite_key_read_problems(
+    fields: list[str], verifier: Any, surface: Optional[str] = None
+) -> list[str]:
     """Why the verifier's read may miss a record that carries the key.
 
     A composite duplicate key counts records that were already there, so the
@@ -252,8 +301,10 @@ def composite_key_read_problems(fields: list[str], verifier: Any) -> list[str]:
 
     from urllib.parse import parse_qsl, urlsplit
 
+    verifier, problems = record_reader(verifier, surface)
+    if problems:
+        return problems
     keys = set(fields)
-    problems: list[str] = []
     kind = getattr(verifier, "kind", None)
     if kind == "rest":
         parts = urlsplit(verifier.records_path)
@@ -323,6 +374,10 @@ class RecordConfig(BaseModel):
     #: The field that tells a new record from one that was already there, for
     #: ``exact_new_set`` (an id the system of record assigns).
     identity_field: str = "id"
+    #: With ``verifier.kind: surfaces``, the surface the record is read from.
+    #: The other surfaces are read for the frame (writes elsewhere) and side
+    #: records. Unset: the verifier's single read.
+    surface: Optional[str] = Field(default=None, pattern=r"^[A-Za-z0-9_.-]{1,64}$")
 
     @field_validator("duplicate_key")
     @classmethod
@@ -553,12 +608,29 @@ class VerifyConfig(BaseModel):
             name not in record.fields for name in record.duplicate_key_fields
         ):
             raise ValueError("record.duplicate_key must name fields in record.fields")
+        if record.surface:
+            _, problems = record_reader(self.verifier.verifier, record.surface)
+            if problems:
+                raise ValueError("; ".join(problems))
         if isinstance(record.duplicate_key, list):
             problems = composite_key_read_problems(
-                record.duplicate_key, self.verifier.verifier
+                record.duplicate_key, self.verifier.verifier, record.surface
             )
             if problems:
                 raise ValueError("; ".join(problems))
+        if self.effects:
+            from openadapt_flow.runtime.effects.surfaces import surface_of
+
+            for effect in self.effects:
+                if effect.composite_key:
+                    surface = surface_of(effect)
+                    problems = composite_key_read_problems(
+                        list(effect.composite_key.keys()),
+                        self.verifier.verifier,
+                        surface,
+                    )
+                    if problems:
+                        raise ValueError("; ".join(problems))
         return self
 
     @model_validator(mode="after")

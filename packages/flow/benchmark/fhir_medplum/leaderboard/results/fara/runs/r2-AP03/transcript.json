@@ -1,0 +1,755 @@
+{
+ "transcript": [
+  {
+   "reply": "We need to locate the Patient record for Tomasz Wren before proceeding with appointment booking, so search the server for his name and date of birth.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [204, 32], \"text\": \"Tomasz Wren 1966-01-30\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the Patient record for Tomasz Wren to access his record id and use it for further operations like booking an appointment.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [215, 302]}}\n</tool_call>"
+  },
+  {
+   "reply": "We need to retain the Patient record id and key details to reference later when reporting the appointment and constructing the JSON.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"pause_and_memorize_fact\", \"fact\": \"Patient record id: 8f84febd-b717-405b-99bf-0df5197d022a; Name: Tomasz Wren; DOB: 1966-01-30; Gender: male\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Need to locate the Practitioner record for Dr Ama Osei to use her id for the appointment participants.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [204, 32], \"text\": \"Dr Ama Osei\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Clear the search field and enter 'Dr Ama Osei' to find her Practitioner record.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [276, 34], \"text\": \"Dr Ama Osei\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Enter the Practitioner search query again in the search bar and submit to locate the practitioner record.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [276, 34], \"text\": \"Dr Ama Osei\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Navigate to the Practitioner search results page directly to locate the record for Dr Ama Osei, bypassing the search input focus issue.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/Practitioner?name=Dr%20Ama%20Osei\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the Practitioner record details to obtain the id and confirm details for Dr Ama Osei.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [215, 302]}}\n</tool_call>"
+  },
+  {
+   "reply": "We need the practitioner's record ID and name for constructing the appointment JSON and referencing later.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"pause_and_memorize_fact\", \"fact\": \"Practitioner record id: 8bfb415b-f3af-4726-b2ef-6043f4fc1fb8; Name: Dr Ama Osei\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Need to create an Appointment resource with the given start, end, status, and participants, so navigate directly to the FHIR Create endpoint for Appointment.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/Appointment/$create\"}}\n</tool_call>"
+  },
+  {
+   "reply": "The $create endpoint returned 404, so navigate to the standard FHIR Create collection endpoint for Appointment to post the JSON.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/Appointment/_search?_type=create\"}}\n</tool_call>"
+  },
+  {
+   "reply": "The current page shows a 404 error; to post the appointment JSON we need the correct FHIR Create collection endpoint, so navigate directly to the Appointment resource collection URL.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/Appointment\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the '+' new resource button to open the form where we can fill in the appointment details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [1232, 170]}}\n</tool_call>"
+  },
+  {
+   "reply": "Switch to JSON tab to view the resource fields as JSON for easier filling.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [100, 133]}}\n</tool_call>"
+  },
+  {
+   "reply": "Switch to the Form tab to access the appointment fields for filling in details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [32, 133]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to reveal the Start, End, and Participant fields needed to fill in appointment details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -846}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll further down to reveal the Start, End, and Participant fields required for the appointment details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -846}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to reveal the Start field that we need to fill in.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 846}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to reveal the Start and End fields that we need to fill in.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 846}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll further up to reach the Start and End fields which are higher in the form.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 846}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll further up to reveal the Start and End fields which are located higher in the form.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 846}}\n</tool_call>"
+  },
+  {
+   "reply": "Switch to JSON tab to view the resource fields in JSON format, which will be easier to fill and ensure correct structure.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [100, 133]}}\n</tool_call>"
+  },
+  {
+   "reply": "Switch to the Form tab to access the appointment fields for filling in details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [32, 133]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to reveal the Start, End, and Participant fields needed to fill in appointment details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -846}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to reveal the Start and End fields located higher in the form.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 846}}\n</tool_call>"
+  },
+  {
+   "reply": "Switch to JSON tab to view resource fields in JSON format, which is easier to fill and ensures correct structure.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [100, 133]}}\n</tool_call>"
+  },
+  {
+   "reply": "Switch to the Form tab to access the appointment fields for filling in details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [32, 133]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to reveal the Start, End, and Participant fields needed to fill in appointment details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -846}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to reveal the Start and End fields located higher in the form.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 846}}\n</tool_call>"
+  },
+  {
+   "reply": "Switch to JSON tab to view the resource fields in JSON format, which will be easier to fill and ensure correct structure.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [100, 133]}}\n</tool_call>"
+  },
+  {
+   "reply": "Switch to the Form tab to access the appointment fields for filling in details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [32, 133]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to reveal the Start, End, and Participant fields needed to fill in appointment details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -846}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to reveal the Start and End fields located higher in the form.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 846}}\n</tool_call>"
+  },
+  {
+   "reply": "Switch to JSON tab to view the resource fields in JSON format, which will be easier to fill and ensure correct structure.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [100, 133]}}\n</tool_call>"
+  },
+  {
+   "reply": "Switch to the Form tab to access the appointment fields for filling in details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [32, 133]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to reveal the Start, End, and Participant fields needed to fill in appointment details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -846}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to reveal the Start and End fields located higher in the form.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 846}}\n</tool_call>"
+  },
+  {
+   "reply": "Switch to JSON tab to view the resource fields in JSON format, which will be easier to fill and ensure correct structure.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [100, 133]}}\n</tool_call>"
+  },
+  {
+   "reply": "Switch to the Form tab to access the appointment fields for filling in details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [32, 133]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to reveal the Start, End, and Participant fields needed to fill in appointment details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -846}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to reveal the Start and End fields located higher in the form.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 846}}\n</tool_call>"
+  },
+  {
+   "reply": "Switch to JSON tab to view the resource fields in JSON format, which will be easier to fill and ensure correct structure.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [100, 133]}}\n</tool_call>"
+  },
+  {
+   "reply": "Switch to the Form tab to access the appointment fields for filling in details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [32, 133]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to reveal the Start, End, and Participant fields needed to fill in appointment details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -846}}\n</tool_call>"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 202.73291925465838,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Tomasz Wren 1966-01-30"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 213.66459627329192,
+   "y": 297.5369458128079,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 202.73291925465838,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Dr Ama Osei"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 274.2857142857143,
+   "y": 33.49753694581281,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Dr Ama Osei"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 274.2857142857143,
+   "y": 33.49753694581281,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Dr Ama Osei"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/Practitioner?name=Dr%20Ama%20Osei"
+  },
+  {
+   "a": "click",
+   "x": 213.66459627329192,
+   "y": 297.5369458128079,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/Appointment/$create"
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/Appointment/_search?_type=create"
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/Appointment"
+  },
+  {
+   "a": "click",
+   "x": 1224.3478260869565,
+   "y": 167.48768472906403,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 99.37888198757764,
+   "y": 131.0344827586207,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 31.801242236024844,
+   "y": 131.0344827586207,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 846.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 846.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -846.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -846.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -846.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -846.0
+  },
+  {
+   "a": "click",
+   "x": 99.37888198757764,
+   "y": 131.0344827586207,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 31.801242236024844,
+   "y": 131.0344827586207,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 846.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -846.0
+  },
+  {
+   "a": "click",
+   "x": 99.37888198757764,
+   "y": 131.0344827586207,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 31.801242236024844,
+   "y": 131.0344827586207,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 846.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -846.0
+  },
+  {
+   "a": "click",
+   "x": 99.37888198757764,
+   "y": 131.0344827586207,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 31.801242236024844,
+   "y": 131.0344827586207,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 846.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -846.0
+  },
+  {
+   "a": "click",
+   "x": 99.37888198757764,
+   "y": 131.0344827586207,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 31.801242236024844,
+   "y": 131.0344827586207,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 846.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -846.0
+  },
+  {
+   "a": "click",
+   "x": 99.37888198757764,
+   "y": 131.0344827586207,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 31.801242236024844,
+   "y": 131.0344827586207,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 846.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -846.0
+  },
+  {
+   "a": "click",
+   "x": 99.37888198757764,
+   "y": 131.0344827586207,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 31.801242236024844,
+   "y": 131.0344827586207,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 846.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 3038,
+   "out": 96,
+   "usd": 0.0
+  },
+  {
+   "in": 4530,
+   "out": 60,
+   "usd": 0.0
+  },
+  {
+   "in": 5994,
+   "out": 115,
+   "usd": 0.0
+  },
+  {
+   "in": 6177,
+   "out": 77,
+   "usd": 0.0
+  },
+  {
+   "in": 6322,
+   "out": 75,
+   "usd": 0.0
+  },
+  {
+   "in": 6465,
+   "out": 74,
+   "usd": 0.0
+  },
+  {
+   "in": 6607,
+   "out": 80,
+   "usd": 0.0
+  },
+  {
+   "in": 6747,
+   "out": 55,
+   "usd": 0.0
+  },
+  {
+   "in": 6870,
+   "out": 92,
+   "usd": 0.0
+  },
+  {
+   "in": 7030,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 7136,
+   "out": 69,
+   "usd": 0.0
+  },
+  {
+   "in": 7247,
+   "out": 72,
+   "usd": 0.0
+  },
+  {
+   "in": 7373,
+   "out": 55,
+   "usd": 0.0
+  },
+  {
+   "in": 7465,
+   "out": 50,
+   "usd": 0.0
+  },
+  {
+   "in": 7553,
+   "out": 49,
+   "usd": 0.0
+  },
+  {
+   "in": 7640,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 7725,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 7810,
+   "out": 42,
+   "usd": 0.0
+  },
+  {
+   "in": 7890,
+   "out": 44,
+   "usd": 0.0
+  },
+  {
+   "in": 7972,
+   "out": 45,
+   "usd": 0.0
+  },
+  {
+   "in": 8055,
+   "out": 46,
+   "usd": 0.0
+  },
+  {
+   "in": 8139,
+   "out": 59,
+   "usd": 0.0
+  },
+  {
+   "in": 8236,
+   "out": 49,
+   "usd": 0.0
+  },
+  {
+   "in": 8323,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 8408,
+   "out": 43,
+   "usd": 0.0
+  },
+  {
+   "in": 8489,
+   "out": 57,
+   "usd": 0.0
+  },
+  {
+   "in": 8584,
+   "out": 49,
+   "usd": 0.0
+  },
+  {
+   "in": 8671,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 8756,
+   "out": 43,
+   "usd": 0.0
+  },
+  {
+   "in": 8837,
+   "out": 59,
+   "usd": 0.0
+  },
+  {
+   "in": 8934,
+   "out": 49,
+   "usd": 0.0
+  },
+  {
+   "in": 9021,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 9106,
+   "out": 43,
+   "usd": 0.0
+  },
+  {
+   "in": 9187,
+   "out": 59,
+   "usd": 0.0
+  },
+  {
+   "in": 9284,
+   "out": 49,
+   "usd": 0.0
+  },
+  {
+   "in": 9371,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 9456,
+   "out": 43,
+   "usd": 0.0
+  },
+  {
+   "in": 9537,
+   "out": 59,
+   "usd": 0.0
+  },
+  {
+   "in": 9634,
+   "out": 49,
+   "usd": 0.0
+  },
+  {
+   "in": 9721,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 9806,
+   "out": 43,
+   "usd": 0.0
+  },
+  {
+   "in": 9887,
+   "out": 59,
+   "usd": 0.0
+  },
+  {
+   "in": 9984,
+   "out": 49,
+   "usd": 0.0
+  },
+  {
+   "in": 10071,
+   "out": 47,
+   "usd": 0.0
+  }
+ ]
+}

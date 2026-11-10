@@ -1458,7 +1458,7 @@ def run_campaign(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument(
         "--trust-roots",

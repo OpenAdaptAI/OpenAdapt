@@ -1,0 +1,90 @@
+{
+ "id": "P03",
+ "class": "clean",
+ "type": "patient",
+ "expect": "create",
+ "note": "A look-alike (same name, born a day later) exists; a new record is right.",
+ "agent_s": 13.6,
+ "cost_usd": 0.019784,
+ "claim": {
+  "status": "not_done",
+  "id": "Patient/2ffd0175-b6d4-4063-9359-5dc7904ef192",
+  "note": "RESULT: NOT DONE Found Lena Okafor (Patient/2ffd0175-b6d4-4063-9359-5dc7904ef192) with birth date 1988-04-23 and no address or telecom to confirm identity; cannot determine whether this is the same person. No changes made.",
+  "claim_line": true,
+  "end_url": "http://localhost:9811/Patient/2ffd0175-b6d4-4063-9359-5dc7904ef192/details",
+  "final_text": "RESULT: NOT DONE Found Lena Okafor (Patient/2ffd0175-b6d4-4063-9359-5dc7904ef192) with birth date 1988-04-23 and no address or telecom to confirm identity; cannot determine whether this is the same person. No changes made.",
+  "model_calls": 5,
+  "actions": 2,
+  "tokens_in": 23956,
+  "tokens_out": 188
+ },
+ "verifier": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "no record is the person and the agent created none"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 0,
+   "agent_writes": 0,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": []
+  },
+  "unreadable": false
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "no record is the person and the agent created none"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 0,
+   "agent_writes": 0,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": []
+  },
+  "unreadable": false
+ },
+ "verify_s": 4.2,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "absent",
+  "reasons": [
+   "no Patient was written"
+  ],
+  "changes": {}
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 1
+}

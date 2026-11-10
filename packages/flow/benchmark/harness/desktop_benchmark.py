@@ -786,7 +786,7 @@ def write_outputs(results: dict, out_dir: str | Path) -> None:
 if __name__ == "__main__":  # pragma: no cover
     import argparse
 
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(allow_abbrev=False)
     ap.add_argument("--out", default="benchmark/desktop")
     ap.add_argument("--n", type=int, default=1)
     ap.add_argument("--conditions", default="")

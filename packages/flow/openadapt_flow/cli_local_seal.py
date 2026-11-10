@@ -891,6 +891,7 @@ def register(sub: Any) -> None:
     p = sub.add_parser(
         "local-seal",
         help="Offline Seals signed with this machine's key; optional batched timestamps",
+        allow_abbrev=False,
     )
     p.add_argument(
         "--home",
@@ -907,7 +908,9 @@ def register(sub: Any) -> None:
     )
     s = p.add_subparsers(dest="local_seal_cmd", required=True)
 
-    r = s.add_parser("run", help="Seal a run directory's report.json")
+    r = s.add_parser(
+        "run", help="Seal a run directory's report.json", allow_abbrev=False
+    )
     r.add_argument("run_dir")
     r.add_argument(
         "--authorization",
@@ -930,14 +933,22 @@ def register(sub: Any) -> None:
     )
     r.set_defaults(func=_guarded(_cmd_run))
 
-    f = s.add_parser("file", help="Seal any file: a record, an export, an audit report")
+    f = s.add_parser(
+        "file",
+        help="Seal any file: a record, an export, an audit report",
+        allow_abbrev=False,
+    )
     f.add_argument("path")
     f.add_argument("--kind", choices=["record", "export", "file"], default="file")
     f.add_argument("--run-id", default=None)
     f.add_argument("--out", default=None, help="Default: PATH.seal.json")
     f.set_defaults(func=_guarded(_cmd_file))
 
-    v = s.add_parser("verify", help="Verify a run directory, or a file with --seal")
+    v = s.add_parser(
+        "verify",
+        help="Verify a run directory, or a file with --seal",
+        allow_abbrev=False,
+    )
     v.add_argument("target", nargs="+", help="Run directories, or one file with --seal")
     v.add_argument("--seal", default=None)
     v.add_argument("--keys", default=None, help="Pinned key registry JSON")
@@ -983,6 +994,7 @@ def register(sub: Any) -> None:
             "Log a Seal's digest in Sigstore Rekor (opt-in; sends a digest and "
             "the public key, never report content)"
         ),
+        allow_abbrev=False,
     )
     a.add_argument("target", help="A run directory, or a .seal.json file")
     a.add_argument(
@@ -997,6 +1009,7 @@ def register(sub: Any) -> None:
     ts = s.add_parser(
         "timestamp",
         help="One RFC 3161 token for a Seal or a run authorization (sends a 32-byte digest)",
+        allow_abbrev=False,
     )
     ts.add_argument(
         "target", help="A run directory, a .seal.json, or an authorization folder"
@@ -1008,11 +1021,15 @@ def register(sub: Any) -> None:
     ts.set_defaults(func=_guarded(_cmd_timestamp))
 
     z = s.add_parser(
-        "authorize", help="Run authorizations signed with a person's GitHub SSH key"
+        "authorize",
+        help="Run authorizations signed with a person's GitHub SSH key",
+        allow_abbrev=False,
     )
     zs = z.add_subparsers(dest="authorize_cmd", required=True)
     zc = zs.add_parser(
-        "create", help="Write an unsigned authorization and snapshot GitHub's keys"
+        "create",
+        help="Write an unsigned authorization and snapshot GitHub's keys",
+        allow_abbrev=False,
     )
     zc.add_argument("--out", default=".", help="Folder for run-authorization.json")
     zc.add_argument("--bundle-digest", required=True, help="bundle_content_digest")
@@ -1041,6 +1058,7 @@ def register(sub: Any) -> None:
     zg = zs.add_parser(
         "sign",
         help="Show what the authorization allows, ask, then sign with ssh-keygen",
+        allow_abbrev=False,
     )
     zg.add_argument("statement", help="run-authorization.json (or its folder)")
     zg.add_argument(
@@ -1057,7 +1075,9 @@ def register(sub: Any) -> None:
     )
     zg.add_argument("--dry-run", action="store_true", help="Print the summary only")
     zg.set_defaults(func=_guarded(_cmd_authorize_sign))
-    zv = zs.add_parser("verify", help="Verify a signed run authorization")
+    zv = zs.add_parser(
+        "verify", help="Verify a signed run authorization", allow_abbrev=False
+    )
     zv.add_argument("authorization")
     zv.add_argument("--allowed-signers", default=None)
     zv.add_argument("--keys", default=None, help="Pinned Seal keys (for the anchor)")
@@ -1069,7 +1089,9 @@ def register(sub: Any) -> None:
     _log_args(zv)
     zv.set_defaults(func=_guarded(_cmd_authorize_verify))
     za = zs.add_parser(
-        "anchor", help="Log the authorization's digest in Rekor with the Seal key"
+        "anchor",
+        help="Log the authorization's digest in Rekor with the Seal key",
+        allow_abbrev=False,
     )
     za.add_argument("authorization")
     za.add_argument("--log-key", action="append", default=[])
@@ -1079,6 +1101,7 @@ def register(sub: Any) -> None:
     pr = s.add_parser(
         "profile",
         help="Pseudonymous operator record from anchored Seals (operator-profile.json)",
+        allow_abbrev=False,
     )
     pr.add_argument("run_dirs", nargs="+")
     pr.add_argument("--keys", default=None, help="Pinned Seal key registry")
@@ -1099,28 +1122,41 @@ def register(sub: Any) -> None:
     _log_args(pr)
     pr.set_defaults(func=_guarded(_cmd_profile), require_anchor=False)
 
-    k = s.add_parser("key", help="Print the Seal key's public half for pinning")
+    k = s.add_parser(
+        "key", help="Print the Seal key's public half for pinning", allow_abbrev=False
+    )
     k.set_defaults(func=_guarded(_cmd_key))
     ks = k.add_subparsers(dest="key_cmd")
     kc = ks.add_parser(
-        "create", help="Make a new key at --key file:PATH or keychain:NAME"
+        "create",
+        help="Make a new key at --key file:PATH or keychain:NAME",
+        allow_abbrev=False,
     )
     kc.set_defaults(func=_guarded(_cmd_key_create))
-    kp = ks.add_parser("pin", help="Add the Seal key to a pinned key registry")
+    kp = ks.add_parser(
+        "pin", help="Add the Seal key to a pinned key registry", allow_abbrev=False
+    )
     kp.add_argument("registry", help="Key registry JSON to create or extend")
     kp.set_defaults(func=_guarded(_cmd_key_pin))
-    kr = ks.add_parser("revoke", help="Mark a pinned key revoked from a time on")
+    kr = ks.add_parser(
+        "revoke", help="Mark a pinned key revoked from a time on", allow_abbrev=False
+    )
     kr.add_argument("registry")
     kr.add_argument("key_id")
     kr.add_argument("--at", default=None, help="UTC YYYY-MM-DDTHH:MM:SSZ (default now)")
     kr.set_defaults(func=_guarded(_cmd_key_revoke))
 
-    b = s.add_parser("batch", help="Fold queued Seals into one Merkle batch (local)")
+    b = s.add_parser(
+        "batch",
+        help="Fold queued Seals into one Merkle batch (local)",
+        allow_abbrev=False,
+    )
     b.set_defaults(func=_guarded(_cmd_batch))
 
     t = s.add_parser(
         "submit",
         help="Timestamp every unsent batch root (sends one 32-byte digest per batch)",
+        allow_abbrev=False,
     )
     t.add_argument(
         "--tsa-url", default=None, help="RFC 3161 TSA URL (default Sigstore)"
@@ -1128,7 +1164,9 @@ def register(sub: Any) -> None:
     t.set_defaults(func=_guarded(_cmd_submit))
 
     q = s.add_parser(
-        "proof", help="Show the batch, root and inclusion proof for a Seal"
+        "proof",
+        help="Show the batch, root and inclusion proof for a Seal",
+        allow_abbrev=False,
     )
     q.add_argument("seal")
     q.set_defaults(func=_guarded(_cmd_proof))

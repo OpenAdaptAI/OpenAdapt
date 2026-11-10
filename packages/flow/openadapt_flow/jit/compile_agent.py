@@ -28,17 +28,21 @@ What it never does:
 from __future__ import annotations
 
 import json
+import os
+import re
 import shutil
 import sys
 import time
 import uuid
 from dataclasses import dataclass, field
+from inspect import CORO_CREATED, getcoroutinestate
 from pathlib import Path
-from types import TracebackType
+from types import CoroutineType, TracebackType
 from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
+    Literal,
     Mapping,
     Optional,
     Protocol,
@@ -62,6 +66,7 @@ __all__ = [
     "App",
     "RECORDING_WARNING",
     "Recording",
+    "RecordingDispatcher",
     "SURFACE_KINDS",
     "SurfaceApp",
     "TaskRequest",
@@ -205,8 +210,10 @@ class WebApp:
         if self.setup is not None:
             try:
                 self.setup(backend.page)
-            except BaseException:
-                close()
+            except BaseException as error:
+                from openadapt_flow.backends._owned import close_owned
+
+                close_owned((close,), primary=error)
                 raise
         return backend, close
 
@@ -486,8 +493,10 @@ class Recording:
     """One capture, as a context manager. Get it from
     :meth:`CompiledAgent.recording`.
 
-    Inside the ``with`` block, send each action to ``computer.execute`` and
-    give the model the observation. On exit the recording is compiled into a
+    Inside the ``with`` block, send each action to ``dispatcher.execute`` and
+    give the agent the observation. The dispatcher is the action boundary for
+    external agents; capture controllers may register per-action and
+    pre-finish checks on it. On exit the recording is compiled into a
     DRAFT bundle, and :attr:`result` says what happened. An
     :class:`UnsupportedAction` raised in the block ends the capture with no
     draft and is not re-raised; any other exception is recorded as
@@ -512,10 +521,12 @@ class Recording:
         self.result: Optional[JitResult] = None
         #: The teach scope's guard, when the task declared one.
         self.guard: Optional["TeachGuard"] = None
+        self.dispatcher: Optional[RecordingDispatcher] = None
         self._baseline: Optional[list[dict[str, Any]]] = None
 
     def __enter__(self) -> "Recording":
         from openadapt_flow.authoring import AuthoringSession
+        from openadapt_flow.backends._owned import close_owned
 
         owner = self._owner
         if owner.admitted or owner.candidate() is not None:
@@ -558,6 +569,27 @@ class Recording:
         else:
             backend, self._close = owner.app.open()
         try:
+            if owner.before_capture is not None:
+                # The public callback returns None. Widen only this runtime
+                # view so Python callers cannot silently return an awaitable.
+                callback: Callable[[Any], object] = owner.before_capture
+                prepared = callback(backend)
+                if prepared is not None:
+                    invalid_return = TypeError(
+                        "before_capture must return None synchronously"
+                    )
+
+                    def discard_unstarted_coroutine() -> None:
+                        # Never await/schedule, call an arbitrary .close, or
+                        # run a suspended coroutine's finally as hygiene.
+                        if (
+                            type(prepared) is CoroutineType
+                            and getcoroutinestate(prepared) == CORO_CREATED
+                        ):
+                            prepared.close()
+
+                    close_owned((discard_unstarted_coroutine,), primary=invalid_return)
+                    raise invalid_return
             if self.guard is not None and owner.app.record_reader is not None:
                 self._baseline = owner.app.record_reader()
             self._session = AuthoringSession(
@@ -577,10 +609,16 @@ class Recording:
                 else None,
                 sleep=owner._sleep,
                 guard=self.guard,
+                after_action=self._dispatch_after_action,
             )
+            self.dispatcher = RecordingDispatcher(self)
+            self.computer.dispatcher = self.dispatcher
             self._session.start_record()
-        except BaseException:
-            self._close()
+        except BaseException as error:
+            callbacks = [self._close]
+            if self.dispatcher is not None:
+                callbacks.insert(0, self.dispatcher.close)
+            close_owned(callbacks, primary=error)
             raise
         return self
 
@@ -590,20 +628,77 @@ class Recording:
         exc: Optional[BaseException],
         tb: Optional[TracebackType],
     ) -> bool:
-        assert self.computer is not None and self._close is not None
-        try:
-            self.result = self._finish(exc)
-        finally:
-            self._close()
-        return isinstance(exc, UnsupportedAction)
+        from openadapt_flow.backends._owned import close_owned, note_failure
 
-    def _finish(self, exc: Optional[BaseException]) -> JitResult:
+        assert self.computer is not None and self._close is not None
+        callbacks = [self._close]
+        if self.dispatcher is not None:
+            callbacks.insert(0, self.dispatcher.close)
+        try:
+            pending = self._finish(exc)
+        except BaseException as error:
+            primary = exc if exc is not None else error
+            if primary is not error:
+                note_failure(primary, error)
+            self.result = None
+            close_owned(
+                [*callbacks, lambda: self._keep_failed_capture("finish", primary)],
+                primary=primary,
+            )
+            raise primary
+        suppress = isinstance(exc, UnsupportedAction)
+        try:
+            close_owned(callbacks, primary=None if suppress else exc)
+        except BaseException as error:
+            self.result = None
+            cleanup_error = error
+
+            def keep_failed_cleanup() -> None:
+                self._keep_failed_capture("cleanup", cleanup_error)
+
+            close_owned((keep_failed_cleanup,), primary=cleanup_error)
+            raise
+        try:
+            # Compilation is staged; only completed owned cleanup permits
+            # signing and publication as a discoverable normal candidate.
+            self.result = pending() if callable(pending) else pending
+        except BaseException as error:
+            primary = exc if exc is not None else error
+            if primary is not error:
+                note_failure(primary, error)
+            self.result = None
+            close_owned(
+                (lambda: self._keep_failed_capture("publication", primary),),
+                primary=primary,
+            )
+            raise primary
+        return suppress
+
+    def _keep_failed_capture(self, stage: str, error: BaseException) -> None:
+        """Retain failed staged/publication data outside normal discovery."""
+        if self._owner.program_dir.exists():
+            assert self.computer is not None
+            self._owner._capture_refused(
+                "capture_failed",
+                f"capture_{stage}_failed:{type(error).__name__}",
+                self.computer,
+                guard=self.guard,
+            )
+
+    def _finish(
+        self, exc: Optional[BaseException]
+    ) -> Union[JitResult, Callable[[], JitResult]]:
         from openadapt_flow.authoring import AuthoringError
         from openadapt_flow.teach_scope import ScopeViolation
 
         owner, session, computer = self._owner, self._session, self.computer
         assert computer is not None
         guard = self.guard
+        if exc is None and self.dispatcher is not None:
+            try:
+                self.dispatcher.finish()
+            except Exception as finish_error:  # noqa: BLE001 - fail closed
+                exc = finish_error
         if guard is not None and exc is None:
             # A request the page made after the agent's last action.
             try:
@@ -660,9 +755,28 @@ class Recording:
                     guard=guard,
                     readback=readback,
                 )
+
+        def mark_identity(recording_dir: Path) -> None:
+            # No DOM names the record next to each control here: mark where
+            # the screen shows the record's identifiers, so every click
+            # checks them. Not all found, nothing is marked and the gate
+            # refuses.
+            if mark_identity_band(recording_dir, owner.on_screen) is None:
+                if owner.on_warning is not None:
+                    owner.on_warning(
+                        "the record's identifiers (the ids and dates in "
+                        "on_screen) were not all found on the recorded screen; "
+                        "its clicks carry no identity band"
+                    )
+
         try:
             compiled = session.compile(
                 owner.bundle_dir,
+                before_compile=(
+                    mark_identity
+                    if owner.app.kind != "web" and owner.on_screen
+                    else None
+                ),
                 name=owner.task.task_id,
                 distill=True,
                 mine_effects=owner.app.record_reader is not None,
@@ -682,7 +796,7 @@ class Recording:
             for line in lines:
                 if owner.on_warning is not None:
                     owner.on_warning(line)
-        return owner._write_draft(
+        return lambda: owner._write_draft(
             session,
             compiled,
             computer,
@@ -691,6 +805,133 @@ class Recording:
             guard=guard,
             readback=readback,
         )
+
+    def _dispatch_after_action(self, native: Mapping[str, Any]) -> None:
+        if self.dispatcher is not None:
+            self.dispatcher.after_action(native)
+
+
+class RecordingDispatcher:
+    """The capture-owned action interface for an external agent.
+
+    Pass only this object to an external agent. Each call to :meth:`execute`
+    goes through the recording computer and its pre-action teach guard. A
+    capture controller can register request-pump and completion callbacks;
+    those run before the observation is taken and before the recording is
+    finalized, respectively.
+    """
+
+    def __init__(self, recording: Recording) -> None:
+        self._recording = recording
+        self._after_action: list[Callable[[Mapping[str, Any]], None]] = []
+        self._finalizers: list[Callable[[], None]] = []
+        self._closers: list[Callable[[], None]] = []
+        self._finish_state: Literal["open", "running", "complete", "failed"] = "open"
+        self._finish_error: Optional[BaseException] = None
+        self._close_error: Optional[BaseException] = None
+        self._closed = False
+
+    @property
+    def recording(self) -> Recording:
+        """The owning capture, for trusted capture controllers."""
+
+        return self._recording
+
+    def execute(self, native: Mapping[str, Any]) -> Any:
+        """Perform one action under the live recording's guard."""
+
+        if (
+            self._closed
+            or self._finish_state != "open"
+            or self._recording.computer is None
+        ):
+            raise RuntimeError("the recording action dispatcher is closed")
+        return self._recording.computer.execute(native)
+
+    def add_after_action(self, callback: Callable[[Mapping[str, Any]], None]) -> None:
+        """Run a capture controller after each guarded operation."""
+
+        if self._closed or self._finish_state != "open":
+            raise RuntimeError("the recording action dispatcher is finishing")
+        self._after_action.append(callback)
+
+    def add_settle_callback(self, callback: Callable[[float], None]) -> None:
+        """Pump a guard while the recorder samples an action's settled result."""
+
+        if self._closed or self._finish_state != "open":
+            raise RuntimeError("the recording action dispatcher is finishing")
+        if self._recording._session is None:
+            raise RuntimeError("the recording session has not started")
+        self._recording._session.add_settle_callback(callback)
+
+    def before_finish(self, callback: Callable[[], None]) -> None:
+        """Require capture-side checks to finish before a draft is written."""
+
+        if self._closed or self._finish_state != "open":
+            raise RuntimeError("the recording action dispatcher is finishing")
+        self._finalizers.append(callback)
+
+    def on_close(self, callback: Callable[[], None]) -> None:
+        """Release a capture controller on both success and refusal."""
+
+        if self._closed:
+            raise RuntimeError("the recording action dispatcher is closed")
+        self._closers.append(callback)
+
+    def after_action(self, native: Mapping[str, Any]) -> None:
+        """Internal action boundary used by :class:`Recording`."""
+
+        if self._closed or self._finish_state != "open":
+            raise RuntimeError("the recording action dispatcher is closed")
+        for callback in tuple(self._after_action):
+            callback(native)
+
+    def finish(self) -> None:
+        """Complete checks once; a caught refusal never authorizes a draft."""
+
+        if self._finish_state == "failed":
+            assert self._finish_error is not None
+            raise self._finish_error
+        if self._finish_state == "complete":
+            return
+        if self._finish_state == "running" or self._closed:
+            self._finish_error = RuntimeError(
+                "recording completion was reentered or its dispatcher closed"
+            )
+            self._finish_state = "failed"
+            raise self._finish_error
+        self._finish_state = "running"
+        try:
+            for callback in tuple(self._finalizers):
+                callback()
+                # A callback may catch a reentrant finish refusal. It still
+                # cannot turn that failed completion back into success.
+                if self._finish_error is not None:
+                    raise self._finish_error
+                if self._closed:
+                    raise RuntimeError(
+                        "the recording dispatcher closed during completion"
+                    )
+        except BaseException as error:
+            if self._finish_error is None:
+                self._finish_error = error
+            self._finish_state = "failed"
+            raise self._finish_error
+        self._finish_state = "complete"
+
+    def close(self) -> None:
+        if self._closed:
+            if self._close_error is not None:
+                raise self._close_error
+            return
+        self._closed = True
+        from openadapt_flow.backends._owned import close_owned
+
+        try:
+            close_owned(reversed(self._closers))
+        except BaseException as error:
+            self._close_error = error
+            raise
 
 
 @dataclass
@@ -715,7 +956,17 @@ class CompiledAgent:
     #: one, the recording's scope is bound from it; ``teach_scope`` may only
     #: narrow it. Without one the draft can't be admitted.
     teach_authorization: Any = None
+    #: The record's identity as the screen shows it (a name, an MRN). On a
+    #: desktop or remote app it marks each click's identity band, as an
+    #: operator's ``record --identifier-region`` does.
+    on_screen: Sequence[str] = ()
+    #: Trusted process-local preparation/preflight on the capture backend.
+    #: Not a canary/replay hook, an approval or a serialized task option.
+    before_capture: Optional[Callable[[Any], None]] = field(default=None, repr=False)
     _sleep: Callable[[float], None] = field(default=time.sleep, repr=False)
+
+    # Enabled only by the compile-agent task loader, never a raw bundle path.
+    _use_skill_repair: bool = field(default=False, init=False, repr=False)
 
     # -- layout --------------------------------------------------------------
 
@@ -729,6 +980,12 @@ class CompiledAgent:
 
     @property
     def bundle_dir(self) -> Path:
+        if self._use_skill_repair:
+            from openadapt_flow.compile_agent.repair_selection import selected_bundle
+
+            selected = selected_bundle(self)
+            if selected is not None:
+                return selected
         return self.program_dir / "bundle"
 
     @property
@@ -768,7 +1025,7 @@ class CompiledAgent:
 
     # -- run -----------------------------------------------------------------
 
-    def run(self, **params: Any) -> JitResult:
+    def run(self, /, **params: Any) -> JitResult:
         """Run the task with ``params``.
 
         Raises:
@@ -800,7 +1057,7 @@ class CompiledAgent:
             )
         return self._explore(params, values)
 
-    def recording(self, **params: Any) -> Recording:
+    def recording(self, /, **params: Any) -> Recording:
         """Record your own CUA loop: ``with jit.recording(note="x") as rec:``.
 
         ``rec.request`` is what to ask the model, ``rec.computer.execute``
@@ -851,6 +1108,8 @@ class CompiledAgent:
                 f"the teach scope is for task {scope.task_id!r}, not "
                 f"{self.task.task_id!r}"
             )
+        if self.app.kind != "web":
+            scope = self._bind_surface_target(scope, authorized)
         # Every declared input is a value the scope declares, so the agent
         # can type it. Nothing else is typed.
         missing = sorted(
@@ -869,6 +1128,43 @@ class CompiledAgent:
                 "read-back) or a write adapter (to check writes before they go)"
             )
         return scope
+
+    def _bind_surface_target(
+        self, scope: TeachScope, authorized: Optional[TeachScope]
+    ) -> TeachScope:
+        """Bind a desktop or remote app's teach scope to the app taught.
+
+        No browser guard sees a desktop or remote app, so the scope must name
+        the app the run is on (``<kind>://<target>``). A signed authorization
+        must name it, and a narrower scope may not name only other apps:
+        either is refused here, before anything is recorded or signed. The
+        returned scope names exactly this app, so a signed scope never omits
+        the target it authorizes.
+        """
+
+        import dataclasses
+
+        from openadapt_flow.teach_scope import scope_origin
+
+        target = scope_origin(self.app.origin)
+        if target is None:
+            raise ValueError(
+                f"this app's origin ({self.app.origin}) is not one a teach "
+                "scope can name; nothing is taught"
+            )
+        if authorized is not None and target not in authorized.origins:
+            raise ValueError(
+                f"the teach authorization does not name this app ({target}); "
+                f"it names {', '.join(authorized.origins) or 'no app'}"
+            )
+        if scope.origins and target not in scope.origins:
+            raise ValueError(
+                f"the teach scope does not name this app ({target}); it names "
+                f"{', '.join(scope.origins)}"
+            )
+        if scope.origins == (target,):
+            return scope
+        return dataclasses.replace(scope, origins=(target,))
 
     def _check_model_key(self) -> None:
         from openadapt_flow.jit.keys import MissingModelKey
@@ -960,17 +1256,25 @@ class CompiledAgent:
         (program / "capture.json").write_text(
             json.dumps(computer.log, indent=2) + "\n", encoding="utf-8"
         )
-        (program / CANDIDATE_FILE).write_text(
-            json.dumps(candidate, indent=2) + "\n", encoding="utf-8"
-        )
-        lifecycle._event(program, "draft", recorded_by=candidate["recorded_by"])
-        return JitResult(
+        # Stage the signed record, then finish fallible retention before the
+        # one atomic publication. A failed event never exposes a candidate.
+        staged = program / f"candidate-pending-{uuid.uuid4().hex}.json"
+        descriptor = os.open(staged, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            json.dump(candidate, stream, indent=2)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        result = JitResult(
             status=NEEDS_HUMAN_ADMIT,
             task_key=self.task.key,
             cache="miss",
             agent_called=self.agent is not None,
             candidate=candidate,
         )
+        lifecycle._event(program, "draft", recorded_by=candidate["recorded_by"])
+        staged.replace(program / CANDIDATE_FILE)
+        return result
 
     def _capture_refused(
         self,
@@ -1047,7 +1351,14 @@ class CompiledAgent:
             key_dir=self.key_dir,
         )
 
-    def canary(self, *, principal_id: Any, **params: Any) -> JitResult:
+    def canary(self, /, *, principal_id: Any, **params: Any) -> JitResult:
+        """Run a canary with keyword data; use canary_params for control-name keys."""
+
+        return self.canary_params(params, principal_id=principal_id)
+
+    def canary_params(
+        self, params: Mapping[str, Any], /, *, principal_id: Any
+    ) -> JitResult:
         """Run the draft once on the target app, attended.
 
         ``principal_id`` is a person's name, or a registered
@@ -1200,8 +1511,13 @@ class CompiledAgent:
 
     # -- cache hit -----------------------------------------------------------
 
-    def _run_admitted(self, values: dict[str, str]) -> JitResult:
+    def _run_admitted(
+        self, values: dict[str, str], *, bundle_dir: Optional[Path] = None
+    ) -> JitResult:
         from openadapt_flow.ir import Workflow
+
+        def bundle() -> Path:
+            return self.bundle_dir if bundle_dir is None else Path(bundle_dir)
 
         def refused(detail: str) -> JitResult:
             return self._to_inbox(
@@ -1215,10 +1531,12 @@ class CompiledAgent:
             )
 
         try:
-            record = lifecycle.verify_admission(self.bundle_dir, key_dir=self.key_dir)
-            workflow = Workflow.load(self.bundle_dir)
+            record = lifecycle.verify_admission(bundle(), key_dir=self.key_dir)
+            workflow = Workflow.load(bundle())
         except Exception as exc:  # noqa: BLE001 - any doubt is a refusal
             return refused(f"the admission does not hold: {exc}")
+        if bundle_dir is not None and record.get("admission_mode") != "repair":
+            return refused("an explicit repair canary requires normal repair admission")
         # Pin what was admitted, not what is on disk now: the bundle is loaded
         # again for the run, and must still be the admitted one.
         digest = str(record["digest"])
@@ -1252,7 +1570,12 @@ class CompiledAgent:
             )
         run_dir = self.runs_dir / f"{_stamp()}-{uuid.uuid4().hex[:8]}"
         run_dir.parent.mkdir(parents=True, exist_ok=True)
-        gate_detail, report = self._run_governed(workflow, digest, values, run_dir)
+        if bundle_dir is None:
+            gate_detail, report = self._run_governed(workflow, digest, values, run_dir)
+        else:
+            gate_detail, report = self._run_governed(
+                workflow, digest, values, run_dir, bundle_dir=bundle_dir
+            )
         if report is None:
             return refused(gate_detail or "the run gate refused")
         result = JitResult(
@@ -1283,6 +1606,7 @@ class CompiledAgent:
         run_dir: Path,
         *,
         attended_by: Any = None,
+        bundle_dir: Optional[Path] = None,
     ) -> tuple[Optional[str], Any]:
         """The standard-profile run: gate, authorization, Replayer, verifier.
 
@@ -1302,9 +1626,12 @@ class CompiledAgent:
         )
         from openadapt_flow.runtime import Replayer
 
+        def bundle() -> Path:
+            return self.bundle_dir if bundle_dir is None else Path(bundle_dir)
+
         if attended_by is None:
             try:
-                lifecycle.verify_admission(self.bundle_dir, key_dir=self.key_dir)
+                lifecycle.verify_admission(bundle(), key_dir=self.key_dir)
             except AdmissionError as exc:
                 return f"a DRAFT never runs unattended: {exc}", None
         refusal = getattr(self.app, "run_refusal", lambda: None)()
@@ -1312,7 +1639,7 @@ class CompiledAgent:
             return f"refused before any action: {refusal}", None
         gate = evaluate_run_gate(
             workflow,
-            bundle_dir=self.bundle_dir,
+            bundle_dir=bundle(),
             deployment=DeploymentConfig(policy=PolicySection(policy=self.policy)),
             effect_verifier=self.verifier,
             profile_contract=execution_profile_contract(ExecutionProfile.STANDARD),
@@ -1348,7 +1675,7 @@ class CompiledAgent:
             ).run(
                 workflow.model_copy(deep=True),
                 params=values,
-                bundle_dir=self.bundle_dir,
+                bundle_dir=bundle(),
                 run_dir=run_dir,
                 execution_target_kind=self.app.kind,
                 execution_origin=self.app.origin if self.app.kind == "web" else None,
@@ -1411,6 +1738,112 @@ def _stamp() -> str:
     )
 
 
+_TOKEN_EDGE = ".,;:()[]{}<>\"'"
+_DIGIT_RUN = re.compile(r"\d+")
+_DATE = re.compile(r"(?<!\d)(\d{1,4})[-/.](\d{1,2})[-/.](\d{1,4})(?!\d)")
+
+
+def _declared_ids(texts: Sequence[str]) -> set[str]:
+    """The identifier tokens (ids, dates: digit-bearing) in ``texts``,
+    casefolded with edge punctuation stripped."""
+
+    out = set()
+    for text in texts:
+        for raw in str(text).split():
+            token = raw.strip(_TOKEN_EDGE).casefold()
+            if any(c.isdigit() for c in token):
+                out.add(token)
+    return out
+
+
+def _date_key(match: "re.Match[str]") -> str:
+    return "-".join(match.groups())
+
+
+def _id_matches(token: str, declared: str) -> bool:
+    """Whether one OCR token shows a declared identifier exactly (#1773).
+
+    The token matches when it equals the identifier, or when one of its
+    maximal digit runs does: OCR often joins a label to its number
+    ("MRN1234"), so that token shows 1234, but "12345", "91234" and
+    "MRN12345" do not (the run is longer). A date compares as a whole
+    normalized date (``1966-02-17``, ``1966/02/17``), and a digit run inside
+    a date never stands for another identifier.
+    """
+
+    if token == declared:
+        return True
+    whole_date = _DATE.fullmatch(declared)
+    if whole_date is not None:
+        want = _date_key(whole_date)
+        return any(_date_key(m) == want for m in _DATE.finditer(token))
+    if not declared.isdigit():
+        return False
+    undated = _DATE.sub(" ", token)
+    return declared in _DIGIT_RUN.findall(undated)
+
+
+def mark_identity_band(
+    recording_dir: Path, on_screen: Sequence[str], *, pad: int = 6
+) -> Optional[list[int]]:
+    """Mark where a desktop or remote recording shows the record's identity.
+
+    Reads the frame before the first click (OCR) and stamps the bounding box,
+    padded, of the lines that show the record's declared identifiers as the
+    recording's ``identifier_region`` in ``meta.json``: the band the compiler
+    gives every click, which each run checks before it acts.
+
+    The identifiers are the digit-bearing tokens of ``on_screen`` (an MRN, a
+    date of birth). As at run time, an id must match raw: an OCR token shows
+    it only when the token, or one of its maximal digit runs, equals it
+    exactly (:func:`_id_matches`), never a longer number that contains it. A
+    name alone identifies
+    no record, so with no declared identifier, or any declared identifier
+    missing from the frame, this abstains: it returns None and stamps
+    nothing, and the run gate then refuses the unbanded clicks.
+    """
+
+    import json
+
+    from openadapt_flow.vision import ocr
+
+    recording_dir = Path(recording_dir)
+    first = None
+    for line in (recording_dir / "events.jsonl").read_text().splitlines():
+        event = json.loads(line) if line.strip() else {}
+        if event.get("kind") == "click":
+            first = event
+            break
+    if first is None:
+        return None
+    frame = recording_dir / "frames" / f"{int(first['i']):04d}_before.png"
+    if not frame.is_file():
+        return None
+    declared = _declared_ids(on_screen)
+    if not declared:
+        return None
+    seen: set[str] = set()
+    boxes = []
+    for found in ocr(frame.read_bytes()):
+        shown = _declared_ids([found.text])
+        tokens = {d for d in declared if any(_id_matches(t, d) for t in shown)}
+        if tokens:
+            seen |= tokens
+            boxes.append(tuple(int(v) for v in found.region))
+    if not boxes or seen != declared:
+        return None
+    left = min(b[0] for b in boxes) - pad
+    top = min(b[1] for b in boxes) - pad
+    right = max(b[0] + b[2] for b in boxes) + pad
+    bottom = max(b[1] + b[3] for b in boxes) + pad
+    band = [max(0, left), max(0, top), right - max(0, left), bottom - max(0, top)]
+    meta_path = recording_dir / "meta.json"
+    meta = json.loads(meta_path.read_text()) if meta_path.is_file() else {}
+    meta["identifier_region"] = band
+    meta_path.write_text(json.dumps(meta, indent=2))
+    return band
+
+
 def compile_agent(
     agent: Optional[ComputerUseAgent] = None,
     *,
@@ -1427,6 +1860,8 @@ def compile_agent(
     require_distinct_reviewer_and_admitter: bool = False,
     teach_scope: Optional[TeachScopeSource] = None,
     teach_authorization: Any = None,
+    on_screen: Sequence[str] = (),
+    before_capture: Optional[Callable[[Any], None]] = None,
 ) -> CompiledAgent:
     """Wrap ``agent`` so a task is explored once and then run as a program.
 
@@ -1458,6 +1893,11 @@ def compile_agent(
             warning is printed to stderr either way.
         require_distinct_reviewer_and_admitter: Refuse an admission by the
             principal who reviewed the draft. Off by default.
+        before_capture: Trusted Python callback receiving the exact owned
+            backend after guarded opening and before recording or actor entry.
+            Prepare and check the state before reserving a model operation.
+            A failure closes the backend. This capture-only callback is not
+            persisted and does not run on canaries, replay or cache hits.
         teach_scope: What the recording run may do, declared before the agent
             reads any page: a :class:`~openadapt_flow.teach_scope.TeachScope`,
             or a function from the run's inputs to one. Typed text, links,
@@ -1472,6 +1912,8 @@ def compile_agent(
             one.
     """
 
+    if before_capture is not None and not callable(before_capture):
+        raise TypeError("before_capture must be callable")
     if agent is not None:
         dialect = getattr(agent, "dialect", None)
         if dialect is None:
@@ -1500,4 +1942,6 @@ def compile_agent(
         require_distinct_reviewer_and_admitter=require_distinct_reviewer_and_admitter,
         teach_scope=teach_scope,
         teach_authorization=teach_authorization,
+        on_screen=tuple(str(t) for t in on_screen if str(t).strip()),
+        before_capture=before_capture,
     )

@@ -950,7 +950,9 @@ def arm_code_agent(args: argparse.Namespace) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("arm", choices=["agent", "first_run", "program", "code_agent"])
     parser.add_argument("task", choices=["mockmed", "openimis", "openemr_referral"])
     parser.add_argument("--run-id", required=True)

@@ -75,9 +75,13 @@ class ImportFailed(RuntimeError):
 
 def _import_seconds(python: Path, module: str) -> float:
     code = f"import time; t = time.perf_counter(); import {module}; print(time.perf_counter() - t)"
-    done = subprocess.run([str(python), "-I", "-c", code], capture_output=True, text=True)
+    done = subprocess.run(
+        [str(python), "-I", "-c", code], capture_output=True, text=True
+    )
     if done.returncode != 0:
-        raise ImportFailed(done.stderr.strip().splitlines()[-1] if done.stderr.strip() else "")
+        raise ImportFailed(
+            done.stderr.strip().splitlines()[-1] if done.stderr.strip() else ""
+        )
     return float(done.stdout.strip().splitlines()[-1])
 
 
@@ -103,7 +107,15 @@ def measure_one(
         install_seconds = time.perf_counter() - started
         listing = json.loads(
             subprocess.run(
-                ["uv", "pip", "list", "--format", "json", "--python", str(_python(venv))],
+                [
+                    "uv",
+                    "pip",
+                    "list",
+                    "--format",
+                    "json",
+                    "--python",
+                    str(_python(venv)),
+                ],
                 check=True,
                 capture_output=True,
                 text=True,
@@ -145,7 +157,16 @@ def _project_field(pyproject: str, field: str) -> str:
 
 
 #: Never copied into a build: local environments, caches and outputs.
-_SKIP_PARTS = {".git", ".venv", "venv", "node_modules", "__pycache__", "dist", "build", "runs"}
+_SKIP_PARTS = {
+    ".git",
+    ".venv",
+    "venv",
+    "node_modules",
+    "__pycache__",
+    "dist",
+    "build",
+    "runs",
+}
 
 
 def _source_files(path: Path) -> list[Path]:
@@ -169,7 +190,8 @@ def _source_files(path: Path) -> list[Path]:
     return [
         name
         for name in names
-        if not (_SKIP_PARTS & set(name.parts)) and name.parts[0] not in nested
+        if not (_SKIP_PARTS & set(name.parts))
+        and name.parts[0] not in nested
         and (path / name).is_file()
     ]
 
@@ -184,8 +206,10 @@ def build_local_wheel(path: Path, out_dir: Path) -> tuple[str, str]:
     name = _project_field(original, "name")
     version = f"{_project_field(original, 'version')}+{LOCAL_LABEL}"
     head, tail = original.split("[project]", 1)
-    patched = head + "[project]" + re.sub(
-        r'(?m)^version = "[^"]+"', f'version = "{version}"', tail, count=1
+    patched = (
+        head
+        + "[project]"
+        + re.sub(r'(?m)^version = "[^"]+"', f'version = "{version}"', tail, count=1)
     )
     work = Path(tempfile.mkdtemp(prefix="weight-build-"))
     try:
@@ -196,7 +220,15 @@ def build_local_wheel(path: Path, out_dir: Path) -> tuple[str, str]:
             shutil.copy2(path / relative, target)
         (copy / "pyproject.toml").write_text(patched, encoding="utf-8")
         subprocess.run(
-            ["uv", "build", "-q", "--wheel", "--out-dir", str(out_dir.resolve()), str(copy)],
+            [
+                "uv",
+                "build",
+                "-q",
+                "--wheel",
+                "--out-dir",
+                str(out_dir.resolve()),
+                str(copy),
+            ],
             check=True,
         )
     finally:
@@ -207,7 +239,9 @@ def build_local_wheel(path: Path, out_dir: Path) -> tuple[str, str]:
 def violations(result: dict, budget: dict, defaults: dict) -> list[str]:
     """Every way ``result`` breaks ``budget``. Empty means it passes."""
     names = [entry.split("==", 1)[0] for entry in result["dists"]]
-    forbid = [_normalize(n) for n in defaults.get("forbid", []) + budget.get("forbid", [])]
+    forbid = [
+        _normalize(n) for n in defaults.get("forbid", []) + budget.get("forbid", [])
+    ]
     allow = [_normalize(n) for n in budget["allow"]]
     problems = []
     if result.get("import_error"):
@@ -219,7 +253,9 @@ def violations(result: dict, budget: dict, defaults: dict) -> list[str]:
             problems.append(f"pulls {name}, which is not in its allow list")
     megabytes = result["site_packages_bytes"] / 1e6
     if megabytes > budget["max_mb"]:
-        problems.append(f"installs {megabytes:.1f} MB, over its {budget['max_mb']} MB budget")
+        problems.append(
+            f"installs {megabytes:.1f} MB, over its {budget['max_mb']} MB budget"
+        )
     if result["dist_count"] > budget["max_dists"]:
         problems.append(
             f"installs {result['dist_count']} distributions, over its budget of {budget['max_dists']}"
@@ -278,7 +314,10 @@ def check(args: argparse.Namespace) -> int:
             python=config.get("python", "3.12"),
             find_links=[str(dist_dir)],
         )
-        result["budget"] = {"max_mb": budget["max_mb"], "max_dists": budget["max_dists"]}
+        result["budget"] = {
+            "max_mb": budget["max_mb"],
+            "max_dists": budget["max_dists"],
+        }
         problems = violations(result, budget, defaults)
         for problem in problems:
             print(f"  FAIL {label} {problem}", flush=True)
@@ -335,20 +374,30 @@ def measure(args: argparse.Namespace) -> int:
             flush=True,
         )
         results.append(result)
-        Path(args.out).write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
+        Path(args.out).write_text(
+            json.dumps(results, indent=2) + "\n", encoding="utf-8"
+        )
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     commands = parser.add_subparsers(dest="command", required=True)
-    check_parser = commands.add_parser("check", help="build, install and enforce budgets")
+    check_parser = commands.add_parser(
+        "check", help="build, install and enforce budgets", allow_abbrev=False
+    )
     check_parser.add_argument("--budgets", default=str(BUDGETS))
-    check_parser.add_argument("--only", action="append", help="package label; repeatable")
+    check_parser.add_argument(
+        "--only", action="append", help="package label; repeatable"
+    )
     check_parser.add_argument("--dist-dir", help="keep the built wheels here")
     check_parser.add_argument("--json", help="write the measurements here")
     check_parser.set_defaults(func=check)
-    measure_parser = commands.add_parser("measure", help="measure arbitrary requirements")
+    measure_parser = commands.add_parser(
+        "measure", help="measure arbitrary requirements", allow_abbrev=False
+    )
     measure_parser.add_argument("specs", nargs="+", help="label=requirement:module")
     measure_parser.add_argument("--out", required=True)
     measure_parser.add_argument("--python", default="3.12")

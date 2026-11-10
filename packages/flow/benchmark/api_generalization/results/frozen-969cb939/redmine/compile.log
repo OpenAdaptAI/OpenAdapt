@@ -1,0 +1,35 @@
+WARNING: writing a compiled bundle in plaintext at /Users/abrichr/oa/scratch/api-generalization/redmine/bundle: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+WARNING: openadapt-privacy is not installed, so reports and logs are not scrubbed of patient data (OPENADAPT_FLOW_SCRUB=auto). Install 'openadapt-flow[privacy]', or set OPENADAPT_FLOW_SCRUB=on to refuse instead.
+param-hygiene step_000: REGION_STABLE dropped — changed region (173, 139, 1062, 122) renders a demonstrated parameter value (Tr****************************************************** B); freezing it would false-halt every run whose value differs. This step has no pixel-region invariant.
+param-hygiene step_004: REGION_STABLE dropped — changed region (173, 173, 1062, 88) renders a demonstrated parameter value (Tr*****************************************************************************************************H2); freezing it would false-halt every run whose value differs. This step has no pixel-region invariant.
+param-hygiene step_008: REGION_STABLE dropped — changed region (0, 76, 1280, 724) renders a demonstrated parameter value (Ov*********************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************ng); freezing it would false-halt every run whose value differs. This step has no pixel-region invariant.
+{
+ "app": "redmine",
+ "workflow": "new-issue",
+ "steps": 9,
+ "params": [
+  "description",
+  "estimated_hours",
+  "subject",
+  "tracker"
+ ],
+ "optional_params": [
+  "description",
+  "estimated_hours"
+ ],
+ "compile_proposal": {
+  "proposed": false,
+  "step": null,
+  "reasons": [
+   "field 'authenticity_token' of the save is not a recorded value, a form default or a session value"
+  ]
+ },
+ "proposed": false,
+ "reasons": [
+  "field 'authenticity_token' of the save is not a recorded value, a form default or a session value"
+ ],
+ "compile_s": 18.0,
+ "frozen": "969cb939e7f246a55a7b49c319941a6aa3ff3d8c",
+ "head": "969cb939e7f246a55a7b49c319941a6aa3ff3d8c",
+ "engine_diff_vs_frozen": ""
+}

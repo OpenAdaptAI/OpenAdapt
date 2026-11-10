@@ -810,7 +810,9 @@ def cmd_pull(args: Any) -> int:
 
 
 def add_parser(sub: Any) -> None:
-    p = sub.add_parser("pull", help="Download a packaged workflow bundle by name")
+    p = sub.add_parser(
+        "pull", help="Download a packaged workflow bundle by name", allow_abbrev=False
+    )
     p.add_argument(
         "workflow", nargs="?", help="Workflow id, for example openemr/new-referral"
     )

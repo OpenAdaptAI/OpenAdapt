@@ -118,6 +118,7 @@ def _default_recorder_factory(
     task_description: str,
     capture_dir: str,
     window: Optional[dict[str, Optional[str]]] = None,
+    window_timeline: bool = False,
 ) -> ContextManager[_CaptureRecorder]:
     """Build a live ``openadapt_capture.Recorder`` (lazy import of the extra).
 
@@ -146,6 +147,13 @@ def _default_recorder_factory(
             "Need openadapt-capture>=1.2.2. Run: pip install -U "
             "'openadapt-capture==1.2.2'"
         )
+    if window_timeline:
+        # Keep the active-window timeline (title, bounds, id per change) that
+        # a cross-window recording places actions with. Only the timeline:
+        # get_active_window_data's per-poll accessibility dump stays off.
+        from openadapt_capture.config import config as capture_config
+
+        capture_config.RECORD_WINDOW_DATA = True
     if hasattr(capture_recorder, "LOG_LEVEL"):
         capture_recorder.LOG_LEVEL = "WARNING"
     logger.remove()

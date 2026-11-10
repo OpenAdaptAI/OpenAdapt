@@ -75,6 +75,22 @@ In this mode:
   viewport, and geometry generation. Recorder shutdown retains one final frame
   after input has stopped, so a consumer can select an exact after-action frame
   by ordinal instead of by nearest timestamp.
+- **Dropped input is recorded, not silently missing.** Each native input
+  reserves a source ordinal when it arrives. Input that did not go to the
+  target window (a click on another window, typing in another app, the
+  release of a dropped press) is dropped, and its ordinal holds no event.
+  Capture writes each dropped ordinal and its reason code to
+  `source-ordinal-skips.json`, which the artifact manifest seals. The verifier
+  still requires every ordinal from 1 to the last one. It accepts an empty
+  ordinal only when that record names it with a known reason, in a
+  window-scoped capture. Any other hole fails verification. The record holds
+  ordinals and reason codes only.
+- **macOS system chrome is hit-tested.** The Quartz window list can include
+  full-screen windows at the Dock level and above (the Dock, Notification
+  Center) that take clicks only where they draw. Such a window counts as the
+  window under the pointer only when the system's Accessibility hit test
+  says its process takes the click there. When the hit test can't answer,
+  the click is dropped (fail closed). Other apps' windows block as before.
 - **Window movement and resize are supported.** The first frame fixes the
   encoded video size. Later source frames scale to fit and letterbox into that
   viewport. Input uses the exact current bounds and content rectangle. No frame

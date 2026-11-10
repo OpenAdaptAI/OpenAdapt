@@ -275,7 +275,7 @@ def render_markdown(scored: dict[str, Any], meta: dict[str, Any]) -> str:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--out", default="benchmark/known_ids")
     parser.add_argument("--seeds", type=int, nargs="+", default=[1, 2, 3, 4, 5])
     parser.add_argument("--n-rows", type=int, default=40)

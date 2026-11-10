@@ -147,7 +147,9 @@ def _cmd_pf_check(args: argparse.Namespace) -> int:
 
 def register(sub: Any) -> None:
     p = sub.add_parser(
-        "service", help="Unattended on-prem service: run, health, restart, egress audit"
+        "service",
+        help="Unattended on-prem service: run, health, restart, egress audit",
+        allow_abbrev=False,
     )
     s = p.add_subparsers(dest="service_cmd", required=True)
 
@@ -157,7 +159,9 @@ def register(sub: Any) -> None:
         )
 
     r = s.add_parser(
-        "run", help="Run the queue loop (what launchd/systemd keeps alive)"
+        "run",
+        help="Run the queue loop (what launchd/systemd keeps alive)",
+        allow_abbrev=False,
     )
     root(r)
     r.add_argument(
@@ -172,7 +176,9 @@ def register(sub: Any) -> None:
     )
     r.set_defaults(func=_cmd_run)
 
-    h = s.add_parser("health", help="Check the service; exit 1 when unhealthy")
+    h = s.add_parser(
+        "health", help="Check the service; exit 1 when unhealthy", allow_abbrev=False
+    )
     root(h)
     h.add_argument(
         "--max-age", type=float, default=None, help="Heartbeat age limit (s)"
@@ -187,13 +193,18 @@ def register(sub: Any) -> None:
     h.add_argument("--label", default="ai.openadapt.flow-service")
     h.set_defaults(func=_cmd_health)
 
-    t = s.add_parser("restart", help="Ask the service manager to restart the service")
+    t = s.add_parser(
+        "restart",
+        help="Ask the service manager to restart the service",
+        allow_abbrev=False,
+    )
     t.add_argument("--label", default="ai.openadapt.flow-service")
     t.set_defaults(func=_cmd_restart)
 
     e = s.add_parser(
         "egress-audit",
         help="Sample the service process tree's sockets; exit 0 only if no peer is off the machine",
+        allow_abbrev=False,
     )
     root(e)
     e.add_argument(
@@ -206,26 +217,37 @@ def register(sub: Any) -> None:
     b = s.add_parser(
         "boot-check",
         help="After a restart: wait for the service account to sign in; alert if late",
+        allow_abbrev=False,
     )
     root(b)
     b.add_argument("--account", default=None, help="Default: the current user")
     b.set_defaults(func=_cmd_boot_check)
 
-    n = s.add_parser("notices", help="List or acknowledge service notices")
+    n = s.add_parser(
+        "notices", help="List or acknowledge service notices", allow_abbrev=False
+    )
     root(n)
     n.add_argument("--ack", default=None, metavar="ID")
     n.add_argument("--by", default=None, help="Who acknowledges (default: you)")
     n.add_argument("--all", action="store_true", help="Include acknowledged notices")
     n.set_defaults(func=_cmd_notices)
 
-    pf = s.add_parser("pf", help="macOS pf rules for the service account (text only)")
+    pf = s.add_parser(
+        "pf",
+        help="macOS pf rules for the service account (text only)",
+        allow_abbrev=False,
+    )
     pfs = pf.add_subparsers(dest="pf_cmd", required=True)
-    pr = pfs.add_parser("render", help="Render the anchor from the allow list")
+    pr = pfs.add_parser(
+        "render", help="Render the anchor from the allow list", allow_abbrev=False
+    )
     pr.add_argument("--user", required=True, help="Service account")
     pr.add_argument("--allow-file", required=True)
     pr.add_argument("--out", default=None)
     pr.set_defaults(func=_cmd_pf_render)
-    pc = pfs.add_parser("check", help="Check a rendered anchor (and pf.conf)")
+    pc = pfs.add_parser(
+        "check", help="Check a rendered anchor (and pf.conf)", allow_abbrev=False
+    )
     pc.add_argument("anchor")
     pc.add_argument("--user", required=True)
     pc.add_argument("--pf-conf", default=None)

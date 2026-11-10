@@ -2,6 +2,56 @@
 
 <!-- version list -->
 
+## v1.21.0 (2026-11-09)
+
+### Requirements
+
+- Require `openadapt-flow>=2.7.0,<3.0.0` in the base install and every Flow
+  extra. `openadapt doctor` and `openadapt deploy` report older Flow releases
+  as unsupported. Flow 2.7 supplies the wrap command and the `--demo-app`
+  replay option shown in the launcher's help.
+
+### Upgrade notes
+
+- The launcher rejects abbreviated long options. Spell each option in full.
+- Replay no longer serves the bundled demo app unless asked: pass `--url`, a
+  `backend.url` in `--config`, or `--demo-app`.
+
+### Features
+
+- `openadapt wrap` runs one operator-configured agent task. The first call
+  runs the agent, checks the saved record and compiles the run; later calls
+  replay the checked program with new inputs and no model calls.
+  `openadapt wrap --serve` offers the task as a local stdio MCP tool, and
+  `openadapt wrap --help` lists every option.
+- `openadapt record`, `openadapt compile` and `openadapt run` forward to the
+  matching Flow commands. Run summaries show the result, the next step and
+  where the report is.
+- `openadapt --help` groups commands into the same 15 tasks as Flow. Earlier
+  command names still work.
+- `openadapt doctor` checks macOS Accessibility and Screen Recording access.
+  `--recording` also checks Capture and FFmpeg for a native backend, and
+  `--install-browser` downloads Playwright's matching Chromium.
+
+## v1.20.0 (2026-11-04)
+
+### Requirements
+
+- Require `openadapt-flow>=2.6.0,<3.0.0` in the base install and every Flow
+  extra. `openadapt doctor` and `openadapt deploy` report older Flow releases
+  as unsupported. This supplies the persistent owed-recheck API used by
+  ledger listing.
+
+### Features
+
+- `openadapt verify ledger list` shows provisional confirmed writes whose
+  rechecks are still owed, with their due time and actor. Owed rechecks remain
+  visible after the server restarts and disappear when the recheck completes.
+  An empty ledger reports that no held writes, open writes or owed rechecks
+  remain.
+- The platform manifest and compatibility report select published component
+  releases, including Desktop 0.25.1.
+
 ## v1.19.0 (2026-11-02)
 
 ### Breaking Changes

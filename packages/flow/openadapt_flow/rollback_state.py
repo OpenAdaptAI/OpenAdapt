@@ -34,6 +34,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping, Optional, Protocol, Sequence
 
 from openadapt_flow.runtime.effects.db_snapshot import (
+    DEFAULT_READ_ROW_BUDGET,
     KEY,
     Snapshot,
     Table,
@@ -90,6 +91,7 @@ class DatabaseReader:
     actor_names: Sequence[str] = ()
     key: bytes = field(default_factory=_new_key, repr=False)
     scope: str = "database"
+    read_row_budget: int = DEFAULT_READ_ROW_BUDGET
 
     @classmethod
     def from_frame_database(
@@ -103,6 +105,7 @@ class DatabaseReader:
                 for t in database.allow_tables
             ],
             max_rows=int(database.max_rows),
+            read_row_budget=int(database.read_row_budget),
             profile=profile,
             actor_names=tuple(actor_names),
         )
@@ -137,6 +140,7 @@ class DatabaseReader:
                     self.dialect,
                     allow_tables=list(self.allow_tables),
                     max_rows=self.max_rows,
+                    read_row_budget=self.read_row_budget,
                     key=self.key,
                     profile=self.profile,
                     before=before,
@@ -158,6 +162,7 @@ class DatabaseReader:
                 key=self.key,
                 modes=dict.fromkeys(self.allow_tables, "append_only"),
                 max_rows=self.max_rows,
+                read_row_budget=self.read_row_budget,
                 before=before,
                 extra_queries=extra,
                 optional_modes={t["table"]: t["mode"] for t in p.allow_tables()},

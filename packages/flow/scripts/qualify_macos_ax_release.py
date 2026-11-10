@@ -57,6 +57,7 @@ from openadapt_flow.compiler import compile_recording  # noqa: E402
 from openadapt_flow.ir import StructuralLocator, Workflow  # noqa: E402
 from openadapt_flow.recorder import Recorder  # noqa: E402
 from openadapt_flow.runtime.replayer import Replayer  # noqa: E402
+
 from scripts.qualify_macos_textedit import (  # noqa: E402
     _cleanup_failures,
     _close_target,
@@ -823,7 +824,7 @@ def write_evidence(report: dict[str, Any], output: Path) -> dict[str, Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--request-permissions", action="store_true")
     args = parser.parse_args()

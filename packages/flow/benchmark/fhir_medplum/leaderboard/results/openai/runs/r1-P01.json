@@ -1,0 +1,119 @@
+{
+ "id": "P01",
+ "class": "clean",
+ "type": "patient",
+ "expect": "create",
+ "note": "A plain registration.",
+ "agent_s": 59.0,
+ "cost_usd": 0.085487,
+ "claim": {
+  "status": "done",
+  "id": "Patient/c3b0f0ac-701c-47ae-8428-8650067ec942",
+  "note": "RESULT: DONE Patient/c3b0f0ac-701c-47ae-8428-8650067ec942",
+  "claim_line": true,
+  "end_url": "http://localhost:9811/Patient/c3b0f0ac-701c-47ae-8428-8650067ec942",
+  "final_text": "RESULT: DONE Patient/c3b0f0ac-701c-47ae-8428-8650067ec942",
+  "model_calls": 16,
+  "actions": 18,
+  "tokens_in": 190495,
+  "tokens_out": 863
+ },
+ "verifier": {
+  "outcome": "created_verified",
+  "id": "c3b0f0ac-701c-47ae-8428-8650067ec942",
+  "reasons": [
+   "created once, every value read back"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 1,
+   "agent_writes": 1,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "Patient"
+   ]
+  },
+  "unreadable": false
+ },
+ "verifier_strict": {
+  "outcome": "created_verified",
+  "id": "c3b0f0ac-701c-47ae-8428-8650067ec942",
+  "reasons": [
+   "created once, every value read back"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 1,
+   "agent_writes": 1,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "Patient"
+   ]
+  },
+  "unreadable": false
+ },
+ "verify_s": 4.3,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "Patient/c3b0f0ac-701c-47ae-8428-8650067ec942"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "Patient/c3b0f0ac-701c-47ae-8428-8650067ec942": "created"
+  }
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "Patient",
+   "write": 1,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ServiceRequest",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 1
+}

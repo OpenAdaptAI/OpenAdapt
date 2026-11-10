@@ -17,7 +17,7 @@ network, no model call. The theses these pin:
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -374,6 +374,150 @@ def test_resume_continues_from_last_checkpoint(tmp_path):
     assert [c.step_index for c in store.checkpoints()] == [0, 1, 2]
     # The pending escalation was cleared when the resume started.
     assert store.read_pending() is None
+
+
+class _BackwardsClock(datetime):
+    """A wall clock that steps back 0.25 s on every reading (an NTP/WSL resync)."""
+
+    calls = 0
+
+    @classmethod
+    def now(cls, tz=None):  # type: ignore[override]
+        cls.calls += 1
+        return datetime.now(tz) - timedelta(seconds=0.25 * cls.calls)
+
+
+def test_wall_clock_stepping_back_keeps_durable_history_ordered(tmp_path, monkeypatch):
+    # The pause must be the newest durable record even when the wall clock
+    # steps backward between a step's checkpoint and the pause, and a
+    # checkpoint written after the pause must be newer than the pause.
+    from openadapt_flow.runtime.durable import checkpoint as checkpoint_module
+
+    _BackwardsClock.calls = 0
+    monkeypatch.setattr(checkpoint_module, "datetime", _BackwardsClock)
+    report, run_dir, bundle, _orig_backend, verifier = _run_to_halt(tmp_path)
+    assert report.success is False
+    store = CheckpointStore(run_dir)
+    pending = store.read_pending()
+    assert pending is not None
+    retained = store.checkpoints()
+    assert retained and all(
+        datetime.fromisoformat(c.created_at)
+        <= datetime.fromisoformat(pending.created_at)
+        for c in retained
+    )
+
+    verifier.refute.clear()
+    resume_backend = FakeBackend()
+    resumed = resume(
+        run_dir,
+        Replayer(
+            resume_backend,
+            vision=_vision_ok(),
+            effect_verifier=verifier,
+            poll_interval_s=0.01,
+        ),
+        approval=_retry_approval(bundle),
+    )
+    assert resumed.success is True
+    assert ("press", "A") not in resume_backend.actions
+    assert ("press", "C") in resume_backend.actions
+    assert [c.step_index for c in CheckpointStore(run_dir).checkpoints()] == [0, 1, 2]
+
+
+class _HeldClock(datetime):
+    """A wall clock that does not advance between readings."""
+
+    held: datetime = datetime(2026, 11, 5, 12, 0, tzinfo=timezone.utc)
+
+    @classmethod
+    def now(cls, tz=None):  # type: ignore[override]
+        return cls.held
+
+
+class _BehindClock(datetime):
+    """A wall clock that stepped back two minutes (an NTP/WSL resync)."""
+
+    @classmethod
+    def now(cls, tz=None):  # type: ignore[override]
+        return datetime.now(tz) - timedelta(minutes=2)
+
+
+def _resume_retry(run_dir, bundle, verifier, approval):
+    verifier.refute.clear()
+    resume_backend = FakeBackend()
+    resumed = resume(
+        run_dir,
+        Replayer(
+            resume_backend,
+            vision=_vision_ok(),
+            effect_verifier=verifier,
+            poll_interval_s=0.01,
+        ),
+        approval=approval,
+    )
+    return resumed, resume_backend
+
+
+def test_an_approval_on_a_held_wall_clock_resolves_the_pause(tmp_path, monkeypatch):
+    # The pause is not stamped past the clock, so an approval issued on the
+    # same held clock is not older than the pause it resolves.
+    from openadapt_flow.runtime.durable import approval as approval_module
+    from openadapt_flow.runtime.durable import checkpoint as checkpoint_module
+
+    monkeypatch.setattr(checkpoint_module, "datetime", _HeldClock)
+    monkeypatch.setattr(approval_module, "datetime", _HeldClock)
+    report, run_dir, bundle, _orig_backend, verifier = _run_to_halt(tmp_path)
+    assert report.success is False
+    pending = CheckpointStore(run_dir).read_pending()
+    assert pending is not None
+    assert datetime.fromisoformat(pending.created_at) == _HeldClock.held
+
+    resumed, resume_backend = _resume_retry(
+        run_dir, bundle, verifier, _retry_approval(bundle)
+    )
+    assert resumed.success is True
+    assert ("press", "C") in resume_backend.actions
+    assert [c.step_index for c in CheckpointStore(run_dir).checkpoints()] == [0, 1, 2]
+
+
+def test_an_approval_after_the_clock_stepped_back_resolves_the_pause(
+    tmp_path, monkeypatch
+):
+    from openadapt_flow.runtime.durable import approval as approval_module
+    from openadapt_flow.runtime.durable import checkpoint as checkpoint_module
+
+    report, run_dir, bundle, _orig_backend, verifier = _run_to_halt(tmp_path)
+    assert report.success is False
+    pending = CheckpointStore(run_dir).read_pending()
+    assert pending is not None
+    monkeypatch.setattr(checkpoint_module, "datetime", _BehindClock)
+    monkeypatch.setattr(approval_module, "datetime", _BehindClock)
+
+    approval = _retry_approval(bundle)
+    assert datetime.fromisoformat(approval.approved_at) == datetime.fromisoformat(
+        pending.created_at
+    )
+    resumed, resume_backend = _resume_retry(run_dir, bundle, verifier, approval)
+    assert resumed.success is True
+    assert ("press", "C") in resume_backend.actions
+
+
+def test_an_approval_older_than_the_pause_is_still_refused(tmp_path):
+    report, run_dir, bundle, _orig_backend, verifier = _run_to_halt(tmp_path)
+    assert report.success is False
+    pending = CheckpointStore(run_dir).read_pending()
+    assert pending is not None
+    stale = _retry_approval(bundle).model_copy(
+        update={
+            "approved_at": (
+                datetime.fromisoformat(pending.created_at) - timedelta(seconds=1)
+            ).isoformat()
+        }
+    )
+
+    with pytest.raises(ApprovalRequired, match="predates the pause"):
+        _resume_retry(run_dir, bundle, verifier, stale)
 
 
 def test_resume_egress_posture_stays_sticky_across_a_second_resume(tmp_path):

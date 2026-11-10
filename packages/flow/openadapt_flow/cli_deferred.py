@@ -27,12 +27,14 @@ def register_deferred_parser(sub: argparse._SubParsersAction) -> None:
     parser = sub.add_parser(
         "deferred",
         help="Settle saves that a later report confirms (claims acks, exports)",
+        allow_abbrev=False,
     )
     verbs = parser.add_subparsers(dest="deferred_cmd", required=True)
 
     settle = verbs.add_parser(
         "settle",
         help="Match a report against the waiting checks; expire overdue ones",
+        allow_abbrev=False,
     )
     settle.add_argument(
         "--config",
@@ -64,7 +66,9 @@ def register_deferred_parser(sub: argparse._SubParsersAction) -> None:
     settle.set_defaults(func=cmd_deferred_settle)
 
     status = verbs.add_parser(
-        "status", help="A run's outcome after its deferred checks settle"
+        "status",
+        help="A run's outcome after its deferred checks settle",
+        allow_abbrev=False,
     )
     status.add_argument("run", help="Run directory (holds report.json)")
     status.add_argument("--config", default=None)

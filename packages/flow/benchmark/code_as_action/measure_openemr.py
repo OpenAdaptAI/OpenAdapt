@@ -369,7 +369,9 @@ def run_one(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("--env-file", type=Path, required=True)
     parser.add_argument("--arms", default="code,every_turn")
     parser.add_argument("--referrals", default="r1,r2,r3,r4,r5,r6,r7,r8")
@@ -389,8 +391,8 @@ def main() -> int:
     arms = [a for a in args.arms.split(",") if a]
     keys = [k for k in args.referrals.split(",") if k]
 
-    from benchmark.openemr_local import qualify_hooks
     from benchmark.harness.openemr_local import SyntheticPatientSpec
+    from benchmark.openemr_local import qualify_hooks
 
     fixture = qualify_hooks.fixture()
     demo = _demo()

@@ -1,0 +1,17 @@
+{
+ "recording": "/Users/abrichr/oa/scratch/api-generalization/espocrm_account/rec-969cb939",
+ "events": 7,
+ "exchanges": 20,
+ "judge": {
+  "new_records": 1,
+  "field_mismatches": [],
+  "collateral": {
+   "deleted": [],
+   "changed": []
+  },
+  "state_ok": true,
+  "new_ids": [
+   "6aeb84078d9ab11e4"
+  ]
+ }
+}

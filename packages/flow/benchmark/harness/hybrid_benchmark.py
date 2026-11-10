@@ -1659,7 +1659,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             "Four-arm hybrid benchmark on MockMed (compiled / agent / "
             "demo-conditioned agent / compiled+fallback hybrid). The "
             "paid arms spend real money under a hard total ceiling."
-        )
+        ),
+        allow_abbrev=False,
     )
     parser.add_argument(
         "--out",

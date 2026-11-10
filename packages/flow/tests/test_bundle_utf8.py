@@ -47,7 +47,7 @@ def test_bundle_round_trips_under_a_non_utf8_locale(tmp_path: Path) -> None:
         assert locale.getpreferredencoding(False).lower() in (
             "ansi_x3.4-1968", "us-ascii", "ascii"
         ), locale.getpreferredencoding(False)
-        name = {NAME!r}
+        name = {ascii(NAME)}
         step = Step(id="s1", intent="Klick", action=ActionKind.KEY, key="Enter")
         bundle = Path(sys.argv[1])
         Workflow(name=name, steps=[step]).save(bundle)

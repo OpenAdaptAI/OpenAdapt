@@ -1,0 +1,87 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      212,
+      297
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Let me check the JSON to confirm details.",
+   "actions": [
+    {
+     "coordinate": [
+      472,
+      149
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Lena Okafor already has a Patient record, so I didn't create another. It was the only Patient on the server, and its details match the task:\n- Name: Lena Okafor\n- Date of birth: 1988-04-22\n- Gender: female\n- Phone: 413-555-0187\n- Email: lena.okafor@example.org\n- Address: 14 Birch Lane, Springfield, MA 01103\n\nI didn't change anything.\n\nRESULT: DONE Patient/1482ce90-1f08-4b3f-9733-ff31f727c4c4",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 212,
+   "y": 297,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 472,
+   "y": 149,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6285,
+   "out": 171,
+   "usd": 0.017421,
+   "cached": 0
+  },
+  {
+   "in": 7860,
+   "out": 121,
+   "usd": 0.006413,
+   "cached": 6281
+  },
+  {
+   "in": 9371,
+   "out": 179,
+   "usd": 0.007143,
+   "cached": 7858
+  }
+ ]
+}

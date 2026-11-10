@@ -119,6 +119,9 @@ def _connect(
                 page = select_attached_page(
                     browser, app_url=cfg.app_url, page_url=page_url
                 )
+                from openadapt_flow._browser_readiness import require_rendering_ready
+
+                require_rendering_ready(browser, attached_page=page)
                 return pw, browser, page
             except BrowserAttachError:
                 browser.close()

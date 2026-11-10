@@ -1,0 +1,66 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_03998f7f6322225a016ae963e5f6a487d29c1e9c7223f4c75b",
+     "call_id": "call_TSDs7KB322giAKaetTTmeSwT",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_03998f7f6322225a016ae963e8513887d2b337f8374bdc33d7",
+     "call_id": "call_KiTWDo5qlqr829zqvf4kPyj5",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE Medplum is showing the sign-in screen; I cannot access the patient or verify or record the allergy without signing in.",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "wait",
+   "s": 1.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 2343,
+   "out": 16,
+   "usd": 0.000634,
+   "cached": 2340
+  },
+  {
+   "in": 3560,
+   "out": 36,
+   "usd": 0.001077,
+   "cached": 3557
+  },
+  {
+   "in": 4817,
+   "out": 33,
+   "usd": 0.003561,
+   "cached": 3557
+  }
+ ]
+}

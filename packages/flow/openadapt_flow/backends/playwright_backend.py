@@ -8,6 +8,7 @@ deviceScaleFactor=1 so CSS pixels equal screenshot pixels.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import hmac
 import json
@@ -18,7 +19,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
-from typing import TYPE_CHECKING, Any, Callable, Literal, Optional
+from typing import TYPE_CHECKING, Any, Callable, Iterator, Literal, Optional, Sequence
 from urllib.parse import urlsplit
 
 from openadapt_flow.backends._page_quiescence import PageQuiescence
@@ -36,6 +37,7 @@ from openadapt_flow.backend import (
 from openadapt_flow.ir import (
     ActionDeliveryReceipt,
     FormIdentity,
+    NativeSelectContract,
     StructuralHandle,
     StructuralLocator,
     SubmitBinding,
@@ -153,6 +155,17 @@ class _StructuralGuard:
     scope: Any
     frame_path: tuple[str, ...]
     context: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
+class _NativeSelectBinding:
+    """Exact control retained across capture or delivery/readback."""
+
+    guard: _StructuralGuard
+    selector: str
+    options: list[dict[str, Any]]
+    value: Optional[str] = None
+    label: Optional[str] = None
 
 
 @dataclass
@@ -566,8 +579,41 @@ _INSTALL_GUARD_BODY_JS = (
         context: {},
         invalidate: null,
         focusListener: null,
+        nativeFocus: null,
+        nativeFocusChanged: false,
+        stopNativeFocusTracking: null,
     };
+    // A native selection may acquire focus later, but only from the exact
+    // unchanged focus chain observed during structural resolution.
+    if (el.localName === 'select') {
+        const focusChain = [];
+        try {
+            let win = window;
+            for (let depth = 0; depth < 9; depth++) {
+                focusChain.push({win, active: win.document.activeElement});
+                if (win === win.top) break;
+                win = win.parent;
+            }
+            if (focusChain[focusChain.length - 1].win === win.top) {
+                entry.nativeFocus = focusChain;
+            }
+        } catch (_) { entry.nativeFocus = null; }
+        if (entry.nativeFocus) {
+            const changed = () => { entry.nativeFocusChanged = true; };
+            for (const item of entry.nativeFocus) {
+                item.win.document.addEventListener('focusin', changed, true);
+                item.win.document.addEventListener('focusout', changed, true);
+            }
+            entry.stopNativeFocusTracking = () => {
+                for (const item of entry.nativeFocus) {
+                    item.win.document.removeEventListener('focusin', changed, true);
+                    item.win.document.removeEventListener('focusout', changed, true);
+                }
+            };
+        }
+    }
     const invalidate = () => {
+        if (entry.stopNativeFocusTracking) entry.stopNativeFocusTracking();
         if (entry.observer) entry.observer.disconnect();
         if (entry.contextObserver) entry.contextObserver.disconnect();
         if (entry.focusListener) {
@@ -608,6 +654,70 @@ _INSTALL_GUARD_BODY_JS = (
 # True when the element is fully transparent. Such a control is laid over its
 # own visible box on purpose, so the bind guard refusing it is not occlusion.
 _TRANSPARENT_JS = "el => Number(window.getComputedStyle(el).opacity || '1') === 0"
+
+#: Records, from the first moment the window sees it, which element each
+#: trusted pointer event of a click reached. Read back right after the click
+#: (:meth:`PlaywrightBackend.act_structural`): input that reached anything but
+#: the verified element (a toast or modal that appeared between the check and
+#: the click) is reported, never retried.
+_ARM_DISPATCH_WITNESS_JS = """(el, key) => {
+  const w = el.ownerDocument.defaultView;
+  const seen = [];
+  const types = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
+  const f = e => {
+    if (!e.isTrusted) return;
+    const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
+    seen.push({type: e.type, hit: path.includes(el) || el.contains(e.target)});
+  };
+  for (const t of types) w.addEventListener(t, f, true);
+  Object.defineProperty(w, key, {configurable: true, value: () => {
+    for (const t of types) w.removeEventListener(t, f, true);
+    delete w[key];
+    return seen;
+  }});
+}"""
+
+#: The whole interruption a dismiss control belongs to: its container's full
+#: text, accessible title and the page's title, so a class is matched on the
+#: whole dialog, never on its button word (openadapt_flow.interruptions).
+_INTERRUPTION_TEXT_JS = """(el, texts) => {
+  const DIALOG = '[role=dialog],[role=alertdialog],[role=alert],[role=status],' +
+                 '[aria-modal=true],dialog';
+  const visible = n => {
+    const r = n.getBoundingClientRect();
+    const cs = n.ownerDocument.defaultView.getComputedStyle(n);
+    return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' &&
+           cs.display !== 'none';
+  };
+  const floating = n => {
+    for (let a = n; a && a.nodeType === 1; a = a.parentElement) {
+      if (a.matches(DIALOG)) return a;
+      const pos = a.ownerDocument.defaultView.getComputedStyle(a).position;
+      if (pos === 'fixed' || pos === 'sticky') return a;
+    }
+    return null;
+  };
+  let box = null;
+  if (el) {
+    box = floating(el);
+  } else {
+    const all = [...document.querySelectorAll(DIALOG)].filter(visible)
+      .filter(n => texts.every(t => (n.innerText || '').includes(t)));
+    const outer = all.filter(n => !all.some(m => m !== n && m.contains(n)));
+    if (outer.length === 1) box = outer[0];
+  }
+  if (!box) return null;
+  let title = box.getAttribute('aria-label') || '';
+  const by = box.getAttribute('aria-labelledby');
+  if (!title && by) {
+    title = by.split(/\\s+/).map(i => {
+      const t = box.ownerDocument.getElementById(i);
+      return t ? t.innerText : '';
+    }).join(' ');
+  }
+  return {text: box.innerText || '', title: title.trim(),
+          window: box.ownerDocument.title || ''};
+}"""
 
 _BIND_STRUCTURAL_TARGET_JS = (
     "(el, args) => { const describe = "
@@ -790,7 +900,11 @@ _SNAPSHOT_FILLED_VALUE_JS = r"""(el, args) => {
     let typed;
     if (el.localName === 'select') {
         const option = el.options[el.selectedIndex];
-        typed = Boolean(option) && clean(option.text) === clean(args.typed);
+        typed = Boolean(option) && (
+            typeof args.nativeValue === 'string'
+                ? option.value === args.nativeValue && option.label === args.typed
+                : clean(option.text) === clean(args.typed)
+        );
     } else if ('value' in el) {
         typed = value === String(args.typed);
     } else {
@@ -873,7 +987,11 @@ _FORM_EXPECTED_JS = (
             }
             pairs.push([name, String(el.value)]);
         }
-        const target = control.hasAttribute('formaction') ? control.formAction : form.action;
+        // Named controls must not replace the native destination or method.
+        const formValue = (name) => Object.getOwnPropertyDescriptor(
+            document.defaultView.HTMLFormElement.prototype, name).get.call(form);
+        const target = control.hasAttribute('formaction')
+            ? control.formAction : formValue('action');
         let address = String(target);
         const query = [];
         try {
@@ -882,7 +1000,7 @@ _FORM_EXPECTED_JS = (
             for (const [k, v] of url.searchParams) if (!exempt.has('?' + k)) query.push([k, v]);
         } catch (_) {}
         const method = String((control.hasAttribute('formmethod')
-            ? control.formMethod : form.method) || 'get').toLowerCase();
+            ? control.formMethod : formValue('method')) || 'get').toLowerCase();
         const order = (x, y) => (x[0] + '\u0000' + x[1]) < (y[0] + '\u0000' + y[1]) ? -1 : 1;
         pairs.sort(order);
         query.sort(order);
@@ -1344,7 +1462,12 @@ _IDENTITY_CANDIDATES_AT_JS = (
         ? Array.from(document.getElementsByTagName(level.tagName)).filter(
             (candidate) => !tag || candidate.getElementsByTagName(tag).length > 0)
         : Array.from(document.querySelectorAll('tr, [role="row"], li, [role="listitem"]'));
-    const pool = new Set(siblings.concat(pageWide));
+    const dialog = el.closest(
+        'dialog:modal, [aria-modal="true"], [role="alertdialog"], .modal.show'
+    );
+    const pool = new Set(siblings.concat(pageWide).filter(
+        (candidate) => !dialog || dialog.contains(candidate)
+    ));
     const result = {
         record_key: recordKey(row, el),
         incomplete: pool.size > cap,
@@ -1553,6 +1676,225 @@ _GUARD_CURRENT_JS = (
 }"""
 )
 
+# Native selection is a fixed semantic operation, never arbitrary supplied JS.
+# Its guard and option census are checked in the same JS task as the setter.
+_NATIVE_SELECT_STATE_JS = r"""(el, requireFocused = true) => {
+    if (!(el instanceof HTMLSelectElement) || !el.isConnected ||
+            el.multiple || el.size > 1 || el.matches(':disabled') ||
+            el.options.length < 1 || el.options.length > 2048) return null;
+    for (let node = el; node; node = node.parentElement) {
+        const style = getComputedStyle(node);
+        if (style.display === 'none' || style.visibility !== 'visible' ||
+                Number(style.opacity) === 0 || node.inert) return null;
+    }
+    const rect = el.getBoundingClientRect();
+    const x = rect.x + rect.width / 2, y = rect.y + rect.height / 2;
+    if (rect.width <= 0 || rect.height <= 0 || x < 0 || y < 0 ||
+            x >= innerWidth || y >= innerHeight ||
+            document.elementFromPoint(x, y) !== el ||
+            (requireFocused && document.activeElement !== el)) return null;
+    const options = Array.from(el.options, option => ({
+        value: option.value,
+        label: option.label,
+        disabled: option.disabled ||
+            (option.parentElement instanceof HTMLOptGroupElement &&
+             option.parentElement.disabled),
+    }));
+    if (options.some(o => o.value.length > 512 || o.label.length > 512)) return null;
+    if (el.selectedOptions.length !== 1) return null;
+    const selected = el.selectedOptions[0];
+    return {value: selected.value, label: selected.label, options};
+}"""
+
+_NATIVE_SELECT_CURRENT_JS = (
+    "(el, args) => { const current = "
+    + _GUARD_CURRENT_JS
+    + "; const state = "
+    + _NATIVE_SELECT_STATE_JS
+    + "; const contextCurrent = (window, document) => { const check = "
+    + _CONTEXT_CURRENT_JS
+    + r"""; return check({context: args.context || {}}); };
+    const requireFocused = args.requireFocused !== false;
+    if (!current(el, {...args, requireFocused})) return null;
+    if (args.requireOriginalFocus) {
+        const entry = window[args.storeKey]?.get(args.token);
+        if (!entry || entry.nativeFocusChanged || !entry.nativeFocus ||
+                !entry.nativeFocus.every(item =>
+                    item.win.document.activeElement === item.active)) return null;
+    }
+    const matches = document.querySelectorAll(args.selector);
+    if (matches.length !== 1 || matches[0] !== el) return null;
+    const observed = state(el, requireFocused);
+    if (!observed || JSON.stringify(observed.options) !==
+            JSON.stringify(args.options)) return null;
+    // Re-prove the ancestor frame hit chain synchronously. Cross-origin
+    // ancestors cannot supply this proof and therefore refuse selection.
+    try {
+        let win = window;
+        const rect = el.getBoundingClientRect();
+        let x = rect.x + rect.width / 2, y = rect.y + rect.height / 2;
+        for (let i = args.framePath.length - 1; i >= 0; i--) {
+            const frame = win.frameElement;
+            const parent = win.parent;
+            if (!frame || parent === win ||
+                    (requireFocused && parent.document.activeElement !== frame)) return null;
+            const candidates = parent.document.querySelectorAll(args.framePath[i]);
+            if (candidates.length !== 1 || candidates[0] !== frame) return null;
+            for (let node = frame; node; node = node.parentElement) {
+                const style = parent.getComputedStyle(node);
+                if (style.transform !== 'none' || style.display === 'none' ||
+                        style.visibility !== 'visible' ||
+                        Number(style.opacity) === 0 || node.inert) return null;
+            }
+            const box = frame.getBoundingClientRect();
+            x += box.x + frame.clientLeft;
+            y += box.y + frame.clientTop;
+            if (parent.document.elementFromPoint(x, y) !== frame) return null;
+            win = parent;
+        }
+        if (win !== win.top || !contextCurrent(win, win.document)) return null;
+    } catch (_) { return null; }
+    return observed;
+}"""
+)
+
+_NATIVE_SELECT_DELIVER_JS = (
+    "(el, args) => { const current = "
+    + _NATIVE_SELECT_CURRENT_JS
+    + "; const register = "
+    + _REGISTER_FILLED_FIELD_JS
+    + "; const snapshot = "
+    + _SNAPSHOT_FILLED_VALUE_JS
+    + r""";
+    const before = current(el, {...args, requireFocused: false, requireOriginalFocus: true});
+    if (!before) return {status: 'refused'};
+    const chosen = before.options.filter(o => o.value === args.value);
+    if (chosen.length !== 1 || chosen[0].label !== args.label ||
+            chosen[0].disabled) return {status: 'refused'};
+    const setter = Object.getOwnPropertyDescriptor(
+        HTMLSelectElement.prototype, 'value').set;
+    let focusLost = false;
+    const focusDocuments = [];
+    const invalidateFocus = () => {
+        focusLost = true;
+        const entry = window[args.storeKey]?.get(args.token);
+        if (entry && entry.invalidate) entry.invalidate();
+    };
+    el.addEventListener('blur', invalidateFocus, true);
+    try {
+        if (!register(el, args.fillKey)) return {status: 'refused'};
+        const entry = window[args.storeKey]?.get(args.token);
+        if (entry?.stopNativeFocusTracking) entry.stopNativeFocusTracking();
+        if (document.activeElement !== el) el.focus({preventScroll: true});
+        // Focus itself delivers an event. If its handler changes the target,
+        // stop before setting a value and report that delivery is uncertain.
+        const focused = !focusLost && current(el, args);
+        if (!focused || focused.value !== before.value || focused.label !== before.label) {
+            return {status: 'uncertain'};
+        }
+        // The intended focus transition is complete. From here, losing
+        // focus anywhere in the frame chain permanently invalidates delivery,
+        // even if the child document keeps its activeElement unchanged.
+        for (const item of entry.nativeFocus) {
+            const doc = item.win.document;
+            doc.addEventListener('focusin', invalidateFocus, true);
+            doc.addEventListener('focusout', invalidateFocus, true);
+            focusDocuments.push(doc);
+        }
+        setter.call(el, args.value);
+        const stillSelected = () => {
+            const observed = !focusLost && current(el, args);
+            return observed && observed.value === args.value &&
+                observed.label === args.label;
+        };
+        if (!stillSelected()) return {status: 'uncertain'};
+        el.dispatchEvent(new Event('input', {bubbles: true}));
+        // Even a blur followed by refocus invalidates the retained proof.
+        // Never send a later event after losing the original focus lease.
+        if (!stillSelected()) return {status: 'uncertain'};
+        el.dispatchEvent(new Event('change', {bubbles: true}));
+        if (!stillSelected()) return {status: 'uncertain'};
+        snapshot(el, {key: args.valueKey, typed: args.label, nativeValue: args.value});
+        return {status: 'delivered'};
+    } finally {
+        el.removeEventListener('blur', invalidateFocus, true);
+        for (const doc of focusDocuments) {
+            doc.removeEventListener('focusin', invalidateFocus, true);
+            doc.removeEventListener('focusout', invalidateFocus, true);
+        }
+    }
+}"""
+)
+
+_NATIVE_SELECT_CAPTURE_JS = (
+    "(el, args) => { const read = "
+    + _NATIVE_SELECT_STATE_JS
+    + "; const bind = "
+    + _BIND_STRUCTURAL_TARGET_JS
+    + "; const register = "
+    + _REGISTER_FILLED_FIELD_JS
+    + r""";
+    const requireFocused = args.requireFocused !== false;
+    const observed = read(el, requireFocused);
+    if (!observed) return null;
+    let selector = el.id ? '#' + CSS.escape(el.id) : null;
+    if (!selector && el.name) selector = 'select[name="' + CSS.escape(el.name) + '"]';
+    if (!selector) return null;
+    const matches = document.querySelectorAll(selector);
+    if (matches.length !== 1 || matches[0] !== el) return null;
+    if (!bind(el, {...args, requireFocused, requireRowIdentity: false})) return null;
+    register(el, args.fillKey);
+    return {...observed, selector};
+}"""
+)
+
+_NATIVE_SELECT_CAPTURE_AT_JS = (
+    "args => { const capture = "
+    + _NATIVE_SELECT_CAPTURE_JS
+    + "; const el = document.elementFromPoint(args.x, args.y);"
+    + " return el ? capture(el, {...args, requireFocused: false}) : null; }"
+)
+
+_NATIVE_SELECT_CONTINUE_JS = (
+    "(el, args) => { const current = "
+    + _NATIVE_SELECT_CURRENT_JS
+    + r""";
+    const observed = current(el, args);
+    if (!observed || observed.value !== args.value || observed.label !== args.label) return false;
+    const entry = window[args.storeKey]?.get(args.token);
+    if (!entry || !entry.nativeFocus) return false;
+    if (!entry.captureFocusArmed) {
+        if (entry.stopNativeFocusTracking) entry.stopNativeFocusTracking();
+        const invalidate = () => entry.invalidate();
+        for (const item of entry.nativeFocus) {
+            item.win.document.addEventListener('focusin', invalidate, true);
+            item.win.document.addEventListener('focusout', invalidate, true);
+        }
+        entry.stopNativeFocusTracking = () => {
+            for (const item of entry.nativeFocus) {
+                item.win.document.removeEventListener('focusin', invalidate, true);
+                item.win.document.removeEventListener('focusout', invalidate, true);
+            }
+        };
+        entry.captureFocusArmed = true;
+    }
+    return true;
+}"""
+)
+
+_NATIVE_SELECT_COMMIT_OBSERVATION_JS = (
+    "(el, args) => { const current = "
+    + _NATIVE_SELECT_CURRENT_JS
+    + "; const snapshot = "
+    + _SNAPSHOT_FILLED_VALUE_JS
+    + r""";
+    const observed = current(el, args);
+    if (!observed || observed.value !== args.value || observed.label !== args.label) return null;
+    snapshot(el, {key: args.valueKey, typed: args.label, nativeValue: args.value});
+    return observed;
+}"""
+)
+
 _BIND_CONTEXT_IDENTITY_JS = (
     r"""(args) => {
     const tokenMap = window[args.storeKey];
@@ -1588,6 +1930,7 @@ _BIND_CONTEXT_IDENTITY_JS = (
 _CLEAN_GUARD_JS = r"""(args) => {
     const tokenMap = window[args.storeKey];
     const entry = tokenMap instanceof Map ? tokenMap.get(args.token) : null;
+    if (entry && entry.stopNativeFocusTracking) entry.stopNativeFocusTracking();
     if (entry && entry.observer) entry.observer.disconnect();
     if (entry && entry.contextObserver) entry.contextObserver.disconnect();
     if (entry && entry.focusListener && entry.el) {
@@ -1675,6 +2018,82 @@ _FRAME_SELECTOR_JS = r"""(el) => {
     return null;
 }"""
 
+# The active modal dialog holding the element under a viewport point. Walks the
+# hit-tested chain from the top document down through same-origin frames; the
+# first dialog met is the outermost one, and hit testing already follows the
+# stacking order, so a dialog painted over another wins. The box is the
+# dialog's first element (from the dialog down toward the hit) that does not
+# cover the viewport, so a Bootstrap ``.modal`` overlay yields its
+# ``.modal-dialog``. Answers ``{status: "dialog", box}``, ``{status: "none"}``,
+# or ``{status: "unknown"}`` when a frame on the chain is cross-origin or
+# transformed and the chain cannot be followed.
+_DIALOG_AT_JS = r"""([x, y]) => {
+    // Modal dialogs only: a popover or date picker with role="dialog" leaves
+    // the page behind live, and its rows stay identity evidence.
+    const SELECTOR = 'dialog:modal, [aria-modal="true"], [role="alertdialog"], ' +
+        '.modal.show';
+    const visible = (el, win) => {
+        const style = win.getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden') return false;
+        if (parseFloat(style.opacity) < 0.05) return false;
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+    };
+    let doc = document;
+    let win = window;
+    let ox = 0, oy = 0;
+    let px = x, py = y;
+    for (let depth = 0; depth < 9; depth++) {
+        const hit = doc.elementFromPoint(px, py);
+        if (!hit) return {status: 'none'};
+        const dialog = hit.closest(SELECTOR);
+        if (dialog && visible(dialog, win)) {
+            const chain = [];
+            for (let node = hit; node; node = node.parentElement) {
+                chain.push(node);
+                if (node === dialog) break;
+            }
+            const vw = win.innerWidth, vh = win.innerHeight;
+            let box = null;
+            for (let i = chain.length - 1; i >= 0; i--) {
+                const r = chain[i].getBoundingClientRect();
+                if (r.width <= 0 || r.height <= 0) continue;
+                if (r.width >= 0.95 * vw && r.height >= 0.95 * vh) continue;
+                box = r;
+                break;
+            }
+            if (!box) box = dialog.getBoundingClientRect();
+            const left = Math.max(0, box.left), top = Math.max(0, box.top);
+            const right = Math.min(vw, box.right), bottom = Math.min(vh, box.bottom);
+            if (right <= left || bottom <= top) return {status: 'unknown'};
+            return {status: 'dialog', box: [
+                Math.floor(left + ox), Math.floor(top + oy),
+                Math.ceil(right - left), Math.ceil(bottom - top),
+            ]};
+        }
+        const tag = hit.localName;
+        if (tag !== 'iframe' && tag !== 'frame') return {status: 'none'};
+        let child;
+        try { child = hit.contentDocument; } catch (_) { child = null; }
+        if (!child || !hit.contentWindow) return {status: 'unknown'};
+        const r = hit.getBoundingClientRect();
+        if (!(hit.offsetWidth > 0 && hit.offsetHeight > 0)) return {status: 'unknown'};
+        if (Math.abs(r.width / hit.offsetWidth - 1) > 0.01 ||
+                Math.abs(r.height / hit.offsetHeight - 1) > 0.01) {
+            return {status: 'unknown'};
+        }
+        const style = win.getComputedStyle(hit);
+        const dx = r.left + hit.clientLeft + (parseFloat(style.paddingLeft) || 0);
+        const dy = r.top + hit.clientTop + (parseFloat(style.paddingTop) || 0);
+        ox += dx; oy += dy;
+        px -= dx; py -= dy;
+        doc = child;
+        win = hit.contentWindow;
+    }
+    return {status: 'unknown'};
+}"""
+
+
 _PROJECT_FRAME_POINT_JS = r"""(el, point) => {
     const [px, py] = point;
     if (document.elementFromPoint(px, py) !== el) return null;
@@ -1750,6 +2169,395 @@ def _normalize_chord(key: str) -> str:
         else:
             normalized.append(part)
     return "+".join(normalized)
+
+
+#: The click guard (:meth:`PlaywrightBackend.structural_label_guard`),
+#: installed by an init script at the start of every document, so its
+#: capture-phase listeners on ``window`` run ahead of every page listener.
+#: Dormant until armed for one click on one element; armed, it blocks the
+#: press and the click whenever the element's label inputs changed since it
+#: was armed (a MutationObserver, flushed with ``takeRecords`` in every
+#: listener, and a fresh snapshot compared with the armed one: attributes,
+#: text, and the computed ``::before``/``::after`` and own ``content``,
+#: ``display`` and ``visibility`` of the element, its label nodes and their
+#: first descendants, so a CSSOM relabel counts), or the input
+#: is not on the element. A page that erases window listeners
+#: (``document.open``) fails the guard's heartbeat. Formatted with the key.
+#: The most nodes (the node itself included) the click guard observes in the
+#: control and in each node that labels it. A larger label can't be observed
+#: whole, so the guard refuses to arm and nothing is clicked.
+LABEL_GUARD_MAX_NODES = 64
+
+#: The click guard script's name in a stack trace (``//# sourceURL``), so a
+#: test can tell the guard's own frames from page code.
+CLICK_GUARD_SOURCE_URL = "oaflow-click-guard.js"
+
+_CLICK_GUARD_JS = r"""
+((key) => {
+  if (Object.prototype.hasOwnProperty.call(window, key)) return;
+  // Every read goes through a built-in captured here, before any page
+  // script, and called with Reflect.apply: a getter or method the page
+  // defines later (on a node, a prototype, Array or Object) never runs.
+  // Lists are walked by index and results are built as strings, so a
+  // patched iterator, push or toJSON can't change them either. Every
+  // dictionary handed to a built-in (a property descriptor, observer
+  // options) has a null prototype and only own data properties, and a list
+  // a built-in iterates is a closed iterable, so converting them never
+  // reads an inherited property the page may have defined. Entry points are
+  // named oaflowClickGuard* so their frames can be told apart in a trace.
+  const R = Reflect.apply;
+  const defProp = Reflect.defineProperty;
+  const getOwn = Object.getOwnPropertyDescriptor;
+  const getter = (proto, name) => {
+    const d = proto ? getOwn(proto, name) : undefined;
+    return d && d.get ? d.get : null;
+  };
+  const getAttr = Element.prototype.getAttribute;
+  const tagOf = getter(Element.prototype, 'tagName');
+  const textOf = getter(Node.prototype, 'textContent');
+  const connected = getter(Node.prototype, 'isConnected');
+  const nameOf = getter(Node.prototype, 'nodeName');
+  const parentOf = getter(Node.prototype, 'parentNode');
+  const rootOf = Node.prototype.getRootNode;
+  const qsa = Document.prototype.querySelectorAll;
+  const elQsa = Element.prototype.querySelectorAll;
+  const docById = Document.prototype.getElementById;
+  const fragById = DocumentFragment.prototype.getElementById;
+  const listLen = getter(NodeList.prototype, 'length');
+  const listItem = NodeList.prototype.item;
+  const recType = getter(MutationRecord.prototype, 'type');
+  const recTarget = getter(MutationRecord.prototype, 'target');
+  const recAdded = getter(MutationRecord.prototype, 'addedNodes');
+  const recRemoved = getter(MutationRecord.prototype, 'removedNodes');
+  const evType = getter(Event.prototype, 'type');
+  const path = Event.prototype.composedPath;
+  const prevent = Event.prototype.preventDefault;
+  const stopNow = Event.prototype.stopImmediatePropagation;
+  const MO = window.MutationObserver;
+  const observe = MO.prototype.observe;
+  const take = MO.prototype.takeRecords;
+  const disconnect = MO.prototype.disconnect;
+  const add = EventTarget.prototype.addEventListener;
+  const dispatch = EventTarget.prototype.dispatchEvent;
+  const Ev = window.Event;
+  const stringify = JSON.stringify;
+  const computed = window.getComputedStyle;
+  const propOf = CSSStyleDeclaration.prototype.getPropertyValue;
+  const freeze = Object.freeze;
+  const ITER = Symbol.iterator;
+  // A property descriptor with no prototype: ToPropertyDescriptor reads only
+  // what is set here.
+  const dataDesc = v => ({__proto__: null, value: v, writable: true,
+    enumerable: true, configurable: true});
+  // A list a built-in converts as a sequence, iterated without
+  // Array.prototype: its own iterator, own next, and null-prototype results.
+  const seq = arr => {
+    const o = {__proto__: null};
+    defProp(o, ITER, {__proto__: null, value: () => {
+      let i = 0;
+      return {__proto__: null, next: () => (i < arr.length
+        ? {__proto__: null, done: false, value: arr[i++]}
+        : {__proto__: null, done: true, value: undefined})};
+    }});
+    return o;
+  };
+  // Brand-checked getters: a built-in getter throws on the wrong kind of
+  // object, so trying each one reads the element's own built-in value.
+  const VALUE_TYPES = ['HTMLInputElement', 'HTMLTextAreaElement',
+    'HTMLSelectElement', 'HTMLButtonElement', 'HTMLOptionElement',
+    'HTMLOutputElement', 'HTMLDataElement', 'HTMLMeterElement',
+    'HTMLProgressElement', 'HTMLLIElement'];
+  const LABEL_TYPES = ['HTMLInputElement', 'HTMLTextAreaElement',
+    'HTMLSelectElement', 'HTMLButtonElement', 'HTMLOutputElement',
+    'HTMLMeterElement', 'HTMLProgressElement'];
+  const collect = (types, name) => {
+    const out = [];
+    for (let i = 0; i < types.length; i += 1) {
+      const ctor = window[types[i]];
+      const g = ctor ? getter(ctor.prototype, name) : null;
+      if (g) defProp(out, out.length, dataDesc(g));
+    }
+    return out;
+  };
+  const valueGetters = collect(VALUE_TYPES, 'value');
+  const labelGetters = collect(LABEL_TYPES, 'labels');
+  const branded = (getters, node) => {
+    for (let i = 0; i < getters.length; i += 1) {
+      let v;
+      let ok = true;
+      try { v = R(getters[i], node, []); } catch (err) { ok = false; }
+      if (ok) return {__proto__: null, found: true, v};
+    }
+    return {__proto__: null, found: false, v: null};
+  };
+  const put = (list, v) => { defProp(list, list.length, dataDesc(v)); };
+  const nodes = list => {
+    const out = [];
+    if (!list) return out;
+    const n = R(listLen, list, []);
+    for (let i = 0; i < n; i += 1) put(out, R(listItem, list, [i]));
+    return out;
+  };
+  const isEl = n => {
+    if (!n) return false;
+    try { R(tagOf, n, []); return true; } catch (err) { return false; }
+  };
+  const enc = v => stringify(v === undefined ? null : v) + '\u0001';
+  const attr = (el, a) => R(getAttr, el, [a]);
+  const text = n => R(textOf, n, []);
+  const words = s => {
+    const out = [];
+    let cur = '';
+    const str = s === null ? '' : '' + s;
+    for (let i = 0; i < str.length; i += 1) {
+      const c = str[i];
+      if (c === ' ' || c === '\t' || c === '\n' || c === '\r' || c === '\f') {
+        if (cur) put(out, cur);
+        cur = '';
+      } else {
+        cur += c;
+      }
+    }
+    if (cur) put(out, cur);
+    return out;
+  };
+  const byId = (root, id) => {
+    try { return R(docById, root, [id]); } catch (err) { /* not a document */ }
+    try { return R(fragById, root, [id]); } catch (err) { return null; }
+  };
+  const LOOK = ['content', 'display', 'visibility', 'content-visibility'];
+  const PSEUDO = ['::before', '::after'];
+  const MAX_LOOK = %(max_look)d;
+  // How a node renders its label, for the node and every node under it:
+  // generated ::before/::after text, its own computed content, and whether
+  // it is shown. More than MAX_LOOK nodes (the node included) can't be
+  // observed whole: the snapshot is then null.
+  const look = node => {
+    if (!isEl(node)) return '';
+    const all = nodes(R(elQsa, node, ['*']));
+    if (all.length + 1 > MAX_LOOK) return null;
+    let out = enc(all.length + 1);
+    for (let i = -1; i < all.length; i += 1) {
+      const n = i < 0 ? node : all[i];
+      const own = R(computed, window, [n]);
+      for (let j = 0; j < LOOK.length; j += 1) out += enc(R(propOf, own, [LOOK[j]]));
+      for (let k = 0; k < PSEUDO.length; k += 1) {
+        const ps = R(computed, window, [n, PSEUDO[k]]);
+        for (let j = 0; j < LOOK.length; j += 1) out += enc(R(propOf, ps, [LOOK[j]]));
+      }
+    }
+    return out;
+  };
+  const ATTRS = ['role', 'aria-label', 'aria-labelledby', 'aria-describedby',
+    'title', 'alt', 'value', 'hidden', 'aria-hidden', 'class', 'style', 'id',
+    'type', 'disabled'];
+  const EVENTS = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click',
+    'auxclick', 'dblclick', 'contextmenu', 'keydown', 'keypress', 'keyup',
+    'touchstart', 'touchend'];
+  const attrs = n => {
+    let out = '';
+    for (let i = 0; i < ATTRS.length; i += 1) out += enc(attr(n, ATTRS[i]));
+    return out;
+  };
+  // The nodes that label the control: [id, node] pairs, then its labels.
+  const refs = el => {
+    const out = [];
+    const root = R(rootOf, el, []);
+    const kinds = ['aria-labelledby', 'aria-describedby'];
+    for (let k = 0; k < kinds.length; k += 1) {
+      const ids = words(attr(el, kinds[k]));
+      for (let i = 0; i < ids.length; i += 1) put(out, [ids[i], byId(root, ids[i])]);
+    }
+    return out;
+  };
+  const labels = el => {
+    const b = branded(labelGetters, el);
+    return b.found ? nodes(b.v) : [];
+  };
+  // The whole evidence as one string, or null when it can't be read whole.
+  // Throws on anything unreadable; callers treat a throw as null.
+  const snapshot = el => {
+    let out = enc(R(connected, el, [])) + enc(R(tagOf, el, [])) + attrs(el)
+      + enc(text(el));
+    const value = branded(valueGetters, el);
+    out += enc(value.found) + enc(value.found ? '' + value.v : null);
+    const own = look(el);
+    if (own === null) return null;
+    out += own;
+    const rs = refs(el);
+    for (let i = 0; i < rs.length; i += 1) {
+      const n = rs[i][1];
+      out += enc(rs[i][0]) + enc(n ? text(n) : null);
+      if (n) {
+        out += attrs(n);
+        const seen = look(n);
+        if (seen === null) return null;
+        out += seen;
+      }
+    }
+    const ls = labels(el);
+    for (let i = 0; i < ls.length; i += 1) {
+      out += enc(text(ls[i])) + enc(attr(ls[i], 'class')) + enc(attr(ls[i], 'style'));
+      const seen = look(ls[i]);
+      if (seen === null) return null;
+      out += seen;
+    }
+    return out;
+  };
+  const styledNode = n => {
+    const name = R(nameOf, n, []);
+    return name === 'STYLE' || name === 'LINK';
+  };
+  const styled = records => {
+    for (let i = 0; i < records.length; i += 1) {
+      const r = records[i];
+      const t = R(recTarget, r, []);
+      if (R(recType, r, []) === 'characterData') {
+        const p = R(parentOf, t, []);
+        if (p && styledNode(p)) return true;
+        continue;
+      }
+      if (t && styledNode(t)) return true;
+      const moved = [R(recAdded, r, []), R(recRemoved, r, [])];
+      for (let j = 0; j < 2; j += 1) {
+        const ns = nodes(moved[j]);
+        for (let k = 0; k < ns.length; k += 1) if (styledNode(ns[k])) return true;
+      }
+    }
+    return false;
+  };
+  // A random event type no page code can know, for the heartbeat.
+  const probe = 'oaflow' + Math.random() + Math.random();
+  let beat = 0;
+  let st = null;
+  // Why the evidence no longer holds, or null. Throws when it can't tell.
+  const changed = () => {
+    if (st.tainted) return st.tainted;
+    if (R(take, st.mo, []).length) st.tainted = 'the control or its label changed';
+    else if (styled(R(take, st.docMo, []))) st.tainted = 'a stylesheet changed';
+    else {
+      const now = snapshot(st.el);
+      if (now === null) st.tainted = 'the label grew too large to observe whole';
+      else if (now !== st.snap) st.tainted = 'the control or its label changed';
+    }
+    return st.tainted;
+  };
+  const onControl = e => {
+    const p = R(path, e, []);
+    for (let i = 0; i < p.length; i += 1) if (p[i] === st.el) return true;
+    return false;
+  };
+  const alive = () => {
+    const before = beat;
+    try { R(dispatch, window, [new Ev(probe)]); } catch (e) { return false; }
+    return beat === before + 1;
+  };
+  const oaflowClickGuardBeat = () => { beat += 1; };
+  R(add, window, [probe, oaflowClickGuardBeat, true]);
+  const oaflowClickGuardListener = e => {
+    if (!st) return;
+    // Blocked unless the whole check finishes and passes: an exception
+    // anywhere in it (a page getter, an unreadable node) blocks the input.
+    let why = 'the label evidence could not be read';
+    let type = '?';
+    try {
+      type = '' + R(evType, e, []);
+      const c = changed();
+      why = c ? c : (onControl(e) ? null : 'the input is not on the control');
+    } catch (err) {
+      why = 'the label evidence could not be read';
+      st.tainted = st.tainted || why;
+    } finally {
+      // Block first: nothing recorded after the decision can undo it.
+      if (why !== null) {
+        R(prevent, e, []);
+        R(stopNow, e, []);
+      }
+      try {
+        put(st.events, type);
+        if (why !== null) put(st.violations, type + ': ' + why);
+      } catch (err) {
+        st.tainted = st.tainted || 'the label evidence could not be read';
+      }
+    }
+  };
+  for (let i = 0; i < EVENTS.length; i += 1) {
+    R(add, window, [EVENTS[i], oaflowClickGuardListener, true]);
+  }
+  const answer = (ok, reason) => (ok ? 'ok' : 'refused: ' + reason);
+  const oaflowClickGuardArm = (tokenAttr, secret) => {
+    if (st) {
+      put(st.violations, 'armed twice');
+      return answer(false, 'the guard is already armed');
+    }
+    if (!alive()) return answer(false, "the guard's listeners are not in this document");
+    let mo = null;
+    let docMo = null;
+    try {
+      const found = nodes(R(qsa, document, ['[' + tokenAttr + ']']));
+      if (found.length !== 1) return answer(false, 'the control is not in this document');
+      const el = found[0];
+      const opts = {__proto__: null, attributes: true, characterData: true,
+        childList: true, subtree: true};
+      const oaflowClickGuardObserved = () => {
+        if (st) st.tainted = 'the control or its label changed';
+      };
+      mo = new MO(oaflowClickGuardObserved);
+      docMo = new MO(function oaflowClickGuardStyled(rs) {
+        if (!st) return;
+        try {
+          if (styled(rs)) st.tainted = 'a stylesheet changed';
+        } catch (err) {
+          st.tainted = 'the label evidence could not be read';
+        }
+      });
+      R(observe, mo, [el, opts]);
+      const rs = refs(el);
+      for (let i = 0; i < rs.length; i += 1) if (rs[i][1]) R(observe, mo, [rs[i][1], opts]);
+      const ls = labels(el);
+      for (let i = 0; i < ls.length; i += 1) R(observe, mo, [ls[i], opts]);
+      R(observe, docMo, [document, {__proto__: null, characterData: true,
+        childList: true, subtree: true, attributes: true,
+        attributeFilter: seq(['href', 'media', 'disabled'])}]);
+      const snap = snapshot(el);
+      if (snap !== null) {
+        st = {__proto__: null, el, secret, snap, tainted: null, violations: [],
+          events: [], mo, docMo};
+        return answer(true);
+      }
+    } catch (err) {
+      /* refused below */
+    }
+    try { if (mo) R(disconnect, mo, []); if (docMo) R(disconnect, docMo, []); } catch (e2) { /* gone */ }
+    return answer(false, 'the control or its label has more than ' + MAX_LOOK
+      + " nodes in one part, or could not be read, so the whole label can't be observed");
+  };
+  const list = xs => {
+    let out = '[';
+    for (let i = 0; i < xs.length; i += 1) out += (i ? ',' : '') + stringify('' + xs[i]);
+    return out + ']';
+  };
+  const oaflowClickGuardFinish = secret => {
+    if (!st || st.secret !== secret) {
+      return '{"ok":false,"violations":["the guard was not armed by this click"],"events":[]}';
+    }
+    // A change after the last input is the click's own effect (the dialog
+    // closing); only an input judged after a change is a violation.
+    const violations = st.violations;
+    if (!alive()) put(violations, "the guard's listeners were removed during the click");
+    const out = '{"ok":true,"violations":' + list(violations) + ',"events":' + list(st.events) + '}';
+    try { R(disconnect, st.mo, []); R(disconnect, st.docMo, []); } catch (err) { /* gone */ }
+    st = null;
+    return out;
+  };
+  defProp(window, key, {
+    __proto__: null,
+    value: freeze({__proto__: null, arm: oaflowClickGuardArm,
+      finish: oaflowClickGuardFinish}),
+    enumerable: false, configurable: false, writable: false,
+  });
+})(%(key)s);
+"""
 
 
 class PlaywrightBackend:
@@ -1888,6 +2696,8 @@ class PlaywrightBackend:
         except Exception:  # noqa: BLE001 - a page stand-in without events
             pass
         self._structural_tokens: dict[str, _StructuralGuard] = {}
+        self._native_select_captures: dict[str, _NativeSelectBinding] = {}
+        self._native_selected_proof: Optional[_NativeSelectBinding] = None
         self._guarded_coordinate: Optional[_CoordinateGuard] = None
         # One-shot expectation that the next click closes this page surface
         # (Step.closes_surface; see expect_page_close).
@@ -2367,6 +3177,43 @@ class PlaywrightBackend:
             return None
         return result or None
 
+    def dialog_region_at(
+        self, x: int, y: int
+    ) -> tuple[str, Optional[tuple[int, int, int, int]]]:
+        """The box of the active dialog holding viewport pixel (x, y).
+
+        Returns ``("dialog", (x, y, w, h))`` when the element under the point
+        sits in an open modal dialog (a modal ``dialog``, ``aria-modal``, an
+        ``alertdialog``, or a shown Bootstrap modal), the outermost one along the frame
+        chain; ``("none", None)`` when the chain was followed and no dialog
+        holds the point; ``("unknown", None)`` when it could not be followed
+        (a cross-origin or transformed frame, an evaluation error). Callers
+        that need a dialog treat ``unknown`` as a failed check. Never raises.
+        """
+        try:
+            result = self.page.evaluate(_DIALOG_AT_JS, [int(x), int(y)])
+        except Exception:
+            return ("unknown", None)
+        if not isinstance(result, dict):
+            return ("unknown", None)
+        status = result.get("status")
+        if status == "none":
+            return ("none", None)
+        box = result.get("box")
+        if (
+            status == "dialog"
+            and isinstance(box, list)
+            and len(box) == 4
+            and all(isinstance(v, (int, float)) for v in box)
+            and box[2] > 0
+            and box[3] > 0
+        ):
+            bx, by, bw, bh = (int(v) for v in box)
+            if not (bx <= int(x) < bx + bw and by <= int(y) < by + bh):
+                return ("unknown", None)
+            return ("dialog", (bx, by, bw, bh))
+        return ("unknown", None)
+
     def identity_candidates_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
         """Census of the rows that show the same record identity as (x, y).
 
@@ -2652,7 +3499,9 @@ class PlaywrightBackend:
 
     # -- the wire check (openadapt_flow.wire_check) --------------------------
 
-    def _arm_wire_check(self, submission: ExpectedSubmission) -> Optional[str]:
+    def _arm_wire_check(
+        self, submission: Optional[ExpectedSubmission], *, check: Any = None
+    ) -> Optional[str]:
         """Hold the save's request at the network to the checked form.
 
         Until it is disarmed, every write request from any page of this
@@ -2704,7 +3553,8 @@ class PlaywrightBackend:
         if workers:
             # A worker's WebSockets skip the page's guard and its routes.
             return "a worker runs on this page, and its WebSockets can't be held"
-        check = WireCheck(submission=submission)
+        if check is None:
+            check = WireCheck(submission=submission)
 
         def handler(route: Any) -> None:
             check.handle(route, proceed=route.fallback)
@@ -2966,6 +3816,238 @@ class PlaywrightBackend:
             pass
         self._form_wire = None
         return reasons
+
+    def _check_dispatch_witness(
+        self, scope: Any, witness: str, fingerprint: str, *, double: bool
+    ) -> None:
+        """Raise when the click's input reached anything but its target.
+
+        A toast or modal can appear between the last check and the click, so
+        the input lands on it. That is a possible unintended action: it is
+        reported as delivery uncertainty (the runtime reconciles, never
+        retries). When the page navigated away on the click, the witness is
+        gone with it; the pre-dispatch checks then stand alone, as before.
+        """
+
+        try:
+            seen = scope.evaluate(
+                "key => { const r = window[key]; return r ? r() : null; }", witness
+            )
+        except Exception:  # noqa: BLE001 - the document went away on the click
+            return
+        if seen is None:
+            return  # a new document: the click navigated
+        if not seen or not all(bool(e.get("hit")) for e in seen):
+            raise ActionDeliveryUncertain(
+                operation="dom_double_click" if double else "dom_click",
+                native=False,
+                target_fingerprint=fingerprint,
+                cause_type="InputLandedElsewhere",
+            )
+
+    def interruption_text(
+        self, locator: Optional[StructuralLocator], texts: Sequence[str]
+    ) -> Optional[dict[str, str]]:
+        """The whole interruption: ``{text, title, window}`` of the dialog,
+        banner or toast that holds ``locator``'s control, or, with no
+        locator, of the one visible dialog that shows every one of
+        ``texts``. None when there is no such single container."""
+
+        try:
+            if locator is None:
+                found = self.page.evaluate(
+                    f"texts => ({_INTERRUPTION_TEXT_JS})(null, texts)", list(texts)
+                )
+            else:
+                resolved = self._locator_with_scope(locator)
+                if resolved is None:
+                    return None
+                _scope, loc = resolved
+                if loc.count() != 1:
+                    return None
+                found = loc.evaluate(_INTERRUPTION_TEXT_JS, list(texts))
+        except Exception:  # noqa: BLE001 - unreadable means unproven
+            return None
+        if not isinstance(found, dict):
+            return None
+        return {k: str(found.get(k) or "") for k in ("text", "title", "window")}
+
+    def structural_control_is(
+        self,
+        locator: StructuralLocator,
+        handle: StructuralHandle,
+        *,
+        role: str,
+        name: str,
+    ) -> bool:
+        """Whether the element ``handle`` is bound to is the one control in
+        its scope with ARIA ``role`` and exact accessible ``name``.
+
+        Uses the browser's own accessible-name computation (Playwright's
+        ``get_by_role(..., exact=True)``), so a selector that resolves to a
+        control named something else is told apart from the declared one.
+        Does not consume the handle. Any doubt (a stale handle, no match, more
+        than one, a different element, an error) is False.
+        """
+
+        try:
+            guard = self._structural_tokens.get(handle.target_fingerprint or "")
+            if guard is None or tuple(locator.frame_path or ()) != guard.frame_path:
+                return False
+            bound = self._token_locator(guard.token, guard.scope)
+            named = guard.scope.get_by_role(role, name=name, exact=True)
+            if bound.count() != 1 or named.count() != 1:
+                return False
+            other = named.element_handle(timeout=1000)
+            if other is None:
+                return False
+            try:
+                return bool(bound.evaluate("(el, other) => el === other", other))
+            finally:
+                other.dispose()
+        except Exception:  # noqa: BLE001 - unreadable means unproven
+            return False
+
+    @contextlib.contextmanager
+    def structural_label_guard(
+        self,
+        locator: StructuralLocator,
+        handle: StructuralHandle,
+        *,
+        role: str,
+        name: str,
+    ) -> Iterator["LabelGuardReport"]:
+        """Keep the control's checked label for the whole click.
+
+        Arms the document's click guard (:data:`_CLICK_GUARD_JS`) on the
+        element ``handle`` is bound to, after checking once more that it is
+        the one control with ``role`` and ``name``
+        (:meth:`structural_control_is`). While the ``with`` body clicks, any
+        change to the element, the nodes its ``aria-labelledby`` and
+        ``aria-describedby`` name, its labels, or a stylesheet, and any input
+        that is not on the element, blocks the press and the click before a
+        page listener sees them, and is recorded. A guard that can't arm
+        sets ``refusal`` and the body must not act. After the body,
+        ``violations`` lists what was blocked; a guard that can't be read
+        afterwards counts as a violation.
+        """
+
+        report = LabelGuardReport()
+        guard = self._structural_tokens.get(handle.target_fingerprint or "")
+        key = _click_guard_key(self.page.context)
+        if guard is None or key is None:
+            report.refusal = "the click guard can't be armed for this control"
+            yield report
+            return
+        if not self.structural_control_is(locator, handle, role=role, name=name):
+            report.refusal = f"the control is no longer the {role} {name!r}"
+            yield report
+            return
+        secret = uuid.uuid4().hex
+        try:
+            armed = guard.scope.evaluate(
+                "(x) => { const g = window[x[0]];"
+                " return g ? g.arm(x[1], x[2]) : 'refused: this document has no click"
+                " guard (it loaded before the guard was installed)'; }",
+                [key, self._token_attribute(guard.token), secret],
+            )
+        except Exception as exc:  # noqa: BLE001 - no guard, no click
+            armed = f"refused: arming failed ({type(exc).__name__})"
+        if armed != "ok":
+            reason = (
+                armed[len("refused: ") :]
+                if isinstance(armed, str) and armed.startswith("refused: ")
+                else None
+            )
+            report.refusal = f"the click guard did not arm: {reason or 'unknown'}"
+            yield report
+            return
+        try:
+            yield report
+        finally:
+            try:
+                seen = guard.scope.evaluate(
+                    "(x) => { const g = window[x[0]];"
+                    " return g ? g.finish(x[1]) : null; }",
+                    [key, secret],
+                )
+            except Exception:  # noqa: BLE001 - the document went away
+                seen = None
+            # The guard answers with a string it built itself, so nothing the
+            # page patched (toJSON, Array methods) can shape the answer.
+            try:
+                seen = json.loads(seen) if isinstance(seen, str) else None
+            except ValueError:
+                seen = None
+            if (
+                not isinstance(seen, dict)
+                or seen.get("ok") is not True
+                or not isinstance(seen.get("violations"), list)
+            ):
+                report.violations.append(
+                    "the click guard could not be read after the click"
+                )
+            else:
+                report.violations.extend(str(v) for v in seen.get("violations") or ())
+                report.events = [str(e) for e in seen.get("events") or ()]
+
+    @contextlib.contextmanager
+    def write_fence(self) -> Iterator["WriteFenceReport"]:
+        """Run the ``with`` body while nothing on the page can write.
+
+        The same hold as a checked save (:meth:`_arm_wire_check`), with no
+        submission allowed: every write request from any page of the context
+        is aborted before it leaves, and a WebSocket, worker or message sent
+        meanwhile is refused in the page. Each is reported. A fence that
+        can't go up sets ``refusal`` and the body must not act. Used around
+        the dismissal of an interruption
+        (:mod:`openadapt_flow.runtime.effect_watch`).
+        """
+
+        report = WriteFenceReport()
+        if self._form_wire is not None:
+            report.refusal = "a save is already held on this page"
+            yield report
+            return
+        check = WireCheck()
+        context = self.page.context
+
+        def on_request(request: Any) -> None:
+            try:
+                parts = urlsplit(request.url)
+                report.requests.append(
+                    f"{str(request.method).upper()} {parts.path or '/'}"
+                )
+            except Exception:  # noqa: BLE001 - a request this can't read
+                report.requests.append("? (a request that could not be read)")
+
+        try:
+            context.on("request", on_request)
+        except Exception:  # noqa: BLE001 - no request log, no proof
+            report.refusal = "the fence could not log the page's requests"
+            yield report
+            return
+        refusal = self._arm_wire_check(None, check=check)
+        if refusal is not None:
+            report.refusal = refusal
+            try:
+                context.remove_listener("request", on_request)
+            except Exception:  # noqa: BLE001
+                pass
+            yield report
+            return
+        try:
+            yield report
+            # Let anything the action queued reach the hold while it is up.
+            self.wait_form_submit_guard(WRITE_FENCE_TAIL_MS)
+        finally:
+            report.attempts.extend(self._disarm_wire_check())
+            # A write the check let through is still a write.
+            report.attempts.extend(f"{sent} left the page" for sent in check.sent)
+            try:
+                context.remove_listener("request", on_request)
+            except Exception:  # noqa: BLE001 - the context is gone
+                pass
 
     def wait_form_submit_guard(self, ms: int) -> None:
         """Let the page and the wire check run for ``ms`` milliseconds."""
@@ -3516,6 +4598,321 @@ class PlaywrightBackend:
         except Exception:
             return False
 
+    def _native_select_args(self, binding: _NativeSelectBinding) -> dict[str, Any]:
+        guard = binding.guard
+        return {
+            "storeKey": self._structural_store_key,
+            "tokenAttribute": self._token_attribute(guard.token),
+            "token": guard.token,
+            "selector": binding.selector,
+            "framePath": list(guard.frame_path),
+            "context": guard.context,
+            "options": binding.options,
+            "value": binding.value,
+            "label": binding.label,
+            "fillKey": self._fill_store_key,
+            "valueKey": self._fill_value_slot,
+        }
+
+    def begin_native_select(
+        self, x: Optional[int] = None, y: Optional[int] = None
+    ) -> Optional[str]:
+        """Retain a focused select, or the exact unfocused select at a point."""
+
+        token = uuid.uuid4().hex
+        frame_path: list[str] = []
+        args: dict[str, Any] = {
+            "storeKey": self._structural_store_key,
+            "tokenAttribute": self._token_attribute(token),
+            "token": token,
+            "fillKey": self._fill_store_key,
+        }
+        if x is None and y is None:
+            observed = self._focused_element_call(
+                _NATIVE_SELECT_CAPTURE_JS,
+                arg=args,
+                with_arg=True,
+                frame_path_out=frame_path,
+            )
+        elif x is not None and y is not None:
+            point = self._frame_point(x, y)
+            if point is None:
+                return None
+            frame_path = list(point.frame_path)
+            try:
+                observed = point.scope.evaluate(
+                    _NATIVE_SELECT_CAPTURE_AT_JS, {**args, "x": point.x, "y": point.y}
+                )
+            except Exception:
+                observed = None
+        else:
+            return None
+        retained = False
+        try:
+            if not isinstance(observed, dict):
+                return None
+            scope = self._resolve_scope(tuple(frame_path))
+            if scope is None:
+                return None
+            binding = _NativeSelectBinding(
+                guard=_StructuralGuard(token, scope, tuple(frame_path)),
+                selector=observed["selector"],
+                options=observed["options"],
+                value=observed["value"],
+                label=observed["label"],
+            )
+            # Bound retention even if a recorder abandons a pending pair.
+            if len(self._native_select_captures) >= 16:
+                self.cancel_native_select(next(iter(self._native_select_captures)))
+            self._native_select_captures[token] = binding
+            retained = True
+            return token
+        except Exception:
+            return None
+        finally:
+            if not retained:
+                # A frame selector can become ambiguous after the page-local
+                # bind. Clean this token even if its original scope no longer
+                # resolves; navigation itself disposes detached documents.
+                try:
+                    for frame in self.page.frames:
+                        self._cleanup_guard(token, frame)
+                except Exception:
+                    pass
+
+    def begin_native_select_at(self, x: int, y: int) -> Optional[str]:
+        """Observe an exact native control before a recorded pointer gesture."""
+
+        return self.begin_native_select(x, y)
+
+    def continue_native_select(self, token: str) -> bool:
+        """Prove the recorded click retained control, census and selected value."""
+
+        binding = self._native_select_captures.get(token)
+        if binding is None:
+            return False
+        guard = binding.guard
+        try:
+            loc = self._token_locator(guard.token, guard.scope)
+            if loc.count() != 1:
+                return False
+            box = loc.bounding_box()
+            if not isinstance(box, dict) or not self._frame_chain_matches(
+                guard.scope, guard.frame_path, box
+            ):
+                return False
+            return bool(
+                loc.evaluate(
+                    _NATIVE_SELECT_CONTINUE_JS, self._native_select_args(binding)
+                )
+            )
+        except Exception:
+            return False
+
+    def cancel_native_select(self, token: str) -> None:
+        """Discard one recording observation without input."""
+
+        binding = self._native_select_captures.pop(token, None)
+        if binding is not None:
+            self._cleanup_guard(binding.guard.token, binding.guard.scope)
+
+    def finish_native_select(self, token: str) -> Optional[dict[str, Any]]:
+        """Read the same control after Enter; changed controls/censuses refuse."""
+
+        binding = self._native_select_captures.pop(token, None)
+        if binding is None:
+            return None
+        guard = binding.guard
+        value_before, label_before = binding.value, binding.label
+        try:
+            loc = self._token_locator(guard.token, guard.scope)
+            if loc.count() != 1:
+                return None
+            box = loc.bounding_box()
+            if not isinstance(box, dict) or not self._frame_chain_matches(
+                guard.scope, guard.frame_path, box
+            ):
+                return None
+            observed = loc.evaluate(
+                _NATIVE_SELECT_CURRENT_JS, self._native_select_args(binding)
+            )
+            if not isinstance(observed, dict):
+                return None
+            # Apply the same duplicate/disabled/label rules as replay.
+            contract = NativeSelectContract.model_validate(observed)
+            if (
+                not isinstance(value_before, str)
+                or not isinstance(label_before, str)
+                or contract.value == value_before
+            ):
+                return None
+            binding.value, binding.label = contract.value, contract.label
+            observed = loc.evaluate(
+                _NATIVE_SELECT_COMMIT_OBSERVATION_JS, self._native_select_args(binding)
+            )
+            if not isinstance(observed, dict):
+                return None
+            return {
+                **observed,
+                "value_before": value_before,
+                "label_before": label_before,
+                "selector": binding.selector,
+                "frame_path": list(guard.frame_path),
+            }
+        except Exception:
+            return None
+        finally:
+            self._cleanup_guard(guard.token, guard.scope)
+
+    def select_native_option_guarded(
+        self,
+        contract: NativeSelectContract,
+        *,
+        locator: StructuralLocator,
+        handle: StructuralHandle,
+    ) -> ActionDeliveryReceipt:
+        """Select one exact option using a consumed structural resolution."""
+
+        previous = self._native_selected_proof
+        self._native_selected_proof = None
+        if previous is not None:
+            self._cleanup_guard(previous.guard.token, previous.guard.scope)
+        fingerprint = handle.target_fingerprint
+        guard = self._structural_tokens.pop(fingerprint or "", None)
+        if guard is None or not fingerprint:
+            raise StructuralResolutionRefused(
+                "native selection requires a fresh handle"
+            )
+        retain = False
+        try:
+            if not isinstance(contract, NativeSelectContract) or not locator.selector:
+                raise StructuralResolutionRefused(
+                    "native selection requires an exact contract"
+                )
+            resolved = self._locator_with_scope(locator)
+            if resolved is None:
+                raise StructuralResolutionRefused(
+                    "native selection target is unavailable"
+                )
+            scope, loc = resolved
+            if (
+                scope != guard.scope
+                or tuple(locator.frame_path or ()) != guard.frame_path
+                or not self._context_guard_is_current(guard)
+                or loc.count() != 1
+                or not self._guard_is_current(loc, guard.token)
+            ):
+                raise StructuralResolutionRefused(
+                    "native selection target or context changed"
+                )
+            box = loc.bounding_box()
+            if not isinstance(box, dict) or not self._frame_chain_matches(
+                scope, guard.frame_path, box
+            ):
+                raise StructuralResolutionRefused(
+                    "native selection frame chain changed"
+                )
+            binding = _NativeSelectBinding(
+                guard=guard,
+                selector=locator.selector,
+                options=[option.model_dump() for option in contract.options],
+                value=contract.value,
+                label=contract.label,
+            )
+            self._assert_qualification_environment_current()
+            receipt_fingerprint = structural_resolution_fingerprint(locator, handle)
+            # The binding is independent of resolver tokens created during
+            # post-action verification. Keep it even if delivery is uncertain.
+            self._native_selected_proof = binding
+            retain = True
+            try:
+                result = loc.evaluate(
+                    _NATIVE_SELECT_DELIVER_JS, self._native_select_args(binding)
+                )
+            except Exception as exc:
+                raise ActionDeliveryUncertain(
+                    operation="guarded_dom_select",
+                    native=False,
+                    target_fingerprint=receipt_fingerprint,
+                    cause_type=type(exc).__name__,
+                ) from exc
+            status = result.get("status") if isinstance(result, dict) else None
+            if status == "refused":
+                retain = False
+                self._native_selected_proof = None
+                raise StructuralResolutionRefused(
+                    "native selection failed its atomic guard"
+                )
+            if status != "delivered":
+                raise ActionDeliveryUncertain(
+                    operation="guarded_dom_select",
+                    native=False,
+                    target_fingerprint=receipt_fingerprint,
+                    cause_type="SelectionContinuityLost",
+                )
+            return ActionDeliveryReceipt(
+                receipt_id=f"playwright-{uuid.uuid4().hex}",
+                operation="guarded_dom_select",
+                native=False,
+                target_fingerprint=receipt_fingerprint,
+                selection_value_sha256=hashlib.sha256(
+                    contract.value.encode("utf-8")
+                ).hexdigest(),
+                selection_commit_key=None,
+                delivered_at=datetime.now(timezone.utc).isoformat(),
+            )
+        except (ActionDeliveryUncertain, StructuralResolutionRefused):
+            raise
+        except Exception as exc:
+            raise StructuralResolutionRefused(
+                "native selection unavailable before dispatch"
+            ) from exc
+        finally:
+            if not retain:
+                self._cleanup_guard(guard.token, guard.scope)
+
+    def native_selected_option_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
+        """Consume proof of the selected value on the original delivered node."""
+
+        binding = self._native_selected_proof
+        self._native_selected_proof = None
+        if binding is None:
+            return None
+        guard = binding.guard
+        try:
+            point = self._frame_point(x, y)
+            if (
+                point is None
+                or point.scope != guard.scope
+                or point.frame_path != guard.frame_path
+                or not self._context_guard_is_current(guard)
+            ):
+                return None
+            loc = self._token_locator(guard.token, guard.scope)
+            if loc.count() != 1 or not loc.evaluate(
+                "(el, p) => document.elementFromPoint(p[0], p[1]) === el",
+                [point.x, point.y],
+            ):
+                return None
+            observed = loc.evaluate(
+                _NATIVE_SELECT_CURRENT_JS, self._native_select_args(binding)
+            )
+            if (
+                not isinstance(observed, dict)
+                or observed.get("value") != binding.value
+                or observed.get("label") != binding.label
+            ):
+                return None
+            return {
+                **observed,
+                "selector": binding.selector,
+                "frame_path": list(guard.frame_path),
+            }
+        except Exception:
+            return None
+        finally:
+            self._cleanup_guard(guard.token, guard.scope)
+
     def act_structural(
         self,
         locator: StructuralLocator,
@@ -3610,6 +5007,20 @@ class PlaywrightBackend:
             self._assert_qualification_environment_current()
             close_expected = self._take_page_close_expectation()
             open_before = not self._page_is_closed()
+            witness = "__oaflow_witness_" + uuid.uuid4().hex
+            try:
+                armed = guard.scope.evaluate(
+                    "([sel, key]) => { const el = document.querySelector(sel); "
+                    f"if (!el) return false; ({_ARM_DISPATCH_WITNESS_JS})(el, key); "
+                    "return true; }",
+                    [f"[{self._token_attribute(guard.token)}]", witness],
+                )
+                if armed is not True:
+                    raise RuntimeError("the guarded target is gone")
+            except Exception as exc:
+                raise StructuralResolutionRefused(
+                    "could not arm the check of where the click lands"
+                ) from exc
             try:
                 if double:
                     token_locator.dblclick(timeout=1000)
@@ -3632,6 +5043,7 @@ class PlaywrightBackend:
                         target_fingerprint=fingerprint,
                         cause_type=type(exc).__name__,
                     ) from exc
+            self._check_dispatch_witness(scope, witness, fingerprint, double=double)
         except ActionDeliveryUncertain:
             raise
         except StructuralResolutionRefused:
@@ -4903,8 +6315,8 @@ class PlaywrightBackend:
             record_video_dir: OPT-IN. When set, the page is created inside a
                 browser context that records a WebM video of the session into
                 this directory (one file per page, Playwright-named). ``None``
-                (default) records nothing and has zero effect on normal runs —
-                the page is created directly on the browser as before. The
+                (default) records nothing. Each launch owns a fresh context
+                and page, including when it shares a browser process. The
                 finished video is only flushed to disk after ``close()`` (which
                 closes the context); read its path from ``backend.page.video``.
             before_goto: Called with the new page before it opens ``url``, so
@@ -4919,56 +6331,56 @@ class PlaywrightBackend:
             pw, browser = shared
         else:
             pw, browser = _start_browser(headless)
-        viewport = {"width": VIEWPORT[0], "height": VIEWPORT[1]}
+        from openadapt_flow.backends._owned import close_owned
+
         context = None
-        if record_video_dir is not None:
-            # Opt-in session video: the page must live in a context so
-            # Playwright can attach the recorder; the video finalizes on
-            # context.close().
-            context = browser.new_context(
-                viewport=viewport,
-                device_scale_factor=1,
-                record_video_dir=record_video_dir,
-                record_video_size=viewport,
-                service_workers="block",
-            )
-            page = context.new_page()
-        else:
-            # No service workers: their requests would skip the wire check.
-            page = browser.new_page(
-                viewport=viewport, device_scale_factor=1, service_workers="block"
-            )
+        closed = False
+        close_error: Optional[BaseException] = None
 
         def close() -> None:
-            if shared is not None:
-                # A shared browser outlives this page; closing the page's own
-                # context discards its cookies, storage, and cache.
-                if context is not None:
-                    context.close()
-                else:
-                    page.context.close()
+            nonlocal closed, close_error
+            if closed:
+                if close_error is not None:
+                    raise close_error
                 return
+            closed = True
+            callbacks: list[Callable[[], None]] = []
+            if context is not None:
+                callbacks.append(context.close)
+            if shared is None:
+                callbacks.extend((browser.close, pw.stop))
             try:
-                if context is not None:
-                    context.close()  # flush the recorded video to disk
-                browser.close()
-            finally:
-                pw.stop()
-
-        if before_goto is not None:
-            try:
-                before_goto(page)
-            except BaseException:
-                close()
+                close_owned(callbacks)
+            except BaseException as error:
+                close_error = error
                 raise
-        # Guard WebSockets before the first document loads, so no page
-        # script can keep a reference to an unguarded constructor.
-        ws_guard = prepare_ws_guard(page)
-        page.goto(url)
-        backend = cls(page, ws_guard=ws_guard)
-        # Read by the generic web environment observer: the environment
-        # digest of a headless and a headed browser differ.
-        backend.headless = headless
+
+        try:
+            viewport = {"width": VIEWPORT[0], "height": VIEWPORT[1]}
+            options: dict[str, Any] = {
+                "viewport": viewport,
+                "device_scale_factor": 1,
+                "service_workers": "block",
+            }
+            if record_video_dir is not None:
+                options.update(
+                    record_video_dir=record_video_dir, record_video_size=viewport
+                )
+            # Acquire the context explicitly, so page-acquisition failures
+            # can close this invocation without closing a shared browser.
+            context = browser.new_context(**options)
+            page = context.new_page()
+            if before_goto is not None:
+                before_goto(page)
+            # Install request and WebSocket guards before the first load.
+            ws_guard = prepare_ws_guard(page)
+            page.goto(url)
+            backend = cls(page, ws_guard=ws_guard)
+            backend.headless = headless
+        except BaseException as error:
+            close_owned((close,), primary=error)
+            raise
+
         return backend, close
 
 
@@ -5253,6 +6665,12 @@ def _ws_guard_secrets(target: Any) -> tuple[str, str, str]:
     context = target
     if not hasattr(target, "new_page"):  # a page: guard its context
         context = getattr(target, "context", None)
+    if context is not None:
+        # The headers the app's own script sends, kept in memory for an API
+        # step that must send them too (runtime/actuators/session_headers.py).
+        from openadapt_flow.runtime.actuators import session_headers
+
+        session_headers.arm(context)
     known = getattr(context, "_oaflow_ws_guard", None)
     if (
         isinstance(known, tuple)
@@ -5271,7 +6689,67 @@ def _ws_guard_secrets(target: Any) -> tuple[str, str, str]:
         context._oaflow_ws_guard = secrets
     except Exception:  # noqa: BLE001 - a stand-in context; holding refuses
         pass
+    _click_guard_key(context)
     return secrets
+
+
+def _click_guard_key(context: Any) -> Optional[str]:
+    """The context's click-guard key (:data:`_CLICK_GUARD_JS`), installing
+    the guard's init script on first use. None when it can't be installed;
+    a guarded click then refuses. Documents opened before it have no guard,
+    so a guarded click in one refuses too."""
+
+    known = getattr(context, "_oaflow_click_guard", None)
+    if isinstance(known, str):
+        return known
+    key = f"__oaflow_click_{uuid.uuid4().hex}"
+    try:
+        context.add_init_script(
+            _CLICK_GUARD_JS
+            % {"key": json.dumps(key), "max_look": LABEL_GUARD_MAX_NODES}
+            # Names the guard's frames in a stack trace, for audits.
+            + "\n//# sourceURL="
+            + CLICK_GUARD_SOURCE_URL
+            + "\n"
+        )
+        context._oaflow_click_guard = key
+    except Exception:  # noqa: BLE001 - a stand-in context; guarding refuses
+        return None
+    return key
+
+
+#: How long a write fence stays up after its action, so a request the action
+#: queued just before the fence comes down is still caught.
+WRITE_FENCE_TAIL_MS = 500
+
+
+@dataclass
+class LabelGuardReport:
+    """What the click guard saw. ``refusal`` set means it never armed."""
+
+    refusal: Optional[str] = None
+    #: Each input the guard blocked, and why.
+    violations: list[str] = field(default_factory=list)
+    #: The input events that reached the guard.
+    events: list[str] = field(default_factory=list)
+
+
+@dataclass
+class WriteFenceReport:
+    """What a write fence saw. ``refusal`` set means it never went up."""
+
+    refusal: Optional[str] = None
+    #: Each write the fence stopped, and how.
+    attempts: list[str] = field(default_factory=list)
+    #: Every request the page made while the fence was up (``METHOD /path``),
+    #: reads included, so a report can be reconciled with what was sent.
+    requests: list[str] = field(default_factory=list)
+
+    @property
+    def held(self) -> bool:
+        """The fence was up for the whole action and nothing tried to write."""
+
+        return self.refusal is None and not self.attempts
 
 
 def _wire_reasons(check: WireCheck, notes: list[str]) -> list[str]:
