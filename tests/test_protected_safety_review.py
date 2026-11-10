@@ -738,8 +738,7 @@ def test_malformed_current_declaration_cannot_restore_older_approval(
 ) -> None:
     comments = _comments()
     coordinator = (
-        f"From: Coordinator\nReviewed-Head: {HEAD}\n"
-        "Coordinator-Approval: APPROVE"
+        f"From: Coordinator\nReviewed-Head: {HEAD}\nCoordinator-Approval: APPROVE"
     )
     comments.append(_comment(coordinator, "coordinator-login", 4))
     slot = {"author": 0, "reviewer": 1, "coordinator": 3}[role]
