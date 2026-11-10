@@ -340,7 +340,7 @@ def _form_state_probe(backend, run_dir: Path, frame_png: bytes) -> dict[str, Any
             if r.step_id != request["step_id"] and r.resolution is not None
         ]
         out["points"] = points
-        out["root_at"] = [backend._root_window_at(x, y) for x, y in points]
+        out["root_at"] = [backend.window_root_at(x, y) for x, y in points]
         backend.clear_verified_windows()
         region = backend.approval_form_region(request["step_id"], points)
         out["window_region"] = region

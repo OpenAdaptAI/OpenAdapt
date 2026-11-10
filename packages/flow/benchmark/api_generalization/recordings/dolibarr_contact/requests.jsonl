@@ -1,0 +1,196 @@
+{"t": 1792434268.019, "method": "GET", "path": "/", "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792434268.032, "method": "GET", "path": "/includes/jquery/css/base/jquery-ui.css", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792434268.033, "method": "GET", "path": "/includes/jquery/plugins/select2/dist/css/select2.css", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792434268.033, "method": "GET", "path": "/includes/jquery/plugins/jnotify/jquery.jnotify-alt.min.css", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792434268.038, "method": "GET", "path": "/includes/jquery/plugins/jnotify/jquery.jnotify.min.js", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792434268.035, "method": "GET", "path": "/includes/jquery/js/jquery.min.js", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792434268.034, "method": "GET", "path": "/theme/common/fontawesome-5/css/all.min.css", "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792434268.043, "method": "GET", "path": "/includes/jquery/plugins/multiselect/jquery.multi-select.js", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792434268.038, "method": "GET", "path": "/includes/jquery/plugins/select2/dist/js/select2.full.min.js", "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792434268.044, "method": "GET", "path": "/core/js/dst.js", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792434268.046, "method": "GET", "path": "/theme/dolibarr_logo.svg", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792434268.038, "method": "GET", "path": "/includes/jquery/js/jquery-ui.min.js", "fault": "pass", "status": 200, "ms": 12}
+{"t": 1792434268.034, "method": "GET", "path": "/theme/eldy/style.css.php", "fault": "pass", "status": 200, "ms": 17}
+{"t": 1792434268.043, "method": "GET", "path": "/core/js/lib_head.js.php", "fault": "pass", "status": 200, "ms": 11}
+{"t": 1792434268.074, "method": "GET", "path": "/theme/common/fontawesome-5/webfonts/fa-solid-900.woff2", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792434268.093, "method": "GET", "path": "/index.php", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792434268.205, "method": "POST", "path": "/index.php", "fault": "pass", "status": 302, "ms": 10}
+{"t": 1792434268.216, "method": "GET", "path": "/admin/index.php", "fault": "pass", "status": 200, "ms": 9}
+{"t": 1792434268.23, "method": "GET", "path": "/includes/jquery/plugins/tablednd/jquery.tablednd.min.js", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792434268.231, "method": "GET", "path": "/public/theme/common/user_anonymous.png", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792434268.231, "method": "GET", "path": "/includes/nnnick/chartjs/dist/chart.min.js", "fault": "pass", "status": 200, "ms": 11}
+{"t": 1792434268.229, "method": "GET", "path": "/theme/eldy/style.css.php", "fault": "pass", "status": 200, "ms": 18}
+{"t": 1792434268.231, "method": "GET", "path": "/core/js/lib_foot.js.php", "fault": "pass", "status": 200, "ms": 18}
+{"t": 1792434268.259, "method": "GET", "path": "/theme/eldy/img/logo_setup.svg", "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792434268.265, "method": "GET", "path": "/contact/card.php", "fault": "pass", "status": 200, "ms": 13}
+{"t": 1792434268.311, "method": "GET", "path": "/theme/eldy/img/object_calendarday.png", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792434359.314, "method": "GET", "path": "/", "fault": "pass", "status": 200, "ms": 13}
+{"t": 1792434359.331, "method": "GET", "path": "/includes/jquery/css/base/jquery-ui.css", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792434359.332, "method": "GET", "path": "/includes/jquery/plugins/jnotify/jquery.jnotify-alt.min.css", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792434359.333, "method": "GET", "path": "/includes/jquery/plugins/select2/dist/css/select2.css", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792434359.333, "method": "GET", "path": "/theme/common/fontawesome-5/css/all.min.css", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792434359.336, "method": "GET", "path": "/includes/jquery/plugins/jnotify/jquery.jnotify.min.js", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792434359.337, "method": "GET", "path": "/includes/jquery/plugins/multiselect/jquery.multi-select.js", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792434359.333, "method": "GET", "path": "/includes/jquery/js/jquery.min.js", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792434359.336, "method": "GET", "path": "/includes/jquery/plugins/select2/dist/js/select2.full.min.js", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792434359.341, "method": "GET", "path": "/theme/dolibarr_logo.svg", "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792434359.341, "method": "GET", "path": "/core/js/dst.js", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792434359.336, "method": "GET", "path": "/includes/jquery/js/jquery-ui.min.js", "fault": "pass", "status": 200, "ms": 9}
+{"t": 1792434359.333, "method": "GET", "path": "/theme/eldy/style.css.php", "fault": "pass", "status": 200, "ms": 14}
+{"t": 1792434359.338, "method": "GET", "path": "/core/js/lib_head.js.php", "fault": "pass", "status": 200, "ms": 10}
+{"t": 1792434359.371, "method": "GET", "path": "/theme/common/fontawesome-5/webfonts/fa-solid-900.woff2", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792434359.388, "method": "GET", "path": "/index.php", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792434359.518, "method": "POST", "path": "/index.php", "fault": "pass", "status": 302, "ms": 11}
+{"t": 1792434359.531, "method": "GET", "path": "/admin/index.php", "fault": "pass", "status": 200, "ms": 9}
+{"t": 1792434359.545, "method": "GET", "path": "/includes/jquery/plugins/tablednd/jquery.tablednd.min.js", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792434359.545, "method": "GET", "path": "/public/theme/common/user_anonymous.png", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792434359.545, "method": "GET", "path": "/includes/nnnick/chartjs/dist/chart.min.js", "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792434359.544, "method": "GET", "path": "/theme/eldy/style.css.php", "fault": "pass", "status": 200, "ms": 13}
+{"t": 1792434359.546, "method": "GET", "path": "/core/js/lib_foot.js.php", "fault": "pass", "status": 200, "ms": 13}
+{"t": 1792434359.569, "method": "GET", "path": "/theme/eldy/img/logo_setup.svg", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792434359.579, "method": "GET", "path": "/contact/card.php", "fault": "pass", "status": 200, "ms": 16}
+{"t": 1792434359.628, "method": "GET", "path": "/theme/eldy/img/object_calendarday.png", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792434369.185, "method": "POST", "path": "/contact/card.php", "fault": "pass", "status": 302, "ms": 11}
+{"t": 1792434369.2, "method": "GET", "path": "/contact/card.php", "fault": "pass", "status": 200, "ms": 16}
+{"t": 1792434369.245, "method": "GET", "path": "/theme/common/fontawesome-5/webfonts/fa-regular-400.woff2", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435752.677, "method": "GET", "path": "/", "save": false, "fault": "pass", "status": 200, "ms": 105}
+{"t": 1792435752.786, "method": "GET", "path": "/includes/jquery/plugins/jnotify/jquery.jnotify-alt.min.css", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435752.786, "method": "GET", "path": "/includes/jquery/plugins/select2/dist/css/select2.css", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435752.786, "method": "GET", "path": "/includes/jquery/css/base/jquery-ui.css", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435752.787, "method": "GET", "path": "/theme/common/fontawesome-5/css/all.min.css", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435752.787, "method": "GET", "path": "/includes/jquery/js/jquery.min.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435752.792, "method": "GET", "path": "/includes/jquery/plugins/jnotify/jquery.jnotify.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435752.793, "method": "GET", "path": "/includes/jquery/plugins/multiselect/jquery.multi-select.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435752.796, "method": "GET", "path": "/theme/dolibarr_logo.svg", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435752.793, "method": "GET", "path": "/includes/jquery/plugins/select2/dist/js/select2.full.min.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435752.796, "method": "GET", "path": "/core/js/dst.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435752.791, "method": "GET", "path": "/includes/jquery/js/jquery-ui.min.js", "save": false, "fault": "pass", "status": 200, "ms": 10}
+{"t": 1792435752.787, "method": "GET", "path": "/theme/eldy/style.css.php", "save": false, "fault": "pass", "status": 200, "ms": 36}
+{"t": 1792435752.793, "method": "GET", "path": "/core/js/lib_head.js.php", "save": false, "fault": "pass", "status": 200, "ms": 36}
+{"t": 1792435752.844, "method": "GET", "path": "/theme/common/fontawesome-5/webfonts/fa-solid-900.woff2", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435752.858, "method": "GET", "path": "/index.php", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435752.986, "method": "POST", "path": "/index.php", "save": false, "fault": "pass", "status": 302, "ms": 45}
+{"t": 1792435753.033, "method": "GET", "path": "/admin/index.php", "save": false, "fault": "pass", "status": 200, "ms": 13}
+{"t": 1792435753.05, "method": "GET", "path": "/includes/jquery/plugins/tablednd/jquery.tablednd.min.js", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435753.051, "method": "GET", "path": "/public/theme/common/user_anonymous.png", "save": false, "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792435753.051, "method": "GET", "path": "/core/js/lib_foot.js.php", "save": false, "fault": "pass", "status": 200, "ms": 9}
+{"t": 1792435753.051, "method": "GET", "path": "/includes/nnnick/chartjs/dist/chart.min.js", "save": false, "fault": "pass", "status": 200, "ms": 12}
+{"t": 1792435753.05, "method": "GET", "path": "/theme/eldy/style.css.php", "save": false, "fault": "pass", "status": 200, "ms": 29}
+{"t": 1792435753.092, "method": "GET", "path": "/theme/eldy/img/logo_setup.svg", "save": false, "fault": "pass", "status": 200, "ms": 10}
+{"t": 1792435753.108, "method": "GET", "path": "/contact/card.php", "save": false, "fault": "pass", "status": 200, "ms": 87}
+{"t": 1792435753.228, "method": "GET", "path": "/theme/eldy/img/object_calendarday.png", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435758.155, "method": "POST", "path": "/contact/card.php", "save": true, "fault": "pass", "status": 302, "ms": 16}
+{"t": 1792435758.173, "method": "GET", "path": "/contact/card.php", "save": false, "fault": "pass", "status": 200, "ms": 26}
+{"t": 1792435758.218, "method": "GET", "path": "/theme/common/fontawesome-5/webfonts/fa-regular-400.woff2", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435760.673, "method": "GET", "path": "/", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435760.683, "method": "GET", "path": "/includes/jquery/plugins/jnotify/jquery.jnotify-alt.min.css", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435760.682, "method": "GET", "path": "/includes/jquery/css/base/jquery-ui.css", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435760.683, "method": "GET", "path": "/includes/jquery/plugins/select2/dist/css/select2.css", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435760.684, "method": "GET", "path": "/theme/common/fontawesome-5/css/all.min.css", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435760.686, "method": "GET", "path": "/includes/jquery/plugins/jnotify/jquery.jnotify.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435760.684, "method": "GET", "path": "/includes/jquery/js/jquery.min.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435760.687, "method": "GET", "path": "/includes/jquery/plugins/multiselect/jquery.multi-select.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435760.686, "method": "GET", "path": "/includes/jquery/plugins/select2/dist/js/select2.full.min.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435760.689, "method": "GET", "path": "/core/js/dst.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435760.69, "method": "GET", "path": "/theme/dolibarr_logo.svg", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435760.685, "method": "GET", "path": "/includes/jquery/js/jquery-ui.min.js", "save": false, "fault": "pass", "status": 200, "ms": 9}
+{"t": 1792435760.684, "method": "GET", "path": "/theme/eldy/style.css.php", "save": false, "fault": "pass", "status": 200, "ms": 12}
+{"t": 1792435760.688, "method": "GET", "path": "/core/js/lib_head.js.php", "save": false, "fault": "pass", "status": 200, "ms": 10}
+{"t": 1792435760.712, "method": "GET", "path": "/theme/common/fontawesome-5/webfonts/fa-solid-900.woff2", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435760.722, "method": "GET", "path": "/index.php", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435760.833, "method": "POST", "path": "/index.php", "save": false, "fault": "pass", "status": 302, "ms": 8}
+{"t": 1792435760.843, "method": "GET", "path": "/admin/index.php", "save": false, "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792435760.855, "method": "GET", "path": "/includes/jquery/plugins/tablednd/jquery.tablednd.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435760.856, "method": "GET", "path": "/public/theme/common/user_anonymous.png", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435760.856, "method": "GET", "path": "/includes/nnnick/chartjs/dist/chart.min.js", "save": false, "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792435760.855, "method": "GET", "path": "/theme/eldy/style.css.php", "save": false, "fault": "pass", "status": 200, "ms": 13}
+{"t": 1792435760.856, "method": "GET", "path": "/core/js/lib_foot.js.php", "save": false, "fault": "pass", "status": 200, "ms": 14}
+{"t": 1792435760.88, "method": "GET", "path": "/theme/eldy/img/logo_setup.svg", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435760.993, "method": "GET", "path": "/contact/card.php", "save": false, "fault": "pass", "status": 200, "ms": 11}
+{"t": 1792435761.035, "method": "GET", "path": "/theme/eldy/img/object_calendarday.png", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435765.377, "method": "POST", "path": "/contact/card.php", "save": true, "fault": "pass", "status": 302, "ms": 8}
+{"t": 1792435765.386, "method": "GET", "path": "/contact/card.php", "save": false, "fault": "pass", "status": 200, "ms": 10}
+{"t": 1792435765.413, "method": "GET", "path": "/theme/common/fontawesome-5/webfonts/fa-regular-400.woff2", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435768.123, "method": "GET", "path": "/", "save": false, "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792435768.134, "method": "GET", "path": "/includes/jquery/css/base/jquery-ui.css", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435768.134, "method": "GET", "path": "/includes/jquery/plugins/jnotify/jquery.jnotify-alt.min.css", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435768.135, "method": "GET", "path": "/includes/jquery/plugins/select2/dist/css/select2.css", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435768.136, "method": "GET", "path": "/theme/common/fontawesome-5/css/all.min.css", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435768.138, "method": "GET", "path": "/includes/jquery/plugins/jnotify/jquery.jnotify.min.js", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435768.137, "method": "GET", "path": "/includes/jquery/js/jquery.min.js", "save": false, "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792435768.142, "method": "GET", "path": "/includes/jquery/plugins/multiselect/jquery.multi-select.js", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435768.138, "method": "GET", "path": "/includes/jquery/js/jquery-ui.min.js", "save": false, "fault": "pass", "status": 200, "ms": 12}
+{"t": 1792435768.14, "method": "GET", "path": "/includes/jquery/plugins/select2/dist/js/select2.full.min.js", "save": false, "fault": "pass", "status": 200, "ms": 11}
+{"t": 1792435768.147, "method": "GET", "path": "/core/js/dst.js", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435768.151, "method": "GET", "path": "/theme/dolibarr_logo.svg", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435768.137, "method": "GET", "path": "/theme/eldy/style.css.php", "save": false, "fault": "pass", "status": 200, "ms": 19}
+{"t": 1792435768.146, "method": "GET", "path": "/core/js/lib_head.js.php", "save": false, "fault": "pass", "status": 200, "ms": 13}
+{"t": 1792435768.185, "method": "GET", "path": "/theme/common/fontawesome-5/webfonts/fa-solid-900.woff2", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435768.194, "method": "GET", "path": "/index.php", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435768.308, "method": "POST", "path": "/index.php", "save": false, "fault": "pass", "status": 302, "ms": 16}
+{"t": 1792435768.325, "method": "GET", "path": "/admin/index.php", "save": false, "fault": "pass", "status": 200, "ms": 23}
+{"t": 1792435768.356, "method": "GET", "path": "/includes/jquery/plugins/tablednd/jquery.tablednd.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435768.357, "method": "GET", "path": "/includes/nnnick/chartjs/dist/chart.min.js", "save": false, "fault": "pass", "status": 200, "ms": 44}
+{"t": 1792435768.354, "method": "GET", "path": "/theme/eldy/style.css.php", "save": false, "fault": "pass", "status": 200, "ms": 49}
+{"t": 1792435768.386, "method": "GET", "path": "/public/theme/common/user_anonymous.png", "save": false, "fault": "pass", "status": 200, "ms": 19}
+{"t": 1792435768.39, "method": "GET", "path": "/core/js/lib_foot.js.php", "save": false, "fault": "pass", "status": 200, "ms": 20}
+{"t": 1792435768.414, "method": "GET", "path": "/theme/eldy/img/logo_setup.svg", "save": false, "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792435768.432, "method": "GET", "path": "/contact/card.php", "save": false, "fault": "pass", "status": 200, "ms": 18}
+{"t": 1792435768.483, "method": "GET", "path": "/theme/eldy/img/object_calendarday.png", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435772.923, "method": "POST", "path": "/contact/card.php", "save": true, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435780.013, "method": "GET", "path": "/", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435780.023, "method": "GET", "path": "/includes/jquery/css/base/jquery-ui.css", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435780.023, "method": "GET", "path": "/includes/jquery/plugins/jnotify/jquery.jnotify-alt.min.css", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435780.024, "method": "GET", "path": "/includes/jquery/plugins/select2/dist/css/select2.css", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435780.025, "method": "GET", "path": "/theme/common/fontawesome-5/css/all.min.css", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435780.029, "method": "GET", "path": "/includes/jquery/plugins/jnotify/jquery.jnotify.min.js", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435780.026, "method": "GET", "path": "/includes/jquery/js/jquery.min.js", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435780.029, "method": "GET", "path": "/includes/jquery/plugins/multiselect/jquery.multi-select.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435780.029, "method": "GET", "path": "/includes/jquery/plugins/select2/dist/js/select2.full.min.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435780.032, "method": "GET", "path": "/core/js/dst.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435780.033, "method": "GET", "path": "/theme/dolibarr_logo.svg", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435780.028, "method": "GET", "path": "/includes/jquery/js/jquery-ui.min.js", "save": false, "fault": "pass", "status": 200, "ms": 9}
+{"t": 1792435780.025, "method": "GET", "path": "/theme/eldy/style.css.php", "save": false, "fault": "pass", "status": 200, "ms": 12}
+{"t": 1792435780.031, "method": "GET", "path": "/core/js/lib_head.js.php", "save": false, "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792435780.056, "method": "GET", "path": "/theme/common/fontawesome-5/webfonts/fa-solid-900.woff2", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435780.067, "method": "GET", "path": "/index.php", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435780.18, "method": "POST", "path": "/index.php", "save": false, "fault": "pass", "status": 302, "ms": 7}
+{"t": 1792435780.188, "method": "GET", "path": "/admin/index.php", "save": false, "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792435780.202, "method": "GET", "path": "/includes/jquery/plugins/tablednd/jquery.tablednd.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435780.202, "method": "GET", "path": "/public/theme/common/user_anonymous.png", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435780.201, "method": "GET", "path": "/includes/nnnick/chartjs/dist/chart.min.js", "save": false, "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792435780.201, "method": "GET", "path": "/theme/eldy/style.css.php", "save": false, "fault": "pass", "status": 200, "ms": 14}
+{"t": 1792435780.203, "method": "GET", "path": "/core/js/lib_foot.js.php", "save": false, "fault": "pass", "status": 200, "ms": 13}
+{"t": 1792435780.226, "method": "GET", "path": "/theme/eldy/img/logo_setup.svg", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435780.232, "method": "GET", "path": "/contact/card.php", "save": false, "fault": "pass", "status": 200, "ms": 12}
+{"t": 1792435780.274, "method": "GET", "path": "/theme/eldy/img/object_calendarday.png", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435784.683, "method": "POST", "path": "/contact/card.php", "save": true, "fault": "pass", "status": 200, "ms": 18}
+{"t": 1792435844.659, "method": "GET", "path": "/", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435844.669, "method": "GET", "path": "/includes/jquery/plugins/select2/dist/css/select2.css", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435844.669, "method": "GET", "path": "/includes/jquery/plugins/jnotify/jquery.jnotify-alt.min.css", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435844.668, "method": "GET", "path": "/includes/jquery/css/base/jquery-ui.css", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435844.669, "method": "GET", "path": "/theme/common/fontawesome-5/css/all.min.css", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435844.67, "method": "GET", "path": "/includes/jquery/js/jquery.min.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435844.673, "method": "GET", "path": "/includes/jquery/plugins/jnotify/jquery.jnotify.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435844.674, "method": "GET", "path": "/includes/jquery/plugins/multiselect/jquery.multi-select.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435844.675, "method": "GET", "path": "/core/js/dst.js", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435844.673, "method": "GET", "path": "/includes/jquery/plugins/select2/dist/js/select2.full.min.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435844.676, "method": "GET", "path": "/theme/dolibarr_logo.svg", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435844.673, "method": "GET", "path": "/includes/jquery/js/jquery-ui.min.js", "save": false, "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792435844.67, "method": "GET", "path": "/theme/eldy/style.css.php", "save": false, "fault": "pass", "status": 200, "ms": 13}
+{"t": 1792435844.675, "method": "GET", "path": "/core/js/lib_head.js.php", "save": false, "fault": "pass", "status": 200, "ms": 11}
+{"t": 1792435844.7, "method": "GET", "path": "/theme/common/fontawesome-5/webfonts/fa-solid-900.woff2", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435844.711, "method": "GET", "path": "/index.php", "save": false, "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792435844.846, "method": "POST", "path": "/index.php", "save": false, "fault": "pass", "status": 302, "ms": 6}
+{"t": 1792435844.854, "method": "GET", "path": "/admin/index.php", "save": false, "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792435844.867, "method": "GET", "path": "/includes/jquery/plugins/tablednd/jquery.tablednd.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435844.868, "method": "GET", "path": "/public/theme/common/user_anonymous.png", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435844.867, "method": "GET", "path": "/includes/nnnick/chartjs/dist/chart.min.js", "save": false, "fault": "pass", "status": 200, "ms": 9}
+{"t": 1792435844.866, "method": "GET", "path": "/theme/eldy/style.css.php", "save": false, "fault": "pass", "status": 200, "ms": 13}
+{"t": 1792435844.868, "method": "GET", "path": "/core/js/lib_foot.js.php", "save": false, "fault": "pass", "status": 200, "ms": 14}
+{"t": 1792435844.891, "method": "GET", "path": "/theme/eldy/img/logo_setup.svg", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435845.063, "method": "GET", "path": "/contact/card.php", "save": false, "fault": "pass", "status": 200, "ms": 12}
+{"t": 1792435845.109, "method": "GET", "path": "/theme/eldy/img/object_calendarday.png", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435849.85, "method": "POST", "path": "/contact/card.php", "save": true, "fault": "pass", "status": 302, "ms": 7}
+{"t": 1792435849.858, "method": "GET", "path": "/contact/card.php", "save": false, "fault": "pass", "status": 200, "ms": 10}
+{"t": 1792435849.885, "method": "GET", "path": "/theme/common/fontawesome-5/webfonts/fa-regular-400.woff2", "save": false, "fault": "pass", "status": 200, "ms": 2}

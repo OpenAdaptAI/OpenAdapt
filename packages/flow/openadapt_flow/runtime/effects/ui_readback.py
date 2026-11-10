@@ -62,6 +62,7 @@ from urllib.parse import quote, urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from openadapt_flow._browser_readiness import launch_rendering_ready
 from openadapt_flow.assurance import SCREEN_READBACK, UNCHECKED
 from openadapt_flow.runtime.effects._common import judge_records
 from openadapt_flow.runtime.effects.adapter import ConnectionProbe, VerifierAdapterBase
@@ -591,7 +592,7 @@ class _PlaywrightSession:
             launch_args: dict[str, Any] = {"headless": spec.headless}
             if self._driver.executable_path:
                 launch_args["executable_path"] = self._driver.executable_path
-            self._browser = launcher.launch(**launch_args)
+            self._browser = launch_rendering_ready(launcher, **launch_args)
             self._context = self._browser.new_context(
                 service_workers="block", accept_downloads=False
             )
@@ -625,6 +626,9 @@ class _PlaywrightSession:
             raise ReadbackSessionError(
                 f"could not open a signed-in read-back session ({type(exc).__name__})"
             ) from None
+        except BaseException:
+            self._close()
+            raise
         finally:
             # Drop the secrets as soon as sign-in is over.
             self._username = ""

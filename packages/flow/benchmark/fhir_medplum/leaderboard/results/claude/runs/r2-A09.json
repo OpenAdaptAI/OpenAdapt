@@ -1,0 +1,142 @@
+{
+ "id": "A09",
+ "class": "other_user",
+ "type": "allergy",
+ "expect": "create",
+ "note": "Another clinician records a latex allergy for a different patient during the run.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/AllergyIntolerance returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/AllergyIntolerance returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 179.1,
+ "cost_usd": 0.339358,
+ "claim": {
+  "status": "done",
+  "id": "AllergyIntolerance/a539c219-8850-46fa-aa17-95249fc61360",
+  "note": "RESULT: DONE AllergyIntolerance/a539c219-8850-46fa-aa17-95249fc61360",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/AllergyIntolerance?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated",
+  "final_text": "Rosa Delgado (born 1979-06-14) now has a penicillin allergy recorded once as an AllergyIntolerance. She was the only patient with that name and birth date; the other patient on the list is Imani Brooks.\n\nBefore creating anything I checked the existing allergy records. There was one, a latex allergy, so the penicillin allergy wasn't already recorded.\n\nThe new record has:\n- **Patient:** Patient/34eeefa9-009a-4b76-a685-628adea114f8\n- **Code:** Allergy to penicillin, SNOMED CT 91936005\n- **Criticality:** high\n- **Clinical status:** active\n- **Verification status:** confirmed\n\nI also put the display text \"Allergy to penicillin\" inside the code. The AllergyIntolerance list now shows exactly two records: the new one and the existing latex allergy.\n\nRESULT: DONE AllergyIntolerance/a539c219-8850-46fa-aa17-95249fc61360",
+  "model_calls": 30,
+  "actions": 310,
+  "tokens_in": 861002,
+  "tokens_out": 4863
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "AllergyIntolerance/a539c219-8850-46fa-aa17-95249fc61360"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "AllergyIntolerance/a539c219-8850-46fa-aa17-95249fc61360": "created"
+  }
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "AllergyIntolerance",
+   "write": 1,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 2,
+ "host_load": {
+  "start": 21.6,
+  "end": 17.1,
+  "waited_s": 0
+ }
+}

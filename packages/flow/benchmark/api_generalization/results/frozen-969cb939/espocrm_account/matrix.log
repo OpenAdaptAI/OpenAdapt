@@ -1,0 +1,146 @@
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/espocrm_account/matrix/N1-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"case": "N1", "arm": "gui", "correct": true, "incorrect_write": false, "false_success": false, "new_records": 1, "engine_success": true, "save_actuation": "dom", "api_fallback": "API steps are off for this run", "save_posts": 1, "engine_s": 8.3, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/espocrm_account/matrix/N1-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"case": "N1", "arm": "api", "correct": true, "incorrect_write": false, "false_success": false, "new_records": 1, "engine_success": true, "save_actuation": "api", "api_fallback": null, "save_posts": 1, "engine_s": 1.625, "error": null}
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 56553)
+Traceback (most recent call last):
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 766, in __init__
+    self.handle()
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/http/server.py", line 440, in handle
+    self.handle_one_request()
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/http/server.py", line 428, in handle_one_request
+    method()
+  File "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/fervent-clarke-60860f/packages/flow/benchmark/api_generalization/proxy.py", line 118, in _handle
+    self._reply(st, reason, headers, data)
+  File "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/fervent-clarke-60860f/packages/flow/benchmark/api_generalization/proxy.py", line 94, in _reply
+    self.wfile.write(data)
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 845, in write
+    self._sock.sendall(b)
+BrokenPipeError: [Errno 32] Broken pipe
+----------------------------------------
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/espocrm_account/matrix/N2-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"case": "N2", "arm": "api", "correct": true, "incorrect_write": false, "false_success": false, "new_records": 1, "engine_success": true, "save_actuation": "api", "api_fallback": null, "save_posts": 1, "engine_s": 0.832, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/espocrm_account/matrix/N2-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"case": "N2", "arm": "gui", "correct": true, "incorrect_write": false, "false_success": false, "new_records": 1, "engine_success": true, "save_actuation": "dom", "api_fallback": "API steps are off for this run", "save_posts": 1, "engine_s": 6.506, "error": null}
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 56756)
+Traceback (most recent call last):
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 766, in __init__
+    self.handle()
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/http/server.py", line 440, in handle
+    self.handle_one_request()
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/http/server.py", line 428, in handle_one_request
+    method()
+  File "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/fervent-clarke-60860f/packages/flow/benchmark/api_generalization/proxy.py", line 118, in _handle
+    self._reply(st, reason, headers, data)
+  File "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/fervent-clarke-60860f/packages/flow/benchmark/api_generalization/proxy.py", line 94, in _reply
+    self.wfile.write(data)
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 845, in write
+    self._sock.sendall(b)
+BrokenPipeError: [Errno 32] Broken pipe
+----------------------------------------
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 56755)
+Traceback (most recent call last):
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 766, in __init__
+    self.handle()
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/http/server.py", line 440, in handle
+    self.handle_one_request()
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/http/server.py", line 428, in handle_one_request
+    method()
+  File "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/fervent-clarke-60860f/packages/flow/benchmark/api_generalization/proxy.py", line 118, in _handle
+    self._reply(st, reason, headers, data)
+  File "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/fervent-clarke-60860f/packages/flow/benchmark/api_generalization/proxy.py", line 94, in _reply
+    self.wfile.write(data)
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 845, in write
+    self._sock.sendall(b)
+BrokenPipeError: [Errno 32] Broken pipe
+----------------------------------------
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/espocrm_account/matrix/N3-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"case": "N3", "arm": "gui", "correct": true, "incorrect_write": false, "false_success": false, "new_records": 1, "engine_success": true, "save_actuation": "dom", "api_fallback": "API steps are off for this run", "save_posts": 1, "engine_s": 5.246, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/espocrm_account/matrix/N3-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"case": "N3", "arm": "api", "correct": true, "incorrect_write": false, "false_success": false, "new_records": 1, "engine_success": true, "save_actuation": "api", "api_fallback": null, "save_posts": 1, "engine_s": 1.202, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/espocrm_account/matrix/B1-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"case": "B1", "arm": "api", "correct": true, "incorrect_write": false, "false_success": false, "new_records": 1, "engine_success": true, "save_actuation": "dom", "api_fallback": "description: a blank value may change the body's shape; the save was not sent", "save_posts": 1, "engine_s": 5.547, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/espocrm_account/matrix/B1-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"case": "B1", "arm": "gui", "correct": true, "incorrect_write": false, "false_success": false, "new_records": 1, "engine_success": true, "save_actuation": "dom", "api_fallback": "API steps are off for this run", "save_posts": 1, "engine_s": 4.925, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/espocrm_account/matrix/D1-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"case": "D1", "arm": "gui", "correct": true, "incorrect_write": false, "false_success": false, "new_records": 1, "engine_success": true, "save_actuation": "dom", "api_fallback": "API steps are off for this run", "save_posts": 1, "engine_s": 5.425, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/espocrm_account/matrix/D1-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"case": "D1", "arm": "api", "correct": true, "incorrect_write": false, "false_success": false, "new_records": 1, "engine_success": true, "save_actuation": "api", "api_fallback": null, "save_posts": 1, "engine_s": 0.871, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/espocrm_account/matrix/S1-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+WARNING: openadapt-privacy is not installed, so reports and logs are not scrubbed of patient data (OPENADAPT_FLOW_SCRUB=auto). Install 'openadapt-flow[privacy]', or set OPENADAPT_FLOW_SCRUB=on to refuse instead.
+{"case": "S1", "arm": "api", "correct": true, "incorrect_write": false, "false_success": false, "new_records": 0, "engine_success": false, "save_actuation": "api", "api_fallback": null, "save_posts": 1, "engine_s": 14.116, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/espocrm_account/matrix/S1-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"case": "S1", "arm": "gui", "correct": true, "incorrect_write": false, "false_success": false, "new_records": 0, "engine_success": false, "save_actuation": "dom", "api_fallback": "API steps are off for this run", "save_posts": 1, "engine_s": 7.424, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/espocrm_account/matrix/F1-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"case": "F1", "arm": "gui", "correct": true, "incorrect_write": false, "false_success": false, "new_records": 0, "engine_success": false, "save_actuation": "dom", "api_fallback": "API steps are off for this run", "save_posts": 1, "engine_s": 10.496, "error": null}
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 57660)
+Traceback (most recent call last):
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 766, in __init__
+    self.handle()
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/http/server.py", line 440, in handle
+    self.handle_one_request()
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/http/server.py", line 428, in handle_one_request
+    method()
+  File "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/fervent-clarke-60860f/packages/flow/benchmark/api_generalization/proxy.py", line 118, in _handle
+    self._reply(st, reason, headers, data)
+  File "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/fervent-clarke-60860f/packages/flow/benchmark/api_generalization/proxy.py", line 94, in _reply
+    self.wfile.write(data)
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 845, in write
+    self._sock.sendall(b)
+BrokenPipeError: [Errno 32] Broken pipe
+----------------------------------------
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/espocrm_account/matrix/F1-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"case": "F1", "arm": "api", "correct": true, "incorrect_write": false, "false_success": false, "new_records": 0, "engine_success": false, "save_actuation": "api", "api_fallback": null, "save_posts": 1, "engine_s": 14.163, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/espocrm_account/matrix/F2-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"case": "F2", "arm": "api", "correct": true, "incorrect_write": false, "false_success": false, "new_records": 1, "engine_success": false, "save_actuation": "api", "api_fallback": null, "save_posts": 1, "engine_s": 6.179, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/espocrm_account/matrix/F2-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"case": "F2", "arm": "gui", "correct": true, "incorrect_write": false, "false_success": false, "new_records": 1, "engine_success": false, "save_actuation": "dom", "api_fallback": "API steps are off for this run", "save_posts": 1, "engine_s": 12.636, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/espocrm_account/matrix/F3-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"case": "F3", "arm": "gui", "correct": true, "incorrect_write": false, "false_success": false, "new_records": 1, "engine_success": false, "save_actuation": "dom", "api_fallback": "API steps are off for this run", "save_posts": 1, "engine_s": 7.272, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/espocrm_account/matrix/F3-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"case": "F3", "arm": "api", "correct": true, "incorrect_write": false, "false_success": false, "new_records": 1, "engine_success": false, "save_actuation": "api", "api_fallback": null, "save_posts": 1, "engine_s": 6.075, "error": null}
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 58117)
+Traceback (most recent call last):
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 766, in __init__
+    self.handle()
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/http/server.py", line 440, in handle
+    self.handle_one_request()
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/http/server.py", line 428, in handle_one_request
+    method()
+  File "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/fervent-clarke-60860f/packages/flow/benchmark/api_generalization/proxy.py", line 118, in _handle
+    self._reply(st, reason, headers, data)
+  File "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/fervent-clarke-60860f/packages/flow/benchmark/api_generalization/proxy.py", line 94, in _reply
+    self.wfile.write(data)
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 845, in write
+    self._sock.sendall(b)
+BrokenPipeError: [Errno 32] Broken pipe
+----------------------------------------
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/espocrm_account/matrix/V1-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"case": "V1", "arm": "api", "correct": true, "incorrect_write": false, "false_success": false, "new_records": 0, "engine_success": false, "save_actuation": null, "api_fallback": null, "save_posts": 0, "engine_s": 0.011, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/espocrm_account/matrix/V1-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"case": "V1", "arm": "gui", "correct": true, "incorrect_write": false, "false_success": false, "new_records": 0, "engine_success": false, "save_actuation": null, "api_fallback": null, "save_posts": 0, "engine_s": 0.011, "error": null}

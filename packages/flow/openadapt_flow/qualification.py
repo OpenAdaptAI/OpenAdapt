@@ -17,6 +17,7 @@ import hashlib
 import json
 import math
 import re
+import weakref
 from base64 import b64decode, b64encode
 from collections import Counter
 from datetime import datetime, timezone
@@ -1195,18 +1196,7 @@ class QualificationError(ValueError):
     """A requested qualification mutation could not be applied."""
 
 
-def workflow_contract_sha256(workflow: "Workflow") -> str:
-    """Digest executable intent and its already-sealed visual assets.
-
-    Qualification state and manifest certification metadata are excluded to
-    avoid self-reference.  Existing manifest file hashes bind the plaintext
-    template assets while keeping their contents inside the declared boundary.
-    """
-
-    content = workflow.model_dump(
-        mode="json",
-        exclude={"manifest", "qualification"},
-    )
+def _workflow_contract_hash(workflow: "Workflow", content: dict[str, Any]) -> str:
     payload = {
         "workflow": content,
         "file_hashes": (
@@ -1222,6 +1212,97 @@ def workflow_contract_sha256(workflow: "Workflow") -> str:
         ensure_ascii=False,
     ).encode()
     return hashlib.sha256(encoded).hexdigest()
+
+
+WorkflowContractForm = Literal["current", "sealed_absent_defaults"]
+
+
+def _bound_workflow_contracts(workflow: "Workflow") -> set[str]:
+    """Workflow-contract digests the persisted qualification is bound to."""
+
+    project = workflow.qualification
+    if project is None:
+        return set()
+    bound = {
+        result.workflow_contract_sha256
+        for case in project.cases
+        for result in case.results
+    }
+    if project.last_certification is not None:
+        bound.add(project.last_certification.workflow_contract_sha256)
+    return bound
+
+
+def workflow_contract_digest(
+    workflow: "Workflow",
+) -> tuple[str, WorkflowContractForm]:
+    """Return the workflow-contract digest and which form produced it.
+
+    The current form is computed first and wins whenever the persisted
+    qualification is bound to it, or to nothing. Only when it is bound to a
+    different digest is the older form tried: the same content with the
+    reviewed additive fields the loaded file never held left out
+    (:func:`bundle_validation.omit_unset_sealed_defaults`). That form is used
+    only if it reproduces a bound digest exactly; otherwise the current digest
+    is returned and the caller's comparison fails as before.
+    """
+
+    from openadapt_flow.bundle_validation import omit_unset_sealed_defaults
+
+    content = workflow.model_dump(mode="json", exclude={"manifest", "qualification"})
+    current = _workflow_contract_hash(workflow, content)
+    bound = _bound_workflow_contracts(workflow)
+    if not bound or current in bound:
+        return current, "current"
+    omit_unset_sealed_defaults(
+        workflow, content, schema_version=workflow.schema_version
+    )
+    older = _workflow_contract_hash(workflow, content)
+    if older != current and older in bound:
+        return older, "sealed_absent_defaults"
+    return current, "current"
+
+
+def workflow_contract_sha256(workflow: "Workflow") -> str:
+    """Digest executable intent and its already-sealed visual assets.
+
+    Qualification state and manifest certification metadata are excluded to
+    avoid self-reference.  Existing manifest file hashes bind the plaintext
+    template assets while keeping their contents inside the declared boundary.
+    A certification sealed before a reviewed additive field existed is
+    reproduced through :func:`workflow_contract_digest`.
+    """
+
+    return workflow_contract_digest(workflow)[0]
+
+
+_CERTIFIED_CONTRACT_FORMS: dict[int, tuple["weakref.ref[Any]", str]] = {}
+
+
+def record_certified_contract_form(workflow: "Workflow") -> str:
+    """Record which contract form reproduced ``workflow``'s certification.
+
+    Called by ``Workflow.load`` after the governed certification check. Kept
+    outside the model so it never enters equality or any digest.
+    """
+
+    form = workflow_contract_digest(workflow)[1]
+    key = id(workflow)
+
+    def _forget(_ref: "weakref.ref[Any]") -> None:
+        _CERTIFIED_CONTRACT_FORMS.pop(key, None)
+
+    _CERTIFIED_CONTRACT_FORMS[key] = (weakref.ref(workflow, _forget), form)
+    return form
+
+
+def certified_contract_form(workflow: "Workflow") -> Optional[str]:
+    """The form recorded by ``Workflow.load``, or None if none was checked."""
+
+    entry = _CERTIFIED_CONTRACT_FORMS.get(id(workflow))
+    if entry is None or entry[0]() is not workflow:
+        return None
+    return entry[1]
 
 
 def _steps_by_id(workflow: "Workflow") -> dict[str, "Step"]:

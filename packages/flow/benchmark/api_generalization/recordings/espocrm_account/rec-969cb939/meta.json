@@ -1,0 +1,20 @@
+{
+  "id": "b73da3d25fe34f5faf166ad79535b1a5",
+  "created_at": "2026-11-04T19:14:16.761457+00:00",
+  "viewport": [
+    1280,
+    800
+  ],
+  "coordinate_space": "page",
+  "app_url": "http://127.0.0.1:9672/#Account/create",
+  "params": {
+    "name": "Harbor Office Supply rec1414",
+    "website": "harbor.example.invalid",
+    "description": "Paper and toner, weekly delivery."
+  },
+  "secret_params": [],
+  "network_capture": {
+    "file": "network.jsonl",
+    "exchanges": 20
+  }
+}

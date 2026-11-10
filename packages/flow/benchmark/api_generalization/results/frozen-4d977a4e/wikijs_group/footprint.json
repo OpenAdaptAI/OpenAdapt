@@ -1,0 +1,22 @@
+{
+ "schema": "openadapt.api-footprint/v1",
+ "equivalent": true,
+ "differences": [],
+ "server_owned": [
+  "groups.createdAt",
+  "groups.id",
+  "groups.updatedAt"
+ ],
+ "tables": {
+  "groups": {
+   "gui_added": 3,
+   "api_added": 3
+  }
+ },
+ "pairs": 3,
+ "gate": "admitted",
+ "verdict_sha256": "sha256:5f0bb903103b44de5bbdce4f20731a50b3246a8736b400bead87646db24b4b95",
+ "frozen": "4d977a4e87a42973d4e72339f16d7eb2817a096b",
+ "head": "4d977a4e87a42973d4e72339f16d7eb2817a096b",
+ "engine_diff_vs_frozen": ""
+}

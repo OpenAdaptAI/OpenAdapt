@@ -1,0 +1,61 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I couldn't book or check the appointment because Medplum is showing its sign-in page, not a signed-in session. Reloading the page didn't change that. I have no login credentials, and creating a new account isn't something I should do here. Because I couldn't open the app, I haven't looked for Tomasz Wren's record or any existing appointment, and I've changed nothing.\n\nIf you can sign in on this browser or send me the credentials to use, I can carry on with the task.\n\nRESULT: NOT DONE Medplum is on the sign-in page, not signed in, and I have no credentials to log in.",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6283,
+   "out": 104,
+   "usd": 0.002304,
+   "cached": 6279
+  },
+  {
+   "in": 7760,
+   "out": 140,
+   "usd": 0.006357,
+   "cached": 6279
+  },
+  {
+   "in": 9301,
+   "out": 188,
+   "usd": 0.007288,
+   "cached": 7758
+  }
+ ]
+}

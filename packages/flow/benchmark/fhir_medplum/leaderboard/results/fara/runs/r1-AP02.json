@@ -1,0 +1,183 @@
+{
+ "id": "AP02",
+ "class": "clean",
+ "type": "appointment",
+ "expect": "found",
+ "note": "The appointment is already booked; nothing should be written.",
+ "agent_s": 718.2,
+ "cost_usd": 0.0,
+ "claim": {
+  "status": "not_done",
+  "id": "Patient/a0d2da23-e46e-4017-aa16-3100ffef18af",
+  "note": "RESULT: NOT DONE \u2014 The appointment is already booked exactly once (status: booked; start: 2026-11-17T14:00:00Z; end: 2026-11-17T14:30:00Z; participants: Patient/a0d2da23-e46e-4017-aa16-3100ffef18af accepted; Practitioner/8bfb415b-f3af-4726-b2ef-6043f4fc1fb8 accepted). No new appointment was created.",
+  "claim_line": true,
+  "end_url": "http://localhost:9821/Appointment/3fceeb8b-7ebc-4cef-9cbd-27c358f9e050/json",
+  "final_text": "RESULT: NOT DONE \u2014 The appointment is already booked exactly once (status: booked; start: 2026-11-17T14:00:00Z; end: 2026-11-17T14:30:00Z; participants: Patient/a0d2da23-e46e-4017-aa16-3100ffef18af accepted; Practitioner/8bfb415b-f3af-4726-b2ef-6043f4fc1fb8 accepted). No new appointment was created.",
+  "model_calls": 18,
+  "actions": 18,
+  "tokens_in": 120873,
+  "tokens_out": 1681
+ },
+ "verifier": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "1 record(s) were already the person, and the agent wrote anyway",
+   "the agent created 0 Appointment records, not one",
+   "the agent wrote 2 other resource(s): Patient, Practitioner"
+  ],
+  "evidence": {
+   "before_matches": 1,
+   "after_matches": 1,
+   "agent_writes": 2,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "Patient",
+    "Practitioner"
+   ],
+   "window_until": "2026-11-04T16:26:23+00:00"
+  },
+  "unreadable": false
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "1 record(s) were already the person, and the agent wrote anyway",
+   "the agent created 0 Appointment records, not one",
+   "the agent wrote 2 other resource(s): Patient, Practitioner"
+  ],
+  "evidence": {
+   "before_matches": 1,
+   "after_matches": 1,
+   "agent_writes": 2,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "Patient",
+    "Practitioner"
+   ],
+   "window_until": "2026-11-04T16:26:26+00:00"
+  },
+  "unreadable": false
+ },
+ "verify_s": 5.4,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {}
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "PUT",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "PUT",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Practitioner",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "PUT",
+   "type": "Practitioner",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Appointment",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Appointment",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 1,
+ "host_load": {
+  "start": 16.6,
+  "end": 13.2,
+  "waited_s": 0
+ }
+}

@@ -1,0 +1,20 @@
+{
+  "id": "92572372699f49fd8f09adcd8a15ee50",
+  "created_at": "2026-11-04T21:50:22.366634+00:00",
+  "viewport": [
+    1280,
+    800
+  ],
+  "coordinate_space": "page",
+  "app_url": "http://127.0.0.1:9666/ipam/ip-addresses/add/",
+  "params": {
+    "address": "10.77.170.43/24",
+    "dns_name": "printer-2f.example.invalid",
+    "description": "Second floor printer"
+  },
+  "secret_params": [],
+  "network_capture": {
+    "file": "network.jsonl",
+    "exchanges": 5
+  }
+}

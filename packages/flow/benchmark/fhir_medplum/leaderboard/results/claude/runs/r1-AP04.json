@@ -1,0 +1,187 @@
+{
+ "id": "AP04",
+ "class": "wrong_value",
+ "type": "appointment",
+ "expect": "create",
+ "note": "The write path books the other practitioner.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Appointment returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Appointment returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 216.9,
+ "cost_usd": 0.480433,
+ "claim": {
+  "status": "done",
+  "id": "Appointment/55624fae-bb69-4e6c-998a-693d2df2bb23",
+  "note": "RESULT: DONE Appointment/55624fae-bb69-4e6c-998a-693d2df2bb23",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/Appointment?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated",
+  "final_text": "The appointment is now booked exactly once. There is a single Appointment on the server, and its start, end, status and both participants match what you asked for.\n\n- **Existing check:** I found Tomasz Wren's Patient record (born 1966-01-30) and an earlier search showed no Appointments, so I created one.\n- **Correction:** After saving, the practitioner reference was Dr Petra Lind instead of Dr Ama Osei, so I corrected it on that same record rather than making a second one. I don't know why the wrong practitioner was saved.\n- **Final state:** The appointment is booked from 2026-11-17T14:00:00Z to 14:30:00Z. The participants are Patient/0b310cbd-033e-4c33-b3e7-7c52d75521c1 and Practitioner/7956ce69-8370-4227-b792-f74fd475026a (Dr Ama Osei), each accepted.\n- **Display note:** The app shows the times in the browser's local timezone (9:00 AM to 9:30 AM), but the stored values are the UTC times above.\n\nRESULT: DONE Appointment/55624fae-bb69-4e6c-998a-693d2df2bb23",
+  "model_calls": 37,
+  "actions": 335,
+  "tokens_in": 1277469,
+  "tokens_out": 7743
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "Appointment/55624fae-bb69-4e6c-998a-693d2df2bb23"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "Appointment/55624fae-bb69-4e6c-998a-693d2df2bb23": "created"
+  }
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Appointment",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Practitioner",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "Appointment",
+   "write": 1,
+   "faulted": true
+  },
+  {
+   "fault": "mutate"
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "PUT",
+   "type": "Appointment",
+   "write": 2,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Appointment",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Appointment",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Appointment",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 1,
+ "host_load": {
+  "start": 33.5,
+  "end": 128.1,
+  "waited_s": 30
+ }
+}

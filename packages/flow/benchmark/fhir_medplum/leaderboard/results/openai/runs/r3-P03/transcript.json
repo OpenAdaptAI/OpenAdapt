@@ -1,0 +1,128 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c4f1c634882da6c016ae99a215f2887d2bceed28947b388d1",
+     "call_id": "call_gLj79GAE6uxt4QmjQWGEmBfs",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c4f1c634882da6c016ae99a243a8c87d2b7e100a7e8793fb8",
+     "call_id": "call_9e2YWAmGrHsUM6NbVINRBMcG",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 234,
+       "y": 298
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c4f1c634882da6c016ae99a26ab9c87d28a8a13238a10c648",
+     "call_id": "call_1dREpe4oVMNusCNnMjjcTVMx",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 474,
+       "y": 147
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c4f1c634882da6c016ae99a29406c87d2a987fa8e28629ef2",
+     "call_id": "call_BLD55591TqZBY3gAqWZT08tG",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE Found Patient/cdeb7a13-bcde-4393-b9ed-cf6070cf3476 for Lena Okafor with birth date 1988-04-23 and no address or contact details; cannot confirm identity. No changes made.",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 234,
+   "y": 298,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 474,
+   "y": 147,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  }
+ ],
+ "usage": [
+  {
+   "in": 2316,
+   "out": 38,
+   "usd": 0.005012,
+   "cached": 0
+  },
+  {
+   "in": 3533,
+   "out": 31,
+   "usd": 0.003213,
+   "cached": 2313
+  },
+  {
+   "in": 4789,
+   "out": 31,
+   "usd": 0.003534,
+   "cached": 3530
+  },
+  {
+   "in": 6045,
+   "out": 18,
+   "usd": 0.003655,
+   "cached": 4786
+  },
+  {
+   "in": 7273,
+   "out": 92,
+   "usd": 0.00459,
+   "cached": 6042
+  }
+ ]
+}
