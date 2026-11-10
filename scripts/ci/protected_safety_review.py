@@ -22,6 +22,7 @@ from typing import Any
 
 from scripts.ci.attestation import (
     EvidenceError,
+    declaration_text,
     parse_author_declaration,
     parse_precommit_report,
     parse_review_report,
@@ -138,11 +139,21 @@ def _matches(path: str, pattern: str) -> bool:
 
 
 def _headers(body: str, key: str) -> list[str]:
-    return re.findall(rf"(?m)^{re.escape(key)}: (.*)$", body)
+    return re.findall(rf"(?m)^{re.escape(key)}: (.*)$", declaration_text(body))
 
 
 def _current_comment(body: Any, head: str) -> bool:
-    return isinstance(body, str) and _headers(body, "Reviewed-Head") == [head]
+    if not isinstance(body, str):
+        return False
+    # Selection must retain ambiguous or malformed declarations that refer to
+    # this head. Only the strict parser may decide whether evidence is valid.
+    mentions = re.findall(
+        r"(?m)^ {0,3}Reviewed-Head[ \t]*:[ \t]*(.*)$", declaration_text(body)
+    )
+    return any(
+        re.search(rf"(?i)(?<![0-9a-f]){re.escape(head)}(?![0-9a-f])", value)
+        for value in mentions
+    )
 
 
 TRUSTED_ASSOCIATIONS = {"OWNER", "MEMBER", "COLLABORATOR"}
@@ -199,13 +210,13 @@ def _review_and_attestation_errors(
             except EvidenceError as exc:
                 errors.append(f"invalid coordinator note: {exc}")
             continue
-        if "## Independent adversarial review:" in body:
+        if "## Independent adversarial review:" in declaration_text(body):
             try:
                 vendor, verdict = parse_review_report(body, head)
                 reviewers.append((vendor, verdict))
             except EvidenceError as exc:
                 errors.append(f"invalid independent review: {exc}")
-        elif _headers(body, "From") and _headers(body, "Reviewed-Head"):
+        else:
             try:
                 vendor = parse_author_declaration(body, head)
                 if comment.get("user", {}).get("login", "").casefold() != (
@@ -228,7 +239,7 @@ def _review_and_attestation_errors(
                 body
                 for body in current
                 if isinstance(body, str)
-                and "## Independent adversarial review:" in body
+                and "## Independent adversarial review:" in declaration_text(body)
             )
             validate_independent_review(authors[0][1], reviewer_body, head)
         except (EvidenceError, StopIteration) as exc:

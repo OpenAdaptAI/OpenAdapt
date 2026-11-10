@@ -322,7 +322,9 @@ class TestBandMatch:
         # consumption, no partial containment ('Phil' in 'Philip' is a
         # sibling, not a join; see TestSiblingProbes).
         assert band_match("ShowActive", "Show Active") == (1.0, 0, 0, 0, 0, 0, 0, False)
-        assert band_match("Show Active", "ShowActive") == (1.0, 0, 0, 0, 0, 0, 0, False)
+        # "Show" and "Active" are UI words, not identity-bearing: the join
+        # matches in full, and the band alone cannot identify a record.
+        assert band_match("Show Active", "ShowActive") == (1.0, 0, 0, 0, 0, 0, 0, True)
         # ... and with digit-class OCR noise inside the split form:
         assert band_match("ShowActive", "Sh0w Active") == (1.0, 0, 0, 0, 0, 0, 0, False)
 
@@ -346,6 +348,23 @@ class TestBandMatch:
     def test_tokenize(self):
         assert tokenize("  Jane   Li \n panel ") == ["jane", "li", "panel"]
         assert tokenize("") == []
+
+    def test_comma_period_name_punctuation_is_ocr_noise(self):
+        # Recorded thin-band context often stores "Smith." while the live
+        # band (or another engine) returns "Smith," — same patient row.
+        match = band_match(
+            "100512 Smith. John 01/15/1980 Active",
+            "100512 Smith, John 01/15/1980 Active",
+        )
+        assert match.coverage == 1.0
+        assert match.contradicted_chars == 0
+        assert match.unexplained_name_tokens == 0
+        # A real near-name sibling must still mismatch.
+        bad = band_match(
+            "100512 Smith. John 01/15/1980 Active",
+            "100512 Smith, Joan 01/15/1980 Active",
+        )
+        assert bad.contradicted_chars > 0 or bad.unexplained_name_tokens > 0
 
 
 class TestOperatingPoint:
@@ -382,16 +401,24 @@ class TestOperatingPoint:
         # numerics dropout). FLIPPED by the identifying-field rule: '1234' is
         # an identifier the recording held and OCR did not return, and the
         # band matched no second kind of identifying field, so the OCR tier
-        # abstains (see identity_evidence_shortfall).
+        # abstains (see identity_evidence_shortfall). Capitalised words, so
+        # they count toward coverage (lowercase words are not
+        # identity-bearing: identity.identity_bearing).
         check = verify_target_identity(
-            "abcd efgh ijkl mnop 1234", "abcd efgh ijkl mnop"
+            "Abcd Efgh Ijkl Mnop 1234", "Abcd Efgh Ijkl Mnop"
         )
         assert check.status == "abstain"
         # A 5-char numeric absence still fails the generic run cap.
         check = verify_target_identity(
-            "abcd efgh ijkl mnop 12345", "abcd efgh ijkl mnop"
+            "Abcd Efgh Ijkl Mnop 12345", "Abcd Efgh Ijkl Mnop"
         )
         assert check.status == "mismatch"
+        # With lowercase words only the id bears identity; its absence
+        # leaves no coverage at all.
+        check = verify_target_identity(
+            "abcd efgh ijkl mnop 1234", "abcd efgh ijkl mnop"
+        )
+        assert check.status != "verified"
 
     def test_replacement_at_same_coverage_mismatches(self):
         """The same 4-char gap with a foreign token IN ITS PLACE is a
@@ -455,6 +482,19 @@ class TestHelpers:
         assert coverage("abcxyzdef", "abc123def") == pytest.approx(6 / 9)
         assert coverage("abcdef", "abcdef") == 1.0
         assert coverage("", "x") == 0.0
+
+    def test_squash_drops_comma_period(self):
+        # Thin identity-band crops make RapidOCR read "Smith," as "Smith."
+        # (Windows native); both must compare equal so glyph abstain is not
+        # overwritten by a false punctuation mismatch.
+        assert squash("Smith,") == squash("Smith.")
+        assert squash("Smith, John") == "smithjohn"
+        assert squash("Jr.") == "jr"
+        # Date / digit separators must survive: collapsing "01.01.1900" into
+        # "01011900" makes the glyph-vulnerable-identifier gate spuriously
+        # abstain on a clean MRN + period-separated DOB pair (CI fuzz).
+        assert squash("01.01.1900") == "01.01.1900"
+        assert squash("01/01/1900") == "01/01/1900"
 
     def test_band_region_clamps_to_viewport(self):
         assert band_region((500, 10), 64, (1280, 800)) == (0, 0, 1280, 64)

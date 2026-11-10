@@ -33,6 +33,7 @@ from openadapt_flow.verify_run import (
     parse_verify_config,
     verify_run,
 )
+from tests._rest_read_contract_fixtures import mockmed_effects_config
 
 NOTE = "Follow-up in two weeks"
 
@@ -53,7 +54,7 @@ def _verify_file(tmp_path: Path, verifier: dict) -> Path:
 
 
 def _rest(base: str) -> dict:
-    return {"kind": "rest", "base_url": base, "records_path": "/api/db"}
+    return mockmed_effects_config(base)
 
 
 def _write(base: str, note: str = NOTE, patient: str = "p1") -> None:
@@ -139,6 +140,69 @@ def test_new_record_becomes_one_unconfirmed_record_written():
         "patient_id": ValueExpr(literal="p1"),
     }
     assert any("nested field(s) extra" in n for n in proposal.not_proposed)
+    # Issue #1864: no single-field key -> propose composite from param-bound
+    # match fields (patient_id stays out until named as record identity).
+    assert effect.idempotency_key is None
+    assert effect.composite_key == {"note": ValueExpr(param="note")}
+
+
+def test_composite_key_includes_named_record_identity_fields():
+    # Issue #1864: when the read set has no key field, propose composite_key
+    # from parameter-bound match fields plus the person's record_fields.
+    diff = diff_snapshots(
+        [],
+        [{"id": 7, "patient_id": "p1", "note": NOTE, "key": None}],
+    )
+    proposal = propose_effects(diff, {"note": NOTE}, record_fields={"patient_id": "p1"})
+    [effect] = proposal.effects
+    assert effect.idempotency_key is None
+    assert effect.composite_key == {
+        "note": ValueExpr(param="note"),
+        "patient_id": ValueExpr(literal="p1"),
+    }
+    assert effect.needs_operator_confirmation is True
+    assert any("proposed composite_key" in n for n in proposal.not_proposed)
+
+
+def test_param_bound_single_field_key_becomes_idempotency_key_not_composite():
+    diff = diff_snapshots(
+        [],
+        [{"id": 7, "patient_id": "p1", "note": NOTE, "key": "run-abc"}],
+    )
+    proposal = propose_effects(
+        diff, {"note": NOTE, "key": "run-abc"}, record_fields={"patient_id": "p1"}
+    )
+    [effect] = proposal.effects
+    assert effect.idempotency_key == ValueExpr(param="key")
+    assert effect.composite_key == {}
+    assert not any("composite_key" in n for n in proposal.not_proposed)
+
+
+def test_literal_single_field_key_not_proposed_as_idempotency_key():
+    diff = diff_snapshots(
+        [],
+        [{"id": 7, "patient_id": "p1", "note": NOTE, "key": "run-abc"}],
+    )
+    proposal = propose_effects(diff, {"note": NOTE}, record_fields={"patient_id": "p1"})
+    [effect] = proposal.effects
+    # Issue #2173: literal key from demonstration is not proposed as
+    # idempotency_key to avoid freezing the key across runs (P0-3); composite_key
+    # is proposed from parameter-bound fields + record identity fields.
+    assert effect.idempotency_key is None
+    assert effect.composite_key == {
+        "note": ValueExpr(param="note"),
+        "patient_id": ValueExpr(literal="p1"),
+    }
+    assert any("avoid freezing key" in n for n in proposal.not_proposed)
+
+
+def test_no_key_and_no_param_bound_fields_notes_missing_composite():
+    diff = diff_snapshots([], [{"id": 3, "status": "open"}])
+    proposal = propose_effects(diff, {"note": NOTE})
+    [effect] = proposal.effects
+    assert effect.idempotency_key is None
+    assert effect.composite_key == {}
+    assert any("clinical-write policy will refuse" in n for n in proposal.not_proposed)
 
 
 def test_changed_fields_become_field_equals_on_that_record():

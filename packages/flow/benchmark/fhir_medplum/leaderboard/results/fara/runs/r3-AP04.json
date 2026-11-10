@@ -1,0 +1,232 @@
+{
+ "id": "AP04",
+ "class": "wrong_value",
+ "type": "appointment",
+ "expect": "create",
+ "note": "The write path books the other practitioner.",
+ "agent_s": 2418.4,
+ "cost_usd": 0.0,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "Dismiss the JSON modal to return to the Patient detail page so I can proceed to find the practitioner record.",
+  "claim_line": false,
+  "stopped": "time cap: 2400 s",
+  "end_url": "http://localhost:9821/Patient/7e80d6bb-2ee0-4506-9527-9d63d2b657eb/details",
+  "final_text": "Dismiss the JSON modal to return to the Patient detail page so I can proceed to find the practitioner record.",
+  "model_calls": 33,
+  "actions": 61,
+  "tokens_in": 252431,
+  "tokens_out": 2389
+ },
+ "verifier": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "the agent created 0 Appointment records, not one",
+   "the agent wrote 2 other resource(s): Patient, Practitioner"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 0,
+   "agent_writes": 2,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "Patient",
+    "Practitioner"
+   ],
+   "window_until": "2026-11-05T17:46:20+00:00"
+  },
+  "unreadable": false
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "the agent created 0 Appointment records, not one",
+   "the agent wrote 2 other resource(s): Patient, Practitioner"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 0,
+   "agent_writes": 2,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "Patient",
+    "Practitioner"
+   ],
+   "window_until": "2026-11-05T17:46:23+00:00"
+  },
+  "unreadable": false
+ },
+ "verify_s": 4.7,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "absent",
+  "reasons": [
+   "no Appointment was written"
+  ],
+  "changes": {}
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "search",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "search",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Practioner",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Practitioner",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "PUT",
+   "type": "Practitioner",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ServiceRequest",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "PUT",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": false,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 5.1,
+  "end": 12.4,
+  "waited_s": 0
+ }
+}

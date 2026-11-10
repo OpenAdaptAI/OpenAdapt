@@ -75,7 +75,7 @@ def cmd_intake(args: argparse.Namespace) -> int:
         print(json.dumps(build_agent_request(doc, specs), indent=2))
         return 0
     if args.agent_response:
-        response = json.loads(Path(args.agent_response).read_text())
+        response = json.loads(Path(args.agent_response).read_text(encoding="utf-8"))
         result = apply_agent_response(doc, specs, response, threshold=args.threshold)
     else:
         result = extract_fields(
@@ -98,14 +98,16 @@ def cmd_intake(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
-    Path(args.out).write_text(json.dumps(result.to_params(), indent=2) + "\n")
+    Path(args.out).write_text(
+        json.dumps(result.to_params(), indent=2) + "\n", encoding="utf-8"
+    )
     # Where each value came from: the document's digest and the line, so a
     # later check can compare the saved record with the document itself.
     from openadapt_flow.provenance import document_sha256, from_intake
 
     prov_path = Path(args.out).with_suffix(".provenance.json")
     prov = from_intake(result, document_sha256(args.document))
-    prov_path.write_text(prov.model_dump_json(indent=2) + "\n")
+    prov_path.write_text(prov.model_dump_json(indent=2) + "\n", encoding="utf-8")
     print(
         f"Wrote {args.out} and {prov_path}. Run: "
         + command(f"run {args.bundle} --params-file {args.out}")
@@ -117,6 +119,7 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser(
         "intake",
         help="Fill a workflow's parameters from a referral PDF, fax image, or email",
+        allow_abbrev=False,
     )
     p.add_argument("bundle", help="Workflow bundle directory")
     p.add_argument("document", help="PDF, image (.png/.tif/...), .eml, or .txt")

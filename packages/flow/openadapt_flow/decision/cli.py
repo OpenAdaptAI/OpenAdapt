@@ -47,19 +47,21 @@ def _cmd_plan(args: argparse.Namespace) -> int:
 
     observations: list[SaveObservation] = []
     if args.observations:
-        for line in Path(args.observations).read_text().splitlines():
+        for line in Path(args.observations).read_text(encoding="utf-8").splitlines():
             if line.strip():
                 observations.append(SaveObservation.model_validate_json(line))
     for run_dir in args.run_dir or []:
         from openadapt_flow.ir import RunReport
 
         path = Path(run_dir)
-        report = RunReport.model_validate_json((path / "report.json").read_text())
+        report = RunReport.model_validate_json(
+            (path / "report.json").read_text(encoding="utf-8")
+        )
         observations.append(observation_from_report(report, run_dir=path))
     artifacts: dict[str, CalibrationArtifact] = {}
     if args.artifact:
         artifact = CalibrationArtifact.model_validate_json(
-            Path(args.artifact).read_text()
+            Path(args.artifact).read_text(encoding="utf-8")
         )
         artifacts[artifact.group_key] = artifact
     config = TriageConfig(
@@ -76,7 +78,7 @@ def _cmd_plan(args: argparse.Namespace) -> int:
 def _load_plan(path: str):
     from openadapt_flow.decision.triage import TriagePlan
 
-    return TriagePlan.model_validate_json(Path(path).read_text())
+    return TriagePlan.model_validate_json(Path(path).read_text(encoding="utf-8"))
 
 
 def _cmd_approve_batch(args: argparse.Namespace) -> int:
@@ -176,7 +178,7 @@ def _cmd_eligibility(args: argparse.Namespace) -> int:
 
     try:
         artifact = CalibrationArtifact.model_validate_json(
-            Path(args.artifact).read_text()
+            Path(args.artifact).read_text(encoding="utf-8")
         )
     except (OSError, ValueError) as exc:
         return _refuse("calibration_artifact_unreadable", str(exc))
@@ -208,10 +210,13 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser(
         "triage",
         help="Order verified saves for review and propose one batch approval",
+        allow_abbrev=False,
     )
     tsub = p.add_subparsers(dest="triage_cmd", required=True)
 
-    plan = tsub.add_parser("plan", help="Write a triage plan; print the review view")
+    plan = tsub.add_parser(
+        "plan", help="Write a triage plan; print the review view", allow_abbrev=False
+    )
     plan.add_argument("--observations", help="SaveObservation JSON lines")
     plan.add_argument("--run-dir", action="append", help="A finished run (repeatable)")
     plan.add_argument(
@@ -229,7 +234,9 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     plan.add_argument("--out", required=True, help="Where to write the plan")
     plan.set_defaults(func=_cmd_plan)
 
-    batch = tsub.add_parser("approve-batch", help="Approve a plan's clean batch")
+    batch = tsub.add_parser(
+        "approve-batch", help="Approve a plan's clean batch", allow_abbrev=False
+    )
     batch.add_argument("plan")
     batch.add_argument("--batch-sha256", required=True)
     batch.add_argument(
@@ -238,7 +245,9 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     _approver_args(batch)
     batch.set_defaults(func=_cmd_approve_batch)
 
-    decide = tsub.add_parser("decide", help="Approve or decline one save")
+    decide = tsub.add_parser(
+        "decide", help="Approve or decline one save", allow_abbrev=False
+    )
     decide.add_argument("plan")
     decide.add_argument("--item", required=True)
     group = decide.add_mutually_exclusive_group(required=True)
@@ -247,7 +256,9 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     _approver_args(decide)
     decide.set_defaults(func=_cmd_decide)
 
-    cal = tsub.add_parser("calibrate", help="Fit a calibration artifact from labels")
+    cal = tsub.add_parser(
+        "calibrate", help="Fit a calibration artifact from labels", allow_abbrev=False
+    )
     cal.add_argument("--labels", required=True)
     cal.add_argument("--group", required=True, help="Group key (64 hex)")
     cal.add_argument("--target-miss", type=float, default=0.05)
@@ -256,7 +267,9 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     cal.add_argument("--out", required=True)
     cal.set_defaults(func=_cmd_calibrate)
 
-    est = tsub.add_parser("estimate", help="Estimate the miss rate from audit labels")
+    est = tsub.add_parser(
+        "estimate", help="Estimate the miss rate from audit labels", allow_abbrev=False
+    )
     est.add_argument("--labels", required=True)
     est.set_defaults(func=_cmd_estimate)
 
@@ -267,6 +280,7 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
             "a pinned, eligible calibration artifact and an audit miss-rate "
             "bound under the target. Exit 0 eligible, 3 not yet, 2 no evidence."
         ),
+        allow_abbrev=False,
     )
     elig.add_argument("--workflow", required=True, help="Opaque workflow id")
     elig.add_argument("--artifact", required=True, help="Calibration artifact")

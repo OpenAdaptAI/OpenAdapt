@@ -1,0 +1,56 @@
+{
+ "id": "AP08",
+ "class": "other_user",
+ "type": "appointment",
+ "expect": "create",
+ "note": "Another clinician books a different patient with the other practitioner during the run.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Appointment returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Appointment returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 10.7,
+ "cost_usd": 0.012538,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "RESULT: NOT DONE Medplum is on the sign-in page, not signed in, and I have no credentials to log in.",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/signin?next=%2F",
+  "final_text": "I couldn't check for or book the appointment. Medplum is showing its sign-in page, not a signed-in session as the task described. I wasn't given an email or password, and I didn't try to register a new account. Reloading the page didn't change anything. Without access I couldn't find Tomasz Wren's Patient record or look for an existing appointment, so nothing was created or changed.\n\nRESULT: NOT DONE Medplum is on the sign-in page, not signed in, and I have no credentials to log in.",
+  "model_calls": 3,
+  "actions": 2,
+  "tokens_in": 23348,
+  "tokens_out": 425
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "absent",
+  "reasons": [
+   "no Appointment was written"
+  ],
+  "changes": {}
+ },
+ "proxy": [],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 20.9,
+  "end": 20.0,
+  "waited_s": 0
+ }
+}

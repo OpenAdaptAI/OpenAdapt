@@ -1,0 +1,36 @@
+WARNING: writing a compiled bundle in plaintext at /Users/abrichr/oa/scratch/api-generalization/espocrm_account/bundle: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+WARNING: openadapt-privacy is not installed, so reports and logs are not scrubbed of patient data (OPENADAPT_FLOW_SCRUB=auto). Install 'openadapt-flow[privacy]', or set OPENADAPT_FLOW_SCRUB=on to refuse instead.
+param-hygiene step_002: REGION_STABLE dropped — changed region (45, 182, 826, 101) renders a demonstrated parameter value (Na***************************************************ne); freezing it would false-halt every run whose value differs. This step has no pixel-region invariant.
+param-hygiene step_006: REGION_STABLE dropped — changed region (43, 165, 827, 382) renders a demonstrated parameter value (Ov***************************************************************************************************************************************************************************************************************************am); freezing it would false-halt every run whose value differs. This step has no pixel-region invariant.
+{
+ "app": "espocrm_account",
+ "workflow": "new-account",
+ "steps": 7,
+ "params": [
+  "description",
+  "name",
+  "website"
+ ],
+ "optional_params": [
+  "description",
+  "website"
+ ],
+ "compile_proposal": {
+  "proposed": true,
+  "step": "step_006",
+  "reasons": []
+ },
+ "proposed": true,
+ "reasons": [],
+ "compile_s": 25.3,
+ "frozen": "969cb939e7f246a55a7b49c319941a6aa3ff3d8c",
+ "head": "969cb939e7f246a55a7b49c319941a6aa3ff3d8c",
+ "engine_diff_vs_frozen": "",
+ "identity": {
+  "subject_name": "name"
+ },
+ "admitted": [
+  "step_006"
+ ],
+ "describe": "step_006: save with one request, POST /api/v1/Account, in place of 7 GUI steps (step_000 to step_006).\n  sign-in: the replaying browser's own session; form read again from /\n  fields: 3 param\n  run values: description={description}, name={name}, website={website}\n  accepted when: HTTP [200]\n  record check after: 3 effect(s) copied from the save step\n  right record (subject_name): the request sends {name} in name and the record check selects name = {name}\n  screen-only checks, not repeated: ['step_000: region_stable', 'step_002: region_stable', 'step_004: region_stable']\n  if the form or a check differs at run time, the GUI steps run instead"
+}

@@ -18,6 +18,9 @@ The independent reviewer comment must use the existing heading
 heading and requires the reviewed SHA to match the current pull request head.
 The author and reviewer declarations must name different vendors. A stale,
 missing, duplicate, malformed, or BLOCK declaration fails closed.
+A current-head reference selects a comment for validation even when its
+headers are ambiguous. Markdown fenced examples are not declarations; author,
+reviewer and coordinator evidence must appear outside backtick or tilde fences.
 Evidence comments are accepted only from GitHub accounts whose API
 `author_association` is `OWNER`, `MEMBER`, or `COLLABORATOR`. The author
 declaration must also be posted by the API-reported pull request author. The

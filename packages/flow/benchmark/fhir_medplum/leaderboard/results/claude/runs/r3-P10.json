@@ -1,0 +1,93 @@
+{
+ "id": "P10",
+ "class": "ambiguous",
+ "type": "patient",
+ "expect": "ambiguous",
+ "note": "Two records already match the person; a person has to merge them.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 40.1,
+ "cost_usd": 0.08077,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "RESULT: NOT DONE Two existing Patient records (cae7d226-2f82-44da-9830-5d5aea9d82ae and 54f2a735-5532-4111-bd4d-b7f4e2638da5) both match name, DOB and sex, and I can't tell which is hers or whether they're duplicates.",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/Patient/54f2a735-5532-4111-bd4d-b7f4e2638da5/json",
+  "final_text": "I didn't create or change anything, because I can't tell which of the two existing records is Lena Okafor's.\n\nThe Patient list has two records with the same name, date of birth (1988-04-22) and sex (female):\n- **Patient/cae7d226-2f82-44da-9830-5d5aea9d82ae** also has the email lena.okafor@example.org, but no address or phone.\n- **Patient/54f2a735-5532-4111-bd4d-b7f4e2638da5** has no address, phone or email at all.\n\nThe first record's email matches, but the second one has nothing that rules it out. It could be the same person entered twice, or a different person with the same name and birth date. Creating a third record would make the duplication worse, and choosing one record to update would be a guess.\n\nRESULT: NOT DONE Two existing Patient records (cae7d226-2f82-44da-9830-5d5aea9d82ae and 54f2a735-5532-4111-bd4d-b7f4e2638da5) both match name, DOB and sex, and I can't tell which is hers or whether they're duplicates.",
+  "model_calls": 9,
+  "actions": 19,
+  "tokens_in": 111829,
+  "tokens_out": 1583
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "needs_person",
+  "reasons": [
+   "2 records already match; a person must merge them"
+  ],
+  "changes": {}
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 11.7,
+  "end": 11.9,
+  "waited_s": 0
+ }
+}

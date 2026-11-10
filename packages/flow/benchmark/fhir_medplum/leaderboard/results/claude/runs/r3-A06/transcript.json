@@ -1,0 +1,1140 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+l"
+    },
+    {
+     "text": "localhost:3000/AllergyIntolerance?patient=Patient/c688d597-d04a-4a60-a0d5-7477aea09593\n"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      223,
+      297
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {
+     "coordinate": [
+      640,
+      500
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 5
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      32,
+      31
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      124,
+      90
+     ]
+    },
+    {
+     "text": "AllergyIntolerance"
+    },
+    {
+     "duration": 1
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      84,
+      138
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 5
+    },
+    {
+     "}": 1
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1231,
+      167
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Use the JSON tab.",
+   "actions": [
+    {
+     "coordinate": [
+      349,
+      131
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 2
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      764,
+      430
+     ]
+    },
+    {
+     "text": "ctrl+a"
+    },
+    {
+     "text": "{\"resourceType\":\"AllergyIntolerance\",\"patient\":{\"reference\":\"Patient/c688d597-d04a-4a60-a0d5-7477aea09593\"},\"code\":{\"coding\":[{\"system\":\"http://snomed.info/sct\",\"code\":\"91936005\",\"display\":\"Allergy to penicillin\"}]},\"criticality\":\"high\",\"clinicalStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical\",\"code\":\"active\"}]},\"verificationStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-verification\",\"code\":\"confirmed\"}]}}"
+    },
+    {
+     "coordinate": [
+      1182,
+      718
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 3
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      764,
+      500
+     ]
+    },
+    {
+     "text": "ctrl+a"
+    },
+    {
+     "text": "BackSpace"
+    },
+    {
+     "}": 4
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      700,
+      400
+     ]
+    },
+    {
+     "text": "ctrl+Home"
+    },
+    {
+     "text": "ctrl+shift+End"
+    },
+    {
+     "text": "Delete"
+    },
+    {
+     "}": 5
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 1
+    },
+    {
+     "}": 6
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "start_coordinate": [
+      322,
+      207
+     ],
+     "coordinate": [
+      1100,
+      600
+     ]
+    },
+    {
+     "text": "BackSpace"
+    },
+    {
+     "}": 7
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "{\"resourceType\":\"AllergyIntolerance\",\"patient\":{\"reference\":\"Patient/c688d597-d04a-4a60-a0d5-7477aea09593\"},\"code\":{\"coding\":[{\"system\":\"http://snomed.info/sct\",\"code\":\"91936005\",\"display\":\"Allergy to penicillin\"}]},\"criticality\":\"high\",\"clinicalStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical\",\"code\":\"active\"}]},\"verificationStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-verification\",\"code\":\"confirmed\"}]}}"
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1182,
+      718
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 8
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      764,
+      500
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 15
+    },
+    {
+     "}": 9
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1182,
+      731
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "}": 10
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      124,
+      90
+     ]
+    },
+    {
+     "text": "AllergyIntolerance"
+    },
+    {
+     "duration": 3
+    },
+    {
+     "coordinate": [
+      84,
+      138
+     ]
+    },
+    {
+     "duration": 8
+    },
+    {
+     "}": 11
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      722,
+      142
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 12
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      470,
+      486
+     ]
+    },
+    {
+     "text": "high"
+    },
+    {
+     "region": [
+      318,
+      470,
+      800,
+      500
+     ]
+    },
+    {
+     "coordinate": [
+      764,
+      500
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 20
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1182,
+      731
+     ]
+    },
+    {
+     "duration": 4
+    },
+    {
+     "}": 13
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      764,
+      300
+     ],
+     "scroll_direction": "up",
+     "scroll_amount": 30
+    },
+    {
+     "coordinate": [
+      576,
+      142
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "}": 14
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Updated. Verify the current state and that only one record exists.",
+   "actions": [
+    {
+     "coordinate": [
+      293,
+      142
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "}": 15
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      323,
+      101
+     ]
+    },
+    {
+     "duration": 8
+    },
+    {
+     "}": 16
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Probably still loading.",
+   "actions": [
+    {
+     "coordinate": [
+      1147,
+      167
+     ]
+    },
+    {
+     "duration": 8
+    },
+    {
+     "}": 17
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 10
+    },
+    {
+     "}": 18
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "There was no allergy recorded for Rosa Delgado (born 1979-06-14), so I created one. It is now the only AllergyIntolerance in the system.\n\nIt holds the patient, code SNOMED CT 91936005 (Allergy to penicillin), criticality high, clinical status active and verification status confirmed. I also set the code's display text to \"Allergy to penicillin\".\n\nAfter I created it, the record showed criticality \"low\", although I had submitted \"high\". I don't know why. I edited it back to \"high\", and the history shows that as the only change.\n\nRESULT: DONE AllergyIntolerance/3bf854ec-4651-4954-afb7-aee4d85f6d12",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "l"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "localhost:3000/AllergyIntolerance?patient=Patient/c688d597-d04a-4a60-a0d5-7477aea09593\n"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 223,
+   "y": 297,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 500,
+   "dx": 0,
+   "dy": 600
+  },
+  {
+   "a": "click",
+   "x": 32,
+   "y": 31,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 124,
+   "y": 90,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "AllergyIntolerance"
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 84,
+   "y": 138,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "click",
+   "x": 1231,
+   "y": 167,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 349,
+   "y": 131,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 764,
+   "y": 430,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "a"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "{\"resourceType\":\"AllergyIntolerance\",\"patient\":{\"reference\":\"Patient/c688d597-d04a-4a60-a0d5-7477aea09593\"},\"code\":{\"coding\":[{\"system\":\"http://snomed.info/sct\",\"code\":\"91936005\",\"display\":\"Allergy to penicillin\"}]},\"criticality\":\"high\",\"clinicalStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical\",\"code\":\"active\"}]},\"verificationStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-verification\",\"code\":\"confirmed\"}]}}"
+  },
+  {
+   "a": "click",
+   "x": 1182,
+   "y": 718,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 764,
+   "y": 500,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 400,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "Home"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "shift",
+    "End"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "drag",
+   "path": [
+    [
+     322,
+     207
+    ],
+    [
+     1100,
+     600
+    ]
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "{\"resourceType\":\"AllergyIntolerance\",\"patient\":{\"reference\":\"Patient/c688d597-d04a-4a60-a0d5-7477aea09593\"},\"code\":{\"coding\":[{\"system\":\"http://snomed.info/sct\",\"code\":\"91936005\",\"display\":\"Allergy to penicillin\"}]},\"criticality\":\"high\",\"clinicalStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical\",\"code\":\"active\"}]},\"verificationStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-verification\",\"code\":\"confirmed\"}]}}"
+  },
+  {
+   "a": "click",
+   "x": 1182,
+   "y": 718,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "scroll",
+   "x": 764,
+   "y": 500,
+   "dx": 0,
+   "dy": 1800
+  },
+  {
+   "a": "click",
+   "x": 1182,
+   "y": 731,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 124,
+   "y": 90,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "AllergyIntolerance"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 84,
+   "y": 138,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 8.0
+  },
+  {
+   "a": "click",
+   "x": 722,
+   "y": 142,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 470,
+   "y": 486,
+   "button": "left",
+   "count": 2,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "high"
+  },
+  {
+   "a": "scroll",
+   "x": 764,
+   "y": 500,
+   "dx": 0,
+   "dy": 2400
+  },
+  {
+   "a": "click",
+   "x": 1182,
+   "y": 731,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 4.0
+  },
+  {
+   "a": "scroll",
+   "x": 764,
+   "y": 300,
+   "dx": 0,
+   "dy": -3600
+  },
+  {
+   "a": "click",
+   "x": 576,
+   "y": 142,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 293,
+   "y": 142,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 323,
+   "y": 101,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 8.0
+  },
+  {
+   "a": "click",
+   "x": 1147,
+   "y": 167,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 8.0
+  },
+  {
+   "a": "wait",
+   "s": 10.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6357,
+   "out": 59,
+   "usd": 0.016481,
+   "cached": 0
+  },
+  {
+   "in": 7789,
+   "out": 267,
+   "usd": 0.00753,
+   "cached": 6353
+  },
+  {
+   "in": 9455,
+   "out": 190,
+   "usd": 0.007626,
+   "cached": 7787
+  },
+  {
+   "in": 11035,
+   "out": 165,
+   "usd": 0.007495,
+   "cached": 9453
+  },
+  {
+   "in": 12598,
+   "out": 281,
+   "usd": 0.008928,
+   "cached": 11033
+  },
+  {
+   "in": 14269,
+   "out": 126,
+   "usd": 0.007961,
+   "cached": 12596
+  },
+  {
+   "in": 15804,
+   "out": 83,
+   "usd": 0.007525,
+   "cached": 14267
+  },
+  {
+   "in": 17264,
+   "out": 98,
+   "usd": 0.007794,
+   "cached": 15802
+  },
+  {
+   "in": 18760,
+   "out": 75,
+   "usd": 0.007946,
+   "cached": 17262
+  },
+  {
+   "in": 20220,
+   "out": 75,
+   "usd": 0.008156,
+   "cached": 18758
+  },
+  {
+   "in": 21680,
+   "out": 80,
+   "usd": 0.008498,
+   "cached": 20218
+  },
+  {
+   "in": 23145,
+   "out": 202,
+   "usd": 0.010022,
+   "cached": 21678
+  },
+  {
+   "in": 24745,
+   "out": 113,
+   "usd": 0.009763,
+   "cached": 23143
+  },
+  {
+   "in": 26256,
+   "out": 453,
+   "usd": 0.01326,
+   "cached": 24743
+  },
+  {
+   "in": 28142,
+   "out": 188,
+   "usd": 0.01185,
+   "cached": 26254
+  },
+  {
+   "in": 29738,
+   "out": 553,
+   "usd": 0.015152,
+   "cached": 28140
+  },
+  {
+   "in": 31710,
+   "out": 120,
+   "usd": 0.012081,
+   "cached": 29736
+  },
+  {
+   "in": 33215,
+   "out": 190,
+   "usd": 0.012008,
+   "cached": 31708
+  },
+  {
+   "in": 34805,
+   "out": 365,
+   "usd": 0.014272,
+   "cached": 33213
+  },
+  {
+   "in": 36554,
+   "out": 104,
+   "usd": 0.012377,
+   "cached": 34803
+  },
+  {
+   "in": 38056,
+   "out": 149,
+   "usd": 0.012559,
+   "cached": 36552
+  },
+  {
+   "in": 39591,
+   "out": 160,
+   "usd": 0.013052,
+   "cached": 38054
+  },
+  {
+   "in": 41149,
+   "out": 216,
+   "usd": 0.013977,
+   "cached": 39589
+  },
+  {
+   "in": 42799,
+   "out": 217,
+   "usd": 0.014528,
+   "cached": 41147
+  },
+  {
+   "in": 44414,
+   "out": 282,
+   "usd": 0.015421,
+   "cached": 42797
+  },
+  {
+   "in": 46119,
+   "out": 104,
+   "usd": 0.014189,
+   "cached": 44412
+  },
+  {
+   "in": 47621,
+   "out": 178,
+   "usd": 0.014762,
+   "cached": 46117
+  },
+  {
+   "in": 49210,
+   "out": 122,
+   "usd": 0.01472,
+   "cached": 47619
+  },
+  {
+   "in": 50730,
+   "out": 132,
+   "usd": 0.014966,
+   "cached": 49208
+  },
+  {
+   "in": 52260,
+   "out": 112,
+   "usd": 0.015095,
+   "cached": 50728
+  },
+  {
+   "in": 53770,
+   "out": 335,
+   "usd": 0.017581,
+   "cached": 52258
+  },
+  {
+   "in": 55490,
+   "out": 285,
+   "usd": 0.017908,
+   "cached": 53768
+  }
+ ]
+}

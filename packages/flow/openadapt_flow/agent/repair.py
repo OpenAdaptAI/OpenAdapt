@@ -114,7 +114,7 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
 
 def _read_json(path: Path) -> Optional[dict[str, Any]]:
     try:
-        value = json.loads(path.read_text())
+        value = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
     return value if isinstance(value, dict) else None
@@ -654,7 +654,9 @@ class RepairDesk:
             event["element_identity"] = {
                 k: v for k, v in identity.items() if k != "dialog_region"
             }
-        (directory / "events.jsonl").write_text(json.dumps(event) + "\n")
+        (directory / "events.jsonl").write_text(
+            json.dumps(event) + "\n", encoding="utf-8"
+        )
         width, height = screen.viewport()
         (directory / "meta.json").write_text(
             json.dumps(
@@ -665,7 +667,8 @@ class RepairDesk:
                     "app_url": "",
                     "params": {},
                 }
-            )
+            ),
+            encoding="utf-8",
         )
         return identity
 

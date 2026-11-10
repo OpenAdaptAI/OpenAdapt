@@ -125,7 +125,9 @@ def render_crop(text: str, cond: RenderCond) -> bytes:
 
     html = _render_html(text, cond)
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=True)
+        from openadapt_flow._browser_readiness import launch_rendering_ready
+
+        browser = launch_rendering_ready(pw.chromium, headless=True)
         page = browser.new_page(device_scale_factor=cond.device_scale_factor)
         page.set_content(html, wait_until="networkidle")
         el = page.query_selector("#id")
@@ -440,7 +442,9 @@ def run_probe(model_name: str, out_dir: Path, *, quick: bool = False) -> dict[st
         "aggregates": aggregates,
         "trials": [asdict(t) for t in trials],
     }
-    (out_dir / "vlm_identity.json").write_text(json.dumps(payload, indent=2))
+    (out_dir / "vlm_identity.json").write_text(
+        json.dumps(payload, indent=2), encoding="utf-8"
+    )
     _write_markdown(out_dir / "VLM_IDENTITY.md", payload, trials)
     # Clean the tmp scratch image.
     try:
@@ -692,11 +696,11 @@ def _write_markdown(path: Path, payload: dict[str, Any], trials: list[Trial]) ->
         "The point estimates are a floor-test, not a universal claim._"
     )
     lines.append("")
-    path.write_text("\n".join(lines))
+    path.write_text("\n".join(lines), encoding="utf-8")
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__)
+    ap = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     ap.add_argument("--model", default="mlx-community/Qwen3-VL-4B-Instruct-4bit")
     ap.add_argument("--out", default="benchmark/vlm_identity", type=Path)
     ap.add_argument("--quick", action="store_true", help="smaller corpus (smoke)")

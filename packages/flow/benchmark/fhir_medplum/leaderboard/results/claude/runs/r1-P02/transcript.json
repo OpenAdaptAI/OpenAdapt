@@ -1,0 +1,87 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      219,
+      297
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      472,
+      149
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Lena Okafor already has a Patient record, so I didn't create another one. The unfiltered Patient list shows 1 of 1 patients, and this record matches every detail you gave:\n- Name: Lena Okafor\n- Date of birth: 1988-04-22\n- Sex: female\n- Address: 14 Birch Lane, Springfield, MA 01103\n- Home phone: 413-555-0187\n- Email: lena.okafor@example.org\n\nI didn't change anything.\n\nRESULT: DONE Patient/73d6bbe8-8011-4894-9aee-f5bc4e32d1a9",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 219,
+   "y": 297,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 472,
+   "y": 149,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6285,
+   "out": 174,
+   "usd": 0.017451,
+   "cached": 0
+  },
+  {
+   "in": 7872,
+   "out": 172,
+   "usd": 0.006953,
+   "cached": 6281
+  },
+  {
+   "in": 9434,
+   "out": 306,
+   "usd": 0.008543,
+   "cached": 7870
+  }
+ ]
+}

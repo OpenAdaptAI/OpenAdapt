@@ -29,8 +29,6 @@ import time
 from pathlib import Path
 from typing import Any
 
-from PIL import Image
-
 from openadapt_flow.backends.rdp_backend import FreeRDPBackend
 from openadapt_flow.backends.xfreerdp import (
     RdpTarget,
@@ -41,6 +39,7 @@ from openadapt_flow.backends.xfreerdp import (
     _release_display,
 )
 from openadapt_flow.runtime.identity import upscale_crop
+from PIL import Image
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE / "fixture"))
@@ -222,7 +221,7 @@ def run_size(
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__)
+    ap = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     ap.add_argument("--sizes", type=int, nargs="+", default=[1, 2, 4])
     ap.add_argument("--jobs", type=int, default=40)
     ap.add_argument("--out", default=str(HERE / "results.json"))

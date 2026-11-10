@@ -8,7 +8,7 @@ The open-source, verified execution layer for computer-use agents.
 
 [![CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml) [![Packages CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml) [![PyPI](https://img.shields.io/pypi/v/openadapt.svg)](https://pypi.org/project/openadapt/) [![Python 3.10–3.12](https://img.shields.io/badge/python-3.10%E2%80%933.12-blue)](https://www.python.org/downloads/) [![License: MIT](https://img.shields.io/badge/license-MIT-3e6b4f.svg)](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/LICENSE) [![Discord](https://img.shields.io/badge/Discord-community-5865F2?logo=discord&logoColor=white)](https://discord.gg/yF527cQbDG)
 
-[What it can do](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CAPABILITIES.md) · [Documentation](https://docs.openadapt.ai) · [Quickstart](https://docs.openadapt.ai/tutorials/quickstart/) · [Live demo](https://app.openadapt.ai/demo) · [Website](https://openadapt.ai) · [Discord](https://discord.gg/yF527cQbDG)
+[What it can do](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CAPABILITIES.md) · [Documentation](https://docs.openadapt.ai) · [Quickstart](https://docs.openadapt.ai/tutorials/quickstart/) · [Live demo](https://app.openadapt.ai/demo) · [Website](https://openadapt.ai) · [Get updates](https://openadapt.ai/#updates) · [Discord](https://discord.gg/yF527cQbDG)
 
 </div>
 
@@ -94,12 +94,12 @@ has the method, the raw runs and the cost.
 ## Try it in one command
 
 ```bash
-uvx --python 3.12 openadapt quickstart --break-it
+uvx --python 3.12 openadapt demo quickstart --break-it
 ```
 
 No account or API key. [uv](https://docs.astral.sh/uv/getting-started/installation/)
 fetches Python 3.12 if you need it; with Python 3.10 to 3.12 already installed,
-`python -m pip install --upgrade openadapt` then `openadapt quickstart --break-it`
+`python -m pip install --upgrade openadapt` then `openadapt demo quickstart --break-it`
 does the same.
 
 ### What it shows
@@ -164,41 +164,72 @@ Each compiled workflow becomes one tool call. The agent decides what to enter;
 OpenAdapt makes the entry, checks it, and returns an outcome instead of the
 agent driving the screen. With no bundles, the server offers a synthetic
 sandbox workflow that returns every outcome. To serve your own workflows, run
-`openadapt agent serve --mode production --bundles ./bundles`; without
+`openadapt services agent serve --mode production --bundles ./bundles`; without
 `--mode production` the agent can list them but not run them.
 `openadapt-agent emit-skill <bundle>` writes an Agent Skill for one workflow,
-and `openadapt flow verify-run` judges a write made by any agent or script
+and `openadapt verify effect` judges a write made by any agent or script
 against the system of record. [Connect an agent](https://docs.openadapt.ai/how-to/connect-an-agent/)
 covers other clients.
 
 ### Record a task by hand
 
+Recording works the same way on every surface; only the target differs:
+`--url` for a web app, `--window` (and `--window-title`) for a Windows or macOS
+app window or a local RDP or Citrix client window. Linux and network RDP record
+the whole local desktop, so they take no target.
+
 ```bash
 python -m pip install --upgrade openadapt
-openadapt flow record --url https://staging.your-app.example --out rec
-openadapt flow compile rec --out bundle --name my-first-workflow
-openadapt flow replay bundle --url https://staging.your-app.example --run-dir run
+openadapt record --backend <web|windows|macos|linux|rdp|citrix> <target> --out rec
+
+# A web app
+openadapt record --backend web --url https://staging.your-app.example --out rec
+openadapt compile rec --out bundle --name my-first-workflow
+openadapt run --replay bundle --url https://staging.your-app.example --run-dir run
+
+# A desktop app (macOS here; Windows and Citrix take --window too).
+# Desktop recording and macOS replay are separate extras.
+python -m pip install --upgrade 'openadapt[capture,macos]'
+openadapt record --backend macos --window "Your App" --out rec
+openadapt compile rec --out bundle --name my-first-workflow
+openadapt run --replay bundle --macos-app "Your App" --run-dir run
 ```
 
-`replay` drives the app at `--url` and performs every recorded action,
+`run --replay` drives the app and performs every recorded action,
 including saves you can't undo. It doesn't ask first and doesn't check the
 saved record. Point it at a test or staging copy, never at production data.
 
+The commands for every surface, including Linux, RDP and Citrix, are in
+[SURFACES.md](packages/flow/docs/SURFACES.md#first-workflow-per-surface).
+
+The existing engine command remains available for scripts:
+
+```bash
+openadapt flow replay bundle --url https://staging.your-app.example --run-dir run
+```
+
+`flow replay` performs every recorded action, including real saves. Use a test
+or staging copy; it does not ask for approval or check the saved record.
+
 A program that writes to a real system also needs record checks, a deployment
-file, certification, qualification, and an admission; then `openadapt flow run`
+file, certification, qualification, and an admission; then `openadapt run`
 runs it. By default each save waits for a person to approve it in OpenAdapt
 Desktop or on a paired phone. [Your first workflow](https://docs.openadapt.ai/tutorials/first-workflow/)
 walks through it. Several recordings of the same task can become one program
-with branches and loops (`openadapt flow induce`).
+with branches and loops (`openadapt compile --induce`).
 
 To record a desktop app, install the recorder and your operating system's
 adapter, for example `python -m pip install "openadapt[capture,windows]"`, or
 use [OpenAdapt Desktop](https://openadapt.ai/download).
 
+`openadapt --help` lists the task commands. `openadapt wrap --help` shows the
+options for running an agent task once and reusing its checked compiled tool.
+The [CLI reference](docs/cli.md) lists task paths and their original aliases.
+
 ### Judge or train any agent
 
-`openadapt flow verify-run` judges a write made by any agent or script against
-the system of record. `openadapt-flow serve-reward` turns the same check into a
+`openadapt verify effect` judges a write made by any agent or script against
+the system of record. `openadapt-flow services reward` turns the same check into a
 reward for training or evaluating computer-use agents
 ([REWARD_WORKER.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/REWARD_WORKER.md)).
 
@@ -298,7 +329,7 @@ the right record is on screen, makes the entry, and reads the record back.
 | Stopped before saving | `HALTED_BEFORE_EFFECT` | `needs_review` | Fix the cause, or show the program the fix, and run again. |
 | Check the record | `RECONCILIATION_REQUIRED` | `not_sure_if_saved` | A save may have gone through. A person checks the record before anything is retried. |
 | Finished, not checked | `COMPLETED_UNVERIFIED` | `not_sure_if_saved` | Fine for testing; not a production success. |
-| Saved, waiting for its check | `SAVED_AWAITING_CHECK` | `not_sure_if_saved` | The save's check is a later report (a claim acknowledgment, an export). Don't rerun it. `openadapt-flow deferred settle` counts it as done only when the report confirms it. |
+| Saved, waiting for its check | `SAVED_AWAITING_CHECK` | `not_sure_if_saved` | The save's check is a later report (a claim acknowledgment, an export). Don't rerun it. `openadapt-flow verify deferred settle` counts it as done only when the report confirms it. |
 | Didn't run | `REJECTED_POLICY`, `CANCELED`, `FAILED_PLATFORM` | `did_not_run` | Fix the gate or the environment and run again. |
 
 The console's last line can read `HALTED` for both the second and third rows.

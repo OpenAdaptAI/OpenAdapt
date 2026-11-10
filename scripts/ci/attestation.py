@@ -23,8 +23,35 @@ class EvidenceError(ValueError):
     """Raised when evidence is missing, ambiguous, stale, or malformed."""
 
 
+def declaration_text(body: str) -> str:
+    """Exclude Markdown fenced examples from declaration syntax.
+
+    Backtick and tilde fences may be indented by up to three spaces. A fence
+    closes only with the same character and at least its opening length.
+    """
+    lines: list[str] = []
+    fence_character: str | None = None
+    fence_length = 0
+    for line in body.splitlines():
+        fence = re.fullmatch(r" {0,3}(`{3,}|~{3,})(.*)", line)
+        if fence_character is not None:
+            if (
+                fence is not None
+                and fence[1][0] == fence_character
+                and len(fence[1]) >= fence_length
+                and not fence[2].strip()
+            ):
+                fence_character = None
+            continue
+        if fence is not None and (fence[1][0] != "`" or "`" not in fence[2]):
+            fence_character, fence_length = fence[1][0], len(fence[1])
+            continue
+        lines.append(line)
+    return "\n".join(lines)
+
+
 def _one_header(body: str, name: str) -> str:
-    values = re.findall(rf"(?m)^{re.escape(name)}: (.*)$", body)
+    values = re.findall(rf"(?m)^{re.escape(name)}: (.*)$", declaration_text(body))
     if len(values) != 1 or not values[0].strip():
         raise EvidenceError(f"expected exactly one nonempty {name} header")
     return values[0].strip()
@@ -40,7 +67,7 @@ def parse_review_report(body: str, expected_head: str) -> tuple[str, str]:
     reviewed_head = _one_header(body, "Reviewed-Head")
     if not _SHA.fullmatch(reviewed_head) or reviewed_head != expected_head:
         raise EvidenceError("review declaration is malformed or stale")
-    lines = body.splitlines()
+    lines = declaration_text(body).splitlines()
     approve_count = lines.count(_REVIEW_HEADING)
     block_count = lines.count(_BLOCK_HEADING)
     if approve_count + block_count != 1:
@@ -62,7 +89,8 @@ def parse_author_declaration(body: str, expected_head: str) -> str:
     declared_head = _one_header(body, "Reviewed-Head")
     if not _SHA.fullmatch(declared_head) or declared_head != expected_head:
         raise EvidenceError("author declaration is malformed or stale")
-    if _REVIEW_HEADING in body.splitlines() or _BLOCK_HEADING in body.splitlines():
+    lines = declaration_text(body).splitlines()
+    if _REVIEW_HEADING in lines or _BLOCK_HEADING in lines:
         raise EvidenceError(
             "author declaration must be separate from the review comment"
         )

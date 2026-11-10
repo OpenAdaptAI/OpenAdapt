@@ -1,0 +1,348 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      225,
+      297
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      472,
+      149
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Now the other one.",
+   "actions": [
+    {
+     "text": "alt+Left"
+    },
+    {
+     "text": "alt+Left"
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+l"
+    },
+    {
+     "text": "localhost:3000/Patient/b844d90b-b103-45a0-b74f-ac31f4b5051c/json\n"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "alt+Left"
+    },
+    {
+     "text": "alt+Left"
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      200,
+      33
+     ]
+    },
+    {
+     "text": "Okafor\n"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "Return"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      472,
+      149
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I didn't change anything, because the server already holds two Patient records that could both be Lena Okafor.\n\n- **Patient/d9ba94f3-ca65-4325-b099-95e3290b3866:** Lena Okafor, born 1988-04-22, female. Its email is lena.okafor@example.org, which matches the task. It has no phone or address.\n- **Patient/b844d90b-b103-45a0-b74f-ac31f4b5051c:** Lena Okafor, born 1988-04-22, female. It has no phone, email or address, so nothing separates it from the first record.\n\nBoth records have the same name, date of birth and sex. The second has nothing that contradicts the person in the task, so I can't rule it out as theirs. The first is the likelier match because of the email, but I can't confirm that. Creating a third record would add another duplicate, and I can't merge or delete records here. Someone needs to confirm which record is correct, or merge the duplicates.\n\nRESULT: NOT DONE Two existing Patient records (d9ba94f3-ca65-4325-b099-95e3290b3866 and b844d90b-b103-45a0-b74f-ac31f4b5051c) both match name, DOB and sex, so I can't tell which is theirs.",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 225,
+   "y": 297,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 472,
+   "y": 149,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "l"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "localhost:3000/Patient/b844d90b-b103-45a0-b74f-ac31f4b5051c/json\n"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 200,
+   "y": 33,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Okafor\n"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Return"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 472,
+   "y": 149,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6285,
+   "out": 139,
+   "usd": 0.017101,
+   "cached": 0
+  },
+  {
+   "in": 7828,
+   "out": 106,
+   "usd": 0.006183,
+   "cached": 6281
+  },
+  {
+   "in": 9324,
+   "out": 128,
+   "usd": 0.006589,
+   "cached": 7826
+  },
+  {
+   "in": 10851,
+   "out": 158,
+   "usd": 0.007266,
+   "cached": 9322
+  },
+  {
+   "in": 12408,
+   "out": 149,
+   "usd": 0.007556,
+   "cached": 10849
+  },
+  {
+   "in": 13956,
+   "out": 164,
+   "usd": 0.007995,
+   "cached": 12406
+  },
+  {
+   "in": 15521,
+   "out": 83,
+   "usd": 0.007537,
+   "cached": 13954
+  },
+  {
+   "in": 16981,
+   "out": 138,
+   "usd": 0.008138,
+   "cached": 15519
+  },
+  {
+   "in": 18507,
+   "out": 112,
+   "usd": 0.008335,
+   "cached": 16979
+  },
+  {
+   "in": 19996,
+   "out": 139,
+   "usd": 0.008817,
+   "cached": 18505
+  },
+  {
+   "in": 21525,
+   "out": 749,
+   "usd": 0.015315,
+   "cached": 19994
+  }
+ ]
+}

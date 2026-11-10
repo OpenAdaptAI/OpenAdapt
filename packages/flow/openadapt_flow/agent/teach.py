@@ -212,7 +212,13 @@ class TaughtEngine:
         self.config = config
 
     def execute(
-        self, entry: Any, run_id: str, inputs: dict[str, str], raw: Mapping[str, Any]
+        self,
+        entry: Any,
+        run_id: str,
+        inputs: dict[str, str],
+        raw: Mapping[str, Any],
+        *,
+        admitted_bundle_sha256: Optional[str] = None,
     ) -> Any:
         from openadapt_flow.agent.service import EngineResult
         from openadapt_flow.compile_agent import FirstRunCompiler
@@ -1171,7 +1177,7 @@ class TeachBridge:
         existing = self._workflow_name(task_dir)
         if existing is not None:
             return next(t for t, w in self.taught.items() if w == existing)
-        spec = json.loads((task_dir / "compile_agent.json").read_text())
+        spec = json.loads((task_dir / "compile_agent.json").read_text(encoding="utf-8"))
         task = spec["task"]
         base = re.sub(r"[^a-z0-9]+", "_", str(task["task_id"]).lower()).strip("_")
         base = (

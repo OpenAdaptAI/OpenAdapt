@@ -1,0 +1,567 @@
+{
+ "transcript": [
+  {
+   "reply": "We need to locate the patient's existing record first, so perform a Medplum search for the name and birth date.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [204, 32], \"text\": \"Tomasz Wren 1966-01-30\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the patient record to view details and later reference the ID.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [222, 302]}}\n</tool_call>"
+  },
+  {
+   "reply": "We need to keep the patient\u2019s UUID handy so we can reference it when searching for or creating the Appointment that involves this patient.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"pause_and_memorize_fact\", \"fact\": \"Patient Tomasz Wren (born 1966-01-30) has FHIR UUID d9044eb8-85bd-47cd-8758-f3d93b721da6\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Need to locate Practitioner Dr Ama Osei on Medplum to obtain UUID.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [204, 32], \"text\": \"Dr Ama Osei\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Enter the practitioner's name into the search bar to locate their record.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [280, 32], \"text\": \"Dr Ama Osei\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the search icon to explicitly submit the search query and load results.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [136, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "Press Enter in the search field to resubmit the search and load results for the practitioner query.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"key\", \"keys\": [\"Enter\"]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the search icon to resubmit the search query and load results for the practitioner.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [136, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "Directly navigate to the expected Practitioner search results page to locate Dr Ama Osei, since the in-page search did not update the view.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/Practitioner?name=Dr%20Ama%20Osei\"}}\n</tool_call>"
+  },
+  {
+   "reply": "We need the practitioner\u2019s UUID to reference when creating or referencing the appointment.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"pause_and_memorize_fact\", \"fact\": \"Practitioner Dr Ama Osei has FHIR UUID 8bf415b-f3af-4726-b2ef-6043f4fc1fb8\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the practitioner record to capture the URL for memorization.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [222, 302]}}\n</tool_call>"
+  },
+  {
+   "reply": "We need to keep the exact URL of the practitioner record so we can reference it when constructing the appointment participant list.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"pause_and_memorize_fact\", \"fact\": \"URL for Practitioner Dr Ama Osei: http://localhost:9821/Practitioner/8bfb415b-f3af-4726-b2ef-6043f4fc1fb8\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Need to create an Appointment resource, so navigate directly to the FHIR Create endpoint for Appointment.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/Appointment/$create\"}}\n</tool_call>"
+  },
+  {
+   "reply": "The $create endpoint returned 404, so instead we will manually post a valid Appointment instance using the standard POST /Patient/{id}/$operation endpoint with content-type application/fhir+json.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/Patient/d9044eb8-85bd-47cd-8758-f3d93b721da6/$operation/Create\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Enter the appointment instance as application/fhir+json payload in the search box and press Enter to post it.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [204, 32], \"text\": \"{\\\"resourceType\\\":\\\"Appointment\\\",\\\"status\\\":\\\"booked\\\",\\\"participant\":[{\"actor\\\":{\\\"reference\\\":\\\"Patient/d9044eb8-85bd-47cd-8758-f3d93b721da6\\\",\\\"\u53cd\u61c9\\\":\\\"patient\\\"}},{\\\"actor\\\":{\\\"reference\\\":\\\"Practitioner/8bfb415b-f3af-4726-b2ef-6043f4fc1fb8\\\",\\\"\u53cd\u61c9\\\":\\\"practitioner\\\"}},{\\\"reaction\\\":\\\"accepts\\\"},{\\\"reaction\\\":\\\"accepts\\\"}]}\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>",
+   "error": "unparsable: closing parenthesis '}' does not match opening parenthesis '[' (<unknown>, line 1)"
+  },
+  {
+   "reply": "Use the standard FHIR base Create endpoint for Appointment since $create was unavailable, posting the appointment JSON.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/Appointment\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the form to create a new Appointment resource.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [1232, 170]}}\n</tool_call>"
+  },
+  {
+   "reply": "Switch to JSON view to see the full FHIR JSON fields including start, end, participant, etc, which we can fill in more easily.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [100, 133]}}\n</tool_call>"
+  },
+  {
+   "reply": "Enter the full appointment JSON instance to create the appointment.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [652, 450], \"text\": \"{\\\"resourceType\\\":\\\"Appointment\\\",\\\"status\\\":\\\"booked\\\",\\\"participant\":[{\"actor\\\":{\\\"reference\\\":\\\"Patient/d9044eb8-85bd-47cd-8758-f3d93b721da6\\\",\\\"\u53cd\u61c9\\\":\\\"patient\\\"}},{\\\"actor\\\":{\\\"reference\\\":\\\"Practitioner/8bfb415b-f3af-4726-b2ef-6043f4fc1fb8\\\",\\\"\u53cd\u61c9\\\":\\\"practitioner\\\"}},{\\\"reaction\\\":\\\"accepts\\\"},{\\\"reaction\\\":\\\"accepts\\\"}]}\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>",
+   "error": "unparsable: closing parenthesis '}' does not match opening parenthesis '[' (<unknown>, line 1)"
+  },
+  {
+   "reply": "Switch to the Form view to see if the appointment form fields are available for input.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [30, 133]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to reveal additional form fields such as participant actors and time slots needed to fill the appointment instance.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to reach the top of the form where the resource Type, ID, Status, and Participant fields are located.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 800}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to reveal the Participant section fields needed to add patient and practitioner participants.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll further down to reveal the Participant section fields needed to add the patient and practitioner participants.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll further down to reveal the Participant section so we can add the patient and practitioner participants.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Add Participant' button to open the participant form where we can set the actor reference and reaction.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [283, 522]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the Actor reference dropdown to choose the Patient resource for this participant.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [720, 690]}}\n</tool_call>"
+  },
+  {
+   "reply": "Type the patient UUID into the Actor combobox to select the Patient resource reference.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [720, 690], \"text\": \"Patient/d9044eb8-85bd-47cd-8758-f3d93b721da6\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the Type dropdown to choose the appropriate participant role (e.g., patient).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [307, 593]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Add Type' button to open the participant type options so we can select the correct participant type (e.g., patient).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [283, 645]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the Type combobox to display available participant role options so we can select the correct one.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [307, 593]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Add Type' button to open the list of available participant types so we can select the appropriate one (e.g., patient).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [283, 700]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the Type combobox to display the list of participant type codes (e.g., Patient) so we can select the correct one.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [307, 593]}}\n</tool_call>"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 202.73291925465838,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Tomasz Wren 1966-01-30"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 220.62111801242236,
+   "y": 297.5369458128079,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 202.73291925465838,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Dr Ama Osei"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 278.2608695652174,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Dr Ama Osei"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 135.1552795031056,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 135.1552795031056,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/Practitioner?name=Dr%20Ama%20Osei"
+  },
+  {
+   "a": "click",
+   "x": 220.62111801242236,
+   "y": 297.5369458128079,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/Appointment/$create"
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/Patient/d9044eb8-85bd-47cd-8758-f3d93b721da6/$operation/Create"
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/Appointment"
+  },
+  {
+   "a": "click",
+   "x": 1224.3478260869565,
+   "y": 167.48768472906403,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 99.37888198757764,
+   "y": 131.0344827586207,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 29.81366459627329,
+   "y": 131.0344827586207,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "click",
+   "x": 281.2422360248447,
+   "y": 514.2857142857143,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 715.527950310559,
+   "y": 679.8029556650247,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 715.527950310559,
+   "y": 679.8029556650247,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Patient/d9044eb8-85bd-47cd-8758-f3d93b721da6"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 305.09316770186336,
+   "y": 584.2364532019704,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 281.2422360248447,
+   "y": 635.4679802955665,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 305.09316770186336,
+   "y": 584.2364532019704,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 281.2422360248447,
+   "y": 689.6551724137931,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 305.09316770186336,
+   "y": 584.2364532019704,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  }
+ ],
+ "usage": [
+  {
+   "in": 3028,
+   "out": 91,
+   "usd": 0.0
+  },
+  {
+   "in": 4515,
+   "out": 48,
+   "usd": 0.0
+  },
+  {
+   "in": 5966,
+   "out": 110,
+   "usd": 0.0
+  },
+  {
+   "in": 6143,
+   "out": 73,
+   "usd": 0.0
+  },
+  {
+   "in": 6283,
+   "out": 69,
+   "usd": 0.0
+  },
+  {
+   "in": 6419,
+   "out": 48,
+   "usd": 0.0
+  },
+  {
+   "in": 6534,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 6648,
+   "out": 52,
+   "usd": 0.0
+  },
+  {
+   "in": 6767,
+   "out": 82,
+   "usd": 0.0
+  },
+  {
+   "in": 6909,
+   "out": 86,
+   "usd": 0.0
+  },
+  {
+   "in": 7055,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 7170,
+   "out": 105,
+   "usd": 0.0
+  },
+  {
+   "in": 7343,
+   "out": 57,
+   "usd": 0.0
+  },
+  {
+   "in": 7438,
+   "out": 111,
+   "usd": 0.0
+  },
+  {
+   "in": 7619,
+   "out": 189,
+   "usd": 0.0
+  },
+  {
+   "in": 7877,
+   "out": 57,
+   "usd": 0.0
+  },
+  {
+   "in": 7988,
+   "out": 46,
+   "usd": 0.0
+  },
+  {
+   "in": 8071,
+   "out": 64,
+   "usd": 0.0
+  },
+  {
+   "in": 8173,
+   "out": 179,
+   "usd": 0.0
+  },
+  {
+   "in": 8389,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 8478,
+   "out": 49,
+   "usd": 0.0
+  },
+  {
+   "in": 8565,
+   "out": 52,
+   "usd": 0.0
+  },
+  {
+   "in": 8655,
+   "out": 44,
+   "usd": 0.0
+  },
+  {
+   "in": 8737,
+   "out": 46,
+   "usd": 0.0
+  },
+  {
+   "in": 8821,
+   "out": 46,
+   "usd": 0.0
+  },
+  {
+   "in": 8905,
+   "out": 57,
+   "usd": 0.0
+  },
+  {
+   "in": 9000,
+   "out": 49,
+   "usd": 0.0
+  },
+  {
+   "in": 9087,
+   "out": 99,
+   "usd": 0.0
+  },
+  {
+   "in": 9224,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 9313,
+   "out": 62,
+   "usd": 0.0
+  },
+  {
+   "in": 9413,
+   "out": 54,
+   "usd": 0.0
+  },
+  {
+   "in": 9505,
+   "out": 63,
+   "usd": 0.0
+  },
+  {
+   "in": 9606,
+   "out": 62,
+   "usd": 0.0
+  }
+ ]
+}

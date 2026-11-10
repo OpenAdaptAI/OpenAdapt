@@ -1,0 +1,43 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/fervent-clarke-60860f/packages/flow/benchmark/api_generalization/harness.py", line 352, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/fervent-clarke-60860f/packages/flow/benchmark/api_generalization/harness.py", line 348, in main
+    {"record": cmd_record, "compile": cmd_compile, "matrix": cmd_matrix, "timing": cmd_timing}[a.cmd](a, app)
+  File "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/fervent-clarke-60860f/packages/flow/benchmark/api_generalization/harness.py", line 118, in cmd_record
+    app.record(rec, page, values)
+  File "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/fervent-clarke-60860f/packages/flow/benchmark/api_generalization/apps/wordpress_category.py", line 43, in record
+    rec_text(rec, page, "#tag-name", v["name"], "name")
+  File "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/fervent-clarke-60860f/packages/flow/benchmark/api_generalization/common.py", line 283, in rec_text
+    rec.click(*center(page, rec, selector))
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/fervent-clarke-60860f/packages/flow/benchmark/api_generalization/common.py", line 269, in center
+    box = loc.bounding_box()
+          ^^^^^^^^^^^^^^^^^^
+  File "/Users/abrichr/oa/worktrees/pr1540/packages/flow/.venv/lib/python3.12/site-packages/playwright/sync_api/_generated.py", line 10814, in bounding_box
+    self._sync(self._impl_obj.bounding_box(timeout=to_milliseconds(timeout)))
+  File "/Users/abrichr/oa/worktrees/pr1540/packages/flow/.venv/lib/python3.12/site-packages/playwright/_impl/_sync_base.py", line 111, in _sync
+    return task.result()
+           ^^^^^^^^^^^^^
+  File "/Users/abrichr/oa/worktrees/pr1540/packages/flow/.venv/lib/python3.12/site-packages/playwright/_impl/_locator.py", line 142, in bounding_box
+    return await self._with_element(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/abrichr/oa/worktrees/pr1540/packages/flow/.venv/lib/python3.12/site-packages/playwright/_impl/_locator.py", line 123, in _with_element
+    handle = await self.element_handle(timeout=timeout)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/abrichr/oa/worktrees/pr1540/packages/flow/.venv/lib/python3.12/site-packages/playwright/_impl/_locator.py", line 334, in element_handle
+    handle = await self._frame.wait_for_selector(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/abrichr/oa/worktrees/pr1540/packages/flow/.venv/lib/python3.12/site-packages/playwright/_impl/_frame.py", line 395, in wait_for_selector
+    await self._channel.send(
+  File "/Users/abrichr/oa/worktrees/pr1540/packages/flow/.venv/lib/python3.12/site-packages/playwright/_impl/_connection.py", line 78, in send
+    return await self._connection.wrap_api_call(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/abrichr/oa/worktrees/pr1540/packages/flow/.venv/lib/python3.12/site-packages/playwright/_impl/_connection.py", line 636, in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+playwright._impl._errors.TimeoutError: Locator.bounding_box: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator("#tag-name").first
+

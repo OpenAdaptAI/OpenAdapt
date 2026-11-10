@@ -121,3 +121,42 @@ def test_rejects_malformed_report() -> None:
             expected_tree=TREE,
             commit_time=COMMIT_TIME,
         )
+
+
+@pytest.mark.parametrize("fence", ["```", "~~~~"])
+@pytest.mark.parametrize("indent", ["", "   "])
+def test_fenced_declarations_are_examples_for_both_parsers(
+    fence: str, indent: str
+) -> None:
+    declaration = (
+        f"From: Claude\nReviewed-Head: {HEAD}\n"
+        "## Independent adversarial review: APPROVE"
+    )
+    body = f"Example only.\n{indent}{fence}text\n{declaration}\n{indent}{fence}"
+    with pytest.raises(EvidenceError):
+        parse_review_report(body, HEAD)
+    with pytest.raises(EvidenceError):
+        parse_author_declaration(body, HEAD)
+
+
+@pytest.mark.parametrize("fence", ["````", "~~~~"])
+@pytest.mark.parametrize("false_close", ["```", "~~~", "````text", "~~~~text"])
+def test_incomplete_or_mismatched_fence_cannot_expose_example(
+    fence: str, false_close: str
+) -> None:
+    body = (
+        f"{fence}text\n{false_close}\nFrom: Claude\nReviewed-Head: {HEAD}\n"
+        "## Independent adversarial review: APPROVE"
+    )
+    with pytest.raises(EvidenceError):
+        parse_review_report(body, HEAD)
+
+
+def test_visible_review_is_independent_of_fenced_example() -> None:
+    body = (
+        f"From: Claude\nReviewed-Head: {HEAD}\n"
+        "## Independent adversarial review: APPROVE\n"
+        "```text\nFrom: Codex\nReviewed-Head: invalid\n"
+        "## Independent adversarial review: BLOCK\n```"
+    )
+    assert parse_review_report(body, HEAD) == ("Claude", "APPROVE")

@@ -146,7 +146,7 @@ class FleetOptIn(BaseModel):
         file = Path(path)
         if not file.is_file():
             return cls.off()
-        return cls.model_validate_json(file.read_text())
+        return cls.model_validate_json(file.read_text(encoding="utf-8"))
 
     def save(self, path: Path | str) -> None:
         file = Path(path)

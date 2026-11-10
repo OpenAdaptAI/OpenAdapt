@@ -1,0 +1,17 @@
+{
+ "recording": "/Users/abrichr/oa/scratch/api-generalization/wikijs_group/rec-969cb939",
+ "events": 4,
+ "exchanges": 6,
+ "judge": {
+  "new_records": 1,
+  "field_mismatches": [],
+  "collateral": {
+   "deleted": [],
+   "changed": []
+  },
+  "state_ok": true,
+  "new_ids": [
+   "7"
+  ]
+ }
+}

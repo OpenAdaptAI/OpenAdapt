@@ -42,6 +42,7 @@ order the browser finished them:
 | `multipart_files` | no | For a kept multipart body: the names of its file inputs that were sent empty (`[name, ""]` in `form`) |
 | `body` | no | Any other text body, as text |
 | `body_omitted` | no | `"multipart"` when a multipart body was not kept: a file was attached, or the body isn't plain form data |
+| `request_headers` | no | For a write (not GET, HEAD or OPTIONS): the NAMES of the headers the page added beyond the browser's own (`authorization`, `x-csrf-token`), sorted. Never a value |
 | `request_truncated` | no | `true` when the body was cut at 256 KiB |
 | `response_type` | no | Response content type, without parameters |
 | `location` | no | The redirect target, when the response has one |
@@ -56,8 +57,9 @@ not captured.
 Nothing below reaches the disk. Values are held in memory during the
 recording and replaced when the file is written.
 
-- **No headers at all.** So no `Cookie`, `Set-Cookie` or `Authorization`
-  value is written.
+- **No header values at all.** So no `Cookie`, `Set-Cookie` or
+  `Authorization` value is written. A write keeps only the names of the
+  headers its page added (`request_headers`).
 - **Cookie and credential values** are replaced wherever a page echoes them
   in a body, URL or script: the cookies the browser sent and the cookies a
   response set with `Set-Cookie` (`<session:cookie>`), and the credential of

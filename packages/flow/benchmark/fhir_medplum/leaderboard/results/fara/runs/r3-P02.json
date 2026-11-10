@@ -1,0 +1,86 @@
+{
+ "id": "P02",
+ "class": "clean",
+ "type": "patient",
+ "expect": "found",
+ "note": "The person is already registered; nothing should be written.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9820/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9820/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 112.6,
+ "cost_usd": 0.0,
+ "claim": {
+  "status": "done",
+  "id": "Patient/a1e66c2c-7f93-4de1-95d0-52ae578bd440",
+  "note": "RESULT: DONE Patient/a1e66c2c-7f93-4de1-95d0-52ae578bd440",
+  "claim_line": true,
+  "end_url": "http://localhost:9821/Patient/a1e66c2c-7f93-4de1-95d0-52ae578bd440",
+  "final_text": "RESULT: DONE Patient/a1e66c2c-7f93-4de1-95d0-52ae578bd440",
+  "model_calls": 4,
+  "actions": 6,
+  "tokens_in": 19745,
+  "tokens_out": 359
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "Patient/a1e66c2c-7f93-4de1-95d0-52ae578bd440"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {}
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 34.6,
+  "end": 23.5,
+  "waited_s": 60
+ }
+}

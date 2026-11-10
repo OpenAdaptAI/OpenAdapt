@@ -1,0 +1,193 @@
+{
+ "id": "A12",
+ "class": "other_user",
+ "type": "allergy",
+ "expect": "create",
+ "note": "As the agent writes, another clinician updates the same patient's phone.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/AllergyIntolerance returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/AllergyIntolerance returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 377.7,
+ "cost_usd": 0.679554,
+ "claim": {
+  "status": "done",
+  "id": "AllergyIntolerance/4fa378ea-e9d0-4fe8-92e9-c5ea6814f0b7",
+  "note": "RESULT: DONE AllergyIntolerance/4fa378ea-e9d0-4fe8-92e9-c5ea6814f0b7",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/AllergyIntolerance?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated",
+  "final_text": "Rosa Delgado (born 1979-06-14) now has exactly one AllergyIntolerance for penicillin. She was the only matching patient, Patient/b845c7bc-4b36-449d-9242-0abda904df57, and she had no allergy records before, so I created it.\n\nThe record has only the five requested fields set:\n- **Patient:** Patient/b845c7bc-4b36-449d-9242-0abda904df57\n- **Code:** SNOMED CT 91936005 (http://snomed.info/sct)\n- **Criticality:** high\n- **Clinical status:** active\n- **Verification status:** confirmed\n\nThe record list loads slowly. After I submitted the record it showed no results for a while, and I pressed the submit button more than once. I rechecked the AllergyIntolerance list once it had finished loading and it shows one record only.\n\nRESULT: DONE AllergyIntolerance/4fa378ea-e9d0-4fe8-92e9-c5ea6814f0b7",
+  "model_calls": 45,
+  "actions": 415,
+  "tokens_in": 1915909,
+  "tokens_out": 11151
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "AllergyIntolerance/4fa378ea-e9d0-4fe8-92e9-c5ea6814f0b7"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "AllergyIntolerance/4fa378ea-e9d0-4fe8-92e9-c5ea6814f0b7": "created"
+  }
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "other_at_write": 1
+  },
+  {
+   "method": "POST",
+   "type": "AllergyIntolerance",
+   "write": 1,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "AllergyIntolerance",
+   "write": 2,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 27.1,
+  "end": 14.6,
+  "waited_s": 60
+ }
+}

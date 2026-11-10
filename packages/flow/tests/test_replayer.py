@@ -4638,3 +4638,118 @@ def test_unencrypted_bundle_still_reads_template_from_disk(tmp_path):
 
     assert report.success is True
     assert crop_png in vision.template_png_calls
+
+
+def _native_selection_workflow():
+    from openadapt_flow.ir import NativeSelectContract, StructuralLocator
+
+    contract = NativeSelectContract(
+        value="species-17",
+        label="Dog",
+        options=[
+            {"value": "", "label": "Choose", "disabled": False},
+            {"value": "species-17", "label": "Dog", "disabled": False},
+        ],
+    )
+    anchor = click_step().anchor.model_copy(deep=True)
+    anchor.structural = StructuralLocator(selector="#species")
+    return Workflow(
+        name="native-select",
+        surface="web",
+        steps=[
+            Step(
+                id="choose",
+                intent="select Dog",
+                action=ActionKind.SELECT_OPTION,
+                text="Dog",
+                native_selection=contract,
+                anchor=anchor,
+            )
+        ],
+    )
+
+
+class NativeSelectionFakeBackend(FakeBackend):
+    def __init__(self, *, uncertain=False, wrong_value=False):
+        super().__init__()
+        self.uncertain = uncertain
+        self.wrong_value = wrong_value
+        self.observed = None
+
+    def locate_structural(self, locator):
+        from openadapt_flow.ir import StructuralHandle
+
+        return StructuralHandle(
+            point=(110, 105),
+            region=(100, 100, 50, 20),
+            target_fingerprint="a" * 64,
+        )
+
+    def select_native_option_guarded(self, contract, *, locator, handle):
+        from openadapt_flow.runtime.resolver import structural_resolution_fingerprint
+
+        self.actions.append(("native_select", contract.value))
+        if self.uncertain:
+            raise ActionDeliveryUncertain(operation="guarded_dom_select", native=False)
+        self.observed = {
+            "value": "wrong" if self.wrong_value else contract.value,
+            "label": contract.label,
+            "options": [option.model_dump(mode="json") for option in contract.options],
+        }
+        return ActionDeliveryReceipt(
+            receipt_id="native-selection-test",
+            operation="guarded_dom_select",
+            native=False,
+            target_fingerprint=structural_resolution_fingerprint(locator, handle),
+            selection_value_sha256=hashlib.sha256(contract.value.encode()).hexdigest(),
+            delivered_at="2026-11-05T20:00:00+00:00",
+        )
+
+    def native_selected_option_at(self, x, y):
+        return self.observed
+
+
+@pytest.mark.parametrize(
+    "uncertain,wrong_value", [(False, False), (True, False), (False, True)]
+)
+def test_native_selection_dispatch_and_uncertainty_never_retype(
+    bundle, run_dir, uncertain, wrong_value
+):
+    backend = NativeSelectionFakeBackend(uncertain=uncertain, wrong_value=wrong_value)
+    report = Replayer(backend, vision=FakeVision(), use_structural=False).run(
+        _native_selection_workflow(),
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+    assert backend.actions == [("native_select", "species-17")]
+    assert report.success is (not uncertain and not wrong_value)
+    assert report.results[0].input_verified is (not uncertain and not wrong_value)
+    if uncertain:
+        assert report.results[0].delivery_uncertainty is not None
+
+
+@pytest.mark.parametrize("surface", ["rdp", "windows"])
+def test_native_selection_rejects_nonbrowser_surface_before_input(
+    bundle, run_dir, surface
+):
+    backend = NativeSelectionFakeBackend()
+    workflow = _native_selection_workflow()
+    workflow.surface = surface
+    report = Replayer(backend, vision=FakeVision()).run(
+        workflow,
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+    assert not report.success
+    assert backend.actions == []
+
+
+def test_native_selection_missing_capability_refuses_before_input(bundle, run_dir):
+    backend = FakeBackend()
+    report = Replayer(backend, vision=FakeVision()).run(
+        _native_selection_workflow(),
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+    assert not report.success
+    assert backend.actions == []

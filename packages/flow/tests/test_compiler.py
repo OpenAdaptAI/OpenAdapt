@@ -871,11 +871,20 @@ class TestCompileRecording:
         assert step.expect == []
 
     def test_bundle_roundtrip(self, compiled) -> None:
+        from openadapt_flow import bundle_validation
+
         wf, bundle = compiled["workflow"], compiled["bundle"]
         loaded = Workflow.load(bundle)
-        assert loaded == wf
+        # A loaded workflow intentionally carries private original-seal state;
+        # compare the public model and validate that persisted seal separately.
+        assert loaded.model_dump(mode="json") == wf.model_dump(mode="json")
+        bundle_validation.verify_integrity(loaded, bundle, loaded.manifest)
+        loaded.save(bundle)
+        reloaded = Workflow.load(bundle)
+        assert reloaded.model_dump(mode="json") == wf.model_dump(mode="json")
+        bundle_validation.verify_integrity(reloaded, bundle, reloaded.manifest)
         # every referenced template exists in the bundle
-        for step in loaded.steps:
+        for step in reloaded.steps:
             if step.anchor:
                 assert (bundle / step.anchor.template).exists()
 
@@ -1912,3 +1921,416 @@ class TestClickLabelsThatShareAWordWithAParameter:
         draw_text(screen, 110, 316, "Triage booking")
         label = self._compile(tmp_path, (180, 328), screen)
         assert label is None
+
+
+@pytest.fixture
+def native_select_events() -> list[dict]:
+    return [
+        {
+            "i": 0,
+            "kind": "click",
+            "x": 300,
+            "y": 200,
+            "t": 1.0,
+            "structural": {"selector": "#animal", "frame_path": ["#editor"]},
+            "submit_binding": {
+                "v": 1,
+                "tag": "select",
+                "type": "select-one",
+                "labelled": True,
+                "in_row": False,
+                "fixed": False,
+                "fields": 1,
+                "form_owner": "shared",
+                "submit_role": "form_control",
+                "scope_kind": "form",
+                "scope_path": "select",
+                "fields_in_scope": True,
+                "field_local": True,
+                "order": "between",
+            },
+            "viewport_before": list(VIEWPORT),
+            "viewport_after": list(VIEWPORT),
+            "title_before": "Form",
+            "title_after": "Form",
+            "sor_before": [{"animal": "cat"}],
+            "sor_after": [{"animal": "cat"}],
+        },
+        {
+            "i": 1,
+            "kind": "type",
+            "text": "d",
+            "t": 2.0,
+            "viewport_before": list(VIEWPORT),
+            "viewport_after": list(VIEWPORT),
+            "title_before": "Form",
+            "title_after": "Form",
+            "sor_before": [{"animal": "cat"}],
+            "sor_after": [{"animal": "cat"}],
+        },
+        {
+            "i": 2,
+            "kind": "key",
+            "key": "Enter",
+            "t": 3.0,
+            "title_before": "Form",
+            "title_after": "Choice saved",
+            "sor_before": [{"animal": "cat"}],
+            "sor_after": [{"animal": "cat"}, {"animal": "dog"}],
+            "native_selection": {
+                "selector": "#animal",
+                "frame_path": ["#editor"],
+                "source_click_index": 0,
+                "click_focus_only": True,
+                "source_type_index": 1,
+                "source_type_text": "d",
+                "value_before": "cat",
+                "label_before": "Cat",
+                "value": "dog",
+                "label": "Dog",
+                "options": [
+                    {"value": "cat", "label": "Cat", "disabled": False},
+                    {"value": "dog", "label": "Dog", "disabled": False},
+                ],
+            },
+        },
+    ]
+
+
+def test_native_select_compile_preserves_gesture_checks_and_source_aliases(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_select_events: list[dict]
+) -> None:
+    monkeypatch.setattr("openadapt_flow.compiler.compile.ocr", lambda *a, **kw: [])
+    # Section admission supports local field selections. A selection that
+    # itself commits a write is outside this fixture's admitted scope.
+    native_select_events[2]["sor_after"] = [{"animal": "cat"}]
+    recording = tmp_path / "recording"
+    (recording / "frames").mkdir(parents=True)
+    frame = blank()
+    draw_button(frame, 240, 180, 160, 48, "Animal")
+    for event in native_select_events:
+        for suffix in ("before", "after"):
+            write_frame(recording, event["i"], suffix, frame)
+    (recording / "meta.json").write_text(
+        json.dumps({"id": "native-select", "viewport": list(VIEWPORT), "params": {}})
+    )
+    original_events = (
+        "\n".join(json.dumps(event) for event in native_select_events) + "\n"
+    )
+    (recording / "events.jsonl").write_text(original_events)
+    workflow = compile_recording(
+        recording,
+        tmp_path / "bundle",
+        name="native-select",
+        mine_effects=True,
+        risk_overrides={"step_000": "reversible", "step_002": "reversible"},
+    )
+    assert [step.id for step in workflow.steps] == ["step_001"]
+    selected = workflow.steps[0]
+    assert selected.action is ActionKind.SELECT_OPTION
+    assert selected.text == "Dog"
+    assert selected.param is None and selected.secret is False
+    assert selected.native_selection is not None
+    assert selected.native_selection.value == "dog"
+    assert selected.anchor is not None and selected.anchor.structural is not None
+    assert selected.anchor.structural.selector == "#animal"
+    assert selected.anchor.structural.frame_path == ["#editor"]
+    assert selected.selection_commit_key is None
+    assert selected.selection_region is None
+    assert selected.risk == "reversible"
+    assert "step_002" in selected.risk_explanation
+    assert PostconditionKind.TITLE_CHANGED in [check.kind for check in selected.expect]
+    assert selected.effects == []
+    assert (recording / "events.jsonl").read_text() == original_events
+    loaded = Workflow.model_validate_json(
+        (tmp_path / "bundle" / "workflow.json").read_text()
+    )
+    assert loaded.steps[0].native_selection == selected.native_selection
+    notes = json.loads((tmp_path / "bundle" / "compile_notes.json").read_text())
+    gesture = next(
+        note
+        for note in notes["changes"]
+        if note["change"] == "native_selection_gesture"
+    )
+    assert gesture["source_events"] == [
+        {"i": 0, "kind": "click"},
+        {"i": 1, "kind": "type", "text": "d"},
+        {"i": 2, "kind": "key", "key": "Enter"},
+    ]
+    assert gesture["absorbed_step_aliases"] == {
+        "step_000": "step_001",
+        "step_002": "step_001",
+    }
+    with pytest.raises(ValueError, match="conflicting risk_overrides"):
+        compile_recording(
+            recording,
+            tmp_path / "conflict",
+            name="native-select",
+            risk_overrides={"step_000": "reversible", "step_002": "irreversible"},
+        )
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "missing",
+        "wrong_selector",
+        "wrong_frame",
+        "missing_frame",
+        "wrong_source",
+        "source_text",
+        "sequence_gap",
+        "tab",
+        "parameter",
+        "secret",
+        "surface",
+        "disabled",
+        "duplicate_value",
+        "duplicate_label",
+        "incomplete",
+        "dialog",
+        "wrong_click",
+        "missing_click_proof",
+        "click_write",
+        "click_navigation",
+        "click_gap",
+        "submit_button",
+        "submit_role",
+        "submit_form",
+        "malformed_submit",
+        "click_resize",
+    ],
+)
+def test_native_select_contract_refuses_unbound_or_unsupported_evidence(
+    native_select_events: list[dict], mutation: str
+) -> None:
+    from openadapt_flow.compiler.compile import _native_selection_contract
+    from openadapt_flow.ir import Anchor, Step, StructuralLocator
+
+    click_event, type_event, key_event = native_select_events
+    raw = key_event["native_selection"]
+    if mutation == "missing":
+        key_event.pop("native_selection")
+    elif mutation == "wrong_selector":
+        raw["selector"] = "#other"
+    elif mutation == "wrong_frame":
+        raw["frame_path"] = ["#other"]
+    elif mutation == "missing_frame":
+        raw.pop("frame_path")
+    elif mutation == "submit_button":
+        click_event["submit_binding"]["tag"] = "button"
+        click_event["submit_binding"]["type"] = "submit"
+    elif mutation == "submit_role":
+        click_event["submit_binding"]["submit_role"] = "form_submit"
+    elif mutation == "submit_form":
+        click_event["submit_binding"]["form_method"] = "post"
+    elif mutation == "malformed_submit":
+        click_event["submit_binding"] = {"tag": "select", "submit_role": "form_control"}
+    elif mutation == "click_resize":
+        click_event["viewport_after"] = [640, 480]
+    elif mutation == "wrong_click":
+        raw["source_click_index"] = 7
+    elif mutation == "missing_click_proof":
+        raw.pop("click_focus_only")
+    elif mutation == "click_write":
+        click_event["sor_before"] = []
+    elif mutation == "click_navigation":
+        click_event["title_before"] = "Another page"
+    elif mutation == "click_gap":
+        type_event["sor_before"] = []
+    elif mutation == "wrong_source":
+        raw["source_type_index"] = 0
+    elif mutation == "source_text":
+        raw["source_type_text"] = "c"
+    elif mutation == "sequence_gap":
+        key_event["i"] = 3
+    elif mutation == "tab":
+        key_event["key"] = "Tab"
+    elif mutation in ("parameter", "secret"):
+        type_event["param"] = "animal"
+        if mutation == "secret":
+            type_event["secret"] = True
+            type_event.pop("text")
+    elif mutation == "surface":
+        key_event["surface"] = "other"
+    elif mutation == "disabled":
+        raw["options"][1]["disabled"] = True
+    elif mutation == "duplicate_value":
+        raw["options"].append({"value": "dog", "label": "Another", "disabled": False})
+    elif mutation == "duplicate_label":
+        raw["options"].append({"value": "other", "label": " DOG ", "disabled": False})
+    elif mutation == "incomplete":
+        raw.pop("options")
+    elif mutation == "dialog":
+        key_event["dialog"] = {"response": "accept", "message": "Continue?"}
+    click = Step(
+        id="step_000",
+        intent="focus animal",
+        action=ActionKind.CLICK,
+        anchor=Anchor(
+            template="animal.png",
+            region=(200, 180, 160, 48),
+            click_point=(300, 200),
+            structural=StructuralLocator.model_validate(click_event["structural"]),
+        ),
+    )
+    typed = Step(
+        id="step_001",
+        intent="type prefix",
+        action=ActionKind.TYPE,
+        text=type_event.get("text"),
+        param=type_event.get("param"),
+        secret=type_event.get("secret", False),
+    )
+    key = Step(
+        id="step_002",
+        intent="commit",
+        action=ActionKind.KEY,
+        key=key_event["key"],
+        surface=key_event.get("surface"),
+    )
+    assert _native_selection_contract(click, typed, key, *native_select_events) is None
+
+
+def test_native_selection_event_preserves_committed_effect_evidence(
+    native_select_events: list[dict],
+) -> None:
+    from openadapt_flow.compiler.compile import _native_selection_event
+
+    click, typed, committed = native_select_events
+    typed["title_before"] = "Intermediate popup"
+    merged = _native_selection_event(click, typed, committed)
+    assert merged["i"] == typed["i"]
+    assert merged["text"] == "d"
+    assert merged["sor_before"] == [{"animal": "cat"}]
+    assert merged["sor_after"] == [{"animal": "cat"}, {"animal": "dog"}]
+    assert merged["title_before"] == "Form"
+    assert merged["title_after"] == "Choice saved"
+    assert typed["sor_after"] == [{"animal": "cat"}]
+
+
+@pytest.mark.parametrize("field", ["sor_before", "title_before"])
+def test_native_select_preserves_click_with_independent_semantics(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    native_select_events: list[dict],
+    field: str,
+) -> None:
+    monkeypatch.setattr("openadapt_flow.compiler.compile.ocr", lambda *a, **kw: [])
+    native_select_events[0][field] = [] if field == "sor_before" else "Earlier page"
+    recording = tmp_path / "recording"
+    (recording / "frames").mkdir(parents=True)
+    frame = blank()
+    draw_button(frame, 240, 180, 160, 48, "Animal")
+    for event in native_select_events:
+        for suffix in ("before", "after"):
+            write_frame(recording, event["i"], suffix, frame)
+    (recording / "meta.json").write_text(
+        json.dumps({"id": "independent-click", "viewport": list(VIEWPORT)})
+    )
+    (recording / "events.jsonl").write_text(
+        "\n".join(json.dumps(event) for event in native_select_events) + "\n"
+    )
+    workflow = compile_recording(
+        recording, tmp_path / "bundle", name="independent-click"
+    )
+    assert [step.action for step in workflow.steps] == [
+        ActionKind.CLICK,
+        ActionKind.TYPE,
+        ActionKind.KEY,
+    ]
+    assert all(step.native_selection is None for step in workflow.steps)
+
+
+@pytest.mark.parametrize(
+    "mutation,text",
+    [
+        ("unchanged", "Dog"),
+        ("unmatched", "zzz"),
+        ("ambiguous_prefix", "d"),
+        ("missing_before", "Dog"),
+        ("unknown_before", "Dog"),
+    ],
+)
+def test_native_select_compile_requires_changed_choice_and_typed_match(
+    tmp_path: Path, native_select_events: list[dict], mutation: str, text: str
+) -> None:
+    from openadapt_flow.compiler.compile import _native_selection_contract
+    from openadapt_flow.ir import Anchor, Step, StructuralLocator
+
+    click_event, typed_event, key_event = native_select_events
+    raw = key_event["native_selection"]
+    if mutation == "unchanged":
+        raw.update(value_before="dog", label_before="Dog")
+    elif mutation == "ambiguous_prefix":
+        raw["options"].append(
+            {"value": "dogwood", "label": "Dogwood", "disabled": False}
+        )
+    elif mutation == "missing_before":
+        raw.pop("value_before")
+    elif mutation == "unknown_before":
+        raw["value_before"] = "not-in-the-census"
+    typed_event["text"] = raw["source_type_text"] = text
+    click = Step(
+        id="step_000",
+        intent="focus animal",
+        action=ActionKind.CLICK,
+        anchor=Anchor(
+            template="animal.png",
+            region=(200, 180, 160, 48),
+            click_point=(300, 200),
+            structural=StructuralLocator.model_validate(click_event["structural"]),
+        ),
+    )
+    typed = Step(
+        id="step_001", intent="literal choice", action=ActionKind.TYPE, text=text
+    )
+    committed = Step(id="step_002", intent="commit", action=ActionKind.KEY, key="Enter")
+    assert (
+        _native_selection_contract(click, typed, committed, *native_select_events)
+        is None
+    )
+    recording = tmp_path / "unproved-recording"
+    recording.mkdir()
+    (recording / "meta.json").write_text(
+        json.dumps({"id": "unproved-native", "viewport": list(VIEWPORT), "params": {}})
+    )
+    (recording / "events.jsonl").write_text(
+        "\n".join(json.dumps(event) for event in native_select_events) + "\n"
+    )
+    bundle = tmp_path / "bundle"
+    with pytest.raises(ValueError, match="lacks demonstrated choice evidence"):
+        compile_recording(recording, bundle, name="unproved-native-choice")
+    assert not (bundle / "workflow.json").exists()
+
+
+@pytest.mark.parametrize(
+    "text,disabled,expected",
+    [
+        ("Dog", False, True),
+        ("d", False, False),
+        ("d", True, True),
+        ("dOg", False, True),
+        ("code-17", False, False),
+    ],
+)
+def test_native_choice_corroboration_uses_observed_enabled_labels(
+    native_select_events: list[dict], text: str, disabled: bool, expected: bool
+) -> None:
+    from openadapt_flow.ir import NativeSelectContract
+    from openadapt_flow.native_selection_capture import demonstrated_native_choice
+
+    raw = native_select_events[2]["native_selection"]
+    raw["options"][1]["value"] = raw["value"] = "code-17"
+    raw["options"].append(
+        {"value": "dogwood", "label": "Dogwood", "disabled": disabled}
+    )
+    contract = NativeSelectContract(
+        value=raw["value"], label=raw["label"], options=raw["options"]
+    )
+    assert (
+        demonstrated_native_choice(
+            contract, value_before="cat", label_before="Cat", typed_text=text
+        )
+        is expected
+    )

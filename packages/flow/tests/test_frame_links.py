@@ -47,7 +47,8 @@ def _notes_change(spec: FrameSpec, author: str) -> str:
 def test_an_audit_entry_names_a_row_through_its_record_key() -> None:
     spec = FrameSpec(identity_field="id", attribution=ATTRIBUTION)
     # Another user's edit to patient 1's note: concurrent, not collateral.
-    assert _notes_change(spec, "clinic2") == "held"
+    # Excused, so nothing refutes; without frame.database it never holds (#1505).
+    assert _notes_change(spec, "clinic2") == "not_checked"
     # The bot's own: collateral.
     assert _notes_change(spec, "bot") == "refuted"
 
@@ -118,7 +119,8 @@ def test_a_table_can_name_its_record_through_another_field() -> None:
             audit_after=[{"id": 1, "user": "clinic2", "patient_id": "1"}],
         ).status
 
-    assert status(FrameSpec(identity_field="id", attribution=keyed)) == "held"
+    # Excused; without frame.database the frame never holds (#1505).
+    assert status(FrameSpec(identity_field="id", attribution=keyed)) == "not_checked"
     assert status(FrameSpec(identity_field="id", attribution=ATTRIBUTION)) == "refuted"
 
 

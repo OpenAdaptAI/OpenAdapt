@@ -715,3 +715,120 @@ def test_module_entrypoint_missing_environment_exits_without_network() -> None:
         "missing GitHub event path, token, event name, run id/attempt, or SHA"
         in result.stderr
     )
+
+
+@pytest.mark.parametrize("role", ["author", "reviewer", "coordinator"])
+@pytest.mark.parametrize(
+    "malformation",
+    [
+        "duplicate-current-head",
+        "current-and-other-head",
+        "two-heads-one-header",
+        "noncanonical-head-spacing",
+        "indented-head",
+        "uppercase-head",
+        "missing-vendor",
+        "duplicate-vendor",
+        "invalid-vendor",
+    ],
+)
+@pytest.mark.parametrize("event_name", ["issue_comment", "pull_request_target"])
+def test_malformed_current_declaration_cannot_restore_older_approval(
+    role: str, malformation: str, event_name: str
+) -> None:
+    comments = _comments()
+    coordinator = (
+        f"From: Coordinator\nReviewed-Head: {HEAD}\n"
+        "Coordinator-Approval: APPROVE"
+    )
+    comments.append(_comment(coordinator, "coordinator-login", 4))
+    slot = {"author": 0, "reviewer": 1, "coordinator": 3}[role]
+    malformed = comments[slot]["body"]
+    if role == "reviewer":
+        malformed = malformed.replace("review: APPROVE", "review: BLOCK")
+    head_line = f"Reviewed-Head: {HEAD}"
+    if malformation == "duplicate-current-head":
+        malformed = malformed.replace(head_line, head_line + "\n" + head_line)
+    elif malformation == "current-and-other-head":
+        malformed = malformed.replace(
+            head_line, head_line + f"\nReviewed-Head: {PARENT}"
+        )
+    elif malformation == "two-heads-one-header":
+        malformed = malformed.replace(head_line, head_line + " " + PARENT)
+    elif malformation == "noncanonical-head-spacing":
+        malformed = malformed.replace(head_line, f"Reviewed-Head : {HEAD}")
+    elif malformation == "indented-head":
+        malformed = malformed.replace(head_line, " " + head_line)
+    elif malformation == "uppercase-head":
+        malformed = malformed.replace(head_line, f"Reviewed-Head: {HEAD.upper()}")
+    elif malformation == "missing-vendor":
+        malformed = "\n".join(
+            line for line in malformed.splitlines() if not line.startswith("From:")
+        )
+    elif malformation == "duplicate-vendor":
+        malformed += "\nFrom: Other"
+    else:
+        assert malformation == "invalid-vendor"
+        malformed = malformed.replace("From: ", "From: invalid/vendor ")
+    comments.append(_comment(malformed, comments[slot]["user"]["login"], 5))
+    files = [{"filename": ".github/agent-safety-manifest.json"}]
+    assert any(
+        "invalid " in error for error in _evaluate(comments=comments, files=files)
+    )
+
+    class MalformedApi(FakeApi):
+        def pages(self, path: str) -> list[dict[str, Any]]:
+            if path == "/issues/42/comments":
+                return comments
+            if path == "/pulls/42/files":
+                return files
+            return super().pages(path)
+
+    api = MalformedApi()
+    event = (
+        {"issue": {"number": 42, "pull_request": {}}}
+        if event_name == "issue_comment"
+        else {"pull_request": {"number": 42, "head": {"sha": HEAD}}}
+    )
+    conclusion, errors = run(event, BASE, api, event_name=event_name)
+    assert conclusion == "failure"
+    assert any("invalid " in error for error in errors)
+    assert api.check_run is not None
+    assert api.check_run["head_sha"] == HEAD
+    assert api.check_run["conclusion"] == "failure"
+
+
+@pytest.mark.parametrize("role", ["author", "reviewer", "coordinator"])
+@pytest.mark.parametrize("fence", ["```", "~~~~"])
+def test_fenced_format_examples_cannot_supply_current_declarations(
+    role: str, fence: str
+) -> None:
+    comments = _comments()
+    comments.append(
+        _comment(
+            f"From: Coordinator\nReviewed-Head: {HEAD}\nCoordinator-Approval: APPROVE",
+            "coordinator-login",
+            4,
+        )
+    )
+    slot = {"author": 0, "reviewer": 1, "coordinator": 3}[role]
+    declaration = comments[slot]["body"]
+    comments[slot]["body"] = (
+        f"Format example, not a declaration.\n{fence}text\n{declaration}\n{fence}\n"
+    )
+    assert _evaluate(
+        comments=comments, files=[{"filename": ".github/agent-safety-manifest.json"}]
+    )
+
+
+@pytest.mark.parametrize("fence", ["```", "~~~~"])
+def test_fenced_examples_do_not_change_valid_declaration_roles(fence: str) -> None:
+    comments = _comments()
+    example = (
+        f"\n{fence}text\nFrom: Other\nReviewed-Head: {HEAD}\n"
+        "Coordinator-Approval: APPROVE\n"
+        f"## Independent adversarial review: BLOCK\n{fence}\n"
+    )
+    for comment in comments[:2]:
+        comment["body"] += example
+    assert _evaluate(comments=comments) == []

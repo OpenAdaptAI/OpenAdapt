@@ -68,6 +68,7 @@ from openadapt_flow.qualify.environment import (
 )
 from openadapt_flow.qualify.faults import WebFaultDriver
 from openadapt_flow.qualify.keys import LocalTestKey, new_local_test_key
+from openadapt_flow.subroutines import SubroutineLibrary, uses_subroutines
 from openadapt_flow.verification import VerificationTier
 
 #: (case id, expected outcome, oracle kind), in run order.
@@ -112,7 +113,10 @@ def _sha256(path: Path) -> str:
 
 def write_json(path: Path, value: Any) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, indent=2, sort_keys=True, default=str) + "\n")
+    path.write_text(
+        json.dumps(value, indent=2, sort_keys=True, default=str) + "\n",
+        encoding="utf-8",
+    )
     return path
 
 
@@ -222,6 +226,13 @@ def record_effects(config: VerifyConfig) -> list[Any]:
                 timeout_s=record.timeout_s,
             )
         )
+    if record.surface:
+        from openadapt_flow.runtime.effects.surfaces import surface_probe
+
+        effects = [
+            e.model_copy(update={"probe": surface_probe(record.surface, e.probe or "")})
+            for e in effects
+        ]
     return effects
 
 
@@ -300,7 +311,7 @@ def resolve_inputs(
         path = config.resolve_path(inputs.file or "")
         if not path.is_file():
             raise QualifyConfigError(f"inputs.file not found: {path}")
-        loaded = json.loads(path.read_text())
+        loaded = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(loaded, dict):
             raise QualifyConfigError(f"inputs.file must hold a JSON object: {path}")
         params.update({k: str(v) for k, v in loaded.items()})
@@ -813,7 +824,12 @@ def _run(
 
             kwargs["checkpoint_key"] = crypto.resolve_key(None)
         if hooks.replayer_kwargs is not None:
-            kwargs.update(hooks.replayer_kwargs(ctx))
+            extra = dict(hooks.replayer_kwargs(ctx))
+            if "duplicate_record_source" in extra:
+                # The duplicate check is resolved from the run's own verifier
+                # on every path; a hook can't qualify under another one.
+                raise ValueError("replayer_kwargs may not set duplicate_record_source")
+            kwargs.update(extra)
         # The signed lookup settings win over any hook, so a hook can't turn
         # structure back on during a pass that must not use it.
         kwargs.update(lookup or {})
@@ -869,11 +885,33 @@ def _judge_trial(
 
 
 def _evidence_ref(root: Path, path: Path, kind: Any) -> Any:
+    from openadapt_flow.evidence_files import is_publication_input_path_excluded
     from openadapt_flow.qualification import EvidenceRef
 
+    if is_publication_input_path_excluded(path.relative_to(root)):
+        raise QualifyError(
+            "Local key material or unclassified containers cannot be qualification evidence"
+        )
     return EvidenceRef(
         kind=kind, sha256=_sha256(path), relative_path=path.relative_to(root).as_posix()
     )
+
+
+def _run_evidence_refs(root: Path, run_dir: Path) -> list[Any]:
+    from openadapt_flow import sealed_set
+    from openadapt_flow.evidence_files import is_publication_input_path_excluded
+
+    run_files = (
+        sealed_set.list_files(run_dir)
+        if sealed_set.is_sealed_path(run_dir)
+        else [path for path in run_dir.rglob("*") if path.is_file()]
+    )
+    return [
+        _evidence_ref(root, path, "other")
+        for path in sorted(run_files)
+        if path.name != "report.json"
+        and not is_publication_input_path_excluded(path.relative_to(root))
+    ]
 
 
 def case_result(
@@ -905,20 +943,10 @@ def case_result(
     if project is None:
         raise QualifyError("the workflow's qualification project disappeared")
     run_dir = trial_dir / "run"
-    from openadapt_flow import sealed_set
 
     # A sealed bundle's run directory is a sealed set: its files are bound by
     # their logical names and plaintext digests, as the run report names them.
-    run_files = (
-        sealed_set.list_files(run_dir)
-        if sealed_set.is_sealed_path(run_dir)
-        else [path for path in run_dir.rglob("*") if path.is_file()]
-    )
-    run_artifacts = [
-        _evidence_ref(root, path, "other")
-        for path in sorted(run_files)
-        if path.name != "report.json"
-    ]
+    run_artifacts = _run_evidence_refs(root, run_dir)
     faults = (
         [
             _evidence_ref(root, trial_dir / "fault-receipt.json", "fault_receipt"),
@@ -1039,6 +1067,7 @@ def _pixels_only_pass(
     run_id_prefix: Optional[str],
     lookup: Mapping[str, Any],
     log: Callable[[str], None],
+    subroutine_library: Optional[SubroutineLibrary] = None,
 ) -> PixelsOnlyPass:
     """Run every selected case again with structure lookups disabled.
 
@@ -1082,7 +1111,10 @@ def _pixels_only_pass(
                 _c: Any = ctx,
             ) -> Any:
                 gate = evaluate_run_gate(
-                    workflow, qualification_evidence_only=True, **gate_kwargs
+                    workflow,
+                    qualification_evidence_only=True,
+                    subroutine_library=subroutine_library,
+                    **gate_kwargs,
                 )
                 if not gate.passed:
                     raise QualifyError(gate.render())
@@ -1248,6 +1280,8 @@ def qualify(
     in_place: bool = False,
     write_campaign_files: bool = True,
     log: Callable[[str], None] = print,
+    subroutine_library: Optional[SubroutineLibrary] = None,
+    persist_subroutine_registration: Optional[Callable[[], None]] = None,
 ) -> QualifyResult:
     """Run the campaign; certify under ``certify`` (a policy name) if given.
 
@@ -1260,6 +1294,13 @@ def qualify(
     ``evidence_root`` (default ``out``) is the root case evidence is relative
     to. ``write_campaign_files=False`` leaves out the campaign summary,
     timing, notes and ``QUALIFICATION.md`` (for packs that list every file).
+    ``subroutine_library`` is the library every case run re-admits embedded
+    subroutines against (the run gate) and certification admits them against
+    (and registers this workflow with); a bundle that embeds one is refused
+    before any run without it.
+    ``persist_subroutine_registration`` writes that library; it runs right
+    after certification, before the certified bundle is saved, and when it
+    raises the certification is withdrawn and the bundle saved uncertified.
     """
 
     from openadapt_flow.policy import load_policy
@@ -1267,6 +1308,7 @@ def qualify(
         QualificationCaseKind,
         certify_project,
         evaluate_qualification,
+        persist_registration_before_certificate,
         record_case_results,
         save_qualified_workflow,
     )
@@ -1310,6 +1352,13 @@ def qualify(
     )
 
     workflow = Workflow.load(bundle_src)
+    if subroutine_library is None and uses_subroutines(workflow):
+        # Every case run re-admits the embedded subroutines against the
+        # library (the run gate), and certification registers them in it.
+        raise QualifyConfigError(
+            "the bundle embeds subroutines; qualifying it needs "
+            "--subroutine-library to admit them"
+        )
     save, notes = apply_verify_config(workflow, config)
     params = resolve_inputs(workflow, config, campaign_id=campaign_id)
     problems = check_ready(workflow, config, save, params)
@@ -1457,7 +1506,10 @@ def qualify(
                 _c: Any = ctx,
             ) -> Any:
                 gate = evaluate_run_gate(
-                    workflow, qualification_evidence_only=True, **gate_kwargs
+                    workflow,
+                    qualification_evidence_only=True,
+                    subroutine_library=subroutine_library,
+                    **gate_kwargs,
                 )
                 if not gate.passed:
                     raise QualifyError(gate.render())
@@ -1604,6 +1656,7 @@ def qualify(
             campaign_id=campaign_id,
             run_id_prefix=run_id_prefix,
             lookup=lookup_kwargs,
+            subroutine_library=subroutine_library,
             log=log,
         )
     else:
@@ -1651,7 +1704,15 @@ def qualify(
     )
     if certify is not None:
         qreport = certify_project(
-            workflow, policy=load_policy(certify), evidence_root=root
+            workflow,
+            policy=load_policy(certify),
+            evidence_root=root,
+            subroutine_library=subroutine_library,
+        )
+        # The registration is durable before any certified save below
+        # (business rules, the admission envelope, the final bundle).
+        persist_registration_before_certificate(
+            workflow, bundle_dir, persist_subroutine_registration
         )
     else:
         qreport = evaluate_qualification(workflow, evidence_root=root)
@@ -1677,6 +1738,7 @@ def qualify(
             case_entries=case_entries,
             write_campaign_files=write_campaign_files,
             log=log,
+            subroutine_library=subroutine_library,
             fail_result=lambda: build_result(
                 report=qreport,
                 verify_sha256=verify_sha,
@@ -1695,7 +1757,9 @@ def qualify(
     )
     result_path = write_json(out / "qualification" / "result.json", qresult)
     if write_campaign_files:
-        (out / "qualification" / "verdict.txt").write_text(qreport.render() + "\n")
+        (out / "qualification" / "verdict.txt").write_text(
+            qreport.render() + "\n", encoding="utf-8"
+        )
     log(qreport.render())
     log(
         f"qualification-result/v1 {result_sha256(qresult)[:16]}: passed="
@@ -1799,6 +1863,7 @@ def qualify(
             policy=certify or config.campaign.policy,
             run_id=f"{campaign_id}-certified-run",
             lookup=lookup_kwargs,
+            subroutine_library=subroutine_library,
         )
         timing["certified_run"] = result.certified_run["timing"]
     if write_campaign_files:
@@ -1960,6 +2025,7 @@ def business_rule_trial(
     lookup: Optional[Mapping[str, Any]] = None,
     verifier_tier: Optional[VerificationTier] = None,
     verifier_substrate: Optional[str] = None,
+    subroutine_library: Optional[SubroutineLibrary] = None,
 ) -> tuple[dict[str, Any], dict[str, Any], Optional[str]]:
     """One trial of a business-rule case on the certified bundle.
 
@@ -2016,7 +2082,9 @@ def business_rule_trial(
         hooks.before_trial(ctx)
 
     def authorize(_verifier: Any, gate_kwargs: dict[str, Any]) -> Any:
-        gate = evaluate_run_gate(workflow, **gate_kwargs)
+        gate = evaluate_run_gate(
+            workflow, subroutine_library=subroutine_library, **gate_kwargs
+        )
         write_json(trial_dir / "run-gate.json", gate.model_dump(mode="json"))
         if not gate.passed:
             raise QualifyError(gate.render())
@@ -2125,6 +2193,7 @@ def _run_business_rules(
     write_campaign_files: bool,
     log: Callable[[str], None],
     fail_result: Callable[[], dict[str, Any]],
+    subroutine_library: Optional[SubroutineLibrary] = None,
 ) -> None:
     """Run every business-rule case ``n_trials`` times on the certified bundle.
 
@@ -2165,6 +2234,7 @@ def _run_business_rules(
                     lookup=lookup,
                     verifier_tier=verifier_tier,
                     verifier_substrate=verifier_substrate,
+                    subroutine_library=subroutine_library,
                 )
                 rows.append(row)
                 case_entries.append(entry)
@@ -2199,6 +2269,7 @@ def certified_run(
     policy: str,
     run_id: str,
     lookup: Optional[Mapping[str, Any]] = None,
+    subroutine_library: Optional[SubroutineLibrary] = None,
 ) -> dict[str, Any]:
     """One ordinary Standard-profile run of the certified bundle."""
 
@@ -2228,7 +2299,9 @@ def certified_run(
         hooks.before_trial(ctx)
 
     def authorize(_verifier: Any, gate_kwargs: dict[str, Any]) -> Any:
-        gate = evaluate_run_gate(workflow, **gate_kwargs)
+        gate = evaluate_run_gate(
+            workflow, subroutine_library=subroutine_library, **gate_kwargs
+        )
         write_json(out / "run-gate.json", gate.model_dump(mode="json"))
         if not gate.passed:
             raise QualifyError(gate.render())
@@ -2325,7 +2398,7 @@ def write_summary_markdown(result: QualifyResult) -> Path:
         "",
     ]
     path = result.out / "QUALIFICATION.md"
-    path.write_text("\n".join(lines))
+    path.write_text("\n".join(lines), encoding="utf-8")
     return path
 
 

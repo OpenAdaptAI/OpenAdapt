@@ -92,7 +92,9 @@ def _cmd_status(args: argparse.Namespace) -> int:
         }
     trust_path = root / TRUST_FILE
     report["trusted_roots"] = (
-        sorted(FleetTrust.model_validate_json(trust_path.read_text()).roots)
+        sorted(
+            FleetTrust.model_validate_json(trust_path.read_text(encoding="utf-8")).roots
+        )
         if trust_path.is_file()
         else "none: every patch is refused"
     )
@@ -222,7 +224,7 @@ def _cmd_policy_sign(args: argparse.Namespace) -> int:
         )
     root = _dir(args)
     roles = RoleRegistry.load(root / ROLES_FILE)
-    draft = json.loads(Path(args.draft).read_text())
+    draft = json.loads(Path(args.draft).read_text(encoding="utf-8"))
     now = datetime.now(timezone.utc).isoformat()
     draft["approver"] = {
         "person_id": args.approver_id,
@@ -299,6 +301,7 @@ def register_fleet_parser(sub: argparse._SubParsersAction) -> None:
             "Fleet drift patch settings: opt-in per app family, roles, and the "
             "signed promotion policy. Off for every app by default."
         ),
+        allow_abbrev=False,
     )
     parser.add_argument(
         "--fleet-dir",
@@ -307,14 +310,16 @@ def register_fleet_parser(sub: argparse._SubParsersAction) -> None:
     )
     verbs = parser.add_subparsers(dest="fleet_cmd", required=True)
 
-    status = verbs.add_parser("status", help="Show opt-in, roles, policy and trust")
+    status = verbs.add_parser(
+        "status", help="Show opt-in, roles, policy and trust", allow_abbrev=False
+    )
     status.add_argument("--json", action="store_true", dest="as_json")
 
     for name, text in (
         ("allow", "Allow patch export and/or import for an app family or domain"),
         ("disallow", "Remove an app family or domain from the allowlist"),
     ):
-        p = verbs.add_parser(name, help=text)
+        p = verbs.add_parser(name, help=text, allow_abbrev=False)
         p.add_argument("--export", action="store_true", help="Patch export")
         p.add_argument(
             "--import", action="store_true", dest="import", help="Patch import"
@@ -327,15 +332,21 @@ def register_fleet_parser(sub: argparse._SubParsersAction) -> None:
             p.add_argument("--admin", help="Name of the admin making this change")
 
     roles = verbs.add_parser(
-        "roles", help="Add a workflow author or a policy approver (never both)"
+        "roles",
+        help="Add a workflow author or a policy approver (never both)",
+        allow_abbrev=False,
     )
     roles.add_argument("--author", help="Person id of a workflow author")
     roles.add_argument("--approver", help="Person id of a policy approver")
     roles.add_argument("--public-key", help="Approver's base64 Ed25519 public key")
 
-    policy = verbs.add_parser("policy", help="Sign or verify the promotion policy")
+    policy = verbs.add_parser(
+        "policy", help="Sign or verify the promotion policy", allow_abbrev=False
+    )
     psub = policy.add_subparsers(dest="policy_cmd", required=True)
-    keygen = psub.add_parser("keygen", help="Create a policy approver key (PEM, 0600)")
+    keygen = psub.add_parser(
+        "keygen", help="Create a policy approver key (PEM, 0600)", allow_abbrev=False
+    )
     keygen.add_argument("--out", required=True)
     keygen.add_argument(
         "--unencrypted",
@@ -345,7 +356,9 @@ def register_fleet_parser(sub: argparse._SubParsersAction) -> None:
             "OPENADAPT_FLEET_KEY_PASSPHRASE"
         ),
     )
-    sign = psub.add_parser("sign", help="Sign a policy draft as a policy approver")
+    sign = psub.add_parser(
+        "sign", help="Sign a policy draft as a policy approver", allow_abbrev=False
+    )
     sign.add_argument(
         "--draft", required=True, help="JSON with auto_promote, app_families, ..."
     )
@@ -367,11 +380,15 @@ def register_fleet_parser(sub: argparse._SubParsersAction) -> None:
     )
     sign.add_argument("--out", help=f"Output path (default: <fleet dir>/{POLICY_FILE})")
     verify = psub.add_parser(
-        "verify", help="Verify the signed policy against roles.json"
+        "verify",
+        help="Verify the signed policy against roles.json",
+        allow_abbrev=False,
     )
     verify.add_argument("--policy", help=f"Default: <fleet dir>/{POLICY_FILE}")
 
-    simulate = verbs.add_parser("simulate", help="Run the three-tenant local simulator")
+    simulate = verbs.add_parser(
+        "simulate", help="Run the three-tenant local simulator", allow_abbrev=False
+    )
     simulate.add_argument("--out", required=True)
 
     parser.set_defaults(func=cmd_fleet)

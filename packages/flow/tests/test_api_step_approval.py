@@ -36,6 +36,7 @@ from openadapt_flow.runtime.actuators.web_form import WebFormActuator
 from openadapt_flow.runtime.effects import RestRecordVerifier
 from openadapt_flow.runtime.replayer import Replayer
 from tests._approver_keys import answer_as_person
+from tests._rest_read_contract_fixtures import mockmed_rest_read_kwargs
 from tests.test_api_tier_web_form import TARGET, EnterWritesBackend, _span_workflow
 from tests.test_replayer import FakeVision
 
@@ -163,9 +164,7 @@ def _run(tmp_path, person: Person, *, transport_setup=None):
         report = Replayer(
             backend,
             vision=FakeVision(),
-            effect_verifier=RestRecordVerifier(
-                url, records_path="/api/db", records_key="records"
-            ),
+            effect_verifier=RestRecordVerifier(url, **mockmed_rest_read_kwargs()),
             web_form_actuator=WebFormActuator(transport),
             approval_gate=gate,
             poll_interval_s=0.01,
