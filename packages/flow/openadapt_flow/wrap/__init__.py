@@ -89,13 +89,72 @@ class WrappedTask:
             raise TaskArgumentsError("task parameter values must be strings")
         return values
 
+    def _workflow(self, values: Mapping[str, str]) -> str:
+        identity = self.cache.key(self.instruction, values)
+        return (
+            "wrap:"
+            + hashlib.sha256(
+                json.dumps(identity, sort_keys=True).encode("utf-8")
+            ).hexdigest()
+        )
+
+    def verify_reply(
+        self, request_id: str, arguments: Mapping[str, Any], reply: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Strict local request/receipt readback against the normal RunStore.
+
+        The caller supplies its actual expected request and arguments, not an
+        arbitrary purported run record. UNBOUND and REFUSED never pass. This
+        checks local association, not a signing issuer or store completeness.
+        """
+        from openadapt_flow.agent.runs import RunStore
+        from openadapt_flow.request_binding import BindingError, verify_receipt_binding
+
+        if (
+            type(request_id) is not str
+            or not request_id.strip()
+            or len(request_id) > 128
+        ):
+            raise BindingError("request_reference")
+        values = self._values(arguments)
+        if type(reply) is not dict or reply.get("request_id") != request_id:
+            raise BindingError("terminal_request")
+        store = RunStore(self.runs_dir)
+        record = store.read(reply.get("run_id", ""))
+        if record is None or record.get("request_id") != request_id:
+            raise BindingError("terminal_request")
+        workflow = self._workflow(values)
+        if record.get("workflow") != workflow or record.get(
+            "fingerprint"
+        ) != store.fingerprint(workflow, values):
+            raise BindingError("terminal_workflow")
+        root_reader = getattr(self.cache, "receipt_root", None)
+        root = root_reader(self.instruction, values) if callable(root_reader) else None
+        if not isinstance(root, Path):
+            raise BindingError("receipt_unbound")
+        return verify_receipt_binding(record, reply, root)
+
     def call(self, request_id: str, arguments: Mapping[str, Any]) -> dict[str, Any]:
         """Reserve a transport request through the existing durable RunStore.
 
         Retrying the same request reads its original outcome. An interrupted
         owner leaves a reservation for reconciliation, never another write.
+
+        ``verified`` remains the cache's effect result. ``receipt_binding``
+        separately states whether its receipt is associated with this actual
+        request and durable byte digest. First-run, direct and legacy results
+        may be UNBOUND; that is never a successful request-binding check. Use
+        :meth:`verify_reply` with the actual request and arguments for a
+        strict local readback. These bindings do not verify a signing issuer.
         """
         from openadapt_flow.agent.runs import RunStore
+        from openadapt_flow.request_binding import (
+            BINDING_SCHEMA,
+            RequestContext,
+            capture_receipt_binding,
+            request_scope,
+            unbound,
+        )
 
         if (
             not isinstance(request_id, str)
@@ -104,13 +163,7 @@ class WrappedTask:
         ):
             raise TaskArgumentsError("request_id must contain 1 to 128 characters")
         values = self._values(arguments)
-        identity = self.cache.key(self.instruction, values)
-        workflow = (
-            "wrap:"
-            + hashlib.sha256(
-                json.dumps(identity, sort_keys=True).encode("utf-8")
-            ).hexdigest()
-        )
+        workflow = self._workflow(values)
         store = RunStore(self.runs_dir)
         begin = store.begin(
             request_id=request_id, workflow=workflow, inputs=values, mode="skill-cache"
@@ -126,15 +179,42 @@ class WrappedTask:
             record = begin.record or {}
             result = record.get("result")
             if record.get("state") == "finished" and isinstance(result, dict):
-                return dict(result, replayed=True)
+                replay = dict(result, replayed=True)
+                if "receipt_binding" not in replay:
+                    replay["receipt_binding"] = unbound("LEGACY_TERMINAL")
+                return replay
             return dict(envelope, status="RECONCILIATION_REQUIRED", verified=False)
         assert begin.record is not None
         try:
-            result = dict(envelope, **_result(self.run(values), self.agent))
+            context = RequestContext.from_record(begin.record)
+            with request_scope(context):
+                result = dict(envelope, **_result(self.run(values), self.agent))
+                try:
+                    root_reader = getattr(self.cache, "receipt_root", None)
+                    root = (
+                        root_reader(self.instruction, values)
+                        if callable(root_reader)
+                        else None
+                    )
+                    if root is not None and not isinstance(root, Path):
+                        raise TypeError("receipt root must be a Path")
+                    result["receipt_binding"] = capture_receipt_binding(
+                        result, context, root
+                    )
+                except Exception:
+                    # Binding diagnostics never replace the actual effect result.
+                    # A strict binding consumer refuses this fixed state.
+                    result["receipt_binding"] = {
+                        "schema": BINDING_SCHEMA,
+                        "status": "REFUSED",
+                        "reason": "RECEIPT_BINDING_UNAVAILABLE",
+                    }
         except Exception:  # noqa: BLE001 - preserve uncertain writes without reflecting values
             # The call may have written before failing. A terminal, nonretryable
             # result keeps this request from being sent again.
             result = dict(envelope, status="RECONCILIATION_REQUIRED", verified=False)
+        if "receipt_binding" not in result:
+            result["receipt_binding"] = unbound("NO_RECEIPT")
         result["reason"] = "cached_tool_result"
         store.finish(begin.record, result)
         return result
@@ -160,4 +240,11 @@ def _result(run: SkillRun, agent: Any) -> dict[str, Any]:
         "receipt": run.replay.get("receipt"),
         "receipt_outcome": run.replay.get("receipt_outcome"),
     }
+    if run.status == "CACHE_HALTED":
+        # The engine's own halt reason (a step and a check), scrubbed under
+        # the local posture like any logged text.
+        from openadapt_flow.privacy import scrub_text
+
+        reason = run.replay.get("halt_reason")
+        result["halt_reason"] = scrub_text(str(reason)) if reason else None
     return result

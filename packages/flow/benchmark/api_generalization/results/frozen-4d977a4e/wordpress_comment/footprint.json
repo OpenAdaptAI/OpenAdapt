@@ -1,0 +1,22 @@
+{
+ "schema": "openadapt.api-footprint/v1",
+ "equivalent": true,
+ "differences": [],
+ "server_owned": [
+  "wp_comments.comment_ID",
+  "wp_comments.comment_date",
+  "wp_comments.comment_date_gmt"
+ ],
+ "tables": {
+  "wp_comments": {
+   "gui_added": 3,
+   "api_added": 3
+  }
+ },
+ "pairs": 3,
+ "gate": "admitted",
+ "verdict_sha256": "sha256:c3ac01f818d21a80277159af35ba18a251b8ed2fd0807672de408de995ed3310",
+ "frozen": "4d977a4e87a42973d4e72339f16d7eb2817a096b",
+ "head": "4d977a4e87a42973d4e72339f16d7eb2817a096b",
+ "engine_diff_vs_frozen": ""
+}

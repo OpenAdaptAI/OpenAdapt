@@ -1,0 +1,61 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I couldn't book the appointment because Medplum is showing its sign-in page, not a signed-in session. I reloaded the page and got the same result. I wasn't given a login, and registering a new account isn't something I should do. I haven't searched for Tomasz Wren or created or changed any records.\n\nIf you sign in, or give me credentials to use, I can check whether the appointment is already booked and book it only if it isn't.\n\nRESULT: NOT DONE Medplum is at the sign-in page, not signed in, and no credentials were provided.",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6283,
+   "out": 109,
+   "usd": 0.002354,
+   "cached": 6279
+  },
+  {
+   "in": 7765,
+   "out": 161,
+   "usd": 0.00658,
+   "cached": 6279
+  },
+  {
+   "in": 9322,
+   "out": 172,
+   "usd": 0.007169,
+   "cached": 7763
+  }
+ ]
+}

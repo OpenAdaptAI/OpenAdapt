@@ -1,0 +1,1082 @@
+{
+ "app_state": {
+  "banner": null,
+  "enc_item": null,
+  "hash": "#patient/p1"
+ },
+ "artifacts": {
+  "heals/step_000/heal.json": "45b77855b26f2f148e5539a1b66a37e95f870e7230826aad6c77b93f747f463c",
+  "heals/step_000/patch.json": "71cd67799906bf7c592709ae3ae7647a5e27b296994947579d8b31ea910badd8",
+  "heals/step_000/screen.png": "9e43117c8f5dcc3ba3a5e6eb636f9e736b6c31feaee783d080458d35a162c5e4",
+  "heals/step_000/template.png": "59e7a505c0762bde07517ef08e419406cd83f7024620b863a3924bcad58f4bf4",
+  "heals/step_002/heal.json": "3320e80c4635b574e11204132d8b5dffaaf7582ae2b5d5965c7f435a1a1bd921",
+  "heals/step_002/patch.json": "e6809b37b0d857625c24b4bd7e13ec602d2caa85c75468de45763191b78e7725",
+  "heals/step_002/screen.png": "f3e6efed2eaf69d8e3f7ea4f3f03d6010b6520add327ca0d20cc8fe15b3304c0",
+  "heals/step_002/template.png": "59e7a505c0762bde07517ef08e419406cd83f7024620b863a3924bcad58f4bf4",
+  "heals/step_004/heal.json": "c6bc342a06b8347d98125f18162a4aa7f1f1622cd58e1053411c47b490cc5c10",
+  "heals/step_004/patch.json": "6fd04b3d1545c31ae069240fab0ad3b6d51d98f1785b2bb77b54a253df353ebd",
+  "heals/step_004/screen.png": "d4b2458d828ecadf3a558090f4d9079b8dffcda558e9a7a709d699802d950195",
+  "heals/step_004/template.png": "c6e8bd05f344066f595bf57ac4a1523be2b6153cf71d57b2ca27807ca872f0bb",
+  "heals/step_005/patch.json": "1b5aeb503877fa1d5bf7e94b5eedb2806213f6bd422fbce57a3b7fce2c24a359",
+  "steps/step_000_after.png": "3bc795168abc8711dbd98e9b00d2f281769a04f17f00fa26bb736e6b98c81f11",
+  "steps/step_000_before.png": "9e43117c8f5dcc3ba3a5e6eb636f9e736b6c31feaee783d080458d35a162c5e4",
+  "steps/step_001_after.png": "f3e6efed2eaf69d8e3f7ea4f3f03d6010b6520add327ca0d20cc8fe15b3304c0",
+  "steps/step_001_before.png": "3bc795168abc8711dbd98e9b00d2f281769a04f17f00fa26bb736e6b98c81f11",
+  "steps/step_002_after.png": "cce1a9982d9ab4aee39eb450454413232eec5c3231793376e55f1db972ff2665",
+  "steps/step_002_before.png": "f3e6efed2eaf69d8e3f7ea4f3f03d6010b6520add327ca0d20cc8fe15b3304c0",
+  "steps/step_003_after.png": "d4b2458d828ecadf3a558090f4d9079b8dffcda558e9a7a709d699802d950195",
+  "steps/step_003_before.png": "cce1a9982d9ab4aee39eb450454413232eec5c3231793376e55f1db972ff2665",
+  "steps/step_004_after.png": "0cf5a5011ed7f8fa456398dc5e2a9ae679813decd68ce9e78ff7dd4f79006269",
+  "steps/step_004_before.png": "d4b2458d828ecadf3a558090f4d9079b8dffcda558e9a7a709d699802d950195",
+  "steps/step_005_after.png": "1b9ebdb9d885ba46909fc8fb32fccb362380b5b576e49e1e91bb1224c36a0d01",
+  "steps/step_005_before.png": "0cf5a5011ed7f8fa456398dc5e2a9ae679813decd68ce9e78ff7dd4f79006269"
+ },
+ "environment": {
+  "platform": "linux",
+  "playwright": "1.61.0"
+ },
+ "report": {
+  "approved_unverified_effect_step_ids": [],
+  "attended_program_transition_evidence": [],
+  "bundle_content_digest": "f84b6fcbbae3daf1bd845728988bb3324d89c13307f7c493a151670bce3cfefc",
+  "business_decision_evidence": [],
+  "canceled": false,
+  "change_ledger": [],
+  "effect_journal": [],
+  "est_model_cost_usd": 0.0,
+  "execution_completed": false,
+  "execution_entry_url": null,
+  "execution_origin": null,
+  "execution_outcome": "HALTED",
+  "execution_profile": "demo",
+  "execution_target_kind": null,
+  "external_network_calls": "unknown",
+  "governed_approval_source": null,
+  "governed_authorization_created_at": null,
+  "governed_authorization_id": null,
+  "governed_authorized_effect_contracts": {},
+  "governed_minimum_effect_tier": null,
+  "governed_policy_contract_sha256": null,
+  "governed_policy_name": null,
+  "governed_qualification_campaign_id_sha256": null,
+  "governed_qualification_case_action_paths": {},
+  "governed_qualification_case_id_sha256": null,
+  "governed_qualification_case_input_sha256": null,
+  "governed_qualification_case_kind": null,
+  "governed_qualification_fault_driver_contract_sha256": null,
+  "governed_qualification_fault_driver_id": null,
+  "governed_qualification_fault_driver_key_id": null,
+  "governed_qualification_fault_step_id_sha256": null,
+  "governed_qualification_project_contract_sha256": null,
+  "governed_qualification_project_id": null,
+  "governed_qualification_project_revision": null,
+  "governed_qualification_run_id_sha256": null,
+  "governed_qualified_effect_requirements": [],
+  "governed_runtime_inputs_digest": null,
+  "halt": {
+   "completed_intents": [
+    "click recorded visual target",
+    "type 'nurse.demo'",
+    "click recorded visual target",
+    "type 'mockmed-demo-pass'",
+    "click 'Sign In'"
+   ],
+   "intent": "click 'Open'",
+   "observed_texts": [
+    "MockMed",
+    "Clinical demo —- all data is fake",
+    "Jane Sample—MRN P1—DOB 1980-01-01",
+    "New Encounter",
+    "Encounters",
+    "No encounters yet."
+   ],
+   "outcome": "halt",
+   "reason": "heal quarantined for step 'step_005': identity regression: refreshed context band no longer verifies the recorded target identity (band verdict 'abstain')",
+   "state_id": "step_005"
+  },
+  "heal_count": 3,
+  "idempotency_key": null,
+  "idempotent_replay": false,
+  "identity_applicable_steps": 8,
+  "identity_armed_steps": 6,
+  "identity_unarmed": [
+   {
+    "intent": "click recorded visual target",
+    "reason": "row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)",
+    "step_id": "step_002"
+   },
+   {
+    "intent": "click 'Sign In'",
+    "reason": "the only readable row text is the target's own label (mutable evidence, excluded from identity)",
+    "step_id": "step_004"
+   }
+  ],
+  "loop_iterations": [],
+  "model_calls": 0,
+  "observed_application_sha256": null,
+  "observed_application_version_sha256": null,
+  "observed_environment_binding_sha256": null,
+  "observed_environment_digest": null,
+  "observed_session_sha256": null,
+  "outcome_envelope": {
+   "compensation_actions": 0,
+   "evidence_classes": [
+    "identity",
+    "postcondition"
+   ],
+   "execution_completed": false,
+   "external_network_calls": "unknown",
+   "model_calls": 0,
+   "outcome": "HALTED",
+   "passed_contracts": {
+    "authorization": 0,
+    "effect": 0,
+    "identity": 0,
+    "postcondition": 11
+   },
+   "postcondition_evidence": [
+    {
+     "action_kind": "click",
+     "actuation_path": "gui",
+     "contract_index": 0,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "f220b3c07766f98e29928e61b7f518e1c5c4f55bbd14df07403f1f2a4a096417",
+     "result_index": 0,
+     "step_contract_sha256": "c0962ee57126f1450f73d2aadd5f9b9e9fa2b54777041c8519e65f41473d0171",
+     "step_index": 0,
+     "verdict": "passed",
+     "workflow_contract_sha256": "22a8701522c267736d12447082a0677eebdf93436d9817e6a455598cf0a7ee8a"
+    },
+    {
+     "action_kind": "type",
+     "actuation_path": "gui",
+     "contract_index": 0,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "c7797506f96fcbb63a0d4b802e8294cfe61f33c3265ca63145a1dc1704a82e1a",
+     "result_index": 1,
+     "step_contract_sha256": "d8ac256bc58a6e14d2d8ffccd6b1938bf964f19cd92f4d84c571c980635920e8",
+     "step_index": 1,
+     "verdict": "passed",
+     "workflow_contract_sha256": "22a8701522c267736d12447082a0677eebdf93436d9817e6a455598cf0a7ee8a"
+    },
+    {
+     "action_kind": "type",
+     "actuation_path": "gui",
+     "contract_index": 1,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "f3d618a48ca1bd5de009daf1e62d6f68365cda62c53f2b903345ee0605a07e36",
+     "result_index": 1,
+     "step_contract_sha256": "d8ac256bc58a6e14d2d8ffccd6b1938bf964f19cd92f4d84c571c980635920e8",
+     "step_index": 1,
+     "verdict": "passed",
+     "workflow_contract_sha256": "22a8701522c267736d12447082a0677eebdf93436d9817e6a455598cf0a7ee8a"
+    },
+    {
+     "action_kind": "type",
+     "actuation_path": "gui",
+     "contract_index": 0,
+     "contract_kind": "intrinsic_input_readback",
+     "contract_sha256": "2654d05f576c48b687027895b3b3b04bf5b334c85ec260c2f942e54bb3b950de",
+     "result_index": 1,
+     "step_contract_sha256": "d8ac256bc58a6e14d2d8ffccd6b1938bf964f19cd92f4d84c571c980635920e8",
+     "step_index": 1,
+     "verdict": "passed",
+     "workflow_contract_sha256": "22a8701522c267736d12447082a0677eebdf93436d9817e6a455598cf0a7ee8a"
+    },
+    {
+     "action_kind": "click",
+     "actuation_path": "gui",
+     "contract_index": 0,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "2fce9a94839ea520fb8e9cedc7fdadff874b6350ac06075e3d2c4701f8061c1c",
+     "result_index": 2,
+     "step_contract_sha256": "c2b74ae73c5afefbf5fa03ba2e67b44d1a7a93ea59577b9b2f81522667c35baa",
+     "step_index": 2,
+     "verdict": "passed",
+     "workflow_contract_sha256": "22a8701522c267736d12447082a0677eebdf93436d9817e6a455598cf0a7ee8a"
+    },
+    {
+     "action_kind": "type",
+     "actuation_path": "gui",
+     "contract_index": 0,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "31582e64269bf713de0da077ecde3fa566636f8c4bf4c571e300dd91f20f98a8",
+     "result_index": 3,
+     "step_contract_sha256": "41916688420a0472362353a8708ab077f56d36ea1bfcfd2448e6219b84c74c87",
+     "step_index": 3,
+     "verdict": "passed",
+     "workflow_contract_sha256": "22a8701522c267736d12447082a0677eebdf93436d9817e6a455598cf0a7ee8a"
+    },
+    {
+     "action_kind": "type",
+     "actuation_path": "gui",
+     "contract_index": 0,
+     "contract_kind": "intrinsic_input_readback",
+     "contract_sha256": "0a5911e3a6b674129dfb35394b22c0808d30d009c15c95d8d8ba227a3cb5a056",
+     "result_index": 3,
+     "step_contract_sha256": "41916688420a0472362353a8708ab077f56d36ea1bfcfd2448e6219b84c74c87",
+     "step_index": 3,
+     "verdict": "passed",
+     "workflow_contract_sha256": "22a8701522c267736d12447082a0677eebdf93436d9817e6a455598cf0a7ee8a"
+    },
+    {
+     "action_kind": "click",
+     "actuation_path": "gui",
+     "contract_index": 0,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "fb1a399bed7f95cd6b1cf3c0b2d1bb3b2133bc121472126910f9db7d560ad0bc",
+     "result_index": 4,
+     "step_contract_sha256": "2d852d7d64f213a9d1d47350823d455fb0f80edca17179da2316b7763ccf347e",
+     "step_index": 4,
+     "verdict": "passed",
+     "workflow_contract_sha256": "22a8701522c267736d12447082a0677eebdf93436d9817e6a455598cf0a7ee8a"
+    },
+    {
+     "action_kind": "click",
+     "actuation_path": "gui",
+     "contract_index": 1,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "738a2942fd4c097cc48e9612707770d11d111f8d4375995d2252f079210628f5",
+     "result_index": 4,
+     "step_contract_sha256": "2d852d7d64f213a9d1d47350823d455fb0f80edca17179da2316b7763ccf347e",
+     "step_index": 4,
+     "verdict": "passed",
+     "workflow_contract_sha256": "22a8701522c267736d12447082a0677eebdf93436d9817e6a455598cf0a7ee8a"
+    },
+    {
+     "action_kind": "click",
+     "actuation_path": "gui",
+     "contract_index": 0,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "146f42385da20584d6518f39dfc8a86e1eb4b112934c9bdd09a25c94ecf79965",
+     "result_index": 5,
+     "step_contract_sha256": "c9ebea68c639e137964f56255e28b9ad1b10e79c7f94015221b3761bd7b34f35",
+     "step_index": 5,
+     "verdict": "passed",
+     "workflow_contract_sha256": "22a8701522c267736d12447082a0677eebdf93436d9817e6a455598cf0a7ee8a"
+    },
+    {
+     "action_kind": "click",
+     "actuation_path": "gui",
+     "contract_index": 1,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "93da9d76dee1132e6f643646be0eac89e140e7d2a974a3f193b33f5dfd0309ba",
+     "result_index": 5,
+     "step_contract_sha256": "c9ebea68c639e137964f56255e28b9ad1b10e79c7f94015221b3761bd7b34f35",
+     "step_index": 5,
+     "verdict": "passed",
+     "workflow_contract_sha256": "22a8701522c267736d12447082a0677eebdf93436d9817e6a455598cf0a7ee8a"
+    }
+   ],
+   "production_eligible": false,
+   "profile": "demo",
+   "required_contracts": {
+    "authorization": 0,
+    "effect": 0,
+    "identity": 0,
+    "postcondition": 11
+   },
+   "version": "openadapt.execution-outcome/v1",
+   "workflow_contract_sha256": "22a8701522c267736d12447082a0677eebdf93436d9817e6a455598cf0a7ee8a"
+  },
+  "parameter_schema_sha256": "b9706e023d1b70651493a1b2b68bb1939f7173f74b5e574d4f9fa57acc89fc6d",
+  "params": {
+   "note": "Golden triage booking three months"
+  },
+  "production_eligible": false,
+  "program_exception_evidence": [],
+  "program_transition_evidence": [],
+  "qualification_environment_observer_contract_sha256": null,
+  "qualification_environment_observer_id": null,
+  "qualification_evidence_only": false,
+  "qualification_fault_mutations": [],
+  "readback": null,
+  "recorded_surface": null,
+  "render_scale": null,
+  "required_identity_step_ids": [],
+  "results": [
+   {
+    "actuation": null,
+    "after_png": "steps/step_000_after.png",
+    "api_fallback": null,
+    "before_png": "steps/step_000_before.png",
+    "delivery_attempted": true,
+    "delivery_receipt": null,
+    "delivery_uncertainty": null,
+    "drag_end_resolution": null,
+    "drift_oracle_calls": 0,
+    "effect_approved_unverified": false,
+    "effect_contract_hashes": [],
+    "effect_evidence": [],
+    "effect_results": [],
+    "effect_verified": null,
+    "elapsed_ms": "<elapsed_ms>",
+    "error": null,
+    "exception_handled": false,
+    "failure_category": null,
+    "field_read": null,
+    "fresh_actuation_events": [],
+    "heal": {
+     "applied": true,
+     "kind": "anchor_refresh",
+     "new_anchor": {
+      "click_point": [
+       214,
+       195
+      ],
+      "context_text": null,
+      "form_identity": null,
+      "identifier_crop": null,
+      "identifier_region": null,
+      "identity_template": {
+       "band_len": 0,
+       "concats": [],
+       "param_token_indices": {},
+       "rests_on_confusable_identifier": false,
+       "salt": "9588ca8dd8f70661010db0bc535ec9bf",
+       "schema_version": 1,
+       "signal_hashes": {
+        "structured|exact|": "478dde8278038b459d4f8e1e8dd55feea2866009e052c41fe0da626b19d472fd",
+        "structured|normalized|casefold": "9eec048367ca69baffeb217515e46fb88057f0f81ff3c12480fbae4c07f124a9",
+        "structured|normalized|casefold,collapse_whitespace": "9eec048367ca69baffeb217515e46fb88057f0f81ff3c12480fbae4c07f124a9",
+        "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "9eec048367ca69baffeb217515e46fb88057f0f81ff3c12480fbae4c07f124a9",
+        "structured|normalized|casefold,strip_punctuation": "9eec048367ca69baffeb217515e46fb88057f0f81ff3c12480fbae4c07f124a9",
+        "structured|normalized|collapse_whitespace": "478dde8278038b459d4f8e1e8dd55feea2866009e052c41fe0da626b19d472fd",
+        "structured|normalized|collapse_whitespace,strip_punctuation": "478dde8278038b459d4f8e1e8dd55feea2866009e052c41fe0da626b19d472fd",
+        "structured|normalized|strip_punctuation": "478dde8278038b459d4f8e1e8dd55feea2866009e052c41fe0da626b19d472fd",
+        "structured|normalized|unicode_nfkc": "478dde8278038b459d4f8e1e8dd55feea2866009e052c41fe0da626b19d472fd",
+        "structured|normalized|unicode_nfkc,casefold": "9eec048367ca69baffeb217515e46fb88057f0f81ff3c12480fbae4c07f124a9",
+        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "9eec048367ca69baffeb217515e46fb88057f0f81ff3c12480fbae4c07f124a9",
+        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "9eec048367ca69baffeb217515e46fb88057f0f81ff3c12480fbae4c07f124a9",
+        "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "9eec048367ca69baffeb217515e46fb88057f0f81ff3c12480fbae4c07f124a9",
+        "structured|normalized|unicode_nfkc,collapse_whitespace": "478dde8278038b459d4f8e1e8dd55feea2866009e052c41fe0da626b19d472fd",
+        "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "478dde8278038b459d4f8e1e8dd55feea2866009e052c41fe0da626b19d472fd",
+        "structured|normalized|unicode_nfkc,strip_punctuation": "478dde8278038b459d4f8e1e8dd55feea2866009e052c41fe0da626b19d472fd"
+       },
+       "structured": "9eec048367ca69ba",
+       "structured_row": false,
+       "tokens": []
+      },
+      "landmarks": [
+       {
+        "distance_px": 130,
+        "dx_px": 76,
+        "dy_px": 106,
+        "ocr_text": "Sign in to MockMed",
+        "relation": "above"
+       },
+       {
+        "distance_px": 132,
+        "dx_px": 129,
+        "dy_px": 29,
+        "ocr_text": "Username",
+        "relation": "left_of"
+       }
+      ],
+      "ocr_text": null,
+      "region": [
+       134,
+       163,
+       160,
+       64
+      ],
+      "search_pad": 80,
+      "structural": {
+       "automation_id": null,
+       "frame_path": null,
+       "name": "Username",
+       "role": "textbox",
+       "selector": "#username",
+       "window_name": null
+      },
+      "structured_identity": null,
+      "template": "templates/step_000.png"
+     },
+     "old_anchor": {
+      "click_point": [
+       214,
+       195
+      ],
+      "context_text": null,
+      "form_identity": null,
+      "identifier_crop": null,
+      "identifier_region": null,
+      "identity_template": {
+       "band_len": 0,
+       "concats": [],
+       "param_token_indices": {},
+       "rests_on_confusable_identifier": false,
+       "salt": "9588ca8dd8f70661010db0bc535ec9bf",
+       "schema_version": 1,
+       "signal_hashes": {
+        "structured|exact|": "478dde8278038b459d4f8e1e8dd55feea2866009e052c41fe0da626b19d472fd",
+        "structured|normalized|casefold": "9eec048367ca69baffeb217515e46fb88057f0f81ff3c12480fbae4c07f124a9",
+        "structured|normalized|casefold,collapse_whitespace": "9eec048367ca69baffeb217515e46fb88057f0f81ff3c12480fbae4c07f124a9",
+        "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "9eec048367ca69baffeb217515e46fb88057f0f81ff3c12480fbae4c07f124a9",
+        "structured|normalized|casefold,strip_punctuation": "9eec048367ca69baffeb217515e46fb88057f0f81ff3c12480fbae4c07f124a9",
+        "structured|normalized|collapse_whitespace": "478dde8278038b459d4f8e1e8dd55feea2866009e052c41fe0da626b19d472fd",
+        "structured|normalized|collapse_whitespace,strip_punctuation": "478dde8278038b459d4f8e1e8dd55feea2866009e052c41fe0da626b19d472fd",
+        "structured|normalized|strip_punctuation": "478dde8278038b459d4f8e1e8dd55feea2866009e052c41fe0da626b19d472fd",
+        "structured|normalized|unicode_nfkc": "478dde8278038b459d4f8e1e8dd55feea2866009e052c41fe0da626b19d472fd",
+        "structured|normalized|unicode_nfkc,casefold": "9eec048367ca69baffeb217515e46fb88057f0f81ff3c12480fbae4c07f124a9",
+        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "9eec048367ca69baffeb217515e46fb88057f0f81ff3c12480fbae4c07f124a9",
+        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "9eec048367ca69baffeb217515e46fb88057f0f81ff3c12480fbae4c07f124a9",
+        "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "9eec048367ca69baffeb217515e46fb88057f0f81ff3c12480fbae4c07f124a9",
+        "structured|normalized|unicode_nfkc,collapse_whitespace": "478dde8278038b459d4f8e1e8dd55feea2866009e052c41fe0da626b19d472fd",
+        "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "478dde8278038b459d4f8e1e8dd55feea2866009e052c41fe0da626b19d472fd",
+        "structured|normalized|unicode_nfkc,strip_punctuation": "478dde8278038b459d4f8e1e8dd55feea2866009e052c41fe0da626b19d472fd"
+       },
+       "structured": "9eec048367ca69ba",
+       "structured_row": false,
+       "tokens": []
+      },
+      "landmarks": [
+       {
+        "distance_px": 130,
+        "dx_px": 76,
+        "dy_px": 106,
+        "ocr_text": "Sign in to MockMed",
+        "relation": "above"
+       },
+       {
+        "distance_px": 132,
+        "dx_px": 129,
+        "dy_px": 29,
+        "ocr_text": "Username",
+        "relation": "left_of"
+       }
+      ],
+      "ocr_text": null,
+      "region": [
+       134,
+       163,
+       160,
+       64
+      ],
+      "search_pad": 80,
+      "structural": {
+       "automation_id": null,
+       "frame_path": null,
+       "name": "Username",
+       "role": "textbox",
+       "selector": "#username",
+       "window_name": null
+      },
+      "structured_identity": null,
+      "template": "templates/step_000.png"
+     },
+     "rung_used": "geometry",
+     "screenshot": "heals/step_000/screen.png",
+     "step_id": "step_000"
+    },
+    "identity": {
+     "abstain_reason": null,
+     "census_status": "not_a_row",
+     "coverage": 1.0,
+     "expected": "<structured identity template>",
+     "hover": null,
+     "known_id_evidence": null,
+     "known_id_halt": null,
+     "look_halt": null,
+     "looks": [],
+     "mode": "structured",
+     "observed": "Username Password Sign In",
+     "param": null,
+     "pixel_evidence": null,
+     "quorum_required": null,
+     "quorum_verified": null,
+     "signal_evidence": [],
+     "status": "verified"
+    },
+    "identity_first_frame_png": null,
+    "identity_first_read": null,
+    "identity_reobserved": false,
+    "input_retried": false,
+    "input_verified": null,
+    "intent": "click recorded visual target",
+    "interstitial_actions": [],
+    "ok": true,
+    "postcondition_drift_rescues": [],
+    "postcondition_page_scale": null,
+    "postconditions_ok": true,
+    "program_scope": [],
+    "resolution": {
+     "confidence": 0.9,
+     "elapsed_ms": "<elapsed_ms>",
+     "point": [
+      214,
+      195
+     ],
+     "rung": "geometry",
+     "structural_handle": null
+    },
+    "risk": "reversible",
+    "risk_explanation": "control label has no retained consequential-write signal",
+    "risk_review_required": false,
+    "safety_halt": false,
+    "safety_refusal_evidence": null,
+    "skipped": false,
+    "starting_state_settled": null,
+    "step_id": "step_000",
+    "submit_binding_verified": null,
+    "timings": "<timings>"
+   },
+   {
+    "actuation": null,
+    "after_png": "steps/step_001_after.png",
+    "api_fallback": null,
+    "before_png": "steps/step_001_before.png",
+    "delivery_attempted": true,
+    "delivery_receipt": null,
+    "delivery_uncertainty": null,
+    "drag_end_resolution": null,
+    "drift_oracle_calls": 0,
+    "effect_approved_unverified": false,
+    "effect_contract_hashes": [],
+    "effect_evidence": [],
+    "effect_results": [],
+    "effect_verified": null,
+    "elapsed_ms": "<elapsed_ms>",
+    "error": null,
+    "exception_handled": false,
+    "failure_category": null,
+    "field_read": null,
+    "fresh_actuation_events": [],
+    "heal": null,
+    "identity": null,
+    "identity_first_frame_png": null,
+    "identity_first_read": null,
+    "identity_reobserved": false,
+    "input_retried": false,
+    "input_verified": true,
+    "intent": "type 'nurse.demo'",
+    "interstitial_actions": [],
+    "ok": true,
+    "postcondition_drift_rescues": [],
+    "postcondition_page_scale": null,
+    "postconditions_ok": true,
+    "program_scope": [],
+    "resolution": null,
+    "risk": "reversible",
+    "risk_explanation": "action has no retained consequential commit signal",
+    "risk_review_required": false,
+    "safety_halt": false,
+    "safety_refusal_evidence": null,
+    "skipped": false,
+    "starting_state_settled": null,
+    "step_id": "step_001",
+    "submit_binding_verified": null,
+    "timings": "<timings>"
+   },
+   {
+    "actuation": null,
+    "after_png": "steps/step_002_after.png",
+    "api_fallback": null,
+    "before_png": "steps/step_002_before.png",
+    "delivery_attempted": true,
+    "delivery_receipt": null,
+    "delivery_uncertainty": null,
+    "drag_end_resolution": null,
+    "drift_oracle_calls": 0,
+    "effect_approved_unverified": false,
+    "effect_contract_hashes": [],
+    "effect_evidence": [],
+    "effect_results": [],
+    "effect_verified": null,
+    "elapsed_ms": "<elapsed_ms>",
+    "error": null,
+    "exception_handled": false,
+    "failure_category": null,
+    "field_read": null,
+    "fresh_actuation_events": [],
+    "heal": {
+     "applied": true,
+     "kind": "anchor_refresh",
+     "new_anchor": {
+      "click_point": [
+       214,
+       264
+      ],
+      "context_text": null,
+      "form_identity": null,
+      "identifier_crop": null,
+      "identifier_region": null,
+      "identity_template": null,
+      "landmarks": [
+       {
+        "distance_px": 112,
+        "dx_px": 94,
+        "dy_px": -60,
+        "ocr_text": "Sign In",
+        "relation": "left_of"
+       },
+       {
+        "distance_px": 132,
+        "dx_px": 129,
+        "dy_px": 30,
+        "ocr_text": "Password",
+        "relation": "left_of"
+       }
+      ],
+      "ocr_text": null,
+      "region": [
+       134,
+       232,
+       160,
+       64
+      ],
+      "search_pad": 80,
+      "structural": {
+       "automation_id": null,
+       "frame_path": null,
+       "name": "Password",
+       "role": "textbox",
+       "selector": "#password",
+       "window_name": null
+      },
+      "structured_identity": null,
+      "template": "templates/step_002.png"
+     },
+     "old_anchor": {
+      "click_point": [
+       214,
+       264
+      ],
+      "context_text": null,
+      "form_identity": null,
+      "identifier_crop": null,
+      "identifier_region": null,
+      "identity_template": null,
+      "landmarks": [
+       {
+        "distance_px": 112,
+        "dx_px": 94,
+        "dy_px": -60,
+        "ocr_text": "Sign In",
+        "relation": "left_of"
+       },
+       {
+        "distance_px": 132,
+        "dx_px": 129,
+        "dy_px": 30,
+        "ocr_text": "Password",
+        "relation": "left_of"
+       }
+      ],
+      "ocr_text": null,
+      "region": [
+       134,
+       232,
+       160,
+       64
+      ],
+      "search_pad": 80,
+      "structural": {
+       "automation_id": null,
+       "frame_path": null,
+       "name": "Password",
+       "role": "textbox",
+       "selector": "#password",
+       "window_name": null
+      },
+      "structured_identity": null,
+      "template": "templates/step_002.png"
+     },
+     "rung_used": "geometry",
+     "screenshot": "heals/step_002/screen.png",
+     "step_id": "step_002"
+    },
+    "identity": null,
+    "identity_first_frame_png": null,
+    "identity_first_read": null,
+    "identity_reobserved": false,
+    "input_retried": false,
+    "input_verified": null,
+    "intent": "click recorded visual target",
+    "interstitial_actions": [],
+    "ok": true,
+    "postcondition_drift_rescues": [],
+    "postcondition_page_scale": null,
+    "postconditions_ok": true,
+    "program_scope": [],
+    "resolution": {
+     "confidence": 0.9,
+     "elapsed_ms": "<elapsed_ms>",
+     "point": [
+      214,
+      264
+     ],
+     "rung": "geometry",
+     "structural_handle": null
+    },
+    "risk": "reversible",
+    "risk_explanation": "control label has no retained consequential-write signal",
+    "risk_review_required": false,
+    "safety_halt": false,
+    "safety_refusal_evidence": null,
+    "skipped": false,
+    "starting_state_settled": null,
+    "step_id": "step_002",
+    "submit_binding_verified": null,
+    "timings": "<timings>"
+   },
+   {
+    "actuation": null,
+    "after_png": "steps/step_003_after.png",
+    "api_fallback": null,
+    "before_png": "steps/step_003_before.png",
+    "delivery_attempted": true,
+    "delivery_receipt": null,
+    "delivery_uncertainty": null,
+    "drag_end_resolution": null,
+    "drift_oracle_calls": 0,
+    "effect_approved_unverified": false,
+    "effect_contract_hashes": [],
+    "effect_evidence": [],
+    "effect_results": [],
+    "effect_verified": null,
+    "elapsed_ms": "<elapsed_ms>",
+    "error": null,
+    "exception_handled": false,
+    "failure_category": null,
+    "field_read": null,
+    "fresh_actuation_events": [],
+    "heal": null,
+    "identity": null,
+    "identity_first_frame_png": null,
+    "identity_first_read": null,
+    "identity_reobserved": false,
+    "input_retried": false,
+    "input_verified": true,
+    "intent": "type 'mockmed-demo-pass'",
+    "interstitial_actions": [],
+    "ok": true,
+    "postcondition_drift_rescues": [],
+    "postcondition_page_scale": null,
+    "postconditions_ok": true,
+    "program_scope": [],
+    "resolution": null,
+    "risk": "reversible",
+    "risk_explanation": "action has no retained consequential commit signal",
+    "risk_review_required": false,
+    "safety_halt": false,
+    "safety_refusal_evidence": null,
+    "skipped": false,
+    "starting_state_settled": null,
+    "step_id": "step_003",
+    "submit_binding_verified": null,
+    "timings": "<timings>"
+   },
+   {
+    "actuation": null,
+    "after_png": "steps/step_004_after.png",
+    "api_fallback": null,
+    "before_png": "steps/step_004_before.png",
+    "delivery_attempted": true,
+    "delivery_receipt": null,
+    "delivery_uncertainty": null,
+    "drag_end_resolution": null,
+    "drift_oracle_calls": 0,
+    "effect_approved_unverified": false,
+    "effect_contract_hashes": [],
+    "effect_evidence": [],
+    "effect_results": [],
+    "effect_verified": null,
+    "elapsed_ms": "<elapsed_ms>",
+    "error": null,
+    "exception_handled": false,
+    "failure_category": null,
+    "field_read": null,
+    "fresh_actuation_events": [],
+    "heal": {
+     "applied": true,
+     "kind": "anchor_refresh",
+     "new_anchor": {
+      "click_point": [
+       120,
+       324
+      ],
+      "context_text": null,
+      "form_identity": null,
+      "identifier_crop": null,
+      "identifier_region": null,
+      "identity_template": null,
+      "landmarks": [
+       {
+        "distance_px": 95,
+        "dx_px": 34,
+        "dy_px": 89,
+        "ocr_text": "Password",
+        "relation": "above"
+       },
+       {
+        "distance_px": 130,
+        "dx_px": 19,
+        "dy_px": 129,
+        "ocr_text": "nurse.demo",
+        "relation": "above"
+       }
+      ],
+      "ocr_text": "Sign In",
+      "region": [
+       40,
+       292,
+       160,
+       64
+      ],
+      "search_pad": 80,
+      "structural": {
+       "automation_id": null,
+       "frame_path": null,
+       "name": "Sign In",
+       "role": "button",
+       "selector": "#signin",
+       "window_name": null
+      },
+      "structured_identity": null,
+      "template": "templates/step_004.png"
+     },
+     "old_anchor": {
+      "click_point": [
+       119,
+       324
+      ],
+      "context_text": null,
+      "form_identity": null,
+      "identifier_crop": null,
+      "identifier_region": null,
+      "identity_template": null,
+      "landmarks": [
+       {
+        "distance_px": 95,
+        "dx_px": 34,
+        "dy_px": 89,
+        "ocr_text": "Password",
+        "relation": "above"
+       },
+       {
+        "distance_px": 130,
+        "dx_px": 19,
+        "dy_px": 129,
+        "ocr_text": "nurse.demo",
+        "relation": "above"
+       }
+      ],
+      "ocr_text": "Sign In",
+      "region": [
+       39,
+       292,
+       160,
+       64
+      ],
+      "search_pad": 80,
+      "structural": {
+       "automation_id": null,
+       "frame_path": null,
+       "name": "Sign In",
+       "role": "button",
+       "selector": "#signin",
+       "window_name": null
+      },
+      "structured_identity": null,
+      "template": "templates/step_004.png"
+     },
+     "rung_used": "ocr",
+     "screenshot": "heals/step_004/screen.png",
+     "step_id": "step_004"
+    },
+    "identity": null,
+    "identity_first_frame_png": null,
+    "identity_first_read": null,
+    "identity_reobserved": false,
+    "input_retried": false,
+    "input_verified": null,
+    "intent": "click 'Sign In'",
+    "interstitial_actions": [],
+    "ok": true,
+    "postcondition_drift_rescues": [],
+    "postcondition_page_scale": null,
+    "postconditions_ok": true,
+    "program_scope": [],
+    "resolution": {
+     "confidence": 1.0,
+     "elapsed_ms": "<elapsed_ms>",
+     "point": [
+      120,
+      324
+     ],
+     "rung": "ocr",
+     "structural_handle": null
+    },
+    "risk": "reversible",
+    "risk_explanation": "control label has no retained consequential-write signal",
+    "risk_review_required": false,
+    "safety_halt": false,
+    "safety_refusal_evidence": null,
+    "skipped": false,
+    "starting_state_settled": null,
+    "step_id": "step_004",
+    "submit_binding_verified": null,
+    "timings": "<timings>"
+   },
+   {
+    "actuation": null,
+    "after_png": "steps/step_005_after.png",
+    "api_fallback": null,
+    "before_png": "steps/step_005_before.png",
+    "delivery_attempted": true,
+    "delivery_receipt": null,
+    "delivery_uncertainty": null,
+    "drag_end_resolution": null,
+    "drift_oracle_calls": 0,
+    "effect_approved_unverified": false,
+    "effect_contract_hashes": [],
+    "effect_evidence": [],
+    "effect_results": [],
+    "effect_verified": null,
+    "elapsed_ms": "<elapsed_ms>",
+    "error": "heal quarantined for step 'step_005': identity regression: refreshed context band no longer verifies the recorded target identity (band verdict 'abstain')",
+    "exception_handled": false,
+    "failure_category": "safety_halt",
+    "field_read": null,
+    "fresh_actuation_events": [],
+    "heal": null,
+    "identity": {
+     "abstain_reason": null,
+     "candidate_count": 1,
+     "coverage": 1.0,
+     "expected": "<structured identity template>",
+     "hover": null,
+     "known_id_evidence": null,
+     "known_id_halt": null,
+     "look_halt": null,
+     "looks": [],
+     "mode": "structured",
+     "observed": "Jane SampleKnee pain referralHigh",
+     "param": null,
+     "pixel_evidence": null,
+     "quorum_required": null,
+     "quorum_verified": null,
+     "signal_evidence": [],
+     "status": "verified"
+    },
+    "identity_first_frame_png": null,
+    "identity_first_read": null,
+    "identity_reobserved": false,
+    "input_retried": false,
+    "input_verified": null,
+    "intent": "click 'Open'",
+    "interstitial_actions": [],
+    "ok": false,
+    "postcondition_drift_rescues": [],
+    "postcondition_page_scale": null,
+    "postconditions_ok": true,
+    "program_scope": [],
+    "resolution": {
+     "confidence": 1.0,
+     "elapsed_ms": "<elapsed_ms>",
+     "point": [
+      777,
+      186
+     ],
+     "rung": "ocr",
+     "structural_handle": null
+    },
+    "risk": "reversible",
+    "risk_explanation": "control label has no retained consequential-write signal",
+    "risk_review_required": false,
+    "safety_halt": true,
+    "safety_refusal_evidence": null,
+    "skipped": false,
+    "starting_state_settled": null,
+    "step_id": "step_005",
+    "submit_binding_verified": null,
+    "timings": "<timings>"
+   }
+  ],
+  "run_id_sha256": "<run_id_sha256>",
+  "rung_counts": {
+   "geometry": 2,
+   "ocr": 1
+  },
+  "screenshots_may_leave_box": false,
+  "source_recording_sha256": null,
+  "started_at": "<started_at>",
+  "success": false,
+  "surface_override": false,
+  "terminal_outcome": null,
+  "total_ms": "<total_ms>",
+  "transaction_billable": false,
+  "transaction_outcome": "HALTED_BEFORE_EFFECT",
+  "transaction_platform_fault": false,
+  "visited_states": [],
+  "workflow_contract_sha256": "03ef68277e63dded9141d8ab2d8460b0742d9a184e5f69161d70c7415ceb6494",
+  "workflow_name": "golden-triage"
+ },
+ "trace": [
+  {
+   "args": [
+    null
+   ],
+   "call": "set_qualification_input_guard"
+  },
+  {
+   "args": [
+    214,
+    195
+   ],
+   "call": "click",
+   "kwargs": {
+    "double": false
+   }
+  },
+  {
+   "args": [
+    "nurse.demo"
+   ],
+   "call": "type_text"
+  },
+  {
+   "args": [
+    214,
+    264
+   ],
+   "call": "click",
+   "kwargs": {
+    "double": false
+   }
+  },
+  {
+   "args": [
+    "mockmed-demo-pass"
+   ],
+   "call": "type_text"
+  },
+  {
+   "args": [
+    120,
+    324
+   ],
+   "call": "click",
+   "kwargs": {
+    "double": false
+   }
+  },
+  {
+   "args": [
+    777,
+    186
+   ],
+   "call": "click",
+   "kwargs": {
+    "double": false
+   }
+  },
+  {
+   "args": [
+    null
+   ],
+   "call": "set_qualification_input_guard"
+  }
+ ]
+}

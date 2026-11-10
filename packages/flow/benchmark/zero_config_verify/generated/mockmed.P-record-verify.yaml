@@ -1,0 +1,28 @@
+# Proposed by `openadapt-flow record --verify` from the records read before and
+# after the demonstration. Nothing here is trusted yet. For each effect:
+#   - remove match fields that change on every save (timestamps, versions);
+#   - check that each {param: ...} is the input that should fill that field;
+#   - delete the `needs_operator_confirmation: true` line.
+# verify-run refuses this file, and qualify reports a problem, until every
+# such line is gone.
+schema_version: openadapt.verify/v1
+verifier:
+  kind: rest
+  base_url: ${APP_URL}
+  records_path: /api/db
+  records_complete: true
+effects:
+- kind: record_written
+  match:
+    note:
+      param: note
+    patient_id:
+      param: patient_id
+    source:
+      literal: replay
+    type:
+      param: type
+  count_new_only: true
+  probe: exactly one new record with note=parameter 'note', patient_id=parameter 'patient_id',
+    source='replay', type=parameter 'type' (proposed from the records read while recording)
+  needs_operator_confirmation: true

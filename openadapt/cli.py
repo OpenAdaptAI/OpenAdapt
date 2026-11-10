@@ -1,7 +1,8 @@
 """Unified CLI for OpenAdapt ecosystem.
 
 Usage:
-    openadapt record --url <app> --out rec   # record a workflow
+    openadapt record --backend <surface> <target> --out rec   # record a workflow
+                                    # target: --url for a web app, --window for a desktop app
     openadapt compile rec --out bundle        # compile it
     openadapt flow replay bundle --url <app>        # run it, local, $0
     openadapt flow lint bundle
@@ -49,19 +50,59 @@ class _FlowAliasCommand(click.Command):
 
 
 class _FlowFirstGroup(click.Group):
-    """Command group that lists ``flow`` first in ``--help``.
-
-    The demonstration compiler is the flagship, so it should lead the
-    command listing instead of sorting alphabetically behind ``capture``.
-    Everything else keeps its normal alphabetical order.
-
-    On an interpreter the engine doesn't support, the help starts with the
-    remedy, so a bare ``openadapt`` explains the problem before anything else.
-    """
+    """Present task names while retaining every original Click command."""
 
     def list_commands(self, ctx):
-        commands = super().list_commands(ctx)
-        return sorted(commands, key=lambda name: (name != "flow", name))
+        from openadapt.cli_tasks import TASKS
+
+        return list(TASKS)
+
+    def format_commands(self, ctx, formatter):
+        from openadapt.cli_tasks import TASKS
+
+        with formatter.section("Commands"):
+            formatter.write_dl(list(TASKS.items()))
+        legacy = [
+            (name, command.get_short_help_str())
+            for name, command in sorted(self.commands.items())
+            if not command.hidden and name not in TASKS
+        ]
+        if legacy:
+            with formatter.section("Legacy commands"):
+                formatter.write_dl(legacy)
+
+    def invoke(self, ctx):
+        try:
+            return super().invoke(ctx)
+        except (SystemExit, click.exceptions.Exit) as exc:
+            code = getattr(exc, "exit_code", getattr(exc, "code", None))
+            if code == 0 and ctx.meta.get("alias_help"):
+                click.echo("\n" + ctx.meta["alias_help"])
+            raise
+
+    def get_command(self, ctx, name):
+        from openadapt.cli_tasks import NATIVE_ROUTES, TASKS
+
+        command = super().get_command(ctx, name)
+        if command is not None:
+            aliases = [
+                " ".join(path) for path, old in NATIVE_ROUTES.items() if old == (name,)
+            ]
+            note = "Also available as: " + ", ".join(aliases) if aliases else ""
+            if name == "setup":
+                note += "\nOperations: " + ", ".join(
+                    path[1] for path in NATIVE_ROUTES if path[0] == "setup"
+                )
+            if note and note not in (command.epilog or ""):
+                command.epilog = "\n".join(filter(None, [command.epilog, note]))
+            return command
+        # Completion can discover the visible Flow task names too. Execution
+        # is routed once by resolve_command after Click consumes root options.
+        return (
+            self.commands.get("flow")
+            if ctx.resilient_parsing and name in TASKS
+            else None
+        )
 
     def format_help(self, ctx, formatter):
         if not _python_supported():
@@ -69,10 +110,50 @@ class _FlowFirstGroup(click.Group):
         super().format_help(ctx, formatter)
 
     def resolve_command(self, ctx, args):
+        from openadapt.cli_tasks import alias_help, alias_notice, group_help, translate
+
+        # Click has consumed root options and its root -- delimiter. Route once
+        # here, before resolving a child or stripping a leaf's literal --.
+        raw = list(args)
+        normalize = ctx.token_normalize_func
+        root_name = normalize(raw[0]) if raw and normalize else (raw[0] if raw else "")
+        if (
+            not ctx.resilient_parsing
+            and root_name == "verify"
+            and raw[1:] in ([], ["-h"], ["--help"])
+        ):
+            click.echo(
+                group_help(ctx.command_path, "verify"), err=len(raw) == 1, nl=False
+            )
+            ctx.exit(2 if len(raw) == 1 else 0)
+        if (
+            not ctx.resilient_parsing
+            and root_name in {"inspect", "workflow", "services", "research"}
+            and raw[1:] in (["-h"], ["--help"])
+        ):
+            click.echo(group_help(ctx.command_path, root_name), nl=False)
+            ctx.exit()
+        args = translate(raw, set(self.commands), normalize)
+        name = normalize(args[0]) if args and normalize else (args[0] if args else "")
+        command = self.commands.get(name)
+        if name == "flow":
+            ctx.meta["task_argv"] = args[1:]
+        elif isinstance(command, _FlowAliasCommand):
+            # Retain main's native alias parser/callback and its version guard.
+            # Both explicit Flow and root aliases preserve the same leaf --.
+            ctx.meta["task_argv"] = [command.name, *args[1:]]
+        if (
+            args == raw
+            and command is not None
+            and (
+                command.context_settings.get("help_option_names") == []
+                or raw[:2] == ["verify", "serve"]
+            )
+        ):
+            ctx.meta["alias_help"] = alias_help(raw, ctx.command_path)
         # `openadapt run` or `openadapt replay` is a Flow verb typed without
         # `flow`. Point at the launcher form instead of a bare "No such
         # command" or Click's nearest launcher name (`replay` -> `deploy`).
-        name = args[0] if args else ""
         if (
             not ctx.resilient_parsing
             and self.get_command(ctx, name) is None
@@ -86,7 +167,10 @@ class _FlowFirstGroup(click.Group):
             # A command this launcher doesn't know may be one a newer
             # openadapt elsewhere on PATH has.
             _warn_about_launcher_conflicts()
-        return super().resolve_command(ctx, args)
+        resolved = super().resolve_command(ctx, args)
+        if args == raw and not ctx.resilient_parsing:
+            alias_notice(raw, ctx.command_path)
+        return resolved
 
 
 def _print_version(ctx: click.Context, _param, value: bool) -> None:
@@ -164,7 +248,7 @@ def _correct_released_flow_x11_sonames() -> None:
     if not isinstance(sonames, (list, tuple)):
         return
     corrected = tuple(_FLOW_X11_SONAME_CASE.get(name, name) for name in sonames)
-    browser_setup._LINUX_CHROMIUM_SONAMES = corrected
+    setattr(browser_setup, "_LINUX_CHROMIUM_SONAMES", corrected)
 
 
 # Flow prints its own follow-up commands with the `openadapt-flow` executable
@@ -217,6 +301,8 @@ def _flow_verbs() -> frozenset[str]:
 def _flow_tutorial_options() -> Optional[frozenset[str]]:
     """Return the installed Flow tutorial's long options, or None if unreadable."""
     tutorial = (_flow_subparsers() or {}).get("tutorial")
+    if tutorial is None:
+        return None
     try:
         names = tutorial._option_string_actions
     except AttributeError:
@@ -268,16 +354,26 @@ def _invoke_flow(argv: list[str]) -> int:
         click.echo("Reinstall with: pip install --upgrade openadapt", err=True)
         return 1
 
-    _correct_released_flow_x11_sonames()
-    if argv[:1] != ["tutorial"]:
-        return int(flow_main(argv))
-    # The tutorial is the first-run path and ends by printing next steps.
-    # Rewrite only its human-readable output; other verbs can print
-    # machine-readable output that must stay byte-for-byte.
-    from contextlib import redirect_stdout
+    from contextlib import AbstractContextManager, nullcontext
 
-    with redirect_stdout(_LauncherSpellingStream(sys.stdout, _flow_verbs())):
-        return int(flow_main(argv))
+    alias_context: AbstractContextManager[None]
+    try:
+        from openadapt_flow.cli_tasks import suppress_alias_notices
+    except ImportError:
+        alias_context = nullcontext()
+    else:
+        alias_context = suppress_alias_notices()
+    with alias_context:
+        _correct_released_flow_x11_sonames()
+        if argv[:1] != ["tutorial"]:
+            return int(flow_main(argv))
+        # The tutorial is the first-run path and ends by printing next steps.
+        # Rewrite only its human-readable output; other verbs can print
+        # machine-readable output that must stay byte-for-byte.
+        from contextlib import redirect_stdout
+
+        with redirect_stdout(_LauncherSpellingStream(sys.stdout, _flow_verbs())):
+            return int(flow_main(argv))
 
 
 def _run_flow(argv: list[str]) -> None:
@@ -470,6 +566,7 @@ def _is_externally_managed_error(error: BaseException) -> bool:
 _QUICKSTART_OPTIONS = frozenset(
     {
         "--out",
+        "--app",
         "--headless",
         "--no-break",
         "--verbose",
@@ -559,6 +656,17 @@ def _quickstart_root(out: Optional[Path]) -> Path:
     ),
 )
 @click.option(
+    "--app",
+    type=click.Choice(["mockmed", "openemr"]),
+    default="mockmed",
+    show_default=True,
+    help=(
+        "The app to run it in. mockmed is bundled (about 22 seconds, no Docker). "
+        "openemr runs OpenEMR 8.0.0.3 in Docker from a clone of the repository; "
+        "the first run downloads and installs it, later runs reuse it."
+    ),
+)
+@click.option(
     "--headless",
     is_flag=True,
     help="Hide the browser. It is shown by default when a display is available.",
@@ -580,6 +688,7 @@ def _quickstart_root(out: Optional[Path]) -> Path:
 def quickstart(
     command_ctx: click.Context,
     out: Optional[Path],
+    app: str,
     headless: bool,
     no_break: bool,
     verbose: bool,
@@ -594,14 +703,21 @@ def quickstart(
     screen says saved, the database has nothing, and OpenAdapt stops. The
     program makes no AI calls. Nothing in the output directory is overwritten.
 
+    With --app openemr, the same three acts run on OpenEMR 8.0.0.3 in Docker,
+    with the certified referral program: referrals registered at once and
+    checked in OpenEMR's record, then a referral that matches an existing
+    chart, where the program stops before saving. It runs from a clone of the
+    repository and needs Docker; without either it says so and exits 2.
+
     Other flags of the engine tutorial (for example --guided or
     --interactive-record) run that tutorial instead, unchanged.
     """
     _require_supported_python()
     _refuse_unknown_tutorial_options(command_ctx.args)
+    openemr = _openemr_checkout(command_ctx.args) if app == "openemr" else None
     root = _quickstart_root(out)
 
-    if command_ctx.args or not _flow_runs_quickstart():
+    if openemr is None and (command_ctx.args or not _flow_runs_quickstart()):
         # Engine-owned flags (--guided, --interactive-record, and future
         # engine additions) run the engine's own tutorial, as before. So does
         # a Flow older than the pieces the three-act quickstart uses.
@@ -615,7 +731,7 @@ def quickstart(
     steps = next_steps(
         _hint,
         _shell_quote,
-        _agent_serves_tutorial(),
+        openemr is None and _agent_serves_tutorial(),
         keep=_keep_command(),
         shadow=_shadowing_openadapt if _under_uvx() else None,
     )
@@ -627,6 +743,7 @@ def quickstart(
                 break_it=not no_break,
                 verbose=verbose,
                 steps=steps,
+                openemr=openemr,
             )
     except KeyboardInterrupt:
         click.echo(f"\nStopped. Anything written so far is in {root}", err=True)
@@ -635,7 +752,11 @@ def quickstart(
         if _is_externally_managed_error(error):
             _echo_python_remedy()
             raise click.exceptions.Exit(1) from error
-        if type(error).__name__ in ("TutorialError", "DurableAuthorityBusy"):
+        if type(error).__name__ in (
+            "TutorialError",
+            "DurableAuthorityBusy",
+            "FixtureError",
+        ):
             raise click.ClickException(
                 f"The quickstart stopped: {error}\nAnything it wrote is in {root}"
             ) from error
@@ -644,6 +765,31 @@ def quickstart(
         outcome.broken is not None and not outcome.broken.stopped
     ):
         raise click.exceptions.Exit(1)
+
+
+def _openemr_checkout(extra: list[str]) -> Path:
+    """The clone's packages/flow for ``--app openemr``, or exit 2 saying why.
+
+    Each missing piece is one line on stderr. Nothing falls back to MockMed.
+    """
+    from openadapt.quickstart.openemr import (
+        checkout_problem,
+        docker_problem,
+        find_flow_checkout,
+    )
+
+    if extra:
+        raise click.UsageError(
+            f"--app openemr runs the three-act quickstart only; {extra[0]} "
+            "belongs to the engine's MockMed tutorial."
+        )
+    problem = docker_problem()
+    flow = find_flow_checkout() if problem is None else None
+    problem = problem or checkout_problem(flow)
+    if problem is not None or flow is None:
+        click.echo(problem, err=True)
+        raise click.exceptions.Exit(2)
+    return flow
 
 
 # The oldest Flow with every piece the three-act quickstart uses (shared
@@ -858,9 +1004,9 @@ def _warn_about_launcher_conflicts() -> None:
 _SECRET_REFERENCE = re.compile(r"^(?:env:[A-Z][A-Z0-9_]*|keychain:[^/\s]+/[^/\s]+)$")
 # Flow 1.33 and 1.34 probe four X11 libraries in the wrong case, so on Linux
 # they refuse to download Chromium on hosts that have them. 1.35.0 fixed it.
-# Launcher 1.20 requires Flow 2.6: ledger listing uses its persistent
-# owed-recheck API.
-_SUPPORTED_FLOW_RANGE = ">=2.6.0,<3.0.0"
+# Launcher 1.21 requires Flow 2.7: `openadapt wrap` forwards to its wrap
+# command.
+_SUPPORTED_FLOW_RANGE = ">=2.7.0,<3.0.0"
 _RDP_INSTALL_COMMAND = _pip_install("openadapt[rdp]")
 _CHROMIUM_SYSTEM_LIBS_COMMAND = (
     f"{shlex.quote(sys.executable)} -m playwright install-deps chromium"
@@ -870,7 +1016,7 @@ _CHROMIUM_SYSTEM_LIBS_COMMAND = (
 def _supported_flow_version(value: str) -> bool:
     """Return whether a stable Flow version is in the launcher's supported range."""
     parsed = _release_tuple(value)
-    return parsed is not None and (2, 6, 0) <= parsed < (3, 0, 0)
+    return parsed is not None and (2, 7, 0) <= parsed < (3, 0, 0)
 
 
 # The Python modules each native or remote Flow backend imports when its
@@ -1147,7 +1293,7 @@ def flow(command_ctx: click.Context) -> None:
     command list, help, options, validation, and exit codes identical to the
     installed engine version.
     """
-    _run_flow(list(command_ctx.args))
+    _run_flow(command_ctx.meta.get("task_argv", list(command_ctx.args)))
 
 
 for _verb, _help in (
@@ -1437,12 +1583,12 @@ def verify_ledger_reconcile(
         click.echo(f"Error: no held or open write with key {key}", err=True)
         sys.exit(2)
     for k, attempt in rows:
-        contract = by_digest.get(str(attempt.begun.get("contract")))
-        if contract is None:
+        held_contract = by_digest.get(str(attempt.begun.get("contract")))
+        if held_contract is None:
             click.echo(f"{k}  skipped: its contract isn't in {contracts}")
             continue
         try:
-            state = reconcile(contract, k, ledger=ledger)
+            state = reconcile(held_contract, k, ledger=ledger)
         except VerifierError as exc:
             click.echo(f"{k}  skipped: {exc}")
             continue

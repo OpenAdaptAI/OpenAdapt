@@ -1,0 +1,424 @@
+{"t": 1792433908.116, "method": "GET", "path": "/", "fault": "pass", "status": 200, "ms": 38}
+{"t": 1792433908.16, "method": "GET", "path": "/wp-includes/blocks/navigation/style.min.css", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433908.161, "method": "GET", "path": "/wp-includes/blocks/image/style.min.css", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433908.162, "method": "GET", "path": "/wp-includes/blocks/navigation/view.min.js", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433908.163, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/images/tourist-and-building.webp", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433908.162, "method": "GET", "path": "/wp-includes/js/dist/interactivity.min.js", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433908.163, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/images/building-exterior.webp", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433908.166, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/images/windows.webp", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433908.183, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/fonts/cardo/cardo_italic_400.woff2", "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792433908.183, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/fonts/cardo/cardo_normal_400.woff2", "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792433908.182, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/fonts/inter/Inter-VariableFont_slnt,wght.woff2", "fault": "pass", "status": 200, "ms": 9}
+{"t": 1792433908.201, "method": "GET", "path": "/wp-login.php", "fault": "pass", "status": 200, "ms": 11}
+{"t": 1792433908.219, "method": "GET", "path": "/wp-includes/js/underscore.min.js", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433908.219, "method": "GET", "path": "/wp-includes/js/wp-util.min.js", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433908.219, "method": "GET", "path": "/wp-admin/js/password-strength-meter.min.js", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433908.217, "method": "GET", "path": "/wp-admin/load-styles.php", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433908.218, "method": "GET", "path": "/wp-includes/js/dist/i18n.min.js", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433908.217, "method": "GET", "path": "/wp-admin/load-scripts.php", "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792433908.224, "method": "GET", "path": "/wp-admin/js/user-profile.min.js", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792433908.236, "method": "GET", "path": "/wp-admin/images/wordpress-logo.svg", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792433908.247, "method": "GET", "path": "/wp-includes/js/zxcvbn.min.js", "fault": "pass", "status": 200, "ms": 51}
+{"t": 1792433908.386, "method": "POST", "path": "/wp-login.php", "fault": "pass", "status": 302, "ms": 11}
+{"t": 1792433908.399, "method": "GET", "path": "/wp-admin/", "fault": "pass", "status": 200, "ms": 24}
+{"t": 1792433908.431, "method": "GET", "path": "/wp-includes/css/editor.min.css", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792433908.431, "method": "GET", "path": "/wp-includes/js/thickbox/thickbox.css", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433908.432, "method": "GET", "path": "/wp-admin/load-scripts.php", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433908.432, "method": "GET", "path": "/wp-admin/js/common.min.js", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433908.432, "method": "GET", "path": "/wp-admin/load-scripts.php", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433908.436, "method": "GET", "path": "/wp-includes/js/hoverintent-js.min.js", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433908.437, "method": "GET", "path": "/wp-includes/js/clipboard.min.js", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433908.436, "method": "GET", "path": "/wp-includes/js/admin-bar.min.js", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433908.438, "method": "GET", "path": "/wp-includes/js/dist/dom-ready.min.js", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433908.439, "method": "GET", "path": "/wp-includes/js/dist/a11y.min.js", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433908.429, "method": "GET", "path": "/wp-admin/load-styles.php", "fault": "pass", "status": 200, "ms": 16}
+{"t": 1792433908.444, "method": "GET", "path": "/wp-includes/js/jquery/jquery.color.min.js", "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792433908.444, "method": "GET", "path": "/wp-includes/js/wp-ajax-response.min.js", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792433908.441, "method": "GET", "path": "/wp-includes/js/dist/url.min.js", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433908.443, "method": "GET", "path": "/wp-admin/js/site-health.min.js", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433908.441, "method": "GET", "path": "/wp-includes/js/api-request.min.js", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433908.449, "method": "GET", "path": "/wp-includes/js/wp-lists.min.js", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433908.449, "method": "GET", "path": "/wp-includes/js/quicktags.min.js", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433908.45, "method": "GET", "path": "/wp-includes/js/jquery/ui/mouse.min.js", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433908.45, "method": "GET", "path": "/wp-includes/js/jquery/jquery.query.js", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433908.449, "method": "GET", "path": "/wp-includes/js/jquery/ui/core.min.js", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433908.449, "method": "GET", "path": "/wp-admin/js/edit-comments.min.js", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433908.453, "method": "GET", "path": "/wp-includes/js/jquery/ui/sortable.min.js", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433908.457, "method": "GET", "path": "/wp-admin/js/postbox.min.js", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433908.458, "method": "GET", "path": "/wp-includes/js/dist/deprecated.min.js", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433908.457, "method": "GET", "path": "/wp-includes/js/dist/vendor/moment.min.js", "fault": "pass", "status": 200, "ms": 9}
+{"t": 1792433908.464, "method": "GET", "path": "/wp-admin/js/plugin-install.min.js", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433908.459, "method": "GET", "path": "/wp-includes/js/thickbox/thickbox.js", "fault": "pass", "status": 200, "ms": 12}
+{"t": 1792433908.464, "method": "GET", "path": "/wp-includes/js/wp-sanitize.min.js", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433908.458, "method": "GET", "path": "/wp-admin/js/dashboard.min.js", "fault": "pass", "status": 200, "ms": 13}
+{"t": 1792433908.458, "method": "GET", "path": "/wp-includes/js/dist/date.min.js", "fault": "pass", "status": 200, "ms": 16}
+{"t": 1792433908.467, "method": "GET", "path": "/wp-admin/js/updates.min.js", "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792433908.473, "method": "GET", "path": "/wp-includes/js/heartbeat.min.js", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792433908.473, "method": "GET", "path": "/wp-admin/js/svg-painter.js", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792433908.469, "method": "GET", "path": "/wp-includes/js/shortcode.min.js", "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792433908.473, "method": "GET", "path": "/wp-admin/js/media-upload.min.js", "fault": "pass", "status": 200, "ms": 12}
+{"t": 1792433908.479, "method": "GET", "path": "/wp-includes/js/wp-auth-check.min.js", "fault": "pass", "status": 200, "ms": 9}
+{"t": 1792433908.481, "method": "GET", "path": "/wp-includes/js/jquery/ui/menu.min.js", "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792433908.48, "method": "GET", "path": "/wp-includes/js/wplink.min.js", "fault": "pass", "status": 200, "ms": 9}
+{"t": 1792433908.482, "method": "GET", "path": "/wp-includes/js/jquery/ui/autocomplete.min.js", "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792433908.516, "method": "GET", "path": "/wp-includes/js/thickbox/loadingAnimation.gif", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433908.499, "method": "GET", "path": "/wp-admin/edit-tags.php", "fault": "pass", "status": 200, "ms": 32}
+{"t": 1792433908.542, "method": "GET", "path": "/wp-admin/js/tags.min.js", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433908.542, "method": "GET", "path": "/wp-admin/js/inline-edit-tax.min.js", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433908.541, "method": "GET", "path": "/wp-admin/load-styles.php", "fault": "pass", "status": 200, "ms": 14}
+{"t": 1792433908.569, "method": "GET", "path": "/wp-admin/images/spinner.gif", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433908.521, "method": "GET", "path": "/wp-admin/admin-ajax.php", "fault": "pass", "status": 200, "ms": 544}
+{"t": 1792433915.492, "method": "POST", "path": "/wp-admin/admin-ajax.php", "fault": "pass", "status": 200, "ms": 13}
+{"t": 1792435344.769, "method": "GET", "path": "/", "save": false, "fault": "pass", "status": 200, "ms": 36}
+{"t": 1792435344.809, "method": "GET", "path": "/wp-includes/blocks/navigation/style.min.css", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435344.81, "method": "GET", "path": "/wp-includes/blocks/navigation/view.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435344.809, "method": "GET", "path": "/wp-includes/blocks/image/style.min.css", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435344.81, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/images/building-exterior.webp", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435344.81, "method": "GET", "path": "/wp-includes/js/dist/interactivity.min.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435344.81, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/images/tourist-and-building.webp", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435344.814, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/images/windows.webp", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435344.829, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/fonts/cardo/cardo_italic_400.woff2", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435344.828, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/fonts/inter/Inter-VariableFont_slnt,wght.woff2", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435344.829, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/fonts/cardo/cardo_normal_400.woff2", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435344.841, "method": "GET", "path": "/wp-login.php", "save": false, "fault": "pass", "status": 200, "ms": 11}
+{"t": 1792435344.857, "method": "GET", "path": "/wp-includes/js/dist/i18n.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435344.857, "method": "GET", "path": "/wp-admin/js/password-strength-meter.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435344.857, "method": "GET", "path": "/wp-includes/js/wp-util.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435344.859, "method": "GET", "path": "/wp-admin/js/user-profile.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435344.857, "method": "GET", "path": "/wp-includes/js/underscore.min.js", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435344.856, "method": "GET", "path": "/wp-admin/load-styles.php", "save": false, "fault": "pass", "status": 200, "ms": 9}
+{"t": 1792435344.856, "method": "GET", "path": "/wp-admin/load-scripts.php", "save": false, "fault": "pass", "status": 200, "ms": 9}
+{"t": 1792435344.875, "method": "GET", "path": "/wp-admin/images/wordpress-logo.svg", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435344.886, "method": "GET", "path": "/wp-includes/js/zxcvbn.min.js", "save": false, "fault": "pass", "status": 200, "ms": 43}
+{"t": 1792435345.009, "method": "POST", "path": "/wp-login.php", "save": false, "fault": "pass", "status": 302, "ms": 14}
+{"t": 1792435345.024, "method": "GET", "path": "/wp-admin/", "save": false, "fault": "pass", "status": 200, "ms": 65}
+{"t": 1792435345.094, "method": "GET", "path": "/wp-includes/js/thickbox/thickbox.css", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435345.096, "method": "GET", "path": "/wp-admin/load-scripts.php", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435345.095, "method": "GET", "path": "/wp-includes/css/editor.min.css", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435345.097, "method": "GET", "path": "/wp-includes/js/hoverintent-js.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435345.096, "method": "GET", "path": "/wp-admin/js/common.min.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435345.099, "method": "GET", "path": "/wp-includes/js/clipboard.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435345.099, "method": "GET", "path": "/wp-includes/js/admin-bar.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435345.096, "method": "GET", "path": "/wp-admin/load-scripts.php", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435345.1, "method": "GET", "path": "/wp-includes/js/dist/dom-ready.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435345.101, "method": "GET", "path": "/wp-includes/js/dist/a11y.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435345.102, "method": "GET", "path": "/wp-includes/js/api-request.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435345.102, "method": "GET", "path": "/wp-includes/js/dist/url.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435345.103, "method": "GET", "path": "/wp-admin/js/site-health.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435345.105, "method": "GET", "path": "/wp-includes/js/jquery/jquery.color.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435345.105, "method": "GET", "path": "/wp-includes/js/wp-lists.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435345.105, "method": "GET", "path": "/wp-includes/js/quicktags.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435345.104, "method": "GET", "path": "/wp-includes/js/wp-ajax-response.min.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435345.107, "method": "GET", "path": "/wp-includes/js/jquery/jquery.query.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435345.111, "method": "GET", "path": "/wp-admin/js/postbox.min.js", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435345.109, "method": "GET", "path": "/wp-admin/js/edit-comments.min.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435345.11, "method": "GET", "path": "/wp-includes/js/jquery/ui/sortable.min.js", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435345.109, "method": "GET", "path": "/wp-includes/js/jquery/ui/core.min.js", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435345.11, "method": "GET", "path": "/wp-includes/js/jquery/ui/mouse.min.js", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435345.094, "method": "GET", "path": "/wp-admin/load-styles.php", "save": false, "fault": "pass", "status": 200, "ms": 23}
+{"t": 1792435345.113, "method": "GET", "path": "/wp-includes/js/dist/deprecated.min.js", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435345.116, "method": "GET", "path": "/wp-admin/js/dashboard.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435345.116, "method": "GET", "path": "/wp-includes/js/thickbox/thickbox.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435345.117, "method": "GET", "path": "/wp-admin/js/plugin-install.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435345.113, "method": "GET", "path": "/wp-includes/js/dist/vendor/moment.min.js", "save": false, "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792435345.119, "method": "GET", "path": "/wp-includes/js/wp-sanitize.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435345.121, "method": "GET", "path": "/wp-includes/js/shortcode.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435345.12, "method": "GET", "path": "/wp-admin/js/updates.min.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435345.121, "method": "GET", "path": "/wp-admin/js/media-upload.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435345.122, "method": "GET", "path": "/wp-admin/js/svg-painter.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435345.122, "method": "GET", "path": "/wp-includes/js/heartbeat.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435345.115, "method": "GET", "path": "/wp-includes/js/dist/date.min.js", "save": false, "fault": "pass", "status": 200, "ms": 10}
+{"t": 1792435345.125, "method": "GET", "path": "/wp-includes/js/wp-auth-check.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435345.126, "method": "GET", "path": "/wp-includes/js/jquery/ui/autocomplete.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435345.126, "method": "GET", "path": "/wp-includes/js/jquery/ui/menu.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435345.126, "method": "GET", "path": "/wp-includes/js/wplink.min.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435345.156, "method": "GET", "path": "/wp-admin/edit-tags.php", "save": false, "fault": "pass", "status": 200, "ms": 21}
+{"t": 1792435345.175, "method": "GET", "path": "/wp-includes/js/thickbox/loadingAnimation.gif", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435345.182, "method": "GET", "path": "/wp-admin/js/inline-edit-tax.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435345.182, "method": "GET", "path": "/wp-admin/js/tags.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435345.182, "method": "GET", "path": "/wp-admin/load-styles.php", "save": false, "fault": "pass", "status": 200, "ms": 9}
+{"t": 1792435345.202, "method": "GET", "path": "/wp-admin/images/spinner.gif", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435347.923, "method": "GET", "path": "/", "save": false, "fault": "pass", "status": 200, "ms": 34}
+{"t": 1792435347.962, "method": "GET", "path": "/wp-includes/blocks/image/style.min.css", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435347.961, "method": "GET", "path": "/wp-includes/blocks/navigation/style.min.css", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435347.962, "method": "GET", "path": "/wp-includes/blocks/navigation/view.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435347.962, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/images/tourist-and-building.webp", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435347.962, "method": "GET", "path": "/wp-includes/js/dist/interactivity.min.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435347.962, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/images/building-exterior.webp", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435347.966, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/images/windows.webp", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435347.98, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/fonts/inter/Inter-VariableFont_slnt,wght.woff2", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435347.981, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/fonts/cardo/cardo_italic_400.woff2", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435347.981, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/fonts/cardo/cardo_normal_400.woff2", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435347.992, "method": "GET", "path": "/wp-login.php", "save": false, "fault": "pass", "status": 200, "ms": 11}
+{"t": 1792435348.007, "method": "GET", "path": "/wp-includes/js/dist/i18n.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435348.009, "method": "GET", "path": "/wp-includes/js/underscore.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435348.009, "method": "GET", "path": "/wp-includes/js/wp-util.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435348.008, "method": "GET", "path": "/wp-admin/js/password-strength-meter.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435348.01, "method": "GET", "path": "/wp-admin/js/user-profile.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435348.007, "method": "GET", "path": "/wp-admin/load-styles.php", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435348.008, "method": "GET", "path": "/wp-admin/load-scripts.php", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435348.023, "method": "GET", "path": "/wp-admin/images/wordpress-logo.svg", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435348.034, "method": "GET", "path": "/wp-includes/js/zxcvbn.min.js", "save": false, "fault": "pass", "status": 200, "ms": 42}
+{"t": 1792435348.127, "method": "POST", "path": "/wp-login.php", "save": false, "fault": "pass", "status": 302, "ms": 31}
+{"t": 1792435348.16, "method": "GET", "path": "/wp-admin/", "save": false, "fault": "pass", "status": 200, "ms": 18}
+{"t": 1792435348.183, "method": "GET", "path": "/wp-includes/js/thickbox/thickbox.css", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435348.184, "method": "GET", "path": "/wp-admin/js/common.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435348.183, "method": "GET", "path": "/wp-includes/css/editor.min.css", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435348.184, "method": "GET", "path": "/wp-admin/load-scripts.php", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435348.186, "method": "GET", "path": "/wp-includes/js/hoverintent-js.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435348.188, "method": "GET", "path": "/wp-includes/js/admin-bar.min.js", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435348.184, "method": "GET", "path": "/wp-admin/load-scripts.php", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435348.189, "method": "GET", "path": "/wp-includes/js/dist/a11y.min.js", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435348.188, "method": "GET", "path": "/wp-includes/js/clipboard.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435348.188, "method": "GET", "path": "/wp-includes/js/dist/dom-ready.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435348.19, "method": "GET", "path": "/wp-includes/js/api-request.min.js", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435348.191, "method": "GET", "path": "/wp-includes/js/dist/url.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435348.192, "method": "GET", "path": "/wp-admin/js/site-health.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435348.192, "method": "GET", "path": "/wp-includes/js/wp-ajax-response.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435348.192, "method": "GET", "path": "/wp-includes/js/jquery/jquery.color.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435348.192, "method": "GET", "path": "/wp-includes/js/wp-lists.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435348.182, "method": "GET", "path": "/wp-admin/load-styles.php", "save": false, "fault": "pass", "status": 200, "ms": 12}
+{"t": 1792435348.193, "method": "GET", "path": "/wp-includes/js/quicktags.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435348.195, "method": "GET", "path": "/wp-includes/js/jquery/jquery.query.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435348.195, "method": "GET", "path": "/wp-admin/js/edit-comments.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435348.197, "method": "GET", "path": "/wp-includes/js/jquery/ui/core.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435348.197, "method": "GET", "path": "/wp-includes/js/jquery/ui/mouse.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435348.197, "method": "GET", "path": "/wp-includes/js/jquery/ui/sortable.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435348.198, "method": "GET", "path": "/wp-admin/js/postbox.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435348.199, "method": "GET", "path": "/wp-includes/js/dist/deprecated.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435348.198, "method": "GET", "path": "/wp-includes/js/dist/vendor/moment.min.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435348.201, "method": "GET", "path": "/wp-admin/js/dashboard.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435348.202, "method": "GET", "path": "/wp-includes/js/thickbox/thickbox.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435348.203, "method": "GET", "path": "/wp-admin/js/plugin-install.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435348.203, "method": "GET", "path": "/wp-includes/js/wp-sanitize.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435348.205, "method": "GET", "path": "/wp-admin/js/media-upload.min.js", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435348.205, "method": "GET", "path": "/wp-includes/js/shortcode.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435348.204, "method": "GET", "path": "/wp-admin/js/updates.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435348.206, "method": "GET", "path": "/wp-includes/js/heartbeat.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435348.206, "method": "GET", "path": "/wp-admin/js/svg-painter.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435348.208, "method": "GET", "path": "/wp-includes/js/wp-auth-check.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435348.201, "method": "GET", "path": "/wp-includes/js/dist/date.min.js", "save": false, "fault": "pass", "status": 200, "ms": 9}
+{"t": 1792435348.209, "method": "GET", "path": "/wp-includes/js/wplink.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435348.209, "method": "GET", "path": "/wp-includes/js/jquery/ui/autocomplete.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435348.209, "method": "GET", "path": "/wp-includes/js/jquery/ui/menu.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435348.224, "method": "GET", "path": "/wp-admin/edit-tags.php", "save": false, "fault": "pass", "status": 200, "ms": 19}
+{"t": 1792435348.255, "method": "GET", "path": "/wp-admin/js/tags.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435348.255, "method": "GET", "path": "/wp-admin/js/inline-edit-tax.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435348.255, "method": "GET", "path": "/wp-admin/load-styles.php", "save": false, "fault": "pass", "status": 200, "ms": 10}
+{"t": 1792435348.276, "method": "GET", "path": "/wp-admin/images/spinner.gif", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435405.025, "method": "POST", "path": "/wp-admin/admin-ajax.php", "save": true, "fault": "pass", "status": 400, "ms": 17}
+{"t": 1792435408.285, "method": "POST", "path": "/wp-admin/admin-ajax.php", "save": true, "fault": "pass", "status": 200, "ms": 11}
+{"t": 1792435408.299, "method": "GET", "path": "/wp-includes/images/spinner.gif", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435408.299, "method": "GET", "path": "/wp-login.php", "save": false, "fault": "pass", "status": 200, "ms": 11}
+{"t": 1792435421.742, "method": "GET", "path": "/", "save": false, "fault": "pass", "status": 200, "ms": 38}
+{"t": 1792435421.783, "method": "GET", "path": "/wp-includes/blocks/navigation/style.min.css", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435421.784, "method": "GET", "path": "/wp-includes/blocks/image/style.min.css", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435421.784, "method": "GET", "path": "/wp-includes/blocks/navigation/view.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435421.785, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/images/tourist-and-building.webp", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435421.784, "method": "GET", "path": "/wp-includes/js/dist/interactivity.min.js", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435421.784, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/images/building-exterior.webp", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435421.789, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/images/windows.webp", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435421.806, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/fonts/inter/Inter-VariableFont_slnt,wght.woff2", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435421.807, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/fonts/cardo/cardo_normal_400.woff2", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435421.806, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/fonts/cardo/cardo_italic_400.woff2", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435421.823, "method": "GET", "path": "/wp-login.php", "save": false, "fault": "pass", "status": 200, "ms": 10}
+{"t": 1792435421.838, "method": "GET", "path": "/wp-includes/js/dist/i18n.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435421.839, "method": "GET", "path": "/wp-includes/js/wp-util.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435421.839, "method": "GET", "path": "/wp-includes/js/underscore.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435421.837, "method": "GET", "path": "/wp-admin/load-styles.php", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435421.839, "method": "GET", "path": "/wp-admin/js/password-strength-meter.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435421.837, "method": "GET", "path": "/wp-admin/load-scripts.php", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435421.84, "method": "GET", "path": "/wp-admin/js/user-profile.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435421.852, "method": "GET", "path": "/wp-admin/images/wordpress-logo.svg", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435421.865, "method": "GET", "path": "/wp-includes/js/zxcvbn.min.js", "save": false, "fault": "pass", "status": 200, "ms": 43}
+{"t": 1792435421.957, "method": "POST", "path": "/wp-login.php", "save": false, "fault": "pass", "status": 302, "ms": 12}
+{"t": 1792435421.97, "method": "GET", "path": "/wp-admin/", "save": false, "fault": "pass", "status": 200, "ms": 19}
+{"t": 1792435421.993, "method": "GET", "path": "/wp-includes/js/thickbox/thickbox.css", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435421.994, "method": "GET", "path": "/wp-includes/css/editor.min.css", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435421.996, "method": "GET", "path": "/wp-admin/js/common.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435421.995, "method": "GET", "path": "/wp-admin/load-scripts.php", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435421.997, "method": "GET", "path": "/wp-includes/js/hoverintent-js.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435421.998, "method": "GET", "path": "/wp-includes/js/admin-bar.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435421.998, "method": "GET", "path": "/wp-includes/js/clipboard.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435421.995, "method": "GET", "path": "/wp-admin/load-scripts.php", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435422.0, "method": "GET", "path": "/wp-includes/js/dist/dom-ready.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435422.001, "method": "GET", "path": "/wp-includes/js/dist/a11y.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435422.002, "method": "GET", "path": "/wp-includes/js/api-request.min.js", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435422.002, "method": "GET", "path": "/wp-includes/js/dist/url.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435422.003, "method": "GET", "path": "/wp-admin/js/site-health.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435422.004, "method": "GET", "path": "/wp-includes/js/wp-ajax-response.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435422.004, "method": "GET", "path": "/wp-includes/js/jquery/jquery.color.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435422.005, "method": "GET", "path": "/wp-includes/js/wp-lists.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435422.006, "method": "GET", "path": "/wp-includes/js/quicktags.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435422.007, "method": "GET", "path": "/wp-includes/js/jquery/jquery.query.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435421.993, "method": "GET", "path": "/wp-admin/load-styles.php", "save": false, "fault": "pass", "status": 200, "ms": 16}
+{"t": 1792435422.008, "method": "GET", "path": "/wp-includes/js/jquery/ui/core.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435422.009, "method": "GET", "path": "/wp-includes/js/jquery/ui/mouse.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435422.008, "method": "GET", "path": "/wp-admin/js/edit-comments.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435422.009, "method": "GET", "path": "/wp-includes/js/jquery/ui/sortable.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435422.011, "method": "GET", "path": "/wp-admin/js/postbox.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435422.013, "method": "GET", "path": "/wp-includes/js/dist/deprecated.min.js", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435422.011, "method": "GET", "path": "/wp-includes/js/dist/vendor/moment.min.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435422.013, "method": "GET", "path": "/wp-includes/js/thickbox/thickbox.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435422.014, "method": "GET", "path": "/wp-admin/js/plugin-install.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435422.013, "method": "GET", "path": "/wp-admin/js/dashboard.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435422.015, "method": "GET", "path": "/wp-includes/js/wp-sanitize.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435422.015, "method": "GET", "path": "/wp-admin/js/updates.min.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435422.017, "method": "GET", "path": "/wp-includes/js/shortcode.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435422.013, "method": "GET", "path": "/wp-includes/js/dist/date.min.js", "save": false, "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792435422.018, "method": "GET", "path": "/wp-admin/js/svg-painter.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435422.019, "method": "GET", "path": "/wp-includes/js/heartbeat.min.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435422.019, "method": "GET", "path": "/wp-includes/js/wp-auth-check.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435422.018, "method": "GET", "path": "/wp-admin/js/media-upload.min.js", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435422.02, "method": "GET", "path": "/wp-includes/js/wplink.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435422.022, "method": "GET", "path": "/wp-includes/js/jquery/ui/menu.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435422.024, "method": "GET", "path": "/wp-includes/js/jquery/ui/autocomplete.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435422.047, "method": "GET", "path": "/wp-admin/edit-tags.php", "save": false, "fault": "pass", "status": 200, "ms": 18}
+{"t": 1792435422.065, "method": "GET", "path": "/wp-includes/js/thickbox/loadingAnimation.gif", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435422.071, "method": "GET", "path": "/wp-admin/js/tags.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435422.071, "method": "GET", "path": "/wp-admin/js/inline-edit-tax.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435422.071, "method": "GET", "path": "/wp-admin/load-styles.php", "save": false, "fault": "pass", "status": 200, "ms": 10}
+{"t": 1792435422.092, "method": "GET", "path": "/wp-admin/images/spinner.gif", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435478.607, "method": "POST", "path": "/wp-admin/admin-ajax.php", "save": true, "fault": "pass", "status": 200, "ms": 16}
+{"t": 1792435482.101, "method": "POST", "path": "/wp-admin/admin-ajax.php", "save": true, "fault": "pass", "status": 200, "ms": 11}
+{"t": 1792435505.2, "method": "GET", "path": "/", "save": false, "fault": "pass", "status": 200, "ms": 39}
+{"t": 1792435505.244, "method": "GET", "path": "/wp-includes/blocks/image/style.min.css", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435505.244, "method": "GET", "path": "/wp-includes/blocks/navigation/view.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435505.244, "method": "GET", "path": "/wp-includes/blocks/navigation/style.min.css", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435505.245, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/images/tourist-and-building.webp", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435505.244, "method": "GET", "path": "/wp-includes/js/dist/interactivity.min.js", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435505.245, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/images/building-exterior.webp", "save": false, "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792435505.249, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/images/windows.webp", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435505.267, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/fonts/cardo/cardo_normal_400.woff2", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435505.268, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/fonts/cardo/cardo_italic_400.woff2", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435505.267, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/fonts/inter/Inter-VariableFont_slnt,wght.woff2", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435505.281, "method": "GET", "path": "/wp-login.php", "save": false, "fault": "pass", "status": 200, "ms": 10}
+{"t": 1792435505.297, "method": "GET", "path": "/wp-admin/js/password-strength-meter.min.js", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435505.296, "method": "GET", "path": "/wp-includes/js/dist/i18n.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435505.297, "method": "GET", "path": "/wp-includes/js/wp-util.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435505.297, "method": "GET", "path": "/wp-includes/js/underscore.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435505.296, "method": "GET", "path": "/wp-admin/load-styles.php", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435505.299, "method": "GET", "path": "/wp-admin/js/user-profile.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435505.295, "method": "GET", "path": "/wp-admin/load-scripts.php", "save": false, "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792435505.312, "method": "GET", "path": "/wp-admin/images/wordpress-logo.svg", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435505.323, "method": "GET", "path": "/wp-includes/js/zxcvbn.min.js", "save": false, "fault": "pass", "status": 200, "ms": 44}
+{"t": 1792435505.449, "method": "POST", "path": "/wp-login.php", "save": false, "fault": "pass", "status": 302, "ms": 12}
+{"t": 1792435505.462, "method": "GET", "path": "/wp-admin/", "save": false, "fault": "pass", "status": 200, "ms": 20}
+{"t": 1792435505.486, "method": "GET", "path": "/wp-includes/js/thickbox/thickbox.css", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435505.487, "method": "GET", "path": "/wp-includes/css/editor.min.css", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435505.488, "method": "GET", "path": "/wp-admin/js/common.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435505.488, "method": "GET", "path": "/wp-admin/load-scripts.php", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435505.49, "method": "GET", "path": "/wp-includes/js/hoverintent-js.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435505.492, "method": "GET", "path": "/wp-includes/js/admin-bar.min.js", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435505.493, "method": "GET", "path": "/wp-includes/js/dist/dom-ready.min.js", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435505.492, "method": "GET", "path": "/wp-includes/js/clipboard.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435505.487, "method": "GET", "path": "/wp-admin/load-scripts.php", "save": false, "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792435505.493, "method": "GET", "path": "/wp-includes/js/dist/a11y.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435505.495, "method": "GET", "path": "/wp-includes/js/api-request.min.js", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435505.495, "method": "GET", "path": "/wp-includes/js/dist/url.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435505.497, "method": "GET", "path": "/wp-includes/js/jquery/jquery.color.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435505.497, "method": "GET", "path": "/wp-includes/js/wp-ajax-response.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435505.497, "method": "GET", "path": "/wp-admin/js/site-health.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435505.498, "method": "GET", "path": "/wp-includes/js/wp-lists.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435505.486, "method": "GET", "path": "/wp-admin/load-styles.php", "save": false, "fault": "pass", "status": 200, "ms": 17}
+{"t": 1792435505.498, "method": "GET", "path": "/wp-includes/js/quicktags.min.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435505.501, "method": "GET", "path": "/wp-includes/js/jquery/jquery.query.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435505.501, "method": "GET", "path": "/wp-admin/js/edit-comments.min.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435505.501, "method": "GET", "path": "/wp-includes/js/jquery/ui/core.min.js", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435505.502, "method": "GET", "path": "/wp-includes/js/jquery/ui/mouse.min.js", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435505.504, "method": "GET", "path": "/wp-admin/js/postbox.min.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435505.504, "method": "GET", "path": "/wp-includes/js/jquery/ui/sortable.min.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435505.508, "method": "GET", "path": "/wp-includes/js/dist/deprecated.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435505.505, "method": "GET", "path": "/wp-includes/js/dist/vendor/moment.min.js", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435505.51, "method": "GET", "path": "/wp-admin/js/dashboard.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435505.511, "method": "GET", "path": "/wp-includes/js/thickbox/thickbox.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435505.511, "method": "GET", "path": "/wp-admin/js/plugin-install.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435505.512, "method": "GET", "path": "/wp-includes/js/wp-sanitize.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435505.514, "method": "GET", "path": "/wp-includes/js/shortcode.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435505.512, "method": "GET", "path": "/wp-admin/js/updates.min.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435505.509, "method": "GET", "path": "/wp-includes/js/dist/date.min.js", "save": false, "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792435505.514, "method": "GET", "path": "/wp-admin/js/media-upload.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435505.514, "method": "GET", "path": "/wp-includes/js/heartbeat.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435505.515, "method": "GET", "path": "/wp-admin/js/svg-painter.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435505.518, "method": "GET", "path": "/wp-includes/js/wp-auth-check.min.js", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435505.518, "method": "GET", "path": "/wp-includes/js/wplink.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435505.519, "method": "GET", "path": "/wp-includes/js/jquery/ui/menu.min.js", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435505.519, "method": "GET", "path": "/wp-includes/js/jquery/ui/autocomplete.min.js", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435505.533, "method": "GET", "path": "/wp-admin/edit-tags.php", "save": false, "fault": "pass", "status": 200, "ms": 18}
+{"t": 1792435505.563, "method": "GET", "path": "/wp-admin/js/tags.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435505.564, "method": "GET", "path": "/wp-admin/js/inline-edit-tax.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435505.564, "method": "GET", "path": "/wp-admin/load-styles.php", "save": false, "fault": "pass", "status": 200, "ms": 10}
+{"t": 1792435505.585, "method": "GET", "path": "/wp-admin/images/spinner.gif", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435562.432, "method": "POST", "path": "/wp-admin/admin-ajax.php", "save": true, "fault": "pass", "status": 200, "ms": 15}
+{"t": 1792435565.599, "method": "POST", "path": "/wp-admin/admin-ajax.php", "save": false, "fault": "pass", "status": 200, "ms": 17}
+{"t": 1792435577.884, "method": "GET", "path": "/", "save": false, "fault": "pass", "status": 200, "ms": 36}
+{"t": 1792435577.924, "method": "GET", "path": "/wp-includes/blocks/navigation/view.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435577.924, "method": "GET", "path": "/wp-includes/blocks/navigation/style.min.css", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435577.924, "method": "GET", "path": "/wp-includes/blocks/image/style.min.css", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435577.925, "method": "GET", "path": "/wp-includes/js/dist/interactivity.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435577.925, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/images/building-exterior.webp", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435577.925, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/images/tourist-and-building.webp", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435577.929, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/images/windows.webp", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435577.946, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/fonts/cardo/cardo_normal_400.woff2", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435577.944, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/fonts/inter/Inter-VariableFont_slnt,wght.woff2", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435577.946, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/fonts/cardo/cardo_italic_400.woff2", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435577.959, "method": "GET", "path": "/wp-login.php", "save": false, "fault": "pass", "status": 200, "ms": 9}
+{"t": 1792435577.973, "method": "GET", "path": "/wp-includes/js/dist/i18n.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435577.973, "method": "GET", "path": "/wp-admin/js/password-strength-meter.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435577.974, "method": "GET", "path": "/wp-includes/js/underscore.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435577.974, "method": "GET", "path": "/wp-includes/js/wp-util.min.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435577.971, "method": "GET", "path": "/wp-admin/load-styles.php", "save": false, "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792435577.978, "method": "GET", "path": "/wp-admin/js/user-profile.min.js", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435577.972, "method": "GET", "path": "/wp-admin/load-scripts.php", "save": false, "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792435577.99, "method": "GET", "path": "/wp-admin/images/wordpress-logo.svg", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435578.0, "method": "GET", "path": "/wp-includes/js/zxcvbn.min.js", "save": false, "fault": "pass", "status": 200, "ms": 43}
+{"t": 1792435578.09, "method": "POST", "path": "/wp-login.php", "save": false, "fault": "pass", "status": 302, "ms": 11}
+{"t": 1792435578.103, "method": "GET", "path": "/wp-admin/", "save": false, "fault": "pass", "status": 200, "ms": 23}
+{"t": 1792435578.131, "method": "GET", "path": "/wp-includes/js/thickbox/thickbox.css", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435578.132, "method": "GET", "path": "/wp-includes/css/editor.min.css", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435578.133, "method": "GET", "path": "/wp-admin/load-scripts.php", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435578.135, "method": "GET", "path": "/wp-includes/js/hoverintent-js.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435578.133, "method": "GET", "path": "/wp-admin/js/common.min.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435578.135, "method": "GET", "path": "/wp-includes/js/admin-bar.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435578.133, "method": "GET", "path": "/wp-admin/load-scripts.php", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435578.138, "method": "GET", "path": "/wp-includes/js/dist/dom-ready.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435578.138, "method": "GET", "path": "/wp-includes/js/clipboard.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435578.139, "method": "GET", "path": "/wp-includes/js/dist/a11y.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435578.139, "method": "GET", "path": "/wp-includes/js/api-request.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435578.14, "method": "GET", "path": "/wp-includes/js/dist/url.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435578.142, "method": "GET", "path": "/wp-admin/js/site-health.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435578.13, "method": "GET", "path": "/wp-admin/load-styles.php", "save": false, "fault": "pass", "status": 200, "ms": 14}
+{"t": 1792435578.143, "method": "GET", "path": "/wp-includes/js/wp-ajax-response.min.js", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435578.143, "method": "GET", "path": "/wp-includes/js/wp-lists.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435578.143, "method": "GET", "path": "/wp-includes/js/quicktags.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435578.143, "method": "GET", "path": "/wp-includes/js/jquery/jquery.color.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435578.146, "method": "GET", "path": "/wp-includes/js/jquery/jquery.query.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435578.147, "method": "GET", "path": "/wp-includes/js/jquery/ui/mouse.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435578.147, "method": "GET", "path": "/wp-includes/js/jquery/ui/sortable.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435578.147, "method": "GET", "path": "/wp-includes/js/jquery/ui/core.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435578.146, "method": "GET", "path": "/wp-admin/js/edit-comments.min.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435578.147, "method": "GET", "path": "/wp-admin/js/postbox.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435578.148, "method": "GET", "path": "/wp-includes/js/dist/vendor/moment.min.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435578.151, "method": "GET", "path": "/wp-includes/js/dist/deprecated.min.js", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435578.151, "method": "GET", "path": "/wp-admin/js/dashboard.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435578.152, "method": "GET", "path": "/wp-admin/js/plugin-install.min.js", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435578.152, "method": "GET", "path": "/wp-includes/js/thickbox/thickbox.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435578.154, "method": "GET", "path": "/wp-includes/js/wp-sanitize.min.js", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435578.154, "method": "GET", "path": "/wp-admin/js/updates.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435578.155, "method": "GET", "path": "/wp-includes/js/shortcode.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435578.156, "method": "GET", "path": "/wp-admin/js/media-upload.min.js", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435578.156, "method": "GET", "path": "/wp-admin/js/svg-painter.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435578.158, "method": "GET", "path": "/wp-includes/js/heartbeat.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435578.151, "method": "GET", "path": "/wp-includes/js/dist/date.min.js", "save": false, "fault": "pass", "status": 200, "ms": 9}
+{"t": 1792435578.159, "method": "GET", "path": "/wp-includes/js/wp-auth-check.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435578.16, "method": "GET", "path": "/wp-includes/js/jquery/ui/menu.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435578.159, "method": "GET", "path": "/wp-includes/js/wplink.min.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435578.16, "method": "GET", "path": "/wp-includes/js/jquery/ui/autocomplete.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435578.183, "method": "GET", "path": "/wp-admin/edit-tags.php", "save": false, "fault": "pass", "status": 200, "ms": 18}
+{"t": 1792435578.202, "method": "GET", "path": "/wp-includes/js/thickbox/loadingAnimation.gif", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435578.207, "method": "GET", "path": "/wp-admin/js/tags.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435578.208, "method": "GET", "path": "/wp-admin/js/inline-edit-tax.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435578.207, "method": "GET", "path": "/wp-admin/load-styles.php", "save": false, "fault": "pass", "status": 200, "ms": 10}
+{"t": 1792435578.228, "method": "GET", "path": "/wp-admin/images/spinner.gif", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435634.927, "method": "POST", "path": "/wp-admin/admin-ajax.php", "save": true, "fault": "duplicate", "status": "200+200", "ms": 26}
+{"t": 1792435638.238, "method": "POST", "path": "/wp-admin/admin-ajax.php", "save": false, "fault": "pass", "status": 200, "ms": 11}

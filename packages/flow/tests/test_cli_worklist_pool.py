@@ -68,6 +68,7 @@ def _config(
 class _Page:
     def __init__(self, ctx: "_Context") -> None:
         self.ctx = ctx
+        self.context = ctx
         self.url = "about:blank"
 
     def goto(self, url: str) -> None:
@@ -79,10 +80,21 @@ class _Page:
     def close(self) -> None:
         pass
 
+    def is_closed(self) -> bool:
+        return False
+
+    def wait_for_function(self, *args: Any, **kwargs: Any) -> Any:
+        class Handle:
+            def dispose(self) -> None:
+                pass
+
+        return Handle()
+
 
 class _Context:
-    def __init__(self, endpoint: str) -> None:
+    def __init__(self, endpoint: str, browser: Any) -> None:
         self.endpoint = endpoint
+        self.browser = browser
 
     def cookies(self) -> list[dict[str, str]]:
         # Each endpoint is its own signed-in browser: its own session cookie.
@@ -101,7 +113,10 @@ class _Context:
 
 class _Browser:
     def __init__(self, endpoint: str) -> None:
-        self.contexts = [_Context(endpoint)]
+        self.contexts = [_Context(endpoint, self)]
+
+    def is_connected(self) -> bool:
+        return True
 
 
 class _Chromium:

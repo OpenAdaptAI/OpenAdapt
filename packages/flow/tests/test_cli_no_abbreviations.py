@@ -86,6 +86,210 @@ def test_every_cli_parser_rejects_all_undeclared_long_option_prefixes():
     assert parser_count > 100 and option_count > 100 and prefix_count > option_count
 
 
+def _parser_constructor_calls(tree):
+    """Resolve static imports and parser bases without executing source code."""
+    scopes = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
+    comprehensions = (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
+
+    def scope_nodes(nodes):
+        for node in nodes:
+            if not isinstance(node, ast.AST):
+                continue
+            yield node
+            if isinstance(node, comprehensions):
+                # Only the first iterable is evaluated outside the implicit
+                # comprehension scope; its targets must not shadow this scope.
+                yield from scope_nodes([node.generators[0].iter])
+            elif isinstance(node, scopes):
+                # Defaults, decorators and bases belong to the enclosing scope.
+                children = (
+                    value for field, value in ast.iter_fields(node) if field != "body"
+                )
+                for value in children:
+                    if isinstance(value, ast.AST):
+                        yield from scope_nodes([value])
+                    elif isinstance(value, list):
+                        yield from scope_nodes(value)
+            else:
+                yield from scope_nodes(ast.iter_child_nodes(node))
+
+    def provenance(node, bindings):
+        if isinstance(node, ast.IfExp):
+            return provenance(node.body, bindings) | provenance(node.orelse, bindings)
+        if isinstance(node, ast.Name):
+            return bindings.get(node.id, set())
+        if (
+            isinstance(node, ast.Attribute)
+            and node.attr == "ArgumentParser"
+            and isinstance(node.value, ast.Name)
+            and (
+                node.value.id == "argparse"
+                or "module" in bindings.get(node.value.id, set())
+            )
+        ):
+            return {"parser"}
+        return set()
+
+    def comprehension_parts(node):
+        parameters = [
+            target.id
+            for generator in node.generators
+            for target in ast.walk(generator.target)
+            if isinstance(target, ast.Name)
+        ]
+        body = [node.key, node.value] if isinstance(node, ast.DictComp) else [node.elt]
+        body += [generator.iter for generator in node.generators[1:]]
+        body += [
+            condition for generator in node.generators for condition in generator.ifs
+        ]
+        return body, parameters
+
+    def enclosing_assignments(nodes):
+        for node in scope_nodes(nodes):
+            if isinstance(node, ast.NamedExpr):
+                yield node.target.id
+            elif isinstance(node, comprehensions):
+                body, _ = comprehension_parts(node)
+                yield from enclosing_assignments(body)
+
+    def scope_bindings(
+        body, inherited, parameters=(), class_scope=False, comprehension_scope=False
+    ):
+        nodes = list(scope_nodes(body))
+        local_names = set(parameters) | set(enclosing_assignments(body))
+        for node in nodes:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                local_names.add(node.name)
+            elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+                local_names.add(node.id)
+            elif isinstance(node, (ast.Import, ast.ImportFrom)):
+                local_names.update(
+                    name.asname or name.name.split(".")[0] for name in node.names
+                )
+        if comprehension_scope:
+            # A walrus target is free in this implicit scope and belongs to
+            # the enclosing function/module; only iteration targets shadow it.
+            local_names.difference_update(
+                set(enclosing_assignments(body)) - set(parameters)
+            )
+        for node in nodes:
+            if isinstance(node, (ast.Global, ast.Nonlocal)):
+                local_names.difference_update(node.names)
+        # Function locals shadow outer bindings throughout the function. Class
+        # bodies can still read an outer name before assigning their own value.
+        bindings = {
+            name: set(kinds)
+            for name, kinds in inherited.items()
+            if class_scope or name not in local_names
+        }
+        for node in nodes:
+            if isinstance(node, ast.Import):
+                for name in node.names:
+                    if name.name == "argparse":
+                        bindings.setdefault(name.asname or name.name, set()).add(
+                            "module"
+                        )
+            elif (
+                isinstance(node, ast.ImportFrom)
+                and node.module == "argparse"
+                and node.level == 0
+            ):
+                for name in node.names:
+                    if name.name == "ArgumentParser":
+                        bindings.setdefault(name.asname or name.name, set()).add(
+                            "parser"
+                        )
+        # A source census cannot decide which runtime branch rebinds a name.
+        # Retain every possible static parser provenance instead of letting an
+        # ambiguous assignment erase coverage. No application code is executed.
+        changed = True
+        while changed:
+            changed = False
+            for node in nodes:
+                targets = []
+                kinds = set()
+                if isinstance(node, ast.ClassDef):
+                    targets = [node.name]
+                    if any(
+                        "parser" in provenance(base, bindings) for base in node.bases
+                    ):
+                        kinds = {"parser"}
+                elif isinstance(node, (ast.Assign, ast.AnnAssign, ast.NamedExpr)):
+                    assigned = (
+                        node.targets if isinstance(node, ast.Assign) else [node.target]
+                    )
+                    targets = [
+                        target.id for target in assigned if isinstance(target, ast.Name)
+                    ]
+                    kinds = provenance(node.value, bindings)
+                for name in targets:
+                    previous = bindings.setdefault(name, set())
+                    if not kinds <= previous:
+                        previous.update(kinds)
+                        changed = True
+            # Assignment expressions escape a comprehension into this scope.
+            # Resolve their values inside the comprehension, where iteration
+            # targets shadow outer aliases, then propagate only known kinds.
+            for node in nodes:
+                if not isinstance(node, comprehensions):
+                    continue
+                child_body, child_parameters = comprehension_parts(node)
+                _, child_bindings = scope_bindings(
+                    child_body, bindings, child_parameters, comprehension_scope=True
+                )
+                for name in enclosing_assignments(child_body):
+                    kinds = child_bindings.get(name, set())
+                    previous = bindings.setdefault(name, set())
+                    if not kinds <= previous:
+                        previous.update(kinds)
+                        changed = True
+        return nodes, bindings
+
+    def visit_scope(
+        body, inherited, parameters=(), class_scope=False, comprehension_scope=False
+    ):
+        nodes, bindings = scope_bindings(
+            body, inherited, parameters, class_scope, comprehension_scope
+        )
+        for node in nodes:
+            if isinstance(node, ast.Call) and (
+                "parser" in provenance(node.func, bindings)
+                or isinstance(node.func, ast.Attribute)
+                and node.func.attr == "add_parser"
+            ):
+                yield node
+            if isinstance(node, comprehensions):
+                child_body, parameters = comprehension_parts(node)
+                yield from visit_scope(
+                    child_body, bindings, parameters, comprehension_scope=True
+                )
+            elif isinstance(node, scopes):
+                parameters = []
+                if not isinstance(node, ast.ClassDef):
+                    args = node.args
+                    parameters = [
+                        arg.arg
+                        for arg in (
+                            *args.posonlyargs,
+                            *args.args,
+                            *args.kwonlyargs,
+                            *([args.vararg] if args.vararg else []),
+                            *([args.kwarg] if args.kwarg else []),
+                        )
+                    ]
+                child_body = [node.body] if isinstance(node, ast.Lambda) else node.body
+                # A method's lexical parent is outside its class namespace.
+                child_bindings = inherited if class_scope else bindings
+                yield from visit_scope(
+                    child_body,
+                    child_bindings,
+                    parameters,
+                    class_scope=isinstance(node, ast.ClassDef),
+                )
+
+    return visit_scope(tree.body, {})
+
+
 def test_standalone_cli_constructor_inventory_also_disables_abbreviations():
     repository = Path(__file__).resolve().parents[3]
     roots = (
@@ -117,18 +321,7 @@ def test_standalone_cli_constructor_inventory_also_disables_abbreviations():
             ):
                 continue
             tree = ast.parse(source.read_text(encoding="utf-8"))
-            for node in ast.walk(tree):
-                if not isinstance(node, ast.Call) or not isinstance(
-                    node.func, ast.Attribute
-                ):
-                    continue
-                constructor = (
-                    node.func.attr == "ArgumentParser"
-                    and isinstance(node.func.value, ast.Name)
-                    and node.func.value.id == "argparse"
-                )
-                if not constructor and node.func.attr != "add_parser":
-                    continue
+            for node in _parser_constructor_calls(tree):
                 values = [kw.value for kw in node.keywords if kw.arg == "allow_abbrev"]
                 assert (
                     len(values) == 1

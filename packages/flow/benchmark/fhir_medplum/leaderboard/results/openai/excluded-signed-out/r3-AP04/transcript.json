@@ -1,0 +1,39 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_087ea5951536e04d016ae969b2396887d2850686b5e52ff1a4",
+     "call_id": "call_2HR68oLwBCQCQ9lAgCAy3muj",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE Medplum is showing the sign-in screen, and no credentials were provided; I could not access the records.",
+   "calls": []
+  }
+ ],
+ "actions": [],
+ "usage": [
+  {
+   "in": 2314,
+   "out": 28,
+   "usd": 0.000748,
+   "cached": 2311
+  },
+  {
+   "in": 3531,
+   "out": 55,
+   "usd": 0.001262,
+   "cached": 3528
+  }
+ ]
+}

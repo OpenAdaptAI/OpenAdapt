@@ -1,0 +1,98 @@
+{
+ "lab": "zenbook (winlap)",
+ "started": "2026-11-03T23:51:51Z",
+ "capabilities": [
+  "context_identity_v1",
+  "guarded_input_v1",
+  "screenshot",
+  "typed_input_v1",
+  "uia_authoring_tree_v1",
+  "uia_read_v1",
+  "uia_v1"
+ ],
+ "patient_notes_tree": {
+  "seconds": 0.48,
+  "nodes": 11,
+  "truncated": false,
+  "identity_matches": 11,
+  "misses": [],
+  "roles": [
+   "button",
+   "menu_item",
+   "text_input"
+  ],
+  "process": "powershell"
+ },
+ "pn_observe": {
+  "nodes": 7,
+  "provider": "windows_uia",
+  "automation_ids": [
+   "noteBox",
+   "saveButton",
+   "searchBox",
+   "searchButton"
+  ]
+ },
+ "pn_dialog_yes_nodes": 1,
+ "pn_clicks": [
+  {
+   "actor": "agent",
+   "structural": {
+    "role": "textbox",
+    "name": "searchBox",
+    "automation_id": "searchBox",
+    "window_name": "Patient Notes - Benchmark Harness"
+   }
+  },
+  {
+   "actor": "agent",
+   "structural": {
+    "role": "button",
+    "name": "searchButton",
+    "automation_id": "searchButton",
+    "window_name": "Patient Notes - Benchmark Harness"
+   }
+  },
+  {
+   "actor": "agent",
+   "structural": {
+    "role": "textbox",
+    "name": "noteBox",
+    "automation_id": "noteBox",
+    "window_name": "Patient Notes - Benchmark Harness"
+   }
+  },
+  {
+   "actor": "agent",
+   "structural": {
+    "role": "button",
+    "name": "saveButton",
+    "automation_id": "saveButton",
+    "window_name": "Patient Notes - Benchmark Harness"
+   }
+  },
+  {
+   "actor": "agent",
+   "structural": {
+    "role": "button",
+    "name": "Yes",
+    "automation_id": "6",
+    "window_name": "Confirm save"
+   }
+  }
+ ],
+ "pn_db_new_rows": 0,
+ "pn_db_has_note": true,
+ "pn_compile": {
+  "status": "needs_human_admit",
+  "workflow_id": "wf_9bcf11df8a0e498a9b3d93e8c3bba5be",
+  "recording_retained": true,
+  "distilled": {
+   "steps_in": 7,
+   "steps_out": 7,
+   "dropped": []
+  }
+ },
+ "od_error": "Open Dental is not installed on this lab host; its tree was not read",
+ "note": "Patient Notes (in-tree WinForms app, synthetic SQLite) on Windows 11 Pro x64. An agent observes the UIA authoring tree and records by control through AuthoringSession; pn_db_has_note is the SQLite read-back. The save updates the existing patient row, so pn_db_new_rows is 0."
+}

@@ -1,0 +1,7 @@
+app,workflows,start_local,first_correct_demo_local,agent_minutes,main_work
+harness,all,13:55,14:10,15,"proxy, judge, recorder/compile/run driver (shared by every app)"
+redmine,1,14:06,14:16,10,"seed via rails runner; Enter on a <select> submitted the form early"
+wordpress,2,14:16,14:19,4,"install over HTTP; must-use plugin turns off the comment flood throttle"
+netbox,1,14:19,14:23,4,"custom-field seed (owner_team) for the changed-default case"
+dolibarr,2,14:23,14:27,4,"select2 widgets; company country constant for the changed-default case"
+trac,1,14:27,14:36,9,"image build; basic-auth sign-in; max_summary_size rule for the validation case"

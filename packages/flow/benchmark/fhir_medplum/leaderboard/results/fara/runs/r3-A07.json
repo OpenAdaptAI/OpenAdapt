@@ -1,0 +1,116 @@
+{
+ "id": "A07",
+ "class": "duplicate",
+ "type": "allergy",
+ "expect": "create",
+ "note": "The write path sends the create twice.",
+ "agent_s": 219.9,
+ "cost_usd": 0.0,
+ "claim": {
+  "status": "done",
+  "id": "Patient/ad43eff8-69c7-4b5f-aded-9ec00d4eadbb",
+  "note": "RESULT: DONE",
+  "claim_line": true,
+  "end_url": "http://localhost:9821/Patient/ad43eff8-69c7-4b5f-aded-9ec00d4eadbb?_contained=type:AllergyIntolerance",
+  "final_text": "No AllergyIntolerance resources were returned, so there is no existing allergy record to report; we should stop execution here.\nRESULT: DONE",
+  "model_calls": 4,
+  "actions": 2,
+  "tokens_in": 19729,
+  "tokens_out": 285
+ },
+ "verifier": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "no record is the person and the agent created none"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 0,
+   "agent_writes": 0,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [],
+   "window_until": "2026-11-05T11:06:25+00:00"
+  },
+  "unreadable": false
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "no record is the person and the agent created none"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 0,
+   "agent_writes": 0,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [],
+   "window_until": "2026-11-05T11:06:27+00:00"
+  },
+  "unreadable": false
+ },
+ "verify_s": 5.6,
+ "readback": {
+  "holds": false,
+  "why": "names another type",
+  "ref": "Patient/ad43eff8-69c7-4b5f-aded-9ec00d4eadbb"
+ },
+ "oracle": {
+  "verdict": "absent",
+  "reasons": [
+   "no AllergyIntolerance was written"
+  ],
+  "changes": {}
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ServiceRequest",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": false,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 23.5,
+  "end": 13.5,
+  "waited_s": 0
+ }
+}

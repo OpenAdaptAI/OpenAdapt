@@ -1,0 +1,16 @@
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wikijs_group/footprint/fp0-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wikijs_group/footprint/fp0-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wikijs_group/footprint/fp1-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wikijs_group/footprint/fp1-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wikijs_group/footprint/fp2-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wikijs_group/footprint/fp2-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{
+ "equivalent": true,
+ "gate": "admitted",
+ "differences": [],
+ "server_owned": [
+  "groups.createdAt",
+  "groups.id",
+  "groups.updatedAt"
+ ]
+}

@@ -1,0 +1,417 @@
+{"t": 1792433666.372, "method": "GET", "path": "/", "fault": "pass", "status": 200, "ms": 19}
+{"t": 1792433666.405, "method": "GET", "path": "/assets/jquery/jquery-ui-1.13.2-70e53573.css", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433666.406, "method": "GET", "path": "/assets/tribute-5.1.3-c23a7bf2.css", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433666.406, "method": "GET", "path": "/assets/application-045e2042.css", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433666.407, "method": "GET", "path": "/assets/rails-ujs-3de06f48.js", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433666.407, "method": "GET", "path": "/assets/responsive-c53c771c.css", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433666.407, "method": "GET", "path": "/assets/jquery-3.7.1-ui-1.13.3-3ca148b8.js", "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792433666.411, "method": "GET", "path": "/assets/tribute-5.1.3.min-6c16c47a.js", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433666.412, "method": "GET", "path": "/assets/tablesort-5.2.1.min-c6968762.js", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433666.413, "method": "GET", "path": "/assets/tablesort-5.2.1.number.min-8a47560b.js", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433666.414, "method": "GET", "path": "/assets/responsive-aa0cdb6f.js", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433666.414, "method": "GET", "path": "/assets/application-14833e45.js", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433666.455, "method": "GET", "path": "/assets/icons-35b4b65e.svg", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792433666.465, "method": "GET", "path": "/assets/chevron-down-f08c7c57.svg", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792433666.478, "method": "GET", "path": "/assets/NotoSans-Regular-ff41eb73.woff2", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433666.479, "method": "GET", "path": "/assets/NotoSans-Bold-8f58b84b.woff2", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433666.495, "method": "GET", "path": "/login", "fault": "pass", "status": 200, "ms": 12}
+{"t": 1792433666.632, "method": "POST", "path": "/login", "fault": "pass", "status": 302, "ms": 7}
+{"t": 1792433666.641, "method": "GET", "path": "/my/page", "fault": "pass", "status": 200, "ms": 24}
+{"t": 1792433666.669, "method": "GET", "path": "/assets/context_menu-a52e1524.css", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433666.67, "method": "GET", "path": "/assets/context_menu-78dc3795.js", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433666.688, "method": "GET", "path": "/projects/helpdesk/issues/new", "fault": "pass", "status": 200, "ms": 38}
+{"t": 1792433666.73, "method": "GET", "path": "/assets/jstoolbar/jstoolbar-d7c21366.js", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433666.731, "method": "GET", "path": "/assets/jstoolbar-57267577.css", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433666.732, "method": "GET", "path": "/assets/jstoolbar/lang/jstoolbar-en-85c9edfe.js", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433666.732, "method": "GET", "path": "/assets/attachments-db17b2b6.js", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433666.731, "method": "GET", "path": "/assets/jstoolbar/common_mark-8a9a868d.js", "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792433666.743, "method": "GET", "path": "/assets/jstoolbar/italic-581bb903.svg", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433666.743, "method": "GET", "path": "/assets/jstoolbar/bold-9488b1ca.svg", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433666.744, "method": "GET", "path": "/assets/jstoolbar/underline-7f1532c4.svg", "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792433666.744, "method": "GET", "path": "/assets/jstoolbar/strikethrough-845fb06b.svg", "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792433666.746, "method": "GET", "path": "/assets/jstoolbar/letter-c-828e6ed3.svg", "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792433666.747, "method": "GET", "path": "/assets/jstoolbar/h1-2c820a9f.svg", "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792433666.747, "method": "GET", "path": "/assets/jstoolbar/h2-e48db650.svg", "fault": "pass", "status": 200, "ms": 9}
+{"t": 1792433666.747, "method": "GET", "path": "/assets/jstoolbar/h3-97122049.svg", "fault": "pass", "status": 200, "ms": 9}
+{"t": 1792433666.755, "method": "GET", "path": "/assets/jstoolbar/table-0cf07e5d.svg", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433666.754, "method": "GET", "path": "/assets/jstoolbar/indent-decrease-7146c0c1.svg", "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792433666.758, "method": "GET", "path": "/assets/jstoolbar/code-099ac2b5.svg", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433666.758, "method": "GET", "path": "/assets/jstoolbar/indent-increase-16ddf219.svg", "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792433666.759, "method": "GET", "path": "/assets/jstoolbar/list-check-cccb4f48.svg", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433666.76, "method": "GET", "path": "/assets/jstoolbar/list-numbers-9bd169a5.svg", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433666.763, "method": "GET", "path": "/assets/jstoolbar/wiki_link-6a9c9575.svg", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433666.76, "method": "GET", "path": "/assets/jstoolbar/image-0b4f4f05.svg", "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792433666.764, "method": "GET", "path": "/assets/jstoolbar/help-16e39147.svg", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433666.769, "method": "GET", "path": "/assets/jstoolbar/list-3397686a.svg", "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792433666.769, "method": "GET", "path": "/assets/arrow_right-e6b20439.png", "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792433666.77, "method": "GET", "path": "/assets/search-0bd54309.svg", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433666.769, "method": "GET", "path": "/assets/arrow_left-49e4d0f5.png", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433669.367, "method": "POST", "path": "/projects/helpdesk/issues", "fault": "pass", "status": 200, "ms": 34}
+{"t": 1792433694.24, "method": "GET", "path": "/", "fault": "pass", "status": 200, "ms": 23}
+{"t": 1792433694.269, "method": "GET", "path": "/assets/jquery/jquery-ui-1.13.2-70e53573.css", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433694.269, "method": "GET", "path": "/assets/tribute-5.1.3-c23a7bf2.css", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433694.27, "method": "GET", "path": "/assets/application-045e2042.css", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433694.27, "method": "GET", "path": "/assets/responsive-c53c771c.css", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433694.271, "method": "GET", "path": "/assets/rails-ujs-3de06f48.js", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433694.271, "method": "GET", "path": "/assets/jquery-3.7.1-ui-1.13.3-3ca148b8.js", "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792433694.279, "method": "GET", "path": "/assets/tablesort-5.2.1.min-c6968762.js", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433694.279, "method": "GET", "path": "/assets/tribute-5.1.3.min-6c16c47a.js", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433694.28, "method": "GET", "path": "/assets/tablesort-5.2.1.number.min-8a47560b.js", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433694.28, "method": "GET", "path": "/assets/application-14833e45.js", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433694.283, "method": "GET", "path": "/assets/responsive-aa0cdb6f.js", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792433694.299, "method": "GET", "path": "/assets/icons-35b4b65e.svg", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792433694.305, "method": "GET", "path": "/assets/chevron-down-f08c7c57.svg", "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792433694.308, "method": "GET", "path": "/assets/NotoSans-Bold-8f58b84b.woff2", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433694.308, "method": "GET", "path": "/assets/NotoSans-Regular-ff41eb73.woff2", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433694.321, "method": "GET", "path": "/login", "fault": "pass", "status": 200, "ms": 10}
+{"t": 1792433694.454, "method": "POST", "path": "/login", "fault": "pass", "status": 302, "ms": 9}
+{"t": 1792433694.464, "method": "GET", "path": "/my/page", "fault": "pass", "status": 200, "ms": 23}
+{"t": 1792433694.492, "method": "GET", "path": "/assets/context_menu-a52e1524.css", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433694.492, "method": "GET", "path": "/assets/context_menu-78dc3795.js", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433694.506, "method": "GET", "path": "/projects/helpdesk/issues/new", "fault": "pass", "status": 200, "ms": 29}
+{"t": 1792433694.541, "method": "GET", "path": "/assets/jstoolbar/common_mark-8a9a868d.js", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433694.54, "method": "GET", "path": "/assets/jstoolbar/jstoolbar-d7c21366.js", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433694.54, "method": "GET", "path": "/assets/jstoolbar-57267577.css", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433694.542, "method": "GET", "path": "/assets/attachments-db17b2b6.js", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433694.542, "method": "GET", "path": "/assets/jstoolbar/lang/jstoolbar-en-85c9edfe.js", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433694.553, "method": "GET", "path": "/assets/jstoolbar/h1-2c820a9f.svg", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433694.553, "method": "GET", "path": "/assets/jstoolbar/letter-c-828e6ed3.svg", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433694.553, "method": "GET", "path": "/assets/jstoolbar/strikethrough-845fb06b.svg", "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792433694.552, "method": "GET", "path": "/assets/jstoolbar/italic-581bb903.svg", "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792433694.552, "method": "GET", "path": "/assets/jstoolbar/bold-9488b1ca.svg", "fault": "pass", "status": 200, "ms": 9}
+{"t": 1792433694.552, "method": "GET", "path": "/assets/jstoolbar/underline-7f1532c4.svg", "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792433694.564, "method": "GET", "path": "/assets/jstoolbar/h2-e48db650.svg", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433694.564, "method": "GET", "path": "/assets/jstoolbar/code-099ac2b5.svg", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433694.564, "method": "GET", "path": "/assets/jstoolbar/h3-97122049.svg", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433694.564, "method": "GET", "path": "/assets/jstoolbar/indent-increase-16ddf219.svg", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433694.564, "method": "GET", "path": "/assets/jstoolbar/list-check-cccb4f48.svg", "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792433694.564, "method": "GET", "path": "/assets/jstoolbar/list-numbers-9bd169a5.svg", "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792433694.572, "method": "GET", "path": "/assets/jstoolbar/table-0cf07e5d.svg", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792433694.573, "method": "GET", "path": "/assets/jstoolbar/help-16e39147.svg", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792433694.574, "method": "GET", "path": "/assets/jstoolbar/wiki_link-6a9c9575.svg", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433694.577, "method": "GET", "path": "/assets/jstoolbar/indent-decrease-7146c0c1.svg", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433694.575, "method": "GET", "path": "/assets/jstoolbar/list-3397686a.svg", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433694.575, "method": "GET", "path": "/assets/jstoolbar/image-0b4f4f05.svg", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433694.578, "method": "GET", "path": "/assets/arrow_right-e6b20439.png", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433694.578, "method": "GET", "path": "/assets/arrow_left-49e4d0f5.png", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792433694.578, "method": "GET", "path": "/assets/search-0bd54309.svg", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433697.077, "method": "POST", "path": "/projects/helpdesk/issues", "fault": "pass", "status": 200, "ms": 27}
+{"t": 1792433705.061, "method": "POST", "path": "/projects/helpdesk/issues", "fault": "pass", "status": 302, "ms": 41}
+{"t": 1792433705.103, "method": "GET", "path": "/issues/1", "fault": "pass", "status": 200, "ms": 80}
+{"t": 1792433705.19, "method": "GET", "path": "/assets/quote_reply-8ea1d289.js", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433705.19, "method": "GET", "path": "/assets/turndown-7.2.0.min-bb727e59.js", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433705.202, "method": "GET", "path": "/assets/file-rss-755b3d48.svg", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792433738.398, "method": "GET", "path": "/", "fault": "pass", "status": 200, "ms": 12}
+{"t": 1792433738.416, "method": "GET", "path": "/assets/jquery/jquery-ui-1.13.2-70e53573.css", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433738.416, "method": "GET", "path": "/assets/tribute-5.1.3-c23a7bf2.css", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433738.416, "method": "GET", "path": "/assets/responsive-c53c771c.css", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433738.417, "method": "GET", "path": "/assets/rails-ujs-3de06f48.js", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433738.416, "method": "GET", "path": "/assets/application-045e2042.css", "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792433738.419, "method": "GET", "path": "/assets/tribute-5.1.3.min-6c16c47a.js", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433738.417, "method": "GET", "path": "/assets/jquery-3.7.1-ui-1.13.3-3ca148b8.js", "fault": "pass", "status": 200, "ms": 9}
+{"t": 1792433738.424, "method": "GET", "path": "/assets/tablesort-5.2.1.number.min-8a47560b.js", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433738.424, "method": "GET", "path": "/assets/tablesort-5.2.1.min-c6968762.js", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433738.425, "method": "GET", "path": "/assets/application-14833e45.js", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433738.425, "method": "GET", "path": "/assets/responsive-aa0cdb6f.js", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433738.446, "method": "GET", "path": "/assets/icons-35b4b65e.svg", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792433738.451, "method": "GET", "path": "/assets/chevron-down-f08c7c57.svg", "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792433738.454, "method": "GET", "path": "/assets/NotoSans-Bold-8f58b84b.woff2", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433738.454, "method": "GET", "path": "/assets/NotoSans-Regular-ff41eb73.woff2", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433738.468, "method": "GET", "path": "/login", "fault": "pass", "status": 200, "ms": 16}
+{"t": 1792433738.591, "method": "POST", "path": "/login", "fault": "pass", "status": 302, "ms": 8}
+{"t": 1792433738.601, "method": "GET", "path": "/my/page", "fault": "pass", "status": 200, "ms": 24}
+{"t": 1792433738.629, "method": "GET", "path": "/assets/context_menu-a52e1524.css", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433738.629, "method": "GET", "path": "/assets/context_menu-78dc3795.js", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433738.642, "method": "GET", "path": "/projects/helpdesk/issues/new", "fault": "pass", "status": 200, "ms": 24}
+{"t": 1792433738.672, "method": "GET", "path": "/assets/jstoolbar-57267577.css", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433738.671, "method": "GET", "path": "/assets/jstoolbar/jstoolbar-d7c21366.js", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433738.674, "method": "GET", "path": "/assets/jstoolbar/lang/jstoolbar-en-85c9edfe.js", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433738.673, "method": "GET", "path": "/assets/jstoolbar/common_mark-8a9a868d.js", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433738.675, "method": "GET", "path": "/assets/attachments-db17b2b6.js", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433738.682, "method": "GET", "path": "/assets/jstoolbar/underline-7f1532c4.svg", "fault": "pass", "status": 200, "ms": 11}
+{"t": 1792433738.682, "method": "GET", "path": "/assets/jstoolbar/italic-581bb903.svg", "fault": "pass", "status": 200, "ms": 12}
+{"t": 1792433738.684, "method": "GET", "path": "/assets/jstoolbar/bold-9488b1ca.svg", "fault": "pass", "status": 200, "ms": 12}
+{"t": 1792433738.684, "method": "GET", "path": "/assets/jstoolbar/letter-c-828e6ed3.svg", "fault": "pass", "status": 200, "ms": 13}
+{"t": 1792433738.684, "method": "GET", "path": "/assets/jstoolbar/strikethrough-845fb06b.svg", "fault": "pass", "status": 200, "ms": 14}
+{"t": 1792433738.684, "method": "GET", "path": "/assets/jstoolbar/h1-2c820a9f.svg", "fault": "pass", "status": 200, "ms": 15}
+{"t": 1792433738.693, "method": "GET", "path": "/assets/jstoolbar/h3-97122049.svg", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433738.695, "method": "GET", "path": "/assets/jstoolbar/list-numbers-9bd169a5.svg", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433738.696, "method": "GET", "path": "/assets/jstoolbar/list-3397686a.svg", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433738.698, "method": "GET", "path": "/assets/jstoolbar/list-check-cccb4f48.svg", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433738.697, "method": "GET", "path": "/assets/jstoolbar/indent-increase-16ddf219.svg", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433738.702, "method": "GET", "path": "/assets/jstoolbar/indent-decrease-7146c0c1.svg", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792433738.704, "method": "GET", "path": "/assets/jstoolbar/table-0cf07e5d.svg", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433738.704, "method": "GET", "path": "/assets/jstoolbar/wiki_link-6a9c9575.svg", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433738.706, "method": "GET", "path": "/assets/jstoolbar/code-099ac2b5.svg", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433738.705, "method": "GET", "path": "/assets/jstoolbar/h2-e48db650.svg", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433738.706, "method": "GET", "path": "/assets/jstoolbar/image-0b4f4f05.svg", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433738.708, "method": "GET", "path": "/assets/arrow_right-e6b20439.png", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433738.709, "method": "GET", "path": "/assets/arrow_left-49e4d0f5.png", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433738.707, "method": "GET", "path": "/assets/jstoolbar/help-16e39147.svg", "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792433738.712, "method": "GET", "path": "/assets/search-0bd54309.svg", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433747.173, "method": "POST", "path": "/projects/helpdesk/issues", "fault": "pass", "status": 302, "ms": 25}
+{"t": 1792433747.199, "method": "GET", "path": "/issues/2", "fault": "pass", "status": 200, "ms": 34}
+{"t": 1792433747.24, "method": "GET", "path": "/assets/quote_reply-8ea1d289.js", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433747.24, "method": "GET", "path": "/assets/turndown-7.2.0.min-bb727e59.js", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433747.252, "method": "GET", "path": "/assets/file-rss-755b3d48.svg", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792433769.184, "method": "GET", "path": "/", "fault": "pass", "status": 200, "ms": 11}
+{"t": 1792433769.201, "method": "GET", "path": "/assets/jquery/jquery-ui-1.13.2-70e53573.css", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433769.201, "method": "GET", "path": "/assets/tribute-5.1.3-c23a7bf2.css", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433769.201, "method": "GET", "path": "/assets/application-045e2042.css", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433769.202, "method": "GET", "path": "/assets/rails-ujs-3de06f48.js", "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792433769.201, "method": "GET", "path": "/assets/responsive-c53c771c.css", "fault": "pass", "status": 200, "ms": 9}
+{"t": 1792433769.202, "method": "GET", "path": "/assets/jquery-3.7.1-ui-1.13.3-3ca148b8.js", "fault": "pass", "status": 200, "ms": 11}
+{"t": 1792433769.21, "method": "GET", "path": "/assets/tablesort-5.2.1.min-c6968762.js", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433769.21, "method": "GET", "path": "/assets/tribute-5.1.3.min-6c16c47a.js", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433769.211, "method": "GET", "path": "/assets/tablesort-5.2.1.number.min-8a47560b.js", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433769.212, "method": "GET", "path": "/assets/responsive-aa0cdb6f.js", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433769.212, "method": "GET", "path": "/assets/application-14833e45.js", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433769.234, "method": "GET", "path": "/assets/icons-35b4b65e.svg", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792433769.24, "method": "GET", "path": "/assets/chevron-down-f08c7c57.svg", "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792433769.246, "method": "GET", "path": "/assets/NotoSans-Bold-8f58b84b.woff2", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433769.246, "method": "GET", "path": "/assets/NotoSans-Regular-ff41eb73.woff2", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433769.26, "method": "GET", "path": "/login", "fault": "pass", "status": 200, "ms": 9}
+{"t": 1792433769.393, "method": "POST", "path": "/login", "fault": "pass", "status": 302, "ms": 7}
+{"t": 1792433769.401, "method": "GET", "path": "/my/page", "fault": "pass", "status": 200, "ms": 28}
+{"t": 1792433769.437, "method": "GET", "path": "/assets/context_menu-78dc3795.js", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433769.437, "method": "GET", "path": "/assets/context_menu-a52e1524.css", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433769.451, "method": "GET", "path": "/projects/helpdesk/issues/new", "fault": "pass", "status": 200, "ms": 26}
+{"t": 1792433769.483, "method": "GET", "path": "/assets/jstoolbar/jstoolbar-d7c21366.js", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433769.483, "method": "GET", "path": "/assets/jstoolbar/lang/jstoolbar-en-85c9edfe.js", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433769.483, "method": "GET", "path": "/assets/jstoolbar-57267577.css", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433769.483, "method": "GET", "path": "/assets/attachments-db17b2b6.js", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433769.483, "method": "GET", "path": "/assets/jstoolbar/common_mark-8a9a868d.js", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433769.493, "method": "GET", "path": "/assets/jstoolbar/italic-581bb903.svg", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792433769.492, "method": "GET", "path": "/assets/jstoolbar/bold-9488b1ca.svg", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433769.493, "method": "GET", "path": "/assets/jstoolbar/underline-7f1532c4.svg", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433769.494, "method": "GET", "path": "/assets/jstoolbar/strikethrough-845fb06b.svg", "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792433769.494, "method": "GET", "path": "/assets/jstoolbar/letter-c-828e6ed3.svg", "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792433769.494, "method": "GET", "path": "/assets/jstoolbar/h1-2c820a9f.svg", "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792433769.495, "method": "GET", "path": "/assets/jstoolbar/h2-e48db650.svg", "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792433769.499, "method": "GET", "path": "/assets/jstoolbar/h3-97122049.svg", "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792433769.5, "method": "GET", "path": "/assets/jstoolbar/list-check-cccb4f48.svg", "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792433769.502, "method": "GET", "path": "/assets/jstoolbar/indent-increase-16ddf219.svg", "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792433769.502, "method": "GET", "path": "/assets/jstoolbar/indent-decrease-7146c0c1.svg", "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792433769.503, "method": "GET", "path": "/assets/jstoolbar/wiki_link-6a9c9575.svg", "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792433769.504, "method": "GET", "path": "/assets/jstoolbar/list-3397686a.svg", "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792433769.507, "method": "GET", "path": "/assets/jstoolbar/list-numbers-9bd169a5.svg", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433769.508, "method": "GET", "path": "/assets/jstoolbar/help-16e39147.svg", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433769.51, "method": "GET", "path": "/assets/jstoolbar/code-099ac2b5.svg", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433769.51, "method": "GET", "path": "/assets/jstoolbar/image-0b4f4f05.svg", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433769.512, "method": "GET", "path": "/assets/arrow_left-49e4d0f5.png", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433769.511, "method": "GET", "path": "/assets/jstoolbar/table-0cf07e5d.svg", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433769.513, "method": "GET", "path": "/assets/arrow_right-e6b20439.png", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433769.514, "method": "GET", "path": "/assets/search-0bd54309.svg", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433772.836, "method": "POST", "path": "/projects/helpdesk/issues", "fault": "pass", "status": 302, "ms": 31}
+{"t": 1792433772.868, "method": "GET", "path": "/issues/3", "fault": "pass", "status": 200, "ms": 37}
+{"t": 1792433772.91, "method": "GET", "path": "/assets/quote_reply-8ea1d289.js", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433772.91, "method": "GET", "path": "/assets/turndown-7.2.0.min-bb727e59.js", "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792433772.92, "method": "GET", "path": "/assets/file-rss-755b3d48.svg", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435265.993, "method": "GET", "path": "/", "save": false, "fault": "pass", "status": 200, "ms": 91}
+{"t": 1792435266.091, "method": "GET", "path": "/assets/tribute-5.1.3-c23a7bf2.css", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435266.09, "method": "GET", "path": "/assets/jquery/jquery-ui-1.13.2-70e53573.css", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435266.091, "method": "GET", "path": "/assets/responsive-c53c771c.css", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435266.091, "method": "GET", "path": "/assets/application-045e2042.css", "save": false, "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792435266.092, "method": "GET", "path": "/assets/rails-ujs-3de06f48.js", "save": false, "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792435266.095, "method": "GET", "path": "/assets/tribute-5.1.3.min-6c16c47a.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435266.095, "method": "GET", "path": "/assets/tablesort-5.2.1.min-c6968762.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435266.091, "method": "GET", "path": "/assets/jquery-3.7.1-ui-1.13.3-3ca148b8.js", "save": false, "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792435266.097, "method": "GET", "path": "/assets/tablesort-5.2.1.number.min-8a47560b.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435266.099, "method": "GET", "path": "/assets/responsive-aa0cdb6f.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435266.098, "method": "GET", "path": "/assets/application-14833e45.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435266.119, "method": "GET", "path": "/assets/icons-35b4b65e.svg", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435266.126, "method": "GET", "path": "/assets/chevron-down-f08c7c57.svg", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435266.13, "method": "GET", "path": "/assets/NotoSans-Bold-8f58b84b.woff2", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435266.129, "method": "GET", "path": "/assets/NotoSans-Regular-ff41eb73.woff2", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435266.142, "method": "GET", "path": "/login", "save": false, "fault": "pass", "status": 200, "ms": 9}
+{"t": 1792435266.257, "method": "POST", "path": "/login", "save": false, "fault": "pass", "status": 302, "ms": 15}
+{"t": 1792435266.273, "method": "GET", "path": "/my/page", "save": false, "fault": "pass", "status": 200, "ms": 48}
+{"t": 1792435266.324, "method": "GET", "path": "/assets/context_menu-78dc3795.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435266.324, "method": "GET", "path": "/assets/context_menu-a52e1524.css", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435266.526, "method": "GET", "path": "/projects/helpdesk/issues/new", "save": false, "fault": "pass", "status": 200, "ms": 36}
+{"t": 1792435266.568, "method": "GET", "path": "/assets/jstoolbar/lang/jstoolbar-en-85c9edfe.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435266.568, "method": "GET", "path": "/assets/jstoolbar/common_mark-8a9a868d.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435266.567, "method": "GET", "path": "/assets/jstoolbar/jstoolbar-d7c21366.js", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435266.567, "method": "GET", "path": "/assets/jstoolbar-57267577.css", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435266.568, "method": "GET", "path": "/assets/attachments-db17b2b6.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435266.576, "method": "GET", "path": "/assets/jstoolbar/underline-7f1532c4.svg", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435266.576, "method": "GET", "path": "/assets/jstoolbar/bold-9488b1ca.svg", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435266.577, "method": "GET", "path": "/assets/jstoolbar/strikethrough-845fb06b.svg", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435266.577, "method": "GET", "path": "/assets/jstoolbar/italic-581bb903.svg", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435266.577, "method": "GET", "path": "/assets/jstoolbar/h1-2c820a9f.svg", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435266.577, "method": "GET", "path": "/assets/jstoolbar/letter-c-828e6ed3.svg", "save": false, "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792435266.581, "method": "GET", "path": "/assets/jstoolbar/h2-e48db650.svg", "save": false, "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792435266.583, "method": "GET", "path": "/assets/jstoolbar/help-16e39147.svg", "save": false, "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792435266.584, "method": "GET", "path": "/assets/jstoolbar/h3-97122049.svg", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435266.581, "method": "GET", "path": "/assets/jstoolbar/image-0b4f4f05.svg", "save": false, "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792435266.584, "method": "GET", "path": "/assets/jstoolbar/indent-decrease-7146c0c1.svg", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435266.586, "method": "GET", "path": "/assets/jstoolbar/wiki_link-6a9c9575.svg", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435266.588, "method": "GET", "path": "/assets/jstoolbar/list-numbers-9bd169a5.svg", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435266.592, "method": "GET", "path": "/assets/jstoolbar/table-0cf07e5d.svg", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435266.592, "method": "GET", "path": "/assets/jstoolbar/list-check-cccb4f48.svg", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435266.592, "method": "GET", "path": "/assets/jstoolbar/indent-increase-16ddf219.svg", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435266.593, "method": "GET", "path": "/assets/arrow_right-e6b20439.png", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435266.594, "method": "GET", "path": "/assets/arrow_left-49e4d0f5.png", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435266.593, "method": "GET", "path": "/assets/jstoolbar/list-3397686a.svg", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435266.592, "method": "GET", "path": "/assets/jstoolbar/code-099ac2b5.svg", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435266.597, "method": "GET", "path": "/assets/search-0bd54309.svg", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435269.787, "method": "POST", "path": "/projects/helpdesk/issues", "save": true, "fault": "pass", "status": 302, "ms": 33}
+{"t": 1792435269.821, "method": "GET", "path": "/issues/4", "save": false, "fault": "pass", "status": 200, "ms": 76}
+{"t": 1792435269.9, "method": "GET", "path": "/assets/turndown-7.2.0.min-bb727e59.js", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435269.9, "method": "GET", "path": "/assets/quote_reply-8ea1d289.js", "save": false, "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792435269.912, "method": "GET", "path": "/assets/file-rss-755b3d48.svg", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435272.573, "method": "GET", "path": "/", "save": false, "fault": "pass", "status": 200, "ms": 10}
+{"t": 1792435272.589, "method": "GET", "path": "/assets/tribute-5.1.3-c23a7bf2.css", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435272.588, "method": "GET", "path": "/assets/jquery/jquery-ui-1.13.2-70e53573.css", "save": false, "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792435272.589, "method": "GET", "path": "/assets/application-045e2042.css", "save": false, "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792435272.589, "method": "GET", "path": "/assets/responsive-c53c771c.css", "save": false, "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792435272.59, "method": "GET", "path": "/assets/rails-ujs-3de06f48.js", "save": false, "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792435272.59, "method": "GET", "path": "/assets/jquery-3.7.1-ui-1.13.3-3ca148b8.js", "save": false, "fault": "pass", "status": 200, "ms": 9}
+{"t": 1792435272.597, "method": "GET", "path": "/assets/tablesort-5.2.1.min-c6968762.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435272.598, "method": "GET", "path": "/assets/tribute-5.1.3.min-6c16c47a.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435272.599, "method": "GET", "path": "/assets/responsive-aa0cdb6f.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435272.598, "method": "GET", "path": "/assets/tablesort-5.2.1.number.min-8a47560b.js", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435272.599, "method": "GET", "path": "/assets/application-14833e45.js", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435272.618, "method": "GET", "path": "/assets/icons-35b4b65e.svg", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435272.624, "method": "GET", "path": "/assets/chevron-down-f08c7c57.svg", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435272.627, "method": "GET", "path": "/assets/NotoSans-Bold-8f58b84b.woff2", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435272.626, "method": "GET", "path": "/assets/NotoSans-Regular-ff41eb73.woff2", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435272.64, "method": "GET", "path": "/login", "save": false, "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792435272.754, "method": "POST", "path": "/login", "save": false, "fault": "pass", "status": 302, "ms": 7}
+{"t": 1792435272.762, "method": "GET", "path": "/my/page", "save": false, "fault": "pass", "status": 200, "ms": 21}
+{"t": 1792435272.787, "method": "GET", "path": "/assets/context_menu-a52e1524.css", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435272.789, "method": "GET", "path": "/assets/context_menu-78dc3795.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435272.799, "method": "GET", "path": "/projects/helpdesk/issues/new", "save": false, "fault": "pass", "status": 200, "ms": 24}
+{"t": 1792435272.827, "method": "GET", "path": "/assets/jstoolbar/jstoolbar-d7c21366.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435272.828, "method": "GET", "path": "/assets/jstoolbar-57267577.css", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435272.828, "method": "GET", "path": "/assets/jstoolbar/lang/jstoolbar-en-85c9edfe.js", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435272.829, "method": "GET", "path": "/assets/attachments-db17b2b6.js", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435272.828, "method": "GET", "path": "/assets/jstoolbar/common_mark-8a9a868d.js", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435272.838, "method": "GET", "path": "/assets/jstoolbar/bold-9488b1ca.svg", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435272.839, "method": "GET", "path": "/assets/jstoolbar/italic-581bb903.svg", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435272.839, "method": "GET", "path": "/assets/jstoolbar/underline-7f1532c4.svg", "save": false, "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792435272.839, "method": "GET", "path": "/assets/jstoolbar/h1-2c820a9f.svg", "save": false, "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792435272.839, "method": "GET", "path": "/assets/jstoolbar/letter-c-828e6ed3.svg", "save": false, "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792435272.839, "method": "GET", "path": "/assets/jstoolbar/strikethrough-845fb06b.svg", "save": false, "fault": "pass", "status": 200, "ms": 9}
+{"t": 1792435272.846, "method": "GET", "path": "/assets/jstoolbar/image-0b4f4f05.svg", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435272.846, "method": "GET", "path": "/assets/jstoolbar/h2-e48db650.svg", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435272.849, "method": "GET", "path": "/assets/jstoolbar/indent-decrease-7146c0c1.svg", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435272.849, "method": "GET", "path": "/assets/jstoolbar/list-3397686a.svg", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435272.849, "method": "GET", "path": "/assets/jstoolbar/h3-97122049.svg", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435272.849, "method": "GET", "path": "/assets/jstoolbar/help-16e39147.svg", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435272.851, "method": "GET", "path": "/assets/jstoolbar/wiki_link-6a9c9575.svg", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435272.854, "method": "GET", "path": "/assets/jstoolbar/table-0cf07e5d.svg", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435272.851, "method": "GET", "path": "/assets/jstoolbar/list-numbers-9bd169a5.svg", "save": false, "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792435272.854, "method": "GET", "path": "/assets/jstoolbar/indent-increase-16ddf219.svg", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435272.854, "method": "GET", "path": "/assets/jstoolbar/code-099ac2b5.svg", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435272.855, "method": "GET", "path": "/assets/jstoolbar/list-check-cccb4f48.svg", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435272.856, "method": "GET", "path": "/assets/arrow_right-e6b20439.png", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435272.861, "method": "GET", "path": "/assets/arrow_left-49e4d0f5.png", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435272.862, "method": "GET", "path": "/assets/search-0bd54309.svg", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435274.376, "method": "POST", "path": "/projects/helpdesk/issues/new.js", "save": false, "fault": "pass", "status": 401, "ms": 7}
+{"t": 1792435274.376, "method": "GET", "path": "/assets/loading-5fb375e6.gif", "save": false, "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792435276.014, "method": "POST", "path": "/projects/helpdesk/issues", "save": true, "fault": "pass", "status": 422, "ms": 14}
+{"t": 1792435283.091, "method": "GET", "path": "/", "save": false, "fault": "pass", "status": 200, "ms": 10}
+{"t": 1792435283.107, "method": "GET", "path": "/assets/jquery/jquery-ui-1.13.2-70e53573.css", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435283.107, "method": "GET", "path": "/assets/tribute-5.1.3-c23a7bf2.css", "save": false, "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792435283.108, "method": "GET", "path": "/assets/responsive-c53c771c.css", "save": false, "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792435283.108, "method": "GET", "path": "/assets/rails-ujs-3de06f48.js", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435283.107, "method": "GET", "path": "/assets/application-045e2042.css", "save": false, "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792435283.108, "method": "GET", "path": "/assets/jquery-3.7.1-ui-1.13.3-3ca148b8.js", "save": false, "fault": "pass", "status": 200, "ms": 9}
+{"t": 1792435283.115, "method": "GET", "path": "/assets/tribute-5.1.3.min-6c16c47a.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435283.117, "method": "GET", "path": "/assets/tablesort-5.2.1.min-c6968762.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435283.118, "method": "GET", "path": "/assets/responsive-aa0cdb6f.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435283.117, "method": "GET", "path": "/assets/tablesort-5.2.1.number.min-8a47560b.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435283.118, "method": "GET", "path": "/assets/application-14833e45.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435283.137, "method": "GET", "path": "/assets/icons-35b4b65e.svg", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435283.143, "method": "GET", "path": "/assets/chevron-down-f08c7c57.svg", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435283.146, "method": "GET", "path": "/assets/NotoSans-Regular-ff41eb73.woff2", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435283.147, "method": "GET", "path": "/assets/NotoSans-Bold-8f58b84b.woff2", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435283.159, "method": "GET", "path": "/login", "save": false, "fault": "pass", "status": 200, "ms": 18}
+{"t": 1792435283.266, "method": "POST", "path": "/login", "save": false, "fault": "pass", "status": 302, "ms": 7}
+{"t": 1792435283.274, "method": "GET", "path": "/my/page", "save": false, "fault": "pass", "status": 200, "ms": 24}
+{"t": 1792435283.302, "method": "GET", "path": "/assets/context_menu-78dc3795.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435283.302, "method": "GET", "path": "/assets/context_menu-a52e1524.css", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435283.317, "method": "GET", "path": "/projects/helpdesk/issues/new", "save": false, "fault": "pass", "status": 200, "ms": 23}
+{"t": 1792435283.345, "method": "GET", "path": "/assets/jstoolbar-57267577.css", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435283.344, "method": "GET", "path": "/assets/jstoolbar/jstoolbar-d7c21366.js", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435283.345, "method": "GET", "path": "/assets/jstoolbar/lang/jstoolbar-en-85c9edfe.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435283.345, "method": "GET", "path": "/assets/attachments-db17b2b6.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435283.345, "method": "GET", "path": "/assets/jstoolbar/common_mark-8a9a868d.js", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435283.353, "method": "GET", "path": "/assets/jstoolbar/bold-9488b1ca.svg", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435283.353, "method": "GET", "path": "/assets/jstoolbar/italic-581bb903.svg", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435283.354, "method": "GET", "path": "/assets/jstoolbar/letter-c-828e6ed3.svg", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435283.354, "method": "GET", "path": "/assets/jstoolbar/underline-7f1532c4.svg", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435283.354, "method": "GET", "path": "/assets/jstoolbar/strikethrough-845fb06b.svg", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435283.355, "method": "GET", "path": "/assets/jstoolbar/h1-2c820a9f.svg", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435283.358, "method": "GET", "path": "/assets/jstoolbar/code-099ac2b5.svg", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435283.357, "method": "GET", "path": "/assets/jstoolbar/indent-increase-16ddf219.svg", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435283.359, "method": "GET", "path": "/assets/jstoolbar/wiki_link-6a9c9575.svg", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435283.362, "method": "GET", "path": "/assets/jstoolbar/list-numbers-9bd169a5.svg", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435283.362, "method": "GET", "path": "/assets/jstoolbar/help-16e39147.svg", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435283.362, "method": "GET", "path": "/assets/jstoolbar/image-0b4f4f05.svg", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435283.364, "method": "GET", "path": "/assets/jstoolbar/list-3397686a.svg", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435283.364, "method": "GET", "path": "/assets/jstoolbar/list-check-cccb4f48.svg", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435283.364, "method": "GET", "path": "/assets/jstoolbar/h3-97122049.svg", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435283.367, "method": "GET", "path": "/assets/jstoolbar/indent-decrease-7146c0c1.svg", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435283.368, "method": "GET", "path": "/assets/arrow_left-49e4d0f5.png", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435283.368, "method": "GET", "path": "/assets/jstoolbar/table-0cf07e5d.svg", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435283.37, "method": "GET", "path": "/assets/arrow_right-e6b20439.png", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435283.37, "method": "GET", "path": "/assets/search-0bd54309.svg", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435283.371, "method": "GET", "path": "/assets/jstoolbar/h2-e48db650.svg", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435284.96, "method": "GET", "path": "/assets/loading-5fb375e6.gif", "save": false, "fault": "pass", "status": 200, "ms": 13}
+{"t": 1792435284.96, "method": "POST", "path": "/projects/helpdesk/issues/new.js", "save": false, "fault": "pass", "status": 200, "ms": 23}
+{"t": 1792435286.9, "method": "POST", "path": "/projects/helpdesk/issues", "save": true, "fault": "duplicate", "status": "302+302", "ms": 52}
+{"t": 1792435286.953, "method": "GET", "path": "/issues/6", "save": false, "fault": "pass", "status": 200, "ms": 32}
+{"t": 1792435286.989, "method": "GET", "path": "/assets/turndown-7.2.0.min-bb727e59.js", "save": false, "fault": "pass", "status": 200, "ms": 11}
+{"t": 1792435286.989, "method": "GET", "path": "/assets/quote_reply-8ea1d289.js", "save": false, "fault": "pass", "status": 200, "ms": 11}
+{"t": 1792435287.005, "method": "GET", "path": "/assets/file-rss-755b3d48.svg", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435297.738, "method": "GET", "path": "/", "save": false, "fault": "pass", "status": 200, "ms": 11}
+{"t": 1792435297.754, "method": "GET", "path": "/assets/jquery/jquery-ui-1.13.2-70e53573.css", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435297.755, "method": "GET", "path": "/assets/tribute-5.1.3-c23a7bf2.css", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435297.755, "method": "GET", "path": "/assets/responsive-c53c771c.css", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435297.755, "method": "GET", "path": "/assets/application-045e2042.css", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435297.755, "method": "GET", "path": "/assets/rails-ujs-3de06f48.js", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435297.755, "method": "GET", "path": "/assets/jquery-3.7.1-ui-1.13.3-3ca148b8.js", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435297.759, "method": "GET", "path": "/assets/tribute-5.1.3.min-6c16c47a.js", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435297.759, "method": "GET", "path": "/assets/tablesort-5.2.1.min-c6968762.js", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435297.76, "method": "GET", "path": "/assets/tablesort-5.2.1.number.min-8a47560b.js", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435297.761, "method": "GET", "path": "/assets/responsive-aa0cdb6f.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435297.76, "method": "GET", "path": "/assets/application-14833e45.js", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435297.782, "method": "GET", "path": "/assets/icons-35b4b65e.svg", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435297.789, "method": "GET", "path": "/assets/chevron-down-f08c7c57.svg", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435297.792, "method": "GET", "path": "/assets/NotoSans-Regular-ff41eb73.woff2", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435297.792, "method": "GET", "path": "/assets/NotoSans-Bold-8f58b84b.woff2", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435297.806, "method": "GET", "path": "/login", "save": false, "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792435297.919, "method": "POST", "path": "/login", "save": false, "fault": "pass", "status": 302, "ms": 6}
+{"t": 1792435297.927, "method": "GET", "path": "/my/page", "save": false, "fault": "pass", "status": 200, "ms": 24}
+{"t": 1792435297.954, "method": "GET", "path": "/assets/context_menu-a52e1524.css", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435297.954, "method": "GET", "path": "/assets/context_menu-78dc3795.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435297.971, "method": "GET", "path": "/projects/helpdesk/issues/new", "save": false, "fault": "pass", "status": 200, "ms": 23}
+{"t": 1792435297.998, "method": "GET", "path": "/assets/jstoolbar-57267577.css", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435297.998, "method": "GET", "path": "/assets/jstoolbar/common_mark-8a9a868d.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435297.999, "method": "GET", "path": "/assets/jstoolbar/lang/jstoolbar-en-85c9edfe.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435297.998, "method": "GET", "path": "/assets/jstoolbar/jstoolbar-d7c21366.js", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435297.999, "method": "GET", "path": "/assets/attachments-db17b2b6.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435298.007, "method": "GET", "path": "/assets/jstoolbar/underline-7f1532c4.svg", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435298.007, "method": "GET", "path": "/assets/jstoolbar/bold-9488b1ca.svg", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435298.008, "method": "GET", "path": "/assets/jstoolbar/letter-c-828e6ed3.svg", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435298.008, "method": "GET", "path": "/assets/jstoolbar/h1-2c820a9f.svg", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435298.008, "method": "GET", "path": "/assets/jstoolbar/italic-581bb903.svg", "save": false, "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792435298.007, "method": "GET", "path": "/assets/jstoolbar/strikethrough-845fb06b.svg", "save": false, "fault": "pass", "status": 200, "ms": 9}
+{"t": 1792435298.011, "method": "GET", "path": "/assets/jstoolbar/h2-e48db650.svg", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435298.013, "method": "GET", "path": "/assets/jstoolbar/image-0b4f4f05.svg", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435298.014, "method": "GET", "path": "/assets/jstoolbar/help-16e39147.svg", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435298.015, "method": "GET", "path": "/assets/jstoolbar/indent-decrease-7146c0c1.svg", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435298.015, "method": "GET", "path": "/assets/jstoolbar/h3-97122049.svg", "save": false, "fault": "pass", "status": 200, "ms": 9}
+{"t": 1792435298.017, "method": "GET", "path": "/assets/jstoolbar/wiki_link-6a9c9575.svg", "save": false, "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792435298.017, "method": "GET", "path": "/assets/jstoolbar/list-numbers-9bd169a5.svg", "save": false, "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792435298.018, "method": "GET", "path": "/assets/jstoolbar/table-0cf07e5d.svg", "save": false, "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792435298.02, "method": "GET", "path": "/assets/jstoolbar/indent-increase-16ddf219.svg", "save": false, "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792435298.021, "method": "GET", "path": "/assets/jstoolbar/code-099ac2b5.svg", "save": false, "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792435298.025, "method": "GET", "path": "/assets/jstoolbar/list-check-cccb4f48.svg", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435298.026, "method": "GET", "path": "/assets/jstoolbar/list-3397686a.svg", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435298.026, "method": "GET", "path": "/assets/arrow_left-49e4d0f5.png", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435298.027, "method": "GET", "path": "/assets/arrow_right-e6b20439.png", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435298.029, "method": "GET", "path": "/assets/search-0bd54309.svg", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435301.085, "method": "POST", "path": "/projects/helpdesk/issues", "save": true, "fault": "pass", "status": 200, "ms": 29}

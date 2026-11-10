@@ -201,3 +201,65 @@ def repair_authorization(
     found = authorizer(key_dir)
     verification = ta.verify(statement, key_dir=key_dir, root=found.root)
     return RepairStore(store_root).keep_teach_authorization(verification, statement)
+
+
+ORDER_ADAPTER = "openadapt_flow.agent.example_app:OrderWrites"
+
+
+def order_spec(
+    base_url: str,
+    values: Mapping[str, str],
+    *,
+    name: str = "add_order",
+    identity: Sequence[str] = ("customer",),
+    record_kind: str = "order",
+    write_adapter: Optional[str] = ORDER_ADAPTER,
+    expected_rows: int = 1,
+    forbidden_controls: Sequence[str] = (),
+) -> dict[str, Any]:
+    """What a person signs to let an agent teach the order write ``name``."""
+
+    from openadapt_flow.teach_scope import origin_of
+
+    writes: dict[str, Any] = {
+        "record_kind": record_kind,
+        "identity": {k: {"value": values[k]} for k in identity},
+        "fields": {k: {"value": v} for k, v in values.items() if k not in identity},
+        "allowed_write_paths": ["/login"],
+        "expected_rows": expected_rows,
+    }
+    if write_adapter is not None:
+        writes["write_adapter"] = write_adapter
+    return {
+        "task": {"task_id": f"browser-tool.{name}", "summary": "Add one order"},
+        "purposes": ["teach"],
+        "origins": [str(origin_of(base_url))],
+        "inputs": {k: {"value": v} for k, v in values.items()},
+        "writes": writes,
+        "forbidden": {"controls": list(forbidden_controls)},
+    }
+
+
+def order_authority(
+    folder: Path,
+    base_url: str,
+    values: Mapping[str, str],
+    *,
+    signer: Optional[LocalAuthorizer] = None,
+    **kw: Any,
+) -> ta.TeachAuthority:
+    """A real approver on a real roster signs :func:`order_spec`; pins it."""
+
+    folder = Path(folder)
+    person = signer or LocalAuthorizer(folder / "approvers", "clinic-lead")
+    admission_key(person.key_dir)
+    statement = person.issue(folder / "statement", order_spec(base_url, values, **kw))
+    return person.authority(statement)
+
+
+def admission_key(key_dir: Path) -> None:
+    """The local admission key an operator sets up in the key directory."""
+
+    from openadapt_flow.execute.keys import load_or_create_private_key
+
+    load_or_create_private_key(Path(key_dir))

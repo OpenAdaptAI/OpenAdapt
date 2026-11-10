@@ -1,0 +1,59 @@
+{"t": 1792433895.562, "method": "GET", "path": "/", "fault": "pass", "status": 200, "ms": 41}
+{"t": 1792433895.608, "method": "GET", "path": "/wp-includes/blocks/navigation/style.min.css", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792433895.609, "method": "GET", "path": "/wp-includes/blocks/image/style.min.css", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792433895.609, "method": "GET", "path": "/wp-includes/blocks/navigation/view.min.js", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792433895.609, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/images/tourist-and-building.webp", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433895.609, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/images/building-exterior.webp", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433895.609, "method": "GET", "path": "/wp-includes/js/dist/interactivity.min.js", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433895.614, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/images/windows.webp", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792433895.632, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/fonts/cardo/cardo_italic_400.woff2", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792433895.632, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/fonts/cardo/cardo_normal_400.woff2", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792433895.632, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/fonts/inter/Inter-VariableFont_slnt,wght.woff2", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792433895.657, "method": "GET", "path": "/", "fault": "pass", "status": 200, "ms": 30}
+{"t": 1792433895.691, "method": "GET", "path": "/wp-includes/css/dist/block-library/common.min.css", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792433895.694, "method": "GET", "path": "/wp-includes/js/comment-reply.min.js", "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792433904.277, "method": "POST", "path": "/wp-comments-post.php", "fault": "pass", "status": 302, "ms": 15}
+{"t": 1792433904.293, "method": "GET", "path": "/", "fault": "pass", "status": 200, "ms": 29}
+{"t": 1792435324.592, "method": "GET", "path": "/", "save": false, "fault": "pass", "status": 200, "ms": 302}
+{"t": 1792435324.901, "method": "GET", "path": "/wp-includes/blocks/navigation/view.min.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435324.9, "method": "GET", "path": "/wp-includes/blocks/image/style.min.css", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435324.9, "method": "GET", "path": "/wp-includes/blocks/navigation/style.min.css", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435324.901, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/images/tourist-and-building.webp", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435324.901, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/images/building-exterior.webp", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435324.901, "method": "GET", "path": "/wp-includes/js/dist/interactivity.min.js", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435324.906, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/images/windows.webp", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435324.923, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/fonts/cardo/cardo_normal_400.woff2", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435324.923, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/fonts/cardo/cardo_italic_400.woff2", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435324.923, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/fonts/inter/Inter-VariableFont_slnt,wght.woff2", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435324.937, "method": "GET", "path": "/", "save": false, "fault": "pass", "status": 200, "ms": 34}
+{"t": 1792435324.975, "method": "GET", "path": "/wp-includes/css/dist/block-library/common.min.css", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435324.977, "method": "GET", "path": "/wp-includes/js/comment-reply.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435328.238, "method": "GET", "path": "/", "save": false, "fault": "pass", "status": 200, "ms": 37}
+{"t": 1792435328.28, "method": "GET", "path": "/wp-includes/blocks/navigation/style.min.css", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435328.28, "method": "GET", "path": "/wp-includes/blocks/navigation/view.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435328.28, "method": "GET", "path": "/wp-includes/blocks/image/style.min.css", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435328.281, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/images/tourist-and-building.webp", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435328.281, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/images/building-exterior.webp", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435328.281, "method": "GET", "path": "/wp-includes/js/dist/interactivity.min.js", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435328.285, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/images/windows.webp", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435328.3, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/fonts/cardo/cardo_italic_400.woff2", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435328.3, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/fonts/inter/Inter-VariableFont_slnt,wght.woff2", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435328.3, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/fonts/cardo/cardo_normal_400.woff2", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435328.312, "method": "GET", "path": "/", "save": false, "fault": "pass", "status": 200, "ms": 28}
+{"t": 1792435328.344, "method": "GET", "path": "/wp-includes/css/dist/block-library/common.min.css", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435328.347, "method": "GET", "path": "/wp-includes/js/comment-reply.min.js", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435332.182, "method": "POST", "path": "/wp-comments-post.php", "save": true, "fault": "reject", "status": 503, "ms": 0}
+{"t": 1792435340.256, "method": "GET", "path": "/", "save": false, "fault": "pass", "status": 200, "ms": 42}
+{"t": 1792435340.302, "method": "GET", "path": "/wp-includes/blocks/navigation/style.min.css", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435340.303, "method": "GET", "path": "/wp-includes/blocks/image/style.min.css", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435340.304, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/images/tourist-and-building.webp", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435340.303, "method": "GET", "path": "/wp-includes/blocks/navigation/view.min.js", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435340.304, "method": "GET", "path": "/wp-includes/js/dist/interactivity.min.js", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435340.304, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/images/building-exterior.webp", "save": false, "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792435340.308, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/images/windows.webp", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435340.326, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/fonts/cardo/cardo_italic_400.woff2", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435340.324, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/fonts/inter/Inter-VariableFont_slnt,wght.woff2", "save": false, "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792435340.325, "method": "GET", "path": "/wp-content/themes/twentytwentyfour/assets/fonts/cardo/cardo_normal_400.woff2", "save": false, "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792435340.343, "method": "GET", "path": "/", "save": false, "fault": "pass", "status": 200, "ms": 35}
+{"t": 1792435340.381, "method": "GET", "path": "/wp-includes/css/dist/block-library/common.min.css", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435340.384, "method": "GET", "path": "/wp-includes/js/comment-reply.min.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
