@@ -3393,15 +3393,9 @@ def _verify_sealed_template_integrity(
     mismatch. Skipped for a bundle with no sealed digest."""
     from openadapt_flow import bundle_validation as _bv
 
-    if not stored.content_digest:
+    if not stored.content_digest and workflow._loaded_seal is None:
         return
-    recomputed = _bv.compute_content_digest(workflow, stored.file_hashes)
-    if recomputed != stored.content_digest:
-        raise _bv.BundleIntegrityError(
-            "bundle content digest mismatch on decrypt: expected "
-            f"{stored.content_digest[:16]}..., recomputed {recomputed[:16]}... "
-            "-- the workflow.json was modified after the manifest was sealed"
-        )
+    _bv._verify_workflow_content(workflow, stored)
     for rel, expected in stored.file_hashes.items():
         data = decrypted.get(rel)
         if data is None:
@@ -3572,6 +3566,8 @@ class Workflow(BaseModel):
     # from ``model_dump`` / the content digest (a private attribute). The
     # resolver consumes a decrypted crop via :meth:`decrypted_template`.
     _decrypted_templates: dict[str, bytes] = PrivateAttr(default_factory=dict)
+    # Immutable source seal + upgraded-model fingerprint; never serialized.
+    _loaded_seal: Any = PrivateAttr(default=None)
 
     @model_validator(mode="after")
     def _undo_ids_are_unique(self) -> "Workflow":
@@ -3696,6 +3692,13 @@ class Workflow(BaseModel):
         Returns the path actually written (``workflow.json`` or, when encrypted,
         ``workflow.json.enc``).
         """
+        from openadapt_flow import bundle_validation as _bv
+
+        _bv.bundle_schema_version({"schema_version": self.schema_version})
+        if self._loaded_seal is not None and not seal_manifest:
+            raise _bv.BundleIntegrityError(
+                "a loaded sealed bundle requires explicit resealing before serialization"
+            )
         do_encrypt = encrypt or key is not None
         bundle = Path(bundle_dir)
         from openadapt_flow import sealed_set as _sealed
@@ -3722,6 +3725,15 @@ class Workflow(BaseModel):
 
             self.manifest = _bv.build_manifest(self, bundle)
         serialized = self.model_dump_json(indent=2)
+        resealed_payload = None
+        if (
+            self._loaded_seal is not None
+            and seal_manifest
+            and self.manifest is not None
+        ):
+            resealed_payload = _bv.verify_original_content(
+                json.loads(serialized), self.manifest
+            )
         plaintext_path = bundle / "workflow.json"
         encrypted_path = bundle / "workflow.json.enc"
         if do_encrypt:
@@ -3752,6 +3764,8 @@ class Workflow(BaseModel):
             (bundle / "manifest.json").write_bytes(
                 self.manifest.model_dump_json(indent=2).encode("utf-8")
             )
+        if resealed_payload is not None and self.manifest is not None:
+            _bv.remember_original_content(self, resealed_payload, self.manifest)
         return path
 
     def _save_sealed_set(
@@ -3786,7 +3800,19 @@ class Workflow(BaseModel):
             from openadapt_flow import bundle_validation as _bv
 
             self.manifest = _bv.build_manifest(self, bundle, assets=assets)
-        writer.write("workflow.json", self.model_dump_json(indent=2).encode("utf-8"))
+        serialized = self.model_dump_json(indent=2).encode("utf-8")
+        resealed_payload = None
+        if (
+            self._loaded_seal is not None
+            and seal_manifest
+            and self.manifest is not None
+        ):
+            from openadapt_flow import bundle_validation as _bv
+
+            resealed_payload = _bv.verify_original_content(
+                json.loads(serialized), self.manifest
+            )
+        writer.write("workflow.json", serialized)
         if self.manifest is not None:
             writer.write(
                 "manifest.json", self.manifest.model_dump_json(indent=2).encode("utf-8")
@@ -3794,6 +3820,8 @@ class Workflow(BaseModel):
         self._decrypted_templates = dict(assets)
         if owned:
             writer.finalize()
+        if resealed_payload is not None and self.manifest is not None:
+            _bv.remember_original_content(self, resealed_payload, self.manifest)
         return bundle / ("workflow.json" + _sealed.SEALED_SUFFIX)
 
     @classmethod
@@ -3858,19 +3886,30 @@ class Workflow(BaseModel):
             raw = json.loads(decrypted)
         else:
             raw = json.loads(plaintext_path.read_bytes())
-        raw = _bv.migrate_bundle_dict(raw)
-        # A manifest may be embedded in workflow.json OR sit in a sidecar; the
-        # embedded one wins, else the sidecar, else it is computed fresh.
+        _bv.bundle_schema_version(raw)
+        # Verify the original canonical representation before upgrading or
+        # constructing today's model. Embedded manifest precedence is unchanged.
         persisted = raw.get("manifest")
-        wf = cls.model_validate(raw)
-
-        if wf.manifest is None:
+        if persisted is None:
             sidecar = bundle / "manifest.json"
             if sidecar.is_file():
-                wf.manifest = BundleManifest.model_validate_json(
-                    sidecar.read_text(encoding="utf-8")
+                persisted = json.loads(sidecar.read_text(encoding="utf-8"))
+        stored = None
+        original_payload = None
+        if persisted is not None:
+            _bv.bundle_schema_version(persisted)
+            stored = BundleManifest.model_validate(persisted)
+            if stored.content_digest:
+                original_payload = (
+                    _bv.verify_original_content(raw, stored)
+                    if verify_integrity
+                    else _bv.source_canonical_payload(raw, stored.file_hashes)
                 )
-                persisted = wf.manifest
+        wf = cls.model_validate(_bv.migrate_bundle_dict(raw))
+        if stored is not None:
+            wf.manifest = stored
+        if original_payload is not None and stored is not None:
+            _bv.remember_original_content(wf, original_payload, stored)
 
         if sealed_assets is not None:
             wf._decrypted_templates = sealed_assets
