@@ -618,6 +618,19 @@ class VerifyConfig(BaseModel):
             )
             if problems:
                 raise ValueError("; ".join(problems))
+        if self.effects:
+            from openadapt_flow.runtime.effects.surfaces import surface_of
+
+            for effect in self.effects:
+                if effect.composite_key:
+                    surface = surface_of(effect)
+                    problems = composite_key_read_problems(
+                        list(effect.composite_key.keys()),
+                        self.verifier.verifier,
+                        surface,
+                    )
+                    if problems:
+                        raise ValueError("; ".join(problems))
         return self
 
     @model_validator(mode="after")
