@@ -578,9 +578,14 @@ above. The ratchet keeps them from growing meanwhile.
 ## 6. Size ratchet
 
 `scripts/check_file_size_ratchet.py` (added in PR 1) reads the table between
-the markers below and fails if any listed file has more lines than its
-budget. The root test `tests/test_file_size_ratchet.py` runs it, so it runs in
-the Python CI workflow on every pull request and in the merge queue.
+the markers below and compares each listed file with its budget. The `ci`
+check runs it on every pull request and in the merge queue with
+`--base HEAD^1`, the base the change merges into: a file over its budget
+fails only when that change grew it, removed it or edited its row. A file
+another merge left over budget never fails an unrelated change. The root test
+`tests/test_file_size_ratchet.py` applies the same rule there, only reports
+on a push to `main`, and enforces the absolute check in the nightly run and
+locally.
 
 PR 1 sets each budget to the file's size on `main` when PR 1 merges. After
 that:
@@ -594,16 +599,16 @@ that:
 <!-- size-ratchet:begin -->
 | File | Line budget |
 |---|---:|
-| `packages/flow/openadapt_flow/runtime/replayer.py` | 18258 |
-| `packages/flow/openadapt_flow/__main__.py` | 11970 |
-| `packages/flow/openadapt_flow/qualification.py` | 5775 |
-| `packages/flow/openadapt_flow/ir.py` | 5765 |
-| `packages/desktop/openadapt_desktop/dispatch.py` | 5686 |
-| `packages/capture/openadapt_capture/recorder.py` | 4532 |
-| `packages/flow/openadapt_flow/interactive_recorder.py` | 4524 |
-| `packages/flow/openadapt_flow/runtime/durable/attended.py` | 4271 |
+| `packages/flow/openadapt_flow/runtime/replayer.py` | 20010 |
+| `packages/flow/openadapt_flow/__main__.py` | 14501 |
+| `packages/flow/openadapt_flow/qualification.py` | 5963 |
+| `packages/flow/openadapt_flow/ir.py` | 6609 |
+| `packages/desktop/openadapt_desktop/dispatch.py` | 6524 |
+| `packages/capture/openadapt_capture/recorder.py` | 4836 |
+| `packages/flow/openadapt_flow/interactive_recorder.py` | 4620 |
+| `packages/flow/openadapt_flow/runtime/durable/attended.py` | 4367 |
 | `packages/flow/openadapt_flow/terminal_verification_v2.py` | 3663 |
-| `packages/flow/openadapt_flow/backends/playwright_backend.py` | 3636 |
+| `packages/flow/openadapt_flow/backends/playwright_backend.py` | 5996 |
 <!-- size-ratchet:end -->
 
 ## 7. Coordination with work in flight

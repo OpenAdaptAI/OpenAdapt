@@ -1,0 +1,33 @@
+WARNING: writing a compiled bundle in plaintext at /Users/abrichr/oa/scratch/api-generalization/medplum_patient/bundle: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+WARNING: openadapt-privacy is not installed, so reports and logs are not scrubbed of patient data (OPENADAPT_FLOW_SCRUB=auto). Install 'openadapt-flow[privacy]', or set OPENADAPT_FLOW_SCRUB=on to refuse instead.
+param-hygiene step_003: REGION_STABLE dropped — changed region (512, 575, 393, 100) renders a demonstrated parameter value (Ad*************ix); freezing it would false-halt every run whose value differs. This step has no pixel-region invariant.
+{
+ "app": "medplum_patient",
+ "workflow": "new-patient",
+ "steps": 11,
+ "params": [
+  "family",
+  "given"
+ ],
+ "optional_params": [
+  "given"
+ ],
+ "compile_proposal": {
+  "proposed": true,
+  "step": "step_010",
+  "reasons": []
+ },
+ "proposed": true,
+ "reasons": [],
+ "compile_s": 12.0,
+ "frozen": "969cb939e7f246a55a7b49c319941a6aa3ff3d8c",
+ "head": "969cb939e7f246a55a7b49c319941a6aa3ff3d8c",
+ "engine_diff_vs_frozen": "",
+ "identity": {
+  "subject_name": "family"
+ },
+ "admitted": [
+  "step_010"
+ ],
+ "describe": "step_010: save with one request, POST /fhir/R4/Patient, in place of 11 GUI steps (step_000 to step_010).\n  sign-in: the replaying browser's own session; form read again from /Patient/new\n  fields: 2 param\n  run values: name/0/family={family}, name/0/given/0={given}\n  accepted when: HTTP [201]\n  record check after: 2 effect(s) copied from the save step\n  right record (subject_name): the request sends {family} in name/0/family and the record check selects family = {family}\n  screen-only checks, not repeated: ['step_000: region_stable, text_present', 'step_001: region_stable', 'step_003: region_stable']\n  if the form or a check differs at run time, the GUI steps run instead"
+}

@@ -2176,6 +2176,23 @@ def judge_frame(
         unverified_columns=unverified_columns,
     )
     verdict.reason = _reason(verdict)
+    if (
+        verdict.status == "held"
+        and spec.attribution is not None
+        and spec.attribution.kind == "audit_read"
+        and database is None
+    ):
+        # The bot's audit entries for a saved record are excused by record,
+        # whatever table they wrote, so its other writes for that record (an
+        # insurance row, an allergy, a note) must be judged as rows. Only the
+        # whole-database diff reads every table; without it such a write
+        # would pass unseen (#1505). Never hold: fail closed.
+        verdict.status = "not_checked"
+        verdict.reason += (
+            "; not checked: audit_read attribution needs frame.database, "
+            "since without the whole-database diff the run's own writes to "
+            "tables the frame doesn't read can't be judged (#1505)"
+        )
     return verdict
 
 

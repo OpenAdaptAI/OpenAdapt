@@ -1,0 +1,431 @@
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_category/timing/r00-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame -- resolution and postconditions may be evaluated mid-transition
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame -- resolution and postconditions may be evaluated mid-transition
+WARNING: openadapt-privacy is not installed, so reports and logs are not scrubbed of patient data (OPENADAPT_FLOW_SCRUB=auto). Install 'openadapt-flow[privacy]', or set OPENADAPT_FLOW_SCRUB=on to refuse instead.
+{"rep": 1, "arm": "gui", "correct": false, "save_actuation": null, "engine_s": 86.024, "wall_s": 93.941, "load1": 26.4, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_category/timing/r00-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame -- resolution and postconditions may be evaluated mid-transition
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame -- resolution and postconditions may be evaluated mid-transition
+{"rep": 1, "arm": "api", "correct": false, "save_actuation": null, "engine_s": 70.473, "wall_s": 75.178, "load1": 44.59, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_category/timing/r01-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame -- resolution and postconditions may be evaluated mid-transition
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame -- resolution and postconditions may be evaluated mid-transition
+{"rep": 2, "arm": "api", "correct": false, "save_actuation": null, "engine_s": 123.179, "wall_s": 127.307, "load1": 43.91, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_category/timing/r01-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame -- resolution and postconditions may be evaluated mid-transition
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame -- resolution and postconditions may be evaluated mid-transition
+{"rep": 2, "arm": "gui", "correct": false, "save_actuation": null, "engine_s": 66.523, "wall_s": 71.19, "load1": 34.71, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_category/timing/r02-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame -- resolution and postconditions may be evaluated mid-transition
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame -- resolution and postconditions may be evaluated mid-transition
+{"rep": 3, "arm": "gui", "correct": false, "save_actuation": null, "engine_s": 105.381, "wall_s": 115.847, "load1": 44.81, "error": null}
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 49334)
+Traceback (most recent call last):
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 766, in __init__
+    self.handle()
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/http/server.py", line 440, in handle
+    self.handle_one_request()
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/http/server.py", line 428, in handle_one_request
+    method()
+  File "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/fervent-clarke-60860f/packages/flow/benchmark/api_generalization/proxy.py", line 118, in _handle
+    self._reply(st, reason, headers, data)
+  File "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/fervent-clarke-60860f/packages/flow/benchmark/api_generalization/proxy.py", line 94, in _reply
+    self.wfile.write(data)
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 845, in write
+    self._sock.sendall(b)
+ConnectionResetError: [Errno 54] Connection reset by peer
+----------------------------------------
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_category/timing/r02-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame -- resolution and postconditions may be evaluated mid-transition
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame -- resolution and postconditions may be evaluated mid-transition
+{"rep": 3, "arm": "api", "correct": false, "save_actuation": null, "engine_s": 89.12, "wall_s": 98.231, "load1": 66.21, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_category/timing/r03-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame -- resolution and postconditions may be evaluated mid-transition
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame -- resolution and postconditions may be evaluated mid-transition
+{"rep": 4, "arm": "api", "correct": false, "save_actuation": null, "engine_s": 68.981, "wall_s": 73.38, "load1": 46.99, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_category/timing/r03-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame -- resolution and postconditions may be evaluated mid-transition
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame -- resolution and postconditions may be evaluated mid-transition
+{"rep": 4, "arm": "gui", "correct": false, "save_actuation": null, "engine_s": 68.279, "wall_s": 72.826, "load1": 37.42, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_category/timing/r04-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 5, "arm": "gui", "correct": false, "save_actuation": null, "engine_s": 11.688, "wall_s": 16.825, "load1": 54.27, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_category/timing/r04-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame -- resolution and postconditions may be evaluated mid-transition
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame -- resolution and postconditions may be evaluated mid-transition
+{"rep": 5, "arm": "api", "correct": false, "save_actuation": null, "engine_s": 79.523, "wall_s": 84.247, "load1": 44.07, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_category/timing/r05-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame -- resolution and postconditions may be evaluated mid-transition
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame -- resolution and postconditions may be evaluated mid-transition
+{"rep": 6, "arm": "api", "correct": false, "save_actuation": null, "engine_s": 108.07, "wall_s": 113.32, "load1": 75.69, "error": null}
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 51602)
+Traceback (most recent call last):
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 766, in __init__
+    self.handle()
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/http/server.py", line 440, in handle
+    self.handle_one_request()
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/http/server.py", line 428, in handle_one_request
+    method()
+  File "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/fervent-clarke-60860f/packages/flow/benchmark/api_generalization/proxy.py", line 118, in _handle
+    self._reply(st, reason, headers, data)
+  File "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/fervent-clarke-60860f/packages/flow/benchmark/api_generalization/proxy.py", line 94, in _reply
+    self.wfile.write(data)
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 845, in write
+    self._sock.sendall(b)
+ConnectionResetError: [Errno 54] Connection reset by peer
+----------------------------------------
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_category/timing/r05-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame -- resolution and postconditions may be evaluated mid-transition
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame -- resolution and postconditions may be evaluated mid-transition
+{"rep": 6, "arm": "gui", "correct": false, "save_actuation": null, "engine_s": 92.27, "wall_s": 106.064, "load1": 114.25, "error": null}
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 51936)
+Traceback (most recent call last):
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 766, in __init__
+    self.handle()
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/http/server.py", line 440, in handle
+    self.handle_one_request()
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/http/server.py", line 428, in handle_one_request
+    method()
+  File "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/fervent-clarke-60860f/packages/flow/benchmark/api_generalization/proxy.py", line 118, in _handle
+    self._reply(st, reason, headers, data)
+  File "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/fervent-clarke-60860f/packages/flow/benchmark/api_generalization/proxy.py", line 94, in _reply
+    self.wfile.write(data)
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 845, in write
+    self._sock.sendall(b)
+BrokenPipeError: [Errno 32] Broken pipe
+----------------------------------------
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_category/timing/r06-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame -- resolution and postconditions may be evaluated mid-transition
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame -- resolution and postconditions may be evaluated mid-transition
+{"rep": 7, "arm": "gui", "correct": false, "save_actuation": null, "engine_s": 135.147, "wall_s": 143.299, "load1": 154.06, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_category/timing/r06-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame -- resolution and postconditions may be evaluated mid-transition
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame -- resolution and postconditions may be evaluated mid-transition
+{"rep": 7, "arm": "api", "correct": false, "save_actuation": null, "engine_s": 118.412, "wall_s": 126.269, "load1": 147.57, "error": null}
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 52628)
+Traceback (most recent call last):
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 766, in __init__
+    self.handle()
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/http/server.py", line 440, in handle
+    self.handle_one_request()
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/http/server.py", line 428, in handle_one_request
+    method()
+  File "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/fervent-clarke-60860f/packages/flow/benchmark/api_generalization/proxy.py", line 118, in _handle
+    self._reply(st, reason, headers, data)
+  File "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/fervent-clarke-60860f/packages/flow/benchmark/api_generalization/proxy.py", line 94, in _reply
+    self.wfile.write(data)
+  File "/Users/abrichr/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py", line 845, in write
+    self._sock.sendall(b)
+ConnectionResetError: [Errno 54] Connection reset by peer
+----------------------------------------
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_category/timing/r07-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 8, "arm": "api", "correct": false, "save_actuation": null, "engine_s": 12.269, "wall_s": 21.653, "load1": 149.48, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_category/timing/r07-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 8, "arm": "gui", "correct": false, "save_actuation": null, "engine_s": 10.909, "wall_s": 22.784, "load1": 150.85, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_category/timing/r08-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame -- resolution and postconditions may be evaluated mid-transition
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame -- resolution and postconditions may be evaluated mid-transition
+{"rep": 9, "arm": "gui", "correct": false, "save_actuation": null, "engine_s": 91.9, "wall_s": 115.015, "load1": 172.07, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_category/timing/r08-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame -- resolution and postconditions may be evaluated mid-transition
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame -- resolution and postconditions may be evaluated mid-transition
+{"rep": 9, "arm": "api", "correct": false, "save_actuation": null, "engine_s": 82.01, "wall_s": 87.783, "load1": 125.59, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_category/timing/r09-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame -- resolution and postconditions may be evaluated mid-transition
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame -- resolution and postconditions may be evaluated mid-transition
+{"rep": 10, "arm": "api", "correct": false, "save_actuation": null, "engine_s": 64.678, "wall_s": 69.138, "load1": 74.8, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_category/timing/r09-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame -- resolution and postconditions may be evaluated mid-transition
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame -- resolution and postconditions may be evaluated mid-transition
+{"rep": 10, "arm": "gui", "correct": false, "save_actuation": null, "engine_s": 57.154, "wall_s": 60.375, "load1": 31.68, "error": null}

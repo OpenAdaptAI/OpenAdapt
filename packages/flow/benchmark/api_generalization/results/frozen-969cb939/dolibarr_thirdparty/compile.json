@@ -1,0 +1,31 @@
+{
+ "app": "dolibarr_thirdparty",
+ "workflow": "new-customer",
+ "steps": 12,
+ "params": [
+  "email",
+  "name",
+  "phone",
+  "town"
+ ],
+ "optional_params": [
+  "email",
+  "phone",
+  "town"
+ ],
+ "compile_proposal": {
+  "proposed": false,
+  "step": null,
+  "reasons": [
+   "field 'client' of the save is not a recorded value, a form default or a session value"
+  ]
+ },
+ "proposed": false,
+ "reasons": [
+  "field 'client' of the save is not a recorded value, a form default or a session value"
+ ],
+ "compile_s": 63.2,
+ "frozen": "969cb939e7f246a55a7b49c319941a6aa3ff3d8c",
+ "head": "969cb939e7f246a55a7b49c319941a6aa3ff3d8c",
+ "engine_diff_vs_frozen": ""
+}

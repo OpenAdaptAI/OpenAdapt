@@ -812,6 +812,36 @@ class LinuxBackend:
             return None
         return value if isinstance(value, str) else None
 
+    def focused_field_label(self) -> Optional[str]:
+        """Return the focused field's AT-SPI label, or None (never raises).
+
+        RECORD-TIME seam (:class:`openadapt_flow.backend.FieldLabelBackend`):
+        reads the focused element's ``LABELLED_BY`` relation, then its
+        accessible name. Never by position; None when there is no label so
+        compile-time OCR fallback still applies.
+        """
+
+        try:
+            window = (
+                self._require_same_window(self._captured_window)
+                if self._captured_window is not None
+                else self._resolve_window()
+            )
+            element = self._client.focused_element(window)
+            if element is None or not self._in_scope(element, window):
+                return None
+            reader = getattr(self._client, "field_label", None)
+            if callable(reader):
+                value = reader(element)
+            else:
+                value = element.name
+        except Exception:
+            return None
+        if isinstance(value, str):
+            text = " ".join(value.split())
+            return text or None
+        return None
+
     def focused_text_value(self) -> Optional[str]:
         """The exact text of the one focused editable field in this window."""
         reader = getattr(self._client, "editable_text", None)
@@ -1847,6 +1877,54 @@ class AtspiLinuxClient:
 
     #: Raw AT-SPI roles whose text is an editable value (not a password).
     _EDITABLE_ROLES = frozenset({"text", "entry", "editbar"})
+
+    def field_label(self, element: LinuxElement) -> Optional[str]:
+        """LABELLED_BY relation name, else the accessible name; None if empty."""
+
+        node = element.native
+        if node is not None:
+            labelled = self._labelled_by_name(node)
+            if labelled:
+                return labelled
+            name = _clean_text(self._call(node, "get_name", default=None))
+            if name:
+                return name
+        return _clean_text(element.name)
+
+    def _labelled_by_name(self, node: Any) -> Optional[str]:
+        """Name of the first LABELLED_BY relation target, if any."""
+
+        relation_set = self._call(node, "get_relation_set", default=None)
+        if not relation_set:
+            return None
+        labelled_by = getattr(self._atspi.RelationType, "LABELLED_BY", None)
+        if labelled_by is None:
+            return None
+        relations: list[Any] = []
+        try:
+            relations = list(relation_set)
+        except TypeError:
+            if isinstance(relation_set, list):
+                relations = relation_set
+            elif isinstance(relation_set, tuple):
+                relations = list(relation_set)
+        for relation in relations:
+            rel_type = self._call(relation, "get_relation_type", default=None)
+            if rel_type != labelled_by:
+                continue
+            target = None
+            get_target = getattr(relation, "get_target", None)
+            if callable(get_target):
+                try:
+                    target = get_target(0)
+                except Exception:
+                    target = None
+            if target is None:
+                continue
+            name = _clean_text(self._call(target, "get_name", default=None))
+            if name:
+                return name
+        return None
 
     def editable_text(self, element: LinuxElement) -> Optional[str]:
         """The full text of an editable text field; None for anything else."""

@@ -1,0 +1,22 @@
+{
+  "id": "ee462adc7eb1418b8e19e253d050e645",
+  "created_at": "2026-10-19T18:26:10.235115+00:00",
+  "viewport": [
+    1280,
+    800
+  ],
+  "coordinate_space": "page",
+  "app_url": "http://127.0.0.1:9852/contact/card.php?action=create",
+  "params": {
+    "lastname": "Okafor",
+    "firstname": "Chidi",
+    "poste": "Purchasing lead",
+    "phone_pro": "555-0161",
+    "email": "c.okafor@example.invalid"
+  },
+  "secret_params": [],
+  "network_capture": {
+    "file": "network.jsonl",
+    "exchanges": 3
+  }
+}

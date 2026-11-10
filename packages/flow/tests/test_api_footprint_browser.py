@@ -284,7 +284,12 @@ def test_actual_editor_capture_and_sqlite_footprint(mode, tmp_path, browser):
             save = next(r for r in report["capture"] if r["url"].endswith("/records"))
             path = "/journal" if mode == "trailing_post" else "/pending"
             trailing = next(r for r in report["capture"] if r["url"].endswith(path))
-            assert trailing["t"] > save["t"]
+            # The page sends the trailing write only after the save's
+            # response, so it is captured later: `seq` is capture order. `t`
+            # is rounded to the millisecond, and two requests a fast runner
+            # finishes in the same millisecond share it.
+            assert trailing["seq"] > save["seq"]
+            assert trailing["t"] >= save["t"]
             assert report["captured_rows"]["journal"] == (
                 [{"id": 1, "event": "saved"}] if mode == "trailing_post" else []
             )

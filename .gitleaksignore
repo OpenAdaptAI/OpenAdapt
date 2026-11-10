@@ -71,6 +71,49 @@ e8ec96725c4451aa64cb97230c18d04b55d98503:packages/flow/tests/e2e/test_mcp_teach_
 ccc7c617e5cd8082909b455ec6176a5e4c0dd4f0:packages/flow/tests/test_extension_network.py:generic-api-key:44
 ccc7c617e5cd8082909b455ec6176a5e4c0dd4f0:packages/flow/tests/test_extension_network.py:jwt:48
 ccc7c617e5cd8082909b455ec6176a5e4c0dd4f0:packages/flow/tests/test_extension_network_browser.py:generic-api-key:24
+# PR #1956: commit 00ef8baa9 restored files that an incomplete sparse delivery
+# commit had omitted. These are the same strings main already ignores for the same
+# file and rule; the restore gave them new commit fingerprints.
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/agent/tests/test_approval_flow.py:generic-api-key:29
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/benchmark/fault_model/results.json:generic-api-key:1918
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/benchmark/fault_model/results.json:generic-api-key:1960
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/benchmark/fault_model/results.json:generic-api-key:2002
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/benchmark/fault_model/results.json:generic-api-key:2065
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/benchmark/fault_model/results.json:generic-api-key:2086
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/benchmark/fault_model/results.json:generic-api-key:2107
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/benchmark/fault_model/results.json:generic-api-key:239
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/benchmark/lending_fault_model/results.json:generic-api-key:2030
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/benchmark/lending_fault_model/results.json:generic-api-key:2052
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/benchmark/lending_fault_model/results.json:generic-api-key:2074
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/benchmark/lending_fault_model/results.json:generic-api-key:2096
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/benchmark/lending_fault_model/results.json:generic-api-key:2140
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/benchmark/lending_fault_model/results.json:generic-api-key:2162
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/benchmark/lending_fault_model/results.json:generic-api-key:2206
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/openadapt_flow/backends/playwright_backend.py:generic-api-key:2699
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/openadapt_flow/execute/service.py:generic-api-key:79
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/openadapt_flow/reward/worker.py:generic-api-key:327
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/e2e/test_mcp_teach_e2e.py:generic-api-key:123
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/fixtures/terminal_verification_v2_delivery_vector.json:generic-api-key:3
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/fixtures/terminal_verification_v2_terminal_vectors.json:generic-api-key:33
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_attended_actions.py:generic-api-key:129
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_attended_actions.py:generic-api-key:182
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_attended_actions.py:generic-api-key:3784
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_browser_attach.py:generic-api-key:4030
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_browser_attach.py:generic-api-key:4563
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_browser_attach.py:generic-api-key:5024
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_browser_attach.py:generic-api-key:5222
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_browser_attach.py:generic-api-key:5297
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_hosted_runner_product_release_gate.py:generic-api-key:101
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_mcp_teach_surfaces.py:generic-api-key:143
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_mobile_attended_decision_e2e.py:generic-api-key:1175
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_mobile_attended_decision_e2e.py:generic-api-key:1214
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_mobile_attended_decision_e2e.py:generic-api-key:1368
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_mobile_attended_decision_e2e.py:generic-api-key:1401
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_mobile_attended_decision_e2e.py:generic-api-key:525
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_mobile_attended_decision_e2e.py:generic-api-key:583
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_qualification_admission.py:generic-api-key:130
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_qualification_admission.py:generic-api-key:59
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_qualification_fault_contract.py:generic-api-key:590
 # PR #1862: a test key file path (files / "agent.pem") passed to principal_from_key, not a key.
 b712804d6a80dde61588980f11e9b4d5a478f39e:packages/flow/tests/e2e/test_mcp_teach_desktop_e2e.py:generic-api-key:144
 # The same line after #1862 was squash-merged into main.

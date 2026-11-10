@@ -102,6 +102,7 @@ from uuid import UUID
 if TYPE_CHECKING:  # pragma: no cover
     from openadapt_flow.backend import Backend
     from openadapt_flow.ir import ExecutionTargetKind, RunReport
+    from openadapt_flow.record_check_proof import Fixture
     from openadapt_flow.runtime.authorization import RuntimeParamScalar
     from openadapt_flow.tutorial import BreakItResult
 
@@ -6233,6 +6234,7 @@ def _cmd_scaffold_verifier(args: argparse.Namespace) -> int:
         db=optional_path("db"),
         verifier=optional_path("verifier"),
         prove=getattr(args, "prove", None),
+        proof_source=getattr(args, "_record_check_proof_source", None),
         recording=optional_path("recording"),
         bundle=optional_path("bundle"),
         complete_read=bool(getattr(args, "complete_read", False)),
@@ -11277,10 +11279,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--prove",
         default=None,
-        choices=("mockmed", "effect-e2e"),
+        metavar="FIXTURE",
         help=(
             "Also run the proposed check end to end against this "
-            "fault-injection fixture (the check must match its record service)"
+            "caller-supplied fault fixture (requires an injected proof source)"
         ),
     )
     p.add_argument(
@@ -14379,7 +14381,11 @@ def _sealed_input_refusal(args: argparse.Namespace) -> Optional[str]:
     return None
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(
+    argv: Sequence[str] | None = None,
+    *,
+    record_check_proof_source: Optional[Fixture] = None,
+) -> int:
     """CLI entry point. Returns a process exit code."""
     from openadapt_flow.cli_tasks import alias_notice, translate
 
@@ -14408,6 +14414,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     alias_notice(raw, getattr(parser, "task_names", {}), "openadapt-flow")
+    if record_check_proof_source is not None:
+        if getattr(args, "func", None) is not _cmd_scaffold_verifier:
+            print("REFUSED: proof source requires scaffold-verifier", file=sys.stderr)
+            return 2
     if getattr(args, "config_sha256", None):
         if not getattr(args, "config", None):
             print("REFUSED: --config-sha256 needs --config", file=sys.stderr)
@@ -14444,6 +14454,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"REFUSED: {safe_errors.message(exc)}", file=sys.stderr)
         return 2
     try:
+        # Inject only after the ordinary input/output argument guards. This
+        # object is not a CLI flag, path exemption or serialized capability.
+        if record_check_proof_source is not None:
+            args._record_check_proof_source = record_check_proof_source
         code = args.func(args)
         if getattr(args, "command", None) in ("run", "replay"):
             # Offline Seal by default (OPENADAPT_LOCAL_SEAL=off disables). It

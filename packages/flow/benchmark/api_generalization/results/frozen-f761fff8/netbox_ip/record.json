@@ -1,0 +1,17 @@
+{
+ "recording": "/Users/abrichr/oa/scratch/api-generalization/netbox_ip/rec-f761fff8",
+ "events": 7,
+ "exchanges": 5,
+ "judge": {
+  "new_records": 1,
+  "field_mismatches": [],
+  "collateral": {
+   "deleted": [],
+   "changed": []
+  },
+  "state_ok": true,
+  "new_ids": [
+   "1"
+  ]
+ }
+}
