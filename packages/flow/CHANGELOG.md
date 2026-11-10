@@ -37,6 +37,10 @@ ledger settlement atomic and extends zero-config verifier generation.
 
 - `scaffold-verifier` closes three gaps the zero-config benchmark found. A generated REST read now carries `records_complete: true` when `--complete-read` declares it or one unpaged response was seen to hold the whole collection; otherwise it stays incomplete and `verify-run` returns INDETERMINATE. A step counts as a write when the capture shows the page sending a POST, PUT, PATCH or DELETE to its own origin, or its store snapshots differ, not only when its label looks like Save. `--probe-reads` (with optional `--probe-base`) finds a read for an app that never reads the saved record back: it probes the collection and item reads the write implies with GET on the local machine, uses one only when it returns the written values and nothing outside it could change unseen (otherwise it refuses and writes the TODO draft), and records every probe (`read_discovery` in the proof, or `read_discovery.json` when none confirms).
 
+### Fixes
+
+- A frame with `audit_read` attribution and no `frame.database` never holds: it reports `not_checked`, so `verify-run` can't call the save `verified`. The bot's log entries for the saved record were excused whatever table they wrote, so an extra insurance row, allergy or note for the new patient passed when the frame read only the record's own table ([#1505](https://github.com/OpenAdaptAI/OpenAdapt/issues/1505)). Add `frame.database` (the whole-database diff) to such a contract; its own refutations are unchanged.
+
 ## v2.7.0 (2026-11-09)
 
 Flow adds `openadapt wrap`, which turns one agent task into a compiled program
