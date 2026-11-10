@@ -14,6 +14,7 @@ from openadapt_flow.runtime.composition import (
 )
 from openadapt_flow.runtime.effects import RestRecordVerifier
 from openadapt_flow.runtime.replayer import Replayer
+from tests._rest_read_contract_fixtures import mockmed_rest_read_kwargs
 from tests.test_loop_authoring import (
     _encounter_body,
     _RowWritingBackend,
@@ -230,7 +231,9 @@ def test_two_child_fixture_second_is_local_backend(tmp_path: Path):
                 report = Replayer(
                     backend,
                     vision=_vision_confirms_saved(),
-                    effect_verifier=RestRecordVerifier(url),
+                    effect_verifier=RestRecordVerifier(
+                        url, **mockmed_rest_read_kwargs()
+                    ),
                     poll_interval_s=0.01,
                 ).run(
                     workflow,

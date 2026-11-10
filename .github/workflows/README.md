@@ -10,6 +10,8 @@ To keep pull requests fast, CI runs in three tiers:
   packages a change touches, on Python 3.12. Flow's unit shards leave out the
   slow tests listed in `packages/flow/tests/nightly_only.txt`. Those are tests
   over about 5 s on CI, except the realism tests that guard safety, which stay.
+  Entries marked `live ` (live browser sessions whose timing a busy runner
+  cannot hold) are also left out on main and run only in the nightly run.
   Flow's critical tests run in two parallel steps, end-to-end and unit. A smoke test
   (`scripts/ci/smoke.py`) installs every package from its lock, imports it
   and runs its command with `--help`, whatever changed. The checkout is the
@@ -102,9 +104,9 @@ App 15368 is GitHub Actions, the app the current checks are pinned to.
 | main.yml | `run-ci` | ubuntu-latest, Python 3.12 | ubuntu-latest, Python 3.12 | ubuntu-latest and macos-latest, Python 3.10 to 3.12 |
 | main.yml | `unsupported-python-guard` | no | no | Python 3.13 and 3.14 |
 | packages.yml | `types`, `agent` | Python 3.12 | Python 3.12 | Python 3.10 and 3.12 |
-| packages.yml | `flow-lint`, `flow-critical` | yes | yes | yes |
-| ci.yml | `smoke`, `ci` | yes | yes | no |
-| packages.yml | `flow-unit` | 3 shards packed by measured time, fast lane (without `nightly_only.txt`) | no | 2 shards |
+| packages.yml | `flow-lint`, `flow-critical`, `flow-onprem-offline` | yes | yes | yes |
+| ci.yml | `smoke` (with the file-size ratchet against the base), `ci` | yes | yes | no |
+| packages.yml | `flow-unit` | 3 shards packed by measured time, fast lane (without `nightly_only.txt`) | no | 2 shards, without the `live ` entries (nightly runs them) |
 | packages.yml | `flow-native-census` | no | no | Windows and macOS |
 | packages.yml | `capture-linux` | Python 3.12 | Python 3.12 | Python 3.10 (ubuntu-22.04), 3.11, 3.12 |
 | packages.yml | `capture-macos`, `capture-windows` | no | no | yes |
@@ -117,7 +119,7 @@ App 15368 is GitHub Actions, the app the current checks are pinned to.
 | desktop-test.yml | `test-python` | ubuntu-latest, Python 3.12 | ubuntu-latest, Python 3.12 | Linux, macOS and Windows, Python 3.11 and 3.12 |
 | desktop-test.yml | `qualification-contract` | yes | yes | yes |
 | desktop-build.yml | `frontend`, `python-distribution` | yes | yes | yes |
-| desktop-build.yml | `python-sidecar` | ubuntu-22.04 | no | Linux, macOS 14 and Windows |
+| desktop-build.yml | `python-sidecar` | ubuntu-22.04 | no | Linux, macOS 15 arm64 and Windows |
 | desktop-build.yml | `native-installers` | no | no | macOS arm64, macOS Intel, Windows, Linux bundles |
 | desktop-dependency-audit.yml | `python`, `npm`, `rust` | when Desktop changes | no | when Desktop changes, and weekly |
 | desktop-dependency-audit.yml | `python-macos-intel` | no | no | when Desktop changes, and weekly |

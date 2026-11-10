@@ -18,6 +18,7 @@ script) starts that browser with a DevTools port and runs
 See ``docs/GUARD_AN_AGENT.md``.
 """
 
+from openadapt_flow.agent_guard.capture import GuardedCapture, GuardedCaptureError
 from openadapt_flow.agent_guard.commit_guard import CommitGuard, GuardSummary
 from openadapt_flow.agent_guard.config import GuardConfig, load_config
 from openadapt_flow.agent_guard.requests import HeldRequest, NotASave, classify
@@ -25,6 +26,8 @@ from openadapt_flow.agent_guard.requests import HeldRequest, NotASave, classify
 __all__ = [
     "CommitGuard",
     "GuardConfig",
+    "GuardedCapture",
+    "GuardedCaptureError",
     "GuardSummary",
     "HeldRequest",
     "NotASave",

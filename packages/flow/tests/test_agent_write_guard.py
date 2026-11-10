@@ -14,7 +14,9 @@ from pathlib import Path
 import pytest
 
 from openadapt_flow.integrations.agents import WriteGuard
-from tests._orders_portal import Portal, portal  # noqa: F401 - fixture
+from tests._orders_portal import Portal
+
+pytest_plugins = ("tests._orders_portal",)
 
 ORDER = {"customer": "Acme", "product": "Desk lamp", "units": "3"}
 
@@ -247,3 +249,41 @@ def test_a_first_read_queued_behind_a_full_pool_writes_nothing(
         release.set()
     assert portal.posts == 0
     assert guard.run(ORDER, _write(portal, ORDER))["verified"] is True
+
+
+def test_a_cancelled_dispatched_write_with_absent_readback_stays_held(
+    portal: Portal, tmp_path: Path
+) -> None:
+    guard = _guard(portal, tmp_path)
+    portal.fault("no_persist")
+
+    async def cancelled_after_dispatch():
+        sent = asyncio.Event()
+        never_reply = asyncio.Event()
+
+        async def write():
+            output = await asyncio.to_thread(portal.save_order, **ORDER)
+            sent.set()
+            await never_reply.wait()
+            return output
+
+        task = asyncio.create_task(guard.arun(ORDER, write))
+        try:
+            await asyncio.wait_for(sent.wait(), timeout=10)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        finally:
+            if not task.done():
+                task.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await task
+
+    asyncio.run(cancelled_after_dispatch())
+    assert portal.posts == 1 and portal.orders() == []
+    portal.fault("")
+    retry = guard.run(ORDER, _write(portal, ORDER))
+    assert retry["verified"] is False
+    assert retry["verdict"] == "RECONCILIATION_REQUIRED"
+    assert retry["not_sent_again"] is True
+    assert portal.posts == 1 and portal.orders() == []

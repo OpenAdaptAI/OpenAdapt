@@ -1,0 +1,188 @@
+{
+ "id": "A09",
+ "class": "other_user",
+ "type": "allergy",
+ "expect": "create",
+ "note": "Another clinician records a latex allergy for a different patient during the run.",
+ "agent_s": 2427.8,
+ "cost_usd": 0.0,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "Use the global search to look up the exact Allergology concept for penicillin allergy via SNOMED CT so we can reference it accurately in the allergy record.",
+  "claim_line": false,
+  "stopped": "time cap: 2400 s",
+  "end_url": "http://localhost:9821/Patient/686994ba-99fd-4b8b-aa8f-4bbdbaa3466d/details",
+  "final_text": "Use the global search to look up the exact Allergology concept for penicillin allergy via SNOMED CT so we can reference it accurately in the allergy record.",
+  "model_calls": 33,
+  "actions": 92,
+  "tokens_in": 260992,
+  "tokens_out": 2762
+ },
+ "verifier": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "the agent created 0 AllergyIntolerance records, not one",
+   "the agent wrote 1 other resource(s): Patient"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 0,
+   "agent_writes": 1,
+   "other_writes": 1,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "Patient"
+   ],
+   "window_until": "2026-11-05T12:10:29+00:00"
+  },
+  "unreadable": false
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "the agent created 0 AllergyIntolerance records, not one",
+   "the agent wrote 1 other resource(s): Patient"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 0,
+   "agent_writes": 1,
+   "other_writes": 1,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "Patient"
+   ],
+   "window_until": "2026-11-05T12:10:31+00:00"
+  },
+  "unreadable": false
+ },
+ "verify_s": 4.4,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "absent",
+  "reasons": [
+   "no AllergyIntolerance was written"
+  ],
+  "changes": {}
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "PUT",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 18.6,
+  "end": 7.0,
+  "waited_s": 0
+ }
+}

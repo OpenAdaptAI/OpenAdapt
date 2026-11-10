@@ -1,0 +1,1785 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1148,
+      167
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      200,
+      33
+     ]
+    },
+    {
+     "text": "Okafor\n"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 4
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      32,
+      31
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      68,
+      178
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1231,
+      167
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Use the JSON tab.",
+   "actions": [
+    {
+     "coordinate": [
+      349,
+      131
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      764,
+      430
+     ]
+    },
+    {
+     "text": "ctrl+a"
+    },
+    {
+     "text": "{\"resourceType\":\"Patient\",\"name\":[{\"family\":\"Okafor\",\"given\":[\"Lena\"]}],\"birthDate\":\"1988-04-22\",\"gender\":\"female\",\"address\":[{\"line\":[\"14 Birch Lane\"],\"city\":\"Springfield\",\"state\":\"MA\",\"postalCode\":\"01103\"}],\"telecom\":[{\"system\":\"phone\",\"value\":\"413-555-0187\",\"use\":\"home\"},{\"system\":\"email\",\"value\":\"lena.okafor@example.org\"}]}"
+    },
+    {
+     "coordinate": [
+      1182,
+      718
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      764,
+      500
+     ]
+    },
+    {
+     "text": "ctrl+a"
+    },
+    {
+     "text": "BackSpace"
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+End"
+    },
+    {
+     "text": "ctrl+shift+Home"
+    },
+    {
+     "text": "BackSpace"
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+End"
+    },
+    {
+     "text": "BackSpace",
+     "repeat": 100
+    },
+    {
+     "text": "BackSpace",
+     "repeat": 100
+    },
+    {
+     "text": "BackSpace",
+     "repeat": 100
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "region": [
+      318,
+      200,
+      1212,
+      290
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1182,
+      718
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      900,
+      500
+     ]
+    },
+    {
+     "text": "ctrl+End"
+    },
+    {
+     "text": "BackSpace"
+    },
+    {
+     "region": [
+      318,
+      200,
+      1212,
+      300
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1182,
+      718
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      764,
+      500
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 15
+    },
+    {
+     "duration": 1
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1182,
+      733
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {
+     "coordinate": [
+      764,
+      300
+     ],
+     "scroll_direction": "up",
+     "scroll_amount": 20
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Created. Let me get the ID via the Details tab.",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {
+     "coordinate": [
+      374,
+      151
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      722,
+      149
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      68,
+      178
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {
+     "coordinate": [
+      1148,
+      167
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Lena Okafor now has one Patient record, and it's the one I created. The server has no other Patient records.\n\nThe Patient list showed \"No results\" for several minutes before I created her. After I created the record, it showed \"No results\" again until I refreshed, so I'm not certain that early empty list was reliable. The refreshed list now shows exactly one patient, so I'm treating the earlier \"none\" as correct.\n\nThe record holds only the values you gave:\n- **Name:** Lena Okafor\n- **Date of birth:** 1988-04-22\n- **Sex:** female\n- **Address:** 14 Birch Lane, Springfield, MA 01103\n- **Telecom:** home phone 413-555-0187 and email lena.okafor@example.org\n\nThe Details tab shows \"Deceased: true\", but the JSON view has no deceased field, so I read that as a display quirk.\n\nRESULT: DONE Patient/b8872864-e989-4b89-8f2c-9dfe4a02ab36",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 1148,
+   "y": 167,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 200,
+   "y": 33,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Okafor\n"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 4.0
+  },
+  {
+   "a": "click",
+   "x": 32,
+   "y": 31,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 68,
+   "y": 178,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 1231,
+   "y": 167,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 349,
+   "y": 131,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 764,
+   "y": 430,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "a"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "{\"resourceType\":\"Patient\",\"name\":[{\"family\":\"Okafor\",\"given\":[\"Lena\"]}],\"birthDate\":\"1988-04-22\",\"gender\":\"female\",\"address\":[{\"line\":[\"14 Birch Lane\"],\"city\":\"Springfield\",\"state\":\"MA\",\"postalCode\":\"01103\"}],\"telecom\":[{\"system\":\"phone\",\"value\":\"413-555-0187\",\"use\":\"home\"},{\"system\":\"email\",\"value\":\"lena.okafor@example.org\"}]}"
+  },
+  {
+   "a": "click",
+   "x": 1182,
+   "y": 718,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 764,
+   "y": 500,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "End"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "shift",
+    "Home"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "End"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 1182,
+   "y": 718,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 900,
+   "y": 500,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "End"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 1182,
+   "y": 718,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "scroll",
+   "x": 764,
+   "y": 500,
+   "dx": 0,
+   "dy": 1800
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 1182,
+   "y": 733,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "scroll",
+   "x": 764,
+   "y": 300,
+   "dx": 0,
+   "dy": -2400
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 374,
+   "y": 151,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 722,
+   "y": 149,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 68,
+   "y": 178,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 1148,
+   "y": 167,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6285,
+   "out": 153,
+   "usd": 0.002794,
+   "cached": 6281
+  },
+  {
+   "in": 7842,
+   "out": 194,
+   "usd": 0.007098,
+   "cached": 6281
+  },
+  {
+   "in": 9437,
+   "out": 83,
+   "usd": 0.006389,
+   "cached": 7840
+  },
+  {
+   "in": 10897,
+   "out": 164,
+   "usd": 0.007181,
+   "cached": 9435
+  },
+  {
+   "in": 12449,
+   "out": 175,
+   "usd": 0.007813,
+   "cached": 10895
+  },
+  {
+   "in": 14014,
+   "out": 126,
+   "usd": 0.007666,
+   "cached": 12447
+  },
+  {
+   "in": 15538,
+   "out": 195,
+   "usd": 0.008566,
+   "cached": 14012
+  },
+  {
+   "in": 17131,
+   "out": 116,
+   "usd": 0.008254,
+   "cached": 15536
+  },
+  {
+   "in": 18637,
+   "out": 387,
+   "usd": 0.011065,
+   "cached": 17129
+  },
+  {
+   "in": 20457,
+   "out": 193,
+   "usd": 0.010211,
+   "cached": 18635
+  },
+  {
+   "in": 22058,
+   "out": 311,
+   "usd": 0.011207,
+   "cached": 20455
+  },
+  {
+   "in": 23775,
+   "out": 265,
+   "usd": 0.011358,
+   "cached": 22056
+  },
+  {
+   "in": 25457,
+   "out": 249,
+   "usd": 0.011454,
+   "cached": 23773
+  },
+  {
+   "in": 27078,
+   "out": 228,
+   "usd": 0.011428,
+   "cached": 25455
+  },
+  {
+   "in": 28704,
+   "out": 324,
+   "usd": 0.012724,
+   "cached": 27076
+  },
+  {
+   "in": 30435,
+   "out": 195,
+   "usd": 0.012022,
+   "cached": 28702
+  },
+  {
+   "in": 32028,
+   "out": 178,
+   "usd": 0.011853,
+   "cached": 30433
+  },
+  {
+   "in": 33604,
+   "out": 158,
+   "usd": 0.011929,
+   "cached": 32026
+  },
+  {
+   "in": 35160,
+   "out": 178,
+   "usd": 0.012394,
+   "cached": 33602
+  },
+  {
+   "in": 36736,
+   "out": 132,
+   "usd": 0.012296,
+   "cached": 35158
+  },
+  {
+   "in": 38278,
+   "out": 144,
+   "usd": 0.012646,
+   "cached": 36734
+  },
+  {
+   "in": 39820,
+   "out": 138,
+   "usd": 0.012894,
+   "cached": 38276
+  },
+  {
+   "in": 41356,
+   "out": 209,
+   "usd": 0.013898,
+   "cached": 39818
+  },
+  {
+   "in": 42975,
+   "out": 319,
+   "usd": 0.015512,
+   "cached": 41354
+  }
+ ]
+}

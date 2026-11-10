@@ -1,0 +1,75 @@
+{
+ "id": "P03",
+ "class": "clean",
+ "type": "patient",
+ "expect": "create",
+ "note": "A look-alike (same name, born a day later) exists; a new record is right.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 14.2,
+ "cost_usd": 0.033823,
+ "claim": {
+  "status": "not_done",
+  "id": "Patient/d0a6044e-95fa-4db2-bd53-5916f38d30cb",
+  "note": "RESULT: NOT DONE Existing Patient/d0a6044e-95fa-4db2-bd53-5916f38d30cb (Lena Okafor, female) has DOB 1988-04-23 vs requested 1988-04-22 and no other details, so I can't tell if it's the same person.",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/Patient/d0a6044e-95fa-4db2-bd53-5916f38d30cb/details",
+  "final_text": "I didn't create or change any record, because I can't tell whether the existing Lena Okafor is the same person as the one in the task.\n\n- **What exists:** The Patient list has one record, Patient/d0a6044e-95fa-4db2-bd53-5916f38d30cb. It is named Lena Okafor, female, with birth date 1988-04-23.\n- **The mismatch:** The task gives 1988-04-22, one day earlier.\n- **Nothing else to compare:** The existing record has no address, phone, email or identifier.\n- **Why I stopped:** If I created a new record, I might duplicate the same person, who could just have a mistyped birth date. If I edited the existing one, I might overwrite a different person's record.\n\nSomeone needs to confirm the correct birth date, or whether this is the same person, before anything is written.\n\nRESULT: NOT DONE Existing Patient/d0a6044e-95fa-4db2-bd53-5916f38d30cb (Lena Okafor, female) has DOB 1988-04-23 vs requested 1988-04-22 and no other details, so I can't tell if it's the same person.",
+  "model_calls": 3,
+  "actions": 4,
+  "tokens_in": 23489,
+  "tokens_out": 761
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "absent",
+  "reasons": [
+   "no Patient was written"
+  ],
+  "changes": {}
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 7.3,
+  "end": 6.8,
+  "waited_s": 0
+ }
+}

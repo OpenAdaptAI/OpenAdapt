@@ -15,59 +15,357 @@
 
 <!-- version list -->
 
-## Unreleased
+## v2.7.1 (2026-11-09)
 
-### Changed
+Flow 2.7.1 fixes loading of programs certified before Nov 8. Two optional
+workflow fields added since then changed their certification digest, so they
+failed to load. They now load under the reviewed sealed-omission rule, while a
+program whose content changed is still refused. The release also makes write
+ledger settlement atomic and extends zero-config verifier generation.
 
-- The wheel no longer ships the benchmark harnesses. `openadapt_flow.benchmark` and `openadapt_flow.instrument` moved to `packages/flow/benchmark/harness/` in the source tree (import `benchmark.harness`); `openadapt-flow benchmark` runs from a source checkout and says so from a wheel. The engine audit for application-specific code is in `docs/GENERALITY_AUDIT.md`. Code that imported `openadapt_flow.benchmark` or `openadapt_flow.instrument` from an installed wheel imports `benchmark.harness` from a source checkout instead.
+### Upgrade notes
 
-### Features
-
-- Linux: self-repair admits a fix's new click on its AT-SPI element identity plus the record check, as on macOS and Windows. `LinuxBackend.element_identity_at` reads the role, name, id, ancestry up to the pinned window (exact title, bounds and process) and application; anything else is no identity, and the click is refused. Before, a repair on Linux refused every new click ("reads an accessibility tree but can't read element identity yet") ([#1704](https://github.com/OpenAdaptAI/OpenAdapt/issues/1704)).
-
-- Linux: `LinuxBackend.text_value_at` and `focused_text_value` read an editable field's exact text over AT-SPI, so a TYPE step is verified from the field rather than by OCR. Password fields abstain.
-
-- The monorepo CI runs Linux on real AT-SPI: the `flow-linux-atspi` job (post-merge tier) runs `scripts/qualify_linux_atspi.py` and records, compiles, runs governed and repairs a write workflow on a GTK3 app with SQLite (`benchmark/repair_every_backend/qualify_linux.py`), and uploads both results ([#1704](https://github.com/OpenAdaptAI/OpenAdapt/issues/1704)).
-
-- macOS: record, compile and a governed run on a third-party app. `benchmark/macos_native/qualify_calibre.py` sets a book's tag in calibre (Qt, SQLite library), certified under `clinical-write`, run under `standard` with a SQL record check; a book with the same title by another author stops at the identity check and two identical books are refused as ambiguous, each with nothing written ([#1705](https://github.com/OpenAdaptAI/OpenAdapt/issues/1705)).
-
-- Teach authorizations (`openadapt.teach-authorization/v1`). A person signs, with an approver key on the signed approver roster, what an agent may do when it teaches or repairs a program: the task, origins, inputs, the one write and forbidden actions and controls. `openadapt-flow teach-authorization create|sign|verify`; `--teach-authorization` on `compile-agent` and `openadapt-agent serve --teach`. Design and the upgrade notes: `docs/TEACH_AUTHORIZATION.md`.
-
-  **Breaking:** admission of every JIT draft now needs one (`teach_auth_not_recorded` otherwise), in every admission mode; so does a self-repair of an agent-taught program and the approval of a calling agent's fix. Drafts from the airbag handoff are refused, and browser teach (`serve --teach-browser`) no longer teaches or runs write tools.
-
-- A dialog's empty-result check in any language. Induction mines the one line a named confirmation dialog adds when every demonstration shows the same line and every value typed before the dialog differs between them. Questions, numbers, typed values and lines from one demonstration only are not mined. When the demonstrations disagree on a mined check, induction refuses (`ambiguous_guard`) instead of copying the first recording's. The opener and its Confirm click no longer read as a two-row loop. Qualification asks for a business-rule case that halts at such a check. See `docs/DUPLICATE_CHECK.md`.
-
-- `run --self-repair` (and repair by default) now works outside a browser. `repair.session` in `deploy.yaml` says how to start the app for each probe, fault probe and resumed run (an argv, no shell, kept running while the app is up; `fault_commands`, `close_command`, `ready_s`). The run's configured backend must bind to a window owned by that command's process group, so a session never binds to the halted session or a copy already open; Flow ends the group afterwards, and closes the halted session before each probe. This works where the bound window is on Flow's machine (macOS, and the local RDP or Citrix client window); Windows over its agent and FreeRDP are refused for now. Without `repair.session`, a desktop run refuses repair with that reason, as before.
-
-- Signed write receipts. A verifier verdict, with its scope (stores read, time window, strength) and a plain list of what it did not check, is signed as a COSE_Sign1 in the IETF SCITT shape and appended to a local transparency log. `openadapt-flow receipt verify FILE --issuer-key --log-key` checks one offline and prints the not-checked list every time; a receipt that claims more than its scope is neither issued nor accepted. `verify_write(..., write_receipt=True)`, `issue_write_receipt(result)` and `openadapt-flow shadow --receipts` issue them; `receipt anchor` puts the digest in Rekor. Extra: `openadapt-flow[receipts]`. Design: `docs/WRITE_RECEIPTS.md`.
+- A custom `LedgerBackend` must provide `transaction(key)`, an exclusive journal transaction shared by `events()` and `append()`; a backend without it refuses ledger mutations. A held write is released only by a person: `settle_s` no longer releases it, and `halted_before_effect` is now `REFUTED` with `retry_safe=False`. See [Verifier API](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/VERIFIER_API.md).
+- `scaffold-verifier --prove` no longer accepts the built-in `mockmed` and `effect-e2e` fixtures. It runs only against a proof source the caller passes to `main(record_check_proof_source=...)`.
 
 ### Fixes
 
-- A qualification case can run on `--backend windows`. `WindowsBackend` now answers the qualification environment observer from one `/context/identity` call: the foreground executable's name, the SHA-256 of that executable file, the live logon-session digest, and a digest of the machine id and exact OS build. Before, `qualify run-case` on Windows refused with "qualification backend cannot observe the complete environment". The digest is withheld when the file changed after the process started (an updater replacing a running program), and it describes the host executable for an app run by an interpreter, browser or shared runtime. Guarded input now also binds the digest and the environment, so a same-named program from another path cannot take the foreground between the check and the input. The agent's session digest now accepts a connected RDP or Citrix session, not only the console session, so the agent can run inside a remote user session. An agent without the new `context_environment_v1` fields still refuses ([#1696](https://github.com/OpenAdaptAI/OpenAdapt/issues/1696)).
+- Programs certified before the `Anchor.form_identity` and `TokenTemplate.bearing` fields were added load again. When the current workflow-contract digest does not match, the loader tries the older form, leaving out only fields on the reviewed sealed-omission list for the bundle's format version that are unset and `None`, and accepts it only if it reproduces the bound digest exactly. A program whose content changed is still refused.
+- Ledger settlements record the journal revision they observed, so a stale or concurrent observation cannot release a hold, grant a retry, complete a recheck or hand back an older result. Rechecks are bound to the original receipt and the exact set of validated later receipts.
 
-- A covered-band dismiss step takes its dialog box from the window the backend proved covers the band, before any pixel search, so a native message box that the accessibility tree doesn't label as a dialog can be dismissed. Without a proved window the step is refused as before.
+### Changed
 
-- macOS: Qt apps' table cells and inline editors report no `AXTopLevelUIElement`, so `MacOSBackend` couldn't scope them to the window and refused them. Their window is now the nearest `AXWindow` or `AXSheet` up the `AXParent` chain (within 32 levels; reaching the application refuses).
+- `scaffold-verifier` closes three gaps the zero-config benchmark found. A generated REST read now carries `records_complete: true` when `--complete-read` declares it or one unpaged response was seen to hold the whole collection; otherwise it stays incomplete and `verify-run` returns INDETERMINATE. A step counts as a write when the capture shows the page sending a POST, PUT, PATCH or DELETE to its own origin, or its store snapshots differ, not only when its label looks like Save. `--probe-reads` (with optional `--probe-base`) finds a read for an app that never reads the saved record back: it probes the collection and item reads the write implies with GET on the local machine, uses one only when it returns the written values and nothing outside it could change unseen (otherwise it refuses and writes the TODO draft), and records every probe (`read_discovery` in the proof, or `read_discovery.json` when none confirms).
 
-- macOS: a text field that accepts only `AXValue` (Qt's line edits) now takes typed text: the text is spliced over the selection and counts as delivered only when the field reads back exactly that value. It refuses when the field changes between the read and the write, and when the field holds characters outside the Basic Multilingual Plane (AX ranges count UTF-16 units). Before, every such field refused AX text delivery.
+### Fixes
 
-- macOS: a table cell's identity text is now its whole row, not the cell alone, and the row census reads rows the same way; a cell under a table that exposes no row (Qt's item views) abstains, so identity falls back to the recorded band. Before, the clicked cell's own text could verify a different record with the same title. A read-back (`displayed_text_at`) still reads the cell's own text. A macOS bundle recorded on a table cell before this change stored the cell's text and halts at that step; record it again.
+- A frame with `audit_read` attribution and no `frame.database` never holds: it reports `not_checked`, so `verify-run` can't call the save `verified`. The bot's log entries for the saved record were excused whatever table they wrote, so an extra insurance row, allergy or note for the new patient passed when the frame read only the record's own table ([#1505](https://github.com/OpenAdaptAI/OpenAdapt/issues/1505)). Add `frame.database` (the whole-database diff) to such a contract; its own refutations are unchanged.
 
-- macOS: F1 to F12 have key codes. `MacOSBackend` takes `pointer_settle_timeout_s` for slow captures.
+## v2.7.0 (2026-11-09)
 
-- Linux: physical input works on a real session. `focus_window` accepts the pinned window when it is already active (GTK refuses `grab_focus` on a top-level frame, so every physical click and keystroke was refused).
+Flow adds `openadapt wrap`, which turns one agent task into a compiled program
+that replays with new inputs and no model calls. It also teaches writes in the
+browser and on desktop apps under a signed authorization, and checks more of
+what a write changed. Verification still refuses a write when the record or its
+outcome cannot be established.
 
-- Self-repair on a covered identity band dismisses only the proved dialog: the covering window must span the band from where the read stops to its right edge at full height, the dismiss click must land in that same window, and only a dialog whose every word is a notice word (no question) may be dismissed ([#1724](https://github.com/OpenAdaptAI/OpenAdapt/issues/1724)).
+### Upgrade notes
 
-- Self-repair can take a stop where the app's own dialog covers the next step's identity band: when the backend proves the covering window belongs to the window the last verified step was in, and the part of the band read still matches the record, the dialog is dismissed after the previous click and the step re-checks its identity in full. Another record behind the dialog stays an identity halt. The runtime lets a backend remember a verified record's window (`record_verified_window`); macOS answers `owned_window_over` from the window's proved sheet ([#1724](https://github.com/OpenAdaptAI/OpenAdapt/issues/1724)).
+- No command falls back to the demo app on its own. `replay` needs a target:
+  `--url`, `backend.url` in `--config`, or `--demo-app` to serve the bundled
+  MockMed (the tutorial and quickstart commands pass it; `--drift` needs it).
+  `--demo-app` with an attached browser is refused. The variant router's
+  first-screen probe captures nothing without a URL. `qualify accept`'s break-it
+  check no longer runs every workflow's oracle against MockMed: it builds the
+  lie from the workflow itself (a store that did not change, and a screen
+  showing the workflow's own success text and every value the run typed). The
+  reference Execute worker refuses, before running anything, an admission whose
+  `target_url` it cannot drive.
+- Every command-line parser rejects abbreviated long options. Spell each
+  option in full: `run --permission` no longer selects `--permission-trust`.
+- Paged REST and FHIR reads must declare an immutable-snapshot contract and
+  completeness. A read that does not declare `records_complete` (or that
+  returns a missing or changing snapshot token, duplicate identities or mixed
+  identity domains) is indeterminate, not confirmed.
+- FHIR reads refuse query parameters in configured searches, requests,
+  effective URLs and self links, because a capped or filtered result cannot
+  establish a complete read-back. A `collection` bundle is accepted only with a
+  total equal to its entry count. Standard searchset paging is unchanged.
+- A workflow recorded with locale, date-order and keyboard-layout facts refuses
+  replay on a computer whose facts differ or cannot be read. Workflows recorded
+  before this release carry no such binding and are not checked.
+- Identity bands are stricter. A recorded token that carries a digit (an id,
+  date, age or count) must match the live band raw, label and hint words no
+  longer count toward coverage, and a band with no identity-bearing token
+  abstains. Some same-name rows that verified before now refuse.
+- SQLite rows are hashed with each cell's storage class, so a value that
+  changes from integer to text (or similar) changes the row hash. A connection
+  with type converters is refused.
+- All database watch routes in one shadow configuration must share the same
+  `frame.database` settings.
 
-- macOS: a run can now act in the pinned window's own AppKit sheet (an `NSAlert` attached to it), which is a separate window. `MacOSBackend` accepts it only when AX lists exactly one `AXSheet` on the window and exactly one window of the same process has its bounds inside it; the capture composites exactly that sheet over the window, and focus, pointer and click-target checks accept it only inside its bounds. Any other window is still refused ([#1711](https://github.com/OpenAdaptAI/OpenAdapt/issues/1711)).
+### Features
 
-- On a macOS host, a pixel-only run (`RemoteDisplayBackend`: Parallels, RDP and Citrix clients) no longer reads a stale frontmost app. `MacWindowClient` applies NSWorkspace's pending updates before each read, so a freshly started app's window passes the focus check instead of failing it as if an app that already exited were still frontmost ([#1712](https://github.com/OpenAdaptAI/OpenAdapt/issues/1712)).
+- `openadapt wrap` (and `python -m openadapt_flow.wrap.cli`) runs one
+  operator-configured, parameterized task. The first call for a task runs the
+  agent once, checks the saved record independently, compiles the run and
+  admits it; later calls replay the admitted program with new inputs and no
+  model calls. `--serve` exposes the task as a local stdio MCP tool whose input
+  schema is exactly the task's declared parameters. A request ID makes a
+  repeated or interrupted call return the original run instead of sending the
+  write again. A failed or uncertain replay is held until a person approves a
+  repair through the normal signed admission and canaries. Model spend and run
+  time are capped before each model call (`--max-cost-usd`,
+  `--max-run-seconds`), and the run reports its usage.
+- The model never sees the task's own identity or inputs. Where a listing or
+  screenshot shows a value bound to the task (a declared `on_screen` identity
+  string or a task input), it is sent as a typed placeholder such as
+  `⟦task.identity_1⟧` or `⟦task.note⟧`: in text, and as a labelled box in the
+  redacted screenshot. Before, the scrubber redacted the task's own patient name
+  and MRN, and Claude stopped at read-back because it could not tell the task's
+  row from any other. Unbound personal data is still redacted generically. The
+  agent may type a placeholder; the harness types the value. The save gate and
+  the read-back still check the real values locally.
+- `openadapt wrap` takes `--max-input-bytes`. Claude's default ceiling on one
+  rendered request is now 4 MiB (was 64 KiB, which ended every
+  screenshot-per-turn run on turn 2); OpenAI keeps 64 KiB. No setting may exceed
+  32 MiB, and a request above the setting is still never sent.
+- Commands are grouped into 15 tasks in `openadapt-flow --help` (for example
+  `setup teach-authorization`, `verify shadow`). Every earlier command name
+  still works as an alias.
+- Browser teach writes: an agent can teach a save in the browser under a
+  person-signed teach authorization (`openadapt.teach-authorization/v1`). The
+  authorization names the task, inputs, origins, permitted writes and forbidden
+  actions; run 1 starts only when it verifies and covers the write, and every
+  click, key and select is checked against it. `openadapt-flow
+  teach-authorization create`, `sign` and `verify` manage authorizations.
+- An agent can teach a save on a desktop or remote app over MCP, get it
+  admitted, and call the taught tool. Teach authorizations accept desktop and
+  remote surface origins, and a desktop teach scope is bound to the app the
+  person taught.
+- Native authoring trees: `authoring_tree()` on the Windows (UI Automation),
+  macOS (Accessibility) and Linux (AT-SPI) backends lists each control by its
+  element identity. `compile-agent --config` and `serve-execute --config` run
+  desktop and remote apps from the deployment's `backend` section.
+- Verifier audit: `python -m openadapt_flow.verifier_audit run --target
+  module:factory --out DIR` tests an environment's own scorer rather than an
+  agent. It replays a reference trajectory with mechanical faults (an
+  unauthorized side effect, the wrong record, a wrong value, a duplicate write,
+  a partial write, a write after the success claim, a claim with no write) plus
+  an incidental-change positive control. It reads the end state independently
+  and reports, per family, where the scorer accepted a wrong end state or
+  rejected a legitimate one, with counterexamples and Wilson 95% intervals.
+  Adapters for AgentDojo and AppWorld ship as examples; private family sets
+  plug in with `--families-module`. Design: `docs/VERIFIER_AUDIT.md`.
+- Database shadow mode watches clients that write directly to a database. The
+  agent announces each action (`/begin`, `/end`); Flow checks the action's
+  database contract and watches for changes between actions. A change no action
+  covers is `REFUTED` when the app's audit names the agent's user and
+  `UNCERTAIN` otherwise. `--guard` refuses actions that cannot be checked or
+  that follow an unconfirmed result.
+- Writes stay provisional while a history recheck is owed. The recheck reads
+  retained versions and deletions, refuses incomplete history, and needs
+  server-controlled provenance to attribute another actor's edit.
+- Reusable subroutines: a typed signature plus a program body, identified by
+  digest and kept in a versioned library. Certification registers each
+  workflow's uses, and every run re-admits embedded subroutines against the
+  current library (`--subroutine-library`), so publishing a new version sends
+  older users back to qualification.
+- A small, safe expression language computes parameters between steps and
+  evaluates generated effect predicates. It has its own parser and type
+  checker (no `eval`), a closed standard library and hard bounds; anything
+  outside it refuses. See `docs/EXPRESSIONS.md`.
+- API steps cover multipart saves, the clicked submit button's `name=value`,
+  and saves sent by page scripts.
+- A new built-in certification policy, `record-write`, asks for the same
+  evidence as `clinical-write` for any non-clinical system of record. Select it
+  with `campaign.policy: record-write` or `--policy record-write`.
+- Setup learns how a selected record reader corresponds to database rows and
+  columns (`learn_frame_identities`), and drafts REST read setups from explicit
+  API paging, total, snapshot and equality semantics. Missing or ambiguous
+  correspondences refuse setup.
+- `verifier.session` works for FHIR and GraphQL read-backs, renewed for each
+  qualification trial.
+- Taught-tool parameters can declare the intake field they come from. A run is
+  refused when a value disagrees with an operator-registered intake grant bound
+  to the source document and the exact bundle that runs.
+- Regulated approvals can require a named-person binding (WebAuthn passkey,
+  OIDC or SAML evidence), carried in the Seal as digests only.
+- The local console authorizes each request against a deployment-resolved
+  identity with reader, operator and administrator permissions.
+- Explicit retention removes finalized sealed runs after a signed policy
+  interval (dry run by default), and sealed-set data keys can be rewrapped
+  without re-encrypting payloads. `OPENADAPT_FLOW_AT_REST=strict` encrypts
+  every run directory and refuses what it cannot encrypt.
+- Recorded native single-select choices replay by their exact option value.
+- Flow ingests evidence from an optional Manifest V3 Chrome extension: open
+  shadow-DOM target paths, cross-origin iframe context and redacted network
+  saves, with secrets withheld before they leave the page.
+- Trusted `before_capture(backend)` preparation runs on the recording's own
+  backend before the first capture; publication waits for cleanup.
+- A modal dialog target's identity band is read on the dialog alone, so
+  confirm steps in dialogs (such as a duplicate-record prompt) can arm
+  identity.
 
-- A durable run (`standard` or `regulated`) on macOS no longer refuses every click the AX tree resolves (`remote delivery receipt does not bind the resolved target`). `MacOSBackend.act_structural` re-finds the locator's one element, refuses unless its fingerprint (AX path, role, name, app, window, bounds) still equals the resolved handle's, and delivers the gated physical click at its center; the receipt binds that fingerprint. The receipt check is unchanged ([#1710](https://github.com/OpenAdaptAI/OpenAdapt/issues/1710)).
+### Fixes
 
-- Self-repair's probe on a backend with no form to read (native or pixel-only) no longer refuses a typed value because OCR glued its words together: a value of two or more words and at least six letters also counts when it shows on one line with its words joined. Single words keep the word rule.
+- The scrubber no longer rewrites a listing's element refs: `[e3] button "Open"`
+  came back as `[<US_DRIVER_LICENSE>] button "Open"`. Only page text is
+  scrubbed, cell by cell; ref tokens never reach the scrubber.
+- `openadapt wrap` on a held task reports `CACHE_HALTED` with the halt reason
+  and exits 1. It used to treat the hold as a cache miss and exit 2 asking for
+  `--max-cost-usd`. A held task never runs the agent.
+- A headed browser launch no longer hangs before the browser opens. Flow's
+  first-launch check held its guard while calling a function that takes the
+  same guard, so every first headed launch with auto-install on (including
+  `record --url`) waited forever.
+- Browser startup refuses when animation frames cannot advance, instead of
+  acting on a page that never renders.
+- Confirmation-shaped clicks that open a dialog keep their reversible
+  classification, so the write check no longer demands a saved effect from a
+  click that saves nothing.
+- Native form destinations are read correctly when named controls mask the
+  form's `action` or `method`.
+- An early database recheck stays pending until its read reaches the
+  deadline, instead of confirming an earlier snapshot.
+- Durable history stays ordered when the wall clock steps back.
+- The space bar is kept as typed text in recordings.
+- Response-path synthesis finds fields in later and nested items of repeated
+  lists, and refuses ambiguous matches.
+- Append-only MySQL and MariaDB logs are read incrementally, with a row budget
+  that fails closed.
+- Planted qualification faults avoid unique indexes, and update variant
+  enumeration stops at its 64-variant limit.
+- Bundle manifests and API proposal sidecars are read as UTF-8.
+- Captured HTML withholds every hidden token and token meta tag.
+- Evidence exports refuse key and credential files before reading them.
+- `ensure_record` binds its read-back to the last version written and orders
+  versions by their parsed instant.
+
+## v2.6.0 (2026-11-04)
+
+Flow adds signed teach authorizations, encrypted local artifacts, durable
+rollback, and more ways to train and evaluate agents. Verification still
+refuses a write when the record or its outcome cannot be established.
+
+### Upgrade notes
+
+- A differing record identifier now counts as a contradiction, even when most
+  of the identity band matches. Runs may refuse some same-record pairs they
+  accepted before. Check the stopped record before retrying.
+- Agent-taught drafts now need a signed teach authorization in every admission
+  mode. The authorization also covers self-repair and approval of an agent's
+  fix. Browser teach no longer teaches or runs write tools. See
+  [Teach authorization](docs/TEACH_AUTHORIZATION.md).
+- Benchmark harnesses and test-only helpers are no longer shipped in the wheel.
+  Replace imports from `openadapt_flow.benchmark` and
+  `openadapt_flow.instrument` with `benchmark.harness` from a source checkout.
+  The `harness2` extra is removed; `openadapt-flow benchmark` needs a checkout.
+- REST verifiers require the app's record path, record key and delete path;
+  FHIR verifiers require its resource type and field map. API-save admission
+  and idempotency-key detection use explicit app configuration. Contracts that
+  pin an app profile must adopt its updated digest before using the revised
+  bookkeeping rules. Existing verifier identities and contract digests stay
+  unchanged when their configuration is unchanged.
+- Re-record macOS bundles whose record identity was captured from a table cell.
+  Identity now uses the whole row; a table with no accessible row falls back
+  to its recorded identity band.
+
+### Features
+
+- A teach authorization's forbidden controls are read from Chromium's accessibility tree, not by a script in the page. Every key (Enter, Space, any key, typing) is checked against the control that has focus when it arrives, in any frame, and Enter in a form field against the form's default button too, so a forbidden control reached by Tab or by implicit submission is refused like a click. Key chords are refused while controls are forbidden. A click is matched by every name its target goes by: the accessible name, the text of a control with no role (a `div` with a click handler), and the control a `<label>` is for; the default button is the browser's own (`:default`), read in an isolated world. Behaviour change: on surfaces without a web page, a statement that forbids any control now refuses clicks and keys.
+
+- Browser teach writes again, bound to a person's signed teach authorization (`serve --teach-browser --teach-authorization`), for task `browser-tool.<name>`. Run 1 opens no WebSocket and reaches only the statement's origins. Run 1 of a write starts only when the statement covers it: the app's origin, the contract as its record kind, a write adapter, run 1's inputs, and exactly the record fields the contract checks, with run 1's values. During run 1 the write adapter reads every write before it is sent. A taught tool keeps the statement and is signed with the local admission key; every call checks the statement again (signature, roster, purpose, task, expiry). The example app ships its write adapter (`openadapt_flow.agent.example_app:OrderWrites`). Docs: `docs/TEACH_AUTHORIZATION.md`, `docs/VERIFY_WRITES.md`.
+
+  Teaching and every later call stop on missing worker containment or an
+  observed worker violation and connect no WebSocket. Redirect hops receive
+  the wire check, and declared GET writes pin query field names, including
+  empty fields. Requests from independently targeted frames are refused.
+  Guarded clicks use the exact fragment point checked; keyboard checks also
+  read visible text.
+
+- A code-as-action agent is now the default for the first run. Every save is
+  read back before that run becomes a replayable program. Form scripts can run
+  before an admitted API save.
+- Teach authorizations bind the task, origins, inputs, permitted write and
+  forbidden actions to a person on the signed approver roster. Create, sign
+  and verify them with `openadapt-flow teach-authorization`.
+- Generated contracts can be admitted through a sandbox without setup answers.
+  They compare their own tables at recheck, support field sets absent from a
+  manifest, and refuse joins or parameter bindings the demonstrations cannot
+  distinguish. Dialog checks can be learned in any language when multiple
+  demonstrations agree; an ambiguous check is refused.
+- Learn an app's per-request bookkeeping writes, then enforce the rules a
+  person approved. See [Learned excuses](docs/LEARNED_EXCUSES.md).
+- Signed write receipts bind each verifier verdict to the stores and time
+  window checked, its strength, and an explicit list of what was not checked.
+  The `receipts` extra supports offline verification and optional transparency
+  log anchoring. See [Write receipts](docs/WRITE_RECEIPTS.md).
+- Encrypt recordings and bundles at rest with a local key. Strict mode refuses
+  unsealed inputs. Compile, compose, route, process, visualize, variant, teach
+  and library paths can read sealed artifacts without a plaintext export.
+  Attended state, checkpoints and the approval journal are encrypted by default;
+  legacy plaintext state is upgraded before use, and raw authority paths are
+  refused in strict mode. See [Encryption at rest](docs/phi_at_rest.md).
+- Roll back durable runs, including after a crash. Desktop and remote-display
+  rollback checks the starting screen through the same step resolver used by
+  a run. The ledger retains owed rechecks across restarts and distinguishes a
+  consumed, missing or incorrectly invoked recheck.
+- Serve record-checked fault environments through OpenEnv and Prime Intellect,
+  with shared observation types and MCP tools. Windows desktop packs cover
+  UI Automation and pixel-only remote display. The `openenv` extra requires
+  Python 3.11 or later; individual environments retain their documented host
+  and qualification requirements.
+- A confirmed write followed by an escalation can earn configurable partial
+  reward credit; the default is 0.5.
+
+### Fixes
+
+- Rollback and qualification read-back distinguish nulls from missing fields
+  and the text `None`. An unresolved parameter mapping cannot establish that
+  an uncertain write landed. An on-screen check with no expected value reports
+  `INDETERMINATE` instead of matching only the record selector. SQL reward
+  read-back compares typed numbers by value.
+- Bookkeeping learning excludes fields the agent sent or read, including
+  bracketed form-field names and requests captured while verification runs.
+  Those fields cannot be proposed as excuses for unrelated database changes.
+- A versions check with an unknown `target_surface` reports `not_checked`
+  with `unknown_surface`. A surface read only by a zero-count guard cannot
+  supply a write target. Generated setup questions now show a missing version
+  check instead of leaving it unnoticed.
+- Typed input must match the complete field value. Native and pixel-only runs
+  stop when delivery cannot be confirmed. Windows input checks the foreground
+  window throughout delivery and reports when focus changes may leave partial
+  input. Native date fields receive ISO dates correctly.
+- Read-back compares exact, typed whole-field values. Generated save checks
+  retain duplicate keys and recognize a copied value even when it also looks
+  like the row's own key. A value is bound to a parameter only when equality
+  distinguishes it from every other candidate.
+- Rechecks hold for review when a later write's frame was not judged. A failed
+  saved state cannot supply a trusted ledger id. Later successful HTTP writes
+  without a known record count as unexplained changes. Volatile FHIR metadata
+  is refused before the first run.
+- Whole-database checks reject ambiguous PostgreSQL table and sequence names
+  and non-PostgreSQL schema wildcards. A column rule cannot excuse a row with
+  no cell hashes. Rollback audit entries identify exactly one snapshot table.
+  API spans re-read checks after writes and preserve an earlier halt reason.
+- Covered or off-viewport targets stop before pixel fallback. Self-repair may
+  dismiss a proved app-owned notice over the identity band, then checks the
+  full identity again. It refuses questions, unrelated windows and incomplete
+  coverage of the obscured band.
+- macOS supports the pinned window's AppKit sheet, Qt field delivery and row
+  identity, and receipts bound to the resolved click target. Remote-display
+  focus checks apply pending workspace updates before reading the active app.
+  Function keys F1–F12 have native key codes.
+- Linux reads editable field values and element identities through AT-SPI;
+  password fields abstain. Physical input accepts an already focused pinned
+  window. Governed self-repair can admit a new click with a unique element
+  identity and a record check.
+- Desktop self-repair can start a fresh app session for each probe when the
+  backend can bind its local window to the configured process. Windows over
+  its agent and FreeRDP still refuse this mode. Probe read-back handles words
+  joined by OCR without weakening single-word checks.
+- Windows qualification observes the executable, machine, OS and live session,
+  including connected remote sessions. Input remains bound to that environment;
+  an old agent without the required fields refuses. Lab profiles choose the
+  test app's interpreter, and headless FreeRDP can request AVC444.
+- Strict no-outbound mode permits child processes only under named containment.
+  Redaction identifies credential names by their parts. Sealed input admission
+  checks named path arguments and refuses a missing deployment key.
+
+### Evaluation and packaging
+
+- The threat model explains which verification layer provides each guarantee.
+  Additional adversarial tests exercise exact read-back and capture ambiguity.
+- Verification benchmarks include operation semantics, model-judge and API
+  read-back baselines, and revised public leaderboard scores. These reports
+  retain their stated task and evaluation scope.
+- Qualification includes Linux AT-SPI, native macOS record/compile/run cases,
+  desktop replay on hosted runners, and backend capability evidence by surface.
+  Published qualification results do not qualify every app or deployment.
+- Benchmark outputs, demo fixtures and restricted reference environments stay
+  outside distributed package artifacts. CI checks application-independent
+  engine code and validates the built wheel and source distribution.
 
 ## v2.5.0 (2026-11-02)
 

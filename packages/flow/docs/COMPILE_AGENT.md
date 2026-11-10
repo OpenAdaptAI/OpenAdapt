@@ -26,6 +26,13 @@ openadapt-flow compile-agent run .openadapt-compile-agent/<task key> \
 (`claude-opus-5-5`) on your own key from `ANTHROPIC_API_KEY`; OpenAdapt holds
 no key. `--agent steps.json` runs a scripted agent with no model calls.
 
+Run 1 compares whole records between reads. A FHIR `field_paths` mapping to
+`meta.lastUpdated`, `meta.versionId`, or the whole `meta` object is refused
+before recording unless its output key is in `verifier.records_drop_fields`.
+For example, `field_paths: {revision: meta.versionId}` also needs
+`records_drop_fields: [revision]`. The refusal names the field and the fix;
+no field is dropped automatically.
+
 ## What happens
 
 1. **Run 1, in the harness.** The agent does the task while
@@ -216,6 +223,51 @@ It shows the person the proposed checks (unless someone confirmed them
 already), the steps, and the canary result, and asks them to confirm each.
 `--admit-key` admits with a registered key instead, once the checks are
 confirmed.
+
+### Prepare the backend before capture
+
+Pass `before_capture=callback` to `compile_agent`, `FirstRunCompiler`,
+`compile_first_run`, `SkillCache` or Python `load_task`. The callback receives
+the exact backend that will be recorded, after its normal guarded opening,
+before the guarded Recording baseline, authoring session and actor start.
+It applies to both web and native backends. It must finish synchronously and
+return `None`; every other return value is refused before those stages. The
+hook is never awaited or scheduled. For the web, the normal request guard is
+installed before the initial navigation and remains active during the callback.
+
+The compiler's existing pre-open baseline for save and final record checks
+is unchanged. Preparation writes within its observed projection remain visible
+and can refuse the capture; this hook does not rebase or hide them. Preparation
+should be neutral within that projection.
+
+Use this trusted callback to prepare and check the starting state, then
+reserve the caller's model allowance only after those checks succeed. An
+exception or cancellation closes the acquired backend; reservation failure
+also closes it and never calls the actor. The pipeline neither retries nor
+refunds the caller's reservation. Capture uses the same backend without
+adopting an unrelated page or opening another context after the callback.
+
+A completed capture is compiled first, then its owned controllers and backend
+are closed. Only successful cleanup permits signing and publishing a normal
+candidate. Failed finalization, closing or publication retains the staged
+capture as refused evidence; a reload cannot confirm or admit it as a draft.
+
+The callback is process-local Python configuration. It is excluded from
+task JSON, task identity, saved specifications, bundles and admission
+records. `FirstRunCompiler.load(..., before_capture=callback)` can supply it
+again explicitly. A task parameter named `before_capture` remains valid.
+The hook grants no authorization or admission and leaves the runtime save
+gate, record checks and human confirmation unchanged.
+
+The synchronous-return check applies to this new hook. Legacy `WebApp.setup`
+and backend `before_goto` callbacks retain their existing return behavior.
+
+This hook runs only for a new first capture. Existing candidates, admitted
+programs and cache hits do not invoke it. Canaries and replay retain their
+existing app-opening behavior; direct `WebApp.setup` still runs on every
+opening of that app. Capture preparation does not implicitly configure those
+other paths. Real-application qualification is separate and has not yet
+been shown for this hook.
 
 ## An agent over MCP
 

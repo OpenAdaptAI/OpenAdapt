@@ -383,6 +383,12 @@ class EngineDispatcher:
             # config / settings
             "get_config": self.get_config,
             "set_config": self.set_config,
+            # usage stats consent and the update check (window wire only)
+            "get_privacy_settings": self.get_privacy_settings,
+            "set_usage_stats": self.set_usage_stats,
+            "set_update_check": self.set_update_check,
+            "get_update_status": self.get_update_status,
+            "subscribe_release_notes": self.subscribe_release_notes,
             # effective policy (fail-closed; Tier-1 user / Tier-2 org / Tier-3 safety)
             "get_effective_policy": self.get_effective_policy,
             "refresh_policy": self.refresh_policy,
@@ -427,6 +433,8 @@ class EngineDispatcher:
             "shadow_set_work_domains": self.shadow_set_work_domains,
             "shadow_decide": self.shadow_decide,
             "shadow_scan": self.shadow_scan,
+            # Unencrypted patient data on this computer (Flow's ledger).
+            "at_rest_status": self.at_rest_status,
         }
 
     # ------------------------------------------------------- shadow mode
@@ -1359,6 +1367,15 @@ class EngineDispatcher:
         run: bool,
         first_supervised: bool = False,
     ) -> dict:
+        try:
+            from openadapt_desktop.telemetry import capture as telemetry_capture
+
+            telemetry_capture(
+                "replay_started",
+                {"surface": "dispatch", "mode": "governed" if run else "replay"},
+            )
+        except Exception:
+            pass
         workflow_id = params.get("workflow_id")
         bundle = self._bundle_dir(workflow_id)
         if bundle is None:
@@ -1787,6 +1804,20 @@ class EngineDispatcher:
                 ),
             },
         )
+        try:
+            from openadapt_desktop.telemetry import capture as telemetry_capture
+
+            failed = outcome in {"FAILED", "unknown"} or bool(error)
+            telemetry_capture(
+                "replay_failed" if failed else "replay_stopped",
+                {
+                    "surface": "dispatch",
+                    "mode": "governed" if run else "replay",
+                    "outcome": str(outcome)[:64],
+                },
+            )
+        except Exception:
+            pass
         return report
 
     @staticmethod
@@ -2378,6 +2409,12 @@ class EngineDispatcher:
 
     def teach_fix(self, **params: Any) -> dict:
         """Teach a fix for a halted workflow via ``openadapt-flow teach``."""
+        try:
+            from openadapt_desktop.telemetry import capture as telemetry_capture
+
+            telemetry_capture("teach_started", {"surface": "dispatch", "mode": "fix"})
+        except Exception:
+            pass
         workflow_id = str(params.get("workflow_id") or "")
         bundle = self._bundle_dir(workflow_id)
         if bundle is None:
@@ -2403,6 +2440,19 @@ class EngineDispatcher:
         except Exception as exc:
             return {"promoted": False, "message": str(exc)}
         message = "Fix promoted." if result.ok else (result.stderr or "Teach did not promote.")
+        try:
+            from openadapt_desktop.telemetry import capture as telemetry_capture
+
+            telemetry_capture(
+                "teach_completed",
+                {
+                    "surface": "dispatch",
+                    "mode": "fix",
+                    "outcome": "promoted" if result.ok else "not_promoted",
+                },
+            )
+        except Exception:
+            pass
         response: dict[str, Any] = {"promoted": result.ok, "message": message}
         if result.ok:
             examples = self._remember_branch_example(workflow_id, run, fix)
@@ -6032,6 +6082,70 @@ class EngineDispatcher:
         self._persist_config_key(key, value)
         return {"ok": True, **self.get_config()}
 
+    # ------------------------------------------- usage stats and updates
+
+    def get_privacy_settings(self, **params: Any) -> dict:
+        """Usage-stats consent and the update-check switch (privacy_settings.py)."""
+        from openadapt_desktop import privacy_settings
+
+        return privacy_settings.status()
+
+    def set_usage_stats(self, **params: Any) -> dict:
+        """Save the person's usage-stats answer. Nothing is sent before ``share``."""
+        from openadapt_desktop import privacy_settings, telemetry
+
+        share = params.get("share")
+        if not isinstance(share, bool):
+            return {"ok": False, "error": "share must be true or false"}
+        was_enabled = telemetry.telemetry_enabled()
+        try:
+            privacy_settings.set_usage_stats(share)
+        except Exception as exc:
+            return {"ok": False, "error": f"The choice was not saved: {exc}"}
+        if share and not was_enabled:
+            # The launch event was skipped before consent; count this session.
+            telemetry.capture("app_opened", {"surface": "consent"})
+        return {"ok": True, **privacy_settings.status()}
+
+    def subscribe_release_notes(self, **params: Any) -> dict:
+        """Send the optional release-notes signup (release_notes_signup.py).
+
+        Runs only when the person types an address and presses Subscribe.
+        The address is not stored.
+        """
+        from openadapt_desktop import release_notes_signup
+
+        return release_notes_signup.subscribe(params.get("email"))
+
+    def set_update_check(self, **params: Any) -> dict:
+        """Turn the daily update check on or off."""
+        from openadapt_desktop import privacy_settings, updates
+
+        enabled = params.get("enabled")
+        if not isinstance(enabled, bool):
+            return {"ok": False, "error": "enabled must be true or false"}
+        try:
+            privacy_settings.set_update_check(enabled)
+        except Exception as exc:
+            return {"ok": False, "error": f"The setting was not saved: {exc}"}
+        if enabled:
+            updates.check_in_background(on_result=lambda result: self.emit("update_status", result))
+        return {"ok": True, **privacy_settings.status()}
+
+    def get_update_status(self, **params: Any) -> dict:
+        """The last update-check result; starts a background check when due.
+
+        ``force=true`` checks now (the Settings button). The result arrives as
+        an ``update_status`` event; this call never waits on the network.
+        """
+        from openadapt_desktop import updates
+
+        updates.check_in_background(
+            force=params.get("force") is True,
+            on_result=lambda result: self.emit("update_status", result),
+        )
+        return updates.status()
+
     def _persist_config_key(self, key: str, value: Any) -> None:
         """Write a single ``[hosted]`` key into ``~/.openadapt/config.toml``."""
         import tomllib
@@ -6234,6 +6348,12 @@ class EngineDispatcher:
 
             self.services.runner = RunnerService(self.config, self.services, emit=self.emit)
         return self.services.runner
+
+    def at_rest_status(self, **params: Any) -> dict:
+        """How many writes Flow recorded as unencrypted, for the notice."""
+        from openadapt_desktop.at_rest_notice import status
+
+        return status()
 
     def runner_status(self, **params: Any) -> dict:
         """Return the ``RunnerStatus``-shaped dict for the Runner screen."""

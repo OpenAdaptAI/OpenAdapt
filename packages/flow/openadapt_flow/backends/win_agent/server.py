@@ -13,6 +13,8 @@ matching the Windows Agent Arena Flask contract (the WAADirect pattern):
     POST /uia/locator-at    -> stable UIA locator at a demonstrated point
     POST /uia/element-identity-at -> role, name, AutomationId, window path and
                                process of the element at a point
+    POST /uia/authoring-tree -> the foreground app's controls, each with its
+                               element-identity-at identity
     POST /uia/text-at-point -> structured row text for identity verification
     POST /uia/identity-candidates-at -> rows that read the same as that row
     POST /uia/find          -> zero / unique / ambiguous exact candidates
@@ -119,6 +121,8 @@ _MAX_TEXT_CHARS = 65_536
 _MAX_UIA_NODES = 5_000
 _MAX_UIA_CANDIDATES = 16
 _MAX_UIA_DEPTH = 24
+#: Elements one ``/uia/tree`` observation returns at most.
+_MAX_TREE_NODES = 400
 # An Invoke that has not returned after this long (a click handler showing a
 # modal dialog, or an app that is not answering) is an uncertain delivery.
 _INVOKE_RETURN_S = 2.0
@@ -447,8 +451,29 @@ def _perform_input(payload: dict[str, Any]) -> dict[str, Any]:
 
         pyautogui.FAILSAFE = False
         if text:
+            foreground = _foreground_window_identity()
+            if foreground is None:
+                raise AgentRequestError(
+                    503,
+                    "input_focus_unavailable",
+                    "cannot bind keyboard input to a foreground window",
+                )
+
+            def require_foreground() -> None:
+                if _foreground_window_identity() != foreground:
+                    raise AgentRequestError(
+                        409,
+                        "input_focus_changed",
+                        "foreground window changed during typing; delivery may be partial",
+                    )
+
             if text.isascii():
-                pyautogui.write(text, interval=float(interval))
+                for index, char in enumerate(text):
+                    require_foreground()
+                    pyautogui.write(char, interval=0, _pause=False)
+                    require_foreground()
+                    if index + 1 < len(text):
+                        time.sleep(float(interval))
             else:
                 encoded = base64.b64encode(text.encode("utf-8")).decode("ascii")
                 ps = (
@@ -463,7 +488,9 @@ def _perform_input(payload: dict[str, Any]) -> dict[str, Any]:
                 if completed.returncode != 0:
                     raise RuntimeError("Set-Clipboard failed")
                 time.sleep(0.2)
+                require_foreground()
                 pyautogui.hotkey("ctrl", "v")
+                require_foreground()
         return _delivery_receipt("physical_type_text", native=False)
 
     if action == "press":
@@ -669,6 +696,161 @@ def _element_identity(control: object) -> Optional[dict[str, Any]]:
     }
 
 
+#: UIA control type -> the authoring observation's role vocabulary (the one
+#: the browser tree uses). Only types ``element-identity-at`` resolves to
+#: themselves are listed, so a click on a listed control reads back the
+#: identity the tree gave it.
+_AUTHORING_ROLES = {
+    "ButtonControl": "button",
+    "SplitButtonControl": "button",
+    "HyperlinkControl": "link",
+    "MenuItemControl": "menu_item",
+    "TabItemControl": "tab",
+    "ListItemControl": "list_item",
+    "CheckBoxControl": "checkbox",
+    "RadioButtonControl": "radio",
+    "EditControl": "text_input",
+}
+_MAX_AUTHORING_NODES = 200
+_AUTHORING_DEADLINE_S = 8.0
+
+
+def _authoring_root(auto: Any) -> Optional[object]:
+    """The outermost window below the desktop that holds the foreground window."""
+    try:
+        node = auto.GetForegroundControl()
+    except Exception:  # noqa: BLE001 - no foreground window is an empty tree
+        return None
+    window: Optional[object] = None
+    for _ in range(_MAX_UIA_DEPTH):
+        if node is None:
+            break
+        if str(_control_value(node, "ControlTypeName", "")) == "WindowControl":
+            window = node
+        node = _parent(node)
+    return window
+
+
+def _top_level_window(user32: Any, control: object) -> Optional[dict[str, int]]:
+    """``{hwnd, pid}`` of the top-level window ``control`` is in, or None.
+
+    The same window ``/window/root-at`` names for a point over the control
+    (``GetAncestor(GA_ROOT)``): a click by node is refused when the window
+    under its point is another one, such as a second window of the same app
+    with the same title. None without Win32 or on any failure.
+    """
+    if user32 is None:
+        return None
+    try:
+        hwnd = _window_handle(control)
+        root = (user32.ancestor(hwnd, _GA_ROOT) or hwnd) if hwnd else 0
+        pid = user32.pid_of(root) if root else 0
+    except Exception:  # noqa: BLE001 - an unreadable window is no window
+        return None
+    if not root or not pid:
+        return None
+    return {"hwnd": int(root), "pid": int(pid)}
+
+
+def _authoring_tree(auto: Any) -> dict[str, Any]:
+    """The foreground app's controls, each with its ``element-identity-at`` identity.
+
+    Lists, in tree order, the controls of the roles in ``_AUTHORING_ROLES``
+    that have an identity (an AutomationId, or a role and a name), at most
+    ``_MAX_AUTHORING_NODES`` on screen and as many off screen. ``identity`` is
+    exactly what ``/uia/element-identity-at`` returns for that control, and
+    ``window`` its top-level window (:func:`_top_level_window`). An
+    off-screen control (scrolled out of view) has ``offscreen: true`` and no
+    pixels: it can't be clicked, but it counts when a caller checks that an
+    identity is unique. Bounds are screen pixels ``{x, y, w, h}``.
+    ``truncated`` is true when a cap, the visit budget or the deadline cut the
+    walk short.
+    """
+    root = _authoring_root(auto)
+    if root is None:
+        return {"status": "ok", "tree": [], "window": None, "truncated": False}
+    user32 = _user32_factory() if os.name == "nt" else None
+    started = time.monotonic()
+    nodes: list[dict[str, Any]] = []
+    shown = hidden = 0
+    truncated = False
+    visited = 0
+    stack: list[tuple[object, int]] = [(root, 0)]
+    while stack:
+        control, depth = stack.pop()
+        visited += 1
+        if (
+            visited > _MAX_UIA_NODES
+            or shown >= _MAX_AUTHORING_NODES
+            or hidden >= _MAX_AUTHORING_NODES
+            or time.monotonic() - started > _AUTHORING_DEADLINE_S
+        ):
+            truncated = True
+            break
+        control_type = str(_control_value(control, "ControlTypeName", ""))
+        role = _AUTHORING_ROLES.get(control_type)
+        if role is not None:
+            identity = _element_identity(control)
+            bounds = _bounds(control)
+            offscreen = bounds is None or bool(
+                _control_value(control, "IsOffscreen", False)
+            )
+            if identity is not None:
+                if offscreen:
+                    hidden += 1
+                else:
+                    shown += 1
+                nodes.append(
+                    {
+                        "role": role,
+                        "control_type": control_type,
+                        "automation_id": identity["automation_id"],
+                        "class_name": str(
+                            _control_value(control, "ClassName", "") or ""
+                        )[:64]
+                        or None,
+                        "name": identity["name"],
+                        "enabled": bool(_control_value(control, "IsEnabled", True)),
+                        "focused": bool(
+                            _control_value(control, "HasKeyboardFocus", False)
+                        ),
+                        "backend_pixels": (
+                            None
+                            if offscreen or bounds is None
+                            else {
+                                "x": bounds[0],
+                                "y": bounds[1],
+                                "w": bounds[2] - bounds[0],
+                                "h": bounds[3] - bounds[1],
+                            }
+                        ),
+                        "offscreen": offscreen,
+                        "identity": identity,
+                        "window": _top_level_window(user32, control),
+                    }
+                )
+        if depth < _MAX_UIA_DEPTH:
+            stack.extend((c, depth + 1) for c in reversed(_children(control)))
+    window_bounds = _bounds(root)
+    process_id = _control_value(root, "ProcessId", 0)
+    window: dict[str, Any] = {
+        "process_name": _process_image_identifier(
+            process_id if isinstance(process_id, int) else 0
+        ),
+        "bounds": (
+            {
+                "x": window_bounds[0],
+                "y": window_bounds[1],
+                "w": window_bounds[2] - window_bounds[0],
+                "h": window_bounds[3] - window_bounds[1],
+            }
+            if window_bounds is not None
+            else None
+        ),
+    }
+    return {"status": "ok", "tree": nodes, "window": window, "truncated": truncated}
+
+
 def _locator_payload(value: object) -> dict[str, Any]:
     data = _exact_object(
         value,
@@ -729,6 +911,39 @@ def _target_fingerprint(control: object, candidate: dict[str, Any]) -> str:
     }
     canonical = json.dumps(identity, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _uia_labeled_by(control: object) -> Optional[object]:
+    """The raw UIA LabeledBy element for ``control``, or None."""
+
+    # The typed COM getter returns IUIAutomationElement directly. The generic
+    # GetPropertyValue API returns VT_UNKNOWN, not a uiautomation Control.
+    element = _control_value(control, "Element", None)
+    return _control_value(element, "CurrentLabeledBy", None)
+
+
+def _uia_field_label(control: object) -> Optional[str]:
+    """Best human label for one focused UIA control: LabeledBy then Name."""
+
+    labeled = _uia_labeled_by(control)
+    if labeled is not None:
+        name = " ".join(str(_control_value(labeled, "CurrentName", "") or "").split())
+        if name:
+            return name
+    name = " ".join(str(_control_value(control, "Name", "") or "").split())
+    return name or None
+
+
+def _focused_field_label(auto: Any) -> Optional[str]:
+    """Label of the one focused UIA control, or None."""
+
+    try:
+        focused = auto.GetFocusedControl()
+    except Exception:  # noqa: BLE001
+        return None
+    if focused is None:
+        return None
+    return _uia_field_label(focused)
 
 
 def _candidate(control: object) -> Optional[dict[str, Any]]:
@@ -1159,10 +1374,69 @@ def _read_rows(container: object) -> tuple[list[dict[str, Any]], bool]:
     return rows, truncated
 
 
+def _window_tree(
+    auto: Any, window_name: str, max_nodes: int
+) -> tuple[list[dict[str, Any]], bool]:
+    """The elements of the top-level windows named ``window_name``.
+
+    Read-only, for an observation: role, name, automation id, bounds and
+    depth of each element with a known role or a name, depth first. Values are
+    not read: a text box's content shows on screen, and reading it here would
+    add a channel the pixels-only surface does not have.
+    """
+    try:
+        root = auto.GetRootControl()
+    except Exception as exc:  # noqa: BLE001
+        raise AgentRequestError(
+            503, "uia_unavailable", "UI Automation is unavailable"
+        ) from exc
+    nodes: list[dict[str, Any]] = []
+    visited = 0
+    truncated = False
+    for window in _children(root):
+        if (
+            " ".join(str(_control_value(window, "Name", "") or "").split())
+            != window_name
+        ):
+            continue
+        stack: list[tuple[Any, int]] = [(window, 0)]
+        while stack:
+            control, depth = stack.pop()
+            visited += 1
+            if visited > _MAX_UIA_NODES or len(nodes) >= max_nodes:
+                truncated = True
+                break
+            bounds = _bounds(control)
+            role = _role(control)
+            name = " ".join(str(_control_value(control, "Name", "") or "").split())
+            if bounds is not None and (role or name):
+                nodes.append(
+                    {
+                        "role": role
+                        or str(_control_value(control, "ControlTypeName", "")),
+                        "name": name[:_MAX_IDENTITY_TEXT] or None,
+                        "automation_id": str(
+                            _control_value(control, "AutomationId", "") or ""
+                        )
+                        or None,
+                        "bounds": bounds,
+                        "depth": depth,
+                    }
+                )
+            if depth < _MAX_UIA_DEPTH:
+                stack.extend((c, depth + 1) for c in reversed(_children(control)))
+        if truncated:
+            break
+    return nodes, truncated
+
+
 def _perform_uia_initialized(
     auto: Any, operation: str, payload: dict[str, Any]
 ) -> dict[str, Any]:
     """Perform one typed UIA operation in an initialized COM apartment."""
+    if operation == "authoring-tree":
+        _exact_object(payload, label=operation)
+        return _authoring_tree(auto)
     if operation in {
         "locator-at",
         "element-identity-at",
@@ -1251,6 +1525,34 @@ def _perform_uia_initialized(
             # a locator that matches others too could only ever be refused.
             locator = None
         return {"status": "ok", "locator": locator}
+
+    if operation == "focused-field-label":
+        _exact_object(payload, required=frozenset(), label=operation)
+        return {"status": "ok", "label": _focused_field_label(auto)}
+
+    if operation == "tree":
+        data = _exact_object(
+            payload,
+            required=frozenset({"window_name"}),
+            optional=frozenset({"max_nodes"}),
+            label="uia tree",
+        )
+        window_name = data["window_name"]
+        if not isinstance(window_name, str) or not 1 <= len(window_name) <= 512:
+            raise AgentRequestError(
+                400, "invalid_schema", "window_name must be a bounded string"
+            )
+        max_nodes = data.get("max_nodes", _MAX_TREE_NODES)
+        if (
+            not isinstance(max_nodes, int)
+            or isinstance(max_nodes, bool)
+            or not 1 <= max_nodes <= _MAX_TREE_NODES
+        ):
+            raise AgentRequestError(
+                400, "invalid_schema", f"max_nodes must be 1..{_MAX_TREE_NODES}"
+            )
+        nodes, truncated = _window_tree(auto, window_name, max_nodes)
+        return {"status": "ok", "nodes": nodes, "truncated": truncated}
 
     if operation == "read":
         data = _exact_object(
@@ -2198,8 +2500,8 @@ def _running_image_digest(pid: int, path: str) -> Optional[str]:
     return _image_file_digest(path)
 
 
-def _foreground_process_id() -> Optional[int]:
-    """The process that owns the foreground window, without reading its title."""
+def _foreground_window_identity() -> Optional[tuple[int, int]]:
+    """Foreground window and owning process, without reading a window title."""
 
     if os.name != "nt":
         return None
@@ -2229,7 +2531,13 @@ def _foreground_process_id() -> Optional[int]:
             return None
     except Exception:  # noqa: BLE001 - unavailable means unverifiable
         return None
-    return int(pid.value)
+    return int(hwnd), int(pid.value)
+
+
+def _foreground_process_id() -> Optional[int]:
+    """The process that owns the foreground window, without reading its title."""
+    identity = _foreground_window_identity()
+    return identity[1] if identity is not None else None
 
 
 def _foreground_application_identity() -> Optional[str]:
@@ -2483,6 +2791,7 @@ def make_handler_class(
                             "guarded_input_v1",
                             "uia_v1",
                             "uia_read_v1",
+                            "uia_authoring_tree_v1",
                             *(
                                 ["legacy_waa_input_v1"]
                                 if config.allow_legacy_exec
@@ -2520,13 +2829,16 @@ def make_handler_class(
                 "/context/identity": ("context", "identity"),
                 "/uia/locator-at": ("uia", "locator-at"),
                 "/uia/element-identity-at": ("uia", "element-identity-at"),
+                "/uia/authoring-tree": ("uia", "authoring-tree"),
                 "/window/root-at": ("uia", "window-root-at"),
                 "/window/owned-over": ("uia", "owned-window-over"),
                 "/uia/text-at-point": ("uia", "text-at-point"),
+                "/uia/focused-field-label": ("uia", "focused-field-label"),
                 "/uia/identity-candidates-at": ("uia", "identity-candidates-at"),
                 "/uia/find": ("uia", "find"),
                 "/uia/act": ("uia", "act"),
                 "/uia/read": ("uia", "read"),
+                "/uia/tree": ("uia", "tree"),
             }
             is_legacy = self.path == "/execute_windows" and config.allow_legacy_exec
             if self.path not in typed_routes and not is_legacy:
@@ -2826,7 +3138,8 @@ def create_server(
 def main(argv: Optional[list[str]] = None) -> None:
     """CLI entry point: run the agent server until interrupted."""
     parser = argparse.ArgumentParser(
-        description="OpenAdapt-flow in-guest Windows agent"
+        description="OpenAdapt-flow in-guest Windows agent",
+        allow_abbrev=False,
     )
     parser.add_argument(
         "--host",

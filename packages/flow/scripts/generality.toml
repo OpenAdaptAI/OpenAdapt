@@ -1,0 +1,68 @@
+# Denylist for scripts/check_engine_generality.py.
+#
+# The engine (openadapt_flow/) must not name a specific application. Add a term
+# here when a new application is qualified or a new app-specific identifier is
+# found. Patterns are Python regular expressions, matched case-insensitively
+# unless they turn that off with (?-i:...). A name matches inside an
+# identifier too (`_openemr_base`, `isOpenEMR`, `to_stedi_body`): only a letter
+# or digit next to it stops a match.
+
+[names]
+openemr = '(?<![a-z0-9])open[ _-]?emr'
+openimis = '(?<![a-z0-9])open[ _-]?imis'
+medplum = '(?<![a-z0-9])medplum'
+dolibarr = '(?<![a-z0-9])dolibarr'
+espocrm = '(?<![a-z0-9])espo[ _-]?crm'
+redmine = '(?<![a-z0-9])redmine'
+snipe-it = '(?<![a-z0-9])snipe[ _-]?it(?![a-z0-9])'
+inventree = '(?<![a-z0-9])inventree'
+kimai = '(?<![a-z0-9])kimai'
+openmrs = '(?<![a-z0-9])open[ _-]?mrs'
+gitea = '(?<![a-z0-9])gitea'
+firefly-iii = '(?<![a-z0-9])firefly[ _-]?(iii|3)(?![a-z0-9])'
+vikunja = '(?<![a-z0-9])vikunja'
+zammad = '(?<![a-z0-9])zammad'
+open-dental = '(?<![a-z0-9])open[ _-]?dental'
+odoo = '(?<![a-z0-9])odoo'
+frappe = '(?<![a-z0-9])(frappe|erpnext)'
+patient-notes = '(?<![a-z0-9])patient[ _-]notes(?![a-z0-9])'
+epic = '(?-i:(?<![A-Za-z0-9])(Epic|EPIC)(?![a-z0-9]))'
+cerner = '(?<![a-z0-9])cerner'
+stedi = '(?<![a-z0-9])stedi(?![a-z0-9])'
+textedit = '(?<![a-z0-9])textedit(?![a-z0-9])'
+notepad = '(?<![a-z0-9])notepad(?![a-z0-9])'
+mockmed = '(?<![a-z0-9])mock[ _-]?med(?![a-z0-9])'
+mockloan = '(?<![a-z0-9])mock[ _-]?loan'
+
+[identifiers]
+# OpenEMR
+token_main = '\btoken_main\b'
+csrf_token_form = '\bcsrf_token_form\b'
+clearpass = '\bclearpass\b'
+pnotes = '\bpnotes\b'
+patient_data = '\bpatient_data\b'
+uuid_registry = '\buuid_registry\b'
+openemr-fhir-path = '/apis/default/fhir'
+# Frappe and Dolibarr table prefixes
+frappe-table = '\btabLoan'
+dolibarr-table = '\bllx_[a-z]'
+# MockMed's REST shape
+mockmed-records = '/api/db\b'
+mockmed-write = '/api/encounter\b'
+
+[allow]
+# Data, loaded generically: an app profile is where one app's bookkeeping lives.
+paths = ["app_profiles/"]
+
+# OpenAdapt's own demo apps and the user-facing commands that serve them
+# (tutorial, demo, demo-record, quickstart, `openadapt-agent serve` with no
+# flags). They may name the demo app and its REST shape; nothing else may.
+[allow.terms_in]
+"mockmed/" = ["mockmed", "mockmed-records", "mockmed-write"]
+"taskgen/profiles/" = ["mockmed"]
+"tutorial.py" = ["mockmed", "mockmed-records", "mockmed-write"]
+"demo_proof.py" = ["mockmed", "mockmed-records", "mockmed-write"]
+"demo_driver.py" = ["mockmed", "mockmed-records", "mockmed-write"]
+"agent/sandbox.py" = ["mockmed", "mockmed-records", "mockmed-write"]
+"agent/tutorial.py" = ["mockmed", "mockmed-records", "mockmed-write"]
+"agent/example_app.py" = ["mockmed", "mockmed-records", "mockmed-write"]

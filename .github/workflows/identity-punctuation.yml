@@ -1,0 +1,83 @@
+name: Identity punctuation regression
+
+on:
+  pull_request:
+    paths:
+      - packages/flow/openadapt_flow/runtime/identity.py
+      - packages/flow/openadapt_flow/runtime/identity_template.py
+      - packages/flow/tests/test_identity_punctuation.py
+      - packages/flow/tests/test_identity_homonym_8th.py
+      - packages/flow/tests/test_identity_ocr_conservative_9th.py
+      - .github/workflows/identity-punctuation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: identity-punctuation-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  identity:
+    name: Identity punctuation (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
+    defaults:
+      run:
+        working-directory: packages/flow
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            packages/flow/uv.lock
+            packages/capture/uv.lock
+          cache-suffix: identity-punctuation-${{ matrix.os }}
+      - name: Install the normal unit-test locks
+        run: >-
+          python ../../scripts/ci/locked_install.py --lock 'packages/flow[dev,capture,agent]'
+          --lock packages/capture --editable packages/types --editable packages/capture
+          --editable packages/flow
+      - name: Provision headless Chromium for the original rendering tests
+        run: python -m playwright install --with-deps chromium
+      - name: Run the original rendering/OCR regressions and punctuation controls
+        run: |
+          mkdir -p runs
+          pytest -q -p no:cacheprovider \
+            tests/test_identity_homonym_8th.py::test_wrong_patient_does_not_verify_via_real_replayer_ocr_tier \
+            tests/test_identity_ocr_conservative_9th.py::test_numeric_100512_collapses_and_abstains_arial \
+            tests/test_identity_punctuation.py --junitxml=runs/identity-punctuation.xml
+      - name: Require both original regressions to execute
+        run: |
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          cases = list(ET.parse("runs/identity-punctuation.xml").getroot().iter("testcase"))
+          required = {
+              "test_wrong_patient_does_not_verify_via_real_replayer_ocr_tier",
+              "test_numeric_100512_collapses_and_abstains_arial",
+          }
+          assert len(cases) >= 12
+          assert required <= {case.attrib["name"] for case in cases}
+          assert not any(case.find("skipped") is not None for case in cases)
+          PY
+      - name: Keep test evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: identity-punctuation-${{ matrix.os }}
+          path: packages/flow/runs/identity-punctuation.xml
+          if-no-files-found: error
+          retention-days: 14

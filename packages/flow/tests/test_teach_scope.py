@@ -8,7 +8,6 @@ import pytest
 
 from openadapt_flow.guard import GuardTask
 from openadapt_flow.jit.adapters import Op
-from openadapt_flow.mockmed.teach_scope import EncounterWrites, encounter_scope
 from openadapt_flow.teach_scope import (
     ScopeViolation,
     TeachGuard,
@@ -16,7 +15,9 @@ from openadapt_flow.teach_scope import (
     instruction_like,
     origin_of,
     provenance_for,
+    scope_origin,
 )
+from tests._teach_scope import EncounterWrites, encounter_scope
 
 BASE = "http://127.0.0.1:8765"
 
@@ -32,6 +33,34 @@ def test_origin_is_scheme_host_and_port_only() -> None:
     assert origin_of("data:text/html,hi") is None
     assert origin_of("about:blank") is None
     assert origin_of("") is None
+
+
+def test_a_desktop_or_remote_app_is_named_by_its_surface_origin() -> None:
+    from openadapt_flow.deployment import BackendConfig
+    from openadapt_flow.surface_selection import surface_target_origin
+
+    for section in (
+        {"kind": "macos", "macos_app": "Chart"},
+        {"kind": "linux", "linux_app": "chart", "linux_window_title": "Chart"},
+        {"kind": "windows", "agent_url": "http://10.0.0.5:8765"},
+        {"kind": "rdp", "rdp_host": "ehr.example.org", "rdp_port": 3390},
+        {"kind": "citrix", "rdp_window": "Citrix Viewer"},
+    ):
+        origin = surface_target_origin(BackendConfig(**section))
+        assert scope_origin(origin) == origin
+        scope = TeachScope("t", origins=(origin,), record={"id": "1"}, fields={})
+        assert scope.origins == (origin,)
+        # A surface origin is never a page a browser may reach.
+        assert not scope.allows_origin(origin)
+    assert scope_origin("MACOS://Chart/") == "macos://chart"
+    for bad in (
+        "ftp://x",
+        "file:///etc/passwd",
+        "vnc://host",
+        "macos://",
+        "macos://a/b",
+    ):
+        assert scope_origin(bad) is None, bad
 
 
 def test_scope_is_frozen_and_validated() -> None:
@@ -349,9 +378,9 @@ def test_a_scope_with_no_origin_lets_a_browser_reach_nothing() -> None:
 def test_write_adapters_load_by_name() -> None:
     from openadapt_flow.teach_scope import load_write_adapter
 
-    adapter = load_write_adapter("openadapt_flow.mockmed.teach_scope:EncounterWrites")
+    adapter = load_write_adapter("tests._teach_scope:EncounterWrites")
     assert isinstance(adapter, EncounterWrites)
     with pytest.raises(ValueError, match="module:attr"):
-        load_write_adapter("openadapt_flow.mockmed.teach_scope")
+        load_write_adapter("tests._teach_scope")
     with pytest.raises(ValueError, match="not a write adapter"):
-        load_write_adapter("openadapt_flow.mockmed.teach_scope:encounter_scope")
+        load_write_adapter("tests._teach_scope:encounter_scope")

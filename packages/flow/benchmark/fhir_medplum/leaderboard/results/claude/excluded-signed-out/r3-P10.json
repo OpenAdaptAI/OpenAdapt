@@ -1,0 +1,56 @@
+{
+ "id": "P10",
+ "class": "ambiguous",
+ "type": "patient",
+ "expect": "ambiguous",
+ "note": "Two records already match the person; a person has to merge them.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 10.5,
+ "cost_usd": 0.012423,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "RESULT: NOT DONE Medplum is on the sign-in page and I have no credentials, so I couldn't search for or create the Patient record.",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/signin?next=%2F",
+  "final_text": "I couldn't check for an existing record for Lena Okafor or create one. Medplum is showing its sign-in page, not an active session, even though I was told I was already signed in. A reload didn't change that. I have no credentials, so I can't sign in. I didn't try the Register link because that would mean creating an account. I made no changes to any records.\n\nRESULT: NOT DONE Medplum is on the sign-in page and I have no credentials, so I couldn't search for or create the Patient record.",
+  "model_calls": 3,
+  "actions": 2,
+  "tokens_in": 23313,
+  "tokens_out": 408
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "needs_person",
+  "reasons": [
+   "2 records already match; a person must merge them"
+  ],
+  "changes": {}
+ },
+ "proxy": [],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 32.1,
+  "end": 28.2,
+  "waited_s": 0
+ }
+}

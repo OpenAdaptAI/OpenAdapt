@@ -1,0 +1,3586 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      222,
+      297
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+l"
+    },
+    {
+     "text": "localhost:3000/AllergyIntolerance?patient=Patient/e96a401b-9fa4-434e-ad42-9a6d35779567\n"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      200,
+      33
+     ]
+    },
+    {
+     "text": "penicillin"
+    },
+    {
+     "text": "Return"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      290,
+      33
+     ]
+    },
+    {
+     "text": "AllergyIntolerance"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      290,
+      33
+     ]
+    },
+    {
+     "text": "BackSpace"
+    },
+    {
+     "coordinate": [
+      32,
+      31
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      124,
+      90
+     ]
+    },
+    {
+     "text": "AllergyIntolerance"
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      40,
+      90
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      84,
+      138
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 5
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1231,
+      167
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Use the JSON tab.",
+   "actions": [
+    {
+     "coordinate": [
+      349,
+      131
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      760,
+      400
+     ]
+    },
+    {
+     "text": "ctrl+a"
+    },
+    {
+     "text": "{\"resourceType\":\"AllergyIntolerance\",\"patient\":{\"reference\":\"Patient/e96a401b-9fa4-434e-ad42-9a6d35779567\"},\"code\":{\"coding\":[{\"system\":\"http://snomed.info/sct\",\"code\":\"91936005\",\"display\":\"Allergy to penicillin\"}]},\"criticality\":\"high\",\"clinicalStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical\",\"code\":\"active\"}]},\"verificationStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-verification\",\"code\":\"confirmed\"}]}}"
+    },
+    {
+     "coordinate": [
+      1182,
+      718
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      760,
+      500
+     ]
+    },
+    {
+     "text": "ctrl+a"
+    },
+    {
+     "text": "BackSpace"
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+a"
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+End"
+    },
+    {
+     "text": "ctrl+shift+Home"
+    },
+    {
+     "text": "Delete"
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+End"
+    },
+    {
+     "text": "BackSpace",
+     "repeat": 100
+    },
+    {
+     "text": "BackSpace",
+     "repeat": 100
+    },
+    {
+     "text": "BackSpace",
+     "repeat": 100
+    },
+    {
+     "text": "BackSpace",
+     "repeat": 100
+    },
+    {
+     "text": "BackSpace",
+     "repeat": 100
+    },
+    {
+     "text": "BackSpace",
+     "repeat": 100
+    },
+    {
+     "text": "BackSpace",
+     "repeat": 100
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 4
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      124,
+      90
+     ]
+    },
+    {
+     "text": "AllergyIntolerance"
+    },
+    {
+     "duration": 2
+    },
+    {
+     "coordinate": [
+      84,
+      138
+     ]
+    },
+    {
+     "duration": 6
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 5
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      84,
+      138
+     ]
+    },
+    {
+     "duration": 8
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1231,
+      167
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "coordinate": [
+      349,
+      131
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "coordinate": [
+      800,
+      232
+     ]
+    },
+    {
+     "text": "End"
+    },
+    {
+     "text": ",\"patient\":{\"reference\":\"Patient/e96a401b-9fa4-434e-ad42-9a6d35779567\"},\"code\":{\"coding\":[{\"system\":\"http://snomed.info/sct\",\"code\":\"91936005\",\"display\":\"Allergy to penicillin\"}]},\"criticality\":\"high\",\"clinicalStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical\",\"code\":\"active\"}]},\"verificationStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-verification\",\"code\":\"confirmed\"}]}"
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Valid. Click OK.",
+   "actions": [
+    {
+     "coordinate": [
+      1182,
+      718
+     ]
+    },
+    {
+     "duration": 5
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1240,
+      500
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 15
+    },
+    {
+     "duration": 1
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1182,
+      733
+     ]
+    },
+    {
+     "duration": 5
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 8
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Created. Let me verify via the list for duplicates.",
+   "actions": [
+    {
+     "duration": 5
+    },
+    {
+     "coordinate": [
+      760,
+      300
+     ],
+     "scroll_direction": "up",
+     "scroll_amount": 15
+    },
+    {
+     "duration": 1
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Get the id from the JSON tab and check the list.",
+   "actions": [
+    {
+     "coordinate": [
+      722,
+      142
+     ]
+    },
+    {
+     "duration": 4
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Now the list, to check for duplicates and read the id.",
+   "actions": [
+    {
+     "coordinate": [
+      323,
+      101
+     ]
+    },
+    {
+     "duration": 8
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 5
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1147,
+      167
+     ]
+    },
+    {
+     "duration": 10
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      68,
+      178
+     ]
+    },
+    {
+     "duration": 8
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 10
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      124,
+      90
+     ]
+    },
+    {
+     "text": "AllergyIntolerance"
+    },
+    {
+     "duration": 3
+    },
+    {
+     "coordinate": [
+      84,
+      138
+     ]
+    },
+    {
+     "duration": 20
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      84,
+      138
+     ]
+    },
+    {
+     "duration": 20
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The penicillin allergy is now recorded for Rosa Delgado (born 1979-06-14) as a single AllergyIntolerance.\n\n- **Patient:** I used Patient/e96a401b-9fa4-434e-ad42-9a6d35779567. The Patient list showed only this one Rosa Delgado, so there was no similarly named patient to confuse her with.\n- **Existing record:** The AllergyIntolerance list was empty before I created anything, so I added the record.\n- **What I wrote:** Only patient, code (SNOMED CT 91936005, Allergy to penicillin), criticality high, clinicalStatus active and verificationStatus confirmed.\n- **Duplicates:** The AllergyIntolerance list now shows exactly one record, so there is no duplicate. The screen was slow to update, so I rechecked after a long wait.\n\nRESULT: DONE AllergyIntolerance/efb1be98-9c84-4554-91d0-468adee28aee",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 222,
+   "y": 297,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "l"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "localhost:3000/AllergyIntolerance?patient=Patient/e96a401b-9fa4-434e-ad42-9a6d35779567\n"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 200,
+   "y": 33,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "penicillin"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Return"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 290,
+   "y": 33,
+   "button": "left",
+   "count": 3,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "AllergyIntolerance"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 290,
+   "y": 33,
+   "button": "left",
+   "count": 3,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 32,
+   "y": 31,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 124,
+   "y": 90,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "AllergyIntolerance"
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 40,
+   "y": 90,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 84,
+   "y": 138,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "click",
+   "x": 1231,
+   "y": 167,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 349,
+   "y": 131,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 760,
+   "y": 400,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "a"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "{\"resourceType\":\"AllergyIntolerance\",\"patient\":{\"reference\":\"Patient/e96a401b-9fa4-434e-ad42-9a6d35779567\"},\"code\":{\"coding\":[{\"system\":\"http://snomed.info/sct\",\"code\":\"91936005\",\"display\":\"Allergy to penicillin\"}]},\"criticality\":\"high\",\"clinicalStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical\",\"code\":\"active\"}]},\"verificationStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-verification\",\"code\":\"confirmed\"}]}}"
+  },
+  {
+   "a": "click",
+   "x": 1182,
+   "y": 718,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 760,
+   "y": 500,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "End"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "shift",
+    "Home"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "End"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 4.0
+  },
+  {
+   "a": "click",
+   "x": 124,
+   "y": 90,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "AllergyIntolerance"
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 84,
+   "y": 138,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 6.0
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "click",
+   "x": 84,
+   "y": 138,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 8.0
+  },
+  {
+   "a": "click",
+   "x": 1231,
+   "y": 167,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 349,
+   "y": 131,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 800,
+   "y": 232,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "End"
+   ]
+  },
+  {
+   "a": "type",
+   "text": ",\"patient\":{\"reference\":\"Patient/e96a401b-9fa4-434e-ad42-9a6d35779567\"},\"code\":{\"coding\":[{\"system\":\"http://snomed.info/sct\",\"code\":\"91936005\",\"display\":\"Allergy to penicillin\"}]},\"criticality\":\"high\",\"clinicalStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical\",\"code\":\"active\"}]},\"verificationStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-verification\",\"code\":\"confirmed\"}]}"
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 1182,
+   "y": 718,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "scroll",
+   "x": 1240,
+   "y": 500,
+   "dx": 0,
+   "dy": 1800
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 1182,
+   "y": 733,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "wait",
+   "s": 8.0
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "scroll",
+   "x": 760,
+   "y": 300,
+   "dx": 0,
+   "dy": -1800
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 722,
+   "y": 142,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 4.0
+  },
+  {
+   "a": "click",
+   "x": 323,
+   "y": 101,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 8.0
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "click",
+   "x": 1147,
+   "y": 167,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 10.0
+  },
+  {
+   "a": "click",
+   "x": 68,
+   "y": 178,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 8.0
+  },
+  {
+   "a": "wait",
+   "s": 10.0
+  },
+  {
+   "a": "click",
+   "x": 124,
+   "y": 90,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "AllergyIntolerance"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 84,
+   "y": 138,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 20.0
+  },
+  {
+   "a": "click",
+   "x": 84,
+   "y": 138,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 20.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6357,
+   "out": 59,
+   "usd": 0.016481,
+   "cached": 0
+  },
+  {
+   "in": 7789,
+   "out": 221,
+   "usd": 0.00707,
+   "cached": 6353
+  },
+  {
+   "in": 9408,
+   "out": 228,
+   "usd": 0.007889,
+   "cached": 7787
+  },
+  {
+   "in": 11035,
+   "out": 247,
+   "usd": 0.008423,
+   "cached": 9406
+  },
+  {
+   "in": 12694,
+   "out": 80,
+   "usd": 0.007158,
+   "cached": 11033
+  },
+  {
+   "in": 14159,
+   "out": 179,
+   "usd": 0.007995,
+   "cached": 12692
+  },
+  {
+   "in": 15740,
+   "out": 172,
+   "usd": 0.008508,
+   "cached": 14157
+  },
+  {
+   "in": 17327,
+   "out": 126,
+   "usd": 0.008379,
+   "cached": 15738
+  },
+  {
+   "in": 18862,
+   "out": 147,
+   "usd": 0.008776,
+   "cached": 17325
+  },
+  {
+   "in": 20407,
+   "out": 98,
+   "usd": 0.008618,
+   "cached": 18860
+  },
+  {
+   "in": 21903,
+   "out": 75,
+   "usd": 0.008575,
+   "cached": 20405
+  },
+  {
+   "in": 23363,
+   "out": 75,
+   "usd": 0.008784,
+   "cached": 21901
+  },
+  {
+   "in": 24823,
+   "out": 80,
+   "usd": 0.009126,
+   "cached": 23361
+  },
+  {
+   "in": 26288,
+   "out": 178,
+   "usd": 0.010411,
+   "cached": 24821
+  },
+  {
+   "in": 27864,
+   "out": 113,
+   "usd": 0.010331,
+   "cached": 26286
+  },
+  {
+   "in": 29375,
+   "out": 454,
+   "usd": 0.013894,
+   "cached": 27862
+  },
+  {
+   "in": 31262,
+   "out": 161,
+   "usd": 0.012206,
+   "cached": 29373
+  },
+  {
+   "in": 32831,
+   "out": 150,
+   "usd": 0.011678,
+   "cached": 31260
+  },
+  {
+   "in": 34365,
+   "out": 196,
+   "usd": 0.012365,
+   "cached": 32829
+  },
+  {
+   "in": 35967,
+   "out": 524,
+   "usd": 0.016122,
+   "cached": 34363
+  },
+  {
+   "in": 37952,
+   "out": 152,
+   "usd": 0.01368,
+   "cached": 35965
+  },
+  {
+   "in": 39489,
+   "out": 643,
+   "usd": 0.017867,
+   "cached": 37950
+  },
+  {
+   "in": 41528,
+   "out": 255,
+   "usd": 0.015549,
+   "cached": 39487
+  },
+  {
+   "in": 43217,
+   "out": 110,
+   "usd": 0.013632,
+   "cached": 41526
+  },
+  {
+   "in": 44712,
+   "out": 118,
+   "usd": 0.013565,
+   "cached": 43215
+  },
+  {
+   "in": 46228,
+   "out": 530,
+   "usd": 0.018036,
+   "cached": 44710
+  },
+  {
+   "in": 48228,
+   "out": 114,
+   "usd": 0.015389,
+   "cached": 46226
+  },
+  {
+   "in": 49740,
+   "out": 182,
+   "usd": 0.015249,
+   "cached": 48226
+  },
+  {
+   "in": 51320,
+   "out": 235,
+   "usd": 0.016252,
+   "cached": 49738
+  },
+  {
+   "in": 52953,
+   "out": 119,
+   "usd": 0.01554,
+   "cached": 51318
+  },
+  {
+   "in": 54457,
+   "out": 158,
+   "usd": 0.015934,
+   "cached": 52951
+  },
+  {
+   "in": 56025,
+   "out": 120,
+   "usd": 0.016015,
+   "cached": 54455
+  },
+  {
+   "in": 57543,
+   "out": 121,
+   "usd": 0.016214,
+   "cached": 56023
+  },
+  {
+   "in": 59062,
+   "out": 80,
+   "usd": 0.01611,
+   "cached": 57541
+  },
+  {
+   "in": 60527,
+   "out": 164,
+   "usd": 0.017118,
+   "cached": 59060
+  },
+  {
+   "in": 62089,
+   "out": 374,
+   "usd": 0.019754,
+   "cached": 60525
+  },
+  {
+   "in": 63861,
+   "out": 532,
+   "usd": 0.022171,
+   "cached": 62087
+  },
+  {
+   "in": 65778,
+   "out": 268,
+   "usd": 0.020248,
+   "cached": 63859
+  },
+  {
+   "in": 67480,
+   "out": 103,
+   "usd": 0.018444,
+   "cached": 65776
+  },
+  {
+   "in": 68981,
+   "out": 324,
+   "usd": 0.020492,
+   "cached": 67478
+  }
+ ]
+}

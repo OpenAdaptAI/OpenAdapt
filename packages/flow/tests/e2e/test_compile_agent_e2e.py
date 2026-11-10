@@ -38,6 +38,7 @@ from openadapt_flow.compile_agent import (
 from openadapt_flow.jit.keys import CustomerModelKey
 from openadapt_flow.mockmed.fault_server import serve
 from openadapt_flow.tutorial import _http_json, _records
+from tests._rest_read_contract_fixtures import mockmed_effects_yaml
 from tests._teach_authorization_support import mockmed_note
 
 PROMPT = (
@@ -67,14 +68,37 @@ def _verify_yaml(tmp_path: Path, base: str) -> Path:
     path = tmp_path / "verify.yaml"
     path.write_text(
         "verifier:\n"
-        "  kind: rest\n"
-        f"  base_url: {base}\n"
-        "  records_path: /api/db\n"
-        "  records_key: records\n"
+        f"{mockmed_effects_yaml(base)}"
         "  timeout_s: 2.0\n"
         "  poll_interval_s: 0.05\n"
     )
     return path
+
+
+class _ImageScrubber:
+    """Redacts nothing. The model here is scripted, so no screenshot leaves
+    the machine, but compile-agent redacts every screenshot it would send
+    and refuses without a scrubber (agents._image)."""
+
+    def __init__(self) -> None:
+        self.images = 0
+
+    def scrub_text(self, text: str, is_separated: bool = False) -> str:
+        return text
+
+    def scrub_image(self, image: Any, fill_color: Any = None) -> Any:
+        self.images += 1
+        return image
+
+
+@pytest.fixture(autouse=True)
+def _scrubber() -> Any:
+    from openadapt_flow import privacy
+
+    scrubber = _ImageScrubber()
+    privacy.set_text_scrubber(scrubber)
+    yield scrubber
+    privacy.reset_scrubbers()
 
 
 def _policy_agent(key_dir: Path, base: str, monkeypatch: pytest.MonkeyPatch) -> Any:
@@ -116,12 +140,16 @@ class FakeClaude:
     """Answers the harness's listings with the tool calls a model would make.
 
     It finds refs in the listing text only, so it fails the way a model would
-    if the listing stopped naming the controls.
+    if the listing stopped naming the controls. Like a model, it sees the
+    task's own values only as their placeholders.
     """
 
     def __init__(self, patient: str, note: str) -> None:
+        from openadapt_flow import privacy
+
         self.patient = patient
         self.note = note
+        self.shown_note = privacy.placeholder("note")
         self.calls = 0
         self.messages = SimpleNamespace(create=self.create)
 
@@ -158,7 +186,10 @@ class FakeClaude:
         elif "# New Encounter" in listing:
             if not re.search(r'"Triage" \([^)]*selected', listing):
                 tool = ("click", {"ref": self._ref(listing, "Triage")})
-            elif f'value="{self.note}"' not in listing:
+            elif (
+                f'value="{self.note}"' not in listing
+                and f'value="{self.shown_note}"' not in listing
+            ):
                 ref = self._ref(listing, "Note")
                 tool = ("type_text", {"text": self.note, "ref": ref})
             else:
@@ -219,10 +250,11 @@ def _common(tmp_path: Path, base: str) -> dict[str, Any]:
 
 
 def test_compile_agent_then_replay_with_no_model_calls(
-    mockmed: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    mockmed: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _scrubber: Any
 ) -> None:
     admitter = _policy_agent(tmp_path / "keys", mockmed, monkeypatch)
-    fake = FakeClaude("Jane Sample", NOTE)
+    # The task's patient: the listing shows it as its placeholder.
+    fake = FakeClaude("\u27e6task.identity_1\u27e7", NOTE)
     # The registered agent drives run 1 and admits it: self-admission, which
     # its signed policy allows.
     agent = ClaudeAgent(vision="selective", client=fake, principal_id=AGENT_ID)
@@ -243,6 +275,7 @@ def test_compile_agent_then_replay_with_no_model_calls(
     # Selective vision: no screenshot asked for; one at the save gate.
     assert harness["screenshots_requested"] == 0
     assert harness["screenshots_at_gate"] == 1
+    assert _scrubber.images == 1  # the gate screenshot was redacted first
     assert harness["screenshots_every_turn"] == 0
     assert harness["gate_checks"] == 1 and harness["gate_refusals"] == 0
     assert result.run1["gates"][0]["decision"] == "passed_no_hold"

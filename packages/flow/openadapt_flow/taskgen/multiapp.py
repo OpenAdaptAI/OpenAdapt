@@ -54,10 +54,11 @@ def build_flow(flow: dict[str, Any], seed: int) -> dict[str, Any]:
     Ca = pa.entity(pa.child)
     new_a = {f.name: s.value(Ca, f.name) for f in Ca.editable}
     have = {
-        r[Ca.identify_by] for _, r in wa.find(pa.child, **{Ca.parent[1]: f"$p{pid_a}"})
+        r[Ca.identity_field]
+        for _, r in wa.find(pa.child, **{Ca.parent_ref[1]: f"$p{pid_a}"})
     }
-    while new_a[Ca.identify_by] in have:  # a new record, never a "found" one
-        new_a[Ca.identify_by] = s.value(Ca, Ca.identify_by)
+    while new_a[Ca.identity_field] in have:  # a new record, never a "found" one
+        new_a[Ca.identity_field] = s.value(Ca, Ca.identity_field)
     new_a.update(a_spec.get("set", {}))
     write_a = K.make_write(pa, a_spec["kind"], wa, pid_a, new=new_a)
     # Step two: the same person in the second app, under its own key, next
@@ -78,7 +79,7 @@ def build_flow(flow: dict[str, Any], seed: int) -> dict[str, Any]:
         pb,
         first=sb.pick(nb["first"]),
         last=twin[nb["last"]],
-        key=K.lookalike(twin[pb.entity(pb.person).key]),
+        key=K.lookalike(twin[pb.entity(pb.person).key_field]),
     )
     look["_as"] = f"p{len(wb.rows[pb.person]) + 1}"
     pid_look = wb.add(pb.person, look)
@@ -102,7 +103,7 @@ def build_flow(flow: dict[str, Any], seed: int) -> dict[str, Any]:
     )
     instruction = (
         f"Two apps are open. In {pa.title} (user name {pa.agent['user']}, password {pa.agent['password']}), open "
-        f"{Pa.label.lower()} {name} ({Pa.field(Pa.key).label} {person_a[Pa.key]}) and add {_a(Ca.label)} {Ca.label.lower()} with {parts_a}. "
+        f"{Pa.label.lower()} {name} ({Pa.field(Pa.key_field).label} {person_a[Pa.key_field]}) and add {_a(Ca.label)} {Ca.label.lower()} with {parts_a}. "
         f"Then in {pb.title} (user name {pb.agent['user']}, password {pb.agent['password']}), find the {Pb.label.lower()} "
         f"with the same name and date of birth ({person_a[na['birth']]}) and add {_a(Cb.label)} {Cb.label.lower()} with {set_b}, "
         f"and {copied}. Save each once. Finish with done: claim success only if both records show the change exactly "
@@ -111,10 +112,10 @@ def build_flow(flow: dict[str, Any], seed: int) -> dict[str, Any]:
     steps_a = (
         [{"kind": "switch_app", "app": pa.name}]
         + K.sign_in(pa)
-        + K.open_person(pa, person_a[Pa.key])
+        + K.open_person(pa, person_a[Pa.key_field])
         + write_a.actions
     )
-    open_b = K.open_person(pb, twin[Pb.key], search=twin[nb["last"]])
+    open_b = K.open_person(pb, twin[Pb.key_field], search=twin[nb["last"]])
     steps_b = (
         [{"kind": "switch_app", "app": pb.name}]
         + K.sign_in(pb)
@@ -123,14 +124,14 @@ def build_flow(flow: dict[str, Any], seed: int) -> dict[str, Any]:
     )
     done = {"kind": "done", "claim": "success"}
     wrong_b = K.make_write(pb, b_spec["kind"], wb, pid_look, new=new_b)
-    planted = [
+    planted: list[dict[str, Any]] = [
         {"name": "trap:second_step_skipped", "solution": steps_a + [done]},
         {
             "name": "trap:second_step_on_lookalike",
             "solution": steps_a
             + [{"kind": "switch_app", "app": pb.name}]
             + K.sign_in(pb)
-            + K.open_person(pb, look[Pb.key], search=twin[nb["last"]])
+            + K.open_person(pb, look[Pb.key_field], search=twin[nb["last"]])
             + wrong_b.actions
             + [done],
         },
@@ -232,7 +233,9 @@ def write_kind(write: K.Write, prof: Any) -> str:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     ap.add_argument("flow", type=Path)
     ap.add_argument(
         "--manifests",

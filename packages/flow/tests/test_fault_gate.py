@@ -21,6 +21,7 @@ from openadapt_flow.fault_gate import (
 )
 from openadapt_flow.runtime.effects.surfaces import surface_probe
 from openadapt_flow.verify_run import parse_verify_config
+from tests._rest_read_contract_fixtures import memory_rest_effects_config
 
 PARAMS = {"patient_id": "p1", "note": "Follow-up in two weeks", "type": "Triage"}
 SEED = [{"id": 1, "patient_id": "p2", "type": "Consult", "note": "Allergy: penicillin"}]
@@ -50,7 +51,7 @@ def _rest_cfg(base: str = "http://127.0.0.1:1"):
     return parse_verify_config(
         {
             "schema_version": "openadapt.verify/v1",
-            "verifier": {"kind": "rest", "base_url": base, "records_path": "/api/db"},
+            "verifier": memory_rest_effects_config(base),
             "effects": _effects(),
         }
     )
@@ -58,7 +59,7 @@ def _rest_cfg(base: str = "http://127.0.0.1:1"):
 
 @pytest.fixture
 def rest_copy():
-    store = MemoryRestCopy(SEED, TARGET)
+    store = MemoryRestCopy(SEED, TARGET, records_path="/api/db", records_key="records")
     try:
         yield store
     finally:
@@ -159,8 +160,7 @@ def test_the_check_digest_ignores_where_the_store_is() -> None:
         {
             "schema_version": "openadapt.verify/v1",
             "verifier": {
-                "kind": "rest",
-                "base_url": "http://127.0.0.1:1",
+                **memory_rest_effects_config("http://127.0.0.1:1"),
                 "records_path": "/api/db?patient=p1",
             },
             "effects": _effects(),
@@ -318,11 +318,7 @@ def test_verify_run_signs_the_coverage_it_was_admitted_with(
     write_coverage(record, tmp_path)
     doc = {
         "schema_version": "openadapt.verify/v1",
-        "verifier": {
-            "kind": "rest",
-            "base_url": rest_copy.base_url,
-            "records_path": "/api/db",
-        },
+        "verifier": memory_rest_effects_config(rest_copy.base_url),
         "effects": _effects(),
         "admission": {"coverage": "check_coverage.json"},
     }

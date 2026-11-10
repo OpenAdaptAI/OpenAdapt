@@ -9,7 +9,8 @@ name: CI
 #   the installer builds run on main and in the nightly run (nightly.yml).
 # - The launcher's own lint and tests (main.yml).
 # - A smoke test of every package, whatever changed: each installs from its
-#   lock, imports and starts (scripts/ci/smoke.py).
+#   lock, imports and starts (scripts/ci/smoke.py). The same job runs the
+#   file-size ratchet against the change's base.
 #
 # `ci` passes when every job above passed or was not selected; it is skipped
 # (which counts as passing) when they all passed. Until branch
@@ -53,7 +54,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+          # The merge commit and its first parent, the base it merges into.
+          fetch-depth: 2
+      - name: No file in the decomposition plan grew past its budget
+        # Runs on every change, whatever it touches, and fails only for a
+        # file this change grew (or whose budget row it edited), so a file
+        # someone else left over budget never fails an unrelated change.
+        run: python3 scripts/check_file_size_ratchet.py --base HEAD^1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: |

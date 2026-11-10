@@ -1815,3 +1815,263 @@ def test_locator_at_keeps_a_unique_automation_id(monkeypatch) -> None:
         _perform_uia("locator-at", {"x": 560, "y": 400})["locator"]["automation_id"]
         == "noteBox"
     )
+
+
+def test_uia_tree_lists_one_windows_elements_without_values(monkeypatch) -> None:
+    box = _FakeControl(
+        "EditControl",
+        automation_id="noteBox",
+        name="Chart note",
+        bounds=(20, 350, 740, 460),
+    )
+    box.Value = "a typed note the tree must not carry"
+    button = _FakeControl(
+        "ButtonControl",
+        automation_id="saveButton",
+        name="Save Note",
+        bounds=(630, 494, 740, 528),
+    )
+    monkeypatch.setitem(sys.modules, "uiautomation", _fake_uia_module(box, button))
+    tree = _perform_uia("tree", {"window_name": "Patient Notes"})
+    ids = [n["automation_id"] for n in tree["nodes"]]
+    assert ids[1:] == ["noteBox", "saveButton"]
+    assert tree["nodes"][2]["bounds"] == [630, 494, 740, 528]
+    assert tree["truncated"] is False
+    assert "typed note" not in str(tree)
+    assert _perform_uia("tree", {"window_name": "Another app"})["nodes"] == []
+    cut = _perform_uia("tree", {"window_name": "Patient Notes", "max_nodes": 1})
+    assert len(cut["nodes"]) == 1 and cut["truncated"] is True
+    for bad in (
+        {},
+        {"window_name": ""},
+        {"window_name": "x", "max_nodes": 0},
+        {"window_name": "x", "max_nodes": True},
+    ):
+        with pytest.raises(AgentRequestError):
+            _perform_uia("tree", bad)
+
+
+@pytest.fixture
+def physical_keyboard(monkeypatch):
+    """A physical-input seam with no desktop, clipboard or real key events."""
+    from openadapt_flow.backends.win_agent import server
+
+    state = types.SimpleNamespace(
+        foreground=(101, 202), typed="", pastes=0, after_write=None, after_paste=None
+    )
+    fake = types.ModuleType("pyautogui")
+
+    def write(text, **_kwargs):
+        state.typed += text
+        if state.after_write is not None:
+            state.after_write()
+
+    def hotkey(*keys):
+        assert keys == ("ctrl", "v")
+        state.pastes += 1
+        if state.after_paste is not None:
+            state.after_paste()
+
+    fake.write = write
+    fake.hotkey = hotkey
+    monkeypatch.setitem(sys.modules, "pyautogui", fake)
+    monkeypatch.setattr(server, "_foreground_window_identity", lambda: state.foreground)
+    monkeypatch.setattr(server.time, "sleep", lambda _delay: None)
+    return state
+
+
+def test_physical_typing_preserves_the_complete_value_with_stable_focus(
+    physical_keyboard,
+):
+    receipt = _perform_input(
+        {"action": "type_text", "text": "safe-text", "interval_s": 0}
+    )
+    assert physical_keyboard.typed == "safe-text"
+    assert receipt["status"] == "delivered"
+    assert receipt["operation"] == "physical_type_text"
+
+
+def test_physical_typing_refuses_an_unobservable_foreground(physical_keyboard):
+    physical_keyboard.foreground = None
+    with pytest.raises(AgentRequestError, match="foreground window"):
+        _perform_input({"action": "type_text", "text": "abc"})
+    assert physical_keyboard.typed == ""
+    assert physical_keyboard.pastes == 0
+
+
+@pytest.mark.parametrize("changed", [(303, 202), (101, 404), None])
+def test_physical_typing_stops_after_focus_changes(physical_keyboard, changed):
+    physical_keyboard.after_write = lambda: setattr(
+        physical_keyboard, "foreground", changed
+    )
+    with pytest.raises(AgentRequestError, match="delivery may be partial") as error:
+        _perform_input({"action": "type_text", "text": "abc"})
+    assert error.value.code == "input_focus_changed"
+    assert physical_keyboard.typed == "a"
+
+
+def test_physical_typing_refuses_focus_change_before_the_first_key(
+    physical_keyboard, monkeypatch
+):
+    from openadapt_flow.backends.win_agent import server
+
+    readings = iter([(101, 202), (303, 202)])
+    monkeypatch.setattr(server, "_foreground_window_identity", lambda: next(readings))
+    with pytest.raises(AgentRequestError, match="delivery may be partial"):
+        _perform_input({"action": "type_text", "text": "abc"})
+    assert physical_keyboard.typed == ""
+
+
+def test_unicode_paste_is_refused_if_focus_changes_during_clipboard_setup(
+    physical_keyboard, monkeypatch
+):
+    from openadapt_flow.backends.win_agent import server
+
+    def clipboard(*_args, **_kwargs):
+        physical_keyboard.foreground = (303, 202)
+        return types.SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(server.subprocess, "run", clipboard)
+    with pytest.raises(AgentRequestError, match="delivery may be partial"):
+        _perform_input({"action": "type_text", "text": "caf\u00e9"})
+    assert physical_keyboard.typed == ""
+    assert physical_keyboard.pastes == 0
+
+
+def test_unicode_paste_reports_uncertainty_if_focus_changes_after_delivery(
+    physical_keyboard, monkeypatch
+):
+    from openadapt_flow.backends.win_agent import server
+
+    monkeypatch.setattr(
+        server.subprocess, "run", lambda *_a, **_k: types.SimpleNamespace(returncode=0)
+    )
+    physical_keyboard.after_paste = lambda: setattr(
+        physical_keyboard, "foreground", (303, 202)
+    )
+    with pytest.raises(AgentRequestError, match="delivery may be partial"):
+        _perform_input({"action": "type_text", "text": "caf\u00e9"})
+    assert physical_keyboard.pastes == 1
+
+
+def test_focus_change_over_http_is_uncertain_and_never_uses_legacy_delivery(
+    physical_keyboard,
+):
+    from openadapt_flow.backend import ActionDeliveryUncertain
+    from openadapt_flow.backends.windows_backend import WindowsBackend
+
+    physical_keyboard.after_write = lambda: setattr(
+        physical_keyboard, "foreground", (303, 202)
+    )
+    legacy_calls = []
+    agent = RunningAgent(
+        AgentConfig(host="127.0.0.1", port=0, allow_legacy_exec=True),
+        legacy_fn=_recording_legacy_fn(legacy_calls),
+    )
+    try:
+        backend = WindowsBackend(agent.url, allow_legacy_exec=True)
+        with pytest.raises(ActionDeliveryUncertain) as error:
+            backend.type_text("abc")
+        assert error.value.operation == "physical_type_text"
+        assert physical_keyboard.typed == "a"
+        assert legacy_calls == []
+    finally:
+        agent.close()
+
+
+def test_authoring_tree_lists_the_foreground_apps_controls_with_identity(
+    monkeypatch,
+) -> None:
+    from openadapt_flow.backends.windows_backend import WindowsBackend
+
+    save = _FakeControl(
+        "ButtonControl",
+        automation_id="saveButton",
+        name="Save Note",
+        bounds=(500, 450, 600, 484),
+    )
+    note = _FakeControl(
+        "EditControl", automation_id="noteBox", bounds=(10, 60, 400, 90)
+    )
+    label = _FakeControl("TextControl", name="Note", bounds=(10, 40, 60, 58))
+    unnamed = _FakeControl("ButtonControl", bounds=(700, 450, 740, 484))
+    scrolled = _FakeControl("ButtonControl", automation_id="older", name="Older")
+    scrolled.IsOffscreen = True
+    group = _FakeControl("PaneControl", name="Note editor")
+    group.children = [note, save, scrolled]
+    module = _fake_uia_module(label, group, unnamed)
+    for child in group.children:
+        child.parent = group
+    window = group.parent
+    module.GetForegroundControl = lambda: window
+    monkeypatch.setitem(sys.modules, "uiautomation", module)
+
+    tree = _perform_uia("authoring-tree", {})
+
+    assert [node["automation_id"] for node in tree["tree"]] == [
+        "noteBox",
+        "saveButton",
+        "older",
+    ]
+    assert [node["offscreen"] for node in tree["tree"]] == [False, False, True]
+    assert tree["tree"][2]["backend_pixels"] is None
+    by_id = {node["automation_id"]: node for node in tree["tree"]}
+    assert by_id["noteBox"]["role"] == "text_input"
+    assert by_id["saveButton"]["backend_pixels"] == {
+        "x": 500,
+        "y": 450,
+        "w": 100,
+        "h": 34,
+    }
+    module.ControlFromPoint = lambda _x, _y: save
+    assert (
+        by_id["saveButton"]["identity"]
+        == _perform_uia("element-identity-at", {"x": 550, "y": 467})["identity"]
+    )
+    assert tree["window"]["bounds"] == {"x": 0, "y": 0, "w": 800, "h": 600}
+    assert tree["truncated"] is False
+    with pytest.raises(AgentRequestError):
+        _perform_uia("authoring-tree", {"x": 1})
+
+    agent = RunningAgent(AgentConfig(host="127.0.0.1", port=0, token="secret"))
+    try:
+        client = WindowsBackend(agent.url, auth_token="secret").authoring_tree()
+        assert client is not None
+        assert [node["identity"] for node in client["tree"]] == [
+            node["identity"] for node in tree["tree"]
+        ]
+    finally:
+        agent.close()
+
+
+def test_authoring_tree_names_each_controls_top_level_window() -> None:
+    """The same window ``/window/root-at`` names for a point over the control:
+    a second window of the same app with the same title is another window."""
+    from openadapt_flow.backends.win_agent.server import _top_level_window
+
+    class _Pids(_FakeUser32):
+        def pid_of(self, hwnd):
+            return 77 if hwnd == 0x1000 else 0
+
+    user32 = _Pids()
+    button = _FakeControl("ButtonControl", automation_id="saveButton", name="Save")
+    button.NativeWindowHandle = user32.hwnd
+    assert _top_level_window(user32, button) == {"hwnd": user32.root, "pid": 77}
+    assert _top_level_window(None, button) is None  # no Win32: no window
+    windowless = _FakeControl("ButtonControl", automation_id="x", name="X")
+    assert _top_level_window(user32, windowless) is None
+    user32.root = 0x2000  # its root has no readable process
+    assert _top_level_window(user32, button) is None
+
+
+def test_authoring_tree_without_a_foreground_window_is_empty(monkeypatch) -> None:
+    module = _fake_uia_module()
+    module.GetForegroundControl = lambda: None
+    monkeypatch.setitem(sys.modules, "uiautomation", module)
+
+    assert _perform_uia("authoring-tree", {}) == {
+        "status": "ok",
+        "tree": [],
+        "window": None,
+        "truncated": False,
+    }

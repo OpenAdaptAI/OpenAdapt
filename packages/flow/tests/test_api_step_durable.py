@@ -42,6 +42,7 @@ from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
 from openadapt_flow.runtime.durable.program_checkpoint import bundle_version
 from openadapt_flow.runtime.effects import RestRecordVerifier
 from openadapt_flow.runtime.replayer import Replayer
+from tests._rest_read_contract_fixtures import mockmed_rest_read_kwargs
 from tests.test_api_tier_web_form import (
     TARGET,
     EnterWritesBackend,
@@ -122,7 +123,7 @@ class SecondReadFails(RestRecordVerifier):
     """Reads the record check's pre-state once, then can't reach it."""
 
     def __init__(self, base_url: str) -> None:
-        super().__init__(base_url)
+        super().__init__(base_url, **mockmed_rest_read_kwargs())
         self.reads = 0
 
     def capture_pre_state(self, context: Any = None):
@@ -148,7 +149,10 @@ class Fixture:
         return Replayer(
             self.backend,
             vision=FakeVision(),
-            effect_verifier=verifier or RestRecordVerifier(verifier_url or self.url),
+            effect_verifier=verifier
+            or RestRecordVerifier(
+                verifier_url or self.url, **mockmed_rest_read_kwargs()
+            ),
             web_form_actuator=actuator,
             poll_interval_s=0.01,
             durable=True,

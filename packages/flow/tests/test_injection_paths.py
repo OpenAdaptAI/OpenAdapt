@@ -27,13 +27,16 @@ from typing import Any, Callable, Iterator, Optional
 
 import pytest
 
+from openadapt_flow.mockmed.fault_server import MOCKMED_RECORDS_READ_CONTRACT
+from tests._rest_read_contract_fixtures import mockmed_effects_yaml
+
 pytest.importorskip("playwright.sync_api")
 
 from openadapt_flow.compile_agent import FirstRunCompiler  # noqa: E402
 from openadapt_flow.compile_agent.agents import AgentLedger  # noqa: E402
 from openadapt_flow.mockmed.fault_server import serve  # noqa: E402
-from openadapt_flow.mockmed.teach_scope import EncounterWrites  # noqa: E402
 from openadapt_flow.tutorial import _http_json  # noqa: E402
+from tests._teach_scope import EncounterWrites  # noqa: E402
 from tests.test_injection_suite import _Attacker, _intent, _untrusted_text  # noqa: E402
 
 NOTE = "Synthetic follow-up in two weeks"
@@ -73,10 +76,7 @@ def _verify_yaml(tmp_path: Path, base: str) -> Path:
     path = tmp_path / "verify.yaml"
     path.write_text(
         "verifier:\n"
-        "  kind: rest\n"
-        f"  base_url: {base}\n"
-        "  records_path: /api/db\n"
-        "  records_key: records\n"
+        f"{mockmed_effects_yaml(base)}"
         "  timeout_s: 2.0\n"
         "  poll_interval_s: 0.05\n"
     )
@@ -424,9 +424,8 @@ def _guard_verify(tmp_path: Path, base: str) -> Path:
             {
                 "schema_version": "openadapt.verify/v1",
                 "verifier": {
-                    "kind": "rest",
                     "base_url": base,
-                    "records_path": "/api/db",
+                    **MOCKMED_RECORDS_READ_CONTRACT,
                 },
                 "effects": [
                     {
@@ -470,7 +469,7 @@ def _guarded_run(
             "verify": str(_guard_verify(tmp_path, base)),
             "allow_text": ["Triage"],
             **(
-                {"write_adapter": "openadapt_flow.mockmed.teach_scope:EncounterWrites"}
+                {"write_adapter": "tests._teach_scope:EncounterWrites"}
                 if write_adapter
                 else {}
             ),

@@ -1,0 +1,3575 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1147,
+      167
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      200,
+      33
+     ]
+    },
+    {
+     "text": "Okafor"
+    },
+    {
+     "text": "Return"
+    },
+    {
+     "duration": 3
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      800
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      800
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      290,
+      33
+     ]
+    },
+    {
+     "text": "Lena"
+    },
+    {
+     "duration": 3
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      800
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "Escape"
+    },
+    {
+     "coordinate": [
+      1231,
+      167
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      800
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The JSON tab is easiest.",
+   "actions": [
+    {
+     "coordinate": [
+      99,
+      131
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      800
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      640,
+      400
+     ]
+    },
+    {
+     "text": "ctrl+a"
+    },
+    {
+     "text": "{\"resourceType\":\"Patient\",\"name\":[{\"given\":[\"Lena\"],\"family\":\"Okafor\"}],\"birthDate\":\"1988-04-22\",\"gender\":\"female\",\"address\":[{\"line\":[\"14 Birch Lane\"],\"city\":\"Springfield\",\"state\":\"MA\",\"postalCode\":\"01103\"}],\"telecom\":[{\"system\":\"phone\",\"use\":\"home\",\"value\":\"413-555-0187\"},{\"system\":\"email\",\"value\":\"lena.okafor@example.org\"}]}"
+    },
+    {
+     "coordinate": [
+      1057,
+      718
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      800
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      640,
+      500
+     ]
+    },
+    {
+     "text": "ctrl+a"
+    },
+    {
+     "text": "BackSpace"
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      400
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      640,
+      500
+     ]
+    },
+    {
+     "text": "ctrl+End"
+    },
+    {
+     "text": "ctrl+shift+Home"
+    },
+    {
+     "text": "BackSpace"
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      400
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "BackSpace",
+     "repeat": 100
+    },
+    {
+     "text": "BackSpace",
+     "repeat": 100
+    },
+    {
+     "text": "BackSpace",
+     "repeat": 100
+    },
+    {
+     "text": "BackSpace",
+     "repeat": 100
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      400
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      400
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "BackSpace",
+     "repeat": 50
+    },
+    {
+     "duration": 2
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      400
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "BackSpace",
+     "repeat": 100
+    },
+    {
+     "text": "BackSpace",
+     "repeat": 100
+    },
+    {
+     "duration": 5
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      400
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "BackSpace",
+     "repeat": 30
+    },
+    {
+     "duration": 2
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      400
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Empty. Type the JSON now.",
+   "actions": [
+    {
+     "text": "{\"resourceType\":\"Patient\",\"name\":[{\"given\":[\"Lena\"],\"family\":\"Okafor\"}],\"birthDate\":\"1988-04-22\",\"gender\":\"female\",\"address\":[{\"line\":[\"14 Birch Lane\"],\"city\":\"Springfield\",\"state\":\"MA\",\"postalCode\":\"01103\"}],\"telecom\":[{\"system\":\"phone\",\"use\":\"home\",\"value\":\"413-555-0187\"},{\"system\":\"email\",\"value\":\"lena.okafor@example.org\"}]}"
+    },
+    {
+     "duration": 5
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      400
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1057,
+      718
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      800
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Now scroll to the submit button.",
+   "actions": [
+    {
+     "coordinate": [
+      1180,
+      500
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 15
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      800
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1057,
+      733
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      800
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {
+     "coordinate": [
+      1180,
+      400
+     ],
+     "scroll_direction": "up",
+     "scroll_amount": 20
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      800
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "It's created. Let me get the ID via the Details tab.",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {
+     "coordinate": [
+      472,
+      151
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      800
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "region": [
+      192,
+      640,
+      640,
+      800
+     ]
+    },
+    {
+     "coordinate": [
+      1180,
+      500
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 15
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      450,
+      443
+     ]
+    },
+    {
+     "text": "End"
+    },
+    {
+     "duration": 1
+    },
+    {
+     "text": "Left"
+    },
+    {
+     "text": "BackSpace"
+    },
+    {
+     "text": "BackSpace"
+    },
+    {
+     "duration": 2
+    },
+    {
+     "text": "87"
+    },
+    {
+     "duration": 3
+    },
+    {
+     "region": [
+      192,
+      360,
+      640,
+      540
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1057,
+      733
+     ]
+    },
+    {
+     "duration": 5
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      800
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {
+     "coordinate": [
+      1180,
+      400
+     ],
+     "scroll_direction": "up",
+     "scroll_amount": 25
+    },
+    {
+     "coordinate": [
+      326,
+      149
+     ]
+    },
+    {
+     "duration": 4
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      800
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      326,
+      149
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      500
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      32,
+      30
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      500
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      68,
+      178
+     ]
+    },
+    {
+     "duration": 4
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      500
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {
+     "coordinate": [
+      1147,
+      167
+     ]
+    },
+    {
+     "duration": 5
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      500
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "There is now one Patient record for Lena Okafor, and the Patient list shows no other patients. When I first searched, the list was empty, so no earlier record existed. I created this one myself.\n\nThe record holds only the requested values:\n- **Name:** Lena Okafor\n- **Date of birth:** 1988-04-22\n- **Sex:** female\n- **Address:** 14 Birch Lane, Springfield, MA 01103\n- **Home phone:** 413-555-0187\n- **Email:** lena.okafor@example.org\n\nThe home phone saved as 413-555-0178 the first time. I corrected it to 413-555-0187, so the record has two versions in its history, both on this same record.\n\nRESULT: DONE Patient/48b4121d-ec48-4ddd-a1c5-030bb171b073",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 1147,
+   "y": 167,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 200,
+   "y": 33,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Okafor"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Return"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 290,
+   "y": 33,
+   "button": "left",
+   "count": 3,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Lena"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Escape"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 1231,
+   "y": 167,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 99,
+   "y": 131,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 640,
+   "y": 400,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "a"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "{\"resourceType\":\"Patient\",\"name\":[{\"given\":[\"Lena\"],\"family\":\"Okafor\"}],\"birthDate\":\"1988-04-22\",\"gender\":\"female\",\"address\":[{\"line\":[\"14 Birch Lane\"],\"city\":\"Springfield\",\"state\":\"MA\",\"postalCode\":\"01103\"}],\"telecom\":[{\"system\":\"phone\",\"use\":\"home\",\"value\":\"413-555-0187\"},{\"system\":\"email\",\"value\":\"lena.okafor@example.org\"}]}"
+  },
+  {
+   "a": "click",
+   "x": 1057,
+   "y": 718,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 640,
+   "y": 500,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 640,
+   "y": 500,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "End"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "shift",
+    "Home"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "type",
+   "text": "{\"resourceType\":\"Patient\",\"name\":[{\"given\":[\"Lena\"],\"family\":\"Okafor\"}],\"birthDate\":\"1988-04-22\",\"gender\":\"female\",\"address\":[{\"line\":[\"14 Birch Lane\"],\"city\":\"Springfield\",\"state\":\"MA\",\"postalCode\":\"01103\"}],\"telecom\":[{\"system\":\"phone\",\"use\":\"home\",\"value\":\"413-555-0187\"},{\"system\":\"email\",\"value\":\"lena.okafor@example.org\"}]}"
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "click",
+   "x": 1057,
+   "y": 718,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "scroll",
+   "x": 1180,
+   "y": 500,
+   "dx": 0,
+   "dy": 1800
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 1057,
+   "y": 733,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "scroll",
+   "x": 1180,
+   "y": 400,
+   "dx": 0,
+   "dy": -2400
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 472,
+   "y": 151,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "scroll",
+   "x": 1180,
+   "y": 500,
+   "dx": 0,
+   "dy": 1800
+  },
+  {
+   "a": "click",
+   "x": 450,
+   "y": 443,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "End"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Left"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "type",
+   "text": "87"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 1057,
+   "y": 733,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "scroll",
+   "x": 1180,
+   "y": 400,
+   "dx": 0,
+   "dy": -3000
+  },
+  {
+   "a": "click",
+   "x": 326,
+   "y": 149,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 4.0
+  },
+  {
+   "a": "click",
+   "x": 326,
+   "y": 149,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 32,
+   "y": 30,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 68,
+   "y": 178,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 4.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 1147,
+   "y": 167,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6285,
+   "out": 100,
+   "usd": 0.002264,
+   "cached": 6281
+  },
+  {
+   "in": 7758,
+   "out": 133,
+   "usd": 0.006278,
+   "cached": 6281
+  },
+  {
+   "in": 9289,
+   "out": 216,
+   "usd": 0.007543,
+   "cached": 7756
+  },
+  {
+   "in": 10925,
+   "out": 91,
+   "usd": 0.006861,
+   "cached": 9287
+  },
+  {
+   "in": 12401,
+   "out": 278,
+   "usd": 0.008659,
+   "cached": 10923
+  },
+  {
+   "in": 14089,
+   "out": 315,
+   "usd": 0.009854,
+   "cached": 12399
+  },
+  {
+   "in": 15813,
+   "out": 126,
+   "usd": 0.008391,
+   "cached": 14087
+  },
+  {
+   "in": 17337,
+   "out": 398,
+   "usd": 0.010956,
+   "cached": 15811
+  },
+  {
+   "in": 19168,
+   "out": 199,
+   "usd": 0.010038,
+   "cached": 17335
+  },
+  {
+   "in": 20775,
+   "out": 328,
+   "usd": 0.011135,
+   "cached": 19166
+  },
+  {
+   "in": 22522,
+   "out": 444,
+   "usd": 0.012966,
+   "cached": 20773
+  },
+  {
+   "in": 24383,
+   "out": 125,
+   "usd": 0.01041,
+   "cached": 22520
+  },
+  {
+   "in": 25893,
+   "out": 167,
+   "usd": 0.010325,
+   "cached": 24381
+  },
+  {
+   "in": 27456,
+   "out": 344,
+   "usd": 0.01253,
+   "cached": 25891
+  },
+  {
+   "in": 29207,
+   "out": 117,
+   "usd": 0.011042,
+   "cached": 27454
+  },
+  {
+   "in": 30720,
+   "out": 344,
+   "usd": 0.013067,
+   "cached": 29205
+  },
+  {
+   "in": 32460,
+   "out": 115,
+   "usd": 0.011648,
+   "cached": 30718
+  },
+  {
+   "in": 33973,
+   "out": 148,
+   "usd": 0.011758,
+   "cached": 32458
+  },
+  {
+   "in": 35519,
+   "out": 162,
+   "usd": 0.012283,
+   "cached": 33971
+  },
+  {
+   "in": 37079,
+   "out": 178,
+   "usd": 0.012787,
+   "cached": 35517
+  },
+  {
+   "in": 38655,
+   "out": 149,
+   "usd": 0.012849,
+   "cached": 37077
+  },
+  {
+   "in": 40214,
+   "out": 181,
+   "usd": 0.013442,
+   "cached": 38653
+  },
+  {
+   "in": 41794,
+   "out": 392,
+   "usd": 0.015916,
+   "cached": 40212
+  },
+  {
+   "in": 43662,
+   "out": 164,
+   "usd": 0.014672,
+   "cached": 41792
+  },
+  {
+   "in": 45224,
+   "out": 212,
+   "usd": 0.014761,
+   "cached": 43660
+  },
+  {
+   "in": 46859,
+   "out": 168,
+   "usd": 0.014816,
+   "cached": 45222
+  },
+  {
+   "in": 48425,
+   "out": 141,
+   "usd": 0.0147,
+   "cached": 46857
+  },
+  {
+   "in": 49964,
+   "out": 114,
+   "usd": 0.014676,
+   "cached": 48423
+  },
+  {
+   "in": 51476,
+   "out": 205,
+   "usd": 0.015826,
+   "cached": 49962
+  },
+  {
+   "in": 53091,
+   "out": 363,
+   "usd": 0.017966,
+   "cached": 51474
+  }
+ ]
+}

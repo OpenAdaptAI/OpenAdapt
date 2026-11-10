@@ -112,6 +112,7 @@ def _broken(root: Path, **overrides) -> BreakFacts:
         halt_reason="record_written refuted",
         model_calls=0,
         seconds=7.7,
+        stop_attributed=True,
     )
     return replace(facts, **overrides)
 
@@ -394,6 +395,30 @@ def test_the_aha_line_appears_only_when_the_run_showed_it(root):
     missed, _ = _plain(FakeEngine(root, broken={"execution_outcome": "VERIFIED"}))
     assert "Stopped before reporting success" not in missed
     assert "did not stop" in missed
+
+
+def test_a_stop_the_record_check_did_not_cause_is_not_the_demonstration(root):
+    # Codex review on #1431: a halt for another reason (here a readiness halt
+    # before the save, nothing refuted, nothing read off the screen) must not
+    # read as the record check catching the silent failure.
+    output, _ = _plain(
+        FakeEngine(
+            root,
+            broken={
+                "screen_text": None,
+                "screen_showed_success": False,
+                "effects_refuted": 0,
+                "stop_attributed": False,
+                "transaction_outcome": "HALTED_BEFORE_EFFECT",
+                "halt_reason": "readiness: the page never settled before step_000",
+            },
+        )
+    )
+    assert "It found nothing" not in output
+    assert "reports Done" not in output
+    assert "a saved message" not in output, "the screen was never observed"
+    assert "Stopped before reporting success" not in output
+    assert "not at the check this act sets off" in output
 
 
 def test_an_engine_without_run_inputs_does_not_claim_new_notes(root):

@@ -122,6 +122,13 @@ collateral, and the outcome is `reconciliation_required`. With `audit_read`,
 a log entry by the bot for a record no effect names is collateral too, even
 when the read shows no change.
 
+An `audit_read` frame needs `frame.database`. The bot's entries for the
+record it saved are excused by record, whatever table they wrote, so its
+other writes for that record (an insurance row, an allergy, a note) are
+caught only as rows, and only the whole-database diff reads every table.
+Without `frame.database` the frame never holds: it reports `not_checked`, so
+the save is never `verified` (#1505).
+
 Only evidence the bot can't write counts:
 
 - `audit_read` reads the app's own audit log or change feed.
@@ -256,6 +263,37 @@ that gap: it reads every table and column before and after the save, and a
 row added, changed or removed anywhere is collateral unless a declared
 effect, a declared side record, an attributed concurrent write or an
 allow-listed bookkeeping table explains it.
+
+Each snapshot has a `frame.database.read_row_budget` of 1,000,000 data rows
+by default. It counts all non-skipped tables, including append-only logs,
+and auxiliary audit-query results. If table counts exceed the budget, their
+contents are not fetched. Audit queries have a server-side result limit;
+one row beyond the remaining budget refuses the entire snapshot. A baseline,
+post-save, settling or recheck read over budget makes the frame
+`not_checked` with a `frame too large` reason. It can never verify from a
+partial read. Set a different positive budget in the contract when needed;
+that change is bound by the contract's digest. The default is omitted from
+serialization so existing contract digests stay unchanged.
+
+For a declared append-only table on MySQL or MariaDB with a single
+AUTO_INCREMENT primary key, historical bodies stay on the database server.
+The baseline records each key and a keyed MAC over server-computed SHA-256
+content digests. Later reads check every old key and digest in the same
+consistent transaction, and fetch full values only for keys absent from the
+baseline. The cursor is that key set, so an insertion into an old id gap is
+seen too. An edit or deletion of an old row still refuses the frame. No log
+row is excused by assuming that the database enforces immutability.
+
+Old baselines keep their original full-row encoding. PostgreSQL, SQLite and
+tables without this key shape retain full reads and the row-budget fallback.
+The optimization reduces historical payload transfer; the server still
+reads and hashes historical contents, so its work can grow with log size.
+
+This is a row limit, not a deadline or a byte limit. Counting and reading
+large cells can still be expensive. `max_rows` is a separate setting: it
+limits retained cell hashes, not rows read. Within the read budget, every
+row is still compared, so edits and deletions of old audit rows remain
+visible. Logged agent writes to audit tables still require an explanation.
 
 An app that writes on every request (the acting user's `last_login`, a
 token's `last_seen`) moves rows in every window. `frame.learned` excuses
@@ -533,9 +571,11 @@ only a whole-number version's value is kept, to count steps. The receipt's
 `evidence.frame.versions` holds counts and a problem code (`another_author`,
 `extra_steps`, `went_back`, `no_author`, `not_a_number`, `null_version`,
 `duplicate_version`, `no_new_version`, `history_changed`, `missing`,
-`no_target_id`, `unreadable`, `self_unresolved`), never ids or values. A
-refuted check refutes the frame (`checked.frame: refuted`); one that can't be
-judged leaves the frame `not_checked`.
+`no_target_id`, `unreadable`, `self_unresolved`, `unknown_surface`), never
+ids or values. A refuted check refutes the frame (`checked.frame: refuted`);
+one that can't be judged leaves the frame `not_checked`. A `target_surface`
+that no write effect reads is `unknown_surface`: with no target there is
+nothing to hold.
 
 ## What the receipt says was checked
 

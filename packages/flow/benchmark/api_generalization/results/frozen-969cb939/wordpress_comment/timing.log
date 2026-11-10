@@ -1,0 +1,41 @@
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_comment/timing/r00-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+WARNING: openadapt-privacy is not installed, so reports and logs are not scrubbed of patient data (OPENADAPT_FLOW_SCRUB=auto). Install 'openadapt-flow[privacy]', or set OPENADAPT_FLOW_SCRUB=on to refuse instead.
+{"rep": 1, "arm": "gui", "correct": false, "save_actuation": "dom", "engine_s": 21.304, "wall_s": 32.69, "load1": 29.04, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_comment/timing/r00-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 1, "arm": "api", "correct": false, "save_actuation": "api", "engine_s": 16.921, "wall_s": 21.721, "load1": 28.25, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_comment/timing/r01-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 2, "arm": "api", "correct": false, "save_actuation": "api", "engine_s": 12.79, "wall_s": 17.924, "load1": 29.4, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_comment/timing/r01-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 2, "arm": "gui", "correct": false, "save_actuation": "dom", "engine_s": 20.226, "wall_s": 25.482, "load1": 40.53, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_comment/timing/r02-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 3, "arm": "gui", "correct": false, "save_actuation": "dom", "engine_s": 11.141, "wall_s": 15.51, "load1": 38.48, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_comment/timing/r02-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 3, "arm": "api", "correct": false, "save_actuation": "api", "engine_s": 11.131, "wall_s": 15.256, "load1": 36.21, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_comment/timing/r03-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 4, "arm": "api", "correct": false, "save_actuation": "api", "engine_s": 12.0, "wall_s": 15.903, "load1": 32.29, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_comment/timing/r03-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 4, "arm": "gui", "correct": false, "save_actuation": "dom", "engine_s": 13.02, "wall_s": 17.783, "load1": 30.78, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_comment/timing/r04-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 5, "arm": "gui", "correct": false, "save_actuation": "dom", "engine_s": 13.35, "wall_s": 18.28, "load1": 32.9, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_comment/timing/r04-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 5, "arm": "api", "correct": false, "save_actuation": "api", "engine_s": 16.356, "wall_s": 24.444, "load1": 37.78, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_comment/timing/r05-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 6, "arm": "api", "correct": false, "save_actuation": "api", "engine_s": 16.514, "wall_s": 27.101, "load1": 36.02, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_comment/timing/r05-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 6, "arm": "gui", "correct": false, "save_actuation": "dom", "engine_s": 12.966, "wall_s": 17.844, "load1": 34.13, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_comment/timing/r06-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 7, "arm": "gui", "correct": false, "save_actuation": "dom", "engine_s": 15.021, "wall_s": 21.951, "load1": 38.94, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_comment/timing/r06-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 7, "arm": "api", "correct": false, "save_actuation": "api", "engine_s": 13.654, "wall_s": 19.917, "load1": 40.83, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_comment/timing/r07-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 8, "arm": "api", "correct": false, "save_actuation": "api", "engine_s": 14.147, "wall_s": 20.249, "load1": 46.92, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_comment/timing/r07-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 8, "arm": "gui", "correct": false, "save_actuation": "dom", "engine_s": 12.387, "wall_s": 17.357, "load1": 47.14, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_comment/timing/r08-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 9, "arm": "gui", "correct": false, "save_actuation": "dom", "engine_s": 14.535, "wall_s": 19.658, "load1": 47.61, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_comment/timing/r08-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 9, "arm": "api", "correct": false, "save_actuation": "api", "engine_s": 12.032, "wall_s": 16.553, "load1": 48.17, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_comment/timing/r09-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 10, "arm": "api", "correct": false, "save_actuation": "api", "engine_s": 11.743, "wall_s": 16.798, "load1": 48.15, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_comment/timing/r09-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 10, "arm": "gui", "correct": false, "save_actuation": "dom", "engine_s": 13.842, "wall_s": 19.115, "load1": 48.91, "error": null}

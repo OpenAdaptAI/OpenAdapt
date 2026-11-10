@@ -173,6 +173,13 @@ def body_shape(request: Any) -> str:
     same save with new values has the same shape."""
 
     names: list[str] = []
+    if request.method.upper() in READ_METHODS:
+        # Explicitly declared GET writes carry their fields in the query.
+        names = [
+            "?" + key
+            for key, _ in parse_qsl(urlsplit(request.url).query, keep_blank_values=True)
+        ]
+        return hashlib.sha256("\n".join(sorted(set(names))).encode()).hexdigest()[:16]
     fields = body_fields(request)
     if fields is not None:
         names = [name for name, _ in fields]
@@ -236,6 +243,15 @@ class WireCheck:
     shapes: list[str] = field(default_factory=list)
     _submitted: bool = False
 
+    def is_write(self, request: Any) -> bool:
+        """A non-read method or a read method the contract declares as a write."""
+
+        method = request.method.upper()
+        write = f"{method} {urlsplit(request.url).path or '/'}"
+        return method not in READ_METHODS or (
+            self.allowed is not None and write in self.allowed
+        )
+
     def judge(self, request: Any) -> Optional[str]:
         """``None`` when ``request`` may go; else why it must not."""
 
@@ -248,7 +264,7 @@ class WireCheck:
         address = f"{parts.scheme}://{parts.netloc}{parts.path}"
         origin = f"{parts.scheme}://{parts.netloc}".lower()
         sub = self.submission
-        is_write = method not in READ_METHODS
+        is_write = self.is_write(request)
         submission_get = (
             sub is not None
             and method == "GET"
@@ -337,7 +353,7 @@ class WireCheck:
             return
         method = request.method.upper()
         if request.redirected_from is None and (
-            method not in READ_METHODS
+            self.is_write(request)
             or (
                 self.submission is not None
                 and request.is_navigation_request()

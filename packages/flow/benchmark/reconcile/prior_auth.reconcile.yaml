@@ -1,0 +1,164 @@
+# One prior authorization across the EHR (Medplum, FHIR R4), the
+# clearinghouse (X12 278 responses in a folder) and the payer (the HL7 Da Vinci
+# PAS reference implementation). The caller names the unit by its
+# submission id; every other expected value comes from the EHR's request.
+#
+# ${RECON_*} values come from run.py's environment. Credentials are named by
+# environment variable, never written here.
+schema_version: openadapt.reconcile/v1
+unit: prior_authorization
+anchor: ehr
+legs:
+  ehr:
+    role: ehr
+    environment_id: medplum-ehr-reconcile
+    verifier:
+      kind: fhir
+      base_url: ${RECON_EHR_FHIR}
+      access_token_env: RECON_EHR_TOKEN
+      resource_type: Claim
+      search_param_exprs:
+        identifier: {param: submission_ref}
+        _include: {literal: "Claim:patient"}
+      field_paths:
+        resourceType: resourceType
+        id: id
+        submission_id: identifier[system=urn:openadapt:synthetic:submission].value
+        use: use
+        status: status
+        patient_ref: patient.reference
+        member_id: identifier[type.coding.code=MB].value
+        service_code: item.productOrService.coding.code
+        service_date: item.servicedDate
+        submitted_at: created
+    join:
+      member_id: {via: patient_ref, field: member_id}
+    identity:
+      submission_id: {param: submission_id}
+      use: preauthorization
+    provides:
+      member_id: member_id
+      service_code: service_code
+      service_date: service_date
+      submitted_at: submitted_at
+
+  payer:
+    role: payer
+    environment_id: davinci-pas-ri-reconcile
+    verifier:
+      kind: fhir
+      base_url: ${RECON_PAYER_FHIR}
+      resource_type: Claim
+      # The PAS reference implementation searches a member's claims only.
+      search_param_exprs:
+        patient.identifier: {param: ehr.member_id}
+      field_paths:
+        id: id
+        submission_id: identifier[system=urn:openadapt:synthetic:submission].value
+        use: use
+        status: status
+        service_code: item.productOrService.coding.code
+        service_date: item.servicedDate
+    identity:
+      submission_id: {param: submission_id}
+    compare:
+      service_code: {param: ehr.service_code}
+      service_date: {param: ehr.service_date}
+    duplicate_key:
+      service_code: {param: ehr.service_code}
+      service_date: {param: ehr.service_date}
+      status: active
+    # CMS-0057-F: 7 calendar days for a standard request.
+    due: {after: ehr.submitted_at, within_s: 604800}
+
+  payer_decision:
+    role: payer
+    environment_id: davinci-pas-ri-reconcile
+    verifier:
+      kind: fhir
+      base_url: ${RECON_PAYER_FHIR}
+      resource_type: ClaimResponse
+      search_param_exprs:
+        patient.identifier: {param: ehr.member_id}
+      # The reference implementation answers a ClaimResponse search with
+      # its response Bundles, the ClaimResponse inside each.
+      field_paths:
+        id: entry[resource.resourceType=ClaimResponse].resource.id
+        submission_id: entry[resource.resourceType=ClaimResponse].resource.identifier[system=urn:openadapt:synthetic:submission].value
+        outcome: entry[resource.resourceType=ClaimResponse].resource.outcome
+        disposition: entry[resource.resourceType=ClaimResponse].resource.disposition
+        auth_number: entry[resource.resourceType=ClaimResponse].resource.preAuthRef
+        decided_at: entry[resource.resourceType=ClaimResponse].resource.created
+    identity:
+      submission_id: {param: submission_id}
+    # A pended response, then the decision: each is a new ClaimResponse
+    # (with its own preAuthRef). Judge the latest.
+    group_by: [submission_id]
+    latest_by: decided_at
+    provides:
+      outcome: outcome
+      disposition: disposition
+      # X12 HCR01, by the reference implementation's own table
+      # (FhirUtils.dispositionToReviewAction).
+      decision:
+        field: disposition
+        map: {Granted: A1, Partial: A2, Denied: A3, Pending: A4, Cancelled: A6}
+      auth_number: auth_number
+      decided_at: decided_at
+    due: {after: ehr.submitted_at, within_s: 604800}
+
+  clearinghouse:
+    role: clearinghouse
+    environment_id: x12-inbox-reconcile
+    verifier:
+      kind: x12
+      options: {root: "${RECON_X12_INBOX}", glob: "*.x12", transaction: "278"}
+    identity:
+      trace: {param: submission_id}
+      purpose: "11"
+    # The 278 must carry what the clinic ordered and the payer's own
+    # decision: its auth number and its review action (HCR01).
+    compare:
+      member_id: {param: ehr.member_id}
+      service_code: {param: ehr.service_code}
+      service_date: {param: ehr.service_date}
+      auth_number: {param: payer_decision.auth_number}
+      decision: {param: payer_decision.decision}
+    duplicate_key:
+      member_id: {param: ehr.member_id}
+      service_code: {param: ehr.service_code}
+      service_date: {param: ehr.service_date}
+      purpose: "11"
+    # A pended review and its final review share a trace: judge the latest.
+    group_by: [trace, purpose]
+    latest_by: sent_at
+    # Two auth numbers under one trace are two decisions, not a history.
+    distinct_by: [auth_number]
+    due: {after: ehr.submitted_at, within_s: 259200}
+
+  writeback:
+    role: writeback
+    environment_id: medplum-ehr-reconcile
+    verifier:
+      kind: fhir
+      base_url: ${RECON_EHR_FHIR}
+      access_token_env: RECON_EHR_TOKEN
+      resource_type: ClaimResponse
+      search_param_exprs:
+        identifier: {param: submission_ref}
+      field_paths:
+        id: id
+        submission_id: identifier[system=urn:openadapt:synthetic:submission].value
+        outcome: outcome
+        disposition: disposition
+        auth_number: preAuthRef
+    identity:
+      submission_id: {param: submission_id}
+    compare:
+      outcome: {param: payer_decision.outcome}
+      disposition: {param: payer_decision.disposition}
+      auth_number: {param: payer_decision.auth_number}
+    # A copy is due once the payer has decided; one that is there is always
+    # compared, so a stale approval is caught while the payer pends.
+    required_when: {param: payer_decision.outcome, values: [complete, partial]}
+    due: {after: payer_decision.decided_at, within_s: 86400}

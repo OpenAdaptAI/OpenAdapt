@@ -1,0 +1,56 @@
+{
+ "id": "P04",
+ "class": "wrong_value",
+ "type": "patient",
+ "expect": "create",
+ "note": "The write path swaps the birth date's month and day.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 10.8,
+ "cost_usd": 0.012001,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "RESULT: NOT DONE Medplum is on the sign-in page and I have no credentials, so I couldn't search for or create the Patient record.",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/signin?next=%2F",
+  "final_text": "I couldn't do this task. The browser is showing the Medplum sign-in page, even though I was told I was already signed in. I have no login credentials, and registering a new account isn't something I should do here. Because of that, I couldn't search for an existing record for Lena Okafor or create one. I made no changes.\n\nRESULT: NOT DONE Medplum is on the sign-in page and I have no credentials, so I couldn't search for or create the Patient record.",
+  "model_calls": 3,
+  "actions": 2,
+  "tokens_in": 23288,
+  "tokens_out": 372
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "absent",
+  "reasons": [
+   "no Patient was written"
+  ],
+  "changes": {}
+ },
+ "proxy": [],
+ "fault_delivered": false,
+ "attempts": 1,
+ "rep": 2,
+ "host_load": {
+  "start": 21.1,
+  "end": 20.5,
+  "waited_s": 0
+ }
+}

@@ -69,6 +69,7 @@ from collections import Counter
 from datetime import date
 from typing import (
     Any,
+    Callable,
     Iterable,
     Literal,
     Mapping,
@@ -364,8 +365,130 @@ ROW_PROXIMITY_MIN_PX = 4
 
 
 def squash(text: str) -> str:
-    """Lowercase and remove ALL whitespace (OCR-tolerant comparison form)."""
+    """Legacy punctuation-noise utility; never use for positive authority.
+
+    Positive comparisons use comparison_squash instead.
+    Thin-band OCR can read ``Smith,`` as ``Smith.``. This tolerance applies
+    only to digit-free tokens. Every comma and period in a digit-bearing
+    token is retained for compatibility, including leading and trailing punctuation:
+    ``RC.79284`` remains distinct from ``RC79284``. Dates retain
+    their separators under the same rule.
+    """
+    return "".join(
+        token
+        if any(ch.isdigit() for ch in token)
+        else token.replace(",", "").replace(".", "")
+        for token in text.lower().split()
+    )
+
+
+def comparison_squash(text: str) -> str:
+    """Punctuation-sensitive comparison form used for positive authority.
+
+    ``squash`` remains a legacy/noise utility. Its lossy output is never the
+    positive identity comparison form. Only the explicit uncertainty fallback
+    below may inspect a comparison made with that utility.
+    """
     return "".join(text.lower().split())
+
+
+def _punctuation_token(token: str) -> bool:
+    return any(not ch.isalnum() for ch in token)
+
+
+def _standalone_punctuation(token: str) -> bool:
+    return bool(token) and not any(ch.isalnum() for ch in token)
+
+
+def _punctuation_signature(
+    keys: list[str],
+    body_keys: list[str],
+    numeric: list[bool],
+    punctuation: list[int],
+    standalone: list[int],
+    names: Optional[list[bool]] = None,
+    labels: Optional[list[bool]] = None,
+) -> Optional[Counter[tuple[str, str, str, str]]]:
+    """Share the same finite structural witness in plain and salted space.
+
+    Record bands bind attached punctuation to its neighbors. Standalone
+    marks in those bands have unknown field ownership and refuse. Text-only
+    bands retain order-insensitive matching, but preserve every punctuation
+    token and its multiplicity. A repeated name body needs a complete ordered
+    token witness; short repeated prefixes cannot claim that exception.
+    """
+    if (
+        len(keys) != len(numeric)
+        or len(keys) != len(body_keys)
+        or (names is not None and len(keys) != len(names))
+        or len(punctuation) != len(set(punctuation))
+        or any(i < 0 or i >= len(keys) for i in punctuation)
+        or len(standalone) != len(set(standalone))
+        or any(i not in punctuation for i in standalone)
+        or (labels is not None and len(keys) != len(labels))
+        or (
+            standalone
+            and any(numeric)
+            and (
+                labels is None
+                or any(
+                    i == 0
+                    or i + 1 == len(keys)
+                    or not labels[i - 1]
+                    or not labels[i + 1]
+                    or numeric[i - 1]
+                    or numeric[i + 1]
+                    for i in standalone
+                )
+            )
+        )
+    ):
+        return None
+    bodies = Counter(body_keys[i] for i in range(len(keys)) if not numeric[i])
+    repeated = {
+        body_keys[i]
+        for i in punctuation
+        if i not in standalone and not numeric[i] and bodies[body_keys[i]] != 1
+    }
+    if repeated:
+        if names is None or any(
+            not names[i]
+            for i in range(len(keys))
+            if not numeric[i] and body_keys[i] in repeated
+        ):
+            return None
+        # Length framing keeps sequences injective in either key space.
+        ordered = "".join(f"{len(key)}:{key}" for key in keys)
+        return Counter({("ordered", ordered, "", ""): 1})
+    if not any(numeric):
+        return Counter(("text", keys[i], "", "") for i in punctuation)
+    return Counter(
+        ("numeric", keys[i], "", "")
+        if numeric[i]
+        else (
+            "context",
+            keys[i],
+            keys[i - 1] if i else "",
+            keys[i + 1] if i + 1 < len(keys) else "",
+        )
+        for i in punctuation
+    )
+
+
+def _punctuation_tokens_agree(expected: list[str], observed: list[str]) -> bool:
+    def witness(words: list[str]) -> Optional[Counter[tuple[str, str, str, str]]]:
+        return _punctuation_signature(
+            [ocr_canonical(t) for t in words],
+            [ocr_canonical("".join(ch for ch in t if ch.isalnum())) for t in words],
+            [_has_digit(t) for t in words],
+            [i for i, t in enumerate(words) if _punctuation_token(t)],
+            [i for i, t in enumerate(words) if _standalone_punctuation(t)],
+            [_is_discriminative_name(t) for t in words],
+            [generic_label_role(t, t) for t in words],
+        )
+
+    expected_witness = witness(expected)
+    return expected_witness is not None and expected_witness == witness(observed)
 
 
 def band_region(point: Point, band_height: int, viewport: tuple[int, int]) -> Region:
@@ -399,6 +522,20 @@ def regions_intersect(a: Region, b: Region) -> bool:
 
 
 _intersects = regions_intersect
+
+
+def centered_in(region: Region, scope: Region) -> bool:
+    """Whether ``region``'s center lies inside ``scope``.
+
+    Scopes the identity band to the active dialog: a line belongs to the
+    dialog when its center is inside the dialog's box, so a form label beside
+    the dialog is not identity evidence. A line the dialog's edge only clips
+    is judged by where most of it sits.
+    """
+    x, y, w, h = region
+    sx, sy, sw, sh = scope
+    cx, cy = x + w // 2, y + h // 2
+    return sx <= cx < sx + sw and sy <= cy < sy + sh
 
 
 def lines_near_point(lines: Iterable[Any], point_y: int) -> list[Any]:
@@ -473,6 +610,7 @@ def context_from_lines(
     point: Optional[Point] = None,
     min_confidence: float = 0.5,
     reference_date: Optional[date] = None,
+    scope: Optional[Region] = None,
 ) -> Optional[str]:
     """Extract the context-band text from full-frame OCR lines.
 
@@ -497,6 +635,8 @@ def context_from_lines(
         reference_date: The recording date, enabling the near/far date
             split; when None every date-bearing line is dropped (heal-time
             re-extraction has no recording date).
+        scope: The active dialog's box when the target sits in one; lines
+            centered outside it (the page behind the dialog) are dropped.
 
     Returns:
         The joined band text, or None when the surviving text is too short
@@ -509,12 +649,13 @@ def context_from_lines(
         point=point,
         min_confidence=min_confidence,
         reference_date=reference_date,
+        scope=scope,
     )
     if not kept:
         return None
     kept.sort(key=lambda item: item[0])
     joined = " ".join(text for _, _, text in kept)
-    if len(squash(joined)) < MIN_CONTEXT_CHARS:
+    if len(comparison_squash(joined)) < MIN_CONTEXT_CHARS:
         return None
     return joined
 
@@ -552,7 +693,7 @@ def identifier_text_from_lines(
         kept.append((int(y), int(x), text))
     kept.sort()
     joined = " ".join(text for _, _, text in kept)
-    return joined if len(squash(joined)) >= MIN_CONTEXT_CHARS else None
+    return joined if len(comparison_squash(joined)) >= MIN_CONTEXT_CHARS else None
 
 
 def _kept_context_lines(
@@ -563,6 +704,7 @@ def _kept_context_lines(
     point: Optional[Point],
     min_confidence: float,
     reference_date: Optional[date],
+    scope: Optional[Region] = None,
 ) -> list[tuple[int, Any, str]]:
     """The confident, in-band, non-excluded, non-volatile identity lines.
 
@@ -579,6 +721,8 @@ def _kept_context_lines(
         lx, ly, lw, lh = line.region
         center_y = ly + lh // 2
         if not (band_y <= center_y < band_y + band_h):
+            continue
+        if scope is not None and not centered_in(line.region, scope):
             continue
         if _intersects(line.region, exclude_region):
             continue
@@ -599,6 +743,7 @@ def context_region_from_lines(
     point: Optional[Point] = None,
     min_confidence: float = 0.5,
     reference_date: Optional[date] = None,
+    scope: Optional[Region] = None,
 ) -> Optional[Region]:
     """Bounding box of the identity lines :func:`context_from_lines` keeps.
 
@@ -618,6 +763,7 @@ def context_region_from_lines(
         point=point,
         min_confidence=min_confidence,
         reference_date=reference_date,
+        scope=scope,
     )
     if not kept:
         return None
@@ -674,7 +820,7 @@ def coverage(needle: str, hay: str) -> float:
 
 def tokenize(text: str) -> list[str]:
     """Split on whitespace and squash each token (lowercase, no spaces)."""
-    return [squash(tok) for tok in text.split() if squash(tok)]
+    return [comparison_squash(tok) for tok in text.split() if comparison_squash(tok)]
 
 
 def ocr_canonical(token: str) -> str:
@@ -886,6 +1032,129 @@ _GEN_SUFFIX_CANON = frozenset(ocr_canonical(s) for s in GENERATIONAL_SUFFIXES)
 _GENERIC_IDENTITY_CANON = frozenset(ocr_canonical(w) for w in _GENERIC_IDENTITY_WORDS)
 
 
+# Form labels, hints and column headings: the words a UI prints beside a
+# record, never part of it. With lowercase words and "Label:" tokens they are
+# not identity-bearing, so they never pad coverage (see identity_bearing).
+_LABEL_WORDS = frozenset(
+    (
+        "name",
+        "last",
+        "first",
+        "middle",
+        "preferred",
+        "phone",
+        "home",
+        "work",
+        "mobile",
+        "cell",
+        "fax",
+        "email",
+        "address",
+        "city",
+        "state",
+        "zip",
+        "country",
+        "dob",
+        "birth",
+        "birthdate",
+        "date",
+        "time",
+        "age",
+        "sex",
+        "gender",
+        "mrn",
+        "id",
+        "number",
+        "num",
+        "account",
+        "acct",
+        "ssn",
+        "subscriber",
+        "invoice",
+        "billing",
+        "type",
+        "mode",
+        "note",
+        "notes",
+        "user",
+        "provider",
+        "select",
+        "ok",
+        "cancel",
+        "save",
+        "clear",
+        "new",
+        "add",
+        "edit",
+        "delete",
+        "close",
+        "previous",
+        "next",
+        "show",
+        "only",
+        "all",
+        "insurance",
+        "clinic",
+        "family",
+    )
+)
+_LABEL_CANON = (
+    frozenset(ocr_canonical(w) for w in _LABEL_WORDS) | _GENERIC_IDENTITY_CANON
+)
+
+
+def identity_bearing(raw_token: str, squashed_token: str) -> bool:
+    """Whether a band token can identify a record, from its shape alone.
+
+    Digit-bearing tokens (ids, dates, ages, counts) and capitalised
+    name-shaped words count. Lowercase words, ``Label:`` tokens and UI
+    vocabulary (field labels, hints, column words) do not: they appear
+    identically beside every record, so they must never pad coverage. The
+    same rule holds in a list, a form or a dialog.
+    """
+    if _has_digit(squashed_token):
+        return True
+    if raw_token.rstrip().endswith(":"):
+        return False
+    bare = squashed_token.strip(".,;:()[]")
+    return (
+        _name_shaped(raw_token, squashed_token)
+        and ocr_canonical(bare) not in _LABEL_CANON
+    )
+
+
+def generic_label_role(raw_token: str, comparison_token: str) -> bool:
+    """Explicit non-bearing label role, shared by plain and hashed writers."""
+    bare = comparison_token.strip(".,;:()[]")
+    return (
+        bool(bare)
+        and not identity_bearing(raw_token, comparison_token)
+        and not _has_digit(comparison_token)
+        and ocr_canonical(bare) in _LABEL_CANON
+    )
+
+
+def identity_coverage(
+    lengths: list[int], matched: list[bool], bearing: list[bool]
+) -> tuple[float, bool]:
+    """Coverage the band must meet, and whether identity evidence is short.
+
+    The lower of whole-band coverage and coverage over identity-bearing
+    tokens. Label text then cannot pad coverage (the bearing share must pass
+    on its own), and leaving a token out of the bearing share can never let
+    a band pass that whole-band coverage fails: a real name that reads like
+    a UI word ("Ali" / "all") or is entered lowercase still counts there.
+    Short when no recorded token is identity-bearing: nothing identifies
+    the record, so the OCR tier abstains.
+    """
+    whole = sum(n for n, m in zip(lengths, matched) if m) / max(sum(lengths), 1)
+    total = sum(n for n, b in zip(lengths, bearing) if b)
+    if not total:
+        return whole, True
+    share = sum(n for n, m, b in zip(lengths, matched, bearing) if m and b) / total
+    return min(whole, share), False
+
+
 def _is_generational_suffix(token: str) -> bool:
     """Whether a squashed token is a Jr/Sr/II/III/IV generational suffix,
     tolerating OCR confusions ('lI' for 'II', '5r' for 'Sr')."""
@@ -941,6 +1210,63 @@ class BandMatch(NamedTuple):
     #: :func:`identity_evidence_shortfall` requires. Makes the OCR tier
     #: ABSTAIN when every other budget passes; never affects ``mismatch``.
     identity_evidence_short: bool = False
+
+
+class _DiagnosticBandMatch(BandMatch):
+    """Strict tuple items with legacy named diagnostic scores.
+
+    All eight tuple items remain strict evidence. Conversion, tuple copying
+    and serialization therefore cannot turn diagnostic scores into authority.
+    Only named properties expose diagnostics, and every status/budget gate
+    reconstructs strict items before reading them. Templates never return this
+    subclass. Missing or malformed diagnostic state falls back to strict data.
+    """
+
+    diagnostic_match: BandMatch
+
+    def _diagnostics(self) -> BandMatch:
+        diagnostics = getattr(self, "diagnostic_match", None)
+        return diagnostics if type(diagnostics) is BandMatch else BandMatch(*self)
+
+    @property
+    def coverage(self) -> float:
+        return self._diagnostics().coverage
+
+    @property
+    def max_uncovered_run(self) -> int:
+        return self._diagnostics().max_uncovered_run
+
+    @property
+    def contradicted_chars(self) -> int:
+        return self._diagnostics().contradicted_chars
+
+    @property
+    def suspect_chars(self) -> int:
+        return self._diagnostics().suspect_chars
+
+    @property
+    def unexplained_name_tokens(self) -> int:
+        return self._diagnostics().unexplained_name_tokens
+
+    @property
+    def max_absent_alpha_token(self) -> int:
+        return self._diagnostics().max_absent_alpha_token
+
+    @property
+    def glyph_ambiguous_id_chars(self) -> int:
+        return self._diagnostics().glyph_ambiguous_id_chars
+
+    @property
+    def identity_evidence_short(self) -> bool:
+        return self._diagnostics().identity_evidence_short
+
+
+def _authoritative_band_match(match: BandMatch) -> BandMatch:
+    if type(match) is BandMatch:
+        return match
+    if type(match) is _DiagnosticBandMatch:
+        return BandMatch(*match)
+    return BandMatch(0.0, 0, 0, identity_evidence_short=True)
 
 
 # ---------------------------------------------------------------------------
@@ -1091,12 +1417,44 @@ def _match_tokens(
         elif _suspicious_pair(expected_raw, observed_raw):
             suspect_evidence[i] = True
 
-    # single-token equivalence (mark every equivalent observed copy)
-    for i, ec in enumerate(exp_c):
-        for j, oc in enumerate(obs_c):
-            if ec == oc:
-                mark(i, exp[i], obs[j])
+    # single-token equivalence (mark every equivalent observed copy). A
+    # digit-bearing recorded token takes ONE observed copy of its own: a
+    # second copy of the recorded value elsewhere in the band ("15 patients
+    # found") must not stand in for a sibling's differing id.
+    digit_used: set[int] = set()
+    # Recorded tokens matched only by gluing two digit-bearing fragments
+    # ("100" "512" vs "100512", or "15" "47" vs "1547"): one id split by OCR
+    # and two values read as one look the same, so the band abstains.
+    digit_glued: set[int] = set()
+    # Digit tokens take a raw-equal copy first: a word that only folds to
+    # the value ("Bo" ~ "80", "Li" ~ "11") must not take the slot the exact
+    # copy fills.
+    for i, token in enumerate(exp):
+        if not _has_digit(token):
+            continue
+        for j, o in enumerate(obs):
+            if o == token and j not in digit_used:
+                mark(i, token, o)
                 explained[j] = True
+                digit_used.add(j)
+                break
+    for i, ec in enumerate(exp_c):
+        digit = _has_digit(exp[i])
+        if digit and matched[i]:
+            continue
+        for j, oc in enumerate(obs_c):
+            if ec != oc or (digit and j in digit_used):
+                continue
+            if not digit and _has_digit(obs[j]) and not _alpha_dominated(obs[j]):
+                # Only a recorded value explains a live value: a word that
+                # folds to one ("Bo" ~ "80") must not hide a differing id.
+                # Digit noise inside a word ("5ample") is still the word.
+                continue
+            mark(i, exp[i], obs[j])
+            explained[j] = True
+            if digit:
+                digit_used.add(j)
+                break
 
     # split: consecutive recorded tokens -> one observed token
     for i in range(len(exp)):
@@ -1105,6 +1463,7 @@ def _match_tokens(
                 break
             if all(matched[i : i + size]):
                 continue
+            glued = _glues_digits(exp[i : i + size])
             concat_raw = "".join(exp[i : i + size])
             concat_c = ocr_canonical(concat_raw)
             if len(concat_c) < MIN_BLOCK:
@@ -1129,6 +1488,8 @@ def _match_tokens(
                             raw_matched[m] = True
                         elif _suspicious_pair(concat_raw, obs[j]):
                             suspect_evidence[m] = True
+                        if glued:
+                            digit_glued.add(m)
                     explained[j] = True
 
     # join: one recorded token -> consecutive observed tokens
@@ -1142,6 +1503,8 @@ def _match_tokens(
                 concat_raw = "".join(obs[j : j + size])
                 if ocr_canonical(concat_raw) == exp_c[i]:
                     mark(i, token, concat_raw)
+                    if _glues_digits(obs[j : j + size]):
+                        digit_glued.add(i)
                     for m in range(j, j + size):
                         explained[m] = True
                     break
@@ -1162,6 +1525,8 @@ def _match_tokens(
     # (→ mismatch), not the abstain gate.
     for i in range(len(exp)):
         if raw_matched[i] and _is_glyph_vulnerable_identifier(exp[i]):
+            glyph_ambiguous_id[i] = True
+        if i in digit_glued:
             glyph_ambiguous_id[i] = True
     return (
         matched,
@@ -1198,22 +1563,40 @@ def _contradicted(
       confusion-equivalent — a changed middle initial ('J' -> 'K'), the
       SEX column ('M' -> 'F'), a 2-char name ('Al' -> 'Bo'). These sat
       below MIN_BLOCK and were invisible to every rule;
-    - generational suffix on either side, unmatched.
+    - generational suffix on either side, unmatched;
+    - an unmatched recorded token carrying a digit (an id, date, age or
+      count), whatever its length, while an unexplained observed token
+      carries one too: a differing value is what tells same-name records
+      apart, never a tolerated uncovered run.
     """
     exp_c = [ocr_canonical(t) for t in exp]
     obs_c = [ocr_canonical(t) for t in obs]
     contradicted = [False] * len(exp)
+    # A 2-letter observed name ("Eva" -> "Bo") replaces a recorded name as
+    # surely as a longer one; shorter recorded tokens are counted in
+    # band_match.
     unexplained_alpha = any(
-        not explained[j] and len(o) >= MIN_BLOCK and _alpha_dominated(o)
+        not explained[j] and len(o) >= 2 and _alpha_dominated(o)
         for j, o in enumerate(obs)
     )
     obs_suffix_unexplained = any(
         not explained[j] and _is_generational_suffix(o) for j, o in enumerate(obs)
     )
+    unexplained_digit = any(
+        not explained[j] and _has_digit(o) for j, o in enumerate(obs)
+    )
     for i, token in enumerate(exp):
         if matched[i]:
             continue
         if _is_generational_suffix(token):
+            contradicted[i] = True
+            continue
+        if _has_digit(token) and unexplained_digit:
+            # A recorded id, date, age or count missing while the live band
+            # shows another digit-bearing token is a different record, never
+            # a small gap: same-name siblings differ ONLY in such tokens
+            # (PatNum 15 vs 16, age 47 vs 50), often under MIN_BLOCK. Pure
+            # absence is charged in band_match (absent identifying field).
             contradicted[i] = True
             continue
         if len(token) < MIN_BLOCK:
@@ -1255,11 +1638,59 @@ def _contradicted(
     return contradicted
 
 
-def band_match(
+def _glues_digits(fragments: list[str]) -> bool:
+    """Whether joining ``fragments`` glues two digit-bearing tokens: OCR's
+    split of one id ("100" "512") and two values ("15" "47" beside a record
+    whose id is 1547) read alike, so such a match can only abstain."""
+    return any(
+        _has_digit(a) and _has_digit(b) for a, b in zip(fragments, fragments[1:])
+    )
+
+
+def _digit_floor_met(digit: list[bool], raw_matched: list[bool]) -> bool:
+    """With an id, date or other digit token in the recorded band, at least
+    one of them must match raw: a name-only match is not enough."""
+    return not any(digit) or any(d and r for d, r in zip(digit, raw_matched))
+
+
+def _digit_token_absent(exp: list[str], matched: list[bool]) -> bool:
+    """Whether a digit-bearing recorded token (id, date, age, count) is
+    unmatched. Such a token is never a tolerated uncovered run: absent, the
+    band lacks identifying evidence (the OCR tier abstains); replaced by
+    another digit token, it is a contradiction (:func:`_contradicted`)."""
+    return any(not m and _has_digit(t) for t, m in zip(exp, matched))
+
+
+def _extra_digit_token(exp: list[str], obs: list[str], explained: list[bool]) -> bool:
+    """Whether the live band shows a digit-bearing token nothing recorded
+    explains while the recorded band shows one. A recorded id can match a
+    copy of its value elsewhere in the live band ("15 patients found")
+    while the record's own differing id sits unexplained, so the band
+    abstains."""
+    return any(_has_digit(t) for t in exp) and any(
+        not explained[j] and _has_digit(o) for j, o in enumerate(obs)
+    )
+
+
+def _name_token_replaced(
+    exp: list[str], obs: list[str], matched: list[bool], explained: list[bool]
+) -> bool:
+    """Whether a recorded alphabetic token is unmatched while the live band
+    shows an alphabetic token nothing recorded explains. A replaced name of
+    any length ("Ann" -> "J", "al" -> "joan") may be OCR noise or another
+    record, so the band abstains."""
+    return any(not m and _alpha_dominated(t) for t, m in zip(exp, matched)) and any(
+        not explained[j] and _alpha_dominated(o) for j, o in enumerate(obs)
+    )
+
+
+def _band_match_normalized(
     expected_text: str,
     observed_text: str,
     *,
     contradiction_sim: float = CONTRADICTION_SIM,
+    normalizer: Callable[[str], str],
+    punctuation_witness: bool,
 ) -> BandMatch:
     """Match a recorded band against a live band, token-wise.
 
@@ -1293,11 +1724,12 @@ def band_match(
         contradicted_chars, suspect_chars, unexplained_name_tokens,
         max_absent_alpha_token, glyph_ambiguous_id_chars).
     """
-    exp = tokenize(expected_text)
+    exp = [normalizer(t) for t in expected_text.split() if normalizer(t)]
     if not exp:
         return BandMatch(0.0, 0, 0)
-    obs_raw = [tok for tok in observed_text.split() if squash(tok)]
-    obs = [squash(tok) for tok in obs_raw]
+    exp_raw = [tok for tok in expected_text.split() if normalizer(tok)]
+    obs_raw = [tok for tok in observed_text.split() if normalizer(tok)]
+    obs = [normalizer(tok) for tok in obs_raw]
     exp_c = [ocr_canonical(t) for t in exp]
     obs_c_all = [ocr_canonical(t) for t in obs]
     (
@@ -1405,14 +1837,27 @@ def band_match(
     # verify_target_identity reads a positive charge here as ABSTAIN (OCR
     # cannot certify), not verify and not mismatch.
     glyph_ambiguous_id_chars = glyph_id_chars
-    evidence_short = identity_evidence_shortfall(
-        [identity_kind(t) for t in exp],
-        matched,
-        raw_matched,
-        [_has_lookalike(t) for t in exp],
+    evidence_short = (
+        (punctuation_witness and not _punctuation_tokens_agree(exp, obs))
+        or identity_evidence_shortfall(
+            [identity_kind(t) for t in exp],
+            matched,
+            raw_matched,
+            [_has_lookalike(t) for t in exp],
+        )
+        or _digit_token_absent(exp, matched)
+        or _extra_digit_token(exp, obs, explained)
+        or _name_token_replaced(exp, obs, matched, explained)
     )
+    coverage, no_bearing = identity_coverage(
+        [len(t) for t in exp],
+        matched,
+        [identity_bearing(r, t) for r, t in zip(exp_raw, exp)],
+    )
+    if no_bearing or not _digit_floor_met([_has_digit(t) for t in exp], raw_matched):
+        evidence_short = True
     return BandMatch(
-        matched_chars / total_chars,
+        coverage,
         max(uncovered_runs, default=0),
         contradicted_chars,
         suspect_chars,
@@ -1423,11 +1868,79 @@ def band_match(
     )
 
 
+def band_match(
+    expected_text: str,
+    observed_text: str,
+    *,
+    contradiction_sim: float = CONTRADICTION_SIM,
+) -> BandMatch:
+    """Legacy diagnostic scores with independently strict verdict evidence.
+
+    Noise scores describe OCR similarity; they never authorize verification.
+    ``band_verdict`` and every budget helper select the strict comparison.
+    """
+    strict = _band_match_normalized(
+        expected_text,
+        observed_text,
+        contradiction_sim=contradiction_sim,
+        normalizer=comparison_squash,
+        punctuation_witness=True,
+    )
+    diagnostics = _band_match_normalized(
+        expected_text,
+        observed_text,
+        contradiction_sim=contradiction_sim,
+        normalizer=squash,
+        punctuation_witness=False,
+    )
+    if diagnostics == strict:
+        return strict
+    result = _DiagnosticBandMatch(*strict)
+    result.diagnostic_match = diagnostics
+    return result
+
+
+def _punctuation_noise_match(expected_text: str, observed_text: str) -> BandMatch:
+    return _band_match_normalized(
+        expected_text,
+        observed_text,
+        normalizer=squash,
+        punctuation_witness=False,
+    )
+
+
+def _status_with_punctuation_noise(
+    strict: BandMatch,
+    noise: Optional[BandMatch],
+) -> tuple[
+    Literal["verified", "mismatch", "abstain"],
+    Optional[Literal["glyph_confusable_identifier", "identity_evidence_short"]],
+]:
+    """A noise comparison can supply uncertainty, never positive evidence."""
+    status = band_verdict(strict)
+    if (
+        status == "mismatch"
+        and noise is not None
+        and band_verdict(noise) == "abstain"
+        and band_abstain_reason(noise) == "glyph_confusable_identifier"
+    ):
+        return "abstain", "glyph_confusable_identifier"
+    return status, band_abstain_reason(strict)
+
+
 def _token_belongs_to(token: str, value_squashed: str) -> bool:
     """Whether a band token is (part of) a parameter's demonstrated value."""
     if not token or not value_squashed:
         return False
-    if token in value_squashed or value_squashed in token:
+    if value_squashed in token:
+        return True
+    if _has_digit(token):
+        # A digit token is never dropped for being inside the value or merely
+        # similar to it: "15" (a PatNum) sits inside "20150101" (a date) and
+        # "547" is near "15470"; each is its own field. Only the value itself,
+        # read with OCR's confusions ("l5470"), belongs to it.
+        return ocr_canonical(token) == ocr_canonical(value_squashed)
+    if token in value_squashed:
         return True
     ratio = difflib.SequenceMatcher(None, token, value_squashed, autojunk=False).ratio()
     # Same-token-with-OCR-jitter question ("Phi1" ~ "Phil"): the token
@@ -1450,7 +1963,7 @@ def strip_param_caret(band_text: str, param_examples: dict[str, str]) -> str:
     ONE caret glyph is rewritten; anything else is left for the matcher.
     """
     for example in param_examples.values():
-        if len(squash(example or "")) < MIN_PARAM_CHARS:
+        if len(comparison_squash(example or "")) < MIN_PARAM_CHARS:
             continue
         band_text = re.sub(
             r"(?i)(?<!\S)("
@@ -1478,11 +1991,11 @@ def substitute_param(band_text: str, example: str, value: str) -> str:
     pattern = re.compile(re.escape(example), re.IGNORECASE)
     if pattern.search(band_text):
         return pattern.sub(value, band_text)
-    example_squashed = squash(example)
+    example_squashed = comparison_squash(example)
     kept = [
         tok
         for tok in band_text.split()
-        if not _token_belongs_to(squash(tok), example_squashed)
+        if not _token_belongs_to(comparison_squash(tok), example_squashed)
     ]
     return " ".join(kept + [value])
 
@@ -1494,15 +2007,153 @@ def embedded_params(context_text: str, param_examples: dict[str, str]) -> list[s
     covered >= ``COVERAGE_THRESHOLD`` inside the squashed context (OCR may
     mangle the odd character of the recorded band).
     """
-    ctx = squash(context_text)
+    ctx = comparison_squash(context_text)
     names = []
     for name, example in param_examples.items():
-        ex = squash(example or "")
+        ex = comparison_squash(example or "")
         if len(ex) < MIN_PARAM_CHARS:
             continue
         if coverage(ex, ctx) >= COVERAGE_THRESHOLD:
             names.append(name)
     return names
+
+
+def parameter_token_ownership(
+    context_text: str, param_examples: dict[str, str]
+) -> dict[str, list[int]]:
+    """Existing whole-token ownership rule, shared by writer and verifier."""
+    embedded = set(embedded_params(context_text, param_examples))
+    owned_parameters: dict[str, list[int]] = {}
+    raw_token_spans = [match.span() for match in re.finditer(r"\S+", context_text)]
+    for name, example in param_examples.items():
+        if name not in embedded:
+            continue
+        ex = comparison_squash(example or "")
+        # Match the plaintext substitute path exactly. When the complete
+        # demonstrated value occurs verbatim, own only tokens inside that
+        # occurrence. Otherwise use the same OCR-jitter fallback as
+        # ``substitute_param``. Without the span rule, a value such as an
+        # email containing an MRN substring could also claim and remove a
+        # separate MRN token, turning a wrong-record mismatch into verify.
+        occurrences = list(re.finditer(re.escape(example), context_text, re.IGNORECASE))
+        if occurrences:
+            owned: set[int] = set()
+            aligned = True
+            for occurrence in occurrences:
+                start, end = occurrence.span()
+                overlapping = [
+                    j
+                    for j, (token_start, token_end) in enumerate(raw_token_spans)
+                    if token_start < end and token_end > start
+                ]
+                if not overlapping:
+                    aligned = False
+                    break
+                first, last = overlapping[0], overlapping[-1]
+                if (
+                    raw_token_spans[first][0] != start
+                    or raw_token_spans[last][1] != end
+                ):
+                    # The parameter occupies only part of a larger token.
+                    # The current template IR cannot retain the token's
+                    # dynamic prefix/suffix while replacing its middle;
+                    # leave it hashed and safely over-halt on changed input.
+                    aligned = False
+                    break
+                owned.update(overlapping)
+            idxs = sorted(owned) if aligned else []
+        else:
+            idxs = [
+                j
+                for j, t in enumerate(tokenize(context_text))
+                if _token_belongs_to(t, ex)
+            ]
+        if idxs:
+            owned_parameters[name] = idxs
+    character_occurrences = [
+        (name, match.start(), match.end())
+        for name in embedded
+        for match in re.finditer(
+            re.escape(param_examples[name]), context_text, re.IGNORECASE
+        )
+    ]
+    ambiguous = {
+        left_name
+        for left_name, start, end in character_occurrences
+        for right_name, other_start, other_end in character_occurrences
+        if left_name != right_name and start < other_end and end > other_start
+    }
+    for name in sorted(ambiguous):
+        # An explicit unknown entry survives hashing and forces refusal;
+        # dropping an ambiguous parameter must not make it look unbound.
+        owned_parameters[name] = []
+    return owned_parameters
+
+
+def parameter_projection(
+    keys: list[str],
+    owned: dict[str, list[int]],
+    examples: dict[str, list[str]],
+    positional: list[bool],
+    replacement_positional: dict[str, bool],
+) -> Optional[tuple[list[tuple[int, int, str]], list[str]]]:
+    """Exact contiguous replacements plus explicit legacy OCR append modes.
+
+    No short key run may claim an index outside its declared ownership.
+    Cross-parameter overlap, malformed indices and partially exact ownership
+    are unknown, not permission to delete a neighboring field.
+    """
+    if len(positional) != len(keys):
+        return None
+    used: set[int] = set()
+    spans: list[tuple[int, int, str]] = []
+    fallback: list[str] = []
+    for name, indices in owned.items():
+        if (
+            not indices
+            or any(type(i) is not int for i in indices)
+            or indices != sorted(set(indices))
+            or any(i < 0 or i >= len(keys) or i in used for i in indices)
+        ):
+            return None
+        used.update(indices)
+        expected = examples.get(name, [])
+        if not expected:
+            return None
+        remaining = set(indices)
+        found: list[tuple[int, int, str]] = []
+        i = 0
+        while i + len(expected) <= len(keys):
+            end = i + len(expected)
+            if keys[i:end] == expected:
+                if not set(range(i, end)) <= remaining:
+                    return None
+                found.append((i, end, name))
+                remaining.difference_update(range(i, end))
+                i = end
+            else:
+                i += 1
+        if found:
+            if remaining:
+                return None
+            spans.extend(found)
+        else:
+            if indices != list(range(indices[0], indices[-1] + 1)) or any(
+                keys[i] in expected for i in indices
+            ):
+                return None
+            fallback.append(name)
+    if len(fallback) > 1:
+        return None
+    if fallback and (
+        any(positional[i] for i in range(len(keys)) if i not in used)
+        or any(replacement_positional.get(name, True) for name in owned)
+    ):
+        # A lossy OCR-owned span has no exact position. Only the old
+        # order-insensitive projection is supported: no retained contextual
+        # punctuation and no newly inserted punctuation may depend on it.
+        return None
+    return sorted(spans), fallback
 
 
 def _band_ok_sans_glyph(match: BandMatch) -> bool:
@@ -1513,6 +2164,7 @@ def _band_ok_sans_glyph(match: BandMatch) -> bool:
     that fails any of them is a real ``mismatch``. The glyph budget is
     handled separately (see :func:`band_verdict`) because a collapsible
     identifier is an ABSTAIN (OCR cannot tell), not affirmative evidence."""
+    match = _authoritative_band_match(match)
     return (
         match.coverage >= COVERAGE_THRESHOLD
         and match.max_uncovered_run <= UNCOVERED_RUN_CAP
@@ -1526,6 +2178,7 @@ def _band_ok_sans_glyph(match: BandMatch) -> bool:
 def _band_ok(match: BandMatch) -> bool:
     """The pinned operating point: all of :func:`_band_ok_sans_glyph` AND the
     glyph-ambiguous-identifier budget. A fully-clean band (verifies)."""
+    match = _authoritative_band_match(match)
     return (
         _band_ok_sans_glyph(match)
         and match.glyph_ambiguous_id_chars <= GLYPH_AMBIGUOUS_ID_CHARS_CAP
@@ -1551,6 +2204,7 @@ def band_verdict(match: BandMatch) -> Literal["verified", "mismatch", "abstain"]
       clean name+DOB (optionally corroborated by a non-confusable identifier)
       genuinely discriminates.
     """
+    match = _authoritative_band_match(match)
     if not _band_ok_sans_glyph(match):
         return "mismatch"
     if match.glyph_ambiguous_id_chars > GLYPH_AMBIGUOUS_ID_CHARS_CAP:
@@ -1566,6 +2220,7 @@ def band_abstain_reason(
     match: BandMatch,
 ) -> Optional[Literal["glyph_confusable_identifier", "identity_evidence_short"]]:
     """Why :func:`band_verdict` abstains on ``match``, or None if it does not."""
+    match = _authoritative_band_match(match)
     if band_verdict(match) != "abstain":
         return None
     if match.glyph_ambiguous_id_chars > GLYPH_AMBIGUOUS_ID_CHARS_CAP:
@@ -1614,10 +2269,10 @@ def verify_target_identity(
     run_values = {k: str(v) for k, v in (params or {}).items() if isinstance(v, str)}
     if run_values:
         observed_text = strip_param_caret(observed_text, run_values)
-    hay = squash(observed_text)
+    hay = comparison_squash(observed_text)
     expected = context_text
 
-    if len(squash(context_text)) < MIN_CONTEXT_CHARS:
+    if len(comparison_squash(context_text)) < MIN_CONTEXT_CHARS:
         # A band this short ("Active High 3") is generic: any sibling row
         # sharing the generic columns would verify. The compiler no longer
         # stores such bands; when one arrives via an older bundle, identity
@@ -1637,6 +2292,33 @@ def verify_target_identity(
         # (any row mentioning "Susan") must not verify.
         if not hay:
             return IdentityCheck(status="unreadable", mode="param", expected=expected)
+        owned = parameter_token_ownership(context_text, param_examples)
+        if (
+            owned
+            and parameter_projection(
+                tokenize(context_text),
+                owned,
+                {name: tokenize(param_examples[name]) for name in owned},
+                [
+                    _punctuation_token(word) and not _has_digit(word)
+                    for word in tokenize(context_text)
+                ],
+                {
+                    name: any(
+                        _punctuation_token(word)
+                        for word in tokenize(params.get(name, param_examples[name]))
+                    )
+                    for name in owned
+                },
+            )
+            is None
+        ):
+            return IdentityCheck(
+                status="abstain",
+                mode="param",
+                expected=expected,
+                observed=observed_text,
+            )
         substituted = context_text
         for name in in_band:
             substituted = substitute_param(
@@ -1645,7 +2327,7 @@ def verify_target_identity(
                 params.get(name, param_examples[name]),
             )
         for name in in_band:
-            value = squash(params.get(name, param_examples[name]))
+            value = comparison_squash(params.get(name, param_examples[name]))
             run = longest_run(value, hay)
             need = required_run(len(value))
             if run < need:
@@ -1671,9 +2353,17 @@ def verify_target_identity(
     if not hay:
         return IdentityCheck(status="unreadable", expected=expected)
     match = band_match(context_text, observed_text)
+    # Minimal scope: no lossy fallback for parameterized calls. Their strict
+    # ownership/substitution path remains authoritative and may over-halt.
+    noise = (
+        _punctuation_noise_match(context_text, observed_text)
+        if not params and not param_examples
+        else None
+    )
+    status, reason = _status_with_punctuation_noise(match, noise)
     return IdentityCheck(
-        status=band_verdict(match),
-        abstain_reason=band_abstain_reason(match),
+        status=status,
+        abstain_reason=reason,
         coverage=round(match.coverage, 4),
         expected=expected,
         observed=observed_text,
@@ -2344,7 +3034,10 @@ def identity_rests_on_confusable_identifier(text: Optional[str]) -> bool:
     """
     if not text:
         return False
-    return any(_is_glyph_vulnerable_identifier(squash(tok)) for tok in tokenize(text))
+    return any(
+        _is_glyph_vulnerable_identifier(comparison_squash(tok))
+        for tok in tokenize(text)
+    )
 
 
 def verify_vlm_identity(
@@ -2415,6 +3108,34 @@ def crop_region(frame_png: bytes, region: Region) -> Optional[bytes]:
     if x1 <= x0 or y1 <= y0:
         return None
     ok, buf = cv2.imencode(".png", img[y0:y1, x0:x1])
+    return buf.tobytes() if ok else None
+
+
+def mask_outside(frame_png: bytes, region: Region) -> Optional[bytes]:
+    """Blank every pixel of a PNG frame outside ``region`` (x, y, w, h).
+
+    The identity band of a target inside a dialog is read on this frame, at
+    record and at replay time, so the page behind the dialog cannot reach the
+    OCR at all: a label beside the dialog is neither read nor merged into a
+    line with the dialog's own text. The fill is flat white, which OCR reads
+    as no text. Returns None when the frame cannot be decoded or the region
+    is empty.
+    """
+    import cv2
+    import numpy as np
+
+    img = cv2.imdecode(np.frombuffer(frame_png, np.uint8), cv2.IMREAD_COLOR)
+    if img is None:
+        return None
+    h, w = img.shape[:2]
+    x0, y0 = max(0, int(region[0])), max(0, int(region[1]))
+    x1 = min(w, int(region[0]) + int(region[2]))
+    y1 = min(h, int(region[1]) + int(region[3]))
+    if x1 <= x0 or y1 <= y0:
+        return None
+    out = np.full_like(img, 255)
+    out[y0:y1, x0:x1] = img[y0:y1, x0:x1]
+    ok, buf = cv2.imencode(".png", out)
     return buf.tobytes() if ok else None
 
 

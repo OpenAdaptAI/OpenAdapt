@@ -158,6 +158,39 @@ def test_scrubbing_keeps_the_values_the_operator_named(monkeypatch) -> None:
 # -- the Claude loop -------------------------------------------------------------
 
 
+def _png() -> bytes:
+    import io
+
+    from PIL import Image
+
+    out = io.BytesIO()
+    Image.new("RGB", (4, 4), (255, 255, 255)).save(out, format="PNG")
+    return out.getvalue()
+
+
+_TINY_PNG = _png()
+
+
+class _OutboundScrubber(_Scrubber):
+    """Text and image scrubbing for the model-facing screenshots."""
+
+    def __init__(self) -> None:
+        self.images = 0
+
+    def scrub_image(self, image, fill_color=None):
+        self.images += 1
+        return image
+
+
+@pytest.fixture(autouse=True)
+def _outbound_scrubber():
+    """Screenshots sent to the model are redacted first (agents._image)."""
+    scrubber = _OutboundScrubber()
+    privacy.set_text_scrubber(scrubber)
+    yield scrubber
+    privacy.reset_scrubbers()
+
+
 class _Harness:
     """Stands in for the browser harness: a fixed listing and counters."""
 
@@ -171,7 +204,7 @@ class _Harness:
 
     def screenshot(self, why: str = "requested") -> bytes:
         self.stats.screenshots_requested += 1
-        return b"\x89PNG fake"
+        return _TINY_PNG
 
     def click(self, ref: str) -> None:
         if ref == "e9":
@@ -216,7 +249,7 @@ class _Client:
 REQUEST = TaskRequest(task_id="t", instruction="Save it", inputs={})
 
 
-def test_claude_loop_counts_tokens_and_the_gate_screenshot() -> None:
+def test_claude_loop_counts_tokens_and_the_gate_screenshot(_outbound_scrubber) -> None:
     client = _Client(
         [
             ("click", {"ref": "e9"}),
@@ -229,6 +262,7 @@ def test_claude_loop_counts_tokens_and_the_gate_screenshot() -> None:
     assert ledger.finished and ledger.summary == "done"
     assert ledger.model_calls == 3 and ledger.tool_errors == 1  # the stale ref
     assert harness.clicks == ["e1"]
+    assert _outbound_scrubber.images >= 1  # redacted before the model saw it
     # The save's result carried a screenshot: the verification gate.
     messages = client.requests[2]["messages"]  # the loop appends to one list
     third = messages[4]["content"][0]["content"]
@@ -275,6 +309,8 @@ def test_ledger_prices_opus() -> None:
 
 
 def test_the_emitted_mcp_server_parses(tmp_path: Path) -> None:
+    import runpy
+
     from openadapt_flow.compile_agent.emit import emit_mcp
     from openadapt_flow.jit.signature import TaskSignature
 
@@ -286,7 +322,12 @@ def test_the_emitted_mcp_server_parses(tmp_path: Path) -> None:
     tree = ast.parse(path.read_text())
     funcs = [n.name for n in tree.body if isinstance(n, ast.FunctionDef)]
     assert funcs == ["demo_add_note"]
-    assert "note: str" in path.read_text()
+    pytest.importorskip("mcp")
+    namespace = runpy.run_path(str(path))
+    tool = next(iter(namespace["mcp"]._tool_manager._tools.values()))
+    assert set(tool.parameters["properties"]) == {"note"}
+    assert tool.parameters["properties"]["note"]["type"] == "string"
+    assert tool.parameters["required"] == ["note"]
 
 
 # -- the save gate ----------------------------------------------------------------
@@ -334,11 +375,11 @@ class _Computer:
         self.executed: list[dict[str, Any]] = []
 
     def screenshot(self) -> bytes:
-        return b"png"
+        return _TINY_PNG
 
     def execute(self, native: dict[str, Any]) -> Any:
         self.executed.append(native)
-        return SimpleNamespace(png=b"png", notes=[])
+        return SimpleNamespace(png=_TINY_PNG, notes=[])
 
 
 def _refused(computer: _Computer, native: dict[str, Any], tmp_path: Path) -> Any:
@@ -457,7 +498,7 @@ def test_a_ref_is_stale_when_its_row_changed() -> None:
 
 
 @pytest.mark.parametrize("backend", ["windows", "macos", "linux", "rdp", "citrix"])
-def test_a_non_web_backend_is_refused_before_anything_runs(
+def test_a_non_web_backend_without_a_deployment_is_refused(
     backend: str, tmp_path: Path, capsys
 ) -> None:
     from openadapt_flow.__main__ import build_parser
@@ -469,8 +510,8 @@ def test_a_non_web_backend_is_refused_before_anything_runs(
         ["compile-agent", "Save {note}", "--backend", backend, "--url", "http://a"]
     )
     assert cmd_compile_agent(args) == 2
-    assert f"the {backend!r} backend" in capsys.readouterr().err
-    with pytest.raises(UnsupportedTarget, match="web apps only"):
+    assert "--config deploy.yaml" in capsys.readouterr().err
+    with pytest.raises(UnsupportedTarget, match="deployment file"):
         FirstRunCompiler(
             "Save {note}",
             params=["note"],
@@ -482,7 +523,7 @@ def test_a_non_web_backend_is_refused_before_anything_runs(
         )
 
 
-def test_a_deployment_naming_another_backend_is_refused(tmp_path: Path, capsys) -> None:
+def test_a_url_with_a_non_web_deployment_is_refused(tmp_path: Path, capsys) -> None:
     from openadapt_flow.__main__ import build_parser
     from openadapt_flow.compile_agent.cli import cmd_compile_agent
 
@@ -492,7 +533,94 @@ def test_a_deployment_naming_another_backend_is_refused(tmp_path: Path, capsys) 
         ["compile-agent", "Save {note}", "--url", "http://a", "--config", str(config)]
     )
     assert cmd_compile_agent(args) == 2
-    assert "'citrix' backend" in capsys.readouterr().err
+    assert "the 'citrix' app comes from --config" in capsys.readouterr().err
+
+
+def test_a_deployment_naming_an_unknown_backend_is_refused(
+    tmp_path: Path, capsys
+) -> None:
+    from openadapt_flow.__main__ import build_parser
+    from openadapt_flow.compile_agent.cli import cmd_compile_agent
+
+    config = tmp_path / "deployment.yaml"
+    config.write_text("backend:\n  kind: vnc\n")
+    args = build_parser().parse_args(
+        ["compile-agent", "Save {note}", "--config", str(config)]
+    )
+    assert cmd_compile_agent(args) == 2
+    assert "names backend 'vnc'" in capsys.readouterr().err
+
+
+def test_a_non_web_deployment_runs_the_surface_pipeline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openadapt_flow.__main__ import build_parser
+    from openadapt_flow.compile_agent import cli, pipeline
+
+    seen: dict[str, Any] = {}
+
+    def fake_compile_first_run(prompt: str, **kwargs: Any) -> Any:
+        seen.update(kwargs)
+        return pipeline.CompileResult(
+            status="unsupported", dir=tmp_path, task_key="t", detail="stub"
+        )
+
+    monkeypatch.setattr(pipeline, "compile_first_run", fake_compile_first_run)
+    steps = tmp_path / "steps.json"
+    steps.write_text('{"steps": [{"click": "Save"}]}')
+    config = tmp_path / "deployment.yaml"
+    config.write_text("backend:\n  kind: macos\n  macos_app: Calculator\n")
+    args = build_parser().parse_args(
+        [
+            "compile-agent",
+            "Save {note}",
+            "--config",
+            str(config),
+            "--verify",
+            str(tmp_path / "verify.yaml"),
+            "--expect",
+            "id=1",
+            "--on-screen",
+            "MRN P1",
+            "--param",
+            "note=x",
+            "--agent",
+            str(steps),
+        ]
+    )
+    cli.cmd_compile_agent(args, interactive=lambda: False)
+    assert seen["url"] is None
+    assert seen["surface_config"] == str(config)
+    assert seen["agent"].drives_surfaces is True
+
+
+def test_a_surface_task_spec_keeps_no_credentials(tmp_path: Path) -> None:
+    from openadapt_flow.compile_agent import FirstRunCompiler
+
+    config = tmp_path / "deployment.yaml"
+    config.write_text(
+        "backend:\n  kind: windows\n  agent_url: https://10.0.0.5:5000\n"
+        "  agent_token: s3cret-token\n"
+    )
+    verify = tmp_path / "verify.yaml"
+    verify.write_text(
+        "verifier:\n  kind: rest\n  base_url: http://127.0.0.1:1\n"
+        "  records_path: /records\n  records_key: records\n"
+    )
+    compiler = FirstRunCompiler(
+        "Save {note}",
+        params=["note"],
+        surface_config=config,
+        verify=verify,
+        expect={"patient_id": "p1"},
+        on_screen=["MRN P1"],
+        cache_dir=tmp_path / "cache",
+    )
+    spec = compiler.save_spec()
+    assert "s3cret-token" not in spec.read_text()
+    again = FirstRunCompiler.load(compiler.dir)
+    assert again.surface.agent_token == "s3cret-token"  # re-read from the file
+    assert again.backend_kind == "windows"
 
 
 def test_a_non_http_url_is_refused(capsys) -> None:

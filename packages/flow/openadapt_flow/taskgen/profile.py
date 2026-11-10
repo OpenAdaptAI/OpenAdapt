@@ -9,6 +9,7 @@ else: no app name appears in the generator's code.
 
 from __future__ import annotations
 
+import builtins
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -50,6 +51,13 @@ class FieldSpec:
             "number": "NUMERIC(12,2)",
         }[self.type]
 
+    @property
+    def ref_entity(self) -> str:
+        """The record type a ref field points at; refuses a field with none."""
+        if self.entity is None:
+            raise ProfileError(f"{self.name} names no entity")
+        return self.entity
+
 
 @dataclass(frozen=True)
 class EntitySpec:
@@ -77,7 +85,28 @@ class EntitySpec:
         raise ProfileError(f"{self.name} has no field {name!r}")
 
     @property
-    def editable(self) -> list[FieldSpec]:
+    def key_field(self) -> str:
+        """The key field; refuses a record type that has none."""
+        if self.key is None:
+            raise ProfileError(f"{self.name} has no key field")
+        return self.key
+
+    @property
+    def parent_ref(self) -> tuple[str, str]:
+        """The parent record type and the field that links to it."""
+        if self.parent is None:
+            raise ProfileError(f"{self.name} has no parent")
+        return self.parent
+
+    @property
+    def identity_field(self) -> str:
+        """The field that tells one of a person's records from another."""
+        if self.identify_by is None:
+            raise ProfileError(f"{self.name} has no identify_by field")
+        return self.identify_by
+
+    @property
+    def editable(self) -> builtins.list[FieldSpec]:
         """Fields a person types or picks on the edit and new forms."""
         return [f for f in self.fields if not f.readonly]
 

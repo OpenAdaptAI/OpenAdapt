@@ -51,11 +51,9 @@ REPEATS = 3
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-
-    from playwright.sync_api import sync_playwright
 
     from openadapt_flow import vision
     from openadapt_flow.runtime.local_grounder import LocalGroundingModel
@@ -65,6 +63,7 @@ def main() -> int:
         _scaled_click_point,
     )
     from openadapt_flow.vision.ocr import OcrResolutionRefused
+    from playwright.sync_api import sync_playwright
 
     model = LocalGroundingModel.load()
     rows = []

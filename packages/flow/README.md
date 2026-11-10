@@ -18,6 +18,17 @@ openadapt-flow compile rec --out bundle --name my-task                          
 openadapt-flow replay bundle --url https://your-test-app.example                     # 3. run
 ```
 
+A desktop app records the same way, with `--window` as its target:
+
+```bash
+pip install 'openadapt-flow[capture,macos]'
+openadapt-flow record --backend macos --window "Your App" --out rec
+openadapt-flow compile rec --out bundle --name my-task
+openadapt-flow replay bundle --macos-app "Your App"
+```
+
+Windows, Linux, RDP and Citrix: [SURFACES.md](docs/SURFACES.md#first-workflow-per-surface).
+
 `replay` is a rehearsal that doesn't read the record back. A production run
 (`openadapt-flow run`) also checks each save; see
 [Try it on your app](#try-it-on-your-app).
@@ -59,6 +70,16 @@ or Edge. Without either, it downloads Playwright's headless Chromium once
 `bundled` to choose. With the
 [OpenAdapt launcher](https://github.com/OpenAdaptAI/OpenAdapt) installed,
 `openadapt flow demo` runs the same command.
+
+Browser startup requires two advancing animation-frame callbacks before an
+application is opened or driven. A new browser is checked on its own blank
+page. An attached browser is checked on the explicitly selected page without
+navigation, focus changes or DOM changes. If progress or cleanup cannot be
+established, startup refuses with `browser_rendering_unavailable` or
+`browser_readiness_unavailable`. The probe never closes an attached browser or
+its existing pages. This checks startup callback progress; it does not replace
+actionability checks or record verification, and an attached page's RAF API
+is not a native rendering attestation.
 
 On macOS, most of a first run in a new environment goes to loading OpenCV,
 which RapidOCR, the default OCR engine, needs. macOS checks each copy of a
@@ -265,7 +286,9 @@ no implicit browser default in production; with a hand-written config, set
 `backend.kind` or pass `--backend`.
 
 `certify` checks the bundle against a policy. `clinical-write` is the strict
-built-in policy, and `permissive` is a smoke check. A new recording usually
+built-in policy, `record-write` asks for the same evidence for a system of
+record that is not clinical (claims or back-office, say), and `permissive` is
+a smoke check. A new recording usually
 fails `clinical-write` until its contracts are complete; `lint` lists the
 gaps. `run --profile standard` checks the policy again, replays, and reads the
 record back.
@@ -303,13 +326,19 @@ Install the extras for the surface that records and replays the workflow:
 each surface, and [docs/PRODUCT_STATUS.md](docs/PRODUCT_STATUS.md) lists the
 evidence for each one. A bundle is bound to the surface it was recorded on.
 
-A bundle drives one surface by default: one browser tab, one desktop app, or
-one remote desktop session. A bundle can also declare more than one surface:
-popups and new tabs it opens, or another backend it switches to with an
-explicit, identity-checked step. See [docs/MULTI_SURFACE.md](docs/MULTI_SURFACE.md)
-for this and its limits. Otherwise, record one bundle per surface and chain
-them with `openadapt-flow compose`. Each child starts
-only after the one before it ends with a checked save, unless you allow a
+A bundle can span several surfaces: popups and tabs a web app opens, and
+other windows the work moves to, such as a native app or a remote desktop.
+Record it in one session and switch windows as you normally do:
+
+```bash
+openadapt-flow record --url https://portal.example --surface chart=linux:Chart --out rec
+```
+
+Each change of window becomes an identity-checked switch step, and an action
+in a window you did not declare stops the recording. See
+[docs/MULTI_SURFACE.md](docs/MULTI_SURFACE.md). Separately recorded bundles
+can also be chained with `openadapt-flow compose`. Each child starts only
+after the one before it ends with a checked save, unless you allow a
 specific stop with `--allow-halt`.
 
 ## Give your agent a program, not a mouse

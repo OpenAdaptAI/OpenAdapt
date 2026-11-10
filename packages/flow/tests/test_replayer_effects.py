@@ -38,6 +38,7 @@ from openadapt_flow.runtime.effects import (
     RestRecordVerifier,
 )
 from openadapt_flow.runtime.replayer import Replayer
+from tests._rest_read_contract_fixtures import mockmed_rest_read_kwargs
 
 # Reuse the scripted fakes from the main replayer unit tests (pytest's
 # prepend import mode puts tests/ on sys.path).
@@ -162,7 +163,7 @@ def test_effect_confirmed_proceeds(tmp_path):
         replayer = Replayer(
             backend,
             vision=vision,
-            effect_verifier=RestRecordVerifier(url),
+            effect_verifier=RestRecordVerifier(url, **mockmed_rest_read_kwargs()),
             poll_interval_s=0.01,
         )
         report = replayer.run(workflow, bundle_dir=bundle, run_dir=run_dir)
@@ -204,7 +205,7 @@ def test_effect_refuted_halts_despite_green_screen(tmp_path):
         replayer = Replayer(
             backend,
             vision=vision,
-            effect_verifier=RestRecordVerifier(url),
+            effect_verifier=RestRecordVerifier(url, **mockmed_rest_read_kwargs()),
             poll_interval_s=0.01,
         )
         report = replayer.run(workflow, bundle_dir=bundle, run_dir=run_dir)
@@ -251,8 +252,10 @@ def test_effect_duplicate_irreversible_reconciles_as_rolled_back(tmp_path):
         replayer = Replayer(
             backend,
             vision=vision,
-            effect_verifier=RestRecordVerifier(url),
-            effect_compensator=RestCompensator(url),
+            effect_verifier=RestRecordVerifier(url, **mockmed_rest_read_kwargs()),
+            effect_compensator=RestCompensator(
+                url, delete_path_template="/api/encounter/{id}"
+            ),
             poll_interval_s=0.01,
         )
         report = replayer.run(workflow, bundle_dir=bundle, run_dir=run_dir)
@@ -295,7 +298,7 @@ def test_effect_duplicate_irreversible_without_compensator_halts(tmp_path):
         replayer = Replayer(
             backend,
             vision=vision,
-            effect_verifier=RestRecordVerifier(url),
+            effect_verifier=RestRecordVerifier(url, **mockmed_rest_read_kwargs()),
             # no compensator configured
             poll_interval_s=0.01,
         )
@@ -487,7 +490,7 @@ def test_effect_evidence_records_a_loopback_verifier_endpoint(tmp_path):
         report = Replayer(
             WritingBackend(url),
             vision=_vision_that_confirms_saved(),
-            effect_verifier=RestRecordVerifier(url),
+            effect_verifier=RestRecordVerifier(url, **mockmed_rest_read_kwargs()),
             poll_interval_s=0.01,
         ).run(workflow, bundle_dir=bundle, run_dir=run_dir)
 
@@ -503,15 +506,21 @@ def test_effect_evidence_records_a_loopback_verifier_endpoint(tmp_path):
 def test_effect_evidence_marks_a_remote_verifier_endpoint_external():
     from openadapt_flow.runtime.replayer import effect_endpoint_scope
 
-    assert effect_endpoint_scope(RestRecordVerifier("https://emr.example.com")) == (
-        "external"
-    )
-    assert effect_endpoint_scope(RestRecordVerifier("http://[::1]:8080")) == (
-        "loopback"
-    )
-    assert effect_endpoint_scope(RestRecordVerifier("http://localhost:8080")) == (
-        "loopback"
-    )
+    assert effect_endpoint_scope(
+        RestRecordVerifier(
+            "https://emr.example.com", records_path="/api/db", records_key="records"
+        )
+    ) == ("external")
+    assert effect_endpoint_scope(
+        RestRecordVerifier(
+            "http://[::1]:8080", records_path="/api/db", records_key="records"
+        )
+    ) == ("loopback")
+    assert effect_endpoint_scope(
+        RestRecordVerifier(
+            "http://localhost:8080", records_path="/api/db", records_key="records"
+        )
+    ) == ("loopback")
     assert effect_endpoint_scope(object()) == "unknown"
 
 

@@ -98,6 +98,11 @@ def _run1_save(tmp_path: Path, base: str, store: _Store, **extra: Any) -> str:
                     "kind": "fhir",
                     "base_url": base,
                     "resource_type": "Observation",
+                    "field_paths": {
+                        "id": "id",
+                        "patient": "subject.reference",
+                        "note": "valueString",
+                    },
                     "timeout_s": 2.0,
                     **extra,
                 }
@@ -156,3 +161,80 @@ def test_the_database_snapshot_is_not_a_readback_source(
     verify.write_text(yaml.safe_dump({"verifier": {"kind": kind}}))
     with pytest.raises(RecordSorError):
         load_observer(verify)
+
+
+@pytest.mark.parametrize("path", ["meta.lastUpdated", "meta.versionId", "meta"])
+def test_run1_refuses_mapped_server_metadata_before_recording(
+    tmp_path: Path, path: str
+) -> None:
+    from openadapt_flow.compile_agent.pipeline import FirstRunCompiler
+
+    verify = tmp_path / "verify.yaml"
+    verify.write_text(
+        yaml.safe_dump(
+            {
+                "verifier": {
+                    "kind": "fhir",
+                    "base_url": "https://example.test/fhir",
+                    "resource_type": "Observation",
+                    "field_paths": {"revision": path},
+                }
+            }
+        )
+    )
+    with pytest.raises(RecordSorError) as refused:
+        FirstRunCompiler(
+            "Save {note}",
+            params=["note"],
+            url="https://example.test",
+            verify=verify,
+            expect={"patient": "Patient/9"},
+            on_screen=["Patient/9"],
+            cache_dir=tmp_path / "cache",
+        )
+    message = str(refused.value)
+    assert "revision" in message and path in message
+    assert "verifier.records_drop_fields" in message
+    assert not (tmp_path / "cache").exists()
+
+
+@pytest.mark.parametrize("path", ["meta.lastUpdated", "meta.versionId", "meta"])
+def test_run1_allows_only_explicitly_dropped_metadata(
+    fhir, tmp_path: Path, path: str
+) -> None:
+    base, store = fhir
+    verify = tmp_path / "verify.yaml"
+    section = {
+        "kind": "fhir",
+        "base_url": base,
+        "resource_type": "Observation",
+        "field_paths": {"id": "id", "revision": path},
+        "records_drop_fields": ["revision"],
+    }
+    verify.write_text(yaml.safe_dump({"verifier": section}))
+    observer, raw = load_observer(verify, for_run1=True)
+    assert observer.system_of_record == [{"id": "1"}]
+    assert raw == section
+    # A raw path in the drop list does not drop the mapped output field.
+    section["records_drop_fields"] = [path]
+    verify.write_text(yaml.safe_dump({"verifier": section}))
+    with pytest.raises(RecordSorError, match="revision"):
+        load_observer(verify, for_run1=True)
+
+
+def test_run1_keeps_stable_metadata_mappings(tmp_path: Path) -> None:
+    verify = tmp_path / "verify.yaml"
+    verify.write_text(
+        yaml.safe_dump(
+            {
+                "verifier": {
+                    "kind": "fhir",
+                    "base_url": "https://example.test/fhir",
+                    "resource_type": "Observation",
+                    "field_paths": {"profile": "meta.profile"},
+                }
+            }
+        )
+    )
+    observer, _ = load_observer(verify, for_run1=True)
+    assert observer.verifier.field_paths == {"profile": "meta.profile"}

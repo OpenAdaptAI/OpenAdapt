@@ -276,8 +276,16 @@ def classify(db_outcome: str, success: bool, must_save: bool) -> str:
 def zip_dir(src: Path, dest: Path) -> None:
     import zipfile
 
+    from openadapt_flow.evidence_files import is_publication_input_path_excluded
+
+    if src.is_symlink() or not src.is_dir():
+        raise ValueError("Evidence source must be a real directory")
     with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as zf:
         for f in sorted(src.rglob("*")):
+            if is_publication_input_path_excluded(f.relative_to(src)):
+                continue
+            if f.is_symlink():
+                raise ValueError("Evidence cannot contain a symbolic link")
             if f.is_file():
                 zf.write(f, f.relative_to(src))
 

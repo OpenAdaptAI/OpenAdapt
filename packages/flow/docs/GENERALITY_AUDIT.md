@@ -6,9 +6,10 @@ Audited 2026-11-03 on `main` at `213f3d9fe`. Scope: everything under
 The rule: the engine has no code written for one application. What one
 application needs lives in data (`app_profiles/*.yaml`, generated contracts,
 deployment configs) or in test fixtures and benchmark harnesses outside the
-shipped package. The CI check that keeps it that way,
-`scripts/check_engine_generality.py`, lands in the pull request that follows
-this audit, together with the rule in [CONTRIBUTING.md](../CONTRIBUTING.md).
+shipped package. A CI check (`scripts/check_engine_generality.py`) keeps it
+that way; [CONTRIBUTING.md](../CONTRIBUTING.md) states the rule. It counts an
+app name inside an identifier too (`_openemr_base`, `isOpenEMR`); its baseline
+started at 425 hits and only shrinks.
 
 ## Method
 
@@ -73,14 +74,14 @@ motivating application.
 | --- | --- | --- | --- |
 | `benchmark/` (25 Python files: `run_benchmark`, `openemr_benchmark`, `openemr_local`, `frappe_lending`, `hybrid_benchmark`, `dom_arm`, `silent_wrong_action`, `desktop_benchmark`, `verify`, `agent_baseline`, `reliability`, `chart_fonts`, `effectbench/`) | Benchmark harnesses shipped in the wheel | Moved to `packages/flow/benchmark/harness/` (import `benchmark.harness.*`). `openadapt-flow benchmark` loads it from a source checkout and says so from a wheel | done |
 | `instrument/` | Competitor-drift harness; imported the benchmark at module load, so it was already broken in a wheel | Moved to `packages/flow/benchmark/harness/instrument/` | done |
-| `integrations/harness2/` | Harness2 research harness on MockMed | Move to `packages/flow/benchmark/harness/harness2/` | planned |
-| `mockloan/`, `demo_driver.record_disbursement_demo` | Lending demo app no product command uses | Move to the benchmark tree | planned |
-| `guard_demo.py`, `agent/ledger_demo.py` | `python -m` demos, no CLI command | Move to the benchmark tree | planned |
-| `mockmed/teach_scope.py` | Used only by tests | Move to `tests/fixtures` | planned |
-| `learning/synth_stream.py:1-245` | MockMed note stream | Split out the generic `StructuralDiffInducer`, then move the stream | planned |
-| `reward/seed.py:1-236` | MockMed reward seed | Split out the generic bundle helpers (`:238-410`), then move the seed behind the demo flag | planned |
-| `record_check_proof.py:60-124` | `MOCKMED` fixture and `if name == "mockmed"` | Fixtures registered by name from the demo app's own module | planned |
-| `validation/dense_surface.py` | Study harness rendering a MockMed table | Move to `benchmark/dense_surface` | planned |
+| `integrations/harness2/` | Harness2 research harness on MockMed | Moved to `packages/flow/benchmark/harness/harness2/`; the `harness2` extra is gone (install `[browser]`) | done |
+| `mockloan/`, `demo_driver.record_disbursement_demo` | The shipped OpenEnv environment serves the installed MockLoan app | Server and static files stay in the wheel; the recorder moved to `packages/flow/benchmark/harness/mockloan/demo.py` | done |
+| `guard_demo.py`, `agent/ledger_demo.py` | `python -m` demos, no CLI command | Moved to `packages/flow/benchmark/harness/guard_demo.py` and `packages/agent/tests/ledger_demo.py` | done |
+| `mockmed/teach_scope.py` | Used only by tests | Moved to `packages/flow/tests/_teach_scope.py` | done |
+| `learning/synth_stream.py:1-245` | MockMed note stream | `StructuralDiffInducer` moved to `openadapt_flow/learning/induce.py`; the stream moved to `packages/flow/benchmark/harness/synth_stream.py` | done |
+| `reward/seed.py:1-236` | MockMed reward seed | Bundle helpers split out to `openadapt_flow/reward/bundle.py`. The seed stays: `serve-reward --seed-mockmed` needs it from a wheel | done |
+| `record_check_proof.py` | Named fixture discovery coupled to the generic proof runner | Caller-owned `Fixture` injection; names, factories and judges are composed in `benchmark/record_check_proof.py` | implemented |
+| `validation/dense_surface.py` | Study harness rendering a MockMed table | Move to the benchmark tree together with the identity studies that import it (`identity_ladder`, `identity_looks_dense`, `pixel_identity_probe`, `known_ids_dense`) | planned |
 | `__main__.py:5246-5275` (`bench`) | Always replays against MockMed | Accept `--url`, or load from a checkout like `benchmark` | planned |
 | `execute/registry.py`, `execute/service.py`, `execute/app.py`, `execute/dispatch.py:60-108`, `--seed-mockmed` | Demo seeding inside the Execute service | Generic `seed_admissions`; the CLI passes the demo seed | planned |
 | `eligibility/payer_routes.yaml`, `fleet/simulator.py`, `repair/dialog_fixture.py` | Synthetic test data and simulators in the package | Move to the benchmark tree or `tests/fixtures` | planned |
@@ -153,7 +154,7 @@ Paths are relative to `packages/flow/openadapt_flow/` as of the audited commit.
 | `runtime/identity.py:275-302` | (d) | MockMed/EMR list | _GENERIC_IDENTITY_WORDS hand-tuned EMR list vocabulary (incl. 'demo','chart','review','results'); derive from recording or app profile |
 | `runtime/replayer.py:392` | (d) | MockMed | PC_STRUCTURAL_TEMPLATE_THRESHOLD=0.8 (line 394) calibrated on MockMed only |
 | `__main__.py:10030-10037` | (c) | MockMed | bench parser. |
-| `__main__.py:10166` | (c) | MockMed | verify-scaffold --prove choices ('mockmed','effect-e2e'): fixture names hard-coded in CLI; see record_check_proof.py. |
+| `__main__.py` proof CLI | (c) | Qualification fixtures | Generic `--prove FIXTURE` requires an injected process-local source; repository composition resolves fixture names outside the engine. |
 | `__main__.py:11940-11989,12341-12415` | (c) | MockMed | serve-execute/serve-reward --seed-mockmed flags and banner paths (data_dir/mockmed/records.db). Opt-in demo seeding; keep as demo flag or rename --seed-demo. |
 | `__main__.py:1787-1806` | (c) | MockMed | demo-record command: serves MockMed, runs demo_driver.record_triage_demo. User-facing CLI; demo data could be a recorded script in data. |
 | `__main__.py:1808-1998` | (c) | MockMed | tutorial command (via tutorial.py). Deliberate product feature; must work from wheel. |
@@ -179,9 +180,9 @@ Paths are relative to `packages/flow/openadapt_flow/` as of the audited commit.
 | `integrations/harness2/ (all: tasks.py, apps.py, agent.py, adapter.py, traces.py, proposers.py, scorer.py, llm.py, pixels.py, rollout.py, selection.py, __init__.py)` | (c) | MockMed | Whole subpackage is a research harness for Harness2 on MockMed: MOCKMED_PATIENT/PATIENTS (tasks.py:71-148), MockMedTarget (apps.py:50-105, /api/db at :70), regex for MockMed task text and 'triage'/'New Encounter'/'encountersaved' (agent.py:221-324), MockMed banner regex Name — MRN — DOB (traces.py:55-57,128-138), clinical prompts (adapter.py:93-120,429-445; proposers.py:50-63). Move to packages/flow/benchmark/harness/harness2; importers: benchmark/harness2_scorer/run.py, tests/test_harness2_{adapter,pixels,traces}.py, pyproject extra 'harness2', .github/workflows/packages.yml:451. |
 | `learning/synth_stream.py:1-245` | (c) | MockMed | synthetic MockMed add-patient-note stream (intents, 'Consent Required', 'Belford, Phil DOB'). Move to benchmark/ or tests/fixtures. |
 | `learning/synth_stream.py:246-525` | (c) | (generic) | StructuralDiffInducer is generic but lives in the MockMed harness module; imported by learning/teach.py:96, learning/branch_teach.py:76, benchmark/openemr_e2e/harness.py, 4 tests; pyproject mypy list (line 611). Move to learning/induce.py first, then move the stream out. |
-| `mockloan/ (server.py, fault_server.py, static/)` | (c) | MockLoan | Own synthetic lending app shipped in wheel but used by no product command; only demo_driver.record_disbursement_demo, benchmark/lending_fault_model, benchmark/undo_proposal, tests (test_mockloan, test_lending_swer, e2e/test_lending_fault_model), scripts (1). Move to packages/flow/benchmark/apps/mockloan. |
+| `mockloan/ (server.py, fault_server.py, static/)` | (c) | MockLoan | Synthetic app served by the shipped OpenEnv environment from the installed wheel. Keep server.py, fault_server.py and static/ in the package; the recorder and benchmark harness stay outside it. |
 | `mockmed/ (server.py, fault_server.py, chart_pages.py, teach_scope.py, static/)` | (c) | MockMed | Own synthetic demo app shipped in wheel. Required by tutorial/demo/demo-record/replay-default/sandbox and root openadapt/quickstart (engine.py, workers.py) + root tests/test_partner_kit.py. Keep shipping (or split to a demo-apps package). mockmed/teach_scope.py (EncounterWrites) is used only by tests -> move to tests/fixtures. chart_pages used by guard_demo + benchmark (agent_guard, effect_e2e, ui_readback). |
-| `record_check_proof.py:1-11,60-124` | (c) | MockMed | --prove fixture registry hard-codes MOCKMED Fixture (judge on patient_id/note, write_path /api/encounter, body type Triage) and `if name == 'mockmed'`. Opt-in proof against our fixture. Move MOCKMED Fixture to mockmed/proof_fixture.py and resolve fixtures by entry point / dotted path. Importers: scaffold_verifier.py:594, benchmark/effect_e2e, tests (2). |
+| `record_check_proof.py` | (c) | Qualification fixtures | Named factories, application judge and defaults moved to `benchmark/record_check_proof.py`; the generic runner requires explicit matching `Fixture` injection. |
 | `repair/dialog_fixture.py:1-` | (c) | synthetic | rendered test app in product package (no real app) |
 | `reward/seed.py:1-236` | (c) | MockMed | seed_mockmed, MockMed encounters table/SQL (MOCKMED_TABLE 'encounters', SELECT id, patient_id, type, status), patients, episodes. Move to reward/demo_seed or tests/fixtures; CLI serve-reward --seed-mockmed uses it. |
 | `reward/seed.py:238-410` | (c) | (generic) | write_bundle/calibrate_bundle/self_signed_certificate are generic helpers living in the MockMed seed module; split into reward/bundle.py. Importers: integrations/harness2/scorer.py, benchmark/undo_proposal/run.py, tests/test_probe_induction.py, test_undo_proposal.py, test_reward_worker.py, test_reward_trust_boundary.py. |

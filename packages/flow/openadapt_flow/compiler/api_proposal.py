@@ -54,7 +54,7 @@ import re
 import urllib.parse as up
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from openadapt_flow import network_capture as nc
 from openadapt_flow import sealed_set as _sealed
@@ -73,8 +73,10 @@ from openadapt_flow.ir import (
 from openadapt_flow.runtime.actuators.web_form import (
     client_rules,
     folded_checks_digest,
-    form_controls,
+    form_parts,
+    forms_of,
     page_scripts,
+    submitter_button,
     web_form_effects,
 )
 
@@ -271,14 +273,93 @@ def _success_pattern(line: dict[str, Any]) -> Optional[str]:
         target = m.group(1) if m else None
     if not target:
         return None
-    path = up.urlsplit(target).path.rsplit("/", 1)[-1]
-    query = up.urlsplit(target).query
-    pieces = [re.escape(path)]
-    for name, value in up.parse_qsl(query, keep_blank_values=True):
-        pieces.append(
-            re.escape(name) + "=" + (r"\d+" if value.isdigit() else re.escape(value))
-        )
+    path = up.urlsplit(target).path
+    leaf = path.rsplit("/", 1)[-1]
+    if leaf.isdigit() or not leaf:
+        # A record's own address (``/ticket/17``, ``/ipam/ip-addresses/3/``):
+        # the record number alone matches almost anything, so the path is
+        # kept, with each number generalized.
+        pieces = [
+            "/".join(
+                r"\d+" if seg.isdigit() else re.escape(seg) for seg in path.split("/")
+            )
+        ]
+    else:
+        pieces = [re.escape(leaf)]
+    for name, value in up.parse_qsl(up.urlsplit(target).query, keep_blank_values=True):
+        if value.isdigit():
+            pattern = r"\d+"
+        elif _is_token(value):
+            # A value the server makes per record (a hash, a nonce): the
+            # name must be there, the value can't be known in advance.
+            pattern = r"[^&#\s]+"
+        else:
+            pattern = re.escape(value)
+        pieces.append(re.escape(name) + "=" + pattern)
     return r".*?".join(pieces)
+
+
+def _is_token(value: str) -> bool:
+    """A long run of letters and digits mixing both, such as a hash."""
+
+    return (
+        len(value) >= 16
+        and re.fullmatch(r"[A-Za-z0-9_-]+", value) is not None
+        and re.search(r"\d", value) is not None
+        and re.search(r"[A-Za-z]", value) is not None
+    )
+
+
+def _button_selector(button: dict[str, Any]) -> str:
+    """A selector for one submit button of the form being evaluated."""
+
+    if button.get("id"):
+        return "#" + button["id"]
+    sel = f"form[data-openadapt-eval] [name={json.dumps(button['name'])}]"
+    if button.get("value") is not None and button.get("value") != "":
+        sel += f"[value={json.dumps(button['value'])}]"
+    return sel
+
+
+def _script_form(
+    lines: list[dict[str, Any]], post: dict[str, Any]
+) -> tuple[Optional[dict[str, Any]], Optional[dict[str, Any]], Optional[str]]:
+    """The form whose fields a page script sent to another endpoint.
+
+    The last captured page, before the save, whose form names every field the
+    save sent (as a control, an empty file input or a submit button). Two
+    such forms on that page are ambiguous.
+    """
+
+    names = {n for n, _ in post["form"]}
+    best: tuple[Optional[dict[str, Any]], Optional[dict[str, Any]], Optional[str]] = (
+        None,
+        None,
+        None,
+    )
+    for ln in lines:
+        if float(ln["t"]) >= float(post["t"]):
+            break
+        if not (
+            ln["method"] == "GET"
+            and ln.get("status") == 200
+            and ln.get("resource_type") == "document"
+            and "<form" in (ln.get("response_text") or "")
+        ):
+            continue
+        hits = [
+            f
+            for f in forms_of(ln["response_text"])
+            if names
+            <= set(f["controls"])
+            | {x["name"] for x in f["files"]}
+            | {b["name"] for b in f["buttons"] if b.get("name")}
+        ]
+        if len(hits) > 1:
+            best = (None, None, "two forms on the page name every field the save sent")
+        elif hits:
+            best = (ln, hits[0], None)
+    return best
 
 
 def _in_page(selector: str, html: str) -> bool:
@@ -437,7 +518,11 @@ def _span_writes(
         if up.urlsplit(ln["url"]).query:
             problems.append(f"{from_step} also sent {what} with values in its URL")
             continue
-        if ln.get("form") is None:
+        if (
+            ln.get("form") is None
+            or (ln.get("request_type") or "application/x-www-form-urlencoded")
+            != "application/x-www-form-urlencoded"
+        ):
             problems.append(
                 f"{from_step} also sent {what} with a body the API step can't rebuild "
                 f"({ln.get('body_omitted') or ln.get('request_type') or 'not form-encoded'})"
@@ -553,8 +638,22 @@ def propose_api_step(
         and not ln.get("failed")
     ]
     if not posts:
+        json_saves = [
+            ln
+            for ln in lines
+            if ln["method"] in ("POST", "PUT", "PATCH")
+            and _is_json(ln)
+            and t_prev < float(ln["t"]) <= t_end
+            and not ln.get("failed")
+        ]
+        if json_saves:
+            return _propose_json(
+                workflow, steps, save, events, lines, params, by_value, json_saves
+            )
         return workflow, None, ["no form request was sent by the save step"]
-    post = max(posts, key=carried)
+    # The save is the last request that carries the most recorded values: a
+    # page script may post the same fields earlier (a live preview).
+    post = max(posts, key=lambda ln: (carried(ln), float(ln["t"])))
     if carried(post) < max(1, len(by_value) // 2):
         return workflow, None, ["the save's request does not carry the recorded values"]
     action, url_problems = _url_template(post["url"], by_value)
@@ -562,9 +661,18 @@ def propose_api_step(
         return workflow, None, url_problems
     if any(v == nc.SECRET for _, v in post["form"]):
         return workflow, None, ["the save sends a secret field; it stays on the GUI"]
+    request_type = post.get("request_type") or "application/x-www-form-urlencoded"
+    encoding: Literal["urlencoded", "multipart"]
+    if request_type == "multipart/form-data":
+        encoding = "multipart"
+    elif request_type == "application/x-www-form-urlencoded":
+        encoding = "urlencoded"
+    else:
+        return workflow, None, [f"the save is sent as {request_type}"]
+    empty_files = set(post.get("multipart_files") or [])
 
     # The page that served the form: the last captured document with that form.
-    form_line, controls = None, None
+    form_line, form = None, None
     for ln in lines:
         if float(ln["t"]) >= float(post["t"]):
             break
@@ -573,16 +681,43 @@ def propose_api_step(
             and ln.get("status") == 200
             and "<form" in (ln.get("response_text") or "")
         ):
-            found = form_controls(ln["response_text"], _path(post["url"]))
+            found = form_parts(
+                ln["response_text"], _path(post["url"]), _path(ln["url"])
+            )
             if found is not None:
-                form_line, controls = ln, found
-    if form_line is None or controls is None:
+                form_line, form = ln, found
+    form_action: Optional[str] = None
+    if form_line is None and post.get("resource_type") in ("xhr", "fetch"):
+        # The page's script sent the form's fields somewhere other than the
+        # form's action: the form is the one whose controls name every field.
+        form_line, form, problem = _script_form(lines, post)
+        if problem:
+            return workflow, None, [problem]
+        if form is not None and form_line is not None:
+            form_action = up.urlsplit(
+                up.urljoin(form_line["url"], form["action"] or form_line["url"])
+            ).path
+    if form_line is None or form is None:
         return (
             workflow,
             None,
             [
                 "the page that serves the form is not in the capture; start recording before opening it"
+                if post.get("resource_type") not in ("xhr", "fetch")
+                else "the save was sent by a page script, and no captured form has "
+                "every field it sent"
             ],
+        )
+    controls = form["controls"]
+    if (
+        encoding == "multipart"
+        and form_action is None
+        and form.get("enctype") != ("multipart/form-data")
+    ):
+        return (
+            workflow,
+            None,
+            ["the save is multipart, but the form doesn't post as multipart"],
         )
     form_t = float(form_line["t"])
     if _origin(form_line["url"]) != _origin(post["url"]):
@@ -603,10 +738,19 @@ def propose_api_step(
     # scratch page with every write blocked (runtime/actuators/form_eval.py).
     client_scripts = page_scripts(
         form_line["response_text"],
-        _path(post["url"]),
+        form_action or _path(post["url"]),
         [n for n, _ in post["form"]],
         client_rules(form_line["response_text"]),
+        _path(form_line["url"]),
     )
+    if form_action is not None and not client_scripts:
+        return (
+            workflow,
+            None,
+            [
+                "the save went elsewhere than the form's action, and the page has no script"
+            ],
+        )
 
     # Steps the API step stands in for: those recorded on the form page.
     folded: list[Step] = []
@@ -637,8 +781,37 @@ def propose_api_step(
             )
 
     fields: list[WebFormField] = []
+    submitter_pair: Optional[tuple[str, str]] = None
+    file_names = [f["name"] for f in form.get("files") or []]
+    if encoding == "multipart" and form_action is None:
+        if sorted(empty_files) != sorted(file_names):
+            return (
+                workflow,
+                None,
+                [
+                    "the save's file inputs aren't the form's own (a file may have been attached)"
+                ],
+            )
     for name, value in post["form"]:
         ctl = controls.get(name)
+        if name in empty_files:
+            if value or file_names.count(name) != 1 or name in controls:
+                return (
+                    workflow,
+                    None,
+                    [f"field {name!r} is a file input the API step can't send empty"],
+                )
+            fields.append(WebFormField(name=name, source="empty_file", value=""))
+            continue
+        if (
+            ctl is None
+            and submitter_pair is None
+            and submitter_button(form, name, value) is not None
+        ):
+            # The browser adds the clicked submit button's own name=value.
+            submitter_pair = (name, value)
+            fields.append(WebFormField(name=name, source="submitter", value=value))
+            continue
         if name in typed and typed[name] is not None:
             param = typed[name]
             demo = params.get(param, "")
@@ -692,7 +865,17 @@ def propose_api_step(
         if (
             value.startswith("<session:")
             and ctl is not None
-            and ctl.get("default") == value
+            and (
+                ctl.get("default") == value
+                or (
+                    # The page's script put the session's own token in the
+                    # form's token field as it submitted (a per-form token
+                    # swapped for the page's); the live form's token is sent.
+                    ctl.get("kind") == "hidden"
+                    and nc.TOKEN_NAME.search(name) is not None
+                    and bool(ctl.get("default"))
+                )
+            )
         ):
             fields.append(WebFormField(name=name, source="session"))
             continue
@@ -842,10 +1025,31 @@ def propose_api_step(
     confirm = _selector(save, events) if submitter is not None else None
     if confirm == submitter:
         confirm = None
+    if submitter_pair is not None:
+        button = submitter_button(form, *submitter_pair)
+        assert button is not None
+        own = _button_selector(button)
+        if submitter is None:
+            # The recording names the button only by what it sent: running
+            # the page's script clicks that button, so the page sends it too.
+            submitter = own
+        elif submitter != own and not (
+            button.get("id") and submitter == "#" + button["id"]
+        ):
+            return (
+                workflow,
+                None,
+                [
+                    f"the save sent the {submitter_pair[0]!r} button's value, but the "
+                    f"person clicked {submitter}"
+                ],
+            )
     spec = WebFormSpec(
         form_path=form_path,
         fields=fields,
         controls=sorted(controls),
+        encoding=encoding,
+        form_action=form_action,
         client_rules=client_rules(form_line["response_text"]),
         client_scripts=client_scripts,
         submitter=submitter,
@@ -873,6 +1077,326 @@ def propose_api_step(
     ]
     workflow = workflow.model_copy(update={"steps": new_steps})
     return workflow, new_steps[-1], []
+
+
+_UUID = re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I
+)
+_DATETIME = re.compile(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}")
+
+
+def _is_json(line: dict[str, Any]) -> bool:
+    kind = line.get("request_type") or ""
+    return (kind == "application/json" or kind.endswith("+json")) and isinstance(
+        line.get("body"), str
+    )
+
+
+def _graphql_read(line: dict[str, Any]) -> bool:
+    """A GraphQL request whose every operation is a query: a read, though POSTed."""
+
+    if not _is_json(line):
+        return False
+    try:
+        doc = json.loads(line["body"])
+    except ValueError:
+        return False
+    ops = doc if isinstance(doc, list) else [doc]
+    return bool(ops) and all(
+        isinstance(op, dict)
+        and isinstance(op.get("query"), str)
+        and re.match(r"\s*(#[^\n]*\n\s*)*(query\b|\{)", op["query"]) is not None
+        for op in ops
+    )
+
+
+def _leaves(
+    value: Any, path: tuple[str, ...] = ()
+) -> list[tuple[tuple[str, ...], Any]]:
+    if isinstance(value, dict):
+        return [x for k, v in value.items() for x in _leaves(v, path + (str(k),))]
+    if isinstance(value, list):
+        return [x for i, v in enumerate(value) for x in _leaves(v, path + (str(i),))]
+    return [(path, value)]
+
+
+def _pointer(path: tuple[str, ...]) -> str:
+    return "/".join(t.replace("~", "~0").replace("/", "~1") for t in path)
+
+
+def _same(leaf: Any, demo: str) -> bool:
+    if isinstance(leaf, bool) or leaf is None:
+        return False
+    if isinstance(leaf, str):
+        return leaf == demo
+    try:
+        return float(demo) == float(leaf)
+    except ValueError:
+        return False
+
+
+def _propose_json(
+    workflow: Workflow,
+    steps: list[Step],
+    save: Step,
+    events: list[dict[str, Any]],
+    lines: list[dict[str, Any]],
+    params: dict[str, str],
+    by_value: dict[str, list[str]],
+    candidates: list[dict[str, Any]],
+) -> tuple[Workflow, Optional[Step], list[str]]:
+    """A save the page's script sent as JSON (a GraphQL mutation included).
+
+    Every value the person typed must be in the body exactly once, and is
+    bound there by its JSON pointer; everything else is sent as recorded.
+    A body is refused when it carries a session or secret value, a value
+    the page makes on each save (an id, a time), a value typed nowhere, or
+    a typed value it doesn't carry. Headers the page's script added are
+    sent with the values the app's script sends in the run's session.
+    """
+
+    def refuse(reason: str) -> tuple[Workflow, Optional[Step], list[str]]:
+        return workflow, None, [reason]
+
+    def carried(line: dict[str, Any]) -> int:
+        try:
+            doc = json.loads(line["body"])
+        except ValueError:
+            return -1
+        return sum(1 for _, v in _leaves(doc) if isinstance(v, str) and v in by_value)
+
+    post = max(candidates, key=lambda ln: (carried(ln), float(ln["t"])))
+    if post.get("request_truncated"):
+        return refuse("the save's JSON body was cut at capture")
+    try:
+        doc = json.loads(post["body"])
+    except ValueError:
+        return refuse("the save's body is not valid JSON")
+    # A GraphQL client may batch: a list holding one operation is that one.
+    batch_of_one = (
+        isinstance(doc, list)
+        and len(doc) == 1
+        and isinstance(doc[0], dict)
+        and isinstance(doc[0].get("query"), str)
+    )
+    if not isinstance(doc, dict) and not batch_of_one:
+        return refuse("the save's JSON body is not an object (a batch of requests?)")
+    op: dict[str, Any] = doc[0] if batch_of_one else doc
+    query_path: tuple[str, ...] = ("0", "query") if batch_of_one else ("query",)
+    if "request_headers" not in post:
+        return refuse(
+            "the recording doesn't say which headers the save carried; record it again"
+        )
+    status = post.get("status")
+    if not isinstance(status, int) or not 200 <= status < 300:
+        return refuse(f"the recorded save wasn't accepted ({status})")
+    action, url_problems = _url_template(post["url"], by_value)
+    if url_problems:
+        return refuse(url_problems[0])
+    # The page the person saved from. A single-page app may have moved to the
+    # new record's address by the time the request is logged, so the save
+    # step's own event says where it was.
+    save_i = _event_index(save)
+    sender = str(
+        (events[save_i].get("url_before") if save_i is not None else None)
+        or post.get("frame_url")
+        or ""
+    )
+    page_lines = [
+        ln
+        for ln in lines
+        if ln["method"] == "GET"
+        and ln.get("resource_type") == "document"
+        and _path(ln["url"]) == _path(sender)
+        and float(ln["t"]) < float(post["t"])
+    ]
+    if page_lines:
+        page_url, page_t = page_lines[-1]["url"], float(page_lines[-1]["t"])
+    else:
+        # A single-page app opens a form by changing its route, not by
+        # loading a document. Every recorded step must then be on that page:
+        # the API step stands in for all of them.
+        page_url, page_t = up.urldefrag(sender).url, float("-inf")
+        on_page = [
+            _path(str(e.get("url_before") or "")) == _path(sender)
+            and _origin(str(e.get("url_before") or "")) == _origin(sender)
+            for e in events[: (_event_index(save) or 0) + 1]
+        ]
+        if not sender or not on_page or not all(on_page):
+            return refuse(
+                "the page that sent the save is not in the capture; start recording before opening it"
+            )
+    api_origin: Optional[str] = None
+    if _origin(page_url) != _origin(post["url"]):
+        if not post.get("request_headers"):
+            return refuse(
+                "the save goes to another origin than its page, with no header the "
+                "app's script added to it"
+            )
+        # The app's API has its own host; its script signs each request.
+        api_origin = _origin(post["url"])
+    form_path, url_problems = _url_template(page_url, by_value)
+    if url_problems:
+        return refuse(url_problems[0])
+    folded = [
+        s
+        for s in steps
+        if (i := _event_index(s)) is not None
+        and i < len(events)
+        and float(events[i]["t"]) > page_t
+    ]
+    if not folded or folded[-1] is not save:
+        return refuse("the save is not part of the steps recorded on its page")
+    for step in folded:
+        if step.guard is not None or step.wait_until is not None:
+            return refuse(
+                f"{step.id} has a guard or wait rule; the API step can't carry it"
+            )
+        i = _event_index(step)
+        if i is not None and events[i].get("identifier_region"):
+            return refuse(
+                f"{step.id} checks record identity on screen; keep the GUI program"
+            )
+    others = [
+        ln
+        for ln in lines
+        if ln["method"] not in ("GET", "HEAD", "OPTIONS")
+        and ln is not post
+        and not _graphql_read(ln)
+        # Sent while the page loaded, before any recorded step.
+        and float(ln["t"]) >= 0
+        # The save is the final step. Its consequences include writes
+        # captured after its own response, not just earlier requests.
+        and page_t < float(ln["t"])
+    ]
+    if others:
+        what = f"{others[0]['method']} {_path(others[0]['url'])}"
+        return refuse(f"the steps also sent {what}; a JSON save is repeated alone")
+    screen_only: list[str] = []
+    for step in folded[:-1]:
+        if not step.expect:
+            continue
+        kinds = {getattr(p.kind, "value", p.kind) for p in step.expect}
+        i = _event_index(step)
+        lo = float(events[i - 1]["t"]) if i else page_t
+        hi = (
+            float(events[i + 1]["t"])
+            if i is not None and i + 1 < len(events)
+            else float("inf")
+        )
+        texts = [
+            p.text
+            for p in step.expect
+            if getattr(p.kind, "value", p.kind) in ("text_present", "text_absent")
+            and p.text
+        ]
+        reads = [
+            ln
+            for ln in lines
+            if lo < float(ln["t"]) <= hi
+            and (ln["method"] == "GET" or _graphql_read(ln))
+        ]
+        if any(t in (ln.get("response_text") or "") for t in texts for ln in reads):
+            # The server answered the check (a duplicate search, a lookup):
+            # the API step would skip it, so the save stays on the GUI.
+            return refuse(
+                f"{step.id} checks text a request returned; a JSON save can't carry it"
+            )
+        screen_only.append(f"{step.id}: " + ", ".join(sorted(str(k) for k in kinds)))
+
+    typed: dict[str, str] = {}
+    for step in folded:
+        if step.action is ActionKind.TYPE:
+            param = step.param or _placeholder(step.text)
+            if param is not None:
+                typed[param] = params.get(param, "")
+    leaves = _leaves(doc)
+    graphql = (
+        isinstance(op.get("query"), str)
+        and re.match(r"\s*(#[^\n]*\n\s*)*mutation\b", op["query"]) is not None
+    )
+    if batch_of_one and not graphql:
+        return refuse("the save's JSON body is not an object (a batch of requests?)")
+    fields: list[WebFormField] = []
+    bound: set[tuple[str, ...]] = set()
+    for param, demo in sorted(typed.items()):
+        if not demo:
+            return refuse(
+                f"{{{param}}} was typed blank; a blank value can't be found in a JSON body"
+            )
+        if len(by_value.get(demo, [])) > 1:
+            return refuse(
+                f"{{{param}}} has the same value as another input; the binding is ambiguous"
+            )
+        hits = [path for path, leaf in leaves if _same(leaf, demo)]
+        if graphql and (
+            any(h[: len(query_path)] == query_path for h in hits)
+            or (not hits and demo in op["query"])
+        ):
+            return refuse(
+                "a typed value is inside the GraphQL operation text, not its variables"
+            )
+        if not hits:
+            return refuse(
+                f"{{{param}}} is typed but the save doesn't send it as a value"
+            )
+        if len(hits) > 1:
+            return refuse(
+                f"{{{param}}}'s value is in the save {len(hits)} times; the binding is ambiguous"
+            )
+        bound.add(hits[0])
+        fields.append(WebFormField(name=_pointer(hits[0]), source="param", param=param))
+    template = json.loads(post["body"])
+    for path, leaf in leaves:
+        where = _pointer(path) or "(body)"
+        if path in bound:
+            parent = template
+            for token in path[:-1]:
+                parent = parent[int(token) if isinstance(parent, list) else token]
+            key: Any = int(path[-1]) if isinstance(parent, list) else path[-1]
+            parent[key] = 0 if isinstance(leaf, (int, float)) else ""
+            continue
+        if isinstance(leaf, str):
+            if leaf.startswith("<session:") or leaf == nc.SECRET:
+                return refuse(f"the save sends a session or secret value at {where}")
+            if leaf in by_value:
+                return refuse(
+                    f"{where} carries the value of "
+                    f"{', '.join('{' + n + '}' for n in by_value[leaf])} but no recorded step typed it"
+                )
+            if _UUID.fullmatch(leaf) or _DATETIME.match(leaf):
+                return refuse(
+                    f"{where} holds a value the page makes on each save ({leaf[:24]!r}); "
+                    "it can't be sent again"
+                )
+    if not fields:
+        return refuse("the save carries none of the values typed on its page")
+    spec = WebFormSpec(
+        form_path=form_path,
+        fields=fields,
+        encoding="json",
+        json_body=template,
+        session_headers=list(post.get("request_headers") or []),
+        graphql=graphql,
+        api_origin=api_origin,
+        replaces_steps=[s.id for s in folded],
+        screen_only_checks=screen_only,
+        folded_checks_digest=folded_checks_digest(folded),
+    )
+    binding = ApiBinding(
+        kind="web_form",
+        on_unavailable="gui",
+        method=post["method"],
+        url_template=action,
+        expected_status=[status],
+        timeout_s=30.0,
+        effects=list(save.effects),
+        web_form=spec,
+    )
+    new_steps = [
+        s.model_copy(update={"api_binding": binding}) if s is save else s for s in steps
+    ]
+    return workflow.model_copy(update={"steps": new_steps}), new_steps[-1], []
 
 
 def proposed_api_steps(workflow: Workflow) -> list[Step]:
@@ -1014,6 +1538,7 @@ def admit_api_step(
     step_id: Optional[str] = None,
     now: Optional[datetime] = None,
     identity: Optional[dict[str, str]] = None,
+    footprint: Optional[dict[str, Any]] = None,
 ) -> tuple[Workflow, list[str]]:
     """Record a person's admission of the proposed API steps.
 
@@ -1025,9 +1550,22 @@ def admit_api_step(
     ...) to the parameter that carries it (:func:`web_form_identity`).
     Standard and Regulated runs need one: their run gate refuses a save
     whose API step names no right-record contract.
+
+    ``footprint`` is the side-effect comparison of GUI saves and API saves
+    on the same inputs (:func:`openadapt_flow.api_footprint.footprint_verdict`).
+    When given, an API step whose footprint differs from the GUI save's (a
+    table, row or field the GUI save writes and it doesn't, or the reverse)
+    isn't admitted: it stays on the GUI.
     """
 
     from openadapt_flow.runtime.effects.effect import is_agent_identity
+
+    if footprint is not None and footprint.get("equivalent") is not True:
+        reasons = "; ".join((footprint.get("differences") or ["no verdict"])[:3])
+        raise ApiProposalError(
+            "the API step isn't shown to have the GUI save's side effects, so it "
+            f"stays on the GUI ({reasons})"
+        )
 
     who = (admitted_by or getpass.getuser() or "").strip()
     if not who:

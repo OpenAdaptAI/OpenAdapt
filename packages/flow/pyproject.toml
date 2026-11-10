@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openadapt-flow"
-version = "2.5.0"
+version = "2.7.1"
 description = "Compile demonstrated GUI workflows into deterministic local replay with governed repair and refusal"
 readme = "README.md"
 license = { text = "MIT" }
@@ -197,12 +197,16 @@ reward = [
     "fastapi>=0.110",
     "uvicorn>=0.29",
 ]
-# Harness² integration (openadapt_flow.integrations.harness2): GUI tasks on
-# resettable apps, scored by reading the system of record, for
-# google-research/harness2's harness search. Harness² (Apache-2.0, Python
-# 3.12+) is not on PyPI, and a published wheel cannot name a git URL, so it is
-# installed beside this extra; docs/HARNESS2.md gives the pinned command.
-harness2 = ["playwright>=1.44"]
+# Standard RL environments (openadapt_flow.rl_env): the record-checked apps
+# served over the OpenEnv protocol (BSD-3-Clause) and rewarded by verify-run.
+# See environments/openenv/README.md. Python 3.11+: on 3.10 the OpenEnv stack
+# resolves to a dnspython release with a known advisory (GHSA-45c3-73f7-pv4m).
+openenv = [
+    "openenv>=0.11,<0.12; python_version >= '3.11'",
+    "playwright>=1.44; python_version >= '3.11'",
+    "fastapi>=0.110; python_version >= '3.11'",
+    "uvicorn>=0.29; python_version >= '3.11'",
+]
 # Native macOS window capture/input. Imported lazily; other platforms never
 # install or import these framework bindings.
 macos = [
@@ -339,11 +343,15 @@ exclude = [
     "/benchmark/**/outputs",
     "/benchmark/**/recording-live*",
     "/benchmark/**/results-*",
+    "/benchmark/**/RESULTS-*",
     "/benchmark/**/state",
     "/benchmark/**/work",
     "/benchmark/**/_bundle",
     "/benchmark/**/_recording",
     "/benchmark/**/_work",
+    # Leaderboard evidence (screenshots, transcripts) is repository-only.
+    "/benchmark/fhir_medplum/leaderboard/results",
+
     # Verifier-baselines evidence (judge views, rubrics, scores) is repository-only.
     "/benchmark/verifier_baselines/results",
     "/benchmark/verifier_baselines/inputs",
@@ -402,11 +410,15 @@ exclude = [
     "/benchmark/**/outputs",
     "/benchmark/**/recording-live*",
     "/benchmark/**/results-*",
+    "/benchmark/**/RESULTS-*",
     "/benchmark/**/state",
     "/benchmark/**/work",
     "/benchmark/**/_bundle",
     "/benchmark/**/_recording",
     "/benchmark/**/_work",
+    # Leaderboard evidence (screenshots, transcripts) is repository-only.
+    "/benchmark/fhir_medplum/leaderboard/results",
+
     # Verifier-baselines evidence (judge views, rubrics, scores) is repository-only.
     "/benchmark/verifier_baselines/results",
     "/benchmark/verifier_baselines/inputs",
@@ -428,6 +440,7 @@ exclude = [
     "/openadapt_flow/validation/adversary_corpus_v2.py",
     "/openadapt_flow/validation/adversary_corpus_v3.py",
     "/openadapt_flow/validation/identity_roc.py",
+    "/environments/openenv/openimis_claims",
     "/scripts/openimis_claims_demo.py",
     "/scripts/openimis_eligibility_demo.py",
     "/scripts/openimis_submit_binding_probe.py",
@@ -511,7 +524,7 @@ line-length = 88
 # Generated / non-package trees at the repo root are not part of the lint
 # surface. The benchmark harness (benchmark/harness/) is linted by naming it
 # explicitly in CI (`ruff check openadapt_flow benchmark/harness`).
-extend-exclude = ["/benchmark", "/docs", "/runs", "/dist"]
+extend-exclude = ["/benchmark", "/docs", "/runs", "/dist", "tests/golden_runs/baselines"]
 
 [tool.ruff.lint]
 # Start pragmatic: pyflakes (real bugs), the safe pycodestyle subset, warnings,
@@ -600,7 +613,7 @@ follow_imports_for_stubs = true
 #   - alternate backends: backends.playwright_backend, backends.rdp_backend
 #   - benchmark & interactive tooling: benchmark.desktop_benchmark,
 #     interactive_recorder
-#   - learning-loop synthesis: learning.synth_stream
+#   - learning-loop synthesis: learning.induce
 #   - disambiguation heuristics: compiler.disambiguation
 #   - runtime helpers still on untyped deps: runtime.effects._common,
 #     runtime.grounder, runtime.healing.perturbation
@@ -615,7 +628,7 @@ module = [
     "openadapt_flow.backends.rdp_backend",
     "openadapt_flow.compiler.disambiguation",
     "openadapt_flow.interactive_recorder",
-    "openadapt_flow.learning.synth_stream",
+    "openadapt_flow.learning.induce",
     "openadapt_flow.report",
     "openadapt_flow.runtime.effects._common",
     "openadapt_flow.runtime.grounder",

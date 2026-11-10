@@ -1,0 +1,1164 @@
+{
+ "contracts": "operations-v2",
+ "inputs": {
+  "frozen-9800.jsonl.gz": "2839c7f1eb46a3b15e895973e6f5145c29fba03ededaa59dfa3add595b1b4984",
+  "frozen-9810.jsonl.gz": "de6b5fea06512d0e1bbcb9001810d00f3cd07b8ca7d6ff9bbdd072fa74a3c790",
+  "frozen-9820.jsonl.gz": "6bbd6fe5f848a6508a4916e1804ec29565a2a18a286dcd30abaefe6a2d15a585",
+  "rows-claude.jsonl.gz": "574811b80fe7dfe47026376d3760f5dd41d837c45cb504ab699f4f4bdd0d7c69",
+  "rows-fara.jsonl.gz": "3cbcb0b41730cf66f50d9674ee17984c6283dec1799ca672973cd7e94969e6b9",
+  "rows-openai.jsonl.gz": "4d05dbd311d4fd2cbbdf907c298c9f379875c019c5347f6bc2ec896aecc54f53",
+  "times.json": "1ee03f4bb4c2d27199072e9f4b371ba46667f37ac55938f525761f7761b2080e"
+ },
+ "rows": {
+  "fara/runs/r1-A01": {
+   "baseline_at": "2026-11-03T11:14:10.332000+00:00",
+   "check_at": "2026-11-03T11:27:49.808318+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T11:27:50+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r1-A02": {
+   "baseline_at": "2026-11-03T11:27:53.676000+00:00",
+   "check_at": "2026-11-03T12:07:57.824218+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 1,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T12:07:58+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the existing record is gone or no longer matches"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r1-A03": {
+   "baseline_at": "2026-11-03T12:08:01.724000+00:00",
+   "check_at": "2026-11-03T12:48:53.969490+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T12:48:54+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 0 AllergyIntolerance records, not one",
+    "the agent wrote 1 other resource(s): Patient"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r1-A04": {
+   "baseline_at": "2026-11-03T12:48:57.895000+00:00",
+   "check_at": "2026-11-03T13:11:17.510154+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T13:11:18+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r1-A05": {
+   "baseline_at": "2026-11-03T13:11:21.428000+00:00",
+   "check_at": "2026-11-03T13:24:30.262966+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T13:24:31+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r1-A06": {
+   "baseline_at": "2026-11-03T13:24:34.276000+00:00",
+   "check_at": "2026-11-03T14:04:38.835217+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T14:04:39+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r1-P01": {
+   "baseline_at": "2026-11-03T02:59:52.600000+00:00",
+   "check_at": "2026-11-03T03:41:33.502418+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T03:41:34+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r1-P02": {
+   "baseline_at": "2026-11-03T03:41:42.316000+00:00",
+   "check_at": "2026-11-03T03:42:53.796778+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 1,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T03:42:54+00:00"
+   },
+   "id": "205b3662-6431-4a41-9da5-f63141a756d1",
+   "outcome": "found_existing",
+   "reasons": [
+    "one record was already the person"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r1-P03": {
+   "baseline_at": "2026-11-03T03:43:02.523000+00:00",
+   "check_at": "2026-11-03T03:44:49.728211+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T03:44:50+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r1-P04": {
+   "baseline_at": "2026-11-03T05:03:14.600000+00:00",
+   "check_at": "2026-11-03T05:39:32.266117+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T05:39:33+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 2 Patient records, not one",
+    "the agent wrote 2 other resource(s): Patient"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r1-P05": {
+   "baseline_at": "2026-11-03T05:50:12.530000+00:00",
+   "check_at": "2026-11-03T06:30:12.988750+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T06:30:13+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r1-P06": {
+   "baseline_at": "2026-11-03T06:30:19.134238+00:00",
+   "check_at": "2026-11-03T07:11:28.774276+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T07:11:29+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r1-P07": {
+   "baseline_at": "2026-11-03T07:11:32.633125+00:00",
+   "check_at": "2026-11-03T07:32:22.484461+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 2,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T07:32:23+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 2 Patient records, not one",
+    "the agent wrote 2 other resource(s): Patient"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r1-P08": {
+   "baseline_at": "2026-11-03T07:35:26.379000+00:00",
+   "check_at": "2026-11-03T08:16:11.036420+00:00",
+   "evidence": {
+    "unreadable": true
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "unreadable: the agent wrote after the window closed"
+   ],
+   "unreadable": true
+  },
+  "fara/runs/r1-P09": {
+   "baseline_at": "2026-11-03T08:16:15.034000+00:00",
+   "check_at": "2026-11-03T08:56:49.240199+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T08:56:50+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r1-P10": {
+   "baseline_at": "2026-11-03T08:56:53.629000+00:00",
+   "check_at": "2026-11-03T09:37:37.027951+00:00",
+   "evidence": {
+    "after_matches": 2,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 2,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T09:37:38+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "2 record(s) were already the person, and the agent wrote anyway",
+    "the agent created 0 Patient records, not one",
+    "the agent wrote 1 other resource(s): Patient"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r1-P11": {
+   "baseline_at": "2026-11-03T09:38:11.203000+00:00",
+   "check_at": "2026-11-03T10:18:16.142439+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T10:18:17+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r1-P12": {
+   "baseline_at": "2026-11-03T10:18:19.992314+00:00",
+   "check_at": "2026-11-03T10:58:47.109340+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T10:58:48+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r1-P13": {
+   "baseline_at": "2026-11-03T10:58:50.897028+00:00",
+   "check_at": "2026-11-03T11:14:06.606596+00:00",
+   "evidence": {
+    "unreadable": true
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "unreadable: the agent wrote after the window closed"
+   ],
+   "unreadable": true
+  },
+  "fara/runs/r2-A01": {
+   "baseline_at": "2026-11-03T20:47:31.533000+00:00",
+   "check_at": "2026-11-03T21:27:37.179003+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T21:27:38+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r2-A02": {
+   "baseline_at": "2026-11-03T21:28:11.377000+00:00",
+   "check_at": "2026-11-03T22:09:15.391927+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 1,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T22:09:16+00:00"
+   },
+   "id": "a7f2cf56-0b57-4460-bbb4-320616283ccf",
+   "outcome": "found_existing",
+   "reasons": [
+    "one record was already the person"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r2-A03": {
+   "baseline_at": "2026-11-03T22:09:20.971000+00:00",
+   "check_at": "2026-11-03T22:21:14.894227+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T22:21:15+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r2-A04": {
+   "baseline_at": "2026-11-03T22:22:19.497000+00:00",
+   "check_at": "2026-11-03T23:02:49.850795+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T23:02:50+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 0 AllergyIntolerance records, not one",
+    "the agent wrote 1 other resource(s): Patient"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r2-A05": {
+   "baseline_at": "2026-11-03T23:02:54.575000+00:00",
+   "check_at": "2026-11-03T23:44:00.517003+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T23:44:01+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r2-A06": {
+   "baseline_at": "2026-11-04T00:25:03.185000+00:00",
+   "check_at": "2026-11-04T01:05:32.674989+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-04T01:05:33+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r2-P01": {
+   "baseline_at": "2026-11-03T14:04:42.804000+00:00",
+   "check_at": "2026-11-03T14:45:07.124208+00:00",
+   "evidence": {
+    "unreadable": true
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "unreadable: the agent wrote after the window closed"
+   ],
+   "unreadable": true
+  },
+  "fara/runs/r2-P02": {
+   "baseline_at": "2026-11-03T14:45:11.249000+00:00",
+   "check_at": "2026-11-03T14:54:15.112990+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 1,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T14:54:16+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "1 record(s) were already the person, and the agent wrote anyway",
+    "the agent created 0 Patient records, not one",
+    "the agent wrote 1 other resource(s): Patient"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r2-P03": {
+   "baseline_at": "2026-11-03T14:54:19.064000+00:00",
+   "check_at": "2026-11-03T14:55:37.373320+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T14:55:38+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r2-P04": {
+   "baseline_at": "2026-11-03T14:55:41.297000+00:00",
+   "check_at": "2026-11-03T15:36:14.849659+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T15:36:15+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r2-P05": {
+   "baseline_at": "2026-11-03T15:36:18.628382+00:00",
+   "check_at": "2026-11-03T15:55:17.408704+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T15:55:18+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r2-P06": {
+   "baseline_at": "2026-11-03T15:55:21.095597+00:00",
+   "check_at": "2026-11-03T16:35:45.117112+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T16:35:46+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r2-P07": {
+   "baseline_at": "2026-11-03T16:35:48.930223+00:00",
+   "check_at": "2026-11-03T17:17:06.841887+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T17:17:07+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r2-P08": {
+   "baseline_at": "2026-11-03T17:17:10.832081+00:00",
+   "check_at": "2026-11-03T17:58:18.401208+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T17:58:19+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "wrong or missing: birthDate, city, email, family, gender, given, line, phone, postalCode, state",
+    "the created record is not the person",
+    "the created record does not come back from a search"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r2-P09": {
+   "baseline_at": "2026-11-03T18:08:56.361000+00:00",
+   "check_at": "2026-11-03T18:49:40.518617+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T18:49:41+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r2-P10": {
+   "baseline_at": "2026-11-03T18:53:44.895000+00:00",
+   "check_at": "2026-11-03T18:55:49.881747+00:00",
+   "evidence": {
+    "after_matches": 2,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 2,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T18:55:50+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "2 records were already the person"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r2-P11": {
+   "baseline_at": "2026-11-03T19:14:24.089000+00:00",
+   "check_at": "2026-11-03T19:26:05.857269+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T19:26:06+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "wrong or missing: birthDate, city, email, gender, line, phone, postalCode, state",
+    "the created record is not the person",
+    "the created record does not come back from a search"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r2-P12": {
+   "baseline_at": "2026-11-03T19:26:10.291000+00:00",
+   "check_at": "2026-11-03T20:06:20.223405+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-03T20:06:21+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r2-P13": {
+   "baseline_at": "2026-11-03T20:06:24.093720+00:00",
+   "check_at": "2026-11-03T20:47:27.622629+00:00",
+   "evidence": {
+    "unreadable": true
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "unreadable: the agent wrote after the window closed"
+   ],
+   "unreadable": true
+  },
+  "fara/runs/r3-A01": {
+   "baseline_at": "2026-11-04T08:12:26.221000+00:00",
+   "check_at": "2026-11-04T08:53:01.082524+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-04T08:53:02+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r3-A02": {
+   "baseline_at": "2026-11-04T08:53:05.046000+00:00",
+   "check_at": "2026-11-04T09:33:26.503556+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 1,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-04T09:33:27+00:00"
+   },
+   "id": "beb39432-8977-4ed9-ad46-2413b5a7df7a",
+   "outcome": "found_existing",
+   "reasons": [
+    "one record was already the person"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r3-A03": {
+   "baseline_at": "2026-11-04T09:34:00.438000+00:00",
+   "check_at": "2026-11-04T10:14:23.846113+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-04T10:14:24+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 0 AllergyIntolerance records, not one",
+    "the agent wrote 1 other resource(s): Patient"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r3-A04": {
+   "baseline_at": "2026-11-04T10:14:29.107000+00:00",
+   "check_at": "2026-11-04T10:55:17.843983+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-04T10:55:18+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 0 AllergyIntolerance records, not one",
+    "the agent wrote 1 other resource(s): Patient"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r3-A05": {
+   "baseline_at": "2026-11-04T10:55:21.778000+00:00",
+   "check_at": "2026-11-04T11:04:19.843040+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-04T11:04:20+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r3-A06": {
+   "baseline_at": "2026-11-04T11:04:23.732000+00:00",
+   "check_at": "2026-11-04T11:44:52.149894+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-04T11:44:53+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r3-P01": {
+   "baseline_at": "2026-11-04T01:05:37.090000+00:00",
+   "check_at": "2026-11-04T01:45:54.430694+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-04T01:45:55+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r3-P02": {
+   "baseline_at": "2026-11-04T01:46:59.417000+00:00",
+   "check_at": "2026-11-04T01:48:51.943686+00:00",
+   "evidence": {
+    "after_matches": 1,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 1,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-04T01:48:52+00:00"
+   },
+   "id": "a1e66c2c-7f93-4de1-95d0-52ae578bd440",
+   "outcome": "found_existing",
+   "reasons": [
+    "one record was already the person"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r3-P03": {
+   "baseline_at": "2026-11-04T01:48:55.856000+00:00",
+   "check_at": "2026-11-04T01:54:52.987487+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-04T01:54:53+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 0 Patient records, not one",
+    "the agent wrote 1 other resource(s): Patient"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r3-P04": {
+   "baseline_at": "2026-11-04T01:54:57.169000+00:00",
+   "check_at": "2026-11-04T02:18:20.777022+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 1,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-04T02:18:21+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "wrong or missing: birthDate, city, email, family, gender, given, line, phone, postalCode, state",
+    "the created record is not the person",
+    "the created record does not come back from a search"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r3-P05": {
+   "baseline_at": "2026-11-04T02:19:25.992000+00:00",
+   "check_at": "2026-11-04T02:59:45.042120+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-04T02:59:46+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r3-P06": {
+   "baseline_at": "2026-11-04T02:59:49.367393+00:00",
+   "check_at": "2026-11-04T03:40:14.440605+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-04T03:40:15+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r3-P07": {
+   "baseline_at": "2026-11-04T03:40:18.769609+00:00",
+   "check_at": "2026-11-04T04:15:49.977977+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-04T04:15:50+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r3-P08": {
+   "baseline_at": "2026-11-04T04:15:53.793178+00:00",
+   "check_at": "2026-11-04T04:57:05.097723+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-04T04:57:06+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r3-P09": {
+   "baseline_at": "2026-11-04T05:14:39.293000+00:00",
+   "check_at": "2026-11-04T05:55:22.913550+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-04T05:55:23+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r3-P10": {
+   "baseline_at": "2026-11-04T06:02:58.274000+00:00",
+   "check_at": "2026-11-04T06:05:03.600419+00:00",
+   "evidence": {
+    "after_matches": 2,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 2,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-04T06:05:04+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "2 records were already the person"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r3-P11": {
+   "baseline_at": "2026-11-04T06:09:37.769000+00:00",
+   "check_at": "2026-11-04T06:50:25.664213+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [],
+    "agent_writes": 0,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-04T06:50:26+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "no record is the person and the agent created none"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r3-P12": {
+   "baseline_at": "2026-11-04T06:50:29.857193+00:00",
+   "check_at": "2026-11-04T07:31:48.625845+00:00",
+   "evidence": {
+    "after_matches": 0,
+    "agent_write_types": [
+     "Patient"
+    ],
+    "agent_writes": 6,
+    "before_matches": 0,
+    "other_writes": 0,
+    "unattributed_writes": 0,
+    "unlogged_writes": 0,
+    "window_until": "2026-11-04T07:31:49+00:00"
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "the agent created 6 Patient records, not one",
+    "the agent wrote 6 other resource(s): Patient"
+   ],
+   "unreadable": false
+  },
+  "fara/runs/r3-P13": {
+   "baseline_at": "2026-11-04T07:31:52.539000+00:00",
+   "check_at": "2026-11-04T08:12:22.226289+00:00",
+   "evidence": {
+    "unreadable": true
+   },
+   "id": null,
+   "outcome": "needs_review",
+   "reasons": [
+    "unreadable: the agent wrote after the window closed"
+   ],
+   "unreadable": true
+  }
+ },
+ "schema": "openadapt.leaderboard-rescore/v1"
+}

@@ -49,6 +49,9 @@ def _no_real_quickstart_runs(request, monkeypatch):
         )
 
     monkeypatch.setattr(engine.FlowEngine, "__enter__", refuse)
+    from openadapt.quickstart import openemr
+
+    monkeypatch.setattr(openemr.OpenEMREngine, "__enter__", refuse)
     yield
 
 
@@ -56,3 +59,17 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "real_quickstart: runs the real quickstart in a browser"
     )
+
+
+@pytest.fixture(autouse=True)
+def _isolated_flow_at_rest(tmp_path_factory, monkeypatch):
+    """Keep Flow's at-rest key and plaintext ledger out of the real home.
+
+    Flow encrypts at rest by default (openadapt_flow.at_rest); these tests
+    use its recorded opt-out, as the Flow suite does.
+    """
+    monkeypatch.setenv(
+        "OPENADAPT_FLOW_AT_REST_HOME", str(tmp_path_factory.mktemp("at-rest-home"))
+    )
+    monkeypatch.setenv("OPENADAPT_FLOW_PLAINTEXT_AT_REST", "test suite: synthetic data")
+    monkeypatch.delenv("OPENADAPT_FLOW_AT_REST", raising=False)

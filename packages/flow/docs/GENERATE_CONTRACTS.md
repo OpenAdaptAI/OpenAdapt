@@ -242,10 +242,12 @@ user, to the value every demonstration held, or to a copy of a column of the
 row a key points to (an invoice line's price from its product). A key, a
 link to a row the write added, the year, month, week or day of a date the
 task gives, and a generated token (a UUID) are recognized as such. A link
-and a column that holds the row's own key need two demonstrations; the own
-key must sit in the same text in every row (`INV-{key}`), never as a mere
-substring. Such a column is listed in the question, never checked or
-left open on its own. A date part must differ between the demonstrations: a constant
+needs two demonstrations. A column that is not a copy and, in two or more
+demonstrations, holds the row's own key in the same text (`INV-{key}`) is
+listed in the question as holding the row's own key, and is left unchecked
+only if the answer names it, like any column that varies. A copy is
+checked as a copy even when its values read as the own key (prices 15 and
+25 on rows 1 and 2). A date part must differ between the demonstrations: a constant
 that happens to equal the month of every demonstration's date is a
 constant. A copy is taken only through a declared key or a column named
 after its table, and only when the source differs between demonstrations:
@@ -290,9 +292,12 @@ is a log from its name.
 
 **Changes the app makes to existing rows.** A column of an existing row that
 the demonstrations changed with no task value is excused only on that row:
-the target itself, a row with the same key in every demonstration (a counter
-row), or the row the task's values name through a key of the main record
-(the account a contact belongs to). It is never excused by name on other
+the target itself, the row the task's values name through a key of the main
+record (the account a contact belongs to), or a row with the same key in
+every demonstration (a counter row). A row the task's values name is named
+by them even when every demonstration happened to touch the same one (both
+demonstrations were in one project), so a correct write in another project
+is not stopped. It is never excused by name on other
 rows or tables. Time stamps set during the write, counters that went up and
 columns set to the acting user are proposed; anything else is listed and
 excused only if the person adds it (`columns_add`). A changed row the
@@ -347,9 +352,33 @@ saves. Only the main record is a target (`target_surface`). A target
 the read before the write doesn't show as new is treated as existing, and
 with no version before the write it stops as `missing` (a record saved
 before the trail began, or outside the app). With neither, the update has no
-version check, and `report.json` shows `versions: null`. If the app stops
+version check: `report.json` shows `versions: null`, and `QUESTIONS.md`
+says so under the kind. If the app stops
 writing the trail (an agenda setting turned off), the agent's own save has
 no new version, and the verifier stops the write rather than pass it.
+
+**Time stamps checked against the clock.** With `now_checks: true` in the
+answers, a date-time column of the main record that the bookkeeping answer
+leaves unchecked on a create (the write's own time stamp), or excuses on the
+target of an update (its modified time), must hold a time near the read: no
+older than the execution window plus the recheck window plus a minute, and
+no more than five minutes ahead, by the database's local clock or by UTC. A
+NULL fails. Without it, such a column may hold any value. It only adds a
+check.
+
+**Checking both readings.** With `strict_pins: true`, a new-row column the
+demonstrations can't settle is checked instead of refusing the kind, in
+three cases: it holds one value that is also a copy of a column a key points
+to (both are checked), it holds the acting user's id and such a copy (both
+are checked), or its field set was seen in one demonstration only with one
+value (that value is pinned). Each only adds a check: a wrong guess stops
+correct writes, never passes a wrong one.
+
+**Setting up with no person answers.** `python -m
+openadapt_flow.generate.zero_touch` answers these questions by fixed rules
+and admits a kind only after a sandbox copy of the store confirms held-out
+writes and stops planted faults; see
+[research/ZERO_TOUCH_DESIGN.md](research/ZERO_TOUCH_DESIGN.md).
 
 **The recheck window.** One question asks how long the
 app can still write on its own after a verified write. The answer is

@@ -9,6 +9,8 @@ real OpenEMR when ``OPENEMR_FHIR_BASE_URL`` (+ optional
 
 from __future__ import annotations
 
+from openadapt_flow.runtime.effects.fhir import DEFAULT_OBSERVATION_PATHS
+
 import os
 
 import pytest
@@ -38,6 +40,7 @@ def fhir():
 def _verifier(base, *, token=None):
     return FhirEffectVerifier(
         base,
+        field_paths=dict(DEFAULT_OBSERVATION_PATHS),
         resource_type="Observation",
         search_params={"patient": PATIENT},
         access_token=token,
@@ -152,6 +155,7 @@ def test_fhir_expired_token_is_indeterminate_not_absent(fhir):
     try:
         v = FhirEffectVerifier(
             _base,
+            field_paths=dict(DEFAULT_OBSERVATION_PATHS),
             resource_type="Observation",
             search_params={"patient": PATIENT},
             access_token="WRONG",
@@ -172,6 +176,7 @@ def test_fhir_expired_token_is_indeterminate_not_absent(fhir):
 def test_fhir_unreachable_is_indeterminate():
     v = FhirEffectVerifier(
         "http://127.0.0.1:1",
+        field_paths=dict(DEFAULT_OBSERVATION_PATHS),
         resource_type="Observation",
         search_params={"patient": PATIENT},
         timeout_s=0.2,
@@ -199,6 +204,7 @@ def test_live_openemr_fhir_reachable():
     patient = os.environ.get("OPENEMR_FHIR_PATIENT", "1")
     v = FhirEffectVerifier(
         base,
+        field_paths=dict(DEFAULT_OBSERVATION_PATHS),
         resource_type="Observation",
         search_params={"patient": patient},
         access_token=token,

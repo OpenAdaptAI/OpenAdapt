@@ -45,6 +45,7 @@ poll never judges a stale transaction snapshot.
 from __future__ import annotations
 
 import re
+import sqlite3
 import time
 from typing import Any, Callable, Iterable, Mapping, Optional
 
@@ -116,12 +117,16 @@ def _is_word_char(char: str) -> bool:
     return char == "_" or char.isalnum() or ord(char) > 127
 
 
-def _sql_tokens(text: str) -> list[tuple[str, str]]:
+def _sql_tokens(
+    text: str, *, preserve_quoted_case: bool = False
+) -> list[tuple[str, str]]:
     """Split ``text`` into ``(kind, value)`` tokens, or raise ``ValueError``.
 
     Kinds: ``word`` (a bare word, lower-cased), ``quoted`` (a ``"..."`` or
     ```...``` identifier's text, lower-cased), ``string`` (a ``'...'``
     literal), ``punct`` (one other character). Whitespace is dropped.
+    ``preserve_quoted_case`` retains exact quoted identifiers for native
+    relation lookup; the read-only guard keeps its existing folding.
 
     It refuses, rather than guesses, every form whose reading differs
     between dialects or that can hide text from the checks: a comment
@@ -164,7 +169,9 @@ def _sql_tokens(text: str) -> list[tuple[str, str]]:
                 j += 1
             value = "".join(body)
             tokens.append(
-                ("string", value) if char == "'" else ("quoted", value.lower())
+                ("string", value)
+                if char == "'"
+                else ("quoted", value if preserve_quoted_case else value.lower())
             )
             i = j + 1
             continue
@@ -248,6 +255,169 @@ def read_only_connection(conn: Any, driver: str) -> Any:
     else:
         raise ValueError(f"no driver-level read-only session for {driver!r}")
     return conn
+
+
+class _SourceSqliteConnection(sqlite3.Connection):
+    """Observe only a reader-owned fresh connection, preserving other readers."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.read_sources: set[tuple[Optional[str], Optional[str], Optional[str]]] = (
+            set()
+        )
+
+        def observe(
+            action: int,
+            table: Optional[str],
+            column: Optional[str],
+            database: Optional[str],
+            view: Optional[str],
+        ) -> int:
+            if action == sqlite3.SQLITE_READ:
+                self.read_sources.add((database, table, view))
+            return sqlite3.SQLITE_OK
+
+        # Installed before this fresh connection is returned. An unknown
+        # connector's existing security authorizer is never replaced.
+        self.set_authorizer(observe)
+
+
+def sqlite_read_connection(database: str) -> sqlite3.Connection:
+    """A fresh read-only SQLite connection with native read-source observation."""
+
+    return read_only_connection(
+        sqlite3.connect(database, factory=_SourceSqliteConnection), "sqlite3"
+    )
+
+
+def _direct_table_source(query: str) -> Optional[tuple[str, ...]]:
+    """Closed query shape over the existing lexer, never inferred SQL origin.
+
+    Only ``SELECT * FROM table [WHERE ...]`` is eligible. Native metadata
+    must still prove that this name resolved to the witnessed physical table.
+    Joins, aliases, CTEs, projections and subqueries remain unknown.
+    """
+
+    try:
+        tokens = _sql_tokens(query, preserve_quoted_case=True)
+    except ValueError:
+        return None
+    if tokens and tokens[-1] == ("punct", ";"):
+        tokens.pop()
+    if tokens[:3] != [("word", "select"), ("punct", "*"), ("word", "from")]:
+        return None
+    i, names = 3, []
+    while i < len(tokens) and _name_token(tokens[i]):
+        if tokens[i][0] == "word" and not tokens[i][1].isascii():
+            return None  # native unquoted case folding is dialect-dependent
+        names.append(tokens[i][1])
+        i += 1
+        if i >= len(tokens) or tokens[i] != ("punct", "."):
+            break
+        i += 1
+        if i >= len(tokens) or not _name_token(tokens[i]):
+            return None
+    if not 1 <= len(names) <= 2:
+        return None
+    tail = tokens[i:]
+    if tail and (tail[0] != ("word", "where") or len(tail) == 1):
+        return None
+    if any(
+        (
+            kind == "word"
+            and value
+            in {
+                "select",
+                "from",
+                "join",
+                "union",
+                "intersect",
+                "except",
+                "with",
+                "as",
+                "group",
+                "having",
+                "window",
+                "order",
+                "limit",
+                "offset",
+                "fetch",
+                "for",
+            }
+        )
+        or (kind == "punct" and value == ";")
+        for kind, value in tail
+    ):
+        return None
+    return tuple(names)
+
+
+def _prepare_source(conn: Any, query: str) -> Optional[tuple[str, str, int]]:
+    names = _direct_table_source(query)
+    if names is None:
+        return None
+    if isinstance(conn, _SourceSqliteConnection):
+        if len(names) == 2 and names[0].casefold() != "main":
+            return None
+        return ("main", names[-1], 0)
+    if type(conn).__module__.split(".")[0] != "psycopg2":
+        return None
+    # Only the deployment reader's fresh read-only connection is probed.
+    # An existing transaction may contain a caller's security settings.
+    if conn.get_transaction_status() != 0 or conn.readonly is not True:
+        return None
+    cur = conn.cursor()
+    try:
+        relation = ".".join('"' + name.replace('"', '""') + '"' for name in names)
+        # Resolve before executing the read: a function in its WHERE clause
+        # cannot change search_path and make a view look like its base table.
+        # An inherited read can return child rows while native column OIDs
+        # name the parent; only a relation without descendants proves origin.
+        cur.execute(
+            "SELECT n.nspname, c.relname, c.oid FROM pg_catalog.pg_class c "
+            "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
+            "WHERE c.oid = pg_catalog.to_regclass(%s) AND c.relkind = 'r' "
+            "AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_inherits i "
+            "WHERE i.inhparent = c.oid)",
+            (relation,),
+        )
+        row = cur.fetchone()
+        return None if row is None else (str(row[0]), str(row[1]), int(row[2]))
+    except Exception:  # noqa: BLE001 - unavailable origin never excuses a row
+        conn.rollback()  # this was a fresh reader-owned connection
+        return None
+    finally:
+        cur.close()
+
+
+def _confirm_source(
+    conn: Any, description: Any, prepared: Optional[tuple[str, str, int]]
+) -> Optional[tuple[str, str, int]]:
+    if prepared is None:
+        return None
+    if isinstance(conn, _SourceSqliteConnection):
+        if len(conn.read_sources) != 1:
+            return None
+        database, table, view = next(iter(conn.read_sources))
+        if (
+            database == "main"
+            and table
+            and view is None
+            and (table.casefold() == prepared[1].casefold())
+        ):
+            return (database, table, 0)
+        return None
+    if (
+        type(conn).__module__.split(".")[0] == "psycopg2"
+        and description
+        and all(
+            getattr(column, "table_oid", None) == prepared[2]
+            and (getattr(column, "table_column", None) or 0) > 0
+            for column in description
+        )
+    ):
+        return prepared
+    return None
 
 
 def _name_token(token: tuple[str, str]) -> bool:
@@ -397,6 +567,9 @@ class SqlRecordVerifier(VerifierAdapterBase):
             land within ``Effect.timeout_s``.
         drop_fields: Record fields removed before judging (``["id"]`` judges
             records by their whole content); see :class:`~openadapt_flow.runtime.effects.RestRecordVerifier`.
+        source_metadata: Observe native source metadata on reader-owned fresh
+            connections. Unknown connectors keep their existing authorizers
+            and expose no attribution witness.
     """
 
     substrate = "sql"
@@ -411,6 +584,7 @@ class SqlRecordVerifier(VerifierAdapterBase):
         timeout_s: float = 5.0,
         poll_interval_s: float = 0.2,
         drop_fields: tuple[str, ...] = (),
+        source_metadata: bool = False,
     ) -> None:
         self.drop_fields = tuple(drop_fields)
         self._connect = connect
@@ -418,20 +592,34 @@ class SqlRecordVerifier(VerifierAdapterBase):
         self.query_params = dict(query_params or {})
         self.timeout_s = timeout_s
         self.poll_interval_s = poll_interval_s
+        self._source_metadata = source_metadata
+        #: Last captured read's native physical relation (schema, table, OID;
+        #: OID is 0 for SQLite). In memory only; None means unknown.
+        self.source_relation: Optional[tuple[str, str, int]] = None
 
     # -- transport ----------------------------------------------------------
 
-    def _fetch_records(self) -> Optional[list[dict[str, Any]]]:
+    def _fetch_records(
+        self, *, capture_source: bool = False
+    ) -> Optional[list[dict[str, Any]]]:
         """Run the read-only query; rows as dicts keyed by column name.
 
         Returns ``None`` -- read as unreadable, forcing INDETERMINATE -- on
         any connect/execute/shape failure. Never raises.
         """
+        self.source_relation = None
         try:
             conn = self._connect()
         except Exception:  # noqa: BLE001 - unreachable SoR is unreadable
             return None
         try:
+            prepared = (
+                _prepare_source(conn, self.query)
+                if capture_source and self._source_metadata
+                else None
+            )
+            if isinstance(conn, _SourceSqliteConnection):
+                conn.read_sources.clear()
             cursor = conn.cursor()
             if self.query_params:
                 cursor.execute(self.query, self.query_params)
@@ -441,7 +629,12 @@ class SqlRecordVerifier(VerifierAdapterBase):
             if description is None:
                 return None  # not a result-set query -> unusable
             columns = [str(col[0]) for col in description]
+            if not columns or len(set(columns)) != len(columns):
+                return None  # A dict cannot preserve duplicate result columns.
             rows = cursor.fetchall()
+            if any(len(row) != len(columns) for row in rows):
+                return None  # zip must not silently drop cells or column names.
+            self.source_relation = _confirm_source(conn, description, prepared)
             return drop_record_fields(
                 [dict(zip(columns, map(read_cell, row))) for row in rows],
                 self.drop_fields,
@@ -457,11 +650,13 @@ class SqlRecordVerifier(VerifierAdapterBase):
     # -- EffectVerifier protocol --------------------------------------------
 
     def capture_pre_state(self, context: Any = None) -> EffectState:
-        records = self._fetch_records()
+        records = self._fetch_records(capture_source=True)
         return EffectState(
             substrate=self.substrate,
             reachable=records is not None,
             records=records or [],
+            # Complete declared SELECT result, not proof of whole-table scope.
+            readback_complete=records is not None,
             detail={"query": self.query},
         )
 

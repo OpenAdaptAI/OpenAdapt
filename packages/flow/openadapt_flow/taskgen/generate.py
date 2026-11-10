@@ -1,7 +1,7 @@
 """Write task packs: OpenEnv tasks, each with its own effect contract.
 
-    python -m openadapt_flow.taskgen.generate mockmed --manifest work/out/manifest.yaml \\
-        --out packs/mockmed --per-cell 6 --seed 1000
+    python -m openadapt_flow.taskgen.generate <app> --manifest work/out/manifest.yaml \\
+        --out packs/<app> --per-cell 6 --seed 1000
 
 For every kind and every family that applies to it (and both forms of the
 families that have a positive form), ``--per-cell`` tasks with consecutive
@@ -228,7 +228,9 @@ def sha256_file(path: Path) -> str:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     ap.add_argument("profile")
     ap.add_argument("--manifest", required=True, type=Path)
     ap.add_argument("--out", required=True, type=Path)

@@ -206,15 +206,15 @@ def _now() -> str:
 def _bundle_digest(bundle: Path) -> str:
     from openadapt_flow import sealed_set
     from openadapt_flow.bundle_validation import (
-        compute_content_digest,
         compute_file_hashes,
+        content_identity_digest,
     )
     from openadapt_flow.ir import Workflow
 
     workflow = Workflow.load(bundle)
     # A sealed bundle's crops are ciphertext on disk; hash the plaintext.
     assets = workflow.decrypted_templates() if sealed_set.is_sealed(bundle) else None
-    return compute_content_digest(
+    return content_identity_digest(
         workflow, compute_file_hashes(workflow, bundle, assets=assets)
     )
 
@@ -391,13 +391,15 @@ def prepare_admission(
         induced = True
         guard_notes = list(result.guard_notes)
     workflow = workflow.model_copy(update={"name": name})
-    from openadapt_flow import sealed_set
+    from openadapt_flow import at_rest, sealed_set
 
-    sealed = any(sealed_set.is_sealed(path) for path in compiled)
+    sealed = any(sealed_set.is_sealed(path) for path in compiled) or at_rest.seal_new(
+        "an admitted bundle", bundle_dir
+    )
     if sealed:
         # Encrypted recordings or bundles admit into a sealed bundle: the
         # crops are merged in memory and never copied out as plaintext.
-        passphrase = sealed_set.passphrase_for("bundle") or sealed_set.recording_key()
+        passphrase = sealed_set.output_bundle_key()
         if not passphrase:
             raise AdmissionError(sealed_set.missing_key_message(compiled[0], "bundle"))
         templates: dict[str, bytes] = {}

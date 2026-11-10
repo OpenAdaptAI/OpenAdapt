@@ -13,7 +13,7 @@ from typing import Any
 
 import pytest
 
-from openadapt_flow import verifier
+from openadapt_flow import verifier as verifier_api
 from openadapt_flow.verifier import (
     Actor,
     BaselineUnreadable,
@@ -147,12 +147,41 @@ def test_no_write_is_uncertain(tmp_path: Path) -> None:
     assert result.verdict == "RECONCILIATION_REQUIRED"
 
 
-def test_a_write_never_sent_and_absent_is_retry_safe(tmp_path: Path) -> None:
+@pytest.mark.parametrize("file_backend", [False, True])
+@pytest.mark.parametrize("write_attempted", [False, True])
+def test_absence_without_dispatch_proof_stays_held(
+    tmp_path: Path, file_backend: bool, write_attempted: bool
+) -> None:
     db = _store(tmp_path)
-    pending = begin_write(_contract(db), PARAMS, actor=BOT, ledger=MemoryLedger())
-    result = verify_write(pending, write_attempted=False)
-    assert result.receipt_outcome == "halted_before_effect"
-    assert result.outcome is Outcome.REFUTED and result.retry_safe
+    backend = (
+        verifier_api.FileLedger(tmp_path / "journal")
+        if file_backend
+        else MemoryLedger()
+    )
+    ledger = verifier_api.Ledger(backend, settle_s=0)
+    contract = _contract(db)
+    pending = begin_write(contract, PARAMS, actor=BOT, ledger=ledger)
+    result = verify_write(pending, write_attempted=write_attempted)
+    expected = Outcome.UNCERTAIN if write_attempted else Outcome.REFUTED
+    assert result.outcome is expected and not result.retry_safe
+    assert result.receipt_outcome == (
+        "reconciliation_required" if write_attempted else "halted_before_effect"
+    )
+    assert result.to_dict()["retry_safe"] is False
+    assert not result.verified
+    retained = ledger.latest(pending.write_key)
+    assert retained is not None and retained.resolved is not None
+    assert retained.resolved["retry_safe"] is False
+    assert retained.resolved["result"]["retry_safe"] is False
+    if file_backend:
+        ledger = verifier_api.Ledger(
+            verifier_api.FileLedger(tmp_path / "journal"), settle_s=0
+        )
+    with pytest.raises(verifier_api.WriteHeld):
+        begin_write(contract, PARAMS, actor=BOT, ledger=ledger)
+    assert len(ledger.attempts()) == 1
+    with sqlite3.connect(db) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM patient").fetchone() == (1,)
 
 
 def test_an_unreadable_store_stops_before_the_write(tmp_path: Path) -> None:
@@ -221,7 +250,7 @@ def test_the_contract_names_the_values_it_binds(tmp_path: Path) -> None:
     "receipt_outcome, checked, rows, expected",
     [
         ("verified", {}, [], (Outcome.CONFIRMED, False)),
-        ("halted_before_effect", {}, [], (Outcome.REFUTED, True)),
+        ("halted_before_effect", {}, [], (Outcome.REFUTED, False)),
         ("rejected_policy", {}, [], (Outcome.REFUTED, False)),
         ("failed_platform", {}, [], (Outcome.UNCERTAIN, False)),
         ("reconciliation_required", {"frame": "refuted"}, [], (Outcome.REFUTED, False)),
@@ -259,7 +288,7 @@ def test_every_receipt_outcome_maps_to_one_of_three(
 
 
 def test_the_public_api_is_stable() -> None:
-    assert sorted(verifier.__all__) == [
+    assert sorted(verifier_api.__all__) == [
         "Actor",
         "AlreadyWritten",
         "BaselineUnreadable",
@@ -311,6 +340,7 @@ def test_the_public_api_is_stable() -> None:
         ("authorization_ref", "KEYWORD_ONLY"),
         ("workdir", "KEYWORD_ONLY"),
         ("declared_by", "KEYWORD_ONLY"),
+        ("read_provider", "KEYWORD_ONLY"),
     ]
     assert params(verify_write) == [
         ("pending", "POSITIONAL_OR_KEYWORD"),
@@ -331,11 +361,15 @@ def test_the_public_api_is_stable() -> None:
         "dialect",
         "allow_tables",
         "max_rows",
+        "read_row_budget",
         "key",
         "profile",
         "before",
         "actor_names",
     ]
+    budget = inspect.signature(capture_database).parameters["read_row_budget"]
+    assert budget.kind is inspect.Parameter.KEYWORD_ONLY
+    assert budget.default == 1_000_000
     assert list(WriteResult.__dataclass_fields__)[:5] == [
         "outcome",
         "scope",
@@ -357,6 +391,7 @@ def test_the_public_api_is_stable() -> None:
         ("excused_by", "KEYWORD_ONLY"),
         ("wait", "KEYWORD_ONLY"),
         ("ledger", "KEYWORD_ONLY"),
+        ("read_provider", "KEYWORD_ONLY"),
     ]
     assert [f for f in RecheckResult.__dataclass_fields__] == [
         "outcome",
@@ -368,7 +403,11 @@ def test_the_public_api_is_stable() -> None:
         "read_at",
         "excused",
         "evidence",
+        "recheck_claim_sha256",
+        "excuse_receipt_sha256s",
+        "recheck_owed",
     ]
+    assert RecheckResult.__dataclass_fields__["recheck_owed"].default is False
     assert list(inspect.signature(RecheckState.load).parameters) == [
         "path",
         "params",
@@ -409,3 +448,101 @@ def test_a_pending_write_repr_shows_no_values(tmp_path: Path) -> None:
     text = repr(pending)
     assert "Ada" not in text and "example.test" not in text
     pending.release()
+
+
+#: Contract hashes as openadapt-flow 2.5.0 computed them. A field that lost
+#: its default (records_path, resource_type) must not move them: the write
+#: ledger and reward certificates are keyed on these.
+_PINNED_CONTRACT_HASHES = {
+    "fhir": {
+        "digest": "91c4a3ebe007fb29ff109ab420e004c69d18344776d91b833275cafa0764fd20",
+        "identity": "5035aab8eb04079931ced609318a886d463b270031edb967650e3966206919e3",
+        "store": "20d025f2007789ef2271b5cef933e38fd47d4114d559fc820aca9283d6d827fd",
+    },
+    "rest": {
+        "digest": "5ab1d6ebc5bae6c5fba13a3f2ce60e2b65292c2126e6f858ef95190ee4b1104f",
+        "identity": "f287cf9ea6af74fd36dba0e42ae64a3024518c4c45ac7e063a1b4fee7dd2e678",
+        "store": "32521d4b64cce55ed24443f4d35ec1e73f472cd88ebc4d57e6a92d06161611a7",
+    },
+    "sql": {
+        "digest": "45ea6035db9bf63b39e7bf31db07dab820e42a9a218ba39906ea54e283cb5b22",
+        "identity": "60cf99eaa0beed0335bff2e85e23ac1a29b90882075d728eb8952a71305b52a2",
+        "store": "f333364923dd35c0e086046de0494ee84df7c766bc5c9a53209e58cad4594a9c",
+    },
+}
+
+
+def test_contract_hashes_do_not_change() -> None:
+    record = {
+        "name": "patient",
+        "match": ["email", "lname"],
+        "fields": {"fname": "fname", "lname": "lname", "email": "email"},
+    }
+    verifiers = {
+        "sql": {
+            "kind": "sql",
+            "sqlite_database": "/data/app.db",
+            "sql_query": "SELECT * FROM patient",
+        },
+        "rest": {
+            "kind": "rest",
+            "base_url": "http://app.local",
+            "records_path": "/api/db",
+            "records_key": "records",
+        },
+        "fhir": {
+            "kind": "fhir",
+            "base_url": "https://fhir.local/r4",
+            "resource_type": "Observation",
+            "field_paths": {
+                "id": "id",
+                "email": "email",
+                "lname": "lname",
+                "fname": "fname",
+            },
+        },
+    }
+    for kind, verifier_config in verifiers.items():
+        contract = Contract.from_dict(
+            {
+                "schema_version": "openadapt.verify/v1",
+                "verifier": verifier_config,
+                "record": record,
+                "frame": {"identity_field": "id"},
+            }
+        )
+        got = {
+            "digest": contract.digest,
+            "store": contract.store,
+            "identity": contract.identity,
+        }
+        assert got == _PINNED_CONTRACT_HASHES[kind], kind
+
+
+def test_legacy_handed_back_result_does_not_advertise_retry(tmp_path: Path) -> None:
+    db = _store(tmp_path)
+    ledger = verifier_api.Ledger(verifier_api.FileLedger(tmp_path / "journal"))
+    contract = _contract(db)
+    pending = begin_write(contract, PARAMS, actor=BOT, ledger=ledger, write_key="one")
+    _write(db, SAVE)
+    result = verify_write(pending)
+    assert result.verified
+    retained = ledger.latest(pending.write_key)
+    assert retained is not None and retained.resolved is not None
+    fields = dict(retained.resolved)
+    for key in ("event", "attempt", "at", "t", "revision", "based_on", "applied"):
+        fields.pop(key, None)
+    fields["result"] = {**fields["result"], "retry_safe": True}
+    ledger.resolved(
+        pending.write_key,
+        pending.write_id,
+        expected_revision=retained.revision,
+        **fields,
+    )
+    reopened = verifier_api.Ledger(verifier_api.FileLedger(tmp_path / "journal"))
+    with pytest.raises(verifier_api.AlreadyWritten) as caught:
+        begin_write(contract, PARAMS, actor=BOT, ledger=reopened, write_key="one")
+    assert caught.value.result["retry_safe"] is False
+    assert caught.value.result["verified"] is True
+    assert caught.value.result["not_sent_again"] is True
+    assert reopened.latest(pending.write_key).resolved["result"]["retry_safe"] is True

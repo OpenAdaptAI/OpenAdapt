@@ -82,15 +82,17 @@ Every result also says what it establishes (`scope`): the read path (database, A
 A check sees what is in the store when it reads. A write that lands after that read is not part of the result: a retry that fires two minutes later, a queued job, a trigger. To catch those, the contract can ask for a recheck. Set `frame.database.recheck_after_s` (a contract that reads the whole database), and every `CONFIRMED` result says `provisional: true` and when the recheck is due (`recheck_due_at`). The recheck reads the whole database again and judges every change since the first check:
 
 - In Python: `recheck(contract, result, params=values, actor=AGENT)` at or after `recheck_due_at`, or with `wait=True` to sleep until then.
-- Over MCP: call `verify_recheck` with the `write_id`. Before the due time it returns `due: false` and how long to wait. Your agent's later writes under the same contract, once checked, account for their own rows. A write under another contract can't: an agent that creates a contact and then an opportunity inside the window gets the first write `REFUTED`.
+- Over MCP: call `verify_recheck` with the `write_id`. Before the due time it returns `due: false` and how long to wait. Your agent's later writes under the same contract and `agent_id`, once checked, account for their own rows. A write under another contract or another `agent_id` can't: an agent that creates a contact and then an opportunity inside the window gets the first write `REFUTED`.
 
 | Recheck outcome | What it means | What to do |
 | --- | --- | --- |
 | `CONFIRMED` | Nothing moved since the first check that the contract doesn't explain. | The write is final as of the recheck. |
 | `REFUTED` | Something changed after the first check that nothing explains: the earlier `CONFIRMED` no longer stands. | Don't retry. A person checks the record. |
-| `UNCERTAIN` | The database couldn't be read again, or was still changing. | Don't retry. A person checks the record. |
+| `UNCERTAIN` | The database couldn't be read again or was still changing; the recheck state wasn't issued under this state directory or doesn't match its receipt; the call gave other params, another actor or another contract than the write (the reason then says the call was wrong, not the write); or a change may belong to a later write that was itself refuted. | Don't retry. A person checks the record. |
 
-A recheck that doesn't confirm also marks the write in the ledger, so a retry of it is held for a person (`openadapt verify ledger list`) instead of being handed the earlier `CONFIRMED`. That holds for a recheck run from a saved `recheck.json` too. If the recheck can't find the write in the ledger, its reasons say so: hold the write by hand.
+A recheck that doesn't confirm also marks the write in the ledger, so a retry of it is held for a person (`openadapt verify ledger list`) instead of being handed the earlier `CONFIRMED`. That holds for a recheck run from a saved `recheck.json` too. If the recheck can't find the write in the ledger, its reasons say so: hold the write by hand. A later `UNCERTAIN` never replaces a `REFUTED` the ledger already holds.
+
+An owed recheck is in the ledger too. Until a recheck settles it, `openadapt verify ledger list` shows the write as `recheck-owed` with its due time, also after the server restarts; a retry of the write is handed its result with `provisional: true` and a `next` that says how to recheck it. This holds past the repeat window too: while a recheck is owed, a retry of the same values never starts a new attempt that would hide it. The MCP server can run only the rechecks it holds itself: after a restart, `verify_recheck` says the recheck is owed but not held here, and a person rechecks it in Python from the saved `recheck.json` (`RecheckState.load`). A recheck already run says so, with its outcome. Once a recheck confirms the write, a retry is handed `provisional: false`.
 
 There is no default window: pick one longer than the slowest write that can follow a save in your system. A write after the recheck's read is not seen by anything. See [VERIFY_RUN.md](VERIFY_RUN.md#writes-that-land-later) for how the recheck judges changes and what was measured on real apps.
 
@@ -98,10 +100,24 @@ A verified result proves the system of record holds what was declared. It doesn'
 
 ## Teach a write as a tool
 
-A write an agent teaches needs a person's signed teach authorization
-([TEACH_AUTHORIZATION.md](TEACH_AUTHORIZATION.md)). Browser teach
-(`openadapt-agent serve --teach-browser`) can't bind one, so it refuses a
-`teach_start` that names a write contract, and a write tool taught there
-earlier doesn't run. Teach the write with `openadapt-agent serve --teach
---teach-authorization STATEMENT`: run 1 runs under the signed scope, and the
-program is admitted only with the signature. The read-only lane is unchanged.
+`openadapt-agent serve --teach-browser --contracts ./contracts --teach-authorization STATEMENT --config deploy.yaml` lets your agent teach a browser write once, against a contract, and call it again as a `taught_<name>` tool. Each call makes the write and returns the same verified receipt or refusal.
+
+A person first signs what the agent may teach: a teach authorization ([TEACH_AUTHORIZATION.md](TEACH_AUTHORIZATION.md)) for the task `browser-tool.<name>` (its own namespace: a statement for a one-time `serve --teach` run, `taught.<name>`, doesn't cover a reusable tool). It must name the app's origin, the contract as its `record_kind`, a write adapter for the app, run 1's inputs, and exactly the record fields the contract checks, as its identity and fields, with run 1's values. The sign-in's path goes in `allowed_write_paths`. The server checks it against the approver roster in the deployment config's `approvers` section. The config's `approvers` section must name its `key_dir`, and that folder must hold the local admission key (`openadapt-flow jit keygen` sets one up), which signs each taught tool. The statement must expire within 90 days and allow as many rows as the contract checks. Run 1 starts only when it verifies and covers the write. While teaching, the write adapter reads every write before it is sent, the browser reaches only the statement's origins and opens no WebSocket, only the statement's values may be typed, and `press` takes only Enter, Tab, Escape and the arrow and page keys. Every later call checks the tool's signature and the kept statement again (signature, roster, purpose, task, expiry, origin, record kind) against the config's roster; the statement's identity, field values, forbidden controls and actions bind run 1 only, and later calls are bounded by the contract and run 1's pinned writes. Without one, or with one that doesn't cover the write, nothing is taught or run. The statement's values bind run 1 only; later calls take new inputs, bounded by the contract.
+
+For a taught write, the contract also lists the requests the write may send:
+
+```yaml
+writes: ["POST /login", "POST /orders"]   # the sign-in and the save
+```
+
+The browser stops any other write before it is sent, while teaching and on every call. The tool sends exactly the writes it was taught, in order and with the same fields, and a call where the page tries anything else ends in `needs_review`, never `done`.
+
+Sign-in values stay with the server. They go only into a password field or another field of a sign-in form, never into an address, and no form of them (encoded or not) reaches the agent:
+
+```bash
+openadapt-agent serve --teach-browser --contracts ./contracts \
+  --teach-authorization STATEMENT --config deploy.yaml \
+  --sign-in username=PORTAL_USER --sign-in password=PORTAL_PASSWORD
+```
+
+The example app has a sign-in and a New Order form to try it on: `openadapt agent example-app`, with user `clerk` and password `portal-demo`. Its write adapter is `openadapt_flow.agent.example_app:OrderWrites`.

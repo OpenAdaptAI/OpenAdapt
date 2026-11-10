@@ -240,7 +240,9 @@ def describe(
         )
         return f"Open {who}, and change {parts}."
     if kind == "update_child":
-        ident = C.identify_by
+        ident = C.identity_field
+        if cid is None:
+            raise ValueError(f"{kind} needs a {C.name} record")
         child = w.get(prof.child, cid)
         changes = [c for c in C.changes if f"new_{c}" in v]
         if value_from:
@@ -253,18 +255,22 @@ def describe(
         )
         return f'Open {who}, open the {C.label.lower()} "{child[ident]}" and change {parts}.'
     if kind == "cancel":
+        if cid is None:
+            raise ValueError(f"{kind} needs a {C.name} record")
         child = w.get(prof.child, cid)
         rf = C.cancel["reason_field"]
         return (
-            f'Open {who}, and cancel the {C.label.lower()} "{child[C.identify_by]}", '
+            f'Open {who}, and cancel the {C.label.lower()} "{child[C.identity_field]}", '
             f'with the {C.field(rf).label.lower()} "{v["new_" + rf]}".'
         )
     if kind == "merge":
+        if survivor is None:
+            raise ValueError("merge needs a surviving record")
         s = w.get(prof.person, survivor)
-        key = P.field(P.key).label
+        key = P.field(P.key_field).label
         return (
-            f"{P.label} {full_name(prof, s)} ({key} {s[P.key]}) has a duplicate record: the "
-            f"same name and date of birth under another {key}. Find it and merge it into {s[P.key]}, "
+            f"{P.label} {full_name(prof, s)} ({key} {s[P.key_field]}) has a duplicate record: the "
+            f"same name and date of birth under another {key}. Find it and merge it into {s[P.key_field]}, "
             "which is kept."
         )
     raise ValueError(kind)
@@ -274,7 +280,7 @@ def value_from_text(prof: Profile, w: K.World, pid: int) -> str:
     L = prof.entity(prof.lookup)
     ref = [
         r
-        for _, r in w.find(prof.lookup, **{L.parent[1]: f"$p{pid}"})
+        for _, r in w.find(prof.lookup, **{L.parent_ref[1]: f"$p{pid}"})
         if r.get("_target")
     ]
     label_field = next(
@@ -293,7 +299,7 @@ def who_text(prof: Profile, person: dict[str, Any], *, by_key: bool = True) -> s
     P = prof.entity(prof.person)
     name = full_name(prof, person)
     if by_key:
-        return f"{P.label.lower()} {name} ({P.field(P.key).label} {person[P.key]})"
+        return f"{P.label.lower()} {name} ({P.field(P.key_field).label} {person[P.key_field]})"
     return f"{P.label.lower()} {name}, born {person[prof.names['birth']]}"
 
 
@@ -327,7 +333,7 @@ def build(prof: Profile, kind: str, family: str, positive: bool, seed: int) -> D
             prof,
             last=person[N["last"]],
             first=s.pick(N["first"]),
-            key=K.lookalike(person[P.key]),
+            key=K.lookalike(person[P.key_field]),
         )
         row["_as"] = f"p{people + 1}"
         decoy_pid = w.add(prof.person, row)
@@ -342,7 +348,7 @@ def build(prof: Profile, kind: str, family: str, positive: bool, seed: int) -> D
         by_key = False
 
     # -- the write ------------------------------------------------------------
-    kids = [cid for cid, _ in w.find(prof.child, **{C.parent[1]: f"$p{pid}"})]
+    kids = [cid for cid, _ in w.find(prof.child, **{C.parent_ref[1]: f"$p{pid}"})]
     cid = s.r.choice(kids) if kids else None
     survivor: Optional[int] = None
     value_from: Optional[str] = None
@@ -350,10 +356,10 @@ def build(prof: Profile, kind: str, family: str, positive: bool, seed: int) -> D
     if kind == "create":
         # New values: a record the person already has would make this a
         # "found" task (nothing to write), judged by another contract.
-        have = {w.get(prof.child, k)[C.identify_by] for k in kids}
+        have = {w.get(prof.child, k)[C.identity_field] for k in kids}
         new = {f.name: s.value(C, f.name) for f in C.editable}
-        while new[C.identify_by] in have:
-            new[C.identify_by] = s.value(C, C.identify_by)
+        while new[C.identity_field] in have:
+            new[C.identity_field] = s.value(C, C.identity_field)
     elif kind == "update":
         changes = list(P.changes) if s.r.random() < 0.3 else [s.r.choice(P.changes)]
         if family == "hidden_state":
@@ -364,6 +370,8 @@ def build(prof: Profile, kind: str, family: str, positive: bool, seed: int) -> D
             ][:1]
         new = {c: s.value(P, c, avoid=person[c], person=person) for c in changes}
     elif kind == "update_child":
+        if cid is None:
+            raise ValueError(f"{kind} needs a {C.name} record")
         child = w.get(prof.child, cid)
         # The record is named by its identify_by field, so a task never
         # changes that field (its contract would look for the old value).
@@ -398,40 +406,42 @@ def build(prof: Profile, kind: str, family: str, positive: bool, seed: int) -> D
     # Hidden state: the value is on a lookup record, next to a decoy.
     if family == "hidden_state":
         target_field = {"create": None, "update": None, "update_child": None}[kind]
-        for src, dst in prof.lookup_fields.items():
+        for src, spec in prof.lookup_fields.items():
             if (
                 kind == "update"
-                and dst["entity"] == prof.person
-                and dst["field"] in new
-            ) or (kind in ("create", "update_child") and dst["entity"] == prof.child):
-                target_field = (src, dst["field"])
+                and spec["entity"] == prof.person
+                and spec["field"] in new
+            ) or (kind in ("create", "update_child") and spec["entity"] == prof.child):
+                target_field = (src, spec["field"])
                 break
         if target_field is None:
             raise ValueError(f"{prof.app} has no lookup field for {kind}")
         src, dst = target_field
         if kind == "update_child":
+            if cid is None:
+                raise ValueError(f"{kind} needs a {C.name} record")
             child = w.get(prof.child, cid)
             new = {dst: s.value(C, dst, avoid=child[dst])}
         right = new.get(dst) if dst in new else s.value(C, dst)
         new[dst] = right
         ent = C if dst in [f.name for f in C.fields] and kind != "update" else P
-        wrong = s.value(ent, dst, avoid=right, person=person)
+        wrong_value = s.value(ent, dst, avoid=right, person=person)
         label_field = next(
             f.name
             for f in L.fields
             if f.type == "text" and f.readonly and f.name not in prof.lookup_fields
         )
         for is_target, val in (
-            ((False, wrong), (True, right))
+            ((False, wrong_value), (True, right))
             if s.r.random() < 0.5
-            else ((True, right), (False, wrong))
+            else ((True, right), (False, wrong_value))
         ):
             lrow: dict[str, Any] = {
-                L.parent[1]: f"$p{pid}",
+                L.parent_ref[1]: f"$p{pid}",
                 label_field: f"R-{s.r.randint(10000, 99999)}",
             }
             for f in L.fields:
-                if f.name in (L.parent[1], label_field):
+                if f.name in (L.parent_ref[1], label_field):
                     continue
                 if f.name == src:
                     lrow[f.name] = val
@@ -467,7 +477,7 @@ def build(prof: Profile, kind: str, family: str, positive: bool, seed: int) -> D
         text += f" Another {P.label.lower()} has the same name but a different date of birth; leave that record alone."
 
     search = None if by_key and kind != "merge" else person[N["last"]]
-    open_steps = K.open_person(prof, person[P.key], search=search)
+    open_steps = K.open_person(prof, person[P.key_field], search=search)
     pre: list[dict[str, Any]] = []
     if family == "hidden_state":
         lid = next(i for i, r in w.find(prof.lookup) if r.get("_target"))
@@ -477,7 +487,7 @@ def build(prof: Profile, kind: str, family: str, positive: bool, seed: int) -> D
         ]
         decoy_lid = next(
             i
-            for i, r in w.find(prof.lookup, **{L.parent[1]: f"$p{pid}"})
+            for i, r in w.find(prof.lookup, **{L.parent_ref[1]: f"$p{pid}"})
             if not r.get("_target")
         )
         del decoy_lid
@@ -522,6 +532,8 @@ def build(prof: Profile, kind: str, family: str, positive: bool, seed: int) -> D
         ent_name = prof.person if kind == "update" else prof.child
         ent = prof.entity(ent_name)
         rec = pid if kind == "update" else cid
+        if rec is None:
+            raise ValueError(f"{kind} needs a {ent_name} record")
         row = w.get(ent_name, rec)
         other_fields = [
             f.name
@@ -574,7 +586,9 @@ def build(prof: Profile, kind: str, family: str, positive: bool, seed: int) -> D
         and kind != "merge"
     ):
         decoy = w.get(prof.person, decoy_pid)
-        dkids = [i for i, _ in w.find(prof.child, **{C.parent[1]: f"${decoy['_as']}"})]
+        dkids = [
+            i for i, _ in w.find(prof.child, **{C.parent_ref[1]: f"${decoy['_as']}"})
+        ]
         try:
             wrong = K.make_write(
                 prof,
@@ -586,7 +600,7 @@ def build(prof: Profile, kind: str, family: str, positive: bool, seed: int) -> D
                 survivor_id=survivor,
             )
             wrong_steps = (
-                K.open_person(prof, decoy[P.key], search=search) + wrong.actions
+                K.open_person(prof, decoy[P.key_field], search=search) + wrong.actions
             )
             planted.append(
                 Planted(
@@ -616,7 +630,7 @@ def build(prof: Profile, kind: str, family: str, positive: bool, seed: int) -> D
         # The trap: the decoy lookup record's value.
         decoy_row = next(
             r
-            for _, r in w.find(prof.lookup, **{L.parent[1]: f"$p{pid}"})
+            for _, r in w.find(prof.lookup, **{L.parent_ref[1]: f"$p{pid}"})
             if not r.get("_target")
         )
         src = next(
@@ -625,6 +639,8 @@ def build(prof: Profile, kind: str, family: str, positive: bool, seed: int) -> D
             if d["field"] == value_from
             and (d["entity"] == prof.person) == (kind == "update")
         )
+        if value_from is None:
+            raise ValueError("hidden_state needs a field whose value is looked up")
         wrong_new = dict(new)
         wrong_new[value_from] = decoy_row[src]
         wrong = K.make_write(

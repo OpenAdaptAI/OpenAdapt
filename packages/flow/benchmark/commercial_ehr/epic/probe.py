@@ -50,7 +50,11 @@ def read_only(c: EpicClient) -> dict[str, Any]:
     _, _, body = c.get("Patient", {"family": KNOWN["family"]})
     facts["patient_search_one_value_matches"] = len(_entries(body, "match"))
     facts["empty_search_outcome_severity"] = sorted(
-        {i.get("severity") for r in _entries(body, "outcome") for i in r.get("issue", [])}
+        {
+            i.get("severity")
+            for r in _entries(body, "outcome")
+            for i in r.get("issue", [])
+        }
     )
     facts["patient_history_status"] = c.get(f"Patient/{pid}/_history")[0]
     facts["auditevent_search_status"] = c.get("AuditEvent", {"date": "ge2026-01-01"})[0]
@@ -72,7 +76,9 @@ def read_only(c: EpicClient) -> dict[str, Any]:
 
 def writes(c: EpicClient) -> dict[str, Any]:
     facts: dict[str, Any] = {}
-    family = "Oaprobe" + "".join(random.choice(string.ascii_lowercase) for _ in range(7))
+    family = "Oaprobe" + "".join(
+        random.choice(string.ascii_lowercase) for _ in range(7)
+    )
     body = {
         "resourceType": "Patient",
         "name": [{"use": "usual", "family": family, "given": ["Ada"]}],
@@ -92,15 +98,17 @@ def writes(c: EpicClient) -> dict[str, Any]:
     systems = sorted(t.get("system") for t in stored.get("telecom", []))
     facts["telecom_systems_stored"] = systems  # sent: email and phone
     facts["name_entries_stored"] = sorted(n.get("use") for n in stored.get("name", []))
-    facts["elements_added_by_epic"] = sorted(
-        set(stored) - set(body) - {"id", "meta"}
-    )
+    facts["elements_added_by_epic"] = sorted(set(stored) - set(body) - {"id", "meta"})
     facts["meta_security_added"] = sorted(
         s.get("code") for s in (stored.get("meta") or {}).get("security", [])
     )
     _, _, found = c.get(
         "Patient",
-        {"family": family, "birthdate": "1971-03-14", "_revinclude": "Provenance:target"},
+        {
+            "family": family,
+            "birthdate": "1971-03-14",
+            "_revinclude": "Provenance:target",
+        },
     )
     provs = _entries(found, "include")
     facts["created_patient_provenance"] = [
@@ -121,9 +129,26 @@ def writes(c: EpicClient) -> dict[str, Any]:
     }
     allergy = {
         "resourceType": "AllergyIntolerance",
-        "clinicalStatus": {"coding": [{"system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical", "code": "active"}]},
-        "verificationStatus": {"coding": [{"system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-verification", "code": "confirmed"}]},
-        "code": {"coding": [{"system": "http://snomed.info/sct", "code": "91936005"}], "text": "Penicillin"},
+        "clinicalStatus": {
+            "coding": [
+                {
+                    "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical",
+                    "code": "active",
+                }
+            ]
+        },
+        "verificationStatus": {
+            "coding": [
+                {
+                    "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-verification",
+                    "code": "confirmed",
+                }
+            ]
+        },
+        "code": {
+            "coding": [{"system": "http://snomed.info/sct", "code": "91936005"}],
+            "text": "Penicillin",
+        },
         "patient": {"reference": loc},
     }
     facts["allergy_confirmed_status"] = c.post("AllergyIntolerance", allergy)[0]
@@ -140,28 +165,46 @@ def writes(c: EpicClient) -> dict[str, Any]:
     facts["allergy_search_lists_created"] = any(
         r.get("id") == aloc.split("/")[-1] for r in _entries(listed, "match")
     )
-    _, _, body = c.get("Observation", {"patient": loc.split("/")[-1], "category": "vital-signs"})
+    _, _, body = c.get(
+        "Observation", {"patient": loc.split("/")[-1], "category": "vital-signs"}
+    )
     status, _, out = c.post(
         "Observation",
         {
             "resourceType": "Observation",
             "status": "final",
-            "category": [{"coding": [{"system": "http://terminology.hl7.org/CodeSystem/observation-category", "code": "vital-signs"}]}],
+            "category": [
+                {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                            "code": "vital-signs",
+                        }
+                    ]
+                }
+            ],
             "code": {"coding": [{"system": "http://loinc.org", "code": "29463-7"}]},
             "subject": {"reference": loc},
             "effectiveDateTime": "2026-10-29T12:00:00Z",
-            "valueQuantity": {"value": 61.2, "unit": "kg", "system": "http://unitsofmeasure.org", "code": "kg"},
+            "valueQuantity": {
+                "value": 61.2,
+                "unit": "kg",
+                "system": "http://unitsofmeasure.org",
+                "code": "kg",
+            },
         },
     )
     facts["observation_create_without_encounter"] = {
         "status": status,
-        "missing": [x for i in (out or {}).get("issue", []) for x in i.get("expression", [])],
+        "missing": [
+            x for i in (out or {}).get("issue", []) for x in i.get("expression", [])
+        ],
     }
     return facts
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(allow_abbrev=False)
     ap.add_argument("--out", required=True)
     ap.add_argument("--read-only", action="store_true")
     args = ap.parse_args(argv)

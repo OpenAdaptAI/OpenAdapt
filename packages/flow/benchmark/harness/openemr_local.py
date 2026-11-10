@@ -106,6 +106,13 @@ class SyntheticPatientSpec:
         }
 
 
+#: The field that identifies one patient chart: OpenEMR has no idempotency
+#: column, so a second chart with the same email is a duplicate write.
+#: ``benchmark/openemr_local/verify.yaml`` declares the same field as
+#: ``duplicate_key``; a test keeps the two in step.
+PATIENT_DUPLICATE_KEY = "email"
+
+
 def patient_effects(
     spec: SyntheticPatientSpec | None = None, *, resolved: bool = False
 ) -> list[Effect]:
@@ -113,6 +120,8 @@ def patient_effects(
 
     The selector deliberately uses both a reserved email and the synthetic
     family name.  A single coincidental field match cannot satisfy the write.
+    The record check carries the duplicate key, so a compiled save passes a
+    policy that requires one without qualification adding it.
     """
     spec = spec or SyntheticPatientSpec()
     selector = {
@@ -124,6 +133,8 @@ def patient_effects(
             kind=EffectKind.RECORD_WRITTEN,
             match=selector,
             expected_count=1,
+            idempotency_key=ValueExpr(param=PATIENT_DUPLICATE_KEY),
+            key_field=PATIENT_DUPLICATE_KEY,
             forbid_collateral_loss=True,
             risk="reversible",
             probe="exactly one synthetic OpenEMR patient exists",

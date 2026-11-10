@@ -41,6 +41,7 @@ from openadapt_flow.variants import (
     author_variant_set,
     is_variant_set_artifact,
 )
+from tests._rest_read_contract_fixtures import mockmed_rest_read_kwargs
 from tests.test_admitted_composition_authoring import _envelope_for
 from tests.test_loop_authoring import (
     _encounter_body,
@@ -513,7 +514,7 @@ def test_routed_variant_runs_through_the_replayer_and_its_report_names_it(
             report = Replayer(
                 _RowWritingBackend(url),
                 vision=_vision_confirms_saved(),
-                effect_verifier=RestRecordVerifier(url),
+                effect_verifier=RestRecordVerifier(url, **mockmed_rest_read_kwargs()),
                 poll_interval_s=0.01,
             ).run(
                 workflow,
@@ -893,7 +894,10 @@ def test_replay_refuses_a_variant_set(tmp_path: Path) -> None:
         main(["replay", str(out)])
 
 
-def test_cli_add_promotes_a_repaired_bundle(tmp_path: Path) -> None:
+@pytest.mark.parametrize("permission_flag", ["--admission", "--permission"])
+def test_cli_add_promotes_a_repaired_bundle(
+    tmp_path: Path, permission_flag: str
+) -> None:
     from openadapt_flow.__main__ import main
 
     variant_set, parent = _author(tmp_path, names=("light", "dark"))
@@ -907,7 +911,7 @@ def test_cli_add_promotes_a_repaired_bundle(tmp_path: Path) -> None:
             str(parent),
             "--variant",
             f"medicare_v2={bundle}",
-            "--admission",
+            permission_flag,
             str(envelope),
             "--when-theme",
             "light",

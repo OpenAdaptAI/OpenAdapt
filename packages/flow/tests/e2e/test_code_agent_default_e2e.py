@@ -25,6 +25,7 @@ import pytest
 from openadapt_flow.compile_agent import FirstRunCompiler, ScriptedCodeAgent
 from openadapt_flow.mockmed.fault_server import serve
 from openadapt_flow.tutorial import _http_json, _records
+from tests._rest_read_contract_fixtures import mockmed_effects_yaml
 
 PROMPT = (
     "Open the referral for Jane Sample, start a Triage encounter, and save "
@@ -54,10 +55,7 @@ def _verify_yaml(tmp_path: Path, base: str) -> Path:
     path = tmp_path / "verify.yaml"
     path.write_text(
         "verifier:\n"
-        "  kind: rest\n"
-        f"  base_url: {base}\n"
-        "  records_path: /api/db\n"
-        "  records_key: records\n"
+        f"{mockmed_effects_yaml(base)}"
         "  timeout_s: 2.0\n"
         "  poll_interval_s: 0.05\n"
     )
@@ -130,7 +128,12 @@ def test_a_dropped_save_is_reported_as_not_saved(mockmed: str, tmp_path: Path) -
 
 
 def _teach(
-    tmp_path: Path, base: str, *, hold: bool, teach_authorization: object = None
+    tmp_path: Path,
+    base: str,
+    *,
+    hold: bool,
+    teach_authorization: object = None,
+    fault: str = "ok",
 ) -> object:
     from openadapt_flow.agent.teach import TeachBridge, TeachConfig
 
@@ -138,7 +141,7 @@ def _teach(
         TeachConfig(
             verify=_verify_yaml(tmp_path, base),
             cache_dir=tmp_path / "teach",
-            url=f"{base}/?fault=ok&idempotency=demo#tasks",
+            url=f"{base}/?fault={fault}&idempotency=demo#tasks",
             key_dir=tmp_path / "keys",
             hold=hold,
             reset=_reset(base),
@@ -267,7 +270,7 @@ def test_a_teach_run_draft_without_a_statement_is_refused_at_admission(
         teach.close()  # type: ignore[attr-defined]
 
 
-def test_a_teach_run_draft_under_a_statement_is_bound_and_admissible(
+def test_a_teach_run_draft_under_a_statement_passes_the_authorization_gate(
     mockmed: str, tmp_path: Path
 ) -> None:
     authority = _authority(tmp_path, mockmed)
@@ -301,7 +304,63 @@ def test_teach_run_cannot_type_what_the_statement_does_not_allow(
         assert out["status"] == "ok", out
         injected = SCRIPTS[1].replace("{note}", "Cleared for discharge")
         out = teach.dispatch("teach_run", {"script": injected})  # type: ignore[attr-defined]
-        assert out["status"] in ("refused", "error"), out
+        assert out["status"] == "refused", out
+        assert "typed_value_not_declared" in str(out["detail"]), out
         assert _records(mockmed) == []  # nothing outside the statement was saved
+        report = teach.dispatch("teach_finish", {})  # type: ignore[attr-defined]
+        assert report["status"] != "draft", report
+    finally:
+        teach.close()  # type: ignore[attr-defined]
+
+
+def test_a_teach_run_save_on_another_record_leaves_no_draft(
+    mockmed: str, tmp_path: Path
+) -> None:
+    """The save reaches the app under the statement, and the read-back judges it."""
+
+    teach = _teach(
+        tmp_path,
+        mockmed,
+        hold=False,
+        teach_authorization=_authority(tmp_path, mockmed),
+        fault="wrong_record",
+    )
+    try:
+        _start(teach)
+        out = teach.dispatch("teach_run", {"script": SCRIPTS[0]})  # type: ignore[attr-defined]
+        assert out["status"] == "ok", out
+        out = teach.dispatch(  # type: ignore[attr-defined]
+            "teach_run", {"script": SCRIPTS[1].replace("{note}", NOTE)}
+        )
+        report = teach.dispatch("teach_finish", {})  # type: ignore[attr-defined]
+        assert report["status"] != "draft", (out, report)
+        jit = teach._compiler._jit()  # type: ignore[attr-defined]
+        assert jit.candidate() is None  # nothing an admission could take
+    finally:
+        teach.close()  # type: ignore[attr-defined]
+
+
+def test_a_person_approved_teach_run_save_under_a_statement_is_bound(
+    mockmed: str, tmp_path: Path
+) -> None:
+    authority = _authority(tmp_path, mockmed)
+    teach = _teach(tmp_path, mockmed, hold=True, teach_authorization=authority)
+    try:
+        _start(teach)
+        assert teach.dispatch("teach_run", {"script": SCRIPTS[0]})["status"] == "ok"  # type: ignore[attr-defined]
+        out = teach.dispatch(  # type: ignore[attr-defined]
+            "teach_run", {"script": SCRIPTS[1].replace("{note}", NOTE)}
+        )
+        assert out["status"] == "needs_person", out
+        hold = teach.hold_needed({"script": out["script"]}, tool="teach_run")  # type: ignore[attr-defined]
+        done = teach.dispatch(  # type: ignore[attr-defined]
+            "teach_run", {"script": out["script"]}, held_by_person=hold["binding"]
+        )
+        assert done["status"] == "ok", done
+        assert [(r["patient_id"], r["note"]) for r in _records(mockmed)] == [
+            ("p1", NOTE)
+        ]
+        assert teach.dispatch("teach_finish", {})["status"] == "draft"  # type: ignore[attr-defined]
+        assert _gate(teach, trust=authority)["task_id"] == "taught.add_note"
     finally:
         teach.close()  # type: ignore[attr-defined]

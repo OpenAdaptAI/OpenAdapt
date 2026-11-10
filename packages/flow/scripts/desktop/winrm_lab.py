@@ -23,17 +23,25 @@ Each lab host is a *profile*: a set of environment variables with the prefix
 * ``PASSWORD``: the WinRM password, used only when ``SSH_KEY`` is unset.
 * ``PYTHON``: the host's ``pythonw.exe`` (optional; found on the host
   when unset).
+* ``APP_PYTHON``: the console ``python.exe`` that test apps and their
+  helper scripts run under (optional; the ``python.exe`` beside ``PYTHON``).
 * ``GUEST_DIR``: where the agent and its certificate go (default ``C:\\oa``).
 
 ``WinRMLab()`` uses the profile named by ``OAFLOW_LAB_PROFILE`` (default
 ``winlab``), so a harness written for one lab host runs on another by
 changing that variable. Nothing here prints a credential. ``pywinrm`` is a lab
 dependency only and is imported lazily, so nothing ships with it.
+
+SSH commands default to a finite 600-second budget. The three desktop task
+preparation calls use 30 seconds. A local SSH timeout does not confirm guest
+exit: ``SSHTimeoutError`` retains ``MAY_STILL_RUN`` and requires reconciliation.
+It does not attempt remote cancellation.
 """
 
 from __future__ import annotations
 
 import base64
+import math
 import os
 import re
 import subprocess
@@ -57,7 +65,8 @@ _PYTHON_DIRS = (
 )
 
 
-# Run over SSH: read the whole script from stdin and run it as one block. Like
+# Run over SSH: read a length-framed script from stdin as one block. Windows
+# OpenSSH does not always deliver EOF, so ReadToEnd can wait indefinitely. Like
 # ``powershell -Command``, exit 1 when the script's last statement failed.
 _SSH_BOOTSTRAP = base64.b64encode(
     (
@@ -65,7 +74,12 @@ _SSH_BOOTSTRAP = base64.b64encode(
         "[Console]::InputEncoding=[Text.Encoding]::UTF8; "
         "[Console]::OutputEncoding=[Text.Encoding]::UTF8; "
         "$global:OAFlowLastOk=$true; "
-        '$s=[Console]::In.ReadToEnd() + "`n`$global:OAFlowLastOk=`$?"; '
+        "$n=0; $header=[Console]::In.ReadLine(); "
+        "if (-not [int]::TryParse($header,[ref]$n) -or $n -le 0) { exit 2 }; "
+        "$b=New-Object char[] $n; $r=0; "
+        "while ($r -lt $n) { "
+        "$k=[Console]::In.Read($b,$r,$n-$r); if ($k -le 0) { exit 2 }; $r+=$k }; "
+        '$s=(-join $b) + "`n`$global:OAFlowLastOk=`$?"; '
         "& ([scriptblock]::Create($s)); "
         "if (-not $global:OAFlowLastOk) { exit 1 }"
     ).encode("utf-16-le")
@@ -74,6 +88,32 @@ _SSH_BOOTSTRAP = base64.b64encode(
 
 class WinRMLabError(RuntimeError):
     """A lab host command failed; carries the exit status and stderr tail."""
+
+
+class SSHTimeoutError(WinRMLabError):
+    """The local SSH deadline expired; the guest outcome remains unknown."""
+
+    def __init__(self, host: str, operation: str, timeout_s: float) -> None:
+        self.host = host
+        self.operation = operation
+        self.timeout_s = timeout_s
+        super().__init__(
+            f"{operation} over SSH to {host} timed out after {timeout_s:g}s; "
+            "guest state unknown (MAY_STILL_RUN); ownership unverified; "
+            "no cancellation attempted; reconciliation required"
+        )
+
+    def as_dict(self) -> dict[str, str | float | bool]:
+        """Retain the unknown guest outcome without payload or partial output."""
+        return {
+            "host": self.host,
+            "operation": self.operation,
+            "timeout_s": self.timeout_s,
+            "guest_state": "MAY_STILL_RUN",
+            "identity_verified": False,
+            "cancellation_attempted": False,
+            "reconciliation_required": True,
+        }
 
 
 @dataclass
@@ -92,6 +132,7 @@ class HostProfile:
     user: str
     ssh_key: Optional[str] = None
     python: Optional[str] = None
+    app_python: Optional[str] = None
     guest_dir: str = r"C:\oa"
 
     @property
@@ -118,6 +159,7 @@ class HostProfile:
             user=os.environ[prefix + "USER"],
             ssh_key=os.path.expanduser(key) if key else None,
             python=os.environ.get(prefix + "PYTHON") or None,
+            app_python=os.environ.get(prefix + "APP_PYTHON") or None,
             guest_dir=os.environ.get(prefix + "GUEST_DIR") or r"C:\oa",
         )
 
@@ -172,6 +214,7 @@ class WinRMLab:
                 user=user or base.user,
                 ssh_key=base.ssh_key,
                 python=base.python,
+                app_python=base.app_python,
                 guest_dir=base.guest_dir,
             )
         self.host = self.profile.host
@@ -204,24 +247,40 @@ class WinRMLab:
             f"{self.user}@{self.host}",
         ]
 
-    def _ssh(self, remote_command: str, stdin: bytes = b"") -> Result:
+    def _ssh(
+        self,
+        remote_command: str,
+        stdin: bytes = b"",
+        *,
+        timeout_s: float = 600.0,
+        operation: str = "PowerShell command",
+    ) -> Result:
+        if not math.isfinite(timeout_s) or timeout_s <= 0:
+            raise ValueError("SSH timeout must be finite and positive")
         try:
             proc = subprocess.run(
                 self._ssh_base() + [remote_command],
                 input=stdin,
                 capture_output=True,
-                timeout=600,
+                timeout=timeout_s,
             )
         except subprocess.TimeoutExpired:
             # The exception's own text repeats the command line.
-            raise WinRMLabError(f"ssh to {self.host} timed out") from None
+            raise SSHTimeoutError(self.host, operation, timeout_s) from None
         return Result(
             proc.returncode,
             proc.stdout.decode("utf-8", "replace"),
             _clixml_text(proc.stderr.decode("utf-8", "replace")),
         )
 
-    def run_ps(self, script: str, *, check: bool = True) -> Result:
+    def run_ps(
+        self,
+        script: str,
+        *,
+        check: bool = True,
+        timeout_s: float = 600.0,
+        operation: str = "PowerShell command",
+    ) -> Result:
         if self._session is not None:
             raw = self._session.run_ps(script)
             result = Result(
@@ -233,9 +292,12 @@ class WinRMLab:
             # The script goes on stdin, so neither its length nor what it
             # holds (an agent token) is on a command line. Progress records
             # would arrive as CLIXML on stderr.
+            units = len(script.encode("utf-16-le")) // 2
             result = self._ssh(
                 f"powershell -NoProfile -NonInteractive -EncodedCommand {_SSH_BOOTSTRAP}",
-                stdin=script.encode("utf-8"),
+                stdin=f"{units}\n{script}".encode("utf-8"),
+                timeout_s=timeout_s,
+                operation=operation,
             )
         if check and result.status != 0:
             raise WinRMLabError(
@@ -243,7 +305,15 @@ class WinRMLab:
             )
         return result
 
-    def run_cmd(self, command: str, *args: str, check: bool = True) -> Result:
+    def run_cmd(
+        self,
+        command: str,
+        *args: str,
+        check: bool = True,
+        timeout_s: float = 600.0,
+        operation: str = "guest command",
+    ) -> Result:
+        """Run a command, forwarding its finite budget and phase on SSH."""
         if self._session is not None:
             raw = self._session.run_cmd(command, list(args))
             result = Result(
@@ -256,7 +326,12 @@ class WinRMLab:
             quoted = " ".join(
                 "'" + a.replace("'", "''") + "'" for a in (command, *args)
             )
-            result = self.run_ps(f"& {quoted}; exit $LASTEXITCODE", check=False)
+            result = self.run_ps(
+                f"& {quoted}; exit $LASTEXITCODE",
+                check=False,
+                timeout_s=timeout_s,
+                operation=operation,
+            )
         if check and result.status != 0:
             raise WinRMLabError(
                 f"guest command exited {result.status}: {result.stderr[-600:]}"
@@ -343,6 +418,19 @@ $found
             )
         return path
 
+    def resolve_app_python(self) -> str:
+        """The host's console ``python.exe`` for test apps and helper scripts.
+
+        Harnesses call this instead of naming an interpreter path, which
+        differs between hosts (an ARM VM's ``Python312-arm64``, an x64 PC's
+        ``C:\\Python312``).
+        """
+        if self.profile.app_python:
+            return self.profile.app_python
+        pythonw = self.resolve_python()
+        folder, _, name = pythonw.rpartition("\\")
+        return f"{folder}\\python.exe" if name.lower() == "pythonw.exe" else pythonw
+
     def launch_interactive(self, command_line: str, *, name: str = "OAFlowLab") -> None:
         """Start ``command_line`` on the signed-in user's desktop.
 
@@ -366,7 +454,7 @@ $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoi
 Register-ScheduledTask -TaskName '{task}' -Action $action -Principal $principal -Settings $settings -Force | Out-Null
 Start-ScheduledTask -TaskName '{task}'
 """
-        self.run_ps(script)
+        self.run_ps(script, timeout_s=30.0, operation="launch interactive task")
 
     def stop_interactive(self, name: str = "OAFlowLab") -> None:
         task = name.replace("'", "")
@@ -375,6 +463,8 @@ Start-ScheduledTask -TaskName '{task}'
             f"Unregister-ScheduledTask -TaskName '{task}' -Confirm:$false "
             "-ErrorAction SilentlyContinue",
             check=False,
+            timeout_s=30.0,
+            operation="stop interactive task",
         )
 
     def wait_port(self, port: int, *, timeout_s: float = 60.0) -> bool:
@@ -409,7 +499,9 @@ if ($line -and $line -match '\\s(\\d+)\\s+Disc') {{
   Unregister-ScheduledTask -TaskName OAFlowConsole -Confirm:$false
 }}
 """
-        self.run_ps(script, check=False)
+        self.run_ps(
+            script, check=False, timeout_s=30.0, operation="attach desktop console"
+        )
 
     def launch_agent(
         self,

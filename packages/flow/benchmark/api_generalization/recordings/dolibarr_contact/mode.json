@@ -1,0 +1,1 @@
+{"mode": "pass", "path_regex": "^/contact/card\\.php$", "body_exclude": "", "body_require": ""}

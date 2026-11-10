@@ -1,6 +1,6 @@
 """Validate a task pack: every task's oracle must tell right from wrong.
 
-    python -m openadapt_flow.taskgen.validate packs/mockmed --profile mockmed \\
+    python -m openadapt_flow.taskgen.validate packs/<app> --profile <app> \\
         --pg "host=127.0.0.1 port=9770 user=wb_admin" --workers 2
 
 For each task, on a fresh copy of the app:
@@ -501,7 +501,9 @@ def validate(
     with (pack / "results.jsonl").open("w", encoding="utf-8") as fh:
         for r in rows:
             fh.write(json.dumps(r, sort_keys=True) + "\n")
-    summary = summarize(pack, rows) if not only else {"episodes": len(rows)}
+    summary: dict[str, Any] = (
+        summarize(pack, rows) if not only else {"episodes": len(rows)}
+    )
     summary["wall_s"] = round(time.time() - started, 1)
     (pack / "validity.json").write_text(
         json.dumps(summary, indent=1, sort_keys=True) + "\n", encoding="utf-8"
@@ -510,7 +512,9 @@ def validate(
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     ap.add_argument("pack", type=Path)
     ap.add_argument(
         "--profile",
