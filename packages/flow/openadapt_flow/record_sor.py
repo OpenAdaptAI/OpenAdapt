@@ -405,10 +405,96 @@ def _record_field_names(
     return frozenset(str(name) for name in record_fields)
 
 
+_FREE_TEXT_FIELDS = frozenset(
+    {
+        "body",
+        "comment",
+        "comments",
+        "content",
+        "description",
+        "detail",
+        "details",
+        "explanation",
+        "instructions",
+        "memo",
+        "message",
+        "narrative",
+        "note",
+        "notes",
+        "reason",
+        "remark",
+        "remarks",
+        "summary",
+        "text",
+    }
+)
+
+_IDENTITY_FIELD_NAMES = frozenset(
+    {
+        "id",
+        "uuid",
+        "guid",
+        "pk",
+        "key",
+        "code",
+        "number",
+        "num",
+        "no",
+        "mrn",
+        "ssn",
+        "ein",
+        "npi",
+        "email",
+        "username",
+        "login",
+        "phone",
+        "first_name",
+        "last_name",
+        "fname",
+        "lname",
+        "dob",
+        "birth_date",
+        "date_of_birth",
+    }
+)
+
+_IDENTITY_SUFFIXES = (
+    "_id",
+    "_uuid",
+    "_guid",
+    "_pk",
+    "_key",
+    "_code",
+    "_number",
+    "_num",
+    "_no",
+)
+
+
+def _is_free_text_field(name: str) -> bool:
+    cleaned = name.strip().lower()
+    if cleaned in _FREE_TEXT_FIELDS:
+        return True
+    return any(cleaned.endswith(f"_{ft}") for ft in _FREE_TEXT_FIELDS)
+
+
+def _is_identity_bearing_field(
+    name: str, record_field_names: frozenset[str] = frozenset()
+) -> bool:
+    if name in record_field_names:
+        return True
+    cleaned = name.strip().lower()
+    if cleaned in _IDENTITY_FIELD_NAMES:
+        return True
+    return any(cleaned.endswith(sfx) for sfx in _IDENTITY_SUFFIXES)
+
+
 def _proposed_duplicate_key(
     record: Mapping[str, Any],
     match: Mapping[str, ValueExpr],
     record_field_names: frozenset[str],
+    *,
+    refuse_non_identity: bool = False,
 ) -> tuple[Optional[ValueExpr], dict[str, ValueExpr], list[str]]:
     """Idempotency key or composite key for a new ``record_written`` effect.
 
@@ -433,6 +519,18 @@ def _proposed_duplicate_key(
         if expr.param is not None or name in record_field_names:
             composite[name] = expr
     if composite:
+        has_identity = any(
+            _is_identity_bearing_field(f, record_field_names) for f in composite
+        )
+        if not has_identity and refuse_non_identity:
+            notes.append(
+                f"refusing to propose composite_key ({', '.join(sorted(composite))}): "
+                "key has no identity-bearing field and would refute legitimate repeats "
+                "of the same text; clinical-write policy will refuse until a person "
+                "adds an identity field or composite key by hand"
+            )
+            return None, {}, notes
+
         notes.append(
             "no "
             f"{DEFAULT_IDEMPOTENCY_KEY_FIELD!r} field on the new record; "
@@ -440,6 +538,20 @@ def _proposed_duplicate_key(
             + (" plus record identity fields" if record_field_names else "")
             + " for a person to confirm"
         )
+        if not has_identity:
+            if len(composite) == 1 and _is_free_text_field(next(iter(composite))):
+                field_name = next(iter(composite))
+                notes.append(
+                    f"warning: proposed composite_key is a single free-text parameter "
+                    f"{field_name!r} with no identity-bearing field; "
+                    "duplicate key check will refute legitimate records that repeat the same text"
+                )
+            else:
+                notes.append(
+                    f"warning: proposed composite_key ({', '.join(sorted(composite))}) has no "
+                    "identity-bearing field; a key without identity fields may refute "
+                    "legitimate records that repeat the same text"
+                )
         return None, composite, notes
 
     notes.append(
@@ -456,12 +568,17 @@ def propose_effects(
     diff: SnapshotDiff,
     params: Optional[Mapping[str, str]] = None,
     record_fields: Optional[Union[Mapping[str, Any], Sequence[str]]] = None,
+    *,
+    refuse_non_identity: bool = False,
 ) -> ContractProposal:
     """Effects that would check the change ``diff`` shows, all unconfirmed.
 
     ``record_fields`` are the identity fields a person named for the record
     (teach ``expect``). When the read set has no single-field key they join
-    parameter-bound match fields in a proposed ``composite_key``.
+    parameter-bound match fields in a proposed ``composite_key``. When the
+    composite key lacks an identity-bearing field (such as a single free-text
+    parameter), a warning is added to the proposal; when ``refuse_non_identity``
+    is True, proposing the key is refused.
     """
 
     lookup, shared = _param_lookup(dict(params or {}))
@@ -490,7 +607,7 @@ def propose_effects(
             )
             continue
         idem_key, composite, key_notes = _proposed_duplicate_key(
-            record, match, identity_names
+            record, match, identity_names, refuse_non_identity=refuse_non_identity
         )
         proposal.not_proposed.extend(key_notes)
         proposal.effects.append(

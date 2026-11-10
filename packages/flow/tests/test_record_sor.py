@@ -144,6 +144,12 @@ def test_new_record_becomes_one_unconfirmed_record_written():
     # match fields (patient_id stays out until named as record identity).
     assert effect.idempotency_key is None
     assert effect.composite_key == {"note": ValueExpr(param="note")}
+    # Issue #2174: warn when proposed composite key is a single free-text parameter
+    # with no identity-bearing field, as it would refute legitimate repeats.
+    assert any(
+        "single free-text parameter 'note' with no identity-bearing field" in n
+        for n in proposal.not_proposed
+    )
 
 
 def test_composite_key_includes_named_record_identity_fields():
@@ -162,6 +168,38 @@ def test_composite_key_includes_named_record_identity_fields():
     }
     assert effect.needs_operator_confirmation is True
     assert any("proposed composite_key" in n for n in proposal.not_proposed)
+    # When an identity-bearing field is present, no warning is emitted.
+    assert not any("no identity-bearing field" in n for n in proposal.not_proposed)
+
+
+def test_composite_key_warns_on_free_text_parameters_without_identity():
+    # Issue #2174: single free-text parameter (comment, description, memo)
+    # refutes legitimate records that repeat the same text.
+    diff = diff_snapshots(
+        [],
+        [{"id": 1, "comment": "standard follow up"}],
+    )
+    proposal = propose_effects(diff, {"comment": "standard follow up"})
+    [effect] = proposal.effects
+    assert effect.composite_key == {"comment": ValueExpr(param="comment")}
+    assert any(
+        "single free-text parameter 'comment' with no identity-bearing field" in n
+        for n in proposal.not_proposed
+    )
+
+
+def test_composite_key_refuses_when_refuse_non_identity_set():
+    # Issue #2174: refuse proposing composite_key when refuse_non_identity=True
+    # and no identity-bearing field is present.
+    diff = diff_snapshots(
+        [],
+        [{"id": 7, "patient_id": "p1", "note": NOTE, "key": None}],
+    )
+    proposal = propose_effects(diff, {"note": NOTE}, refuse_non_identity=True)
+    [effect] = proposal.effects
+    assert effect.composite_key == {}
+    assert any("refusing to propose composite_key" in n for n in proposal.not_proposed)
+    assert any("key has no identity-bearing field" in n for n in proposal.not_proposed)
 
 
 def test_single_field_key_becomes_idempotency_key_not_composite():
