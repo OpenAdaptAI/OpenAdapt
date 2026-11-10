@@ -780,10 +780,12 @@ def build_record_check(
         _refuse_plaintext_output(recording_dir, out_dir)
         destination = out_dir or recording_dir
         destination.mkdir(parents=True, exist_ok=True)
-        _sealed.write_text(
-            destination / READ_DISCOVERY_FILE,
-            json.dumps(proposal.search.read_discovery, indent=2, sort_keys=True) + "\n",
-        )
+        if proposal.search.read_discovery is not None:
+            _sealed.write_text(
+                destination / READ_DISCOVERY_FILE,
+                json.dumps(proposal.search.read_discovery, indent=2, sort_keys=True)
+                + "\n",
+            )
         # The proof, without the check: why nothing runnable was written.
         _sealed.write_text(
             destination / rcs.PROOF_NAME,
@@ -827,6 +829,51 @@ def build_record_check(
         summary=rcs.summary(proposal, check, proof),
         identity_path=identity_path,
     )
+
+
+def report_draft_fallback(
+    source: Path, out_dir: Optional[Path], *, probe_reads: bool = False
+) -> None:
+    """Print why build_record_check fell back to the TODO draft."""
+    destination = out_dir or source
+    if probe_reads:
+        import json as _json
+
+        found = destination / READ_DISCOVERY_FILE
+        status, reason = "unavailable", ""
+        try:
+            data = _json.loads(_sealed.read_text(found))
+            status, reason = str(data.get("status")), str(data.get("reason") or "")
+        except (OSError, ValueError, _sealed.SealedSetError):
+            pass
+        if status == "refused":
+            print(
+                "Read discovery: REFUSED. A probed read confirmed the written "
+                f"values but can't see the whole save, so no check was written: "
+                f"{reason} ({found})."
+            )
+        else:
+            print(
+                "Read discovery: UNAVAILABLE. No probed read confirmed the "
+                "written values, so no read was proposed; a person must name "
+                f"one ({found})."
+            )
+    else:
+        from openadapt_flow.record_check_synthesis import PROOF_NAME
+
+        proof_path = destination / PROOF_NAME
+        try:
+            import json as _json
+
+            proof_data = _json.loads(_sealed.read_text(proof_path))
+            if proof_data.get("status") == "refused":
+                reason = str(proof_data.get("refusal_reason") or "")
+                print(
+                    "Record check: REFUSED. A recorded read can't see the "
+                    f"whole save, so no check was written: {reason} ({proof_path})."
+                )
+        except (OSError, ValueError, _sealed.SealedSetError):
+            pass
 
 
 # ---------------------------------------------------------------------------

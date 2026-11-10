@@ -6220,6 +6220,7 @@ def _cmd_scaffold_verifier(args: argparse.Namespace) -> int:
     from openadapt_flow.scaffold_verifier import (
         NEXT_COMMANDS_TEMPLATE,
         build_record_check,
+        report_draft_fallback,
         write_draft,
     )
 
@@ -6245,31 +6246,11 @@ def _cmd_scaffold_verifier(args: argparse.Namespace) -> int:
     if built is not None:
         print(built.summary)
         return 0 if built.working else 1
-    if getattr(args, "probe_reads", False):
-        import json as _json
-
-        from openadapt_flow import sealed_set as _sealed_set
-        from openadapt_flow.scaffold_verifier import READ_DISCOVERY_FILE
-
-        found = (out_dir or Path(args.source)) / READ_DISCOVERY_FILE
-        status, reason = "unavailable", ""
-        try:
-            data = _json.loads(_sealed_set.read_text(found))
-            status, reason = str(data.get("status")), str(data.get("reason") or "")
-        except (OSError, ValueError, _sealed_set.SealedSetError):
-            pass
-        if status == "refused":
-            print(
-                "Read discovery: REFUSED. A probed read confirmed the written "
-                f"values but can't see the whole save, so no check was written: "
-                f"{reason} ({found})."
-            )
-        else:
-            print(
-                "Read discovery: UNAVAILABLE. No probed read confirmed the "
-                "written values, so no read was proposed; a person must name "
-                f"one ({found})."
-            )
+    report_draft_fallback(
+        Path(args.source),
+        out_dir,
+        probe_reads=bool(getattr(args, "probe_reads", False)),
+    )
     out, count = write_draft(Path(args.source), out_dir)
     print(
         "No read in the recording returns the saved record (no network capture, "

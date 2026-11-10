@@ -1825,6 +1825,7 @@ class Proposal:
     #: on a copy of the database with ``fault_gate``, else mapped from the
     #: recorded-state faults above.
     coverage: Optional[Any] = None
+    refusal_reason: Optional[str] = None
 
     @property
     def misses(self) -> list[str]:
@@ -1850,9 +1851,9 @@ class Proposal:
 
     @property
     def refused(self) -> bool:
-        """A probed read was found but can't see the whole save: no check."""
+        """A probed or observed read can't see the whole save: no check."""
         found = self.search.read_discovery or {}
-        return found.get("status") == "refused"
+        return found.get("status") == "refused" or self.refusal_reason is not None
 
     @property
     def working(self) -> bool:
@@ -1925,6 +1926,17 @@ class Proposal:
             "notes": list(self.search.notes),
             "read_discovery": self.search.read_discovery,
             "identity": self.identity,
+            **(
+                {
+                    "refusal_reason": self.refusal_reason
+                    or (self.search.read_discovery or {}).get("reason")
+                }
+                if (
+                    self.refusal_reason is not None
+                    or (self.search.read_discovery or {}).get("reason") is not None
+                )
+                else {}
+            ),
             "coverage": (
                 None
                 if self.coverage is None
@@ -2032,7 +2044,7 @@ def synthesize(
         closed_world=search.closed_world,
     )
     proposal = Proposal(params, search, effects, section, faults)
-    _refuse_partial_probed_read(proposal)
+    _refuse_partial_read(proposal)
     cfg = gate_config(proposal)
     if fault_gate and db_path is not None:
         proposal.coverage = gate_on_database(proposal, Path(db_path), cfg)
@@ -2041,20 +2053,17 @@ def synthesize(
     return proposal
 
 
-def _refuse_partial_probed_read(proposal: Proposal) -> None:
-    """Refuse a check built on a probed read that can't see the whole save.
+def _refuse_partial_read(proposal: Proposal) -> None:
+    """Refuse a check built on a read that can't see the whole save.
 
-    A probe finds the collection the save wrote, not the store. When the
-    fault test shows a write outside the reads would pass
+    A probe or partial observed read finds the collection the save wrote, not
+    the store. When the fault test shows a write outside the reads would pass
     (``collateral_unaudited``), or the capture holds a write no read covers,
     a CONFIRMED from that check could hide a wrong write elsewhere. So no
     runnable check is emitted: the read stays proposed only, with the reason,
     and a person decides (``--complete-read``, ``--db`` or a fuller read).
     """
 
-    found = proposal.search.read_discovery
-    if not found or found.get("status") != "promoted":
-        return
     unaudited = [
         f"{r.fault}: {r.detail}"
         for r in proposal.faults
@@ -2062,19 +2071,39 @@ def _refuse_partial_probed_read(proposal: Proposal) -> None:
     ] + [f"not covered: {item}" for item in proposal.search.uncovered]
     if not unaudited:
         return
-    found.update(
-        status="refused",
-        needs_operator_confirmation=True,
-        reason=(
-            f"the probed read {found.get('read')} covers only the written "
-            "collection, and a write outside it would pass the check ("
+
+    found = proposal.search.read_discovery
+    if found and found.get("status") == "promoted":
+        found.update(
+            status="refused",
+            needs_operator_confirmation=True,
+            reason=(
+                f"the probed read {found.get('read')} covers only the written "
+                "collection, and a write outside it would pass the check ("
+                + "; ".join(unaudited)
+                + "). No runnable check was written; confirm the read covers "
+                "everything the save can change (--complete-read), give --db, or "
+                "name a fuller read"
+            ),
+        )
+        proposal.refusal_reason = found["reason"]
+        proposal.search.notes.append(f"read discovery: {found['reason']}")
+    elif proposal.search.surfaces:
+        read_names = ", ".join(s.name for s in proposal.search.surfaces)
+        proposal.refusal_reason = (
+            f"the recorded read {read_names} covers only the recorded "
+            "records, and a write outside it would pass the check ("
             + "; ".join(unaudited)
             + "). No runnable check was written; confirm the read covers "
             "everything the save can change (--complete-read), give --db, or "
             "name a fuller read"
-        ),
-    )
-    proposal.search.notes.append(f"read discovery: {found['reason']}")
+        )
+        proposal.search.notes.append(
+            f"recorded read refusal: {proposal.refusal_reason}"
+        )
+
+
+_refuse_partial_probed_read = _refuse_partial_read
 
 
 # ---------------------------------------------------------------------------
