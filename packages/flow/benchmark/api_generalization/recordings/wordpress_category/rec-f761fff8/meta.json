@@ -1,0 +1,20 @@
+{
+  "id": "84c886a9879c42ea940ccaaad44e3e0b",
+  "created_at": "2026-11-04T20:55:38.149226+00:00",
+  "viewport": [
+    1280,
+    800
+  ],
+  "coordinate_space": "page",
+  "app_url": "http://127.0.0.1:9664/wp-admin/edit-tags.php?taxonomy=category",
+  "params": {
+    "name": "Community Events rec1555",
+    "parent": "None",
+    "description": "Fairs, meetups and open days."
+  },
+  "secret_params": [],
+  "network_capture": {
+    "file": "network.jsonl",
+    "exchanges": 2
+  }
+}

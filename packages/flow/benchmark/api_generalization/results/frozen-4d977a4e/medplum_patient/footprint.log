@@ -1,0 +1,10 @@
+{
+ "equivalent": false,
+ "gate": "stays on the GUI: the API step's side effects differ from the GUI save's, so it stays on the GUI (pair 1: the GUI save didn't make the expected record, so there is nothing to compare; pair 2: the GUI save didn't make the expected record, so there is nothing to compare; pair 3: the GUI save didn't make the expected record, so there is nothing to compare)",
+ "differences": [
+  "pair 1: the GUI save didn't make the expected record, so there is nothing to compare",
+  "pair 2: the GUI save didn't make the expected record, so there is nothing to compare",
+  "pair 3: the GUI save didn't make the expected record, so there is nothing to compare"
+ ],
+ "server_owned": []
+}

@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import importlib.util
+import os
+import subprocess
 import sys
+import warnings
 from pathlib import Path
 
 import pytest
@@ -33,8 +36,35 @@ def _repo(tmp_path: Path, table: str, files: dict[str, int]) -> Path:
     return tmp_path
 
 
+def _git(root: Path, *args: str) -> None:
+    subprocess.run(
+        ["git", "-C", str(root), "-c", "user.name=t", "-c", "user.email=t@t", *args],
+        check=True,
+        capture_output=True,
+    )
+
+
+def _base(root: Path) -> Path:
+    """Commit ``root`` as the base a pull request merges into."""
+    _git(root, "init", "-q")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-q", "-m", "base")
+    return root
+
+
+def _write(root: Path, name: str, lines: int) -> None:
+    (root / name).write_text("x\n" * lines, encoding="utf-8")
+
+
 def test_listed_files_are_within_budget() -> None:
-    failures, _notes = ratchet.check(ROOT)
+    """The real table, under the rule this CI event gets from ``policy``."""
+    base, report_only = ratchet.policy(os.environ)
+    failures, _notes = ratchet.check(ROOT, base)
+    if report_only:
+        # A push to main reports; the pull request that grew a file failed.
+        for failure in failures:
+            warnings.warn(failure, stacklevel=1)
+        return
     assert failures == []
 
 
@@ -83,3 +113,90 @@ def test_plan_lists_the_ten_largest_files() -> None:
     paths = {budget.path for budget in budgets}
     assert "packages/flow/openadapt_flow/runtime/replayer.py" in paths
     assert len(paths) == 10
+
+
+@pytest.mark.parametrize(
+    "event,expected",
+    [
+        ("pull_request", ("HEAD^1", False)),
+        ("merge_group", ("HEAD^1", False)),
+        ("push", (None, True)),
+        ("schedule", (None, False)),
+        ("workflow_dispatch", (None, False)),
+        (None, (None, False)),
+    ],
+)
+def test_policy_per_event(event: str | None, expected) -> None:
+    env = {} if event is None else {"GITHUB_EVENT_NAME": event}
+    assert ratchet.policy(env) == expected
+
+
+def test_a_change_that_does_not_touch_an_over_budget_file_passes(
+    tmp_path: Path,
+) -> None:
+    # Two pull requests each fit; together they left a.py over budget on main.
+    root = _base(_repo(tmp_path, "| `a.py` | 10 |\n", {"a.py": 12, "b.txt": 1}))
+    _write(root, "b.txt", 5)
+    failures, notes = ratchet.check(root, "HEAD")
+    assert failures == []
+    assert "did not grow it" in notes[0]
+    assert ratchet.main(["--root", str(root), "--base", "HEAD"]) == 0
+    # The absolute check still sees it, and --report-only only reports it.
+    assert len(ratchet.check(root)[0]) == 1
+    assert ratchet.main(["--root", str(root)]) == 1
+    assert ratchet.main(["--root", str(root), "--report-only"]) == 0
+
+
+@pytest.mark.parametrize("before", [10, 12])
+def test_a_change_that_grows_a_file_past_its_budget_fails(
+    tmp_path: Path, before: int
+) -> None:
+    root = _base(_repo(tmp_path, "| `a.py` | 10 |\n", {"a.py": before}))
+    _write(root, "a.py", 13)
+    failures, _notes = ratchet.check(root, "HEAD")
+    assert len(failures) == 1 and "a.py: 13 lines, budget 10 (+3)" in failures[0]
+    assert ratchet.main(["--root", str(root), "--base", "HEAD"]) == 1
+
+
+def test_growth_within_budget_passes(tmp_path: Path) -> None:
+    root = _base(_repo(tmp_path, "| `a.py` | 10 |\n", {"a.py": 5}))
+    _write(root, "a.py", 10)
+    assert ratchet.check(root, "HEAD")[0] == []
+
+
+def test_a_new_file_over_its_budget_fails(tmp_path: Path) -> None:
+    root = _base(_repo(tmp_path, "| `a.py` | 10 |\n", {"a.py": 10}))
+    doc = root / ratchet.DOC
+    doc.write_text(
+        doc.read_text().replace("| `a.py` | 10 |", "| `a.py` | 10 |\n| `n.py` | 1 |")
+    )
+    _write(root, "n.py", 2)
+    failures, _notes = ratchet.check(root, "HEAD")
+    assert len(failures) == 1 and failures[0].startswith("n.py: 2 lines")
+
+
+def test_a_budget_row_edited_below_the_file_fails(tmp_path: Path) -> None:
+    root = _base(_repo(tmp_path, "| `a.py` | 12 |\n", {"a.py": 12}))
+    doc = root / ratchet.DOC
+    doc.write_text(doc.read_text().replace("| 12 |", "| 11 |"))
+    failures, _notes = ratchet.check(root, "HEAD")
+    assert len(failures) == 1 and "a.py: 12 lines, budget 11" in failures[0]
+
+
+def test_removing_a_listed_file_fails_only_the_change_that_removed_it(
+    tmp_path: Path,
+) -> None:
+    root = _base(_repo(tmp_path, "| `a.py` | 10 |\n", {"a.py": 10}))
+    (root / "a.py").unlink()
+    failures, _notes = ratchet.check(root, "HEAD")
+    assert len(failures) == 1 and "missing" in failures[0]
+    _git(root, "commit", "-q", "-am", "removed without its row")
+    failures, notes = ratchet.check(root, "HEAD")
+    assert failures == [] and "Already missing on the base" in notes[0]
+
+
+def test_an_unreadable_base_is_refused(tmp_path: Path) -> None:
+    root = _base(_repo(tmp_path, "| `a.py` | 10 |\n", {"a.py": 10}))
+    with pytest.raises(ValueError, match="not a commit"):
+        ratchet.check(root, "no-such-ref")
+    assert ratchet.main(["--root", str(root), "--base", "no-such-ref"]) == 2

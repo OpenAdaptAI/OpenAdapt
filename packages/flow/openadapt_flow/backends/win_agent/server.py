@@ -913,6 +913,39 @@ def _target_fingerprint(control: object, candidate: dict[str, Any]) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def _uia_labeled_by(control: object) -> Optional[object]:
+    """The raw UIA LabeledBy element for ``control``, or None."""
+
+    # The typed COM getter returns IUIAutomationElement directly. The generic
+    # GetPropertyValue API returns VT_UNKNOWN, not a uiautomation Control.
+    element = _control_value(control, "Element", None)
+    return _control_value(element, "CurrentLabeledBy", None)
+
+
+def _uia_field_label(control: object) -> Optional[str]:
+    """Best human label for one focused UIA control: LabeledBy then Name."""
+
+    labeled = _uia_labeled_by(control)
+    if labeled is not None:
+        name = " ".join(str(_control_value(labeled, "CurrentName", "") or "").split())
+        if name:
+            return name
+    name = " ".join(str(_control_value(control, "Name", "") or "").split())
+    return name or None
+
+
+def _focused_field_label(auto: Any) -> Optional[str]:
+    """Label of the one focused UIA control, or None."""
+
+    try:
+        focused = auto.GetFocusedControl()
+    except Exception:  # noqa: BLE001
+        return None
+    if focused is None:
+        return None
+    return _uia_field_label(focused)
+
+
 def _candidate(control: object) -> Optional[dict[str, Any]]:
     locator = _locator_from_control(control)
     bounds = _bounds(control)
@@ -1492,6 +1525,10 @@ def _perform_uia_initialized(
             # a locator that matches others too could only ever be refused.
             locator = None
         return {"status": "ok", "locator": locator}
+
+    if operation == "focused-field-label":
+        _exact_object(payload, required=frozenset(), label=operation)
+        return {"status": "ok", "label": _focused_field_label(auto)}
 
     if operation == "tree":
         data = _exact_object(
@@ -2796,6 +2833,7 @@ def make_handler_class(
                 "/window/root-at": ("uia", "window-root-at"),
                 "/window/owned-over": ("uia", "owned-window-over"),
                 "/uia/text-at-point": ("uia", "text-at-point"),
+                "/uia/focused-field-label": ("uia", "focused-field-label"),
                 "/uia/identity-candidates-at": ("uia", "identity-candidates-at"),
                 "/uia/find": ("uia", "find"),
                 "/uia/act": ("uia", "act"),

@@ -1,0 +1,32 @@
+WARNING: writing a compiled bundle in plaintext at /Users/abrichr/oa/scratch/api-generalization/trac/bundle: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+WARNING: openadapt-privacy is not installed, so reports and logs are not scrubbed of patient data (OPENADAPT_FLOW_SCRUB=auto). Install 'openadapt-flow[privacy]', or set OPENADAPT_FLOW_SCRUB=on to refuse instead.
+{
+ "app": "trac",
+ "workflow": "new-ticket",
+ "steps": 10,
+ "params": [
+  "description",
+  "keywords",
+  "summary",
+  "type"
+ ],
+ "optional_params": [
+  "description",
+  "keywords"
+ ],
+ "compile_proposal": {
+  "proposed": false,
+  "step": null,
+  "reasons": [
+   "step_008 also sent POST /newticket; its field 'preview' is not a typed value, a form default or a session value"
+  ]
+ },
+ "proposed": false,
+ "reasons": [
+  "step_008 also sent POST /newticket; its field 'preview' is not a typed value, a form default or a session value"
+ ],
+ "compile_s": 16.1,
+ "frozen": "969cb939e7f246a55a7b49c319941a6aa3ff3d8c",
+ "head": "969cb939e7f246a55a7b49c319941a6aa3ff3d8c",
+ "engine_diff_vs_frozen": ""
+}

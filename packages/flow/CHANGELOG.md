@@ -15,11 +15,31 @@
 
 <!-- version list -->
 
-## Unreleased
+## v2.7.1 (2026-11-09)
+
+Flow 2.7.1 fixes loading of programs certified before Nov 8. Two optional
+workflow fields added since then changed their certification digest, so they
+failed to load. They now load under the reviewed sealed-omission rule, while a
+program whose content changed is still refused. The release also makes write
+ledger settlement atomic and extends zero-config verifier generation.
+
+### Upgrade notes
+
+- A custom `LedgerBackend` must provide `transaction(key)`, an exclusive journal transaction shared by `events()` and `append()`; a backend without it refuses ledger mutations. A held write is released only by a person: `settle_s` no longer releases it, and `halted_before_effect` is now `REFUTED` with `retry_safe=False`. See [Verifier API](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/VERIFIER_API.md).
+- `scaffold-verifier --prove` no longer accepts the built-in `mockmed` and `effect-e2e` fixtures. It runs only against a proof source the caller passes to `main(record_check_proof_source=...)`.
+
+### Fixes
+
+- Programs certified before the `Anchor.form_identity` and `TokenTemplate.bearing` fields were added load again. When the current workflow-contract digest does not match, the loader tries the older form, leaving out only fields on the reviewed sealed-omission list for the bundle's format version that are unset and `None`, and accepts it only if it reproduces the bound digest exactly. A program whose content changed is still refused.
+- Ledger settlements record the journal revision they observed, so a stale or concurrent observation cannot release a hold, grant a retry, complete a recheck or hand back an older result. Rechecks are bound to the original receipt and the exact set of validated later receipts.
 
 ### Changed
 
 - `scaffold-verifier` closes three gaps the zero-config benchmark found. A generated REST read now carries `records_complete: true` when `--complete-read` declares it or one unpaged response was seen to hold the whole collection; otherwise it stays incomplete and `verify-run` returns INDETERMINATE. A step counts as a write when the capture shows the page sending a POST, PUT, PATCH or DELETE to its own origin, or its store snapshots differ, not only when its label looks like Save. `--probe-reads` (with optional `--probe-base`) finds a read for an app that never reads the saved record back: it probes the collection and item reads the write implies with GET on the local machine, uses one only when it returns the written values and nothing outside it could change unseen (otherwise it refuses and writes the TODO draft), and records every probe (`read_discovery` in the proof, or `read_discovery.json` when none confirms).
+
+### Fixes
+
+- A frame with `audit_read` attribution and no `frame.database` never holds: it reports `not_checked`, so `verify-run` can't call the save `verified`. The bot's log entries for the saved record were excused whatever table they wrote, so an extra insurance row, allergy or note for the new patient passed when the frame read only the record's own table ([#1505](https://github.com/OpenAdaptAI/OpenAdapt/issues/1505)). Add `frame.database` (the whole-database diff) to such a contract; its own refutations are unchanged.
 
 ## v2.7.0 (2026-11-09)
 

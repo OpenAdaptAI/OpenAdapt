@@ -1,0 +1,93 @@
+{
+ "app": "medplum_patient",
+ "workflow": "new-patient",
+ "steps": 11,
+ "params": [
+  "family",
+  "given"
+ ],
+ "optional_params": [
+  "given"
+ ],
+ "compile_proposal": {
+  "proposed": true,
+  "step": "step_010",
+  "reasons": []
+ },
+ "proposed": true,
+ "reasons": [],
+ "compile_s": 12.0,
+ "frozen": "969cb939e7f246a55a7b49c319941a6aa3ff3d8c",
+ "head": "969cb939e7f246a55a7b49c319941a6aa3ff3d8c",
+ "engine_diff_vs_frozen": "",
+ "identity": {
+  "subject_name": "family"
+ },
+ "admitted": [
+  "step_010"
+ ],
+ "describe": "step_010: save with one request, POST /fhir/R4/Patient, in place of 11 GUI steps (step_000 to step_010).\n  sign-in: the replaying browser's own session; form read again from /Patient/new\n  fields: 2 param\n  run values: name/0/family={family}, name/0/given/0={given}\n  accepted when: HTTP [201]\n  record check after: 2 effect(s) copied from the save step\n  right record (subject_name): the request sends {family} in name/0/family and the record check selects family = {family}\n  screen-only checks, not repeated: ['step_000: region_stable, text_present', 'step_001: region_stable', 'step_003: region_stable']\n  if the form or a check differs at run time, the GUI steps run instead",
+ "binding": {
+  "form_path": "/Patient/new",
+  "fields": [
+   {
+    "name": "name/0/family",
+    "source": "param",
+    "param": "family",
+    "value": null
+   },
+   {
+    "name": "name/0/given/0",
+    "source": "param",
+    "param": "given",
+    "value": null
+   }
+  ],
+  "controls": [],
+  "encoding": "json",
+  "json_body": {
+   "resourceType": "Patient",
+   "name": [
+    {
+     "given": [
+      ""
+     ],
+     "family": ""
+    }
+   ]
+  },
+  "session_headers": [
+   "authorization",
+   "x-medplum"
+  ],
+  "api_origin": "http://localhost:9673",
+  "client_rules": null,
+  "client_scripts": [],
+  "submitter": null,
+  "submitter_requests": [],
+  "confirm": null,
+  "prechecks": [],
+  "success_pattern": null,
+  "replaces_steps": [
+   "step_000",
+   "step_001",
+   "step_002",
+   "step_003",
+   "step_004",
+   "step_005",
+   "step_006",
+   "step_007",
+   "step_008",
+   "step_009",
+   "step_010"
+  ],
+  "other_writes_seen": [],
+  "writes": [],
+  "screen_only_checks": [
+   "step_000: region_stable, text_present",
+   "step_001: region_stable",
+   "step_003: region_stable"
+  ],
+  "folded_checks_digest": "sha256:ed497fec37bba1feb205a5084c71663ad6d9062e7905740901f3484274cdab26"
+ }
+}
