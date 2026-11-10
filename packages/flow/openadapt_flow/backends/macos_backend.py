@@ -359,6 +359,28 @@ def _fingerprint(element: MacElement) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def _ax_field_label(element: Any, copy_attr) -> Optional[str]:
+    """Best human label for one focused AX element, or None.
+
+    Prefers ``AXTitleUIElement`` (the associated label control), then the
+    element's own ``AXTitle`` / ``AXDescription``. Used by
+    :meth:`MacOSBackend.focused_field_label`; ``copy_attr`` is injectable so
+    unit tests can exercise the priority without ApplicationServices.
+    """
+
+    title_ui = copy_attr(element, "AXTitleUIElement")
+    if title_ui is not None:
+        for attribute in ("AXTitle", "AXDescription"):
+            text = _clean_text(copy_attr(title_ui, attribute))
+            if text:
+                return text
+    for attribute in ("AXTitle", "AXDescription"):
+        text = _clean_text(copy_attr(element, attribute))
+        if text:
+            return text
+    return None
+
+
 class QuartzMacAXClient:
     """Live :class:`MacAXClient` over the macOS Accessibility (AX) API.
 
@@ -2033,6 +2055,38 @@ class MacOSBackend(RemoteDisplayBackend):
             else:
                 candidate["dx"] = candidate["dy"] = None
         return census
+
+    def focused_field_label(self) -> Optional[str]:
+        """Return the focused field's AX label, or None (never raises).
+
+        RECORD-TIME seam (:class:`openadapt_flow.backend.FieldLabelBackend`):
+        reads ``AXTitleUIElement`` then ``AXTitle`` / ``AXDescription`` on the
+        one focused AX element in this window. Never by position; None when
+        there is no label so compile-time OCR fallback still applies.
+        """
+
+        try:
+            window = (
+                self._captured_window
+                if self._captured_window is not None
+                else self._resolve_window()
+            )
+            if window is None:
+                return None
+            token = self._mac_client.focused_element_token(window)
+            if token is None:
+                return None
+            from ApplicationServices import AXUIElementCopyAttributeValue
+
+            def copy_attr(element: Any, attribute: str) -> Any:
+                error, value = AXUIElementCopyAttributeValue(element, attribute, None)
+                if error != 0:
+                    return None
+                return value
+
+            return _ax_field_label(token, copy_attr)
+        except Exception:  # noqa: BLE001 - a momentary AX failure is not fatal
+            return None
 
     def displayed_text_at(self, x: int, y: int) -> Optional[str]:
         """The text of the one AX element under (x, y), for a read-back.

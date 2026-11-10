@@ -1,0 +1,39 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_01c257f199fb474b016ae962d709e087d2bd8ba96bcea31668",
+     "call_id": "call_uM93lJ0PA4MTgPm4LHoV47fm",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE The app is showing the sign-in screen; no authenticated session is available to find the patient or verify and record the allergy.",
+   "calls": []
+  }
+ ],
+ "actions": [],
+ "usage": [
+  {
+   "in": 2343,
+   "out": 16,
+   "usd": 0.000634,
+   "cached": 2340
+  },
+  {
+   "in": 3560,
+   "out": 55,
+   "usd": 0.001267,
+   "cached": 3557
+  }
+ ]
+}

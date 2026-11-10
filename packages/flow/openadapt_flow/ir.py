@@ -728,6 +728,22 @@ class Postcondition(BaseModel):
     candidate_params: Optional[tuple[str, ...]] = Field(
         default=None, min_length=1, max_length=8
     )
+    #: NO_DUPLICATE_CANDIDATE: where the check's evidence must come from.
+    #: ``record``: the system of record, and a run with no record channel
+    #: fails the step (never the screen instead). ``screen``: the listed rows,
+    #: even when a record channel exists. Unset: the record when the run has
+    #: a record channel, else the screen.
+    candidate_source: Optional[Literal["record", "screen"]] = None
+    #: NO_DUPLICATE_CANDIDATE, record source: the run parameter that fills
+    #: each field the record check reads (``fname``, ``lname``, ``DOB``,
+    #: ``mrn``, ``phone_home``, ``email``, ``street``). Unset: those names.
+    candidate_record_fields: Optional[dict[str, str]] = None
+    #: NO_DUPLICATE_CANDIDATE, record source: which channel to search.
+    #: ``fhir`` with an app's REST record check searches the app's FHIR API
+    #: on the same server (``app_profiles/record_search``); ``rest``, the
+    #: app's REST API only. Unset: the channel of the run's record check.
+    candidate_channel: Optional[Literal["fhir", "rest"]] = None
+
     #: TEXT_PRESENT: ``text`` must be read exactly once, as a whole line or
     #: wrapped lines equal to it after case, spaces and punctuation drop; never
     #: the fuzzy OCR match. Set on the empty-result checks the compiler mines
@@ -751,6 +767,9 @@ class Postcondition(BaseModel):
             "candidate_rows",
             "candidate_frame_path",
             "candidate_params",
+            "candidate_source",
+            "candidate_record_fields",
+            "candidate_channel",
             "focus_by",
             "focus_value",
             "focus_role",
@@ -958,9 +977,27 @@ class WebFormSpec(BaseModel):
     fields: list[WebFormField] = Field(min_length=1)
     controls: list[str] = Field(default_factory=list)
     #: How the save's body is encoded, as the recorded request was:
-    #: ``urlencoded`` (``application/x-www-form-urlencoded``) or ``multipart``
-    #: (``multipart/form-data`` with no file attached).
-    encoding: Literal["urlencoded", "multipart"] = "urlencoded"
+    #: ``urlencoded`` (``application/x-www-form-urlencoded``), ``multipart``
+    #: (``multipart/form-data`` with no file attached) or ``json`` (a JSON
+    #: body the page's script built, a GraphQL mutation included).
+    encoding: Literal["urlencoded", "multipart", "json"] = "urlencoded"
+    #: A ``json`` save's body as recorded, every value a constant except the
+    #: leaves a ``param`` field names (by JSON pointer, as the field's
+    #: ``name``): those hold an empty value of the recorded type ("" or 0).
+    json_body: Optional[Any] = None
+    #: Headers the page's script added to the save (names only, lowercase).
+    #: Each run sends the value the app's own script last sent to this
+    #: origin in this session (runtime/actuators/session_headers.py); one the
+    #: app hasn't sent keeps the save on the GUI.
+    session_headers: list[str] = Field(default_factory=list)
+    #: The save is a GraphQL mutation: its operation text is a constant of
+    #: ``json_body``, and success needs a response with data and no errors.
+    graphql: bool = False
+    #: A ``json`` save the page's script sent to another origin than its own
+    #: (an app whose API has its own host). The save goes only there, and
+    #: only when the app's own script sent that origin its headers in this
+    #: session.
+    api_origin: Optional[str] = None
     #: The path the form's own ``action`` names, when the save goes elsewhere:
     #: the page's script sent the form's fields to another endpoint (for
     #: example ``admin-ajax.php``) instead of submitting the form. The runtime
@@ -1016,7 +1053,8 @@ class WebFormSpec(BaseModel):
 
     @model_serializer(mode="wrap")
     def _omit_new_defaults(self, handler: Any) -> Any:
-        # A binding proposed before ``encoding`` and ``form_action`` existed
+        # A binding proposed before ``encoding``, ``form_action`` and the JSON
+        # fields existed
         # keeps the admission digest a person admitted: the keys are written
         # only when they say something.
         data = handler(self)
@@ -1025,6 +1063,14 @@ class WebFormSpec(BaseModel):
                 data.pop("encoding")
             if data.get("form_action") is None:
                 data.pop("form_action", None)
+            if data.get("json_body") is None:
+                data.pop("json_body", None)
+            if not data.get("session_headers"):
+                data.pop("session_headers", None)
+            if not data.get("graphql"):
+                data.pop("graphql", None)
+            if data.get("api_origin") is None:
+                data.pop("api_origin", None)
         return data
 
 
@@ -3347,15 +3393,9 @@ def _verify_sealed_template_integrity(
     mismatch. Skipped for a bundle with no sealed digest."""
     from openadapt_flow import bundle_validation as _bv
 
-    if not stored.content_digest:
+    if not stored.content_digest and workflow._loaded_seal is None:
         return
-    recomputed = _bv.compute_content_digest(workflow, stored.file_hashes)
-    if recomputed != stored.content_digest:
-        raise _bv.BundleIntegrityError(
-            "bundle content digest mismatch on decrypt: expected "
-            f"{stored.content_digest[:16]}..., recomputed {recomputed[:16]}... "
-            "-- the workflow.json was modified after the manifest was sealed"
-        )
+    _bv._verify_workflow_content(workflow, stored)
     for rel, expected in stored.file_hashes.items():
         data = decrypted.get(rel)
         if data is None:
@@ -3526,6 +3566,8 @@ class Workflow(BaseModel):
     # from ``model_dump`` / the content digest (a private attribute). The
     # resolver consumes a decrypted crop via :meth:`decrypted_template`.
     _decrypted_templates: dict[str, bytes] = PrivateAttr(default_factory=dict)
+    # Immutable source seal + upgraded-model fingerprint; never serialized.
+    _loaded_seal: Any = PrivateAttr(default=None)
 
     @model_validator(mode="after")
     def _undo_ids_are_unique(self) -> "Workflow":
@@ -3650,6 +3692,13 @@ class Workflow(BaseModel):
         Returns the path actually written (``workflow.json`` or, when encrypted,
         ``workflow.json.enc``).
         """
+        from openadapt_flow import bundle_validation as _bv
+
+        _bv.bundle_schema_version({"schema_version": self.schema_version})
+        if self._loaded_seal is not None and not seal_manifest:
+            raise _bv.BundleIntegrityError(
+                "a loaded sealed bundle requires explicit resealing before serialization"
+            )
         do_encrypt = encrypt or key is not None
         bundle = Path(bundle_dir)
         from openadapt_flow import sealed_set as _sealed
@@ -3676,6 +3725,15 @@ class Workflow(BaseModel):
 
             self.manifest = _bv.build_manifest(self, bundle)
         serialized = self.model_dump_json(indent=2)
+        resealed_payload = None
+        if (
+            self._loaded_seal is not None
+            and seal_manifest
+            and self.manifest is not None
+        ):
+            resealed_payload = _bv.verify_original_content(
+                json.loads(serialized), self.manifest
+            )
         plaintext_path = bundle / "workflow.json"
         encrypted_path = bundle / "workflow.json.enc"
         if do_encrypt:
@@ -3706,6 +3764,8 @@ class Workflow(BaseModel):
             (bundle / "manifest.json").write_bytes(
                 self.manifest.model_dump_json(indent=2).encode("utf-8")
             )
+        if resealed_payload is not None and self.manifest is not None:
+            _bv.remember_original_content(self, resealed_payload, self.manifest)
         return path
 
     def _save_sealed_set(
@@ -3740,7 +3800,19 @@ class Workflow(BaseModel):
             from openadapt_flow import bundle_validation as _bv
 
             self.manifest = _bv.build_manifest(self, bundle, assets=assets)
-        writer.write("workflow.json", self.model_dump_json(indent=2).encode("utf-8"))
+        serialized = self.model_dump_json(indent=2).encode("utf-8")
+        resealed_payload = None
+        if (
+            self._loaded_seal is not None
+            and seal_manifest
+            and self.manifest is not None
+        ):
+            from openadapt_flow import bundle_validation as _bv
+
+            resealed_payload = _bv.verify_original_content(
+                json.loads(serialized), self.manifest
+            )
+        writer.write("workflow.json", serialized)
         if self.manifest is not None:
             writer.write(
                 "manifest.json", self.manifest.model_dump_json(indent=2).encode("utf-8")
@@ -3748,6 +3820,8 @@ class Workflow(BaseModel):
         self._decrypted_templates = dict(assets)
         if owned:
             writer.finalize()
+        if resealed_payload is not None and self.manifest is not None:
+            _bv.remember_original_content(self, resealed_payload, self.manifest)
         return bundle / ("workflow.json" + _sealed.SEALED_SUFFIX)
 
     @classmethod
@@ -3812,19 +3886,30 @@ class Workflow(BaseModel):
             raw = json.loads(decrypted)
         else:
             raw = json.loads(plaintext_path.read_bytes())
-        raw = _bv.migrate_bundle_dict(raw)
-        # A manifest may be embedded in workflow.json OR sit in a sidecar; the
-        # embedded one wins, else the sidecar, else it is computed fresh.
+        _bv.bundle_schema_version(raw)
+        # Verify the original canonical representation before upgrading or
+        # constructing today's model. Embedded manifest precedence is unchanged.
         persisted = raw.get("manifest")
-        wf = cls.model_validate(raw)
-
-        if wf.manifest is None:
+        if persisted is None:
             sidecar = bundle / "manifest.json"
             if sidecar.is_file():
-                wf.manifest = BundleManifest.model_validate_json(
-                    sidecar.read_text(encoding="utf-8")
+                persisted = json.loads(sidecar.read_text(encoding="utf-8"))
+        stored = None
+        original_payload = None
+        if persisted is not None:
+            _bv.bundle_schema_version(persisted)
+            stored = BundleManifest.model_validate(persisted)
+            if stored.content_digest:
+                original_payload = (
+                    _bv.verify_original_content(raw, stored)
+                    if verify_integrity
+                    else _bv.source_canonical_payload(raw, stored.file_hashes)
                 )
-                persisted = wf.manifest
+        wf = cls.model_validate(_bv.migrate_bundle_dict(raw))
+        if stored is not None:
+            wf.manifest = stored
+        if original_payload is not None and stored is not None:
+            _bv.remember_original_content(wf, original_payload, stored)
 
         if sealed_assets is not None:
             wf._decrypted_templates = sealed_assets
@@ -3852,6 +3937,7 @@ class Workflow(BaseModel):
                 from openadapt_flow.qualification import (
                     QualificationError,
                     build_governed_authorization_template,
+                    record_certified_contract_form,
                 )
 
                 try:
@@ -3866,6 +3952,7 @@ class Workflow(BaseModel):
                         "governed authorization template does not match the "
                         "sealed workflow and certification"
                     )
+                record_certified_contract_form(wf)
 
         if wf.manifest is None:
             wf.manifest = _bv.build_manifest(wf, bundle)
@@ -5027,6 +5114,14 @@ class StepResult(BaseModel):
     #: on that path alone; None otherwise, and then omitted from the
     #: serialized result.
     scroll_target_ready_before: Optional[bool] = None
+    #: Set when ``no_duplicate_candidate`` failed this step: ``exact`` or
+    #: ``close`` (a record matched), ``candidate`` (a listed row matched on the
+    #: screen): about the item; ``unreadable`` (the record channel or the
+    #: screen list could not answer, or a record-pinned check had no
+    #: channel): about the program. None otherwise, and then omitted.
+    duplicate_check: Optional[Literal["exact", "close", "candidate", "unreadable"]] = (
+        None
+    )
 
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
@@ -5045,6 +5140,8 @@ class StepResult(BaseModel):
             data.pop("check_to_click", None)
         if isinstance(data, dict) and self.scroll_target_ready_before is None:
             data.pop("scroll_target_ready_before", None)
+        if isinstance(data, dict) and self.duplicate_check is None:
+            data.pop("duplicate_check", None)
         return data
 
 

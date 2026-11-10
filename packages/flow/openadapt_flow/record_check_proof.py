@@ -1,24 +1,10 @@
-"""Run a proposed record check end to end against a fault-injection fixture.
+"""Run a proposed record check against an explicit caller-owned proof source.
 
-:mod:`openadapt_flow.record_check_synthesis` judges a proposed check on bad
-writes built from the recorded records. This module goes further on the two
-fixtures that inject bad writes at the persistence boundary:
-
-- ``mockmed``: the MockMed fault server (:mod:`openadapt_flow.mockmed.fault_server`,
-  the ``--break-it`` fixture), one in-memory store read at ``/api/db``;
-- ``effect-e2e``: the SQLite record service of ``benchmark/effect_e2e`` (repo
-  only), with an encounters table, a billing table the REST read does not see,
-  and the app's own save banner.
-
-For each fault, the save goes through the real
-:class:`~openadapt_flow.runtime.replayer.Replayer` and
-:class:`~openadapt_flow.runtime.actuators.ApiActuator`, the proposed check is
-the replayer's effect verifier, and the fixture's own ground truth (which never
-sees the check) says whether the save was right. The check passes only when
-every wrong save stops the run and the clean save is reported as done.
-
-Each run uses new values for free-text parameters, so a check that froze the
-demonstration's values fails the clean save. No model calls, localhost only.
+The generic runner receives the source's lifecycle, scenarios and independent
+judge through Fixture. It never imports a demo or benchmark to discover one.
+Writes still use the real Replayer/ApiActuator and proposed effect verifier;
+the caller's independent ground truth decides whether each save was correct.
+Fresh free-text values reject checks frozen to the demonstration's values.
 """
 
 from __future__ import annotations
@@ -57,71 +43,21 @@ class Fixture:
     default_body: dict[str, str]
 
 
-# -- MockMed -----------------------------------------------------------------
+def require_fixture(name: str, source: Optional[Fixture]) -> Fixture:
+    """Bind a caller-owned proof source; the engine never discovers fixtures.
 
-
-def _mockmed_serve() -> tuple[str, Optional[Path], Callable[[], None], Any]:
-    from openadapt_flow.mockmed.fault_server import serve
-
-    url, db, stop = serve()
-    return url.rstrip("/"), None, stop, db
-
-
-def _mockmed_judge(
-    before: list[dict[str, Any]], after: list[dict[str, Any]], params: Mapping[str, str]
-) -> tuple[bool, str]:
-    patient = params.get("patient_id", "p1")
-    note = params.get("note", "")
-    before_ids = {r["id"] for r in before}
-    after_ids = {r["id"] for r in after}
-    if any(r["id"] not in after_ids for r in before):
-        return False, "collateral_loss"
-    new = [r for r in after if r["id"] not in before_ids]
-    mine = [r for r in new if str(r.get("patient_id")) == patient]
-    if not mine:
-        return False, "wrong_record" if new else "absent"
-    if len(mine) > 1:
-        return False, "duplicate"
-    if str(mine[0].get("note")) != note:
-        return False, "partial"
-    if len(new) > 1:
-        return False, "collateral_write"
-    return True, "correct"
-
-
-MOCKMED = Fixture(
-    name="mockmed",
-    serve=_mockmed_serve,
-    reset=lambda db, seed: db.reset(seed_concurrent=seed),
-    snapshot=lambda db: [dict(r) for r in db.snapshot()["records"]],
-    judge=_mockmed_judge,
-    scenarios=(
-        ("ok", False),
-        ("no_persist", False),
-        ("partial", False),
-        ("wrong_record", False),
-        ("stale", True),
-        ("optimistic", False),
-        ("session", False),
-    ),
-    write_path="/api/encounter",
-    default_body={"patient_id": "{patient_id}", "type": "Triage", "note": "{note}"},
-)
-
-
-def fixture(name: str) -> Fixture:
-    if name == "mockmed":
-        return MOCKMED
-    if name in ("effect-e2e", "effect_e2e"):
-        try:
-            from benchmark.effect_e2e.prove_check import FIXTURE
-        except ImportError as exc:  # pragma: no cover - wheel installs
-            raise ProofUnavailable(
-                "the effect-e2e fixture lives in the repository "
-                "(packages/flow/benchmark); run from a checkout"
-            ) from exc
-        return FIXTURE
-    raise ProofUnavailable(f"unknown fault fixture {name!r} (mockmed, effect-e2e)")
+    This is trusted in-process dependency injection, not approval, admission or
+    a callback loaded from serialized input. A label alone grants no fixture.
+    """
+    if (
+        source is None
+        or type(source) is not Fixture
+        or not isinstance(name, str)
+        or not name
+        or source.name != name
+    ):
+        raise ProofUnavailable("a matching caller-owned proof fixture is required")
+    return source
 
 
 # -- replayer fakes (the API tier never touches the screen) --------------------
@@ -267,8 +203,15 @@ def prove_live(
     *,
     write_requests: Optional[list[dict[str, Any]]] = None,
     work_dir: Path,
+    proof_source: Optional[Fixture] = None,
 ) -> dict[str, Any]:
-    """Run every fixture fault through the replayer with the proposed check."""
+    """Run every supplied fixture fault through the normal replayer.
+
+    Missing or mismatched sources refuse before serving anything. Fixture
+    discovery belongs to the caller's test or qualification composition root.
+    """
+
+    fx = require_fixture(fixture_name, proof_source)
 
     from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
     from openadapt_flow.ir import (
@@ -280,7 +223,6 @@ def prove_live(
     from openadapt_flow.runtime.actuators import ApiActuator
     from openadapt_flow.runtime.replayer import Replayer
 
-    fx = fixture(fixture_name)
     origin, sqlite_path, stop, handle = fx.serve()
     body = body_template(write_requests or [], params, fx.default_body)
     checked = [

@@ -1051,6 +1051,9 @@ def _new_text_postcondition(
         A TEXT_PRESENT postcondition, or None if there is no suitable
         stable new text.
     """
+    # A field may restate a row and still confirm a save. OCR layout and
+    # an off-row click do not establish selection semantics, so they cannot
+    # remove an otherwise eligible positive text check.
     before_norm = {normalize_text(l.text) for l in before_lines}
     before_squashed = [_squash(l.text) for l in before_lines if l.text.strip()]
 
@@ -2481,9 +2484,17 @@ def _compile_recording(
 
     recording = Path(recording_dir)
     bundle = Path(out_bundle_dir)
+    meta = json.loads(_sealed.read_text(recording / "meta.json"))
+    review = meta.get("multi_surface_record")
+    if isinstance(review, dict) and review.get("confirmed") is not True:
+        # A cross-window recording's surfaces are what replay will drive. A
+        # person confirms them (record's prompt, or confirm-surfaces) first.
+        raise ValueError(
+            "this recording's surfaces have not been confirmed by a person; "
+            f"review them with 'openadapt-flow confirm-surfaces {recording}'"
+        )
     (bundle / "templates").mkdir(parents=True, exist_ok=True)
 
-    meta = json.loads(_sealed.read_text(recording / "meta.json"))
     backend_hints_raw = meta.get("backend_hints")
     backend_hints: Optional[BackendHints] = None
     if backend_hints_raw is not None:

@@ -1,0 +1,825 @@
+{
+ "transcript": [
+  {
+   "reply": "We need to locate the Patient record for Tomasz Wren before proceeding to search for an existing Appointment.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"web_search\", \"query\": \"Tomasz Wren 1966-01-30 Patient\"}}\n</tool_call>",
+   "error": "there is no web search in this browser"
+  },
+  {
+   "reply": "We need to remember the Patient ID so we can reference it when searching for the appointment and when providing the final status output.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"pause_and_memorize_fact\", \"fact\": \"Patient Tomasz Wren (born 1966-01-30) has FHIR ID 63b16adc-d5de-40e2-95b0-ec99e1c6ddfa\"}}\n</tool_call>"
+  },
+  {
+   "reply": "To locate the existing Appointment for Tomasz Wren on 2026-11-17, we need to switch to the Appointment search interface.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/Appointment?_count=20&_fields=id,start,end,status,participant\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the filter panel to add filters for patient and date.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [165, 170]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Filters' button again to open the filter panel so we can add filters for patient and date.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [165, 170]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Add Filter' link to open the filter options so we can filter by patient and date.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [191, 289]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt again to open the filter panel to add filters for patient and date.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [165, 170]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Add Filter' link to open the filter options panel so we can add filters for patient and date.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [191, 289]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Add Filter' link to open the filter options panel so we can add filters for patient and date.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [191, 289]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Field' dropdown in the first filter row to open the list of available filter fields.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [319, 231]}}\n</tool_call>"
+  },
+  {
+   "reply": "Select 'Actor' as the field for the first filter so we can filter by participant.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [319, 309]}}\n</tool_call>"
+  },
+  {
+   "reply": "Select 'equals' as the operator for the first filter so we can specify a constant value.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [514, 231]}}\n</tool_call>"
+  },
+  {
+   "reply": "Select the constant value 'Practitioner' for the Actor field so the filter becomes Actor equals Practitioner.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [514, 231]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Constant value' combobox to open its options so we can select the Practitioner constant.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [319, 282]}}\n</tool_call>"
+  },
+  {
+   "reply": "Select 'Practitioner' as the constant value so the filter reads Actor equals Practitioner.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [319, 231]}}\n</tool_call>"
+  },
+  {
+   "reply": "Press Escape to close the filter options panel so we can proceed to add the second filter for patient.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"key\", \"keys\": [\"Escape\"]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Add Filter' link to open the filter options panel so we can add the second filter for Patient.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [191, 343]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Filters' button to open or focus the filter panel so we can add the necessary filters.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [165, 170]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Add Filter' link to open the filter options panel so we can add the necessary filters for patient and date.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [191, 289]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the filter options panel so we can add filters for patient and date.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [191, 289]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the 'Field' dropdown in the first filter row to choose the Actor field.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [319, 231]}}\n</tool_call>"
+  },
+  {
+   "reply": "Select 'Actor' as the field for the first filter so we can filter by participant.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [319, 309]}}\n</tool_call>"
+  },
+  {
+   "reply": "Press Escape to close the filter options panel so we can proceed to add the second filter for patient.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"key\", \"keys\": [\"Escape\"]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Add Filter' link to open the filter options panel so we can add the second filter for the patient.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [191, 343]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Filters' button to open the filter panel so we can add the necessary filters for patient and date.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [165, 170]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Add Filter' link to open the filter options panel so we can add the necessary filters for patient and date.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [191, 289]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Add Filter' link to open the filter options panel so we can add the necessary filters for patient and date.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [191, 289]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the 'Field' dropdown in the first filter row to choose the Actor field.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [319, 231]}}\n</tool_call>"
+  },
+  {
+   "reply": "Select 'Actor' as the field for the first filter so we can filter by participant.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [319, 309]}}\n</tool_call>"
+  },
+  {
+   "reply": "Press Escape to close the filter options panel so we can proceed to add the second filter for the patient.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"key\", \"keys\": [\"Escape\"]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Add Filter' link to open the filter options panel so we can add the second filter for the patient.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [191, 343]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Filters' button to open the filter panel so we can add the necessary filters for patient and date.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [165, 170]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Add Filter' link to open the filter options panel so we can add the necessary filters for patient and date.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [191, 170]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Add Filter' link to open the filter options panel so we can add the necessary filters for patient and date.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [191, 289]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Search' textbox to focus it so we can type the patient's name to locate the Patient resource.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [203, 34]}}\n</tool_call>"
+  },
+  {
+   "reply": "Type the patient's name into the search bar to locate the Patient record via search.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [284, 34], \"text\": \"Tomasz Wren\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Open search for Patient' button to perform a global search for the patient, which may reveal the record even if not visible in current view.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [31, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "Type the patient's name into the global search bar to locate the Patient record.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [273, 34], \"text\": \"Tomasz Wren\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "We need to remember the exact Patient resource link so we can reference it when searching for the Appointment and when reporting back the record.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"pause_and_memorize_fact\", \"fact\": \"Patient Tomasz Wren (born 1966-01-30) resource URL: http://localhost:9821/Patient/63b16adc-d5de-40e2-95b0-ec99e1c6ddfa\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the Practitioner link in the left navigation to open the practitioner search interface.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [125, 218]}}\n</tool_call>"
+  },
+  {
+   "reply": "Focus the global search bar to type the practitioner's name.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [203, 34]}}\n</tool_call>"
+  },
+  {
+   "reply": "Enter the practitioner's name into the global search bar to locate the Practitioner record.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [203, 34], \"text\": \"Dr Ama Osei\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "We need to remember the exact Practitioner resource link so we can reference it when searching for the appointment and when reporting back the record.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"pause_and_memorize_fact\", \"fact\": \"Practitioner Dr Ama Osei resource URL: http://localhost:9821/Practitioner/88fb415b-f3af-4726-b2ef-60434f1cf1b8\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Open search for Appointment' button to perform a global search for Appointment resources, which will allow filtering by patient and practitioner.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [31, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Open search for Appointment' button to perform a global search for Appointment resources so we can filter by patient and practitioner.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [31, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the Resource Type combobox to open its options so we can select 'Appointment'.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [125, 91]}}\n</tool_call>"
+  },
+  {
+   "reply": "Type 'Appointment' into the Resource Type combobox to filter the list to the Appointment option so we can select it.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [125, 91], \"text\": \"Appointment\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Press Enter to confirm the Resource Type selection and close the dropdown so we can proceed to filter by patient and practitioner.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"key\", \"keys\": [\"Enter\"]}}\n</tool_call>"
+  }
+ ],
+ "actions": [
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/Appointment?_count=20&_fields=id,start,end,status,participant"
+  },
+  {
+   "a": "click",
+   "x": 163.9751552795031,
+   "y": 167.48768472906403,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 163.9751552795031,
+   "y": 167.48768472906403,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 189.8136645962733,
+   "y": 284.72906403940885,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 163.9751552795031,
+   "y": 167.48768472906403,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 189.8136645962733,
+   "y": 284.72906403940885,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 189.8136645962733,
+   "y": 284.72906403940885,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 317.01863354037266,
+   "y": 227.58620689655172,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 317.01863354037266,
+   "y": 304.4334975369458,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 510.8074534161491,
+   "y": 227.58620689655172,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 510.8074534161491,
+   "y": 227.58620689655172,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 317.01863354037266,
+   "y": 277.83251231527095,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 317.01863354037266,
+   "y": 227.58620689655172,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Escape"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 189.8136645962733,
+   "y": 337.9310344827586,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 163.9751552795031,
+   "y": 167.48768472906403,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 189.8136645962733,
+   "y": 284.72906403940885,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 189.8136645962733,
+   "y": 284.72906403940885,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 317.01863354037266,
+   "y": 227.58620689655172,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 317.01863354037266,
+   "y": 304.4334975369458,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Escape"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 189.8136645962733,
+   "y": 337.9310344827586,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 163.9751552795031,
+   "y": 167.48768472906403,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 189.8136645962733,
+   "y": 284.72906403940885,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 189.8136645962733,
+   "y": 284.72906403940885,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 317.01863354037266,
+   "y": 227.58620689655172,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 317.01863354037266,
+   "y": 304.4334975369458,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Escape"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 189.8136645962733,
+   "y": 337.9310344827586,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 163.9751552795031,
+   "y": 167.48768472906403,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 189.8136645962733,
+   "y": 167.48768472906403,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 189.8136645962733,
+   "y": 284.72906403940885,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 201.7391304347826,
+   "y": 33.49753694581281,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 282.2360248447205,
+   "y": 33.49753694581281,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Tomasz Wren"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 30.80745341614907,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 271.30434782608694,
+   "y": 33.49753694581281,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Tomasz Wren"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 124.22360248447205,
+   "y": 214.7783251231527,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 201.7391304347826,
+   "y": 33.49753694581281,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 201.7391304347826,
+   "y": 33.49753694581281,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Dr Ama Osei"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 30.80745341614907,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 30.80745341614907,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 124.22360248447205,
+   "y": 89.65517241379311,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 124.22360248447205,
+   "y": 89.65517241379311,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Appointment"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  }
+ ],
+ "usage": [
+  {
+   "in": 3038,
+   "out": 64,
+   "usd": 0.0
+  },
+  {
+   "in": 4498,
+   "out": 108,
+   "usd": 0.0
+  },
+  {
+   "in": 6002,
+   "out": 83,
+   "usd": 0.0
+  },
+  {
+   "in": 6142,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 6246,
+   "out": 57,
+   "usd": 0.0
+  },
+  {
+   "in": 6360,
+   "out": 56,
+   "usd": 0.0
+  },
+  {
+   "in": 6473,
+   "out": 50,
+   "usd": 0.0
+  },
+  {
+   "in": 6580,
+   "out": 58,
+   "usd": 0.0
+  },
+  {
+   "in": 6695,
+   "out": 58,
+   "usd": 0.0
+  },
+  {
+   "in": 6810,
+   "out": 55,
+   "usd": 0.0
+  },
+  {
+   "in": 6922,
+   "out": 53,
+   "usd": 0.0
+  },
+  {
+   "in": 7032,
+   "out": 54,
+   "usd": 0.0
+  },
+  {
+   "in": 7143,
+   "out": 57,
+   "usd": 0.0
+  },
+  {
+   "in": 7257,
+   "out": 56,
+   "usd": 0.0
+  },
+  {
+   "in": 7370,
+   "out": 54,
+   "usd": 0.0
+  },
+  {
+   "in": 7481,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 7585,
+   "out": 58,
+   "usd": 0.0
+  },
+  {
+   "in": 7700,
+   "out": 56,
+   "usd": 0.0
+  },
+  {
+   "in": 7813,
+   "out": 60,
+   "usd": 0.0
+  },
+  {
+   "in": 7930,
+   "out": 50,
+   "usd": 0.0
+  },
+  {
+   "in": 8037,
+   "out": 52,
+   "usd": 0.0
+  },
+  {
+   "in": 8146,
+   "out": 53,
+   "usd": 0.0
+  },
+  {
+   "in": 8256,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 8360,
+   "out": 59,
+   "usd": 0.0
+  },
+  {
+   "in": 8476,
+   "out": 58,
+   "usd": 0.0
+  },
+  {
+   "in": 8591,
+   "out": 60,
+   "usd": 0.0
+  },
+  {
+   "in": 8708,
+   "out": 60,
+   "usd": 0.0
+  },
+  {
+   "in": 8825,
+   "out": 52,
+   "usd": 0.0
+  },
+  {
+   "in": 8934,
+   "out": 53,
+   "usd": 0.0
+  },
+  {
+   "in": 9044,
+   "out": 48,
+   "usd": 0.0
+  },
+  {
+   "in": 9149,
+   "out": 59,
+   "usd": 0.0
+  },
+  {
+   "in": 9265,
+   "out": 58,
+   "usd": 0.0
+  },
+  {
+   "in": 9380,
+   "out": 60,
+   "usd": 0.0
+  },
+  {
+   "in": 9497,
+   "out": 60,
+   "usd": 0.0
+  },
+  {
+   "in": 9614,
+   "out": 57,
+   "usd": 0.0
+  },
+  {
+   "in": 9728,
+   "out": 72,
+   "usd": 0.0
+  },
+  {
+   "in": 9857,
+   "out": 64,
+   "usd": 0.0
+  },
+  {
+   "in": 9987,
+   "out": 71,
+   "usd": 0.0
+  },
+  {
+   "in": 10124,
+   "out": 118,
+   "usd": 0.0
+  },
+  {
+   "in": 10308,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 10416,
+   "out": 46,
+   "usd": 0.0
+  },
+  {
+   "in": 10519,
+   "out": 72,
+   "usd": 0.0
+  },
+  {
+   "in": 10648,
+   "out": 111,
+   "usd": 0.0
+  },
+  {
+   "in": 10816,
+   "out": 60,
+   "usd": 0.0
+  },
+  {
+   "in": 10933,
+   "out": 59,
+   "usd": 0.0
+  },
+  {
+   "in": 11049,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 11157,
+   "out": 75,
+   "usd": 0.0
+  },
+  {
+   "in": 11289,
+   "out": 50,
+   "usd": 0.0
+  }
+ ]
+}

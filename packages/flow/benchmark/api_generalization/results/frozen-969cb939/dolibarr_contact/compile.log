@@ -1,0 +1,39 @@
+WARNING: writing a compiled bundle in plaintext at /Users/abrichr/oa/scratch/api-generalization/dolibarr_contact/bundle: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+WARNING: openadapt-privacy is not installed, so reports and logs are not scrubbed of patient data (OPENADAPT_FLOW_SCRUB=auto). Install 'openadapt-flow[privacy]', or set OPENADAPT_FLOW_SCRUB=on to refuse instead.
+param-hygiene step_011: REGION_STABLE dropped — changed region (269, 41, 1005, 499) renders a demonstrated parameter value (B ****************************************************************************************************************************************************************************************************************************************************************************************************ts); freezing it would false-halt every run whose value differs. This step has no pixel-region invariant.
+{
+ "app": "dolibarr_contact",
+ "workflow": "new-contact",
+ "steps": 12,
+ "params": [
+  "email",
+  "firstname",
+  "lastname",
+  "phone_pro",
+  "poste"
+ ],
+ "optional_params": [
+  "email",
+  "firstname",
+  "phone_pro",
+  "poste"
+ ],
+ "compile_proposal": {
+  "proposed": true,
+  "step": "step_011",
+  "reasons": []
+ },
+ "proposed": true,
+ "reasons": [],
+ "compile_s": 161.3,
+ "frozen": "969cb939e7f246a55a7b49c319941a6aa3ff3d8c",
+ "head": "969cb939e7f246a55a7b49c319941a6aa3ff3d8c",
+ "engine_diff_vs_frozen": "",
+ "identity": {
+  "subject_name": "lastname"
+ },
+ "admitted": [
+  "step_011"
+ ],
+ "describe": "step_011: save with one request, POST /contact/card.php, in place of 12 GUI steps (step_000 to step_011).\n  sign-in: the replaying browser's own session; form read again from /contact/card.php?action=create\n  fields: 17 form_default, 5 param, 1 session, 1 submitter\n  run values: lastname={lastname}, firstname={firstname}, poste={poste}, phone_pro={phone_pro}, email={email}\n  accepted when: HTTP [302] and the response matches 'card\\\\.php.*?id=\\\\d+'\n  record check after: 5 effect(s) copied from the save step\n  right record (subject_name): the request sends {lastname} in lastname and the record check selects lastname = {lastname}\n  the form's own script runs before each save, in a scratch page with writes blocked, on the run's values: birthday onchange 349ab4993f4c, inline script, script /core/js/lib_foot.js.php?lang=en_US&layout=classic&version=20.0.2, script /core/js/lib_head.js.php?lang=en_US&amp;layout=classic&amp;version=20.0.2, script /includes/jquery/js/jquery-ui.min.js?layout=classic&amp;version=20.0.2, script /includes/jquery/js/jquery.min.js?layout=classic&amp;version=20.0.2, and 5 more\n  screen-only checks, not repeated: ['step_000: region_stable', 'step_002: region_stable', 'step_004: region_stable', 'step_006: region_stable', 'step_008: region_stable']\n  if the form or a check differs at run time, the GUI steps run instead"
+}

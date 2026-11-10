@@ -679,6 +679,15 @@ class FrameChange:
 
 
 @dataclass
+class AddedRowWitness:
+    """One attributed physical database row, kept in memory only."""
+
+    primary_key: tuple[str, ...]
+    record: Mapping[str, Any]
+    source_relation: tuple[str, str, int]
+
+
+@dataclass
 class FrameVerdict:
     status: FrameStatus
     reason: str
@@ -710,6 +719,9 @@ class FrameVerdict:
     #: and when it was read). Never put in a receipt; only its salted digest
     #: is.
     post_state: Optional[dict[str, Any]] = None
+    #: In memory only: rows whose source, physical key and unambiguous audit
+    #: identity the database snapshot witnessed for a surface.
+    added_row_witnesses: dict[str, list[AddedRowWitness]] = field(default_factory=dict)
 
     @property
     def held(self) -> bool:
@@ -761,6 +773,12 @@ class FrameVerdict:
 
 def _not_checked(reason: str, attribution: str = "none") -> FrameVerdict:
     return FrameVerdict(status="not_checked", reason=reason, attribution=attribution)
+
+
+def _who(actor: Any) -> str:
+    """An actor name as compared with the bot's own ids."""
+
+    return str(actor).strip().casefold()
 
 
 def get_path(record: Mapping[str, Any], path: str) -> Any:
@@ -939,7 +957,11 @@ def judge_frame(
                 "not supply; changes can't be attributed",
                 mode,
             )
-        self_ids = resolved | {str(a) for a in run_actors if str(a)}
+        # Compared without case or surrounding space: a log that writes the
+        # bot as "Bot" or "bot " still names the bot (fail closed).
+        self_ids = {_who(a) for a in resolved} | {
+            _who(a) for a in run_actors if str(a).strip()
+        }
 
     hashers = hashers or {}
     database = spec.database
@@ -1198,7 +1220,7 @@ def judge_frame(
         name: str, ref: Any, field: Optional[str], kinds: Optional[set[str]] = None
     ) -> set[str]:
         return {
-            str(get_path(e, attribution.actor_field))  # type: ignore[union-attr]
+            _who(get_path(e, attribution.actor_field))  # type: ignore[union-attr]
             for e in entries_for(name, ref, field, kinds)
         }
 
@@ -1220,7 +1242,7 @@ def judge_frame(
         if before is not None and not changed(name, before, after):
             return False  # untouched in the window
         actor = get_path(after, attribution.actor_field)
-        return actor not in (None, "") and str(actor) not in self_ids
+        return actor is not None and bool(_who(actor)) and _who(actor) not in self_ids
 
     def bot_only_inserted(name: str, ref: Any) -> bool:
         """The bot's write entries for this record are inserts only, so a
@@ -1232,7 +1254,7 @@ def judge_frame(
         mine = [
             e
             for e in entries_for(name, ref, None)
-            if str(get_path(e, attribution.actor_field)) in self_ids
+            if _who(get_path(e, attribution.actor_field)) in self_ids
         ]
         return all(
             str(get_path(e, attribution.event_field or "")) in inserts for e in mine
@@ -1479,10 +1501,9 @@ def judge_frame(
             )
             kinds = event_kinds(change)
             for e in entries_for(name, ref, field, kinds):
-                if (
-                    id(e) in used
-                    or str(get_path(e, attribution.actor_field)) in self_ids
-                ):
+                who = _who(get_path(e, attribution.actor_field))
+                # A blank actor names no one, so it explains nothing.
+                if id(e) in used or not who or who in self_ids:
                     continue
                 if attribution.write_events:
                     used.add(id(e))
@@ -1506,9 +1527,9 @@ def judge_frame(
         if after is None:
             return "unattributed"  # a removed record can't say who removed it
         actor = get_path(after, attribution.actor_field)
-        if actor in (None, ""):
+        if actor is None or not _who(actor):
             return "unattributed"
-        if str(actor) in self_ids:
+        if _who(actor) in self_ids:
             return "self"
         if before is not None and any(
             path_unknown(before, p)
@@ -1958,7 +1979,15 @@ def judge_frame(
                 if change.attribution == "other":
                     partner(None, after, "other")
                 view = views_of.get(name)
-                if change.attribution == "other" and view and spec.identity_field:
+                if (
+                    change.attribution == "other"
+                    and view is not None
+                    and spec.identity_field
+                    # Only the one table behind the surface holds its
+                    # records: a colleague's row in another table that the
+                    # surface also maps never names the surface's record.
+                    and [t for t, v in views_of.items() if v == view] == [name]
+                ):
                     # The same record as its surface names it, for checks
                     # that read the surface (an exact_new_set's additions).
                     added_by_others.add((view, str(after.get(spec.identity_field))))
@@ -2085,7 +2114,7 @@ def judge_frame(
             for entry in window_entries:
                 actor = get_path(entry, attribution.actor_field)  # type: ignore[union-attr]
                 ref = get_path(entry, attribution.record_field or "")  # type: ignore[union-attr]
-                if actor is None or str(actor) not in self_ids:
+                if actor is None or _who(actor) not in self_ids:
                     continue
                 if str(ref) in declared_keys or str(ref) in logged or names_moved(ref):
                     continue
@@ -2147,6 +2176,23 @@ def judge_frame(
         unverified_columns=unverified_columns,
     )
     verdict.reason = _reason(verdict)
+    if (
+        verdict.status == "held"
+        and spec.attribution is not None
+        and spec.attribution.kind == "audit_read"
+        and database is None
+    ):
+        # The bot's audit entries for a saved record are excused by record,
+        # whatever table they wrote, so its other writes for that record (an
+        # insurance row, an allergy, a note) must be judged as rows. Only the
+        # whole-database diff reads every table; without it such a write
+        # would pass unseen (#1505). Never hold: fail closed.
+        verdict.status = "not_checked"
+        verdict.reason += (
+            "; not checked: audit_read attribution needs frame.database, "
+            "since without the whole-database diff the run's own writes to "
+            "tables the frame doesn't read can't be judged (#1505)"
+        )
     return verdict
 
 

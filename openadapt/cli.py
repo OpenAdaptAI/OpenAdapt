@@ -566,6 +566,7 @@ def _is_externally_managed_error(error: BaseException) -> bool:
 _QUICKSTART_OPTIONS = frozenset(
     {
         "--out",
+        "--app",
         "--headless",
         "--no-break",
         "--verbose",
@@ -655,6 +656,17 @@ def _quickstart_root(out: Optional[Path]) -> Path:
     ),
 )
 @click.option(
+    "--app",
+    type=click.Choice(["mockmed", "openemr"]),
+    default="mockmed",
+    show_default=True,
+    help=(
+        "The app to run it in. mockmed is bundled (about 22 seconds, no Docker). "
+        "openemr runs OpenEMR 8.0.0.3 in Docker from a clone of the repository; "
+        "the first run downloads and installs it, later runs reuse it."
+    ),
+)
+@click.option(
     "--headless",
     is_flag=True,
     help="Hide the browser. It is shown by default when a display is available.",
@@ -676,6 +688,7 @@ def _quickstart_root(out: Optional[Path]) -> Path:
 def quickstart(
     command_ctx: click.Context,
     out: Optional[Path],
+    app: str,
     headless: bool,
     no_break: bool,
     verbose: bool,
@@ -690,14 +703,21 @@ def quickstart(
     screen says saved, the database has nothing, and OpenAdapt stops. The
     program makes no AI calls. Nothing in the output directory is overwritten.
 
+    With --app openemr, the same three acts run on OpenEMR 8.0.0.3 in Docker,
+    with the certified referral program: referrals registered at once and
+    checked in OpenEMR's record, then a referral that matches an existing
+    chart, where the program stops before saving. It runs from a clone of the
+    repository and needs Docker; without either it says so and exits 2.
+
     Other flags of the engine tutorial (for example --guided or
     --interactive-record) run that tutorial instead, unchanged.
     """
     _require_supported_python()
     _refuse_unknown_tutorial_options(command_ctx.args)
+    openemr = _openemr_checkout(command_ctx.args) if app == "openemr" else None
     root = _quickstart_root(out)
 
-    if command_ctx.args or not _flow_runs_quickstart():
+    if openemr is None and (command_ctx.args or not _flow_runs_quickstart()):
         # Engine-owned flags (--guided, --interactive-record, and future
         # engine additions) run the engine's own tutorial, as before. So does
         # a Flow older than the pieces the three-act quickstart uses.
@@ -711,7 +731,7 @@ def quickstart(
     steps = next_steps(
         _hint,
         _shell_quote,
-        _agent_serves_tutorial(),
+        openemr is None and _agent_serves_tutorial(),
         keep=_keep_command(),
         shadow=_shadowing_openadapt if _under_uvx() else None,
     )
@@ -723,6 +743,7 @@ def quickstart(
                 break_it=not no_break,
                 verbose=verbose,
                 steps=steps,
+                openemr=openemr,
             )
     except KeyboardInterrupt:
         click.echo(f"\nStopped. Anything written so far is in {root}", err=True)
@@ -731,7 +752,11 @@ def quickstart(
         if _is_externally_managed_error(error):
             _echo_python_remedy()
             raise click.exceptions.Exit(1) from error
-        if type(error).__name__ in ("TutorialError", "DurableAuthorityBusy"):
+        if type(error).__name__ in (
+            "TutorialError",
+            "DurableAuthorityBusy",
+            "FixtureError",
+        ):
             raise click.ClickException(
                 f"The quickstart stopped: {error}\nAnything it wrote is in {root}"
             ) from error
@@ -740,6 +765,31 @@ def quickstart(
         outcome.broken is not None and not outcome.broken.stopped
     ):
         raise click.exceptions.Exit(1)
+
+
+def _openemr_checkout(extra: list[str]) -> Path:
+    """The clone's packages/flow for ``--app openemr``, or exit 2 saying why.
+
+    Each missing piece is one line on stderr. Nothing falls back to MockMed.
+    """
+    from openadapt.quickstart.openemr import (
+        checkout_problem,
+        docker_problem,
+        find_flow_checkout,
+    )
+
+    if extra:
+        raise click.UsageError(
+            f"--app openemr runs the three-act quickstart only; {extra[0]} "
+            "belongs to the engine's MockMed tutorial."
+        )
+    problem = docker_problem()
+    flow = find_flow_checkout() if problem is None else None
+    problem = problem or checkout_problem(flow)
+    if problem is not None or flow is None:
+        click.echo(problem, err=True)
+        raise click.exceptions.Exit(2)
+    return flow
 
 
 # The oldest Flow with every piece the three-act quickstart uses (shared
@@ -954,9 +1004,9 @@ def _warn_about_launcher_conflicts() -> None:
 _SECRET_REFERENCE = re.compile(r"^(?:env:[A-Z][A-Z0-9_]*|keychain:[^/\s]+/[^/\s]+)$")
 # Flow 1.33 and 1.34 probe four X11 libraries in the wrong case, so on Linux
 # they refuse to download Chromium on hosts that have them. 1.35.0 fixed it.
-# Launcher 1.20 requires Flow 2.6: ledger listing uses its persistent
-# owed-recheck API.
-_SUPPORTED_FLOW_RANGE = ">=2.6.0,<3.0.0"
+# Launcher 1.21 requires Flow 2.7: `openadapt wrap` forwards to its wrap
+# command.
+_SUPPORTED_FLOW_RANGE = ">=2.7.0,<3.0.0"
 _RDP_INSTALL_COMMAND = _pip_install("openadapt[rdp]")
 _CHROMIUM_SYSTEM_LIBS_COMMAND = (
     f"{shlex.quote(sys.executable)} -m playwright install-deps chromium"
@@ -966,7 +1016,7 @@ _CHROMIUM_SYSTEM_LIBS_COMMAND = (
 def _supported_flow_version(value: str) -> bool:
     """Return whether a stable Flow version is in the launcher's supported range."""
     parsed = _release_tuple(value)
-    return parsed is not None and (2, 6, 0) <= parsed < (3, 0, 0)
+    return parsed is not None and (2, 7, 0) <= parsed < (3, 0, 0)
 
 
 # The Python modules each native or remote Flow backend imports when its

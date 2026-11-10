@@ -33,7 +33,10 @@ Two read-first operator helpers live here.
     and the exact suggested next command (re-run, pair an oracle via
     ``scaffold-verifier``, or qualify).
 
-Neither helper executes a workflow, contacts a network, or weakens any gate.
+Neither helper executes a workflow or weakens any gate. Neither contacts a
+network, except ``scaffold-verifier --probe-reads``, which sends read-only
+``GET`` requests to a copy of the app on the local machine
+(:mod:`openadapt_flow.read_discovery`).
 """
 
 from __future__ import annotations
@@ -41,7 +44,7 @@ from __future__ import annotations
 import shlex
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from openadapt_flow import artifacts as _artifacts
 from openadapt_flow import sealed_set as _sealed
@@ -53,6 +56,11 @@ RECORDING_MARKER = "events.jsonl"
 #: The draft file this module writes. Deliberately YAML: it is the shape an
 #: operator copies into ``deployment.yaml`` (``effects:``) and reviews by hand.
 CONTRACT_FILENAME = "effect_contract.yaml"
+#: What ``--probe-reads`` tried when no probe confirmed a read.
+READ_DISCOVERY_FILE = "read_discovery.json"
+
+if TYPE_CHECKING:
+    from openadapt_flow.record_check_proof import Fixture
 
 
 class ScaffoldRefused(SystemExit):
@@ -142,6 +150,13 @@ def _sor_delta(event: dict[str, Any]) -> tuple[Optional[list], Optional[list]]:
     )
 
 
+def _record_keys(records: list) -> list[str]:
+    """Order-free content keys of a snapshot, for a before/after comparison."""
+    import json
+
+    return sorted(json.dumps(r, sort_keys=True, default=str) for r in records)
+
+
 def _demonstrated_param_values(recording_dir: Path) -> tuple[str, ...]:
     """The demonstration's parameter values (from ``meta.json``), if any."""
     import json
@@ -198,12 +213,100 @@ def _candidate_from_record(
     )
 
 
+_MUTATING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+
+def _origin_of(url: str) -> str:
+    from urllib.parse import urlsplit
+
+    parts = urlsplit(url)
+    return f"{parts.scheme}://{parts.netloc}".lower() if parts.netloc else ""
+
+
+def _mutating_requests_by_event(
+    recording_dir: Path, times: dict[int, float]
+) -> dict[int, list[dict[str, Any]]]:
+    """Event index -> the mutating requests the app's page sent for it.
+
+    A request counts when its method is POST, PUT, PATCH or DELETE, the
+    server answered it (it did not fail in transit), and it went to the app's
+    own origin (the origin of the page that sent it). An event's ``t`` is
+    stamped after the screen settles, so a request belongs to the first event
+    stamped at or after it; one sent after the last event belongs to the last.
+    """
+
+    from openadapt_flow import record_check_synthesis as rcs
+
+    try:
+        network = rcs.load_network(recording_dir)
+    except rcs.SynthesisError:
+        return {}
+    if not network or not times:
+        return {}
+    ordered = sorted(times.items(), key=lambda item: item[1])
+    out: dict[int, list[dict[str, Any]]] = {}
+    for line in network:
+        method = str(line.get("method") or "").upper()
+        if method not in _MUTATING_METHODS or line.get("failed"):
+            continue
+        if not isinstance(line.get("status"), int):
+            continue
+        app = _origin_of(str(line.get("frame_url") or ""))
+        if not app or _origin_of(str(line.get("url") or "")) != app:
+            continue
+        t = line.get("t")
+        if not isinstance(t, (int, float)):
+            continue
+        owner = next((i for i, et in ordered if et >= float(t)), ordered[-1][0])
+        out.setdefault(owner, []).append(line)
+    return out
+
+
+def _candidate_from_request(
+    step_id: str,
+    action: str,
+    label: str,
+    requests: list[dict[str, Any]],
+    *,
+    demonstrated_values: tuple[str, ...],
+) -> WriteCandidate:
+    """A write observed on the wire: the request and the values it sent."""
+    from openadapt_flow import record_check_synthesis as rcs
+
+    shown = ", ".join(
+        f"{str(line.get('method')).upper()} "
+        f"{rcs._templated(str(line.get('url') or ''), {}).safe}"
+        for line in requests[:3]
+    )
+    payload: dict[str, str] = {}
+    for line in requests:
+        for key, value in rcs._write_values(
+            line, excluded_values=demonstrated_values
+        ).items():
+            if value in demonstrated_values:
+                payload.setdefault(key, value)
+    return WriteCandidate(
+        step_id=step_id,
+        action=action,
+        label=label,
+        basis=f"observed mutating request to the app ({shown})",
+        payload=payload,
+    )
+
+
 def candidates_from_recording(
     recording_dir: Path,
     *,
     idempotency_key_field: Optional[str] = DEFAULT_IDEMPOTENCY_KEY_FIELD,
 ) -> list[WriteCandidate]:
-    """Write-shaped candidates straight from ``events.jsonl`` evidence."""
+    """Write-shaped candidates straight from ``events.jsonl`` evidence.
+
+    An event is a write when any of these holds, strongest first: its
+    before/after system-of-record snapshots differ; the network capture
+    shows the app's page sending a mutating request (POST, PUT, PATCH or
+    DELETE to its own origin) for it; its control label is write-shaped
+    (:func:`openadapt_flow.risk.is_write_shaped`); or it is an Enter key.
+    """
     import json
 
     from openadapt_flow.risk import is_write_shaped
@@ -221,7 +324,7 @@ def candidates_from_recording(
     # match selector), exactly as the compiler's miner does.
     demonstrated_values = _demonstrated_param_values(recording_dir)
 
-    candidates: list[WriteCandidate] = []
+    events: list[tuple[int, dict[str, Any]]] = []
     for index, line in enumerate(lines):
         if not line.strip():
             continue
@@ -231,6 +334,20 @@ def candidates_from_recording(
             raise ScaffoldRefused(
                 f"scaffold-verifier: {events_path} line {index + 1} is not JSON: {exc}"
             ) from exc
+        if isinstance(event, dict):
+            events.append((index, event))
+    wire = _mutating_requests_by_event(
+        recording_dir,
+        {
+            index: float(event["t"])
+            for index, event in events
+            if isinstance(event.get("t"), (int, float))
+            and not isinstance(event.get("t"), bool)
+        },
+    )
+
+    candidates: list[WriteCandidate] = []
+    for index, event in events:
         kind = str(event.get("kind") or "")
         step_id = f"step_{index:03d}"  # positional, matching the compiler
         label = _event_text(event)
@@ -255,6 +372,32 @@ def candidates_from_recording(
                     )
                 )
                 continue
+            if _record_keys(before) != _record_keys(after):
+                candidates.append(
+                    WriteCandidate(
+                        step_id=step_id,
+                        action=kind,
+                        label=label,
+                        basis=(
+                            "observed system-of-record delta "
+                            f"({len(new_records)} new record(s), "
+                            f"{len(before)} before, {len(after)} after)"
+                        ),
+                    )
+                )
+                continue
+
+        if index in wire:
+            candidates.append(
+                _candidate_from_request(
+                    step_id,
+                    kind,
+                    label,
+                    wire[index],
+                    demonstrated_values=demonstrated_values,
+                )
+            )
+            continue
 
         pointer_write = kind in {"click", "double_click", "right_click"} and (
             is_write_shaped(label)
@@ -523,10 +666,13 @@ def build_record_check(
     db: Optional[Path] = None,
     verifier: Optional[Path] = None,
     prove: Optional[str] = None,
+    proof_source: Optional[Fixture] = None,
     recording: Optional[Path] = None,
     bundle: Optional[Path] = None,
     complete_read: bool = False,
     fault_gate: bool = False,
+    probe_reads: bool = False,
+    probe_base: Optional[str] = None,
 ) -> Optional[RecordCheckResult]:
     """Build, fault-test and write a proposed record check.
 
@@ -539,9 +685,26 @@ def build_record_check(
     (``openadapt_flow/fault_gate.py``): the faults are written to the copy and
     the check reads them through its own read. A fault it misses keeps the
     check a draft. Either way ``check_coverage.json`` is written.
+
+    ``probe_reads``: when the recording holds no read of the saved record,
+    probe the reads its write implies with ``GET`` on the local machine
+    (``probe_base`` or the recorded origin, which must be local). A read is
+    used only when a probe confirms the written values. Otherwise
+    ``read_discovery.json`` records every probe and the read stays
+    unavailable (``None`` is returned, for the TODO draft).
     """
 
     import tempfile
+
+    from openadapt_flow.record_check_proof import ProofUnavailable, require_fixture
+
+    if prove is not None:
+        try:
+            require_fixture(prove, proof_source)
+        except ProofUnavailable as exc:
+            raise ScaffoldRefused(f"scaffold-verifier --prove: {exc}") from exc
+    elif proof_source is not None:
+        raise ScaffoldRefused("scaffold-verifier: a proof source requires --prove")
 
     from openadapt_flow import record_check_synthesis as rcs
 
@@ -586,6 +749,8 @@ def build_record_check(
             verifier=section,
             complete_read=complete_read,
             fault_gate=fault_gate,
+            probe_reads=probe_reads,
+            probe_base=probe_base,
         )
     except rcs.SynthesisError as exc:
         if db is None and section is None:
@@ -597,9 +762,36 @@ def build_record_check(
                 "scaffold-verifier: no read returns a record holding the "
                 "recorded values: " + "; ".join(proposal.search.notes or ["none"])
             )
+        if proposal.search.read_discovery is not None:
+            import json
+
+            _refuse_plaintext_output(recording_dir, out_dir)
+            destination = out_dir or recording_dir
+            destination.mkdir(parents=True, exist_ok=True)
+            _sealed.write_text(
+                destination / READ_DISCOVERY_FILE,
+                json.dumps(proposal.search.read_discovery, indent=2, sort_keys=True)
+                + "\n",
+            )
+        return None
+    if proposal.refused:
+        import json
+
+        _refuse_plaintext_output(recording_dir, out_dir)
+        destination = out_dir or recording_dir
+        destination.mkdir(parents=True, exist_ok=True)
+        _sealed.write_text(
+            destination / READ_DISCOVERY_FILE,
+            json.dumps(proposal.search.read_discovery, indent=2, sort_keys=True) + "\n",
+        )
+        # The proof, without the check: why nothing runnable was written.
+        _sealed.write_text(
+            destination / rcs.PROOF_NAME,
+            json.dumps(proposal.proof(), indent=2, sort_keys=True, default=str) + "\n",
+        )
         return None
     if prove:
-        from openadapt_flow.record_check_proof import ProofUnavailable, prove_live
+        from openadapt_flow.record_check_proof import prove_live
 
         try:
             with tempfile.TemporaryDirectory(prefix="record-check-proof-") as tmp:
@@ -610,6 +802,7 @@ def build_record_check(
                     proposal.params,
                     write_requests=proposal.search.write_requests,
                     work_dir=Path(tmp),
+                    proof_source=proof_source,
                 )
         except ProofUnavailable as exc:
             raise ScaffoldRefused(f"scaffold-verifier --prove: {exc}") from exc

@@ -1,0 +1,15 @@
+{
+ "equivalent": false,
+ "differences": [
+  "pair 1: the GUI save didn't make the expected record, so there is nothing to compare",
+  "pair 2: the GUI save didn't make the expected record, so there is nothing to compare",
+  "pair 3: the GUI save didn't make the expected record, so there is nothing to compare"
+ ],
+ "server_owned": [],
+ "tables": {},
+ "gate": "stays on the GUI: the API step's side effects differ from the GUI save's, so it stays on the GUI (pair 1: the GUI save didn't make the expected record, so there is nothing to compare; pair 2: the GUI save didn't make the expected record, so there is nothing to compare; pair 3: the GUI save didn't make the expected record, so there is nothing to compare)",
+ "verdict_sha256": "sha256:6b90f5f378513de4c17c7751f9aeccf827e6377c8df8d5d58fa6f3d8d3854b7a",
+ "frozen": "4d977a4e87a42973d4e72339f16d7eb2817a096b",
+ "head": "4d977a4e87a42973d4e72339f16d7eb2817a096b",
+ "engine_diff_vs_frozen": ""
+}

@@ -18,10 +18,10 @@ engine="${CONTAINER_ENGINE:-podman}"
 if [ "${1:-}" = build ]; then
   exec "$engine" build -t oa-linux-qualify -f "$here/Containerfile" "$here"
 fi
-exec "$engine" run --rm --init --memory 3g --cpus 2 \
+exec "$engine" run --rm --init --memory "${OA_LINUX_MEMORY:-3g}" --cpus "${OA_LINUX_CPUS:-2}" \
   -v "$repo:$repo" -v "$common:$common:ro" -v oa-linux-qualify-venv:/opt/venv \
   -w "$repo/packages/flow" -e REPO="$repo" -e TMPDIR="${OA_LINUX_TMPDIR:-/tmp}" \
-  -e OA_LINUX_SETUP="${OA_LINUX_SETUP:-0}" \
+  -e OA_LINUX_SETUP="${OA_LINUX_SETUP:-0}" -e OA_LINUX_SCREEN="${OA_LINUX_SCREEN:-1280x800x24}" \
   oa-linux-qualify bash -lc '
     set -e
     git config --global --add safe.directory "*"
@@ -30,6 +30,6 @@ exec "$engine" run --rm --init --memory 3g --cpus 2 \
     fi
     # xvfb-run outside dbus-run-session: the AT-SPI registry is started by
     # D-Bus activation and needs DISPLAY to synthesize input.
-    exec xvfb-run -a -s "-screen 0 1280x800x24" dbus-run-session -- \
+    exec xvfb-run -a -s "-screen 0 ${OA_LINUX_SCREEN:-1280x800x24}" dbus-run-session -- \
       bash -c "openbox >/dev/null 2>&1 & sleep 1; exec \"\$@\"" bash "$@"
   ' bash "$@"

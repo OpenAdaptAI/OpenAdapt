@@ -1,0 +1,19 @@
+{
+  "id": "fc40191606794d95b9eb7903c943721b",
+  "created_at": "2026-11-04T19:29:52.144919+00:00",
+  "viewport": [
+    1280,
+    800
+  ],
+  "coordinate_space": "page",
+  "app_url": "http://localhost:9674/Patient/new",
+  "params": {
+    "given": "Ada",
+    "family": "Okonkwo rec1429"
+  },
+  "secret_params": [],
+  "network_capture": {
+    "file": "network.jsonl",
+    "exchanges": 7
+  }
+}
