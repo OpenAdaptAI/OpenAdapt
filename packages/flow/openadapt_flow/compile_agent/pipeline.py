@@ -962,6 +962,7 @@ class FirstRunCompiler:
         import yaml
 
         from openadapt_flow.record_sor import _write_private
+        from openadapt_flow.runtime.effects.effect import DEFAULT_IDEMPOTENCY_KEY_FIELD
         from openadapt_flow.verify_run import parse_verify_config, sha256_tagged
 
         jit = self._jit()
@@ -990,6 +991,26 @@ class FirstRunCompiler:
                 }
                 if not effect["composite_key"]:
                     effect.pop("composite_key", None)
+            key_field = effect.get("key_field") or DEFAULT_IDEMPOTENCY_KEY_FIELD
+            idem = effect.get("idempotency_key")
+            idem_param = None
+            if isinstance(idem, dict):
+                idem_param = idem.get("param")
+            elif (
+                isinstance(idem, str)
+                and idem.startswith("{param:")
+                and idem.endswith("}")
+            ):
+                idem_param = idem[7:-1].strip()
+            elif hasattr(idem, "param"):
+                idem_param = getattr(idem, "param", None)
+            if (
+                key_field in drop_fields
+                or "key" in drop_fields
+                or (idem_param and idem_param in drop_fields)
+            ):
+                effect.pop("idempotency_key", None)
+                effect.pop("key_field", None)
             if _claims_new_record(effect, count_new_only=False):
                 # A check routed to one read (scaffold-verifier's
                 # ``surface=<name>|...``) keeps its route.

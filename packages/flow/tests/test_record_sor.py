@@ -164,16 +164,36 @@ def test_composite_key_includes_named_record_identity_fields():
     assert any("proposed composite_key" in n for n in proposal.not_proposed)
 
 
-def test_single_field_key_becomes_idempotency_key_not_composite():
+def test_param_bound_single_field_key_becomes_idempotency_key_not_composite():
+    diff = diff_snapshots(
+        [],
+        [{"id": 7, "patient_id": "p1", "note": NOTE, "key": "run-abc"}],
+    )
+    proposal = propose_effects(
+        diff, {"note": NOTE, "key": "run-abc"}, record_fields={"patient_id": "p1"}
+    )
+    [effect] = proposal.effects
+    assert effect.idempotency_key == ValueExpr(param="key")
+    assert effect.composite_key == {}
+    assert not any("composite_key" in n for n in proposal.not_proposed)
+
+
+def test_literal_single_field_key_not_proposed_as_idempotency_key():
     diff = diff_snapshots(
         [],
         [{"id": 7, "patient_id": "p1", "note": NOTE, "key": "run-abc"}],
     )
     proposal = propose_effects(diff, {"note": NOTE}, record_fields={"patient_id": "p1"})
     [effect] = proposal.effects
-    assert effect.idempotency_key == ValueExpr(literal="run-abc")
-    assert effect.composite_key == {}
-    assert not any("composite_key" in n for n in proposal.not_proposed)
+    # Issue #2173: literal key from demonstration is not proposed as
+    # idempotency_key to avoid freezing the key across runs (P0-3); composite_key
+    # is proposed from parameter-bound fields + record identity fields.
+    assert effect.idempotency_key is None
+    assert effect.composite_key == {
+        "note": ValueExpr(param="note"),
+        "patient_id": ValueExpr(literal="p1"),
+    }
+    assert any("avoid freezing key" in n for n in proposal.not_proposed)
 
 
 def test_no_key_and_no_param_bound_fields_notes_missing_composite():

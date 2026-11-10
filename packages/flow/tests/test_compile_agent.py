@@ -623,6 +623,90 @@ def test_a_surface_task_spec_keeps_no_credentials(tmp_path: Path) -> None:
     assert again.backend_kind == "windows"
 
 
+def test_confirm_checks_drops_idempotency_key_when_key_in_drop_fields(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import yaml
+
+    from openadapt_flow.compile_agent import FirstRunCompiler
+    from openadapt_flow.compile_agent.pipeline import PROPOSED_FILE
+
+    config = tmp_path / "deployment.yaml"
+    config.write_text(
+        "backend:\n  kind: windows\n  agent_url: https://10.0.0.5:5000\n"
+        "  agent_token: s3cret-token\n"
+    )
+    verify = tmp_path / "verify.yaml"
+    verify.write_text(
+        "verifier:\n  kind: rest\n  base_url: http://127.0.0.1:1\n"
+        "  records_path: /records\n  records_key: records\n"
+    )
+    compiler = FirstRunCompiler(
+        "Save {note}",
+        params=["note"],
+        surface_config=config,
+        verify=verify,
+        expect={"patient_id": "p1"},
+        on_screen=["MRN P1"],
+        cache_dir=tmp_path / "cache",
+    )
+    compiler.out_dir.mkdir(parents=True, exist_ok=True)
+    proposed_doc = {
+        "schema_version": "openadapt.verify/v1",
+        "verifier": {
+            "kind": "rest",
+            "base_url": "http://127.0.0.1:1",
+            "records_path": "/records",
+            "records_key": "records",
+        },
+        "effects": [
+            {
+                "kind": "record_written",
+                "match": {
+                    "patient_id": {"literal": "p1"},
+                    "note": {"param": "note"},
+                    "key": {"literal": "run-abc"},
+                },
+                "idempotency_key": {"literal": "run-abc"},
+                "key_field": "key",
+                "count_new_only": True,
+                "expected_count": 1,
+                "needs_operator_confirmation": True,
+            }
+        ],
+    }
+    (compiler.out_dir / PROPOSED_FILE).write_text(yaml.safe_dump(proposed_doc))
+
+    monkeypatch.setattr(
+        "openadapt_flow.jit.lifecycle.check_principal",
+        lambda principal_id, *args, **kw: str(principal_id),
+    )
+    monkeypatch.setattr(
+        "openadapt_flow.jit.lifecycle.confirm_params",
+        lambda *args, **kw: None,
+    )
+    monkeypatch.setattr(
+        "openadapt_flow.jit.lifecycle._event",
+        lambda *args, **kw: None,
+    )
+
+    # When confirmed without drop_fields, idempotency_key is preserved
+    preserved_path = compiler.confirm_checks(principal_id="dana.reviewer")
+    preserved_doc = yaml.safe_load(preserved_path.read_text())
+    [preserved_effect] = preserved_doc["effects"]
+    assert preserved_effect.get("idempotency_key") == {"literal": "run-abc"}
+
+    # When confirmed with drop_fields containing "key", idempotency_key is dropped
+    confirmed_path = compiler.confirm_checks(
+        principal_id="dana.reviewer", drop_fields=["key"]
+    )
+    confirmed_doc = yaml.safe_load(confirmed_path.read_text())
+    [effect] = confirmed_doc["effects"]
+    assert "key" not in effect["match"]
+    assert "idempotency_key" not in effect
+    assert "key_field" not in effect
+
+
 def test_a_non_http_url_is_refused(capsys) -> None:
     from openadapt_flow.__main__ import build_parser
     from openadapt_flow.compile_agent.cli import cmd_compile_agent
