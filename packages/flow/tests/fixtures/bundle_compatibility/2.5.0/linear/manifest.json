@@ -1,0 +1,22 @@
+{
+  "schema_version": 2,
+  "content_digest": "f44b31062baf7e119b04bea142ad87120568cf5c9f94712a0c3e137a123edf7b",
+  "file_hashes": {
+    "templates/button.png": "fa53ee8e6f7730a17a6b8ea30ebab860d2811526204fcf2c76946850b582b493"
+  },
+  "provenance": {
+    "compiler_version": "2.5.0",
+    "source_recording_sha256": null,
+    "compiler_config_sha256": null,
+    "created_at": "2026-01-02T03:04:05+00:00",
+    "policy_name": null,
+    "certified": false,
+    "certification_status": null,
+    "certified_at": null,
+    "expires_at": null,
+    "certification_invalidated_at": null,
+    "certification_invalidation_reason": null,
+    "governed_authorization_template": null
+  },
+  "encrypted": false
+}

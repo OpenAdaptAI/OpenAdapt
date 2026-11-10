@@ -66,6 +66,43 @@ e8ec96725c4451aa64cb97230c18d04b55d98503:packages/flow/tests/e2e/test_mcp_teach_
 # container with a fixed synthetic superuser token (a run of hex digits, never a
 # credential for any real system); the harness now generates it per run.
 9922cee8dbbbaa4494b1c69ec6c71e4899305de6:packages/flow/benchmark/api_generalization/apps/nb.py:generic-api-key:60
+# Bundle compatibility fixtures (PR #1928, part of #1899): the generic-api-key rule
+# matched `source_hashes` entries in the pinned 2.2.0/2.5.0/2.6.0 provenance.json
+# fixtures. Each value is the SHA-256 of that source file at the fixture's pinned
+# release commit (verified for all 33). Content digests, not credentials.
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.2.0/provenance.json:generic-api-key:66
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.2.0/provenance.json:generic-api-key:182
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.2.0/provenance.json:generic-api-key:193
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.2.0/provenance.json:generic-api-key:248
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.2.0/provenance.json:generic-api-key:290
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.2.0/provenance.json:generic-api-key:348
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.2.0/provenance.json:generic-api-key:397
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.2.0/provenance.json:generic-api-key:416
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.2.0/provenance.json:generic-api-key:428
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.5.0/provenance.json:generic-api-key:85
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.5.0/provenance.json:generic-api-key:155
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.5.0/provenance.json:generic-api-key:190
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.5.0/provenance.json:generic-api-key:275
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.5.0/provenance.json:generic-api-key:351
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.5.0/provenance.json:generic-api-key:414
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.5.0/provenance.json:generic-api-key:488
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.5.0/provenance.json:generic-api-key:508
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.5.0/provenance.json:generic-api-key:528
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.5.0/provenance.json:generic-api-key:570
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.5.0/provenance.json:generic-api-key:643
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.5.0/provenance.json:generic-api-key:655
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.6.0/provenance.json:generic-api-key:85
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.6.0/provenance.json:generic-api-key:132
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.6.0/provenance.json:generic-api-key:168
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.6.0/provenance.json:generic-api-key:254
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.6.0/provenance.json:generic-api-key:316
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.6.0/provenance.json:generic-api-key:379
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.6.0/provenance.json:generic-api-key:468
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.6.0/provenance.json:generic-api-key:490
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.6.0/provenance.json:generic-api-key:511
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.6.0/provenance.json:generic-api-key:554
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.6.0/provenance.json:generic-api-key:630
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.6.0/provenance.json:generic-api-key:642
 # OpenAdapt#1872 network-save redaction tests (PR #2014, first commit): synthetic
 # credentials the redactor must withhold. Later commits assemble them at runtime.
 ccc7c617e5cd8082909b455ec6176a5e4c0dd4f0:packages/flow/tests/test_extension_network.py:generic-api-key:44
