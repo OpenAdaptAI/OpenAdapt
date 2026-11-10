@@ -445,7 +445,9 @@ def run(out_dir: Path, pair_subset=None) -> dict:
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=True)
+        from openadapt_flow._browser_readiness import launch_rendering_ready
+
+        browser = launch_rendering_ready(pw.chromium, headless=True)
         try:
             for p, (name, dob) in pairs:
                 rec[p.label] = _render(browser, name, dob, p.target, RECORD)
@@ -704,7 +706,7 @@ def _markdown(summary: dict) -> str:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__)
+    ap = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     ap.add_argument("--out", default="benchmark/identity_ladder", type=Path)
     args = ap.parse_args(argv)
     summary = run(args.out)

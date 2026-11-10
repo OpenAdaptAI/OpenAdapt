@@ -108,7 +108,7 @@ class QualificationWindow:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument("--title", required=True)
     parser.add_argument("--effect-path", type=Path, required=True)
     parser.add_argument("--control-path", type=Path, required=True)

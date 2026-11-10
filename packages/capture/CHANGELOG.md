@@ -2,6 +2,18 @@
 
 <!-- version list -->
 
+## Unreleased
+
+### Fixes
+
+- Full-screen video startup sizes the stream from Quartz display-mode
+  pixel metadata instead of taking a screenshot, so a slow framebuffer
+  read in a macOS VM guest no longer blows the writer startup budget.
+  Darwin screen-dimension and pixel-ratio probes prefer the same Quartz
+  path and only fall back to a grab when metadata is unavailable
+  ([#1883](https://github.com/OpenAdaptAI/OpenAdapt/issues/1883)).
+
+
 ## v1.3.0 (2026-10-17)
 
 _This release uses the MIT License._

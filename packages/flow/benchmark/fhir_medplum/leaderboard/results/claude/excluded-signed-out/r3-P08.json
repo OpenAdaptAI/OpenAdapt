@@ -1,0 +1,56 @@
+{
+ "id": "P08",
+ "class": "lost_response",
+ "type": "patient",
+ "expect": "create",
+ "note": "The create lands, but the agent gets a 504 instead of the reply.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 11.4,
+ "cost_usd": 0.015633,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "RESULT: NOT DONE Medplum is showing the sign-in page and I have no credentials, so I couldn't search for or create the patient record.",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/signin?next=%2F",
+  "final_text": "I couldn't check for or create a Patient record for Lena Okafor. Medplum is showing its sign-in page instead of a signed-in session, even though I was told I was already signed in. I reloaded the page and got the same result. I have no login credentials, and registering a new account isn't something I should do, so I made no changes.\n\nRESULT: NOT DONE Medplum is showing the sign-in page and I have no credentials, so I couldn't search for or create the patient record.",
+  "model_calls": 3,
+  "actions": 2,
+  "tokens_in": 23354,
+  "tokens_out": 399
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "absent",
+  "reasons": [
+   "no Patient was written"
+  ],
+  "changes": {}
+ },
+ "proxy": [],
+ "fault_delivered": false,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 26.8,
+  "end": 26.4,
+  "waited_s": 0
+ }
+}

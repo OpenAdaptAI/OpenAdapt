@@ -25,6 +25,7 @@ from openadapt_flow.surface_selection import (
     native_surface_for_this_os,
     store_last_surface,
 )
+from tests.browser_readiness import ReadyBrowserMixin
 
 # ---------------------------------------------------------------------------
 # fakes (mirrors test_cli_new_commands)
@@ -38,7 +39,7 @@ class _FakePage:
         self.url = url
 
 
-class _FakeBrowser:
+class _FakeBrowser(ReadyBrowserMixin):
     def new_page(self, viewport=None, **_options):
         return _FakePage()
 
@@ -214,53 +215,28 @@ def test_record_production_profile_requires_explicit_backend(
         assert "Nothing was recorded." in out
 
 
-def test_record_demo_defaults_to_this_os_with_notice(
-    tmp_path: Path, capsys, cli_state: Path, monkeypatch
+@pytest.mark.parametrize("profile", [[], ["--profile", "demo"]])
+@pytest.mark.parametrize("last_used", [None, "web", "windows"])
+def test_record_with_no_target_follows_the_person_across_windows(
+    tmp_path: Path, cli_state: Path, monkeypatch, profile, last_used
 ) -> None:
-    # No last-used target and no --url: capture on this OS, said out loud.
-    _install_fake_desktop_record(monkeypatch)
-    rc = main(["record", "--out", str(tmp_path / "rec"), "--profile", "demo"])
-    assert rc == 0
-    this_os = native_surface_for_this_os()
-    out = capsys.readouterr().out
-    assert f"NOTE: defaulting to capture on this OS ({this_os})" in out
-    assert "defaulting to browser" not in out
-    assert json.loads((tmp_path / "rec" / "meta.json").read_text())["surface"] == (
-        this_os
+    # No --backend and no --url: record finds the surfaces from the windows
+    # the person uses. A last-used target never narrows that.
+    if last_used:
+        store_last_surface(last_used)
+    calls: list[dict] = []
+
+    def fake_multi(out, **kwargs):
+        calls.append(kwargs)
+        raise SystemExit("stop here")
+
+    monkeypatch.setattr(
+        "openadapt_flow.multi_surface_record.record_multi_surface", fake_multi
     )
-
-
-def test_record_demo_uses_last_used_target_when_this_os(
-    tmp_path: Path, capsys, cli_state: Path, monkeypatch
-) -> None:
-    this_os = native_surface_for_this_os()
-    store_last_surface(this_os)
     _install_fake_desktop_record(monkeypatch)
-    rc = main(["record", "--out", str(tmp_path / "rec"), "--profile", "demo"])
-    assert rc == 0
-    out = capsys.readouterr().out
-    assert f"defaulting to backend '{this_os}' (demo convenience" in out
-    assert "defaulting to browser" not in out
-    # The recording is stamped with the exact surface for compile-time binding.
-    assert json.loads((tmp_path / "rec" / "meta.json").read_text())["surface"] == (
-        this_os
-    )
-
-
-def test_record_demo_last_used_web_does_not_override_this_os(
-    tmp_path: Path, capsys, cli_state: Path, monkeypatch
-) -> None:
-    store_last_surface("web")
-    _install_fake_desktop_record(monkeypatch)
-    rc = main(["record", "--out", str(tmp_path / "rec"), "--profile", "demo"])
-    assert rc == 0
-    this_os = native_surface_for_this_os()
-    out = capsys.readouterr().out
-    assert f"NOTE: defaulting to capture on this OS ({this_os})" in out
-    assert "defaulting to browser" not in out
-    assert json.loads((tmp_path / "rec" / "meta.json").read_text())["surface"] == (
-        this_os
-    )
+    with pytest.raises(SystemExit, match="stop here"):
+        main(["record", "--out", str(tmp_path / "rec"), *profile])
+    assert calls and calls[0]["surfaces"] == [] and calls[0]["url"] is None
 
 
 def test_record_demo_persists_explicit_backend(
@@ -280,22 +256,6 @@ def test_record_demo_persists_explicit_backend(
     )
     assert rc == 0
     assert load_last_surface() == "windows"
-
-
-def test_record_without_profile_defaults_to_this_os_ignoring_last_used(
-    tmp_path: Path, capsys, cli_state: Path, monkeypatch
-) -> None:
-    store_last_surface("windows")  # must NOT apply outside --profile demo
-    _install_fake_desktop_record(monkeypatch)
-    rc = main(["record", "--out", str(tmp_path / "rec")])
-    assert rc == 0
-    this_os = native_surface_for_this_os()
-    out = capsys.readouterr().out
-    assert f"NOTE: defaulting to capture on this OS ({this_os})" in out
-    assert "defaulting to browser" not in out
-    assert json.loads((tmp_path / "rec" / "meta.json").read_text())["surface"] == (
-        this_os
-    )
 
 
 def test_record_url_without_backend_selects_web(

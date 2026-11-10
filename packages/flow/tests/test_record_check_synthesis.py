@@ -21,15 +21,15 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import stat
 from pathlib import Path
 
 import pytest
 import yaml
 
-from openadapt_flow.__main__ import main
+from benchmark.record_check_proof import main, prove_live
 from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
-from openadapt_flow.record_check_proof import prove_live
 from openadapt_flow.record_check_synthesis import (
     PROOF_NAME,
     PROPOSED_NAME,
@@ -51,6 +51,7 @@ from tests._record_check_fixtures import (
     mockmed_recording,
     write_recording,
 )
+from tests._rest_read_contract_fixtures import mockmed_effects_config
 
 
 @pytest.fixture
@@ -94,6 +95,7 @@ def test_rest_read_found_by_recorded_values_and_values_bound(tmp_path, e2e_servi
     # The banner read also returns the saved values; the persisted row wins.
     assert any("/api/ui/last-save" in note for note in proposal.search.notes)
     effect, content = proposal.effects
+    assert content.probe is not None
     assert content.probe.startswith("surface=api_records.content")
     assert proposal.verifier["surfaces"]["api_records.content"][
         "records_drop_fields"
@@ -126,13 +128,11 @@ def test_one_rest_read_misses_the_billing_write_and_stays_a_draft(
         write_requests=proposal.search.write_requests,
         work_dir=tmp_path / "live",
     )
-    rows = {row["scenario"]: row["result"] for row in proposal.live["runs"]}
-    assert rows["ok"] == "clean pass"
-    assert rows["collateral_unaudited"] == "MISSED"
-    assert all(
-        rows[name].startswith("caught")
-        for name in ("no_persist", "partial", "duplicate", "wrong_record", "stale")
-    )
+    # The read was seen whole before and after the save, so it is complete;
+    # what it can't see is the billing table.
+    assert proposal.search.surfaces[0].complete_basis == "observed"
+    assert proposal.live["runs"][0]["result"] == "clean pass"
+    assert any(row["result"] == "MISSED" for row in proposal.live["runs"])
     assert not proposal.live["passed"]
     assert not proposal.working
     text = render(proposal)
@@ -161,17 +161,9 @@ def test_database_read_path_covers_every_table_and_passes_the_suite(
         write_requests=proposal.search.write_requests,
         work_dir=tmp_path / "live",
     )
-    rows = {row["scenario"]: row for row in proposal.live["runs"]}
-    assert rows["ok"]["result"] == "clean pass"
-    assert rows["collateral_unaudited"]["result"] == "caught by the check"
-    # Every wrong save stopped; the timeout committed but the actuator could
-    # not know, which is a safe stop the check is not blamed for.
-    for name, row in rows.items():
-        if row["ground_truth"] != "correct":
-            assert not row["reported_done"], name
-    assert rows["timeout"]["result"] == "stopped by the actuator (outcome unknown)"
     assert proposal.live["passed"], proposal.live["misses"]
     assert proposal.working
+    assert not any("completeness" in p for p in proposal.search.problems)
 
 
 def test_frozen_demo_value_fails_the_live_clean_save(tmp_path, e2e_service):
@@ -195,7 +187,7 @@ def test_frozen_demo_value_fails_the_live_clean_save(tmp_path, e2e_service):
         write_requests=proposal.search.write_requests,
         work_dir=tmp_path / "live",
     )
-    assert live["runs"][0]["result"] == "false stop"
+    assert live["runs"][0]["result"] != "clean pass"
     assert not live["passed"]
 
 
@@ -204,12 +196,13 @@ def test_frozen_demo_value_fails_the_live_clean_save(tmp_path, e2e_service):
 # ---------------------------------------------------------------------------
 
 
-def test_mockmed_needs_a_declared_complete_read(tmp_path, mockmed):
+def test_mockmed_complete_read_declared_passes_the_live_suite(tmp_path, mockmed):
     url, db = mockmed
     rec = mockmed_recording(tmp_path / "rec", url, db)
 
     plain = synthesize(rec)
     assert plain.search.surfaces[0].config["records_path"] == "/api/db"
+    assert plain.search.surfaces[0].complete_basis == "observed"
     assert not plain.working
     assert any("collateral_unaudited" in miss for miss in plain.misses)
 
@@ -224,20 +217,12 @@ def test_mockmed_needs_a_declared_complete_read(tmp_path, mockmed):
         write_requests=declared.search.write_requests,
         work_dir=tmp_path / "live",
     )
-    rows = {row["scenario"]: row["result"] for row in declared.live["runs"]}
-    assert rows["ok"] == "clean pass"
-    for name in (
-        "no_persist",
-        "partial",
-        "wrong_record",
-        "stale",
-        "optimistic",
-        "session",
-    ):
-        assert rows[name].startswith("caught"), (name, rows[name])
-    assert declared.live["passed"]
+    assert declared.live["passed"], declared.live["misses"]
     assert declared.working
     assert declared.proof()["closed_world"] == "declared"
+    assert {r.get("records_complete") for r in declared.proof()["reads"]} == {
+        "declared"
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -304,6 +289,7 @@ def test_openemr_fhir_check_refutes_store_level_faults(tmp_path, fhir):
         verifier = build_effect_verifier(
             EffectsConfig.model_validate(proposal.verifier), params
         )
+        assert verifier is not None
         before = verifier.capture_pre_state()
         if fault == "ok":
             store.add_observation(patient="p1", note=params["note"])
@@ -719,6 +705,76 @@ def _capture(rec: Path, lines: list[dict]) -> None:
             fh.write(json.dumps(line) + "\n")
 
 
+def test_captured_paged_rest_read_stays_a_draft(tmp_path):
+    """A response that says it is one page never gets records_complete,
+    whether observed or declared."""
+    params = {"patient_id": "p1", "note": NOTE}
+    rec = write_recording(tmp_path / "rec", params)
+    _capture(
+        rec,
+        [
+            {
+                "method": "POST",
+                "url": "http://app.test/api/encounters",
+                "status": 201,
+                "t": 2.0,
+                "body": json.dumps(params),
+            },
+            {
+                "method": "GET",
+                "url": "http://app.test/api/records",
+                "status": 200,
+                "t": 3.0,
+                "response_type": "application/json",
+                "response_text": json.dumps(
+                    {
+                        "records": [
+                            {"id": "enc-1", **params},
+                        ],
+                        "next": "http://app.test/api/records?cursor=2",
+                    }
+                ),
+            },
+        ],
+    )
+
+    # The body links to a next page: neither the observation nor a person's
+    # whole-write declaration makes this one response complete.
+    proposal = synthesize(rec, complete_read=True)
+
+    assert proposal.effects
+    assert not proposal.working
+    assert any(
+        "REST read completeness is not declared" in problem
+        for problem in proposal.search.problems
+    )
+
+
+def test_reviewed_complete_rest_contract_is_used_for_an_actual_read(tmp_path, mockmed):
+    from openadapt_flow.mockmed.fault_server import MOCKMED_RECORDS_READ_CONTRACT
+
+    url, db = mockmed
+    rec = mockmed_recording(tmp_path / "rec", url, db)
+    # Use the reviewed verifier path only; the capture below contains no GET
+    # that could be mistaken for pagination evidence.
+    _capture(rec, [])
+    verifier_config = {
+        **MOCKMED_RECORDS_READ_CONTRACT,
+        "base_url": url,
+    }
+
+    proposal = synthesize(rec, verifier=verifier_config, complete_read=True)
+
+    [surface] = proposal.search.surfaces
+    assert surface.target in surface.after
+    emitted = proposal.verifier["surfaces"][surface.name]
+    assert emitted["records_complete"] is True
+    assert not any(
+        "REST read completeness is not declared" in problem
+        for problem in proposal.search.problems
+    )
+
+
 def _db(path: Path, rows: dict[str, list[tuple]]) -> Path:
     import sqlite3
 
@@ -788,6 +844,7 @@ def test_guards_catch_a_changed_or_deleted_row_through_the_real_read(tmp_path):
         verifier = build_effect_verifier(
             EffectsConfig.model_validate(proposal.verifier), proposal.params
         )
+        assert verifier is not None
         conn = sqlite3.connect(db)
         conn.execute("DELETE FROM encounters")
         conn.commit()
@@ -837,7 +894,7 @@ def test_the_save_is_timed_from_its_write_request(tmp_path):
     """An event's t is stamped after the screen settles, so the save's POST
     and the app's read-back come before the Save step's t."""
 
-    before = {"records": []}
+    before: dict[str, list[dict[str, object]]] = {"records": []}
     after = {"records": [{"id": 1, "patient_id": "p1", "note": NOTE}]}
     rec = write_recording(
         tmp_path / "rec", {"patient_id": "p1", "note": NOTE}, save_t=3.0
@@ -1015,3 +1072,252 @@ def test_a_binary_keyed_table_reads_the_same_in_the_scan_and_the_check(tmp_path)
     )
     assert not [p for p in proposal.search.problems if "patient_data" in p]
     assert any(s.is_target for s in proposal.search.surfaces)
+
+
+# The owned fixture source returns the full SELECT.fetchall encounter set.
+# The actual HTTP count controls below check this declaration independently.
+def _reviewed_effect_e2e_read(base_url: str) -> dict:
+    return {
+        "kind": "rest",
+        "base_url": base_url,
+        "records_path": "/api/records",
+        "records_key": "records",
+        "records_complete": True,
+    }
+
+
+def _reviewed_input(recording: Path, destination: Path) -> Path:
+    """Separate reviewed-only input; the original captured GETs remain intact."""
+    original = (recording / "network.jsonl").read_bytes()
+    shutil.copytree(recording, destination)
+    exchanges = [json.loads(line) for line in original.decode().splitlines()]
+    # The explicitly reviewed verifier supplies all reads. Keep the recorded
+    # write request so the existing live proof still uses its actual payload.
+    _capture(
+        destination,
+        [line for line in exchanges if line.get("method") not in (None, "GET")],
+    )
+    assert (recording / "network.jsonl").read_bytes() == original
+    assert not any(
+        json.loads(line).get("method") == "GET"
+        for line in (destination / "network.jsonl").read_text().splitlines()
+    )
+    return destination
+
+
+@pytest.mark.parametrize("count", [0, 1, 2, 200, 201])
+def test_reviewed_effect_e2e_read_is_the_whole_encounter_set(e2e_service, count):
+    import sqlite3
+
+    import requests
+
+    with sqlite3.connect(e2e_service.db_path) as db:
+        db.row_factory = sqlite3.Row
+        db.execute("DELETE FROM encounters")
+        db.executemany(
+            "INSERT INTO encounters (patient_id, type, note, source, key) VALUES (?, ?, ?, ?, ?)",
+            [
+                ("p1", "Triage", f"synthetic-{i}", "test", f"key-{i}")
+                for i in range(count)
+            ],
+        )
+        db.commit()
+        expected = [
+            dict(row)
+            for row in db.execute(
+                "SELECT id, patient_id, type, note, source, key FROM encounters ORDER BY id"
+            ).fetchall()
+        ]
+    response = requests.get(f"{e2e_service.base_url}/api/records", timeout=5)
+    assert response.status_code == 200
+    assert len(expected) == count
+    assert response.json()["records"] == expected
+    reader = build_effect_verifier(
+        EffectsConfig.model_validate(_reviewed_effect_e2e_read(e2e_service.base_url))
+    )
+    assert reader is not None
+    state = reader.capture_pre_state()
+    assert state.reachable
+    assert state.readback_complete is True
+    assert state.records == expected
+
+
+def test_one_rest_read_misses_the_billing_write_and_stays_a_draft_with_a_reviewed_read_contract(
+    tmp_path, e2e_service
+):
+    rec = effect_e2e_recording(tmp_path / "rec", e2e_service.base_url)
+    reviewed = _reviewed_input(rec, tmp_path / "reviewed")
+    proposal = synthesize(
+        reviewed, verifier=_reviewed_effect_e2e_read(e2e_service.base_url)
+    )
+
+    results = _results(proposal)
+    assert results["ok"] == ["clean pass"]
+    for fault in ("no_persist", "partial", "duplicate", "wrong_record", "stale"):
+        assert set(results[fault]) == {"caught"}, fault
+    assert results["collateral_unaudited"] == ["MISSED"]
+
+    proposal.live = prove_live(
+        "effect-e2e",
+        proposal.verifier,
+        proposal.effects,
+        proposal.params,
+        write_requests=proposal.search.write_requests,
+        work_dir=tmp_path / "live",
+    )
+    rows = {row["scenario"]: row["result"] for row in proposal.live["runs"]}
+    assert rows["ok"] == "clean pass"
+    assert rows["collateral_unaudited"] == "MISSED"
+    assert all(
+        rows[name].startswith("caught")
+        for name in ("no_persist", "partial", "duplicate", "wrong_record", "stale")
+    )
+    assert not proposal.live["passed"]
+    assert not proposal.working
+    text = render(proposal)
+    assert text.startswith("# DRAFT record check")
+    assert "MISS: collateral_unaudited" in text
+
+
+def test_database_read_path_covers_every_table_and_passes_the_suite_with_a_reviewed_read_contract(
+    tmp_path, e2e_service
+):
+    rec = effect_e2e_recording(tmp_path / "rec", e2e_service.base_url)
+    reviewed = _reviewed_input(rec, tmp_path / "reviewed")
+    proposal = synthesize(
+        reviewed,
+        db_path=e2e_service.db_path,
+        verifier=_reviewed_effect_e2e_read(e2e_service.base_url),
+    )
+
+    roles = {s.name: s.is_target for s in proposal.search.surfaces}
+    assert roles["encounters"] and roles["rest_read"]
+    assert roles["billing"] is False  # guarded: the save adds no row there
+    assert proposal.search.closed_world_basis == "database"
+    assert proposal.search.uncovered == []
+    assert all(fault.ok for fault in proposal.faults)
+
+    proposal.live = prove_live(
+        "effect-e2e",
+        proposal.verifier,
+        proposal.effects,
+        proposal.params,
+        write_requests=proposal.search.write_requests,
+        work_dir=tmp_path / "live",
+    )
+    rows = {row["scenario"]: row for row in proposal.live["runs"]}
+    assert rows["ok"]["result"] == "clean pass"
+    assert rows["collateral_unaudited"]["result"] == "caught by the check"
+    # Every wrong save stopped; the timeout committed but the actuator could
+    # not know, which is a safe stop the check is not blamed for.
+    for name, row in rows.items():
+        if row["ground_truth"] != "correct":
+            assert not row["reported_done"], name
+    assert rows["timeout"]["result"] == "stopped by the actuator (outcome unknown)"
+    assert proposal.live["passed"], proposal.live["misses"]
+    assert proposal.working
+
+
+def test_frozen_demo_value_fails_the_live_clean_save_with_a_reviewed_read_contract(
+    tmp_path, e2e_service
+):
+    """The live proof uses new note values, so a literal demo note can't pass."""
+
+    rec = effect_e2e_recording(tmp_path / "rec", e2e_service.base_url)
+    reviewed = _reviewed_input(rec, tmp_path / "reviewed")
+    proposal = synthesize(
+        reviewed,
+        db_path=e2e_service.db_path,
+        verifier=_reviewed_effect_e2e_read(e2e_service.base_url),
+    )
+    frozen = []
+    for effect in proposal.effects:
+        match = dict(effect.match)
+        if "note" in match:
+            from openadapt_flow.runtime.effects import ValueExpr
+
+            match["note"] = ValueExpr(literal=NOTE)
+        frozen.append(effect.model_copy(update={"match": match}))
+    live = prove_live(
+        "effect-e2e",
+        proposal.verifier,
+        frozen,
+        proposal.params,
+        write_requests=proposal.search.write_requests,
+        work_dir=tmp_path / "live",
+    )
+    assert live["runs"][0]["result"] == "false stop"
+    assert not live["passed"]
+
+
+def test_mockmed_needs_a_declared_complete_read_with_a_reviewed_read_contract(
+    tmp_path, mockmed
+):
+    url, db = mockmed
+    rec = mockmed_recording(tmp_path / "rec", url, db)
+
+    plain = synthesize(rec)
+    assert plain.search.surfaces[0].config["records_path"] == "/api/db"
+    assert not plain.working
+    assert any("collateral_unaudited" in miss for miss in plain.misses)
+
+    reviewed = _reviewed_input(rec, tmp_path / "reviewed")
+    declared = synthesize(
+        reviewed, verifier=mockmed_effects_config(url), complete_read=True
+    )
+    assert declared.search.closed_world_basis == "declared"
+    assert all(fault.ok for fault in declared.faults)
+    declared.live = prove_live(
+        "mockmed",
+        declared.verifier,
+        declared.effects,
+        declared.params,
+        write_requests=declared.search.write_requests,
+        work_dir=tmp_path / "live",
+    )
+    rows = {row["scenario"]: row["result"] for row in declared.live["runs"]}
+    assert rows["ok"] == "clean pass"
+    for name in (
+        "no_persist",
+        "partial",
+        "wrong_record",
+        "stale",
+        "optimistic",
+        "session",
+    ):
+        assert rows[name].startswith("caught"), (name, rows[name])
+    assert declared.live["passed"]
+    assert declared.working
+    assert declared.proof()["closed_world"] == "declared"
+
+
+def test_cli_writes_a_working_check_and_its_proof_with_a_reviewed_read_contract(
+    tmp_path, e2e_service, capsys
+):
+    rec = effect_e2e_recording(tmp_path / "rec", e2e_service.base_url)
+    reviewed = _reviewed_input(rec, tmp_path / "reviewed")
+    config = tmp_path / "reviewed.yaml"
+    config.write_text(
+        yaml.safe_dump({"verifier": _reviewed_effect_e2e_read(e2e_service.base_url)})
+    )
+    code = main(
+        [
+            "scaffold-verifier",
+            str(reviewed),
+            "--verifier",
+            str(config),
+            "--db",
+            str(e2e_service.db_path),
+            "--prove",
+            "effect-e2e",
+            "--out",
+            str(tmp_path / "out"),
+        ]
+    )
+    out = capsys.readouterr().out
+    assert code == 0, out
+    assert "Record check: WORKING (not approved)" in out
+    proof = json.loads((tmp_path / "out" / PROOF_NAME).read_text())
+    assert proof["status"] == "working" and proof["approved"] is False
+    assert proof["live"]["passed"]
+    assert (tmp_path / "out" / PROPOSED_NAME).is_file()

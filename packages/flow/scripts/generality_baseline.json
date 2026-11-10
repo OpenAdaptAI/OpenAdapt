@@ -1,10 +1,7 @@
 {
   "__main__.py": {
-    "mockmed": 43,
+    "mockmed": 42,
     "textedit": 1
-  },
-  "api.py": {
-    "mockmed": 1
   },
   "backend.py": {
     "mockmed-records": 1
@@ -20,12 +17,6 @@
   },
   "backends/win_agent/server.py": {
     "notepad": 1
-  },
-  "cli_undo.py": {
-    "mockmed": 2
-  },
-  "cli_variants.py": {
-    "mockmed": 2
   },
   "compile_agent/code_action.py": {
     "openemr": 1,
@@ -141,11 +132,6 @@
   "qualification_dev_signer.py": {
     "mockmed": 1
   },
-  "qualification_oracle_gate.py": {
-    "mockmed": 8,
-    "mockmed-records": 2,
-    "mockmed-write": 1
-  },
   "qualification_proposal.py": {
     "mockmed": 1
   },
@@ -161,11 +147,6 @@
   },
   "record_check_identity.py": {
     "openemr": 1
-  },
-  "record_check_proof.py": {
-    "mockmed": 12,
-    "mockmed-records": 1,
-    "mockmed-write": 1
   },
   "record_check_synthesis.py": {
     "mockmed": 1
@@ -215,7 +196,6 @@
     "redmine": 1
   },
   "runtime/effects/fhir.py": {
-    "epic": 1,
     "mockmed": 2,
     "openemr": 5,
     "openemr-fhir-path": 1

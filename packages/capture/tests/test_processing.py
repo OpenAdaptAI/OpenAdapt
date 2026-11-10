@@ -166,6 +166,65 @@ class TestMergeConsecutiveKeyboardEvents:
         assert isinstance(result[0], KeyTypeEvent)
         assert result[0].text == "A"
 
+    def test_named_space_key_is_typed_text(self):
+        # The macOS and X11 observers name the space bar without a character.
+        events = [
+            KeyDownEvent(timestamp=1.0, key_name="space", canonical_key_name="space"),
+            KeyUpEvent(timestamp=1.1, key_name="space", canonical_key_name="space"),
+        ]
+
+        result = merge_consecutive_keyboard_events(events)
+
+        assert len(result) == 1
+        assert isinstance(result[0], KeyTypeEvent)
+        assert result[0].text == " "
+
+    def test_named_space_between_overlapping_letters_is_kept(self):
+        # Fast typing: "e" is still held when space goes down.
+        events = [
+            KeyDownEvent(timestamp=1.0, key_char="e"),
+            KeyDownEvent(timestamp=1.1, key_name="space", canonical_key_name="space"),
+            KeyUpEvent(timestamp=1.2, key_char="e"),
+            KeyDownEvent(timestamp=1.3, key_char="n"),
+            KeyUpEvent(timestamp=1.4, key_name="space", canonical_key_name="space"),
+            KeyUpEvent(timestamp=1.5, key_char="n"),
+        ]
+
+        result = merge_consecutive_keyboard_events(events)
+
+        assert len(result) == 1
+        assert isinstance(result[0], KeyTypeEvent)
+        assert result[0].text == "e n"
+
+    def test_shift_space_is_typed_text(self):
+        events = [
+            KeyDownEvent(timestamp=1.0, key_name="shift"),
+            KeyDownEvent(timestamp=1.1, key_name="space", canonical_key_name="space"),
+            KeyUpEvent(timestamp=1.2, key_name="space", canonical_key_name="space"),
+            KeyUpEvent(timestamp=1.3, key_name="shift"),
+        ]
+
+        result = merge_consecutive_keyboard_events(events)
+
+        assert len(result) == 1
+        assert isinstance(result[0], KeyTypeEvent)
+        assert result[0].text == " "
+
+    def test_control_space_stays_a_shortcut(self):
+        events = [
+            KeyDownEvent(timestamp=1.0, key_name="control"),
+            KeyDownEvent(timestamp=1.1, key_name="space", canonical_key_name="space"),
+            KeyUpEvent(timestamp=1.2, key_name="space", canonical_key_name="space"),
+            KeyUpEvent(timestamp=1.3, key_name="control"),
+        ]
+
+        result = merge_consecutive_keyboard_events(events)
+
+        assert len(result) == 1
+        assert isinstance(result[0], KeyShortcutEvent)
+        assert result[0].modifiers == ["ctrl"]
+        assert result[0].key == "space"
+
 
 class TestMergeConsecutiveMouseMoveEvents:
     """Tests for merge_consecutive_mouse_move_events."""

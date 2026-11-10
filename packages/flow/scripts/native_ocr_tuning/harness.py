@@ -614,7 +614,6 @@ def run_pairs() -> dict[str, Any]:
 def run_homonyms() -> dict[str, Any]:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tests"))
     import test_identity_ocr_conservative_9th as T
-
     from openadapt_flow.validation.dense_surface import RenderCondition
 
     cases = list(T._NUMERIC_HOMONYMS)
@@ -637,7 +636,7 @@ def run_homonyms() -> dict[str, Any]:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(allow_abbrev=False)
     ap.add_argument("--config", required=True, choices=sorted(CONFIGS))
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument(

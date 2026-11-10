@@ -20,8 +20,6 @@ ROOT = Path(openadapt_flow.__file__).parent
 ALLOWED = {
     # The benchmark CLI command loads the harness on demand from a checkout.
     "__main__.py",
-    # `record-check prove` loads its fixture from a checkout on demand.
-    "record_check_proof.py",
 }
 
 

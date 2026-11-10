@@ -212,8 +212,15 @@ def issue_resume_approval(
         raise ApprovalRequired(
             "the active pause does not match the retained run and workflow"
         )
+    # An approval is issued for a pause that already exists, so it is never
+    # older than that pause. When the wall clock stepped back after the pause
+    # was stamped, stamp the approval at the pause rather than before it.
+    now = datetime.now(timezone.utc)
+    paused = _parse(getattr(pending, "created_at", ""))
+    approved_at = paused if paused is not None and paused > now else now
     return ApprovalRecord(
         approver=approver,
+        approved_at=approved_at.isoformat(),
         resolution=resolution,
         bundle_version=bundle_version,
         workflow_name=workflow_name,

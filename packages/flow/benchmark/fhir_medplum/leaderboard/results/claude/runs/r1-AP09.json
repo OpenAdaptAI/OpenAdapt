@@ -1,0 +1,157 @@
+{
+ "id": "AP09",
+ "class": "wrong_value",
+ "type": "appointment",
+ "expect": "create",
+ "note": "The write path saves the booking as proposed instead of booked.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Appointment returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Appointment returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 308.2,
+ "cost_usd": 0.555237,
+ "claim": {
+  "status": "done",
+  "id": "Appointment/71036b9c-9241-4556-9ab4-a8862f4bd122",
+  "note": "RESULT: DONE Appointment/71036b9c-9241-4556-9ab4-a8862f4bd122",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/Appointment?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated",
+  "final_text": "The appointment is booked once, as `Appointment/71036b9c-9241-4556-9ab4-a8862f4bd122`. The Appointment list was empty beforehand, so nothing existing was duplicated.\n\n- **Patient:** Tomasz Wren, `Patient/b3b7b51b-2abf-4608-ae72-44e830189648`.\n- **Practitioner:** Dr Ama Osei, `Practitioner/7956ce69-8370-4227-b792-f74fd475026a`.\n- **Status and times:** I wrote status `booked`, start 2026-11-17T14:00:00Z and end 2026-11-17T14:30:00Z.\n- **Participants:** The patient and the practitioner are both listed, each with status `accepted`.\n- **Status correction:** After saving, the record came back as `proposed`. I changed it to `booked` on the same record and did not create a second one. The record now shows `booked`, and the Appointment list shows exactly one entry.\n\nRESULT: DONE Appointment/71036b9c-9241-4556-9ab4-a8862f4bd122",
+  "model_calls": 42,
+  "actions": 86,
+  "tokens_in": 1597819,
+  "tokens_out": 7338
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "Appointment/71036b9c-9241-4556-9ab4-a8862f4bd122"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "Appointment/71036b9c-9241-4556-9ab4-a8862f4bd122": "created"
+  }
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Appointment",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Practitioner",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "Appointment",
+   "write": 1,
+   "faulted": true
+  },
+  {
+   "fault": "mutate"
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "PUT",
+   "type": "Appointment",
+   "write": 2,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Appointment",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 1,
+ "host_load": {
+  "start": 31.4,
+  "end": 35.4,
+  "waited_s": 300
+ }
+}

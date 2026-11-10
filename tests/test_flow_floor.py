@@ -24,10 +24,20 @@ except ModuleNotFoundError:  # pragma: no cover - exercised on Python 3.10 CI
     import tomli as tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
-# Launcher 1.19 requires Flow 2.5 (`openadapt shadow` and the recheck that
-# `openadapt verify serve` offers), so 1.x and 2.0 to 2.4 are below the floor.
-BELOW_FLOOR = ["1.29.0", "1.35.1", "2.0.0", "2.2.0", "2.4.1"]
-ACCEPTED = "2.5.0"
+# Launcher 1.21 requires Flow 2.7's wrap command.
+# Keep every earlier rejection case, including the former 2.6 floor.
+BELOW_FLOOR = [
+    "1.29.0",
+    "1.35.1",
+    "2.0.0",
+    "2.2.0",
+    "2.4.1",
+    "2.5.0",
+    "2.5.1",
+    "2.6.0",
+    "2.6.1",
+]
+ACCEPTED = "2.7.0"
 
 
 def _flow_requirements() -> list[Requirement]:

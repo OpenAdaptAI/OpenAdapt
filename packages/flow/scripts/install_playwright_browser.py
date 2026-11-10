@@ -513,7 +513,7 @@ def main() -> int:
         return _windows_job_wrapper(sys.argv[2:])
     if len(sys.argv) == 2 and sys.argv[1] == BROWSER_LAUNCH_PROBE_FLAG:
         return verify_chromium_launch()
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument("--attempts", type=positive_int, default=2)
     parser.add_argument(
         "--attempt-timeout-seconds",

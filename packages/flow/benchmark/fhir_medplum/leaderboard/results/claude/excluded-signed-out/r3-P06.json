@@ -1,0 +1,56 @@
+{
+ "id": "P06",
+ "class": "wrong_value",
+ "type": "patient",
+ "expect": "create",
+ "note": "The write path adds deceasedBoolean true.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 11.0,
+ "cost_usd": 0.015653,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "RESULT: NOT DONE Medplum is on the sign-in page, not signed in, and I have no credentials to log in.",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/signin?next=%2F",
+  "final_text": "I couldn't check for or create a Patient record for Lena Okafor. Medplum is showing its sign-in page, not a signed-in session as the task said it would be. I don't have any credentials, and I reloaded the page once and got the same sign-in screen. I didn't register a new account or guess at a login, and I haven't written anything to the server.\n\nRESULT: NOT DONE Medplum is on the sign-in page, not signed in, and I have no credentials to log in.",
+  "model_calls": 3,
+  "actions": 2,
+  "tokens_in": 23344,
+  "tokens_out": 401
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "absent",
+  "reasons": [
+   "no Patient was written"
+  ],
+  "changes": {}
+ },
+ "proxy": [],
+ "fault_delivered": false,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 32.9,
+  "end": 35.8,
+  "waited_s": 0
+ }
+}

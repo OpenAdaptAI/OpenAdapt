@@ -1,0 +1,26 @@
+{
+ "app": "dolibarr_thirdparty",
+ "workflow": "new-customer",
+ "steps": 12,
+ "params": [
+  "email",
+  "name",
+  "phone",
+  "town"
+ ],
+ "compile_proposal": {
+  "proposed": false,
+  "step": null,
+  "reasons": [
+   "no form request was sent by the save step"
+  ]
+ },
+ "proposed": false,
+ "reasons": [
+  "no form request was sent by the save step"
+ ],
+ "compile_s": 13.7,
+ "frozen": "",
+ "head": "3cb70fa649407782f150ae4b0f65058fcd84ec30",
+ "engine_diff_vs_frozen": ""
+}

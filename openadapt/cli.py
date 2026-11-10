@@ -1,9 +1,10 @@
 """Unified CLI for OpenAdapt ecosystem.
 
 Usage:
-    openadapt flow record --url <app> --out rec   # record a workflow
-    openadapt flow compile rec --out bundle        # compile it
-    openadapt flow replay bundle                    # run it, local, $0
+    openadapt record --backend <surface> <target> --out rec   # record a workflow
+                                    # target: --url for a web app, --window for a desktop app
+    openadapt compile rec --out bundle        # compile it
+    openadapt flow replay bundle --url <app>        # run it, local, $0
     openadapt flow lint bundle
     openadapt flow certify bundle --policy clinical-write
 
@@ -24,6 +25,7 @@ Usage:
     openadapt doctor
 """
 
+import argparse
 import json
 import os
 import platform
@@ -31,6 +33,7 @@ import re
 import shlex
 import sys
 from contextlib import contextmanager
+from importlib import import_module
 from pathlib import Path
 from typing import Optional
 
@@ -39,20 +42,67 @@ import click
 from openadapt.version import __version__
 
 
+class _FlowAliasCommand(click.Command):
+    """Parse a root alias exactly as the existing ``flow <verb>`` form."""
+
+    def parse_args(self, ctx, args):
+        return super().parse_args(ctx, [self.name, *args])
+
+
 class _FlowFirstGroup(click.Group):
-    """Command group that lists ``flow`` first in ``--help``.
-
-    The demonstration compiler is the flagship, so it should lead the
-    command listing instead of sorting alphabetically behind ``capture``.
-    Everything else keeps its normal alphabetical order.
-
-    On an interpreter the engine doesn't support, the help starts with the
-    remedy, so a bare ``openadapt`` explains the problem before anything else.
-    """
+    """Present task names while retaining every original Click command."""
 
     def list_commands(self, ctx):
-        commands = super().list_commands(ctx)
-        return sorted(commands, key=lambda name: (name != "flow", name))
+        from openadapt.cli_tasks import TASKS
+
+        return list(TASKS)
+
+    def format_commands(self, ctx, formatter):
+        from openadapt.cli_tasks import TASKS
+
+        with formatter.section("Commands"):
+            formatter.write_dl(list(TASKS.items()))
+        legacy = [
+            (name, command.get_short_help_str())
+            for name, command in sorted(self.commands.items())
+            if not command.hidden and name not in TASKS
+        ]
+        if legacy:
+            with formatter.section("Legacy commands"):
+                formatter.write_dl(legacy)
+
+    def invoke(self, ctx):
+        try:
+            return super().invoke(ctx)
+        except (SystemExit, click.exceptions.Exit) as exc:
+            code = getattr(exc, "exit_code", getattr(exc, "code", None))
+            if code == 0 and ctx.meta.get("alias_help"):
+                click.echo("\n" + ctx.meta["alias_help"])
+            raise
+
+    def get_command(self, ctx, name):
+        from openadapt.cli_tasks import NATIVE_ROUTES, TASKS
+
+        command = super().get_command(ctx, name)
+        if command is not None:
+            aliases = [
+                " ".join(path) for path, old in NATIVE_ROUTES.items() if old == (name,)
+            ]
+            note = "Also available as: " + ", ".join(aliases) if aliases else ""
+            if name == "setup":
+                note += "\nOperations: " + ", ".join(
+                    path[1] for path in NATIVE_ROUTES if path[0] == "setup"
+                )
+            if note and note not in (command.epilog or ""):
+                command.epilog = "\n".join(filter(None, [command.epilog, note]))
+            return command
+        # Completion can discover the visible Flow task names too. Execution
+        # is routed once by resolve_command after Click consumes root options.
+        return (
+            self.commands.get("flow")
+            if ctx.resilient_parsing and name in TASKS
+            else None
+        )
 
     def format_help(self, ctx, formatter):
         if not _python_supported():
@@ -60,10 +110,50 @@ class _FlowFirstGroup(click.Group):
         super().format_help(ctx, formatter)
 
     def resolve_command(self, ctx, args):
+        from openadapt.cli_tasks import alias_help, alias_notice, group_help, translate
+
+        # Click has consumed root options and its root -- delimiter. Route once
+        # here, before resolving a child or stripping a leaf's literal --.
+        raw = list(args)
+        normalize = ctx.token_normalize_func
+        root_name = normalize(raw[0]) if raw and normalize else (raw[0] if raw else "")
+        if (
+            not ctx.resilient_parsing
+            and root_name == "verify"
+            and raw[1:] in ([], ["-h"], ["--help"])
+        ):
+            click.echo(
+                group_help(ctx.command_path, "verify"), err=len(raw) == 1, nl=False
+            )
+            ctx.exit(2 if len(raw) == 1 else 0)
+        if (
+            not ctx.resilient_parsing
+            and root_name in {"inspect", "workflow", "services", "research"}
+            and raw[1:] in (["-h"], ["--help"])
+        ):
+            click.echo(group_help(ctx.command_path, root_name), nl=False)
+            ctx.exit()
+        args = translate(raw, set(self.commands), normalize)
+        name = normalize(args[0]) if args and normalize else (args[0] if args else "")
+        command = self.commands.get(name)
+        if name == "flow":
+            ctx.meta["task_argv"] = args[1:]
+        elif isinstance(command, _FlowAliasCommand):
+            # Retain main's native alias parser/callback and its version guard.
+            # Both explicit Flow and root aliases preserve the same leaf --.
+            ctx.meta["task_argv"] = [command.name, *args[1:]]
+        if (
+            args == raw
+            and command is not None
+            and (
+                command.context_settings.get("help_option_names") == []
+                or raw[:2] == ["verify", "serve"]
+            )
+        ):
+            ctx.meta["alias_help"] = alias_help(raw, ctx.command_path)
         # `openadapt run` or `openadapt replay` is a Flow verb typed without
         # `flow`. Point at the launcher form instead of a bare "No such
         # command" or Click's nearest launcher name (`replay` -> `deploy`).
-        name = args[0] if args else ""
         if (
             not ctx.resilient_parsing
             and self.get_command(ctx, name) is None
@@ -77,7 +167,10 @@ class _FlowFirstGroup(click.Group):
             # A command this launcher doesn't know may be one a newer
             # openadapt elsewhere on PATH has.
             _warn_about_launcher_conflicts()
-        return super().resolve_command(ctx, args)
+        resolved = super().resolve_command(ctx, args)
+        if args == raw and not ctx.resilient_parsing:
+            alias_notice(raw, ctx.command_path)
+        return resolved
 
 
 def _print_version(ctx: click.Context, _param, value: bool) -> None:
@@ -99,7 +192,7 @@ def _print_version(ctx: click.Context, _param, value: bool) -> None:
     help="Show the version and exit.",
 )
 def main():
-    """OpenAdapt launcher for the openadapt-flow compiler.
+    """Record, compile and run workflows with OpenAdapt.
 
     Compile a demonstrated workflow into deterministic local replay. Healthy
     runs make no model calls; configured checks can halt on ambiguity. Native
@@ -114,10 +207,10 @@ def main():
     \b
     Manual Demo Lifecycle:
         openadapt flow demo-record --out rec
-        openadapt flow compile rec --out bundle --name demo
+        openadapt compile rec --out bundle --name demo
         openadapt flow lint bundle
         openadapt flow certify bundle --policy permissive
-        openadapt flow replay bundle
+        openadapt flow replay bundle --demo-app
 
     Lint lists the demo's coverage gaps. The demo has warnings, so
     `lint --strict` exits 1 on it.
@@ -155,7 +248,7 @@ def _correct_released_flow_x11_sonames() -> None:
     if not isinstance(sonames, (list, tuple)):
         return
     corrected = tuple(_FLOW_X11_SONAME_CASE.get(name, name) for name in sonames)
-    browser_setup._LINUX_CHROMIUM_SONAMES = corrected
+    setattr(browser_setup, "_LINUX_CHROMIUM_SONAMES", corrected)
 
 
 # Flow prints its own follow-up commands with the `openadapt-flow` executable
@@ -208,6 +301,8 @@ def _flow_verbs() -> frozenset[str]:
 def _flow_tutorial_options() -> Optional[frozenset[str]]:
     """Return the installed Flow tutorial's long options, or None if unreadable."""
     tutorial = (_flow_subparsers() or {}).get("tutorial")
+    if tutorial is None:
+        return None
     try:
         names = tutorial._option_string_actions
     except AttributeError:
@@ -257,19 +352,28 @@ def _invoke_flow(argv: list[str]) -> int:
     except ImportError:
         click.echo("Error: openadapt-flow not installed.", err=True)
         click.echo("Reinstall with: pip install --upgrade openadapt", err=True)
-        click.echo("Engine only: pip install openadapt-flow", err=True)
         return 1
 
-    _correct_released_flow_x11_sonames()
-    if argv[:1] != ["tutorial"]:
-        return int(flow_main(argv))
-    # The tutorial is the first-run path and ends by printing next steps.
-    # Rewrite only its human-readable output; other verbs can print
-    # machine-readable output that must stay byte-for-byte.
-    from contextlib import redirect_stdout
+    from contextlib import AbstractContextManager, nullcontext
 
-    with redirect_stdout(_LauncherSpellingStream(sys.stdout, _flow_verbs())):
-        return int(flow_main(argv))
+    alias_context: AbstractContextManager[None]
+    try:
+        from openadapt_flow.cli_tasks import suppress_alias_notices
+    except ImportError:
+        alias_context = nullcontext()
+    else:
+        alias_context = suppress_alias_notices()
+    with alias_context:
+        _correct_released_flow_x11_sonames()
+        if argv[:1] != ["tutorial"]:
+            return int(flow_main(argv))
+        # The tutorial is the first-run path and ends by printing next steps.
+        # Rewrite only its human-readable output; other verbs can print
+        # machine-readable output that must stay byte-for-byte.
+        from contextlib import redirect_stdout
+
+        with redirect_stdout(_LauncherSpellingStream(sys.stdout, _flow_verbs())):
+            return int(flow_main(argv))
 
 
 def _run_flow(argv: list[str]) -> None:
@@ -439,15 +543,16 @@ def _halted_rerun_result(run_dir: Path) -> str:
     that a retry is safe.
     """
     outcome = _transaction_outcome(run_dir)
+    detail = f"Transaction outcome: {outcome or 'unknown'}."
     if outcome == "HALTED_BEFORE_EFFECT":
         return (
-            "Result: stopped before saving (transaction outcome "
-            "HALTED_BEFORE_EFFECT). The engine proved nothing was written."
+            "Result: Stopped before saving. The engine proved nothing was written. "
+            + detail
         )
     return (
-        f"Result: check the record (transaction outcome {outcome or 'unknown'}). "
+        "Result: Check the record. "
         "A save may have gone through, so nothing is retried until a person "
-        "checks the record."
+        "checks the record. " + detail
     )
 
 
@@ -461,6 +566,7 @@ def _is_externally_managed_error(error: BaseException) -> bool:
 _QUICKSTART_OPTIONS = frozenset(
     {
         "--out",
+        "--app",
         "--headless",
         "--no-break",
         "--verbose",
@@ -550,6 +656,17 @@ def _quickstart_root(out: Optional[Path]) -> Path:
     ),
 )
 @click.option(
+    "--app",
+    type=click.Choice(["mockmed", "openemr"]),
+    default="mockmed",
+    show_default=True,
+    help=(
+        "The app to run it in. mockmed is bundled (about 22 seconds, no Docker). "
+        "openemr runs OpenEMR 8.0.0.3 in Docker from a clone of the repository; "
+        "the first run downloads and installs it, later runs reuse it."
+    ),
+)
+@click.option(
     "--headless",
     is_flag=True,
     help="Hide the browser. It is shown by default when a display is available.",
@@ -571,6 +688,7 @@ def _quickstart_root(out: Optional[Path]) -> Path:
 def quickstart(
     command_ctx: click.Context,
     out: Optional[Path],
+    app: str,
     headless: bool,
     no_break: bool,
     verbose: bool,
@@ -585,14 +703,21 @@ def quickstart(
     screen says saved, the database has nothing, and OpenAdapt stops. The
     program makes no AI calls. Nothing in the output directory is overwritten.
 
+    With --app openemr, the same three acts run on OpenEMR 8.0.0.3 in Docker,
+    with the certified referral program: referrals registered at once and
+    checked in OpenEMR's record, then a referral that matches an existing
+    chart, where the program stops before saving. It runs from a clone of the
+    repository and needs Docker; without either it says so and exits 2.
+
     Other flags of the engine tutorial (for example --guided or
     --interactive-record) run that tutorial instead, unchanged.
     """
     _require_supported_python()
     _refuse_unknown_tutorial_options(command_ctx.args)
+    openemr = _openemr_checkout(command_ctx.args) if app == "openemr" else None
     root = _quickstart_root(out)
 
-    if command_ctx.args or not _flow_runs_quickstart():
+    if openemr is None and (command_ctx.args or not _flow_runs_quickstart()):
         # Engine-owned flags (--guided, --interactive-record, and future
         # engine additions) run the engine's own tutorial, as before. So does
         # a Flow older than the pieces the three-act quickstart uses.
@@ -606,7 +731,7 @@ def quickstart(
     steps = next_steps(
         _hint,
         _shell_quote,
-        _agent_serves_tutorial(),
+        openemr is None and _agent_serves_tutorial(),
         keep=_keep_command(),
         shadow=_shadowing_openadapt if _under_uvx() else None,
     )
@@ -618,6 +743,7 @@ def quickstart(
                 break_it=not no_break,
                 verbose=verbose,
                 steps=steps,
+                openemr=openemr,
             )
     except KeyboardInterrupt:
         click.echo(f"\nStopped. Anything written so far is in {root}", err=True)
@@ -626,7 +752,11 @@ def quickstart(
         if _is_externally_managed_error(error):
             _echo_python_remedy()
             raise click.exceptions.Exit(1) from error
-        if type(error).__name__ in ("TutorialError", "DurableAuthorityBusy"):
+        if type(error).__name__ in (
+            "TutorialError",
+            "DurableAuthorityBusy",
+            "FixtureError",
+        ):
             raise click.ClickException(
                 f"The quickstart stopped: {error}\nAnything it wrote is in {root}"
             ) from error
@@ -635,6 +765,31 @@ def quickstart(
         outcome.broken is not None and not outcome.broken.stopped
     ):
         raise click.exceptions.Exit(1)
+
+
+def _openemr_checkout(extra: list[str]) -> Path:
+    """The clone's packages/flow for ``--app openemr``, or exit 2 saying why.
+
+    Each missing piece is one line on stderr. Nothing falls back to MockMed.
+    """
+    from openadapt.quickstart.openemr import (
+        checkout_problem,
+        docker_problem,
+        find_flow_checkout,
+    )
+
+    if extra:
+        raise click.UsageError(
+            f"--app openemr runs the three-act quickstart only; {extra[0]} "
+            "belongs to the engine's MockMed tutorial."
+        )
+    problem = docker_problem()
+    flow = find_flow_checkout() if problem is None else None
+    problem = problem or checkout_problem(flow)
+    if problem is not None or flow is None:
+        click.echo(problem, err=True)
+        raise click.exceptions.Exit(2)
+    return flow
 
 
 # The oldest Flow with every piece the three-act quickstart uses (shared
@@ -849,9 +1004,9 @@ def _warn_about_launcher_conflicts() -> None:
 _SECRET_REFERENCE = re.compile(r"^(?:env:[A-Z][A-Z0-9_]*|keychain:[^/\s]+/[^/\s]+)$")
 # Flow 1.33 and 1.34 probe four X11 libraries in the wrong case, so on Linux
 # they refuse to download Chromium on hosts that have them. 1.35.0 fixed it.
-# Launcher 1.19 requires Flow 2.5: `openadapt shadow` forwards to its shadow
-# command, and `openadapt verify serve` offers its recheck.
-_SUPPORTED_FLOW_RANGE = ">=2.5.0,<3.0.0"
+# Launcher 1.21 requires Flow 2.7: `openadapt wrap` forwards to its wrap
+# command.
+_SUPPORTED_FLOW_RANGE = ">=2.7.0,<3.0.0"
 _RDP_INSTALL_COMMAND = _pip_install("openadapt[rdp]")
 _CHROMIUM_SYSTEM_LIBS_COMMAND = (
     f"{shlex.quote(sys.executable)} -m playwright install-deps chromium"
@@ -861,7 +1016,7 @@ _CHROMIUM_SYSTEM_LIBS_COMMAND = (
 def _supported_flow_version(value: str) -> bool:
     """Return whether a stable Flow version is in the launcher's supported range."""
     parsed = _release_tuple(value)
-    return parsed is not None and (2, 5, 0) <= parsed < (3, 0, 0)
+    return parsed is not None and (2, 7, 0) <= parsed < (3, 0, 0)
 
 
 # The Python modules each native or remote Flow backend imports when its
@@ -879,7 +1034,9 @@ _NATIVE_BACKENDS: dict[str, tuple[dict[str, tuple[str, ...]], str]] = {
 _HOST_NAMES = {"darwin": "macOS", "linux": "Linux", "win32": "Windows"}
 
 
-def _native_backend_status(backend: str) -> tuple[str, str]:
+def _native_backend_status(
+    backend: str, *, install_command: str | None = None
+) -> tuple[str, str]:
     """Check one native or remote backend's Python dependencies on this host.
 
     Returns ``(status, message)`` with status ``OK``, ``MISSING``, or
@@ -903,7 +1060,7 @@ def _native_backend_status(backend: str) -> tuple[str, str]:
         return (
             "MISSING",
             f"{backend}: {', '.join(missing)} not installed. "
-            f"Run: {_pip_install(f'openadapt[{extra}]')}",
+            f"Run: {install_command or _pip_install(f'openadapt[{extra}]')}",
         )
     return (
         "OK",
@@ -1136,7 +1293,26 @@ def flow(command_ctx: click.Context) -> None:
     command list, help, options, validation, and exit codes identical to the
     installed engine version.
     """
-    _run_flow(list(command_ctx.args))
+    _run_flow(command_ctx.meta.get("task_argv", list(command_ctx.args)))
+
+
+for _verb, _help in (
+    ("record", "Record a workflow. Uses the same options as flow record."),
+    ("compile", "Compile a recording. Uses the same options as flow compile."),
+    ("run", "Run a bundle with its checks. Uses the same options as flow run."),
+):
+    main.add_command(
+        _FlowAliasCommand(
+            _verb,
+            callback=flow.callback,
+            help=_help,
+            context_settings={
+                "ignore_unknown_options": True,
+                "allow_extra_args": True,
+                "help_option_names": [],
+            },
+        )
+    )
 
 
 @main.command(
@@ -1392,12 +1568,23 @@ def verify_ledger() -> None:
 @verify_ledger.command("list")
 @_LEDGER_OPTION
 def verify_ledger_list(ledger_dir: Optional[str]) -> None:
-    """Show held and open writes: key, state, when it began, outcome."""
+    """Show held and open writes: key, state, when it began, outcome.
+
+    Also each provisional CONFIRMED whose recheck is still owed, with its due
+    time, so a recheck isn't lost when the server that holds it restarts.
+    """
     ledger = _write_ledger(ledger_dir)
     rows = ledger.unresolved()
-    if not rows:
-        click.echo("No held or open writes.")
+    owed = ledger.rechecks_owed()
+    if not rows and not owed:
+        click.echo("No held or open writes. No rechecks owed.")
         return
+    for key, attempt in owed:
+        click.echo(
+            f"{key}  recheck-owed  began {attempt.begun.get('at')}  "
+            f"due {attempt.recheck_owed}  by {attempt.begun.get('actor_kind')}:"
+            f"{attempt.begun.get('actor_id')}"
+        )
     for key, attempt in rows:
         outcome = (attempt.resolved or {}).get("outcome", "-")
         state = "review" if attempt.review else ledger.state(attempt)
@@ -1438,12 +1625,12 @@ def verify_ledger_reconcile(
         click.echo(f"Error: no held or open write with key {key}", err=True)
         sys.exit(2)
     for k, attempt in rows:
-        contract = by_digest.get(str(attempt.begun.get("contract")))
-        if contract is None:
+        held_contract = by_digest.get(str(attempt.begun.get("contract")))
+        if held_contract is None:
             click.echo(f"{k}  skipped: its contract isn't in {contracts}")
             continue
         try:
-            state = reconcile(contract, k, ledger=ledger)
+            state = reconcile(held_contract, k, ledger=ledger)
         except VerifierError as exc:
             click.echo(f"{k}  skipped: {exc}")
             continue
@@ -1499,6 +1686,47 @@ def shadow(command_ctx: click.Context) -> None:
     _run_flow(["shadow", *command_ctx.args])
 
 
+def _optional_engine_entrypoint(command_ctx: click.Context, modules: tuple[str, ...]):
+    """Show pure help for absent commands; preserve installed-engine failures."""
+    targets = {
+        ".".join(parts[:end])
+        for module in modules
+        for parts in (module.split("."),)
+        for end in range(1, len(parts) + 1)
+    }
+    try:
+        loaded = [import_module(module) for module in modules]
+    except ModuleNotFoundError as exc:
+        if exc.name not in targets:
+            raise
+        if list(command_ctx.args) in (["--help"], ["-h"]):
+            click.echo(command_ctx.get_help())
+            command_ctx.exit(0)
+        return None
+    return loaded[-1].main
+
+
+@main.command(
+    "wrap",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def wrap(command_ctx: click.Context) -> None:
+    """Run an agent task once, then reuse its checked compiled tool."""
+    _require_supported_python()
+    wrap_main = _optional_engine_entrypoint(command_ctx, ("openadapt_flow.wrap.cli",))
+    if wrap_main is None:
+        click.echo(
+            "Error: this openadapt-flow installation has no wrap command.", err=True
+        )
+        sys.exit(2)
+    sys.exit(int(wrap_main(list(command_ctx.args)) or 0))
+
+
 @main.command(
     "agent",
     context_settings={
@@ -1519,9 +1747,8 @@ def agent(command_ctx: click.Context) -> None:
     MCP client can launch this command directly.
     """
     _require_supported_python()
-    try:
-        from openadapt_agent.cli import main as agent_main
-    except ImportError:
+    agent_main = _optional_engine_entrypoint(command_ctx, ("openadapt_agent.cli",))
+    if agent_main is None:
         click.echo("Error: openadapt-agent is not installed.", err=True)
         click.echo("Reinstall with: pip install --upgrade openadapt", err=True)
         sys.exit(1)
@@ -1553,28 +1780,18 @@ def seal(command_ctx: click.Context) -> None:
         sys.exit(_view_sealed_runs(args[1:]))
     if len(args) >= 2 and args[0] == "verify" and Path(args[1]).is_dir():
         sys.exit(_verify_sealed_runs(Path(args[1]), args[2:]))
-    try:
-        from openadapt_agent import seal_cli  # noqa: F401
-        from openadapt_agent.cli import main as agent_main
-    except ImportError:
-        args = list(command_ctx.args)
-        if not args or args[0] in ("--help", "-h"):
-            click.echo("Usage: openadapt seal verify <file|url|->")
-            click.echo("       openadapt seal keys pin | keys show")
-            click.echo("")
-            click.echo("Seal checks need a newer openadapt-agent:")
-            click.echo("  pip install --upgrade openadapt-agent")
-            sys.exit(0)
+    agent_main = _optional_engine_entrypoint(
+        command_ctx, ("openadapt_agent.seal_cli", "openadapt_agent.cli")
+    )
+    if agent_main is None:
         click.echo("Error: this openadapt-agent cannot check Seals.", err=True)
         click.echo("Upgrade with: pip install --upgrade openadapt-agent", err=True)
         sys.exit(1)
     sys.exit(int(agent_main(["seal", *command_ctx.args]) or 0))
 
 
-def _view_sealed_runs(argv: list[str]) -> int:
-    """`openadapt seal view RUN_DIR`: write each sealed run's offline Seal page."""
-    import argparse
-
+def _seal_view_parser() -> argparse.ArgumentParser:
+    """Build the launcher's argparse command without reading or opening runs."""
     parser = argparse.ArgumentParser(
         prog="openadapt seal view",
         description=(
@@ -1584,6 +1801,7 @@ def _view_sealed_runs(argv: list[str]) -> int:
             "network requests. A folder of runs (such as the quickstart's) gets "
             "one page per sealed run."
         ),
+        allow_abbrev=False,
     )
     parser.add_argument(
         "run_dir", type=Path, help="a sealed run folder, or a folder of them"
@@ -1601,7 +1819,12 @@ def _view_sealed_runs(argv: list[str]) -> int:
         help="the run's compiled bundle, for the program map (default: found next to the run)",
     )
     parser.add_argument("--no-open", action="store_true", help="write the page only")
-    options = parser.parse_args(argv)
+    return parser
+
+
+def _view_sealed_runs(argv: list[str]) -> int:
+    """`openadapt seal view RUN_DIR`: write each sealed run's offline Seal page."""
+    options = _seal_view_parser().parse_args(argv)
     folder = options.run_dir
     runs = _sealed_run_dirs(folder) if folder.is_dir() else []
     if not runs:
@@ -2251,6 +2474,118 @@ def version():
             click.echo(f"  {name}: {number}")
 
 
+def _doctor_python_command(arguments: str) -> str:
+    """Show a command for the interpreter running doctor, in the host shell."""
+    if _host_platform() == "win32":
+        powershell = "'" + sys.executable.replace("'", "''") + "'"
+        return (
+            f"PowerShell: & {powershell} {arguments}\n"
+            f'    Command Prompt: "{sys.executable}" {arguments}'
+        )
+    return f"{_shell_quote(sys.executable)} {arguments}"
+
+
+def _doctor_macos_permissions() -> list[str]:
+    """Inspect consent without asking for it or touching the desktop."""
+    try:
+        from openadapt_flow.backends.remote_display import MacWindowClient
+
+        client = MacWindowClient()
+    except Exception:
+        click.echo("  [ERROR] macOS permissions could not be checked.")
+        return ["macos-permissions"]
+
+    failures = []
+    for name, check, pane in (
+        ("Accessibility", client.input_trusted, "Accessibility"),
+        (
+            "Screen Recording",
+            client.capture_trusted,
+            "Screen & System Audio Recording",
+        ),
+    ):
+        try:
+            granted = check()
+        except Exception:
+            failures.append(name)
+            click.echo(f"  [ERROR] {name}: permission could not be checked.")
+            continue
+        if granted:
+            click.echo(f"  [OK] {name}: permission is granted.")
+        else:
+            failures.append(name)
+            click.echo(
+                f"  [MISSING] {name}: permission is not granted or unavailable. "
+                f"In System Settings > Privacy & Security > {pane}, enable "
+                "the app that launches OpenAdapt, then restart that app."
+            )
+    return failures
+
+
+def _doctor_ffmpeg_remedy() -> str:
+    """Offer the installed Capture capability, or an explicit compatible upgrade."""
+    from importlib import import_module
+
+    try:
+        capture_cli = import_module("openadapt_capture.cli")
+        managed_install = callable(getattr(capture_cli, "install_ffmpeg", None))
+    except Exception:
+        managed_install = False
+    if managed_install:
+        return "install the managed runtime with: " + _doctor_python_command(
+            "-m openadapt_capture.cli install-ffmpeg"
+        )
+    return "upgrade Capture, then rerun doctor: " + _doctor_python_command(
+        '-m pip install --upgrade "openadapt-capture>=1.3.0,<2.0.0"'
+    )
+
+
+def _doctor_recording_prerequisites(backend: str) -> list[str]:
+    """Resolve recording dependencies without capturing or testing an encoder."""
+    from importlib.util import find_spec
+
+    extra = "capture"
+    if backend in ("macos", "windows", "linux", "rdp"):
+        extra += f",{backend}"
+    elif backend == "citrix" and _host_platform() == "darwin":
+        extra += ",macos"
+    install = _doctor_python_command(f'-m pip install "openadapt[{extra}]"')
+    click.echo("\nNative recording prerequisites:")
+    if find_spec("openadapt_capture") is None:
+        click.echo("  [MISSING] Capture: not installed. Run: " + install)
+        return ["capture"]
+    try:
+        from openadapt_capture.config import config
+        from openadapt_capture.video import FFmpegUnavailableError, resolve_ffmpeg
+    except Exception:
+        click.echo(
+            "  [ERROR] Capture: recording dependencies could not be imported. "
+            "Reinstall with: " + install
+        )
+        return ["capture-check"]
+
+    click.echo("  [OK] Capture: recording dependencies are importable.")
+    try:
+        provision = resolve_ffmpeg(config.VIDEO_FFMPEG_PATH, config.VIDEO_FFPROBE_PATH)
+    except FFmpegUnavailableError:
+        click.echo(
+            "  [MISSING] FFmpeg: no executable could be resolved. Check any "
+            "configured FFmpeg path, or " + _doctor_ffmpeg_remedy()
+        )
+        return ["ffmpeg"]
+    except Exception:
+        click.echo(
+            "  [ERROR] FFmpeg: the recording executable could not be inspected. "
+            "Check the configured FFmpeg path and reinstall Capture with: " + install
+        )
+        return ["ffmpeg-check"]
+    click.echo(
+        f"  [FOUND] FFmpeg: an executable was resolved from {provision.source}. "
+        "The encoder is checked when recording starts; it was not tested here."
+    )
+    return []
+
+
 @main.command()
 @click.option(
     "--backend",
@@ -2258,8 +2593,24 @@ def version():
     default=None,
     help="Explain setup for one execution surface.",
 )
-def doctor(backend: str | None):
+@click.option(
+    "--install-browser",
+    is_flag=True,
+    help="Download Playwright's matching Chromium if missing; do not launch it.",
+)
+@click.option(
+    "--recording",
+    is_flag=True,
+    help="Also check Capture and FFmpeg for an explicit native --backend.",
+)
+def doctor(backend: str | None, install_browser: bool, recording: bool):
     """Check system requirements and dependencies."""
+    if install_browser and backend not in (None, "web"):
+        raise click.UsageError(
+            "--install-browser requires --backend web (or no backend)."
+        )
+    if recording and backend in (None, "web"):
+        raise click.UsageError("--recording requires an explicit native --backend.")
     click.echo("OpenAdapt System Check")
     click.echo("=" * 40)
 
@@ -2283,6 +2634,8 @@ def doctor(backend: str | None):
     from importlib.util import find_spec
 
     failures = []
+    native_host_supported = True
+    reinstall = _doctor_python_command("-m pip install --upgrade openadapt")
     click.echo("\nSelected execution surface:")
     if backend == "rdp":
         if find_spec("aardwolf") is not None:
@@ -2295,13 +2648,22 @@ def doctor(backend: str | None):
             failures.append("rdp")
             click.echo(
                 "  [MISSING] rdp: the RDP transport dependency is not installed. "
-                "Run: " + _RDP_INSTALL_COMMAND
+                "Run: " + _doctor_python_command('-m pip install "openadapt[rdp]"')
             )
     elif backend and backend != "web":
-        status, message = _native_backend_status(backend)
+        extra = _NATIVE_BACKENDS[backend][1]
+        status, message = _native_backend_status(
+            backend,
+            install_command=_doctor_python_command(
+                f'-m pip install "openadapt[{extra}]"'
+            ),
+        )
+        native_host_supported = status != "UNSUPPORTED"
         if status != "OK":
             failures.append(backend)
         click.echo(f"  [{status}] {message}")
+        if backend == "macos" and status == "OK":
+            failures.extend(_doctor_macos_permissions())
         click.echo(
             f"  [--] {backend}: browser support is not required; "
             "no Playwright or Chromium setup will run."
@@ -2312,7 +2674,7 @@ def doctor(backend: str | None):
             failures.append("playwright")
             click.echo(
                 "  [MISSING] Browser: the base install does not contain "
-                "Playwright. Run `python -m pip install --upgrade openadapt`."
+                "Playwright. Run: " + reinstall
             )
         else:
             _correct_released_flow_x11_sonames()
@@ -2325,8 +2687,7 @@ def doctor(backend: str | None):
                 failures.append("browser-diagnostics")
                 click.echo(
                     "  [MISSING] Browser: the installed Flow version cannot check "
-                    "Chromium dependencies. Run `python -m pip install --upgrade "
-                    "openadapt`."
+                    "Chromium dependencies. Run: " + reinstall
                 )
             else:
                 try:
@@ -2346,7 +2707,10 @@ def doctor(backend: str | None):
                             f"libraries: {', '.join(missing_system_libs)}"
                         )
                         click.echo(
-                            "  Install them once: " + _CHROMIUM_SYSTEM_LIBS_COMMAND
+                            "  Install them once: "
+                            + _doctor_python_command(
+                                "-m playwright install-deps chromium"
+                            )
                         )
                     else:
                         try:
@@ -2359,18 +2723,54 @@ def doctor(backend: str | None):
                                 "OpenAdapt, then run this command again."
                             )
                         else:
+                            if not chromium and install_browser:
+                                import subprocess
+
+                                click.echo(
+                                    "  [INSTALL] Downloading Playwright's matching "
+                                    "Chromium (up to 5 minutes)."
+                                )
+                                try:
+                                    subprocess.run(
+                                        [
+                                            sys.executable,
+                                            "-m",
+                                            "playwright",
+                                            "install",
+                                            "chromium",
+                                        ],
+                                        check=True,
+                                        capture_output=True,
+                                        text=True,
+                                        timeout=300,
+                                    )
+                                    chromium = _chromium_present()
+                                    if not chromium:
+                                        raise RuntimeError("Chromium is still missing")
+                                except Exception:
+                                    failures.append("browser-install")
+                                    click.echo(
+                                        "  [ERROR] Browser: Chromium installation "
+                                        "could not be confirmed. Retry with: "
+                                        + _doctor_python_command(
+                                            "-m playwright install chromium"
+                                        )
+                                    )
                             if chromium:
                                 click.echo(
                                     "  [OK] Browser: Playwright, Chromium, and its "
                                     "system libraries are ready."
                                 )
-                            else:
+                            elif not install_browser:
                                 click.echo(
                                     "  [READY] Browser: Playwright and Chromium's "
                                     "system libraries are ready. OpenAdapt will try "
                                     "to download the matching Chromium build on the "
                                     "first web action."
                                 )
+
+    if recording and backend is not None and native_host_supported:
+        failures.extend(_doctor_recording_prerequisites(backend))
 
     # Core packages: installed by the base `pip install openadapt`. Only
     # these are treated as required; a missing one is a real problem.
@@ -2381,16 +2781,13 @@ def doctor(backend: str | None):
         "playwright",
     ]
     for pkg in core:
-        # find_spec checks installability without executing package code
-        # (importing openadapt-capture screenshots at import time, which
-        # crashes headless environments)
+        # Inspect package presence without starting its runtime.
         if find_spec(pkg) is not None:
             click.echo(f"  [OK] {pkg}")
         else:
             failures.append(f"core:{pkg}")
             click.echo(
-                f"  [MISSING] {pkg} (core dependency; reinstall with "
-                f"`pip install openadapt`)"
+                f"  [MISSING] {pkg} (core dependency). Reinstall with: {reinstall}"
             )
 
     # Optional packages: opt-in extras the base install intentionally
@@ -2411,8 +2808,8 @@ def doctor(backend: str | None):
             click.echo(f"  [OK] {pkg}")
         else:
             click.echo(
-                f"  [--] {pkg} (optional; install with "
-                f'`pip install "openadapt[{extra}]"`)'
+                f"  [--] {pkg} (optional). Install with: "
+                + _doctor_python_command(f'-m pip install "openadapt[{extra}]"')
             )
 
     # A GPU and model API keys matter only to the research extras (`openadapt

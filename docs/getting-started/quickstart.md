@@ -50,7 +50,7 @@ openadapt flow demo-record --out rec
 openadapt flow compile rec --out bundle --name my-task
 openadapt flow lint bundle --strict
 openadapt flow certify bundle --policy permissive
-openadapt flow replay bundle --run-dir run
+openadapt flow replay bundle --demo-app --run-dir run
 ```
 
 The strict lint step returns a nonzero exit code. The bundled manual demo has
@@ -64,14 +64,32 @@ fault cases, and deployment policy before production use.
 
 ## Record a workflow
 
-Omit `--backend`. No `--url` records this OS. `--url` records the browser.
+Recording is the same on every surface; only the target differs: `--url`
+for a web app, `--window` for a Windows or macOS app window or a local RDP or
+Citrix client window. Linux and network RDP record the whole local desktop, so
+they take no target.
 
 ```bash
-openadapt flow record --out rec
-openadapt flow record --url https://your-app.example --out rec
-openadapt flow compile rec --out bundle --name my-workflow
-openadapt flow replay bundle --url https://your-app.example --run-dir run
+openadapt record --backend <web|windows|macos|linux|rdp|citrix> <target> --out rec
 ```
+
+```bash
+# A web app
+openadapt record --backend web --url https://your-app.example --out rec
+openadapt compile rec --out bundle --name my-workflow
+openadapt run --replay bundle --url https://your-app.example --run-dir run
+
+# A desktop app (macOS here; Windows and Citrix take --window too).
+# Desktop recording and macOS replay are separate extras.
+python -m pip install --upgrade 'openadapt[capture,macos]'
+openadapt record --backend macos --window "Your App" --out rec
+openadapt compile rec --out bundle --name my-workflow
+openadapt run --replay bundle --macos-app "Your App" --run-dir run
+```
+
+`--backend` can be left out: with `--url` it records the browser, and without
+it records this computer's desktop. Every surface's commands are in
+[SURFACES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/SURFACES.md#first-workflow-per-surface).
 
 Password fields and fields declared with `--secret` exclude their values at
 record time. Read the

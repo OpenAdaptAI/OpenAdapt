@@ -1,0 +1,73 @@
+{
+ "apps_seen": [
+  "galculator"
+ ],
+ "galculator_windows": [
+  "galculator"
+ ],
+ "galculator_tree": {
+  "seconds": 0.2,
+  "nodes": 0,
+  "offscreen": 6,
+  "identity_rereads_equal": 0,
+  "roles": [],
+  "names": [],
+  "truncated": false
+ },
+ "galculator_recording_error": "KeyError('7')",
+ "gnome_calculator_tree": {
+  "seconds": 1.2,
+  "nodes": 0,
+  "offscreen": 34,
+  "identity_rereads_equal": 0,
+  "roles": [],
+  "names": [],
+  "truncated": false
+ },
+ "gnome_calculator_recording_error": "KeyError('7')",
+ "fixture_tree": {
+  "seconds": 0.04,
+  "nodes": 2,
+  "offscreen": 0,
+  "identity_rereads_equal": 2,
+  "roles": [
+   "button",
+   "text_input"
+  ],
+  "names": [
+   "Effect value",
+   "Write effect"
+  ],
+  "truncated": false
+ },
+ "fixture_recording": [
+  {
+   "kind": "click",
+   "actor": "agent",
+   "structural": {
+    "role": "textbox",
+    "name": "Effect value",
+    "window_name": "oa-native-surfaces"
+   }
+  },
+  {
+   "kind": "type",
+   "actor": "agent",
+   "structural": null
+  },
+  {
+   "kind": "click",
+   "actor": "agent",
+   "structural": {
+    "role": "button",
+    "name": "Write effect",
+    "window_name": "oa-native-surfaces"
+   }
+  }
+ ],
+ "fixture_effect_file": "not-yet-qualifiednative-surfaces-42",
+ "ambiguous_click": "ambiguous_node",
+ "ambiguous_twins": 2,
+ "ambiguous_effect_written": false,
+ "note": "Xvfb + openbox + AT-SPI in Debian bookworm. The in-tree GTK3 fixture: tree identities re-read equal, the agent records by control and the effect file is the oracle; two identical 'Write effect' buttons are refused by ref. galculator lists its keys as AT-SPI 'toggle button', which the shared role map does not map, so none is offered; GNOME Calculator 43 (GTK4) reports no SHOWING state, so every control is offscreen and none is clickable."
+}

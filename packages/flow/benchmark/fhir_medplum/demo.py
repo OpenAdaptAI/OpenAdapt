@@ -234,13 +234,15 @@ def cmd_compile(args: argparse.Namespace) -> int:
 
 
 def main(argv: Any = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     sub = parser.add_subparsers(dest="cmd", required=True)
-    p = sub.add_parser("record")
+    p = sub.add_parser("record", allow_abbrev=False)
     p.add_argument("--out", required=True)
     p.add_argument("--values", default=None, help="JSON file of field values")
     p.set_defaults(func=cmd_record)
-    p = sub.add_parser("compile")
+    p = sub.add_parser("compile", allow_abbrev=False)
     p.add_argument("--recording", required=True)
     p.add_argument("--bundle", required=True)
     p.set_defaults(func=cmd_compile)

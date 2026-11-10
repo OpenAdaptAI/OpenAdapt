@@ -1,10 +1,15 @@
 # API steps from a recording's network traffic
 
-**Scope: a single HTML form submission.** An API step repeats one
-`application/x-www-form-urlencoded` POST of one HTML form, read again from
-the live page, in place of the clicks and keystrokes that filled it. It is
-not a general API client: JSON or script-built requests and multi-page
-server state stay on the GUI. Other writes during the replaced steps are a
+**Scope: a single HTML form submission.** An API step repeats one POST of
+one HTML form, read again from the live page, in place of the clicks and
+keystrokes that filled it. The POST is `application/x-www-form-urlencoded`
+or `multipart/form-data` with no file attached, and either the browser
+submits the form or the page's script sends the form's fields to another
+endpoint (see [Saves the page's script sends](#saves-the-pages-script-sends)).
+A save the page's script sends as JSON, a GraphQL mutation included, is
+covered too (see [JSON and GraphQL saves](#json-and-graphql-saves)). It is
+not a general API client: uploads and multi-page server state stay on the
+GUI. Other writes during the replaced steps are a
 declared sequence (below): the page's own background requests are listed
 and left to the page, and a write a step caused is sent in its recorded
 place before the save and read back. A form whose script
@@ -74,6 +79,29 @@ every field it sent:
 | `select_label` | A select a recorded step typed an option's label into | The option with that label in the live form; refuse if it isn't exactly one |
 | `session` | A CSRF or session value the server issued | Read from the live form in this session |
 | `form_default` | The form's own default | Must still equal the recorded default |
+| `submitter` | The `name=value` the browser adds for the submit button the person clicked (`commit=Create`) | The live form must have exactly one enabled submit button that sends that value |
+| `empty_file` | A file input sent empty in a multipart save | The live form must have exactly the recorded file inputs; the API step never attaches a file |
+
+The save is sent with the encoding it was recorded with. A multipart save
+is encoded the way Chromium encodes a form with no file (each field a part,
+an empty file input a part with `filename=""`, line breaks as CRLF), with a
+boundary derived from the fields, so the same request always has the same
+bytes. A multipart save that attached a file isn't captured
+(`body_omitted: "multipart"`), so it isn't proposed. A form with no `action`
+posts to its own page and is matched as such.
+
+The submit button's pair is explained only by exactly one button whose value
+is written in the page. An `<input type=submit>` without a `value` sends the
+browser's own label, which the page doesn't state, so such a pair isn't
+explained. When the recording doesn't name the clicked control by `#id` or
+`[name]`, the button that sends the pair is the one clicked when the page's
+script runs; a recorded click on another control refuses the proposal.
+
+The save's success signal is the address it sent the browser to. A record's
+own address (`/ticket/17`, `/ipam/ip-addresses/3/`) is kept whole with each
+number generalized, since the number alone matches almost any URL. A query
+value that is a long hash or nonce (a comment's `moderation-hash`) must be
+present, with any value.
 
 A field is bound by provenance: which recorded step typed into it (the
 field the click before the typing targeted), never by its value matching a
@@ -117,6 +145,89 @@ found." The API step sends these requests and requires the same text before
 it sends the save. On-screen checks of steps that made no request (layout
 and region checks) are screen-only. They are listed for the person who
 admits the step and aren't repeated.
+
+## Saves the page's script sends
+
+Some pages don't submit the form. Their script reads the form's fields and
+posts them to another endpoint (WordPress's category form posts to
+`admin-ajax.php`, not to its `action`). The compiler takes the form whose
+controls name every field the request sent, on the last captured page
+before the save; two such forms refuse the proposal. The binding names the
+form's own action (`form_action`), and the request's endpoint.
+
+Such a save always runs the page's script first (below): the scratch page's
+blocked request to the endpoint is the save compared, and it gets an empty
+`200` so the script carries on. The API step sends only when the script
+sends exactly the body the API step built. A page that no longer has script
+keeps the save on the GUI. There is no redirect to read, so success is the
+recorded status and then the record check.
+
+## JSON and GraphQL saves
+
+A single-page app saves by sending JSON from its script (`POST
+/api/v1/Contact`, a FHIR resource, a GraphQL mutation). There is no form, so
+the compiler binds each value the person typed on the page to the one JSON
+leaf that carries it, by its JSON pointer. Everything else in the body is
+sent as recorded. The typed values aren't kept in the bundle: their leaves
+hold an empty value of the recorded type, and a leaf recorded as a number
+takes the run's value as a number.
+
+The page is the one the person saved from (the save step's own address:
+a single-page app may already show the new record's address when the
+request is logged). When the app opened its form by changing its route
+rather than loading a document, every recorded step must be on that page,
+and the API step stands in for all of them. A save the app's script sends
+to the app's own API host, on another origin, goes only there, and only
+with the headers the app's script sent that host in the session.
+
+A GraphQL client that batches sends a list; a list holding one mutation is
+that mutation, and its answer is a list of one. GraphQL queries are POSTed
+too, but a request whose every operation is a query is a read. Writes sent
+while the page loaded, before the first recorded step, aren't caused by
+any step.
+
+Nothing is proposed when:
+
+- a typed value was blank, equals another input's, is in the body twice or
+  not at all, or is inside a GraphQL operation's text rather than its
+  variables;
+- a value in the body equals an input no step typed;
+- the body carries a session or secret value, or a value the page makes on
+  each save (a UUID, a date and time), which can't be sent again;
+- the body isn't a JSON object (a batch), was cut at capture, or the recorded
+  save wasn't accepted (2xx);
+- the steps on the page also sent another write, including one captured
+  after the selected save, or a step checks text that
+  a request's response carries (a JSON save is repeated alone, with no
+  pre-checks); a step's other on-screen checks are listed as screen-only;
+- the recording doesn't say which headers the save carried (a capture from
+  before `request_headers` existed).
+
+Many apps sign their API calls with a header their script adds
+(`Authorization: Bearer ...`, a CSRF header), which the session's cookies
+don't carry. The capture keeps the names of those headers, never their
+values. While a run's browser is open, the runtime keeps, in memory only, the
+last value of each such header the app's own script sent to its origin
+(`runtime/actuators/session_headers.py`). The API step sends those values. A
+header the app hasn't sent in this session keeps the save on the GUI. The
+values are in the approval digest and never shown.
+
+A run value that is blank keeps a JSON save on the GUI: a page often leaves
+a blank field out of the body, so the recorded shape can't be assumed.
+
+A JSON save succeeds on its recorded status. A GraphQL server answers 200
+with errors in the body, so a GraphQL save also needs a response with data
+and no `errors`; anything else halts it and it is not retried. The record
+check reads the record back, as for every API step.
+
+`api_footprint.footprint_verdict` compares paired GUI/API database changes.
+Changed rows retain their complete before/after values, including unchanged
+row IDs. Every field is compared after normalizing each run's marker.
+Variation between GUI saves does not prove server ownership: counters and
+other business values can vary too. Unexplained differences keep the save
+on the GUI, including generated insert IDs or times that the dumps alone
+cannot justify omitting. A matching footprint is optional at admission;
+known additional JSON writes refuse the proposal even without one.
 
 ## Other writes in the span
 
@@ -439,9 +550,13 @@ recording.
 
 - Web only. A desktop app, an RDP session or a Citrix session has no page
   requests to capture (`record --capture-network` refuses those backends).
-- One form save, posted as `application/x-www-form-urlencoded`. JSON bodies
-  built by script, multipart uploads, signed or computed fields, and saves
-  over a websocket aren't proposed.
+- One save: a form posted URL-encoded or as multipart with no file, or a
+  JSON body. File uploads, signed or computed fields, saves over a
+  websocket, and JSON values the page makes on each save aren't proposed. Step writes in the span must be URL-encoded.
+- A field the server fills in on every page load (a page-load time, a
+  per-record code, a date defaulting to today) is a form default that
+  differs on the next load, so the API step doesn't run and the GUI steps
+  do.
 - The server may enforce less than the page. On OpenEMR, the duplicate
   check and the required fields run only in the browser. The API step
   carries over the checks it can evaluate (pre-checks, native HTML

@@ -34,7 +34,7 @@ from openai.types.responses import (  # noqa: E402
 )
 
 from openadapt_flow.integrations.agents.openai_agents import verified  # noqa: E402
-from tests._orders_portal import Portal, portal  # noqa: E402,F401 - fixture
+from tests._orders_portal import Portal  # noqa: E402
 
 set_tracing_disabled(True)
 

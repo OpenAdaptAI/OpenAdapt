@@ -1,0 +1,43 @@
+{
+ "lab": "zenbook (winlap)",
+ "started": "2026-11-04T00:01:00Z",
+ "status": {
+  "schema_version": "openadapt.execute-status/v1",
+  "execution_id": "execution_62e4a338ac05436b91dde83d4c3671f0",
+  "state": "terminal",
+  "terminal_outcome": "reconciliation_required",
+  "evidence_receipt_id": "receipt_d4385935162c4d089b74da9b594fe433",
+  "updated_at": "2026-11-04T00:02:07Z"
+ },
+ "receipt": {
+  "schema_version": "openadapt.execute-evidence-receipt/v1",
+  "receipt_id": "receipt_d4385935162c4d089b74da9b594fe433",
+  "execution_id": "execution_62e4a338ac05436b91dde83d4c3671f0",
+  "workflow_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "workflow_version": "workflow_pnwinlap01",
+  "qualification_id": "qualification_pnwinlap01",
+  "environment_id": "environment_zenbook",
+  "runner_id": "runner_270a6cc211fb4e3db2d642f5e9402524",
+  "nonce": "nonce_b8872f52f7c94acf9cf40eb3b504a640",
+  "oracle_tier": 0,
+  "outcome": "reconciliation_required",
+  "contracts": {
+   "authorization_passed": false,
+   "identity_passed": false,
+   "postcondition_passed": false,
+   "effect_passed": false,
+   "minimum_effect_strength": "independent_system_of_record",
+   "observed_effect_strength": null,
+   "model_used": false,
+   "external_network_used": false
+  },
+  "delivery_uncertain": true,
+  "compensation_effect_verified": false,
+  "evidence_digest": "sha256:b6145f35324b29db8bf1a704bebccc3093c6611235d6682a8255c47a95e702ba",
+  "issued_at": "2026-11-04T00:02:07Z",
+  "seal_signature": null
+ },
+ "db_has_note": false,
+ "db_changed": false,
+ "note": "ExecuteService ran the compiled Patient Notes bundle through `openadapt-flow run --config` (windows backend). The child refused before any input: Standard actuation off the web needs a signed qualification authority, and this bundle has none (qualify campaign on Windows is #1701). The worker cannot see that the child refused before acting, so the outcome is reconciliation_required with delivery uncertain, and the database did not change."
+}

@@ -26,7 +26,7 @@ from crewai.llms.base_llm import BaseLLM  # noqa: E402
 from crewai.tools import tool  # noqa: E402
 
 from openadapt_flow.integrations.agents.crewai import verified  # noqa: E402
-from tests._orders_portal import Portal, portal  # noqa: E402,F401 - fixture
+from tests._orders_portal import Portal  # noqa: E402
 
 ORDER = {"customer": "Acme", "product": "Desk lamp", "units": "3"}
 
