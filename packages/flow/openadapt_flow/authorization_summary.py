@@ -51,17 +51,15 @@ class SignRefused(RuntimeError):
 
 
 def bundle_digest(bundle_dir: Path) -> str:
-    """Recompute a bundle's content digest from its files (not from its manifest)."""
+    """Verify content identity against the original seal and current asset bytes."""
     from openadapt_flow.bundle_validation import (
-        compute_content_digest,
         compute_file_hashes,
+        content_identity_digest,
     )
     from openadapt_flow.ir import Workflow
 
-    workflow = Workflow.model_validate_json(
-        (Path(bundle_dir) / "workflow.json").read_text(encoding="utf-8")
-    )
-    return compute_content_digest(workflow, compute_file_hashes(workflow, bundle_dir))
+    workflow = Workflow.load(bundle_dir)
+    return content_identity_digest(workflow, compute_file_hashes(workflow, bundle_dir))
 
 
 def matching_bundle(digest: str, candidates: Sequence[Path]) -> Optional[Path]:

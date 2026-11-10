@@ -1,0 +1,60 @@
+{
+  "started": "2026-11-04T20:01:06.342541+00:00",
+  "commit": "7c0d102e738172a4d4cbe0bdb141bd5f7cc239e4",
+  "platform": "linux x11 (Xvfb, openbox), AT-SPI, Chromium",
+  "work_dir": "/tmp/cross-window-olav8ii8",
+  "record": {
+    "exit": 1,
+    "error": null,
+    "output": [
+      "  File \"/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/sad-hertz-e86754/packages/flow/openadapt_flow/__main__.py\", line 13786, in main",
+      "    code = args.func(args)",
+      "           ^^^^^^^^^^^^^^^",
+      "  File \"/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/sad-hertz-e86754/packages/flow/openadapt_flow/__main__.py\", line 1500, in _cmd_record",
+      "    code = _cmd_record_capture(args)",
+      "           ^^^^^^^^^^^^^^^^^^^^^^^^^",
+      "  File \"/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/sad-hertz-e86754/packages/flow/openadapt_flow/__main__.py\", line 1591, in _cmd_record_capture",
+      "    return _cmd_record_surfaces(args)",
+      "           ^^^^^^^^^^^^^^^^^^^^^^^^^^",
+      "  File \"/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/sad-hertz-e86754/packages/flow/openadapt_flow/__main__.py\", line 1933, in _cmd_record_surfaces",
+      "    out = record_multi_surface(",
+      "          ^^^^^^^^^^^^^^^^^^^^^",
+      "  File \"/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/sad-hertz-e86754/packages/flow/openadapt_flow/multi_surface_record.py\", line 880, in record_multi_surface",
+      "    convert_capture(",
+      "  File \"/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/sad-hertz-e86754/packages/flow/openadapt_flow/adapters/capture.py\", line 1272, in convert_capture",
+      "    events = _flow_events(",
+      "             ^^^^^^^^^^^^^",
+      "  File \"/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/sad-hertz-e86754/packages/flow/openadapt_flow/adapters/capture.py\", line 1021, in _flow_events",
+      "    _convert_key_type(action, ts, events, text_run, flush_text)",
+      "  File \"/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/sad-hertz-e86754/packages/flow/openadapt_flow/adapters/capture.py\", line 1117, in _convert_key_type",
+      "    raise ValueError(f\"unmapped key {name!r} at t={ts:.3f}; extend _KEY_NAME_MAP\")",
+      "ValueError: unmapped key 'keycode_41' at t=1793822484.437; extend _KEY_NAME_MAP",
+      "Recording http://127.0.0.1:34457/",
+      "  Perform your workflow in the browser window.",
+      "  Complete the workflow. Recording stops automatically after the configured result is observed. Press Ctrl-C only to stop early.",
+      "",
+      "[record] check succeeded; stopping.",
+      "",
+      "=== Recording Profile ===",
+      "Duration: 72.9s",
+      "Main thread: False",
+      "Threads started: 9",
+      "  action: 59 events (0.8/s)",
+      "  screen: 225 events (3.1/s)",
+      "  window: 6 events (0.1/s)",
+      "  browser: 0 events (0.0/s)",
+      "  video: 225 events (3.1/s)",
+      "  screenshot: avg=67.6ms max=1390.0ms min=4.8ms",
+      "Config: WINDOW_DATA=True VIDEO=True PLOT_PERF=False FPS=10.0",
+      "========================="
+    ],
+    "events": [],
+    "recording": "/tmp/cross-window-olav8ii8/recording",
+    "chart_rows": [
+      [
+        "rc79284",
+        "follow up in two weeks"
+      ]
+    ]
+  }
+}

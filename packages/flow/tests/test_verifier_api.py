@@ -13,7 +13,7 @@ from typing import Any
 
 import pytest
 
-from openadapt_flow import verifier
+from openadapt_flow import verifier as verifier_api
 from openadapt_flow.verifier import (
     Actor,
     BaselineUnreadable,
@@ -147,12 +147,41 @@ def test_no_write_is_uncertain(tmp_path: Path) -> None:
     assert result.verdict == "RECONCILIATION_REQUIRED"
 
 
-def test_a_write_never_sent_and_absent_is_retry_safe(tmp_path: Path) -> None:
+@pytest.mark.parametrize("file_backend", [False, True])
+@pytest.mark.parametrize("write_attempted", [False, True])
+def test_absence_without_dispatch_proof_stays_held(
+    tmp_path: Path, file_backend: bool, write_attempted: bool
+) -> None:
     db = _store(tmp_path)
-    pending = begin_write(_contract(db), PARAMS, actor=BOT, ledger=MemoryLedger())
-    result = verify_write(pending, write_attempted=False)
-    assert result.receipt_outcome == "halted_before_effect"
-    assert result.outcome is Outcome.REFUTED and result.retry_safe
+    backend = (
+        verifier_api.FileLedger(tmp_path / "journal")
+        if file_backend
+        else MemoryLedger()
+    )
+    ledger = verifier_api.Ledger(backend, settle_s=0)
+    contract = _contract(db)
+    pending = begin_write(contract, PARAMS, actor=BOT, ledger=ledger)
+    result = verify_write(pending, write_attempted=write_attempted)
+    expected = Outcome.UNCERTAIN if write_attempted else Outcome.REFUTED
+    assert result.outcome is expected and not result.retry_safe
+    assert result.receipt_outcome == (
+        "reconciliation_required" if write_attempted else "halted_before_effect"
+    )
+    assert result.to_dict()["retry_safe"] is False
+    assert not result.verified
+    retained = ledger.latest(pending.write_key)
+    assert retained is not None and retained.resolved is not None
+    assert retained.resolved["retry_safe"] is False
+    assert retained.resolved["result"]["retry_safe"] is False
+    if file_backend:
+        ledger = verifier_api.Ledger(
+            verifier_api.FileLedger(tmp_path / "journal"), settle_s=0
+        )
+    with pytest.raises(verifier_api.WriteHeld):
+        begin_write(contract, PARAMS, actor=BOT, ledger=ledger)
+    assert len(ledger.attempts()) == 1
+    with sqlite3.connect(db) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM patient").fetchone() == (1,)
 
 
 def test_an_unreadable_store_stops_before_the_write(tmp_path: Path) -> None:
@@ -221,7 +250,7 @@ def test_the_contract_names_the_values_it_binds(tmp_path: Path) -> None:
     "receipt_outcome, checked, rows, expected",
     [
         ("verified", {}, [], (Outcome.CONFIRMED, False)),
-        ("halted_before_effect", {}, [], (Outcome.REFUTED, True)),
+        ("halted_before_effect", {}, [], (Outcome.REFUTED, False)),
         ("rejected_policy", {}, [], (Outcome.REFUTED, False)),
         ("failed_platform", {}, [], (Outcome.UNCERTAIN, False)),
         ("reconciliation_required", {"frame": "refuted"}, [], (Outcome.REFUTED, False)),
@@ -259,7 +288,7 @@ def test_every_receipt_outcome_maps_to_one_of_three(
 
 
 def test_the_public_api_is_stable() -> None:
-    assert sorted(verifier.__all__) == [
+    assert sorted(verifier_api.__all__) == [
         "Actor",
         "AlreadyWritten",
         "BaselineUnreadable",
@@ -311,6 +340,7 @@ def test_the_public_api_is_stable() -> None:
         ("authorization_ref", "KEYWORD_ONLY"),
         ("workdir", "KEYWORD_ONLY"),
         ("declared_by", "KEYWORD_ONLY"),
+        ("read_provider", "KEYWORD_ONLY"),
     ]
     assert params(verify_write) == [
         ("pending", "POSITIONAL_OR_KEYWORD"),
@@ -361,6 +391,7 @@ def test_the_public_api_is_stable() -> None:
         ("excused_by", "KEYWORD_ONLY"),
         ("wait", "KEYWORD_ONLY"),
         ("ledger", "KEYWORD_ONLY"),
+        ("read_provider", "KEYWORD_ONLY"),
     ]
     assert [f for f in RecheckResult.__dataclass_fields__] == [
         "outcome",
@@ -372,7 +403,11 @@ def test_the_public_api_is_stable() -> None:
         "read_at",
         "excused",
         "evidence",
+        "recheck_claim_sha256",
+        "excuse_receipt_sha256s",
+        "recheck_owed",
     ]
+    assert RecheckResult.__dataclass_fields__["recheck_owed"].default is False
     assert list(inspect.signature(RecheckState.load).parameters) == [
         "path",
         "params",
@@ -467,11 +502,11 @@ def test_contract_hashes_do_not_change() -> None:
             },
         },
     }
-    for kind, verifier in verifiers.items():
+    for kind, verifier_config in verifiers.items():
         contract = Contract.from_dict(
             {
                 "schema_version": "openadapt.verify/v1",
-                "verifier": verifier,
+                "verifier": verifier_config,
                 "record": record,
                 "frame": {"identity_field": "id"},
             }
@@ -482,3 +517,32 @@ def test_contract_hashes_do_not_change() -> None:
             "identity": contract.identity,
         }
         assert got == _PINNED_CONTRACT_HASHES[kind], kind
+
+
+def test_legacy_handed_back_result_does_not_advertise_retry(tmp_path: Path) -> None:
+    db = _store(tmp_path)
+    ledger = verifier_api.Ledger(verifier_api.FileLedger(tmp_path / "journal"))
+    contract = _contract(db)
+    pending = begin_write(contract, PARAMS, actor=BOT, ledger=ledger, write_key="one")
+    _write(db, SAVE)
+    result = verify_write(pending)
+    assert result.verified
+    retained = ledger.latest(pending.write_key)
+    assert retained is not None and retained.resolved is not None
+    fields = dict(retained.resolved)
+    for key in ("event", "attempt", "at", "t", "revision", "based_on", "applied"):
+        fields.pop(key, None)
+    fields["result"] = {**fields["result"], "retry_safe": True}
+    ledger.resolved(
+        pending.write_key,
+        pending.write_id,
+        expected_revision=retained.revision,
+        **fields,
+    )
+    reopened = verifier_api.Ledger(verifier_api.FileLedger(tmp_path / "journal"))
+    with pytest.raises(verifier_api.AlreadyWritten) as caught:
+        begin_write(contract, PARAMS, actor=BOT, ledger=reopened, write_key="one")
+    assert caught.value.result["retry_safe"] is False
+    assert caught.value.result["verified"] is True
+    assert caught.value.result["not_sent_again"] is True
+    assert reopened.latest(pending.write_key).resolved["result"]["retry_safe"] is True

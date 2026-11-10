@@ -328,8 +328,18 @@ it before a person reviews it.
 openadapt-flow scaffold-verifier rec/                      # network capture only
 openadapt-flow scaffold-verifier rec/ --db app.sqlite      # plus every table
 openadapt-flow scaffold-verifier rec/ --verifier verify.yaml --bundle bundle/
-openadapt-flow scaffold-verifier rec/ --db app.sqlite --prove effect-e2e
+python -m benchmark.record_check_proof scaffold-verifier rec/ --db app.sqlite --prove effect-e2e
 ```
+
+The repository's benchmark entry point supplies the named fault fixture.
+The core proof runner receives an explicit caller-owned `Fixture`; neither it
+nor the engine CLI discovers demo or benchmark sources. A direct core CLI
+`--prove` request without an injected source refuses before proof execution or
+output. It never falls back to an unproved check. Programmatic callers pass
+`proof_source=...` to `prove_live` or `build_record_check`; CLI composition passes
+`record_check_proof_source=...` to `main`. These are process-local dependencies,
+not serialized callbacks or approval authority. The existing proof still uses
+the real replayer, the declared verifier and the fixture's independent judge.
 
 ### Finding the read
 
@@ -419,6 +429,55 @@ A check built from API reads alone can't see tables it doesn't read. If one
 store really holds everything the save can change (MockMed's `/api/db`), a
 person can say so with `--complete-read`. The proof records that as
 `closed_world: declared`, not as proven.
+
+A REST read returns INDETERMINATE until its completeness is established
+(`records_complete`, `records_next_path` or `records_total_path`). The
+generated read gets `records_complete: true` in two cases, and the proof
+records which one under each read's `records_complete`:
+
+- `declared`: `--complete-read` was given and nothing in the request or
+  response says it is paged;
+- `observed`: one response held the whole collection as the recording saw
+  it. The URL has no paging parameter, the body has no paging field and no
+  stated total that differs from what it holds, the body was not cut, it
+  holds the saved record and every record the same read returned before the
+  save, and its length is not a common page size.
+
+Otherwise the read is left without it, so the check stays a draft and
+`verify-run` fails closed.
+
+### Which step is the save
+
+A step is a write when its before/after snapshots differ, when the network
+capture shows the page sending a POST, PUT, PATCH or DELETE to its own origin
+for that step, when its label is write-shaped (Save, Submit, ...), or when it
+is an Enter key. So a button labelled with an unfamiliar verb still counts
+when the traffic shows it wrote.
+
+### When the app never reads the record back
+
+Many apps show the saved record from page memory and make no read after the
+save. `--probe-reads` then derives reads from the captured write: for a POST,
+PUT or PATCH to `/api/<collection>` or `/api/<collection>/<id>`, the
+collection (`GET /api/<collection>`, plus its plural or singular spelling)
+and the item (`GET .../<id>`, the id from the URL or the write's response).
+Each is probed once with GET, after the save, on the local machine only: the
+recorded origin when it is local, or `--probe-base <local URL>`. No cookies or
+credentials are sent and redirects are not followed.
+
+A collection read is used only when it returns a record holding every
+parameter value the write sent. A probe finds the collection the save wrote,
+not the store, so a probed read that would pass a write outside it (the
+fault test's `collateral_unaudited`, or a captured write no read covers) is
+refused: no runnable check is written, the TODO draft is, and
+`read_discovery.json` and `record_check.proof.json` say `refused` with the
+reason and `needs_operator_confirmation: true`. `--complete-read` (the read
+is the whole store) or `--db` lifts it. An item read that does is recorded but not
+used, because it can't count new records. When no probe confirms, nothing is
+proposed: `read_discovery.json` lists every probe, marks the read
+`unavailable` and `needs_operator_confirmation: true`, and the TODO draft is
+written. Every probe is also recorded in `record_check.proof.json` under
+`read_discovery`.
 
 ### What a person still does
 
@@ -1037,9 +1096,9 @@ Per-kind required fields:
 | `ui_readback` | `ui_readback` section: `record_url`, `sign_in` (env-var names for the read-back account), `ready_selector`, `row_selector`, `fields`, `identity` | `url_params`, `empty_selector`, `not_found_selector`, `read_post_paths`, per-field `attribute` / `date_format` / `casefold`, `truncation_markers`, `navigation_timeout_s` |
 | `desktop_readback` | `desktop_readback` section: `session` (a `backend:`-style config for the read-back session), `search` (`box`, `query`), `ready`, `identity`, `fields` | `credentials` (env-var names), `sign_in`, `search.submit`, `open.results`, `not_found`, per-control `shows` / `region` / `at`, per-field `date_format` / `casefold`, `min_ocr_confidence`, `navigation_timeout_s`, `settle_s` |
 | `deferred_report` | `deferred_report` section: `report` (`format`, and for csv/text its columns or pattern and `accept`), `key`, `deadline_hours`, `ledger` | `report.reject`, `describe` |
-| `rest` | `base_url` | `records_path` (may contain `{placeholder}`s), `records_key`, `records_next_path`, `records_total_path`, `path_params`, `auth`, `records_drop_fields` |
+| `rest` | `base_url` | `records_path` (may contain `{placeholder}`s), `records_key`, `records_next_path`, `records_total_path`, `records_complete`, `records_snapshot_path`, `path_params`, `auth`, `records_drop_fields` |
 | `graphql` | `base_url` + `graphql_query` | `graphql_variables` (`{param: ...}` entity binding), `graphql_records_path`, `graphql_freshness_field` + `graphql_freshness_window_s`, `auth` |
-| `fhir` | `base_url` | `resource_type`, `search_params`, `search_param_exprs`, `field_paths`, `access_token_env` or `smart_backend`, `verify_tls`, `records_drop_fields` |
+| `fhir` | `base_url` | `resource_type`, `search_params`, `search_param_exprs`, `field_paths`, `access_token_env` or `smart_backend`, `verify_tls`, `records_drop_fields`, `records_snapshot_path` |
 | `sql` | `sql_query` + (`sqlite_database` or `sql_driver`) | `sql_query_params`, `sql_connect_args`, `sql_password_env`, `records_drop_fields` |
 | `file` | `root` | `file_pattern`, `file_min_size`, `file_mtime_window_s`, `file_content_probe` |
 | `email` | `root` | `mail_pattern`, `file_mtime_window_s` (freshness), `file_content_probe` (body regex) |
@@ -1048,18 +1107,47 @@ Per-kind required fields:
 | `surfaces` | `surfaces`: name -> one plain verifier config (any kind above) | each effect's `probe` names its surface (`surface=<name>`); an effect naming none, or an unknown one, halts |
 
 A paged list is read whole or not at all. `fhir` follows the Bundle's `next`
-links. `rest` follows the next page's URL at `records_next_path` (a dotted
-path in the body, such as `links.next`; a relative URL resolves against the
-page it came from). Without `records_next_path` one response is the whole
-read, as before. A next page on another origin, a page that fails, more than
-50 pages, or a FHIR `total` other than the number of matches read (included
-resources don't count) makes the read unreadable (INDETERMINATE), never a
-confirmation or a refutation from the first pages.
+links. For REST, `records_next_path` follows the continuation URL in the
+response body (relative URLs resolve against the page that returned them),
+and `records_total_path` checks the returned record count against the server
+total. A failed page, a cross-origin next URL, a malformed record, an
+inconsistent total, or more than 50 pages makes the read unreadable
+(INDETERMINATE), never a confirmation or refutation based on a partial page.
+
+Every multi-page REST or FHIR read also needs `records_snapshot_path`: a
+dotted response-body path whose declared endpoint semantics bind every page
+to the same immutable result set. The value must be a nonblank string or a
+nonnegative integer, with the same type and value on every page. Missing or
+changed values make the read unreadable. Configure this from a reviewed,
+validated endpoint contract; a constant version-looking field or repeated
+stable probes do not establish immutable snapshot semantics. Matching tokens
+do not establish freshness or attribute a write to this attempt.
+
+REST counted or paged reads require usable `id` values. FHIR search matches
+use `(resourceType, id)`. Repeated identities make coverage ambiguous and
+refuse the read rather than silently deduplicating it to fit a total. The
+ensure-record reader applies the same snapshot contract to searches and
+history while retaining distinct versions of a resource in history.
+
+Without `records_next_path`, `records_total_path`, or `records_complete: true`,
+a REST response is not known to contain the whole matching set and is
+unreadable. `records_complete: true` is an explicit validated endpoint
+declaration that one response contains all matching records; it is not
+inferred from the number of rows returned. A declaration does not override configured pagination or total validation,
+a partial response, or a malformed entry.
+
+A reviewed verifier configuration carries its declared pagination or
+complete-response semantics into the generated REST contract. A captured GET
+alone does not supply them. Without a declaration, including for an
+identity-filtered read, the generated check stays a draft. URL templating a
+captured parameter does not establish that it is a unique record identity.
+Declared next-page reads without snapshot semantics also stay drafts.
 
 REST has no standard total. With `records_total_path` (a dotted path in the
-first page, such as `meta.total`), a read whose record count differs, or a
-first page without the total, is unreadable. Without it, a REST read trusts
-the page chain.
+response body, such as `meta.total`), a read whose distinct record count differs,
+whose pages disagree on the total, or whose body omits it is unreadable. Without a total, a configured
+next-page chain must reach its declared terminal marker; an unpaged read
+requires a validated `records_complete: true` declaration.
 
 A redirect is a failed read: the configured auth headers never follow it to
 another host. Why a read was unreadable is in the verdict's reason and the

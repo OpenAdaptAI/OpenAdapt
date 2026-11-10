@@ -419,7 +419,7 @@ class ReplayTarget:
             worklists=self.worklists or None,
             bundle_dir=bundle_dir,
             run_dir=run_dir,
-            execution_target_kind=self.execution_target_kind,  # type: ignore[arg-type]
+            execution_target_kind=self.execution_target_kind,
             execution_origin=self.execution_origin,
             execution_entry_url=self.entry_url,
         )
@@ -1521,7 +1521,7 @@ class SelfRepair:
         from openadapt_flow.ir import Anchor
         from openadapt_flow.risk import is_meaningful_label, is_write_shaped
         from openadapt_flow.runtime.heal import _crop_png, _reocr_text
-        from openadapt_flow.runtime.identity import squash
+        from openadapt_flow.runtime.identity import comparison_squash as squash
 
         region = _centered_region(
             point, (size_like[2], size_like[3]), _png_size(screen)
@@ -2568,6 +2568,8 @@ def _carry_admission(
     approved_by: Optional[str] = None,
     route: Optional[str] = None,
     probe_only: bool = False,
+    key_dir: Optional[Path] = None,
+    approver_root: Optional[str] = None,
 ) -> None:
     """Carry an agent-compiled program's admission to its repaired copy.
 
@@ -2591,6 +2593,8 @@ def _carry_admission(
             approved_by=approved_by,
             route=route,
             probe_only=probe_only,
+            key_dir=key_dir,
+            approver_root=approver_root,
         )
     except lifecycle.AdmissionError as exc:
         raise SelfRepairRefused(
@@ -2971,7 +2975,8 @@ def _cover_explains_cut(
     cover with no ``region`` is doubt.
     """
 
-    from openadapt_flow.runtime.identity import ocr_canonical, squash
+    from openadapt_flow.runtime.identity import comparison_squash as squash
+    from openadapt_flow.runtime.identity import ocr_canonical
 
     rect = _cover_region(cover)
     if rect is None or not (recorded or "").strip():
@@ -3125,7 +3130,8 @@ def _uncovered_band_matches(step: Step, observed: str, recorded: Optional[str]) 
     is the record's, not a stray line). Any doubt is False.
     """
 
-    from openadapt_flow.runtime.identity import ocr_canonical, squash
+    from openadapt_flow.runtime.identity import comparison_squash as squash
+    from openadapt_flow.runtime.identity import ocr_canonical
     from openadapt_flow.runtime.identity_template import _band_match_template
 
     template = step.anchor.identity_template if step.anchor is not None else None
@@ -3197,7 +3203,12 @@ def _recorded_band_text(
         match = _band_match_template(anchor.identity_template, text)
     except Exception:  # noqa: BLE001 - unreadable is no recorded band
         return None
-    if not text or match.contradicted_chars or match.coverage < 0.999:
+    if (
+        not text
+        or match.contradicted_chars
+        or match.identity_evidence_short
+        or match.coverage < 0.999
+    ):
         return None
     return text
 

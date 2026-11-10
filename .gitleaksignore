@@ -6,6 +6,8 @@
 # a benchmark idempotency key from the openadapt-flow and openadapt-agent histories.
 # None is a credential. Each fingerprint pins commit:file:rule:line, so a new finding,
 # or the same text in any other commit, file or line, still fails. No rule is relaxed.
+# PR #1951: a synthetic record parameter in a test, not a key.
+9f7b67e652a1906366fec4cd1966ec0865bc675f:packages/flow/tests/test_ensure_invariants.py:generic-api-key:15
 01d9ead6895964e8236272296fad0d424dffd98f:packages/flow/tests/fixtures/terminal_verification_v2_terminal_vectors.json:generic-api-key:33
 0f5f39557513cd71d9e84996f5773eeca26b1005:packages/flow/tests/test_attended_actions.py:generic-api-key:122
 0f5f39557513cd71d9e84996f5773eeca26b1005:packages/flow/tests/test_attended_actions.py:generic-api-key:174
@@ -64,3 +66,92 @@ e8ec96725c4451aa64cb97230c18d04b55d98503:packages/flow/tests/e2e/test_mcp_teach_
 # container with a fixed synthetic superuser token (a run of hex digits, never a
 # credential for any real system); the harness now generates it per run.
 9922cee8dbbbaa4494b1c69ec6c71e4899305de6:packages/flow/benchmark/api_generalization/apps/nb.py:generic-api-key:60
+# Bundle compatibility fixtures (PR #1928, part of #1899): the generic-api-key rule
+# matched `source_hashes` entries in the pinned 2.2.0/2.5.0/2.6.0 provenance.json
+# fixtures. Each value is the SHA-256 of that source file at the fixture's pinned
+# release commit (verified for all 33). Content digests, not credentials.
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.2.0/provenance.json:generic-api-key:66
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.2.0/provenance.json:generic-api-key:182
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.2.0/provenance.json:generic-api-key:193
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.2.0/provenance.json:generic-api-key:248
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.2.0/provenance.json:generic-api-key:290
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.2.0/provenance.json:generic-api-key:348
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.2.0/provenance.json:generic-api-key:397
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.2.0/provenance.json:generic-api-key:416
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.2.0/provenance.json:generic-api-key:428
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.5.0/provenance.json:generic-api-key:85
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.5.0/provenance.json:generic-api-key:155
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.5.0/provenance.json:generic-api-key:190
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.5.0/provenance.json:generic-api-key:275
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.5.0/provenance.json:generic-api-key:351
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.5.0/provenance.json:generic-api-key:414
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.5.0/provenance.json:generic-api-key:488
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.5.0/provenance.json:generic-api-key:508
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.5.0/provenance.json:generic-api-key:528
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.5.0/provenance.json:generic-api-key:570
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.5.0/provenance.json:generic-api-key:643
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.5.0/provenance.json:generic-api-key:655
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.6.0/provenance.json:generic-api-key:85
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.6.0/provenance.json:generic-api-key:132
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.6.0/provenance.json:generic-api-key:168
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.6.0/provenance.json:generic-api-key:254
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.6.0/provenance.json:generic-api-key:316
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.6.0/provenance.json:generic-api-key:379
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.6.0/provenance.json:generic-api-key:468
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.6.0/provenance.json:generic-api-key:490
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.6.0/provenance.json:generic-api-key:511
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.6.0/provenance.json:generic-api-key:554
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.6.0/provenance.json:generic-api-key:630
+8ccf2cf3360b7d7720af04c36eee4f8e756bdf6e:packages/flow/tests/fixtures/bundle_compatibility/2.6.0/provenance.json:generic-api-key:642
+# OpenAdapt#1872 network-save redaction tests (PR #2014, first commit): synthetic
+# credentials the redactor must withhold. Later commits assemble them at runtime.
+ccc7c617e5cd8082909b455ec6176a5e4c0dd4f0:packages/flow/tests/test_extension_network.py:generic-api-key:44
+ccc7c617e5cd8082909b455ec6176a5e4c0dd4f0:packages/flow/tests/test_extension_network.py:jwt:48
+ccc7c617e5cd8082909b455ec6176a5e4c0dd4f0:packages/flow/tests/test_extension_network_browser.py:generic-api-key:24
+# PR #1956: commit 00ef8baa9 restored files that an incomplete sparse delivery
+# commit had omitted. These are the same strings main already ignores for the same
+# file and rule; the restore gave them new commit fingerprints.
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/agent/tests/test_approval_flow.py:generic-api-key:29
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/benchmark/fault_model/results.json:generic-api-key:1918
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/benchmark/fault_model/results.json:generic-api-key:1960
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/benchmark/fault_model/results.json:generic-api-key:2002
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/benchmark/fault_model/results.json:generic-api-key:2065
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/benchmark/fault_model/results.json:generic-api-key:2086
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/benchmark/fault_model/results.json:generic-api-key:2107
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/benchmark/fault_model/results.json:generic-api-key:239
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/benchmark/lending_fault_model/results.json:generic-api-key:2030
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/benchmark/lending_fault_model/results.json:generic-api-key:2052
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/benchmark/lending_fault_model/results.json:generic-api-key:2074
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/benchmark/lending_fault_model/results.json:generic-api-key:2096
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/benchmark/lending_fault_model/results.json:generic-api-key:2140
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/benchmark/lending_fault_model/results.json:generic-api-key:2162
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/benchmark/lending_fault_model/results.json:generic-api-key:2206
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/openadapt_flow/backends/playwright_backend.py:generic-api-key:2699
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/openadapt_flow/execute/service.py:generic-api-key:79
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/openadapt_flow/reward/worker.py:generic-api-key:327
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/e2e/test_mcp_teach_e2e.py:generic-api-key:123
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/fixtures/terminal_verification_v2_delivery_vector.json:generic-api-key:3
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/fixtures/terminal_verification_v2_terminal_vectors.json:generic-api-key:33
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_attended_actions.py:generic-api-key:129
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_attended_actions.py:generic-api-key:182
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_attended_actions.py:generic-api-key:3784
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_browser_attach.py:generic-api-key:4030
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_browser_attach.py:generic-api-key:4563
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_browser_attach.py:generic-api-key:5024
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_browser_attach.py:generic-api-key:5222
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_browser_attach.py:generic-api-key:5297
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_hosted_runner_product_release_gate.py:generic-api-key:101
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_mcp_teach_surfaces.py:generic-api-key:143
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_mobile_attended_decision_e2e.py:generic-api-key:1175
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_mobile_attended_decision_e2e.py:generic-api-key:1214
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_mobile_attended_decision_e2e.py:generic-api-key:1368
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_mobile_attended_decision_e2e.py:generic-api-key:1401
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_mobile_attended_decision_e2e.py:generic-api-key:525
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_mobile_attended_decision_e2e.py:generic-api-key:583
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_qualification_admission.py:generic-api-key:130
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_qualification_admission.py:generic-api-key:59
+00ef8baa92b0f073ed43c6a8dc9b0e1e99d96378:packages/flow/tests/test_qualification_fault_contract.py:generic-api-key:590
+# PR #1862: a test key file path (files / "agent.pem") passed to principal_from_key, not a key.
+b712804d6a80dde61588980f11e9b4d5a478f39e:packages/flow/tests/e2e/test_mcp_teach_desktop_e2e.py:generic-api-key:144
+# The same line after #1862 was squash-merged into main.
+be3584b446cc4c2b576d69ffc9d7a6d60f6fcb92:packages/flow/tests/e2e/test_mcp_teach_desktop_e2e.py:generic-api-key:144

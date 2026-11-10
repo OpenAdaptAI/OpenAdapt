@@ -54,7 +54,6 @@ client automatically when none is injected.
 from __future__ import annotations
 
 import hashlib
-import importlib
 import io
 import struct
 import sys
@@ -1960,10 +1959,27 @@ def _pyobjc_missing_message(missing: list[str]) -> str:
     )
 
 
+def _load_pyobjc_module(name: str) -> Any:
+    """Load only a declared native framework, preserving raw ImportError."""
+    if name == "Quartz":
+        import Quartz
+
+        return Quartz
+    if name == "ApplicationServices":
+        import ApplicationServices
+
+        return ApplicationServices
+    if name == "AppKit":
+        import AppKit
+
+        return AppKit
+    raise ValueError("unknown macOS framework module")
+
+
 def _pyobjc_module(name: str) -> Any:
     """Import one pyobjc framework module, naming the extra when it's absent."""
     try:
-        return importlib.import_module(name)
+        return _load_pyobjc_module(name)
     except ImportError as exc:
         raise MacOSDependencyMissing(_pyobjc_missing_message([name])) from exc
 
@@ -1973,11 +1989,34 @@ def require_pyobjc() -> None:
     missing: list[str] = []
     for name in MACOS_PYOBJC_MODULES:
         try:
-            importlib.import_module(name)
+            _load_pyobjc_module(name)
         except ImportError:
             missing.append(name)
     if missing:
         raise MacOSDependencyMissing(_pyobjc_missing_message(missing))
+
+
+def _hit_test_pid(x: float, y: float) -> Optional[int]:
+    """The process the system's accessibility hit test says a click at a
+    screen point goes to, or None when it can't tell."""
+    try:
+        from ApplicationServices import (
+            AXUIElementCopyElementAtPosition,
+            AXUIElementCreateSystemWide,
+            AXUIElementGetPid,
+        )
+
+        error, element = AXUIElementCopyElementAtPosition(
+            AXUIElementCreateSystemWide(), float(x), float(y), None
+        )
+        if error != 0 or element is None:
+            return None
+        pid_error, pid = AXUIElementGetPid(element, None)
+        if pid_error != 0 or not pid:
+            return None
+        return int(pid)
+    except Exception:  # noqa: BLE001 - no answer; the caller fails closed
+        return None
 
 
 class MacWindowClient:
@@ -2152,7 +2191,19 @@ class MacWindowClient:
         return None
 
     def window_id_at_point(self, x: float, y: float) -> Optional[int]:
-        """Frontmost visible window containing a screen point, any layer."""
+        """The visible window a click at a screen point goes to, any layer.
+
+        The frontmost window containing the point, except one the system's
+        own hit test passes through: on macOS 15 the Dock (and Notification
+        Center while a banner shows) owns a full-screen window above every
+        app, and a click outside the Dock or the banner goes to the window
+        under it. When the accessibility hit test names the process that
+        gets the click, the frontmost window of that process at the point is
+        the answer; a window of another process in front of it is skipped
+        only then. When the hit test can't answer, or names a process with no
+        window at the point, the frontmost window is returned, so an unknown
+        cover still refuses the input.
+        """
         try:
             import Quartz
 
@@ -2161,6 +2212,8 @@ class MacWindowClient:
                 | Quartz.kCGWindowListExcludeDesktopElements
             )
             wins = Quartz.CGWindowListCopyWindowInfo(opts, Quartz.kCGNullWindowID)
+            hit_pid = _hit_test_pid(x, y)
+            first: Optional[int] = None
             for window in wins or []:
                 bounds = window.get("kCGWindowBounds", {}) or {}
                 left = float(bounds.get("X", 0.0))
@@ -2171,10 +2224,17 @@ class MacWindowClient:
                     continue
                 if left <= x < left + width and top <= y < top + height:
                     window_id = int(window.get("kCGWindowNumber", 0) or 0)
-                    return window_id if window_id > 0 else None
+                    if window_id <= 0:
+                        return None
+                    if first is None:
+                        first = window_id
+                    if hit_pid is None or (
+                        int(window.get("kCGWindowOwnerPID", 0) or 0) == hit_pid
+                    ):
+                        return window_id
+            return first
         except Exception:  # noqa: BLE001 - unknown point target fails closed
             return None
-        return None
 
     def raise_window(self, window: WindowInfo) -> bool:
         """Raise one exact native window within its owning application.

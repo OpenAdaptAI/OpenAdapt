@@ -155,6 +155,20 @@ _MAC_ROLE_MAP = {
     "AXRow": "row",
 }
 
+#: Neutral role -> the authoring observation's role vocabulary (the one the
+#: browser tree uses). Only controls an agent acts on are listed.
+_AUTHORING_ROLES = {
+    "button": "button",
+    "link": "link",
+    "menuitem": "menu_item",
+    "tab": "tab",
+    "radio": "radio",
+    "checkbox": "checkbox",
+    "textbox": "text_input",
+    "combobox": "combobox",
+}
+_AUTHORING_MAX_NODES = 200
+
 # AX action name -> backend-neutral operation. Recorded ONLY as diagnostic
 # ``supported_operations`` on a resolved handle; the macOS backend does not
 # perform native AX actions (it re-uses the fully gated physical click), so these
@@ -343,6 +357,28 @@ def _fingerprint(element: MacElement) -> str:
     }
     canonical = json.dumps(identity, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _ax_field_label(element: Any, copy_attr) -> Optional[str]:
+    """Best human label for one focused AX element, or None.
+
+    Prefers ``AXTitleUIElement`` (the associated label control), then the
+    element's own ``AXTitle`` / ``AXDescription``. Used by
+    :meth:`MacOSBackend.focused_field_label`; ``copy_attr`` is injectable so
+    unit tests can exercise the priority without ApplicationServices.
+    """
+
+    title_ui = copy_attr(element, "AXTitleUIElement")
+    if title_ui is not None:
+        for attribute in ("AXTitle", "AXDescription"):
+            text = _clean_text(copy_attr(title_ui, attribute))
+            if text:
+                return text
+    for attribute in ("AXTitle", "AXDescription"):
+        text = _clean_text(copy_attr(element, attribute))
+        if text:
+            return text
+    return None
 
 
 class QuartzMacAXClient:
@@ -573,6 +609,52 @@ class QuartzMacAXClient:
     _TABLE_ROLES = frozenset({"AXTable", "AXOutline", "AXGrid"})
     #: Bound on the nodes read for one row's text.
     _ROW_TEXT_NODES = 256
+
+    def walk(
+        self, pid: int, window_title: str, *, limit: int
+    ) -> tuple[list[tuple[MacElement, bool, bool]], bool]:
+        """Every element of the one window, in tree order, bounded by ``limit``.
+
+        Each entry is ``(element, enabled, focused)`` from ``AXEnabled`` and
+        ``AXFocused``; an element with no frame has ``bounds`` ``(0, 0, 0, 0)``. ``truncated`` is True past ``limit`` nodes. An empty
+        list when the window can't be found.
+        """
+        from ApplicationServices import kAXChildrenAttribute
+
+        window = self._window_element(int(pid), window_title)
+        if window is None:
+            return [], False
+        out: list[tuple[MacElement, bool, bool]] = []
+        visited = 0
+        stack: list[tuple[Any, str]] = [(window, "0")]
+        while stack:
+            native, path = stack.pop()
+            visited += 1
+            if visited > limit:
+                return out, True
+            element = self._to_element(native, path, int(pid), window_title)
+            if element is None:
+                # No frame: it can't be clicked, but it may share another
+                # control's identity, so it is still listed (zero bounds).
+                element = MacElement(
+                    ax_path=path,
+                    accessible_id=self._accessible_id(native),
+                    role=self._role(native),
+                    name=self._name(native),
+                    app_pid=int(pid),
+                    window_title=window_title,
+                    bounds=(0, 0, 0, 0),
+                    text=None,
+                    supported_operations=(),
+                    native=native,
+                )
+            enabled = self._attr(native, "AXEnabled")
+            focused = self._attr(native, "AXFocused")
+            out.append((element, enabled is not False, focused is True))
+            children = self._attr(native, kAXChildrenAttribute) or []
+            for index in reversed(range(len(children))):
+                stack.append((children[index], f"{path}/{index}"))
+        return out, False
 
     def structured_text(self, element: MacElement) -> Optional[str]:
         """The element's record text: its row's text inside a table.
@@ -1671,32 +1753,119 @@ class MacOSBackend(RemoteDisplayBackend):
             element = self._ax_client.element_at_point(
                 window.pid, window.title, screen_x, screen_y
             )
-            if element is None or not self._scoped_to_target(element):
-                return None
-            if self._in_window_pixel_rect(window, element.bounds) is None:
-                return None
-            read = getattr(self._ax_client, "ancestry", None)
-            trail = read(element) if callable(read) else None
-            if not trail:
-                return None
-            from openadapt_flow.repair.element_identity import DIALOG_ROLES
-
-            dialog_region = None
-            for role, _name, bounds in trail:
-                if role in DIALOG_ROLES and bounds is not None:
-                    dialog_region = self._in_window_pixel_rect(window, bounds)
-                    break
-            return {
-                "source": "ax",
-                "role": element.role,
-                "name": element.name,
-                "automation_id": element.accessible_id,
-                "ancestry": [[role, name] for role, name, _bounds in trail],
-                "window": window.title,
-                "process": window.owner,
-                "dialog_region": list(dialog_region) if dialog_region else None,
-            }
+            return self._identity_of(element, window)
         except Exception:  # noqa: BLE001 - a momentary AX failure is not fatal
+            return None
+
+    def _identity_of(
+        self, element: Optional[MacElement], window: WindowInfo, *, visible: bool = True
+    ) -> Optional[dict[str, Any]]:
+        """``element``'s identity in :meth:`element_identity_at`'s shape, or None.
+
+        ``visible=False`` reads it for an element outside the captured window
+        (scrolled out of view), which is never clicked.
+        """
+        if element is None or not self._scoped_to_target(element):
+            return None
+        if visible and self._in_window_pixel_rect(window, element.bounds) is None:
+            return None
+        read = getattr(self._ax_client, "ancestry", None)
+        trail = read(element) if callable(read) else None
+        if not trail:
+            return None
+        from openadapt_flow.repair.element_identity import DIALOG_ROLES
+
+        dialog_region = None
+        for role, _name, bounds in trail:
+            if role in DIALOG_ROLES and bounds is not None:
+                dialog_region = self._in_window_pixel_rect(window, bounds)
+                break
+        return {
+            "source": "ax",
+            "role": element.role,
+            "name": element.name,
+            "automation_id": element.accessible_id,
+            "ancestry": [[role, name] for role, name, _bounds in trail],
+            "window": window.title,
+            "process": window.owner,
+            "dialog_region": list(dialog_region) if dialog_region else None,
+        }
+
+    def authoring_tree(self) -> Optional[dict[str, Any]]:
+        """The pinned window's controls for an agent, from the AX tree.
+
+        Buttons, links, menu items, tabs, check boxes, radio buttons, text
+        fields and pop-up menus fully inside the captured window, in tree
+        order, at most ``_AUTHORING_MAX_NODES``. Controls outside it (scrolled
+        out of view) follow with ``offscreen: true`` and no pixels: they are
+        never clicked, but count when an identity must be unique. Each node
+        has the browser tree's fields with ``backend_pixels`` in
+        captured-window pixels, and ``identity``, exactly what :meth:`element_identity_at` reads for that
+        element. An element with no id and no role-and-name, or whose
+        ancestry can't be read, is left out. None when the AX client can't
+        walk a window. Never raises.
+        """
+        walk = getattr(self._ax_client, "walk", None)
+        if not callable(walk):
+            return None
+        try:
+            window = self._ensure_captured()
+            entries, truncated = walk(
+                window.pid, window.title, limit=_AX_ENUMERATION_LIMIT
+            )
+            nodes: list[dict[str, Any]] = []
+            hidden: list[dict[str, Any]] = []
+            for element, enabled, focused in entries:
+                role = _AUTHORING_ROLES.get(element.role or "")
+                if role is None:
+                    continue
+                rect = self._in_window_pixel_rect(window, element.bounds)
+                if not (element.accessible_id or (element.role and element.name)):
+                    continue  # nothing to identify it by, so no twin either
+                identity = self._identity_of(element, window, visible=rect is not None)
+                if identity is None:
+                    # It could be another control's twin: uniqueness can't
+                    # be shown, so no click by node from this tree.
+                    truncated = True
+                    continue
+                if rect is None:
+                    # Scrolled out of view: listed only for the uniqueness check.
+                    identity["dialog_region"] = None
+                    hidden.append(
+                        {"role": role, "offscreen": True, "identity": identity}
+                    )
+                    continue
+                nodes.append(
+                    {
+                        "role": role,
+                        "control_type": element.role,
+                        "automation_id": element.accessible_id,
+                        "class_name": None,
+                        "name": element.name,
+                        "enabled": bool(enabled),
+                        "focused": bool(focused),
+                        "backend_pixels": {
+                            "x": rect[0],
+                            "y": rect[1],
+                            "w": rect[2],
+                            "h": rect[3],
+                        },
+                        "identity": identity,
+                    }
+                )
+                if len(nodes) >= _AUTHORING_MAX_NODES:
+                    truncated = True
+                    break
+            width, height = self._viewport or (0, 0)
+            return {
+                "tree": nodes + hidden,
+                "window": {
+                    "process_name": window.owner,
+                    "bounds": {"x": 0, "y": 0, "w": width, "h": height},
+                },
+                "truncated": bool(truncated),
+            }
+        except Exception:  # noqa: BLE001 - an unreadable tree is no tree
             return None
 
     def _unique_candidate(self, locator: StructuralLocator) -> Optional[MacElement]:
@@ -1886,6 +2055,38 @@ class MacOSBackend(RemoteDisplayBackend):
             else:
                 candidate["dx"] = candidate["dy"] = None
         return census
+
+    def focused_field_label(self) -> Optional[str]:
+        """Return the focused field's AX label, or None (never raises).
+
+        RECORD-TIME seam (:class:`openadapt_flow.backend.FieldLabelBackend`):
+        reads ``AXTitleUIElement`` then ``AXTitle`` / ``AXDescription`` on the
+        one focused AX element in this window. Never by position; None when
+        there is no label so compile-time OCR fallback still applies.
+        """
+
+        try:
+            window = (
+                self._captured_window
+                if self._captured_window is not None
+                else self._resolve_window()
+            )
+            if window is None:
+                return None
+            token = self._mac_client.focused_element_token(window)
+            if token is None:
+                return None
+            from ApplicationServices import AXUIElementCopyAttributeValue
+
+            def copy_attr(element: Any, attribute: str) -> Any:
+                error, value = AXUIElementCopyAttributeValue(element, attribute, None)
+                if error != 0:
+                    return None
+                return value
+
+            return _ax_field_label(token, copy_attr)
+        except Exception:  # noqa: BLE001 - a momentary AX failure is not fatal
+            return None
 
     def displayed_text_at(self, x: int, y: int) -> Optional[str]:
         """The text of the one AX element under (x, y), for a read-back.

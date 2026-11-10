@@ -1,0 +1,769 @@
+{
+ "transcript": [
+  {
+   "reply": "We need to locate the Patient record for Tomasz Wren. Search the server for his name and date of birth.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [204, 32], \"text\": \"Tomasz Wren 1966-01-30\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the Patient detail page for Tomasz Wren to confirm his record before scheduling the appointment.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [860, 345]}}\n</tool_call>"
+  },
+  {
+   "reply": "We need to keep the Patient resource reference handy so we can later reference or search for this record when scheduling the appointment.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"pause_and_memorize_fact\", \"fact\": \"Patient record reference: http://localhost:9821/Patient/04d2eff3-5524-462b-9264-899df61a71fe\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Need to locate the Practitioner resource for Dr Ama Osei to use as participant in the appointment.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [204, 32], \"text\": \"Dr Ama Osei\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Clear the search box and search for the Practitioner resource by name to locate Dr Ama Osei.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [276, 32], \"text\": \"Dr Ama Osei\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the search button to execute the search for 'Dr Ama Osei' and load the Practitioner results.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [125, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "Press Enter in the search box to execute the search for 'Dr Ama Osei' since clicking the search button did not work.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"key\", \"keys\": [\"Enter\"]}}\n</tool_call>"
+  },
+  {
+   "reply": "Directly navigate to the Practitioner search results URL to locate Dr Ama Osei without relying on the unresponsive search button.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/Practitioner?name=Dr%20Ama%20Osei\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the Practitioner detail page to capture the resource reference for Dr Ama Osei.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [213, 302]}}\n</tool_call>"
+  },
+  {
+   "reply": "We need to keep the Practitioner resource reference so we can include it in the appointment participant list later.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"pause_and_memorize_fact\", \"fact\": \"Practitioner record reference: http://localhost:9821/Practitioner/8bfb415b-f3af-4726-b2ef-6043f4fc1fb8\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the JSON view to retrieve the full resource JSON for Dr Ama Osei so we can extract id, status, and participants.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [475, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Wait a moment to ensure JSON view fully loaded before scrolling.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"wait\", \"time\": 3}}\n</tool_call>"
+  },
+  {
+   "reply": "Wait a bit to ensure JSON content is fully rendered before scrolling.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"wait\", \"time\": 3}}\n</tool_call>"
+  },
+  {
+   "reply": "Wait a bit longer to ensure JSON content is fully rendered before attempting to scroll.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"wait\", \"time\": 3}}\n</tool_call>"
+  },
+  {
+   "reply": "Return to the Practitioner detail view so we can access the Participants tab and review/append the participant list.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [107, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the Event tab to access the appointment participant list and verify/append participants.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [253, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to reveal the appointment events list where participants can be edited.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"key\", \"keys\": [\"PageDown\"]}}\n</tool_call>"
+  },
+  {
+   "reply": "Wait a moment to allow the Event tab content to load fully before scrolling.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"wait\", \"time\": 3}}\n</tool_call>"
+  },
+  {
+   "reply": "Allow additional time for the Event tab content to load, as spinner is still visible.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"wait\", \"time\": 3}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the Edit tab to access the form view where participants can be added or modified.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [192, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to reveal the Edit form and any participant fields to add the patient or appointment details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"key\", \"keys\": [\"PageDown\"]}}\n</tool_call>"
+  },
+  {
+   "reply": "Switch to the Event tab to access the appointment list where we can add participants.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [253, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Switch to the Edit tab to access the practitioner form, which should provide fields to add or modify event participants.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [192, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to reveal the practitioner form fields, including any participant or appointment-related inputs.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"key\", \"keys\": [\"PageDown\"]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll further down to reveal additional form fields, particularly those related to events or participants.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"key\", \"keys\": [\"PageDown\"]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll further down to reveal additional form fields, including potential participant or appointment-related inputs.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"key\", \"keys\": [\"PageDown\"]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll further down to reveal any remaining form fields, especially those related to events or participants.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"key\", \"keys\": [\"PageDown\"]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll further down to reveal any remaining form fields, specifically looking for participant or appointment-related inputs.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"key\", \"keys\": [\"PageDown\"]}}\n</tool_call>"
+  },
+  {
+   "reply": "Switch to the Event tab to access the appointment list and verify or add participants.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [253, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Switch to the Event tab to view the appointment list and participant details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [253, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to see if the Event tab header and content are located higher in the form.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"key\", \"keys\": [\"PageUp\"]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to locate the Event tab header and content section which may be positioned above the current viewport.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"key\", \"keys\": [\"PageUp\"]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up further to reach the top of the form where the Event tab header likely resides.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"key\", \"keys\": [\"PageUp\"]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to reach the top of the form where the Event tab header likely resides.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"key\", \"keys\": [\"PageUp\"]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up further to reach the very top of the form where the Event tab header likely resides.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"key\", \"keys\": [\"PageUp\"]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to look for event or appointment participant fields within the Edit form.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"key\", \"keys\": [\"PageDown\"]}}\n</tool_call>"
+  },
+  {
+   "reply": "Directly open the practitioner's JSON view to capture the full resource JSON for inclusion in the appointment participant field.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/Practitioner/8bfb415b-f3af-4726-b2ef-6043f4fc1fb8/json\"}}\n</tool_call>"
+  },
+  {
+   "reply": "We need the full JSON snippet for the practitioner so we can include it in the appointment participant list.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"pause_and_memorize_fact\", \"fact\": \"Practitioner JSON snippet: {\\\"resourceType\\\": \\\"Practitioner\\\", \\\"identifier\\\": [ { \\\"system\\\": \\\"urn:openadapt:bench:practitioner\\\", \\\"value\\\": \\\"dr_osei\\\" } ], \\\"name\\\": [ { \\\"given\\\": [ \\\"Ama\\\" ], \\\"family\\\": \\\"Osei\\\", \\\"prefix\\\": [ \\\"Dr\\\" ] } ], \\\"id\\\": \\\"8bfb415b-f3af-4726-b2ef-6043f4fc1fb8\\\", \\\"meta\\\": { \\\"versionId\\\": \\\"ccdc50c0-763a-4042-bc43-24dd5ef904f4\\\", \\\"lastUpdated\\\": \\\"2026-11-03T02:39:39.982Z\\\" } }\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the Patient resource directly to capture its JSON snippet for the appointment participant list.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/Patient/04d2eff3-5524-462b-9264-899df61a71fe/json\"}}\n</tool_call>"
+  },
+  {
+   "reply": "We need the full Patient JSON snippet to include in the appointment participant list.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"pause_and_memorize_fact\", \"fact\": \"Patient JSON snippet: {\\\"resourceType\\\": \\\"Patient\\\", \\\"name\\\": [ { \\\"given\\\": [ \\\"Tomasz\\\" ], \\\"family\\\": \\\"Wren\\\" } ], \\\"birthDate\\\": \\\"1966-01-30\\\", \\\"id\\\": \\\"04d2eff3-5524-462b-9264-899df61a71fe\\\", \\\"meta\\\": { \\\"versionId\\\": \\\"d278da8e-2c8e-48f9-8e15-7c999849025f\\\", \\\"lastUpdated\\\": \\\"2026-11-04T21:56:21.413Z\\\" } }\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the FHIR Appointment R4 template in the current browser so we can pre-fill the required fields (status, start, end, participants) and then copy/paste into the Medplum app.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"https://r4.fhir.io/appointment.html\"}}\n</tool_call>",
+   "error": "only the clinic's app can be opened in this browser"
+  },
+  {
+   "reply": "Return to the Patient detail page so we can access the Event tab and look for the appointment list to add participants.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"history_back\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the Event tab to access the appointment list where we can add the patient as a participant.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [253, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Wait a moment to allow the Event tab content to load before scrolling.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"wait\", \"time\": 3}}\n</tool_call>"
+  },
+  {
+   "reply": "Allow additional time for the Event tab content to load, as spinner is still visible.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"wait\", \"time\": 3}}\n</tool_call>"
+  },
+  {
+   "reply": "Switch to the Edit tab to access the practitioner form, which should include fields to add or modify event participants.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [192, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Switch to the Event tab to access the appointment list and add participants.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [253, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Switch to the Edit tab to access the practitioner form, which should provide a field to add the Patient participant.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [192, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the JSON view to capture the practitioner's full resource JSON for later inclusion in the appointment participants list.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [475, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Wait a moment to ensure JSON view fully loaded before scrolling.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"wait\", \"time\": 3}}\n</tool_call>"
+  },
+  {
+   "reply": "We need the full JSON snippet for the practitioner so we can include it in the appointment participant list.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"pause_and_memorize_fact\", \"fact\": \"Practitioner JSON snippet: {\\\"resourceType\\\": \\\"Practitioner\\\", \\\"identifier\\\": [ { \\\"system\\\": \\\"urn:openadapt:bench:practitioner\\\", \\\"value\\\": \\\"dr_osei\\\" } ], \\\"name\\\": [ { \\\"given\\\": [ \\\"Ama\\\" ], \\\"family\\\": \\\"Osei\\\", \\\"prefix\\\": [ \\\"Dr\\\" ] } ], \\\"id\\\": \\\"8bfb415b-f3af-4726-b2ef-6043f4fc1fb8\\\", \\\"meta\\\": { \\\"versionId\\\": \\\"ccdc50c0-763a-4042-bc43-24dd5ef904f4\\\", \\\"lastUpdated\\\": \\\"2026-11-03T02:39:39.982Z\\\" } }\"}}\n</tool_call>"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 202.73291925465838,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Tomasz Wren 1966-01-30"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 854.6583850931677,
+   "y": 339.90147783251234,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 202.73291925465838,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Dr Ama Osei"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 274.2857142857143,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Dr Ama Osei"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 124.22360248447205,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/Practitioner?name=Dr%20Ama%20Osei"
+  },
+  {
+   "a": "click",
+   "x": 211.67701863354037,
+   "y": 297.5369458128079,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 472.0496894409938,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 106.33540372670808,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 251.42857142857142,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "PageDown"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 190.80745341614906,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "PageDown"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 251.42857142857142,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 190.80745341614906,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "PageDown"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "PageDown"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "PageDown"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "PageDown"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "PageDown"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 251.42857142857142,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 251.42857142857142,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "PageUp"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "PageUp"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "PageUp"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "PageUp"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "PageUp"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "PageDown"
+   ]
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/Practitioner/8bfb415b-f3af-4726-b2ef-6043f4fc1fb8/json"
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/Patient/04d2eff3-5524-462b-9264-899df61a71fe/json"
+  },
+  {
+   "a": "back"
+  },
+  {
+   "a": "click",
+   "x": 251.42857142857142,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 190.80745341614906,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 251.42857142857142,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 190.80745341614906,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 472.0496894409938,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 3038,
+   "out": 90,
+   "usd": 0.0
+  },
+  {
+   "in": 4524,
+   "out": 54,
+   "usd": 0.0
+  },
+  {
+   "in": 5983,
+   "out": 101,
+   "usd": 0.0
+  },
+  {
+   "in": 6153,
+   "out": 76,
+   "usd": 0.0
+  },
+  {
+   "in": 6298,
+   "out": 76,
+   "usd": 0.0
+  },
+  {
+   "in": 6443,
+   "out": 57,
+   "usd": 0.0
+  },
+  {
+   "in": 6569,
+   "out": 54,
+   "usd": 0.0
+  },
+  {
+   "in": 6692,
+   "out": 78,
+   "usd": 0.0
+  },
+  {
+   "in": 6830,
+   "out": 53,
+   "usd": 0.0
+  },
+  {
+   "in": 6951,
+   "out": 99,
+   "usd": 0.0
+  },
+  {
+   "in": 7118,
+   "out": 62,
+   "usd": 0.0
+  },
+  {
+   "in": 7249,
+   "out": 38,
+   "usd": 0.0
+  },
+  {
+   "in": 7356,
+   "out": 39,
+   "usd": 0.0
+  },
+  {
+   "in": 7464,
+   "out": 42,
+   "usd": 0.0
+  },
+  {
+   "in": 7575,
+   "out": 57,
+   "usd": 0.0
+  },
+  {
+   "in": 7701,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 7821,
+   "out": 42,
+   "usd": 0.0
+  },
+  {
+   "in": 7932,
+   "out": 41,
+   "usd": 0.0
+  },
+  {
+   "in": 8042,
+   "out": 43,
+   "usd": 0.0
+  },
+  {
+   "in": 8154,
+   "out": 52,
+   "usd": 0.0
+  },
+  {
+   "in": 8275,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 8391,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 8511,
+   "out": 57,
+   "usd": 0.0
+  },
+  {
+   "in": 8637,
+   "out": 45,
+   "usd": 0.0
+  },
+  {
+   "in": 8751,
+   "out": 45,
+   "usd": 0.0
+  },
+  {
+   "in": 8865,
+   "out": 45,
+   "usd": 0.0
+  },
+  {
+   "in": 8979,
+   "out": 46,
+   "usd": 0.0
+  },
+  {
+   "in": 9094,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 9210,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 9330,
+   "out": 49,
+   "usd": 0.0
+  },
+  {
+   "in": 9448,
+   "out": 46,
+   "usd": 0.0
+  },
+  {
+   "in": 9563,
+   "out": 48,
+   "usd": 0.0
+  },
+  {
+   "in": 9680,
+   "out": 46,
+   "usd": 0.0
+  },
+  {
+   "in": 9795,
+   "out": 45,
+   "usd": 0.0
+  },
+  {
+   "in": 9909,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 10025,
+   "out": 43,
+   "usd": 0.0
+  },
+  {
+   "in": 10137,
+   "out": 91,
+   "usd": 0.0
+  },
+  {
+   "in": 10297,
+   "out": 234,
+   "usd": 0.0
+  },
+  {
+   "in": 10601,
+   "out": 86,
+   "usd": 0.0
+  },
+  {
+   "in": 10757,
+   "out": 211,
+   "usd": 0.0
+  },
+  {
+   "in": 11038,
+   "out": 77,
+   "usd": 0.0
+  },
+  {
+   "in": 11184,
+   "out": 44,
+   "usd": 0.0
+  },
+  {
+   "in": 11297,
+   "out": 54,
+   "usd": 0.0
+  },
+  {
+   "in": 11420,
+   "out": 40,
+   "usd": 0.0
+  },
+  {
+   "in": 11529,
+   "out": 43,
+   "usd": 0.0
+  },
+  {
+   "in": 11641,
+   "out": 57,
+   "usd": 0.0
+  },
+  {
+   "in": 11767,
+   "out": 49,
+   "usd": 0.0
+  },
+  {
+   "in": 11885,
+   "out": 57,
+   "usd": 0.0
+  },
+  {
+   "in": 12011,
+   "out": 56,
+   "usd": 0.0
+  },
+  {
+   "in": 12136,
+   "out": 38,
+   "usd": 0.0
+  },
+  {
+   "in": 12243,
+   "out": 235,
+   "usd": 0.0
+  }
+ ]
+}

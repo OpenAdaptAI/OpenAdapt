@@ -20,6 +20,7 @@ Everything here is synthetic and runs without a browser.
 from __future__ import annotations
 
 import ast
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -838,11 +839,21 @@ def test_push_in_strict_mode_seals_the_review_copy_of_a_plain_recording(
 
 
 def _bundle_with_a_bad_action(source: Path, out: Path, *, key=None) -> Path:
-    """A copy of ``source`` whose first action is the private marker."""
+    """A sealed copy whose first action is invalid but integrity-consistent."""
+    from openadapt_flow import bundle_validation
+
     opened = sealed_set.open_set(source, KEY)
     files = {rel: opened.read_bytes(rel) for rel in opened.files("")}
     doc = json.loads(files["workflow.json"])
     doc["steps"][0]["action"] = _MARKER
+    stored = doc["manifest"]
+    digest = hashlib.sha256(
+        bundle_validation.source_canonical_payload(doc, stored["file_hashes"])
+    ).hexdigest()
+    stored["content_digest"] = digest
+    sidecar = json.loads(files["manifest.json"])
+    sidecar["content_digest"] = digest
+    files["manifest.json"] = json.dumps(sidecar, indent=2, sort_keys=True).encode()
     files["workflow.json"] = json.dumps(doc).encode()
     if key is None:
         for rel, data in files.items():

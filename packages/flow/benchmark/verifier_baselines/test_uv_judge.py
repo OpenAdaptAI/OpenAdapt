@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import io
 import json
 import re
@@ -87,7 +88,7 @@ class FakeClient:
         assert json_output is True
         text = self._text(messages)
         step = next(k for k, h in STEP_HEADS.items() if h in text)
-        self.log.append((step, messages))
+        self.log.append((step, copy.deepcopy(messages)))
         if step == "0a":
             out = RUBRIC
         elif step == "0b":
@@ -123,6 +124,13 @@ class FakeClient:
                     }
                     for i in range(2)
                 ]
+            }
+        elif step == "4single":
+            out = {
+                "screenshot_evidence": "e",
+                "criterion_analysis": "a",
+                "discrepancies": "none",
+                "environment_issues_confirmed": False,
             }
         elif step == "6":
             out = {
@@ -179,16 +187,18 @@ class FakeClient:
 STEPS = [
     {
         "url": "http://localhost:9801/Patient?x=1",
-        "state_description": "list",
+        "observations": [{"source": "application", "content": "list"}],
         "action_name": "left_click",
         "action_args": {"coordinate": [1, 2]},
     },
     {
         "url": "http://localhost:9801/Patient/new",
-        "state_description": "form",
+        "observations": [
+            {"source": "application", "content": "form"},
+            {"source": "tool", "content": {"error": "boom"}},
+        ],
         "action_name": "type",
         "action_args": {"text": "Feld"},
-        "error": "boom",
     },
 ]
 
@@ -199,7 +209,6 @@ def _run(client, **kw):
             "Create patient Noah Feld and save it.",
             "http://localhost:9801/",
             STEPS,
-            "Done.",
             [_png(), _png((0, 255, 0))],
             client,
             **kw,
@@ -254,12 +263,13 @@ def test_precomputed_rubric_skips_generation():
     assert [s for s, _ in c.log][:2] == ["0c", "4"]
 
 
-def test_format_action_history_matches_uv():
+def test_format_action_history_retains_observations():
     h = uv_judge.format_action_history(STEPS)
     assert h.startswith(
-        "State 1: http://localhost:9801/Patient, state_description: list\nAction 1: left_click({"
+        "State 1: http://localhost:9801/Patient\nAction 1: left_click({"
     )
-    assert "Error! The above Action 2 encountered an Error: boom" in h
+    assert 'Observed application: "list"' in h
+    assert 'Observed tool: {"error": "boom"}' in h
 
 
 def test_retry_nudge_on_bad_json():

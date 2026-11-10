@@ -583,7 +583,7 @@ def qualify() -> tuple[int, dict[str, Any]]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     code, report = qualify()

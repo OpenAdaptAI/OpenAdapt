@@ -10,7 +10,12 @@ from typing import Any, Iterator
 import httpx
 import pytest
 
-from openadapt_flow.agent.example_app import DEMO_PASSWORD, DEMO_USER, serve
+from openadapt_flow.agent.example_app import (
+    DEMO_PASSWORD,
+    DEMO_USER,
+    ORDERS_READ_CONTRACT,
+    serve,
+)
 
 
 class Portal:
@@ -22,10 +27,8 @@ class Portal:
         return {
             "schema_version": "openadapt.verify/v1",
             "verifier": {
-                "kind": "rest",
+                **ORDERS_READ_CONTRACT,
                 "base_url": self.base,
-                "records_path": "/api/orders",
-                "records_key": "records",
             },
             "effects": [
                 {

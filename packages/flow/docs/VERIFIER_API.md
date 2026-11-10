@@ -47,8 +47,9 @@ system of record show the declared write, and only it?
 | `UNCERTAIN` | The store doesn't show the write, couldn't be read, or was read too weakly to certify it. The write may still land. | Not until reconciliation resolves it |
 
 `result.verified` is `outcome is Outcome.CONFIRMED`. `result.retry_safe` is
-true in one case only: the caller said the write was never sent and the store
-shows nothing landed (verify-run's `halted_before_effect`).
+false. A caller's no-send claim and an absent read do not provide durable
+dispatch facts or complete coverage of other delivery channels. The receipt
+can retain `halted_before_effect`, but the unresolved attempt stays held.
 
 A caller that can't tell whether the write was sent, such as a tool that
 raised before or while acting, leaves `write_attempted=True`. A store that
@@ -70,7 +71,7 @@ name (`"agent"`) or a map from value name to who set it (`{"clinic":
 | Source | Old name | New outcome |
 |---|---|---|
 | verify-run receipt `outcome` | `verified` | `CONFIRMED` |
-| | `halted_before_effect` | `REFUTED`, `retry_safe=True` |
+| | `halted_before_effect` | `REFUTED`, `retry_safe=False` |
 | | `rejected_policy` (self-approved) | `REFUTED` |
 | | `reconciliation_required` | `REFUTED` or `UNCERTAIN` (rule below) |
 | | `failed_platform` | `UNCERTAIN` |
@@ -341,9 +342,35 @@ two intended writes with the same values need distinct `write_key`s. With a
 **Storage.** `FileLedger` is the default, in `~/.openadapt/ledger/`
 (`OPENADAPT_LEDGER_DIR` overrides it). It keeps one append-only JSON Lines
 file per key. Events are `begun`, `resolved`, `delivered` and `released`.
-Nothing is rewritten or deleted. A `LedgerBackend` protocol (`events`,
-`append`, `lease`) lets a deployment keep it elsewhere, such as a shared
-database for workers on several hosts. `MemoryLedger` is for tests.
+Nothing is rewritten or deleted. A `LedgerBackend` protocol lets a
+deployment keep it elsewhere, such as a shared database for workers on
+several hosts. In addition to `events`, `append` and `lease`, a backend must
+provide `transaction(key)`: a short exclusive journal transaction whose
+`events()` read and durable `append(event)` use the same lock. All appends
+must participate in that lock. It must be separate from the lifecycle lease,
+which a write holds while a late recheck may settle its journal. A backend
+without this primitive refuses mutations; a separate read and append is not
+an atomic substitute. `MemoryLedger` is for tests.
+
+Ledger mutations record the target attempt and journal revision. Settlements
+derived from a read supply the revision they observed before that read.
+Concurrent observations remain in the journal, including rejected ones, but
+a stale weak observation cannot release a hold, grant a retry, mark a
+recheck complete, hand back an older positive result, or remove its saved
+baseline. Attempt history and the latest attempt use the same fold. A
+recorded refutation holds the workflow until an explicit current-revision
+person decision releases it. This ordering does not establish that a native
+write happened or that its effect is absent. A person's release remains a
+workflow decision, separate from native verification. Rechecks bind the
+original receipt and the exact set of separately validated later receipts.
+Restoring current rows cannot confirm a historical claim already refuted
+under that context. A fresh confirmation needs a new issued receipt, not
+reordered, duplicated, removed or recycled excuses. Missing legacy context
+stays unresolved. A new receipt-bound claim can report its fresh read while
+the earlier workflow hold remains; it does not grant retry, cleanup or
+old-result handback. These context identities are data bindings, not native
+write or absence authority.
+
 `ledger=None` turns the ledger off; use it only for a sandbox that resets
 between runs, such as RL episodes.
 
@@ -361,7 +388,7 @@ send and the read-back, and reconciles it before anything else.
 
 | Latest attempt | `begin_write` |
 |---|---|
-| none, `retry_safe`, or landed and delivered more than `repeat_s` ago (no `write_key`) | new attempt |
+| none, explicitly released, or landed and delivered more than `repeat_s` ago (no `write_key`) | new attempt |
 | open, lease held elsewhere | `WriteHeld` (in flight) |
 | open, lease free (owner died) | reconcile, then decide again |
 | landed (`CONFIRMED`, or `landed`): undelivered, inside `repeat_s`, or under a `write_key` | `AlreadyWritten` with the stored result |
@@ -383,12 +410,10 @@ an operator's job.
   is handed back once (`AlreadyWritten`) instead of a resend.
 - `UNCERTAIN` keeps the attempt held. Past the contract's
   `max_execution_window_s`, the baseline proves nothing, so the attempt stays
-  held. A held attempt is released by a person. An attempt the store still
-  shows `absent` is also released once the ledger's `settle_s` has passed.
-  `settle_s` defaults to off, because a queued write can land late.
+  held. A held attempt is released by a person. `settle_s` remains accepted
+  for compatibility but does not release an attempt or grant retry permission.
 - An attempt whose process died before it sent anything looks the same as
-  one that died just after: it stays held until a person, or `settle_s`,
-  releases it.
+  one that died just after: it stays held until a person releases it.
 
 **Other writes in the window.** `verify_write` and reconciliation both check
 the result against attempts of other keys that were open during its window,
@@ -428,7 +453,8 @@ from just before its baseline read to the end of its read-back.
 **What's kept on disk.** While an attempt may still need a read-back, its
 baseline and values stay in its private folder (mode 0700, files 0600) next
 to the ledger, as verify-run keeps baselines today. Once it resolves for
-good (landed, refuted, retry-safe or released), they're removed. Receipts
+good (landed or explicitly released), they're removed. Held attempts keep
+their recovery files. Receipts
 stay; they hold no record values.
 
 **People.** `openadapt verify ledger list` shows open and held keys (no
@@ -474,3 +500,64 @@ A snapshot doesn't go through the ledger, so move to
   call without a `write_key` counts as a new write. A cancellation the
   caller sees isn't affected (`delivered=False`). `write_key` closes the
   remaining gap for callers that have a stable task id.
+
+### Final verdicts from history
+
+A contract can set `frame.history` to read complete change feeds across its
+record surfaces and declared collateral scope. Each surface maps to a feed;
+additional feeds extend the collateral scope. The quiet window `quiet_s` is
+chosen from server behavior observed during sandbox setup, and
+`setup_evidence_sha256` pins that observation.
+
+FHIR feeds read every page of the type-level `_history?_since=t0`, including
+deletions and earlier versions. SQL feeds read CDC or audit events and an
+independent coverage query in one read-only transaction. The coverage query
+returns `retained_since`, `through`, and `event_count`; it must describe the
+source's complete retained history, independently of the event query. The
+SQL event query returns `event_id`, `record_id`, `operation`, `author`, and
+`occurred_at`. Both time columns and event times are timezone-bearing ISO
+strings. SQL checkpoints retain every returned event identity, including
+events dated before the attempt; the independent count and existing budget
+bound that inventory. A new identity is judged even when its timestamp is
+old. Earlier SQL checkpoints lack the per-feed retained-inventory marker and
+cannot authorize an initial or final verdict under this model; they remain
+unresolved rather than being upgraded or rebaselined.
+
+A SQL-history confirmation recorded by an older ledger cannot be promoted
+to a final result during a retry handoff unless the recheck recorded the
+current inventory model and the same frame contract. The current recheck
+writer records that tag only after validating and confirming the issued
+checkpoint. Missing or different tags hold the cached result for review;
+old entries are never retagged. This cannot revoke a result already delivered
+by an older runtime, and it does not reconstruct a missing old inventory.
+
+Event visibility and event attribution are separate. A newly discovered event
+dated before the attempt cannot count as its intended target write. A known
+historical event stays in the baseline, and a changed or missing historical
+event prevents confirmation. The same checks apply before provisional
+success and during recheck.
+
+FHIR `_since` selects resource-version creation time. The reader uses the
+history entry's server `response.lastModified`, falling back to the resource's
+server-managed `meta.lastUpdated`; a domain timestamp such as
+`Provenance.recorded` does not set this boundary. Every returned history row
+is retained. Setup must qualify version visibility, retention and the coverage
+frontier for the actual endpoint. A source that omits versions that become
+visible later with older version timestamps cannot establish complete
+coverage from a timestamp-filtered history response alone. No client-side
+quiet window proves that source property, and unsupported coverage must not
+be presented as a complete finality proof.
+
+A confirmed initial check has `provisional: true` and `final: false` while its
+recheck is owed. A consumer that requires a final verdict calls
+`recheck(contract, result, params=params, actor=actor, wait=True)`. The ledger
+keeps the recheck owed across restarts. The final verdict covers the earliest
+coverage frontier returned by all feeds. A write after that frontier remains
+outside the receipt's time window.
+
+Every version and tombstone is checked, so reverting a late edit does not
+remove its history. Only server-controlled provenance can attribute a late
+edit to another user. Missing coverage, a vanished or changed history entry,
+an unreadable page, or an unresolved actor prevents confirmation. The history
+checkpoint stores keyed event digests; record values and actor identities do
+not enter the receipt.

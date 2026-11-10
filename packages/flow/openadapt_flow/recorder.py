@@ -53,6 +53,7 @@ import io
 import json
 import time
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional
@@ -69,8 +70,10 @@ from openadapt_flow.image_hash import perceptual_hash
 from openadapt_flow.ir import (
     MAX_PAGES_OPENED_PER_STEP,
     PRIMARY_SURFACE_ID,
+    NativeSelectContract,
     StructuralLocator,
 )
+from openadapt_flow.native_selection_capture import demonstrated_native_choice
 
 #: Bound on waiting for a newly opened page's first navigation.
 _NEW_PAGE_LOAD_TIMEOUT_S = 10.0
@@ -164,6 +167,16 @@ def _census_has_twin(census: dict[str, Any]) -> bool:
     )
 
 
+@dataclass
+class _NativeSelectObservation:
+    backend: Any
+    token: Any
+    click_index: int
+    surface: str
+    type_index: Optional[int] = None
+    text: str = ""
+
+
 class Recorder:
     """Records a demonstration by mirroring backend actions to disk.
 
@@ -202,7 +215,12 @@ class Recorder:
         encryption_key: Optional[str] = None,
         finalize_on_finish: bool = True,
         capture_hover: bool = False,
+        event_clock: Optional[list[float]] = None,
     ) -> None:
+        # A cross-window recording (multi_surface_record) orders this
+        # recorder's events against another recorder's by wall-clock time:
+        # each committed event appends the time its action was observed.
+        self._event_clock = event_clock
         # Pixel surfaces: before each click, rest the pointer on the target
         # and keep that frame (frames/{i}_hover.png) so the compiler can store
         # the hover response as identity evidence (runtime.hover_evidence).
@@ -254,6 +272,10 @@ class Recorder:
         # backend must never advertise an authoritative business-effect oracle
         # merely because the recorder can query a separate read-only source.
         self._system_of_record_reader = system_of_record_reader
+        #: Optional callbacks that pump an attached capture/guard while the
+        #: recorder waits for a consequential action to settle. These run
+        #: before each frame and SOR snapshot, on the recording thread.
+        self._settle_callbacks: list[Callable[[float], None]] = []
         #: Set by :meth:`expect_write` for the next event only.
         self._write_wait_s = 0.0
         self._settle_interval_s = settle_interval_s
@@ -263,6 +285,7 @@ class Recorder:
         self._params: dict[str, str] = {}
         # Names of parameters declared secret (never their values).
         self._withheld_param_names: set[str] = set()
+        self._native_select_pending: Optional[_NativeSelectObservation] = None
         self._i = 0
         self._t0 = time.monotonic()
 
@@ -270,6 +293,7 @@ class Recorder:
 
     def click(self, x: int, y: int) -> None:
         """Click at pixel coordinates, recording the event and frames."""
+        self._cancel_native_select()
         self._record(
             {"kind": "click", "x": int(x), "y": int(y)},
             lambda: self._backend.click(int(x), int(y)),
@@ -277,6 +301,7 @@ class Recorder:
 
     def double_click(self, x: int, y: int) -> None:
         """Double-click at pixel coordinates, recording the event."""
+        self._cancel_native_select()
         self._record(
             {"kind": "double_click", "x": int(x), "y": int(y)},
             lambda: self._backend.click(int(x), int(y), double=True),
@@ -285,6 +310,7 @@ class Recorder:
     def right_click(self, x: int, y: int) -> None:
         """Right-click at pixel coordinates, recording the event."""
 
+        self._cancel_native_select()
         if not isinstance(self._backend, RichPointerActionBackend):
             raise RuntimeError("recording backend does not support right-click input")
         backend = self._backend
@@ -296,6 +322,7 @@ class Recorder:
     def drag(self, x: int, y: int, end_x: int, end_y: int) -> None:
         """Drag between two points, retaining both endpoints as evidence."""
 
+        self._cancel_native_select()
         if not isinstance(self._backend, RichPointerActionBackend):
             raise RuntimeError("recording backend does not support drag input")
         backend = self._backend
@@ -351,6 +378,7 @@ class Recorder:
 
     def scroll(self, dx: int, dy: int) -> None:
         """Scroll by (dx, dy) pixels via the wheel, recording the event."""
+        self._cancel_native_select()
         self._record(
             {"kind": "scroll", "dx": int(dx), "dy": int(dy)},
             lambda: self._backend.scroll(int(dx), int(dy)),
@@ -378,6 +406,7 @@ class Recorder:
         at compile time. Compiles to a READ step.
         """
 
+        self._cancel_native_select()
         png = self._backend.screenshot()
         event: dict[str, Any] = {
             "kind": "read",
@@ -394,6 +423,7 @@ class Recorder:
 
     def finish(self) -> Path:
         """Write ``meta.json`` and return the recording directory."""
+        self._cancel_native_select()
         viewport = self._primary_backend.viewport
         meta: dict[str, Any] = {
             "id": uuid.uuid4().hex,
@@ -453,6 +483,7 @@ class Recorder:
 
     def abandon_encryption(self) -> None:
         """Stop routing writes for an aborted encrypted recording."""
+        self._cancel_native_select()
         writer, self._sealed_writer = self._sealed_writer, None
         if writer is not None:
             _sealed.unregister_writer(writer)
@@ -518,6 +549,7 @@ class Recorder:
         its after frame the new one, settled.
         """
 
+        self._cancel_native_select()
         import re as _re
 
         from openadapt_flow.ir import SURFACE_ID_PATTERN
@@ -720,7 +752,139 @@ class Recorder:
 
     # -- internals -----------------------------------------------------------
 
+    def _cancel_native_select(self) -> None:
+        pending, self._native_select_pending = self._native_select_pending, None
+        if pending is not None:
+            try:
+                pending.backend.cancel_native_select(pending.token)
+            except Exception:
+                pass  # Optional evidence must not alter the demonstrated action.
+
+    def _native_select_continues(self, pending: _NativeSelectObservation) -> bool:
+        try:
+            return pending.backend.continue_native_select(pending.token) is True
+        except Exception:
+            return False
+
     def _record(self, event: dict[str, Any], act: Callable[[], None]) -> None:
+        """Keep one pre-click native token across literal CLICK + TYPE + Enter."""
+        pending = self._native_select_pending
+        same_surface = (
+            pending is not None
+            and pending.backend is self._backend
+            and pending.surface == self._active_surface
+        )
+        begins_type = (
+            same_surface
+            and pending is not None
+            and pending.type_index is None
+            and pending.click_index + 1 == self._i
+            and event.get("kind") == "type"
+            and isinstance(event.get("text"), str)
+            and bool(event["text"])
+            and event.get("param") is None
+            and not event.get("secret")
+            and self._native_select_continues(pending)
+        )
+        commits_selection = (
+            same_surface
+            and pending is not None
+            and pending.type_index is not None
+            and pending.type_index + 1 == self._i
+            and event.get("kind") == "key"
+            and event.get("key") == "Enter"
+        )
+        if begins_type and pending is not None:
+            pending.type_index = self._i
+            pending.text = event["text"]
+        elif not commits_selection:
+            self._cancel_native_select()
+        if event.get("kind") == "click":
+            begin = getattr(self._backend, "begin_native_select", None)
+            required = (
+                "continue_native_select",
+                "finish_native_select",
+                "cancel_native_select",
+            )
+            if callable(begin) and all(
+                callable(getattr(self._backend, name, None)) for name in required
+            ):
+                try:
+                    token = begin(x=event["x"], y=event["y"])
+                except Exception:
+                    token = None
+                if token is not None:
+                    self._native_select_pending = _NativeSelectObservation(
+                        self._backend, token, self._i, self._active_surface
+                    )
+        try:
+            self._record_action(event, act)
+        except BaseException:
+            self._cancel_native_select()
+            raise
+
+    def _finish_native_select(self, event: dict[str, Any]) -> dict[str, Any]:
+        pending = self._native_select_pending
+        if pending is None:
+            return event
+        if event.get("kind") == "click":
+            if not self._native_select_continues(pending):
+                self._cancel_native_select()
+            return event
+        if event.get("kind") != "key" or pending.type_index is None:
+            return event
+        refused = {**event, "control_refusal": "native_selection_not_demonstrated"}
+        try:
+            evidence = pending.backend.finish_native_select(pending.token)
+            if not isinstance(evidence, dict):
+                return refused
+            selector, frame_path = evidence.get("selector"), evidence.get("frame_path")
+            if (
+                not isinstance(selector, str)
+                or not selector.strip()
+                or not isinstance(frame_path, list)
+                or len(frame_path) > 8
+                or any(
+                    not isinstance(frame, str) or not frame.strip()
+                    for frame in frame_path
+                )
+            ):
+                return refused
+            contract = NativeSelectContract.model_validate(
+                {
+                    "value": evidence.get("value"),
+                    "label": evidence.get("label"),
+                    "options": evidence.get("options"),
+                }
+            )
+            if not demonstrated_native_choice(
+                contract,
+                value_before=evidence.get("value_before"),
+                label_before=evidence.get("label_before"),
+                typed_text=pending.text,
+            ):
+                return refused
+            event = {
+                **event,
+                "native_selection": {
+                    **contract.model_dump(mode="json"),
+                    "value_before": evidence["value_before"],
+                    "label_before": evidence["label_before"],
+                    "selector": selector,
+                    "frame_path": frame_path,
+                    "source_click_index": pending.click_index,
+                    "click_focus_only": True,
+                    "source_type_index": pending.type_index,
+                    "source_type_text": pending.text,
+                },
+            }
+        except Exception:
+            return refused  # Missing proof must not compile to raw TYPE.
+        finally:
+            self._cancel_native_select()
+        return event
+
+    def _record_action(self, event: dict[str, Any], act: Callable[[], None]) -> None:
         """Capture before frame, act, wait settle, capture after, log event."""
         before = self._backend.screenshot()
         structural_before = self._structural_state()
@@ -868,6 +1032,7 @@ class Recorder:
             _sealed.write_bytes(
                 self._frames_dir / f"{self._i:04d}_hover.png", hover_png
             )
+        event = self._finish_native_select(event)
         self._commit(event, before, after, structural_before)
 
     def _hover_frame(self, event: dict[str, Any]) -> Optional[bytes]:
@@ -901,6 +1066,7 @@ class Recorder:
         redact_region: Optional[tuple[int, int, int, int]] = None,
         after_png: Optional[bytes] = None,
         structural_after: Optional[dict[str, Any]] = None,
+        observed_at: Optional[float] = None,
     ) -> None:
         """Persist an event the USER already performed (no backend action).
 
@@ -932,7 +1098,10 @@ class Recorder:
             after_png: Pre-captured settled after-frame. When None, the screen
                 is settled and captured now.
         """
+        self._cancel_native_select()
         event = dict(event)
+        # Native selection evidence comes only from the driven capture lifecycle.
+        event.pop("native_selection", None)
         if (
             event.get("kind")
             in (
@@ -972,6 +1141,7 @@ class Recorder:
             structural_before,
             redact_region=redact_region,
             structural_after=structural_after,
+            observed_at=observed_at,
         )
 
     def _commit(
@@ -983,6 +1153,7 @@ class Recorder:
         *,
         redact_region: Optional[tuple[int, int, int, int]] = None,
         structural_after: Optional[dict[str, Any]] = None,
+        observed_at: Optional[float] = None,
     ) -> None:
         """Write this step's before/after frames and its events.jsonl line.
 
@@ -994,6 +1165,10 @@ class Recorder:
         navigating click produced); when None it is read now.
         """
         i = self._i
+        if self._event_clock is not None:
+            self._event_clock.append(
+                observed_at if observed_at is not None else time.time()
+            )
         if redact_region is not None:
             before_png = self._redact(before_png, redact_region)
             after_png = self._redact(after_png, redact_region)
@@ -1265,6 +1440,7 @@ class Recorder:
         start = time.monotonic()
         limit = start + self._settle_timeout_s
         before_pixels = _pixels(before) if before is not None else None
+        self._run_settle_callbacks(limit)
         png = self._backend.screenshot()
         prev = _phash(png)
         consecutive = 1
@@ -1288,6 +1464,7 @@ class Recorder:
             if time.monotonic() >= limit:
                 return png
             time.sleep(self._settle_interval_s)
+            self._run_settle_callbacks(limit)
             png = self._backend.screenshot()
             cur = _phash(png)
             if cur == prev:
@@ -1295,6 +1472,20 @@ class Recorder:
             else:
                 consecutive = 1
             prev = cur
+
+    def add_settle_callback(self, callback: Callable[[float], None]) -> None:
+        """Pump an attached guard while an action's settled state is captured.
+
+        Callbacks run on the recording thread immediately before settle
+        screenshots, including the screen and system-of-record snapshots that
+        become the action's after-state.
+        """
+
+        self._settle_callbacks.append(callback)
+
+    def _run_settle_callbacks(self, deadline: float) -> None:
+        for callback in tuple(self._settle_callbacks):
+            callback(deadline)
 
     def _page_quiet(self) -> Optional[bool]:
         """The browser page's DOM + network probe, or None when it has none."""

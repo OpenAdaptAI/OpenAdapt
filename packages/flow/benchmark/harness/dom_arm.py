@@ -1504,7 +1504,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         description=(
             "DOM-selector benchmark arm vs. compiled vision replay on "
             "MockMed. $0: no model calls anywhere."
-        )
+        ),
+        allow_abbrev=False,
     )
     parser.add_argument(
         "--out",

@@ -652,7 +652,7 @@ def qualify(trials: int) -> tuple[int, dict[str, Any]]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument("--trials", type=int, default=MIN_TRIALS)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--request-permissions", action="store_true")
