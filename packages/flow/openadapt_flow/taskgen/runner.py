@@ -20,8 +20,14 @@ class Browser:
     def __init__(self, *, timeout_ms: int = 8000) -> None:
         from playwright.sync_api import sync_playwright
 
+        from openadapt_flow._browser_readiness import launch_rendering_ready
+
         self._pw = sync_playwright().start()
-        self._browser = self._pw.chromium.launch(headless=True)
+        try:
+            self._browser = launch_rendering_ready(self._pw.chromium, headless=True)
+        except BaseException:
+            self._pw.stop()
+            raise
         self.timeout_ms = timeout_ms
         self._ctx: Any = None
         self.page: Any = None
