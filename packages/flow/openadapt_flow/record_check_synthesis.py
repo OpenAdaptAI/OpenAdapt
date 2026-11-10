@@ -1739,10 +1739,18 @@ def prove_against_faults(
                     elsewhere[fld] = f"stray {elsewhere.get(fld)}"
                 if "id" in elsewhere or surface.has_ids:
                     elsewhere["id"] = _fresh_id(after + before)
+                # Only a bare-list root is the whole store in one list; on an
+                # object root this is an unrelated row in the saved record's
+                # own collection (other collections have their own reads).
+                whole = surface.config.get("records_key") is None
                 run(
-                    "collateral_unaudited",
-                    f"a stray row written elsewhere in the store (it shows in "
-                    f"{surface.name})",
+                    "collateral_unaudited" if whole else "unrelated_row",
+                    (
+                        f"a stray row written elsewhere in the store (it shows in "
+                        f"{surface.name})"
+                        if whole
+                        else f"an unrelated row added to {surface.name}"
+                    ),
                     {**base, surface.name: (before, after + [elsewhere])},
                 )
 
@@ -2143,6 +2151,7 @@ _RECORDED_CLASS = {
     "changed": "unrelated_edit",
     "deleted": "unrelated_edit",
     "collateral_unaudited": "unrelated_edit",
+    "unrelated_row": "unrelated_edit",
 }
 
 

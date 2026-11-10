@@ -600,6 +600,30 @@ def cover(
             row["outcome"] = "holds a list the REST check can't read"
             why.append(f"GET {row['path']}: {row['outcome']}")
             continue
+        # Fail closed on shape: every top-level value must be a list of
+        # objects (a collection) or a scalar. An object may hold records the
+        # check would not read (a nested collection, an id-keyed map).
+        nested = (
+            sorted(
+                str(k)
+                for k, v in body.items()
+                if not isinstance(v, list)
+                and not (v is None or isinstance(v, (str, int, float, bool)))
+            )
+            if isinstance(body, dict)
+            else []
+        )
+        if nested:
+            row["outcome"] = (
+                "root holds a non-list value that may contain records: "
+                + ", ".join(nested)
+            )
+            why.append(f"GET {row['path']}: {row['outcome']}")
+            continue
+        if isinstance(body, list) and any(not isinstance(i, dict) for i in body):
+            row["outcome"] = "holds a list of non-records"
+            why.append(f"GET {row['path']}: {row['outcome']}")
+            continue
         # Every top-level list is a collection the check must read, an empty
         # one included (``_listings`` skips lists that hold no object).
         lists: dict[str, list[Any]] = (

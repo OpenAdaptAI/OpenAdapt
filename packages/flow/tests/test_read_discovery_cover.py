@@ -53,6 +53,7 @@ class StoreApp:
             {"id": 501, "account": "acct-0001", "fee": "2.50"}
         ]
         self.stray = False
+        self.root = root
         self.fees_route = fees_route
         self.log: list[tuple[str, str, dict[str, str]]] = []
         app = self
@@ -83,19 +84,26 @@ class StoreApp:
                     self._send(200, {"records": app.transfers})
                 elif path == "/api/fees" and app.fees_route:
                     self._send(200, {"records": app.fees})
-                elif path in ("/api", "/api/") and root == "split":
+                elif path in ("/api", "/api/") and app.root == "split":
                     self._send(200, {"transfers": app.transfers, "fees": app.fees})
-                elif path in ("/api", "/api/") and root == "omit_empty":
+                elif path in ("/api", "/api/") and app.root == "omit_empty":
                     # A collection with no rows is left out of the body.
                     body = {"transfers": app.transfers}
                     if app.fees:
                         body["fees"] = app.fees
                     self._send(200, body)
-                elif path in ("/api", "/api/") and root == "merged":
+                elif path in ("/api", "/api/") and app.root == "nested":
+                    self._send(
+                        200, {"transfers": app.transfers, "billing": {"fees": app.fees}}
+                    )
+                elif path in ("/api", "/api/") and app.root == "idmap":
+                    fees = {str(r["id"]): r for r in app.fees}
+                    self._send(200, {"transfers": app.transfers, "fees": fees})
+                elif path in ("/api", "/api/") and app.root == "merged":
                     self._send(200, {"records": self._everything()})
-                elif path in ("/api", "/api/") and root == "partial":
+                elif path in ("/api", "/api/") and app.root == "partial":
                     self._send(200, {"records": app.transfers})
-                elif path in ("/api", "/api/") and root == "redirect":
+                elif path in ("/api", "/api/") and app.root == "redirect":
                     self._send(302, {}, Location="/hidden/everything")
                 elif path == "/hidden/everything":
                     self._send(200, {"records": self._everything()})
@@ -288,6 +296,63 @@ def test_a_reviewed_list_that_disappears_reads_as_unreadable(make_app):
     assert "fees" in (reader.read_problem or "")
     app.fees = [{"id": 501, "account": "acct-0001", "fee": "2.50"}]
     assert reader._fetch_records() is not None
+
+
+@pytest.mark.parametrize("seeded", [False, True])
+@pytest.mark.parametrize("root", ["nested", "idmap"])
+def test_a_root_holding_an_object_is_refused(tmp_path, make_app, root, seeded):
+    """Regression: a collection nested in an object, or an id-keyed map, is a
+    shape the check can't guard, so the root is never promoted (fail closed
+    on shape) and no check exists that could CONFIRM a stray fee."""
+
+    app = make_app(root=root)
+    if not seeded:
+        app.fees = []
+    rec = _recording(tmp_path / "rec", app)
+    proposal = synthesize(rec, probe_reads=True)
+    assert proposal.refused and not proposal.working
+    found = proposal.search.read_discovery
+    assert found["read"] == "/api/transfers"
+    assert found["covering_read"]["status"] == "not found"
+    key = "billing" if root == "nested" else "fees"
+    assert (
+        f"root holds a non-list value that may contain records: {key}"
+        in (found["reason"])
+    )
+    assert not any(s.store_wide for s in proposal.search.surfaces)
+    assert not any(
+        r["fault"] == "collateral_unaudited" and r["result"] == "caught"
+        for r in proposal.proof()["faults"]
+    )
+    out = tmp_path / "out"
+    assert build_record_check(rec, out, probe_reads=True) is None
+    assert not (out / "record_check.proposed.yaml").exists()
+
+
+@pytest.mark.parametrize("later", ["nested", "idmap"])
+def test_an_object_that_appears_after_promotion_is_never_confirmed(
+    tmp_path, make_app, later
+):
+    app = make_app(root="split")
+    rec = _recording(tmp_path / "rec", app)
+    proposal = synthesize(rec, probe_reads=True)
+    assert proposal.working, proposal.misses
+    app.root = later
+    app.stray = True
+    bad = {"account": "acct-4004", "memo": "Synthetic memo: stray fee run"}
+    assert _judge(proposal, app, bad) != "CONFIRMED"
+
+
+def test_a_list_of_non_records_in_the_root_is_refused(tmp_path, make_app):
+    app = make_app(root="split")
+    app.fees = ["not a record"]  # type: ignore[list-item]
+    rec = _recording(tmp_path / "rec", app)
+    proposal = synthesize(rec, probe_reads=True)
+    assert proposal.refused
+    assert (
+        "holds a list of non-records under fees"
+        in (proposal.search.read_discovery["reason"])
+    )
 
 
 def test_promoted_covering_read_is_written_to_read_discovery_json(tmp_path, make_app):

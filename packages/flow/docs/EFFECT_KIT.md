@@ -1141,11 +1141,12 @@ requires a validated `records_complete: true` declaration.
 
 `records_list_keys` names the top-level keys whose value is a list, for a
 whole-store read that returns one list per collection. A body without a list
-under one of them is unreadable. A read with `records_other_lists: true` (and
+under one of them, or with an object value (which may hold records no
+reviewed read sees), is unreadable. A read with `records_other_lists: true` (and
 no `records_key`) returns the records of every list under any other key, so a
 row written to a collection that appeared after review is seen. `scaffold-verifier
 --probe-reads` sets both on a prefix-root read it uses in place of a collection
-read: one read per list it saw (empty lists included), plus one for any other
+read (only when every top-level value is a list of objects or a scalar): one read per list it saw (empty lists included), plus one for any other
 list, where the save may add no row.
 
 A redirect is a failed read: the configured auth headers never follow it to

@@ -124,8 +124,9 @@ class RestRecordVerifier(VerifierAdapterBase):
             response length.
         list_keys: The top-level keys whose value is a list in a whole-store
             read that holds one list per collection, as the read was reviewed.
-            Set, a body that is not a JSON object, or lacks a list under one of
-            these keys, reads as unreadable.
+            Set, a body that is not a JSON object, lacks a list under one of
+            these keys, or holds an object value (which may contain records no
+            reviewed read sees), reads as unreadable.
         other_lists: With ``list_keys`` (and ``records_key=None``): the read
             returns the records of every list under a key NOT in
             ``list_keys``. A collection that appears after review is read
@@ -356,6 +357,15 @@ class RestRecordVerifier(VerifierAdapterBase):
                     self.read_problem = (
                         f"GET {url}: the reviewed lists are missing: "
                         + ", ".join(missing)
+                    )
+                    self.readback_complete = False
+                    return None
+                nested = sorted(str(k) for k, v in body.items() if isinstance(v, dict))
+                if nested:
+                    # An object may hold records no reviewed read sees.
+                    self.read_problem = (
+                        f"GET {url}: the body holds an object that may contain "
+                        "records: " + ", ".join(nested)
                     )
                     self.readback_complete = False
                     return None

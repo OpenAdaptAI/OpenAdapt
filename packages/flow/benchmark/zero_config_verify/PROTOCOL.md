@@ -268,3 +268,12 @@ and the save may add no row there; a reviewed list that disappears makes the
 read unreadable. The fault test injects a stray row into each of these. Nothing
 else in this protocol changes, and the expected MockLoan outcome (refused,
 `GET /api` returns 404) is the same.
+
+### 2026-11-09, before the fourth run (second review fix)
+
+The second review found two more shapes a root could hide records in: a
+collection nested in an object, and an id-keyed map. Ruling: fail closed on
+shape. The root is promoted only when every top-level value is a list of
+objects or a scalar; otherwise the reason is "root holds a non-list value that
+may contain records: <key>". At check time, an object value in the root makes
+the read unreadable. The fourth run uses this commit. Nothing else changes.
