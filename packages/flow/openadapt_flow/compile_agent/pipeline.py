@@ -1060,6 +1060,7 @@ class FirstRunCompiler:
         judge the confirmed checks against the system of record."""
 
         from openadapt_flow import __version__
+        from openadapt_flow.request_binding import current_request_context
         from openadapt_flow.verify_run import verify_run, write_result
 
         cfg = self._confirmed_config()
@@ -1083,6 +1084,9 @@ class FirstRunCompiler:
             },
             authorization_ref=f"compile-agent:{self.task.key}:{kind}",
             baseline_path=self._receipt_baseline,
+            # A canary is a distinct operation, even during first admission.
+            # Never relabel its receipt as the outer request's effect.
+            request_context=current_request_context() if kind == "run" else None,
         )
         return result, receipt, write_result(receipt, work)
 

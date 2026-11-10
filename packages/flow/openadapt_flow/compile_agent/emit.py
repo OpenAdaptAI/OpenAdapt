@@ -59,7 +59,17 @@ def {func}({signature}) -> dict:
     """
     from openadapt_flow.compile_agent import run_compiled_params as {dispatch_symbol}
 
-    return {dispatch_symbol}({task_symbol}, {values}).to_dict()
+    from openadapt_flow.request_binding import context_from_mcp as {parse_context_symbol}
+    from openadapt_flow.request_binding import request_scope as {request_scope_symbol}
+
+    try:
+        {meta_symbol} = {context_symbol}.request_context.meta if {context_symbol} is not None else None
+    except ValueError:
+        # The SDK's direct call_tool API has no incoming request context.
+        # It remains unbound; an existing owned scope cannot be downgraded.
+        {meta_symbol} = None
+    with {request_scope_symbol}({parse_context_symbol}({meta_symbol})):
+        return {dispatch_symbol}({task_symbol}, {values}).to_dict()
 
 
 if __name__ == "__main__":
@@ -86,6 +96,11 @@ def emit_mcp(compiler: "FirstRunCompiler", out_path: Path) -> Path:
     field_type = symbols.allocate("Field")
     server_type = symbols.allocate("FastMCP")
     import_error = symbols.allocate("mcp_import_error")
+    context_type = symbols.allocate("MCPContext")
+    context_symbol = symbols.allocate("request_context")
+    parse_context_symbol = symbols.allocate("parse_request_context")
+    request_scope_symbol = symbols.allocate("request_scope")
+    meta_symbol = symbols.allocate("request_meta")
     task_symbol = symbols.allocate("TASK_DIR")
     server_symbol = symbols.allocate("mcp")
     dispatch_symbol = symbols.allocate("run_compiled_params")
@@ -102,14 +117,21 @@ def emit_mcp(compiler: "FirstRunCompiler", out_path: Path) -> Path:
         annotated_type=annotated_type,
         field_type=field_type,
         server_type=server_type,
-        sdk_import=server_import(server_type, import_error),
+        sdk_import=server_import(server_type, import_error, context_type),
         task_symbol=task_symbol,
         server_symbol=server_symbol,
         dispatch_symbol=dispatch_symbol,
         signature=", ".join(
-            f"{binding}: {annotated_type}[str, {field_type}(validation_alias={name!r})]"
-            for name, binding in bindings.items()
+            [
+                f"{binding}: {annotated_type}[str, {field_type}(validation_alias={name!r})]"
+                for name, binding in bindings.items()
+            ]
+            + [f"{context_symbol}: {context_type} = None"]
         ),
+        context_symbol=context_symbol,
+        parse_context_symbol=parse_context_symbol,
+        request_scope_symbol=request_scope_symbol,
+        meta_symbol=meta_symbol,
         doc=" ".join(instruction.split()),
         values="{"
         + ", ".join(f"{name!r}: {binding}" for name, binding in bindings.items())
