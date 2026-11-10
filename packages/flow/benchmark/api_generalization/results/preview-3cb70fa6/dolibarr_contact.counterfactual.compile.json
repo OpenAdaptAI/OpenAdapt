@@ -1,0 +1,222 @@
+{
+ "app": "dolibarr_contact",
+ "workflow": "new-contact",
+ "steps": 12,
+ "params": [
+  "email",
+  "firstname",
+  "lastname",
+  "phone_pro",
+  "poste"
+ ],
+ "compile_proposal": {
+  "proposed": true,
+  "step": "step_011",
+  "reasons": []
+ },
+ "proposed": true,
+ "reasons": [],
+ "compile_s": 11.0,
+ "frozen": "",
+ "head": "3cb70fa649407782f150ae4b0f65058fcd84ec30",
+ "engine_diff_vs_frozen": "",
+ "admitted": [
+  "step_011"
+ ],
+ "describe": "step_011: save with one request, POST /contact/card.php, in place of 12 GUI steps (step_000 to step_011).\n  sign-in: the replaying browser's own session; form read again from /contact/card.php?action=create\n  fields: 17 form_default, 5 param, 1 session\n  run values: lastname={lastname}, firstname={firstname}, poste={poste}, phone_pro={phone_pro}, email={email}\n  accepted when: HTTP [302] and the response matches 'card\\\\.php.*?id=\\\\d+'\n  record check after: 5 effect(s) copied from the save step\n  screen-only checks, not repeated: ['step_000: region_stable', 'step_002: region_stable', 'step_004: region_stable', 'step_006: region_stable', 'step_008: region_stable']\n  if the form or a check differs at run time, the GUI steps run instead",
+ "binding": {
+  "form_path": "/contact/card.php?action=create",
+  "fields": [
+   {
+    "name": "token",
+    "source": "session",
+    "param": null,
+    "value": null
+   },
+   {
+    "name": "action",
+    "source": "form_default",
+    "param": null,
+    "value": "add"
+   },
+   {
+    "name": "backtopage",
+    "source": "form_default",
+    "param": null,
+    "value": "/contact/card.php?id=__ID__"
+   },
+   {
+    "name": "entity",
+    "source": "form_default",
+    "param": null,
+    "value": ""
+   },
+   {
+    "name": "lastname",
+    "source": "param",
+    "param": "lastname",
+    "value": null
+   },
+   {
+    "name": "firstname",
+    "source": "param",
+    "param": "firstname",
+    "value": null
+   },
+   {
+    "name": "socid",
+    "source": "form_default",
+    "param": null,
+    "value": "-1"
+   },
+   {
+    "name": "civility_code",
+    "source": "form_default",
+    "param": null,
+    "value": ""
+   },
+   {
+    "name": "poste",
+    "source": "param",
+    "param": "poste",
+    "value": null
+   },
+   {
+    "name": "address",
+    "source": "form_default",
+    "param": null,
+    "value": ""
+   },
+   {
+    "name": "zipcode",
+    "source": "form_default",
+    "param": null,
+    "value": ""
+   },
+   {
+    "name": "town",
+    "source": "form_default",
+    "param": null,
+    "value": ""
+   },
+   {
+    "name": "country_id",
+    "source": "form_default",
+    "param": null,
+    "value": ""
+   },
+   {
+    "name": "phone_pro",
+    "source": "param",
+    "param": "phone_pro",
+    "value": null
+   },
+   {
+    "name": "phone_perso",
+    "source": "form_default",
+    "param": null,
+    "value": ""
+   },
+   {
+    "name": "phone_mobile",
+    "source": "form_default",
+    "param": null,
+    "value": ""
+   },
+   {
+    "name": "fax",
+    "source": "form_default",
+    "param": null,
+    "value": ""
+   },
+   {
+    "name": "email",
+    "source": "param",
+    "param": "email",
+    "value": null
+   },
+   {
+    "name": "priv",
+    "source": "form_default",
+    "param": null,
+    "value": "0"
+   },
+   {
+    "name": "birthday",
+    "source": "form_default",
+    "param": null,
+    "value": ""
+   },
+   {
+    "name": "birthdayday",
+    "source": "form_default",
+    "param": null,
+    "value": ""
+   },
+   {
+    "name": "birthdaymonth",
+    "source": "form_default",
+    "param": null,
+    "value": ""
+   },
+   {
+    "name": "birthdayyear",
+    "source": "form_default",
+    "param": null,
+    "value": ""
+   }
+  ],
+  "controls": [
+   "action",
+   "address",
+   "backtopage",
+   "birthday",
+   "birthday_alert",
+   "birthdayday",
+   "birthdaymonth",
+   "birthdayyear",
+   "civility_code",
+   "country_id",
+   "email",
+   "entity",
+   "fax",
+   "firstname",
+   "lastname",
+   "phone_mobile",
+   "phone_perso",
+   "phone_pro",
+   "poste",
+   "priv",
+   "socid",
+   "token",
+   "town",
+   "zipcode"
+  ],
+  "client_rules": null,
+  "prechecks": [],
+  "success_pattern": "card\\.php.*?id=\\d+",
+  "replaces_steps": [
+   "step_000",
+   "step_001",
+   "step_002",
+   "step_003",
+   "step_004",
+   "step_005",
+   "step_006",
+   "step_007",
+   "step_008",
+   "step_009",
+   "step_010",
+   "step_011"
+  ],
+  "other_writes_seen": [],
+  "screen_only_checks": [
+   "step_000: region_stable",
+   "step_002: region_stable",
+   "step_004: region_stable",
+   "step_006: region_stable",
+   "step_008: region_stable"
+  ],
+  "folded_checks_digest": "sha256:aee9bd119446030e41f3d5970bc695d2b5f5a7ace3e499c33bc6d3c880385922"
+ }
+}

@@ -278,7 +278,7 @@ def test_the_actual_required_status_gate_rejects_failed_or_missing_producers(
 
 def test_supported_backing_files_cannot_be_wholly_deselected_in_the_fast_lane() -> None:
     excluded = {
-        line.split("#", 1)[0].strip()
+        line.split("#", 1)[0].strip().removeprefix("live ")
         for line in (FLOW / "tests/nightly_only.txt").read_text().splitlines()
     }
     for claim in validator.load_registry()["claims"]:

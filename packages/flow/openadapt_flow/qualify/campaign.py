@@ -223,6 +223,13 @@ def record_effects(config: VerifyConfig) -> list[Any]:
                 timeout_s=record.timeout_s,
             )
         )
+    if record.surface:
+        from openadapt_flow.runtime.effects.surfaces import surface_probe
+
+        effects = [
+            e.model_copy(update={"probe": surface_probe(record.surface, e.probe or "")})
+            for e in effects
+        ]
     return effects
 
 
@@ -814,7 +821,12 @@ def _run(
 
             kwargs["checkpoint_key"] = crypto.resolve_key(None)
         if hooks.replayer_kwargs is not None:
-            kwargs.update(hooks.replayer_kwargs(ctx))
+            extra = dict(hooks.replayer_kwargs(ctx))
+            if "duplicate_record_source" in extra:
+                # The duplicate check is resolved from the run's own verifier
+                # on every path; a hook can't qualify under another one.
+                raise ValueError("replayer_kwargs may not set duplicate_record_source")
+            kwargs.update(extra)
         # The signed lookup settings win over any hook, so a hook can't turn
         # structure back on during a pass that must not use it.
         kwargs.update(lookup or {})

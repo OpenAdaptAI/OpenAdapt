@@ -17,6 +17,9 @@ reason and an issue, and an exception that no longer exists fails too, so the
 list only shrinks.
 The repository migration tests separately enforce ``import_layers_debt.json``:
 its exact source-bound unresolved ceiling must shrink as migration removes sites.
+A row names its site by module, path, edge kind, diagnostic and the hash of the
+enclosing statement, never by line number, so an edit that only moves a known
+site up or down its file changes nothing; a new, changed or removed site fails.
 That ceiling is not target admission or proof of capability safety. The raw
 direct/transitive violation APIs always report all unresolved diagnostics.
 
@@ -2277,8 +2280,10 @@ def _dynamic_problems(graph: Graph, contract: dict, *, transitive: bool) -> list
     ]
 
 
+# The baseline file carries no line numbers, so this pins only the reviewed
+# membership: moving a known site within its file leaves the bytes unchanged.
 DEBT_BASELINE_SHA256 = (
-    "6e21f87c00026e772d35ffb15a1e8837cd1a34152aeca0ec2b19fe4de8e6fa46"
+    "d8c5aa0c76e59707756dcd06e489eb7385489b872b6416ef48bbd92e0feb11cf"
 )
 
 
@@ -2287,7 +2292,6 @@ _DEBT_FOLLOW_UP = "unresolved-import-provider-migration"
 _DEBT_ROW_KEYS = {
     "module",
     "path",
-    "line",
     "edge_kind",
     "diagnostic",
     "reason",
@@ -2305,6 +2309,21 @@ def _debt_message_parts(value):
         value,
     )
     return (match[1], int(match[2])) if match else None
+
+
+def _debt_unlocated(problem):
+    """``module:LINE: text`` as ``module: text``, the form a baseline row keeps."""
+    return re.sub(r"^([A-Za-z_][\w.]*):[1-9][0-9]*: ", r"\1: ", problem, count=1)
+
+
+def _debt_site_identity(metadata):
+    """A site's identity: everything the parsed source binds except its line."""
+    return {
+        "module": metadata["module"],
+        "path": metadata["path"],
+        "diagnostic": _debt_unlocated(metadata["diagnostic"]),
+        "source_statement_sha256": metadata["source_statement_sha256"],
+    }
 
 
 def _debt_site_metadata(tree, module, path, problems):
@@ -2349,12 +2368,16 @@ def _debt_rows_problems(rows):
         if type(row) is not dict or set(row) != _DEBT_ROW_KEYS:
             problems.append("unresolved debt row has an unknown or missing field")
             continue
-        parts = _debt_message_parts(row["diagnostic"])
+        # The diagnostic is kept without its line: ``module: text``.
+        unlocated = isinstance(row["diagnostic"], str) and re.fullmatch(
+            r"([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*): "
+            r"unresolvable dynamic import \([^()\n]+\)",
+            row["diagnostic"],
+        )
         path = row["path"]
         if (
-            parts != (row["module"], row["line"])
-            or type(row["line"]) is not int
-            or row["line"] <= 0
+            not unlocated
+            or unlocated[1] != row["module"]
             or type(path) is not str
             or not re.fullmatch(
                 r"packages/flow/openadapt_flow/(?:[A-Za-z_]\w*/)*[A-Za-z_]\w*\.py", path
@@ -2455,10 +2478,13 @@ def repository_debt_violations(graph, raw_results, baseline_bytes, *, edge_kind)
                 "unresolved debt site has absent or ambiguous source binding"
             )
             continue
+        # The line number is not part of the identity: an unrelated edit above
+        # a known site moves it without changing what it is.
+        identity = _debt_site_identity(metadata)
         matches = [
             row
             for row in expected
-            if all(row.get(key) == value for key, value in metadata.items())
+            if all(row.get(key) == value for key, value in identity.items())
         ]
         if len(matches) != 1:
             problems.append("new or changed source-bound unresolved debt site")
@@ -2467,7 +2493,7 @@ def repository_debt_violations(graph, raw_results, baseline_bytes, *, edge_kind)
         # Every executable-site field is independently supplied by parsed source.
         live.append(
             {
-                **metadata,
+                **identity,
                 "edge_kind": edge_kind,
                 "reason": matches[0]["reason"],
                 "follow_up": matches[0]["follow_up"],
@@ -6478,9 +6504,8 @@ def _debt_model_row(**changes):
     row = {
         "module": "openadapt_flow.runtime.planted",
         "path": "packages/flow/openadapt_flow/runtime/planted.py",
-        "line": 3,
         "edge_kind": "direct",
-        "diagnostic": "openadapt_flow.runtime.planted:3: unresolvable dynamic import (importer value escape)",
+        "diagnostic": "openadapt_flow.runtime.planted: unresolvable dynamic import (importer value escape)",
         "reason": "namespace-query",
         "follow_up": _DEBT_FOLLOW_UP,
         "source_statement_sha256": "a" * 64,
@@ -6492,7 +6517,7 @@ def _debt_model_row(**changes):
 def test_debt_ceiling_detects_every_changed_row_field(field):
     row = _debt_model_row()
     changed = dict(row)
-    changed[field] = 4 if field == "line" else str(row[field]) + "changed"
+    changed[field] = str(row[field]) + "changed"
     assert _debt_row_differences([row], [row]) == []
     assert _debt_row_differences([changed], [row])
     assert _debt_row_differences([row], [changed])
@@ -6509,7 +6534,7 @@ def test_debt_ceiling_preserves_multiplicity_and_refuses_duplicates(side):
 
 @given(
     commands=st.lists(
-        st.sampled_from(["add", "remove", "commit", "move", "duplicate"]), max_size=35
+        st.sampled_from(["add", "remove", "commit", "edit", "duplicate"]), max_size=35
     )
 )
 def test_debt_ceiling_temporal_membership_model(commands):
@@ -6522,11 +6547,8 @@ def test_debt_ceiling_temporal_membership_model(commands):
             live.pop("site", None)
         elif command == "commit":
             baseline = [dict(row) for row in live.values()]
-        elif command == "move" and "site" in live:
-            live["site"] = _debt_model_row(
-                line=4,
-                diagnostic="openadapt_flow.runtime.planted:4: unresolvable dynamic import (importer value escape)",
-            )
+        elif command == "edit" and "site" in live:
+            live["site"] = _debt_model_row(source_statement_sha256="b" * 64)
         current = [dict(row) for row in live.values()]
         if command == "duplicate" and current:
             current.append(dict(current[0]))
@@ -6584,26 +6606,33 @@ def test_debt_source_binding_refuses_absent_or_ambiguous_statement(code, line):
     )
 
 
-def _debt_synthetic_observation(document):
-    """Explicit policy-only graph double; real parsed-source binding tested above."""
+def _debt_synthetic_observation(document, *, first_line=1):
+    """Explicit policy-only graph double; real parsed-source binding tested above.
+
+    Returns the graph and each edge kind's raw diagnostics. Each site gets a
+    line from ``first_line`` up, so a caller can shift every site at once.
+    """
     graph = Graph()
+    lines = {}
+    raw = {"direct": [], "transitive": []}
     for row in document["entries"]:
         module = row["module"]
+        site = (module, row["diagnostic"], row["source_statement_sha256"])
+        line = lines.setdefault(site, first_line + len(lines))
+        problem = row["diagnostic"].replace(f"{module}: ", f"{module}:{line}: ", 1)
         graph.setdefault(module, {})
         graph.dynamic_problems.setdefault(module, [])
-        if row["diagnostic"] not in graph.dynamic_problems[module]:
-            graph.dynamic_problems[module].append(row["diagnostic"])
-        graph.debt_sites.setdefault(module, {})[row["diagnostic"]] = {
-            key: row[key]
-            for key in (
-                "module",
-                "path",
-                "line",
-                "diagnostic",
-                "source_statement_sha256",
-            )
+        if problem not in graph.dynamic_problems[module]:
+            graph.dynamic_problems[module].append(problem)
+        graph.debt_sites.setdefault(module, {})[problem] = {
+            "module": module,
+            "path": row["path"],
+            "line": line,
+            "diagnostic": problem,
+            "source_statement_sha256": row["source_statement_sha256"],
         }
-    return graph
+        raw[row["edge_kind"]].append(problem)
+    return graph, raw
 
 
 @pytest.mark.parametrize("edge_kind", ["direct", "transitive"])
@@ -6611,12 +6640,8 @@ def test_repository_debt_boundary_preserves_raw_results_and_forbidden_refusal(
     unresolved_debt_baseline, edge_kind
 ):
     document = json.loads(unresolved_debt_baseline)
-    graph = _debt_synthetic_observation(document)
-    raw = [
-        row["diagnostic"]
-        for row in document["entries"]
-        if row["edge_kind"] == edge_kind
-    ]
+    graph, raw = _debt_synthetic_observation(document)
+    raw = raw[edge_kind]
     before = json.dumps(
         [graph, graph.dynamic_problems, graph.debt_sites, raw], sort_keys=True
     )
@@ -6650,6 +6675,47 @@ def test_repository_debt_boundary_preserves_raw_results_and_forbidden_refusal(
         )
         == before
     )
+
+
+@pytest.mark.parametrize("edge_kind", ["direct", "transitive"])
+def test_repository_debt_matches_sites_by_statement_not_line(
+    unresolved_debt_baseline, edge_kind
+):
+    """A merge that only moves known sites passes; any real change still fails."""
+    document = json.loads(unresolved_debt_baseline)
+
+    def check(graph, raw):
+        return repository_debt_violations(
+            graph, raw, unresolved_debt_baseline, edge_kind=edge_kind
+        )
+
+    # Pure line shift: every known site moves 40 lines down its file.
+    graph, raw = _debt_synthetic_observation(document, first_line=41)
+    assert check(graph, raw[edge_kind]) == []
+
+    # A changed statement at a known site is a different site.
+    graph, raw = _debt_synthetic_observation(document)
+    raw = raw[edge_kind]
+    module = _debt_message_parts(raw[0])[0]
+    graph.debt_sites[module][raw[0]]["source_statement_sha256"] = "0" * 64
+    assert check(graph, raw) == [
+        "new or changed source-bound unresolved debt site",
+        "new, changed or stale unresolved debt membership; review and shrink the committed baseline",
+    ]
+
+    # A new site, even a copy of a known statement in the same module.
+    graph, raw = _debt_synthetic_observation(document)
+    raw = raw[edge_kind]
+    site = dict(graph.debt_sites[module][raw[0]])
+    added = raw[0].replace(f"{module}:{site['line']}: ", f"{module}:9999: ", 1)
+    graph.dynamic_problems[module].append(added)
+    graph.debt_sites[module][added] = {**site, "line": 9999, "diagnostic": added}
+    assert check(graph, [*raw, added])
+
+    # A stale row: the site is gone but the baseline still lists it.
+    assert check(graph, raw[1:]) == [
+        "new, changed or stale unresolved debt membership; review and shrink the committed baseline"
+    ]
 
 
 def test_repository_debt_policy_does_not_filter_default_strict_validators(
@@ -6706,12 +6772,8 @@ def test_repository_debt_receipt_detaches_raw_and_policy_without_safety_claim(
     unresolved_debt_baseline, edge_kind
 ):
     document = json.loads(unresolved_debt_baseline)
-    graph = _debt_synthetic_observation(document)
-    raw = [
-        row["diagnostic"]
-        for row in document["entries"]
-        if row["edge_kind"] == edge_kind
-    ]
+    graph, raw = _debt_synthetic_observation(document)
+    raw = raw[edge_kind]
     policy = repository_debt_violations(
         graph, raw, unresolved_debt_baseline, edge_kind=edge_kind
     )

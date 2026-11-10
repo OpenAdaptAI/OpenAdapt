@@ -1,0 +1,41 @@
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/redmine/timing/r00-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 1, "arm": "gui", "correct": false, "save_actuation": "dom", "engine_s": 8.972, "wall_s": 14.164, "load1": 27.72, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/redmine/timing/r00-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 1, "arm": "api", "correct": true, "save_actuation": "api", "engine_s": 7.218, "wall_s": 13.358, "load1": 31.21, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/redmine/timing/r01-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+WARNING: openadapt-privacy is not installed, so reports and logs are not scrubbed of patient data (OPENADAPT_FLOW_SCRUB=auto). Install 'openadapt-flow[privacy]', or set OPENADAPT_FLOW_SCRUB=on to refuse instead.
+{"rep": 2, "arm": "api", "correct": false, "save_actuation": null, "engine_s": 12.277, "wall_s": 18.47, "load1": 30.69, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/redmine/timing/r01-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 2, "arm": "gui", "correct": false, "save_actuation": null, "engine_s": 10.022, "wall_s": 15.505, "load1": 31.66, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/redmine/timing/r02-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 3, "arm": "gui", "correct": false, "save_actuation": null, "engine_s": 9.994, "wall_s": 14.841, "load1": 31.3, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/redmine/timing/r02-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 3, "arm": "api", "correct": false, "save_actuation": null, "engine_s": 15.632, "wall_s": 20.584, "load1": 34.22, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/redmine/timing/r03-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 4, "arm": "api", "correct": true, "save_actuation": "api", "engine_s": 5.137, "wall_s": 10.395, "load1": 33.85, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/redmine/timing/r03-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 4, "arm": "gui", "correct": false, "save_actuation": "dom", "engine_s": 5.195, "wall_s": 10.83, "load1": 34.39, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/redmine/timing/r04-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 5, "arm": "gui", "correct": false, "save_actuation": null, "engine_s": 12.346, "wall_s": 17.401, "load1": 34.52, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/redmine/timing/r04-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 5, "arm": "api", "correct": false, "save_actuation": null, "engine_s": 12.658, "wall_s": 17.769, "load1": 31.61, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/redmine/timing/r05-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 6, "arm": "api", "correct": false, "save_actuation": null, "engine_s": 15.065, "wall_s": 21.088, "load1": 30.42, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/redmine/timing/r05-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 6, "arm": "gui", "correct": false, "save_actuation": null, "engine_s": 11.062, "wall_s": 16.511, "load1": 31.54, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/redmine/timing/r06-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 7, "arm": "gui", "correct": false, "save_actuation": "dom", "engine_s": 6.739, "wall_s": 12.772, "load1": 33.12, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/redmine/timing/r06-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 7, "arm": "api", "correct": true, "save_actuation": "api", "engine_s": 7.609, "wall_s": 13.4, "load1": 33.74, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/redmine/timing/r07-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 8, "arm": "api", "correct": false, "save_actuation": null, "engine_s": 17.117, "wall_s": 22.812, "load1": 37.33, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/redmine/timing/r07-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 8, "arm": "gui", "correct": false, "save_actuation": null, "engine_s": 12.111, "wall_s": 17.162, "load1": 35.32, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/redmine/timing/r08-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 9, "arm": "gui", "correct": false, "save_actuation": null, "engine_s": 10.916, "wall_s": 15.949, "load1": 33.49, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/redmine/timing/r08-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 9, "arm": "api", "correct": false, "save_actuation": null, "engine_s": 13.974, "wall_s": 18.478, "load1": 31.54, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/redmine/timing/r09-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 10, "arm": "api", "correct": true, "save_actuation": "api", "engine_s": 5.704, "wall_s": 10.473, "load1": 29.5, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/redmine/timing/r09-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 10, "arm": "gui", "correct": false, "save_actuation": "dom", "engine_s": 4.592, "wall_s": 8.764, "load1": 27.66, "error": null}

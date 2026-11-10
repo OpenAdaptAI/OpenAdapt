@@ -1,0 +1,208 @@
+{
+ "app": "redmine",
+ "workflow": "new-issue",
+ "steps": 9,
+ "params": [
+  "description",
+  "estimated_hours",
+  "subject",
+  "tracker"
+ ],
+ "optional_params": [
+  "description",
+  "estimated_hours"
+ ],
+ "compile_proposal": {
+  "proposed": true,
+  "step": "step_008",
+  "reasons": []
+ },
+ "proposed": true,
+ "reasons": [],
+ "compile_s": 15.6,
+ "frozen": "cf28c2af85e87965f248c8a75bd8f0aa32f2e634",
+ "head": "cf28c2af85e87965f248c8a75bd8f0aa32f2e634",
+ "engine_diff_vs_frozen": "",
+ "identity": {
+  "subject_name": "subject"
+ },
+ "admitted": [
+  "step_008"
+ ],
+ "describe": "step_008: save with one request, POST /projects/helpdesk/issues, in place of 9 GUI steps (step_000 to step_008).\n  sign-in: the replaying browser's own session; form read again from /projects/helpdesk/issues/new\n  fields: 1 empty_file, 11 form_default, 3 param, 1 select_label, 1 session, 1 submitter\n  run values: issue[tracker_id]={tracker}, issue[subject]={subject}, issue[description]={description}, issue[estimated_hours]={estimated_hours}\n  accepted when: HTTP [302] and the response matches '/issues/\\\\d+'\n  record check after: 4 effect(s) copied from the save step\n  right record (subject_name): the request sends {subject} in issue[subject] and the record check selects subject = {subject}\n  the form's own script runs before each save, in a scratch page with writes blocked, on the run's values: inline script, issue[parent_issue_id] onchange c05ae63ad9c2, issue[status_id] onchange c05ae63ad9c2, issue[tracker_id] onchange c05ae63ad9c2, script /assets/application-14833e45.js, script /assets/attachments-db17b2b6.js, and 9 more\n  screen-only checks, not repeated: ['step_000: region_stable', 'step_002: region_stable', 'step_004: region_stable', 'step_006: region_stable']\n  if the form or a check differs at run time, the GUI steps run instead",
+ "binding": {
+  "form_path": "/projects/helpdesk/issues/new",
+  "fields": [
+   {
+    "name": "authenticity_token",
+    "source": "session",
+    "param": null,
+    "value": null
+   },
+   {
+    "name": "form_update_triggered_by",
+    "source": "form_default",
+    "param": null,
+    "value": ""
+   },
+   {
+    "name": "issue[is_private]",
+    "source": "form_default",
+    "param": null,
+    "value": "0"
+   },
+   {
+    "name": "issue[tracker_id]",
+    "source": "select_label",
+    "param": "tracker",
+    "value": null
+   },
+   {
+    "name": "issue[subject]",
+    "source": "param",
+    "param": "subject",
+    "value": null
+   },
+   {
+    "name": "issue[description]",
+    "source": "param",
+    "param": "description",
+    "value": null
+   },
+   {
+    "name": "issue[status_id]",
+    "source": "form_default",
+    "param": null,
+    "value": "1"
+   },
+   {
+    "name": "was_default_status",
+    "source": "form_default",
+    "param": null,
+    "value": "1"
+   },
+   {
+    "name": "issue[priority_id]",
+    "source": "form_default",
+    "param": null,
+    "value": "2"
+   },
+   {
+    "name": "issue[assigned_to_id]",
+    "source": "form_default",
+    "param": null,
+    "value": ""
+   },
+   {
+    "name": "issue[parent_issue_id]",
+    "source": "form_default",
+    "param": null,
+    "value": ""
+   },
+   {
+    "name": "issue[start_date]",
+    "source": "form_default",
+    "param": null,
+    "value": "2026-11-04"
+   },
+   {
+    "name": "issue[due_date]",
+    "source": "form_default",
+    "param": null,
+    "value": ""
+   },
+   {
+    "name": "issue[estimated_hours]",
+    "source": "param",
+    "param": "estimated_hours",
+    "value": null
+   },
+   {
+    "name": "issue[done_ratio]",
+    "source": "form_default",
+    "param": null,
+    "value": "0"
+   },
+   {
+    "name": "attachments[dummy][file]",
+    "source": "empty_file",
+    "param": null,
+    "value": ""
+   },
+   {
+    "name": "issue[watcher_user_ids][]",
+    "source": "form_default",
+    "param": null,
+    "value": ""
+   },
+   {
+    "name": "commit",
+    "source": "submitter",
+    "param": null,
+    "value": "Create"
+   }
+  ],
+  "controls": [
+   "authenticity_token",
+   "form_update_triggered_by",
+   "issue[assigned_to_id]",
+   "issue[description]",
+   "issue[done_ratio]",
+   "issue[due_date]",
+   "issue[estimated_hours]",
+   "issue[is_private]",
+   "issue[parent_issue_id]",
+   "issue[priority_id]",
+   "issue[start_date]",
+   "issue[status_id]",
+   "issue[subject]",
+   "issue[tracker_id]",
+   "issue[watcher_user_ids][]",
+   "was_default_status"
+  ],
+  "encoding": "multipart",
+  "client_rules": null,
+  "client_scripts": [
+   "inline script",
+   "issue[parent_issue_id] onchange c05ae63ad9c2",
+   "issue[status_id] onchange c05ae63ad9c2",
+   "issue[tracker_id] onchange c05ae63ad9c2",
+   "script /assets/application-14833e45.js",
+   "script /assets/attachments-db17b2b6.js",
+   "script /assets/jquery-3.7.1-ui-1.13.3-3ca148b8.js",
+   "script /assets/jstoolbar/common_mark-8a9a868d.js",
+   "script /assets/jstoolbar/jstoolbar-d7c21366.js",
+   "script /assets/jstoolbar/lang/jstoolbar-en-85c9edfe.js",
+   "script /assets/rails-ujs-3de06f48.js",
+   "script /assets/responsive-aa0cdb6f.js",
+   "script /assets/tablesort-5.2.1.min-c6968762.js",
+   "script /assets/tablesort-5.2.1.number.min-8a47560b.js",
+   "script /assets/tribute-5.1.3.min-6c16c47a.js"
+  ],
+  "submitter": "form[data-openadapt-eval] [name=\"commit\"][value=\"Create\"]",
+  "submitter_requests": [],
+  "confirm": null,
+  "prechecks": [],
+  "success_pattern": "/issues/\\d+",
+  "replaces_steps": [
+   "step_000",
+   "step_001",
+   "step_002",
+   "step_003",
+   "step_004",
+   "step_005",
+   "step_006",
+   "step_007",
+   "step_008"
+  ],
+  "other_writes_seen": [],
+  "writes": [],
+  "screen_only_checks": [
+   "step_000: region_stable",
+   "step_002: region_stable",
+   "step_004: region_stable",
+   "step_006: region_stable"
+  ],
+  "folded_checks_digest": "sha256:da0ba5a8e239816eb8d194d459a4f8858c9762d854e6b7bd7b63bbd685a1752a"
+ }
+}
