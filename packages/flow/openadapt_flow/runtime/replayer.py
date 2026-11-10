@@ -1634,12 +1634,6 @@ class Replayer:
         before they are written, and durable checkpoints use the same key.
         No plaintext of the bundle or of the live screen reaches the disk.
         """
-        # Windows captured by an earlier run on this backend name no step of
-        # this one (step ids repeat across workflows).
-        forget = getattr(self.backend, "clear_verified_windows", None)
-        if callable(forget):
-            forget()
-
         from openadapt_flow import at_rest
 
         bundle_path = Path(bundle_dir)
@@ -1961,6 +1955,12 @@ class Replayer:
         clear_guard = getattr(self.backend, "set_qualification_input_guard", None)
         if callable(clear_guard):
             clear_guard(None)
+        # Windows captured by an earlier run on this backend name no step of
+        # this one (step ids repeat across workflows). Cleared here, after the
+        # refusal checks, so a refused run never touches the backend.
+        forget = getattr(self.backend, "clear_verified_windows", None)
+        if callable(forget):
+            forget()
         # Parameter resolution (Workflow-program IR, Phase 1): recorded defaults
         # (``params`` dict) plus each TYPED ``param_specs`` example as a default,
         # with caller-supplied values overriding both. A v0 bundle (empty

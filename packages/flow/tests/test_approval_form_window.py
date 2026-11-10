@@ -213,15 +213,60 @@ def test_the_windows_backend_refuses_a_doubtful_window(captures, conflicted, ans
     assert backend.approval_form_region("save") is None
 
 
+class _Reached(Exception):
+    """Raised once a run is past its refusal checks."""
+
+
+def _replayer_on(backend):
+    replayer = Replayer(backend, vision=SimpleNamespace())
+    replayer.checkpoint_key = b"k" * 32
+    return replayer
+
+
+def test_a_refused_run_does_not_touch_the_captured_windows(monkeypatch, tmp_path):
+    """The captures are cleared only after the refusal checks pass, so a
+    refused run never touches the backend."""
+    backend, sent = _windows_backend({"s1": (7, 10)}, ("s2",))
+    monkeypatch.setattr(
+        Replayer, "_managed_dispatch_refusal", lambda self: "refused here"
+    )
+    with pytest.raises(ValueError, match="refused here"):
+        _replayer_on(backend).run(
+            SimpleNamespace(), bundle_dir=tmp_path / "b", run_dir=tmp_path / "r"
+        )
+    assert backend._verified_windows == {"s1": (7, 10)}
+    assert backend._conflicted_windows == {"s2"}
+    assert sent == []
+
+
 def test_a_run_forgets_the_windows_an_earlier_run_captured(monkeypatch, tmp_path):
     backend, _sent = _windows_backend({"s1": (7, 10)}, ("s2",))
-    replayer = object.__new__(Replayer)
-    replayer.backend = backend
-    replayer.checkpoint_key = b"k" * 32  # set by __init__, which this skips
-    monkeypatch.setattr(Replayer, "_run_unsealed", lambda self, *a, **k: "ran")
-    assert (
-        replayer.run(None, bundle_dir=tmp_path / "b", run_dir=tmp_path / "r") == "ran"
+    import openadapt_flow.jit.lifecycle as lifecycle
+    import openadapt_flow.locale_invariants as locale_invariants
+
+    for name in (
+        "_managed_dispatch_refusal",
+        "_production_qualification_refusal",
+        "_qualification_campaign_refusal",
+    ):
+        monkeypatch.setattr(Replayer, name, lambda self, *a, **k: None)
+    monkeypatch.setattr(Replayer, "_reset_render_scale", lambda self: None)
+    monkeypatch.setattr(Replayer, "_install_execution_snapshots", lambda s, w: None)
+    monkeypatch.setattr(
+        locale_invariants, "enforce_workflow_locale_invariants", lambda w: None
     )
+    monkeypatch.setattr(lifecycle, "ensure_runnable", lambda *a, **k: None)
+
+    def reached(self, *a, **k):
+        raise _Reached
+
+    monkeypatch.setattr(Replayer, "_initial_external_network_calls", reached)
+    with pytest.raises(_Reached):
+        _replayer_on(backend).run(
+            SimpleNamespace(interstitials=()),
+            bundle_dir=tmp_path / "b",
+            run_dir=tmp_path / "r",
+        )
     assert backend._verified_windows == {} and backend._conflicted_windows == set()
     assert backend.approval_form_region("save") is None
 
