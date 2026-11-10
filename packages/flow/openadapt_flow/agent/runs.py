@@ -172,19 +172,39 @@ class RunStore:
 
     def _fingerprint_key(self) -> bytes:
         path = self.root / "fingerprint.key"
-        existing = (
-            path.read_bytes() if path.is_file() and not path.is_symlink() else b""
-        )
-        if len(existing) >= 32:
-            return existing
+        if path.is_file() and not path.is_symlink():
+            existing = path.read_bytes()
+            if len(existing) >= 32:
+                return existing
+            raise ValueError(f"Corrupt or truncated fingerprint key at {path}")
+
         key = secrets.token_bytes(32)
+        fd, tmp = tempfile.mkstemp(prefix=".key-", dir=self.root)
         try:
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        except FileExistsError:
-            return path.read_bytes()
-        with os.fdopen(fd, "wb") as handle:
-            handle.write(key)
-        return key
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(key)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.chmod(tmp, 0o600)
+            try:
+                os.link(tmp, path)
+            except FileExistsError:
+                pass
+            except OSError:
+                if not path.exists():
+                    os.replace(tmp, path)
+        finally:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+
+        if not path.is_file() or path.is_symlink():
+            raise ValueError(f"Missing or invalid fingerprint key at {path}")
+        existing = path.read_bytes()
+        if len(existing) < 32:
+            raise ValueError(f"Corrupt or truncated fingerprint key at {path}")
+        return existing
 
     def fingerprint(self, workflow: str, inputs: Any) -> str:
         material = json.dumps(

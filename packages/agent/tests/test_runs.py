@@ -82,7 +82,9 @@ def test_reused_request_id_with_different_inputs_is_a_conflict(store):
 
 def test_records_never_hold_input_values(store, tmp_path):
     secret = "Jane Roe MRN 8812345"
-    first = store.begin(request_id="req-0001", workflow="w", inputs={"a": secret}, mode="production")
+    first = store.begin(
+        request_id="req-0001", workflow="w", inputs={"a": secret}, mode="production"
+    )
     finish(store, first, "saved_and_checked")
     for path in (tmp_path / "runs" / "openadapt-agent").rglob("*.json"):
         assert secret not in path.read_text()
@@ -154,3 +156,30 @@ def test_stale_reservation_without_a_record_becomes_an_orphan(store, monkeypatch
     assert begin.kind == "replay"
     assert begin.run_id == run_id
     assert begin.record["pid"] is None
+
+
+def test_concurrent_first_run_store_init_never_produces_empty_or_differing_keys(tmp_path):
+    import concurrent.futures
+
+    runs_dir = tmp_path / "concurrent_runs"
+
+    def init_store(_):
+        store = RunStore(runs_dir)
+        return store._key
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as ex:
+        keys = list(ex.map(init_store, range(30)))
+
+    assert len(keys) == 30
+    assert all(len(k) >= 32 for k in keys)
+    assert all(k == keys[0] for k in keys)
+
+
+def test_fingerprint_key_rejects_truncated_key(tmp_path):
+    runs_dir = tmp_path / "truncated_runs"
+    key_file = runs_dir / "openadapt-agent" / "fingerprint.key"
+    key_file.parent.mkdir(parents=True, exist_ok=True)
+    key_file.write_bytes(b"too_short")
+
+    with pytest.raises(ValueError, match="truncated fingerprint key"):
+        RunStore(runs_dir)
