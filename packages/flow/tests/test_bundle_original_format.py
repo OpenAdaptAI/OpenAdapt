@@ -277,9 +277,7 @@ def test_verified_replacement_preserves_source_authority_across_save_paths(
         else:
             loaded.save(destination, key=key if storage == "sealed" else None)
 
-        reopened = Workflow.load(
-            destination, key=key if storage == "sealed" else None
-        )
+        reopened = Workflow.load(destination, key=key if storage == "sealed" else None)
         assert reopened.manifest.content_digest != original_digest
         assert reopened.manifest.file_hashes["templates/button.png"] == (
             hashlib.sha256(replacement).hexdigest()
@@ -324,9 +322,7 @@ def test_staged_replacement_refuses_foreign_destination_without_changes(
         bundles.BundleIntegrityError,
         match=r"save-as destination asset.*conflicts with verified source",
     ):
-        loaded.save(
-            destination, key=key if destination_storage == "sealed" else None
-        )
+        loaded.save(destination, key=key if destination_storage == "sealed" else None)
 
     assert _bundle_files(source) == source_before
     assert _bundle_files(destination) == destination_before
