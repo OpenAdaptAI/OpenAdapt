@@ -91,9 +91,9 @@
     {
       "module": "openadapt_flow.verify_run",
       "path": "packages/flow/openadapt_flow/verify_run.py",
-      "line": 719,
+      "line": 720,
       "edge_kind": "direct",
-      "diagnostic": "openadapt_flow.verify_run:719: unresolvable dynamic import (nonliteral or unresolved import target)",
+      "diagnostic": "openadapt_flow.verify_run:720: unresolvable dynamic import (nonliteral or unresolved import target)",
       "reason": "unbounded-config",
       "follow_up": "unresolved-import-provider-migration",
       "source_statement_sha256": "8c512ea9cf6f4dcfcb2dbb07904849468f9b705c898ff08ac216394b655eaf53"
@@ -151,9 +151,9 @@
     {
       "module": "openadapt_flow.qualification",
       "path": "packages/flow/openadapt_flow/qualification.py",
-      "line": 2928,
+      "line": 3009,
       "edge_kind": "transitive",
-      "diagnostic": "openadapt_flow.qualification:2928: unresolvable dynamic import (importer value escape)",
+      "diagnostic": "openadapt_flow.qualification:3009: unresolvable dynamic import (importer value escape)",
       "reason": "vision-transfer",
       "follow_up": "unresolved-import-provider-migration",
       "source_statement_sha256": "817c0e8b4d2e627aa0d849e212b0788ac0e2ec16186e281f12e58fef134f0628"
@@ -291,9 +291,9 @@
     {
       "module": "openadapt_flow.verify_run",
       "path": "packages/flow/openadapt_flow/verify_run.py",
-      "line": 719,
+      "line": 720,
       "edge_kind": "transitive",
-      "diagnostic": "openadapt_flow.verify_run:719: unresolvable dynamic import (nonliteral or unresolved import target)",
+      "diagnostic": "openadapt_flow.verify_run:720: unresolvable dynamic import (nonliteral or unresolved import target)",
       "reason": "unbounded-config",
       "follow_up": "unresolved-import-provider-migration",
       "source_statement_sha256": "8c512ea9cf6f4dcfcb2dbb07904849468f9b705c898ff08ac216394b655eaf53"

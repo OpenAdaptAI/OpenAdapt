@@ -2278,7 +2278,7 @@ def _dynamic_problems(graph: Graph, contract: dict, *, transitive: bool) -> list
 
 
 DEBT_BASELINE_SHA256 = (
-    "6e21f87c00026e772d35ffb15a1e8837cd1a34152aeca0ec2b19fe4de8e6fa46"
+    "fce5e859344870a08b1bee158758e91869838852aa491c79b223fe67af7239a6"
 )
 
 
