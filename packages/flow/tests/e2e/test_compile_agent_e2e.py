@@ -140,12 +140,16 @@ class FakeClaude:
     """Answers the harness's listings with the tool calls a model would make.
 
     It finds refs in the listing text only, so it fails the way a model would
-    if the listing stopped naming the controls.
+    if the listing stopped naming the controls. Like a model, it sees the
+    task's own values only as their placeholders.
     """
 
     def __init__(self, patient: str, note: str) -> None:
+        from openadapt_flow import privacy
+
         self.patient = patient
         self.note = note
+        self.shown_note = privacy.placeholder("note")
         self.calls = 0
         self.messages = SimpleNamespace(create=self.create)
 
@@ -182,7 +186,10 @@ class FakeClaude:
         elif "# New Encounter" in listing:
             if not re.search(r'"Triage" \([^)]*selected', listing):
                 tool = ("click", {"ref": self._ref(listing, "Triage")})
-            elif f'value="{self.note}"' not in listing:
+            elif (
+                f'value="{self.note}"' not in listing
+                and f'value="{self.shown_note}"' not in listing
+            ):
                 ref = self._ref(listing, "Note")
                 tool = ("type_text", {"text": self.note, "ref": ref})
             else:
@@ -246,7 +253,8 @@ def test_compile_agent_then_replay_with_no_model_calls(
     mockmed: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _scrubber: Any
 ) -> None:
     admitter = _policy_agent(tmp_path / "keys", mockmed, monkeypatch)
-    fake = FakeClaude("Jane Sample", NOTE)
+    # The task's patient: the listing shows it as its placeholder.
+    fake = FakeClaude("\u27e6task.identity_1\u27e7", NOTE)
     # The registered agent drives run 1 and admits it: self-admission, which
     # its signed policy allows.
     agent = ClaudeAgent(vision="selective", client=fake, principal_id=AGENT_ID)

@@ -28,10 +28,17 @@ import secrets
 import threading
 from datetime import date, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Callable
+from typing import Any, Callable, Mapping, Optional
 from urllib.parse import parse_qs, urlencode, urlsplit
 
-__all__ = ["COLUMNS", "ORDERS", "DEFAULT_PORT", "filter_orders", "serve"]
+__all__ = [
+    "COLUMNS",
+    "ORDERS",
+    "DEFAULT_PORT",
+    "OrderWrites",
+    "filter_orders",
+    "serve",
+]
 
 DEFAULT_PORT = 8765
 COLUMNS = ("order_id", "date", "region", "product", "units", "revenue")
@@ -254,6 +261,49 @@ ORDERS_READ_CONTRACT = {
 
 
 ORDER_FIELDS = ("order_id", "customer", "product", "units")
+
+
+class OrderWrites:
+    """The example app's write adapter (:class:`~openadapt_flow.teach_scope.WriteAdapter`).
+
+    ``POST /orders`` with a form body is one order: the customer names the
+    record, and the product and units are its fields. Every other write is
+    unattributed, so a teach scope blocks it unless the authorization lists
+    its path (the sign-in, ``/login``).
+    """
+
+    def claim(self, method: str, url: str, body: Optional[bytes]) -> Any:
+        from openadapt_flow.teach_scope import WriteClaim
+
+        if method.upper() != "POST" or urlsplit(url).path != "/orders":
+            return None
+        try:
+            form = {
+                k: v[-1] for k, v in parse_qs((body or b"").decode("utf-8")).items()
+            }
+        except UnicodeDecodeError:
+            return None
+        # Every posted field, so an undeclared one (an order id) is refused.
+        return WriteClaim(
+            record={"customer": form.get("customer", "").strip()},
+            fields={
+                **{k: v for k, v in form.items() if k != "customer"},
+                "units": form.get("units", "").strip(),
+            },
+        )
+
+    def claim_row(self, row: Mapping[str, Any]) -> Any:
+        from openadapt_flow.teach_scope import WriteClaim
+
+        if "customer" not in row:
+            return None
+        return WriteClaim(
+            record={"customer": str(row["customer"])},
+            fields={
+                "product": str(row.get("product", "")),
+                "units": str(row.get("units", "")),
+            },
+        )
 
 
 def _handler(

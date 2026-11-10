@@ -1,0 +1,122 @@
+# Task mockmed-v1-fed416014d7e: merge_patient, from merge_patient/mrn+new_merged_into+new_status.cd01cf23.update.yaml (openadapt_flow.generate.verify_contract).
+schema_version: openadapt.verify/v1
+environment_id: taskgen-workbench-mockmed-v1
+max_execution_window_s: 900
+verifier:
+  kind: surfaces
+  surfaces:
+    record:
+      kind: sql
+      sql_driver: psycopg2
+      sql_connect_args:
+        dbname: wb_mockmed_v1
+        host: 127.0.0.1
+        port: 9770
+        user: wb_reader
+      sql_password_env: WB_READER_PASSWORD
+      sql_query: SELECT CAST(t."id" AS TEXT) AS "id", CAST(t."mrn" AS TEXT) AS "mrn", CAST(t."first_name"
+        AS TEXT) AS "first_name", CAST(t."last_name" AS TEXT) AS "last_name", CAST(t."dob" AS TEXT) AS
+        "dob", CAST(t."phone" AS TEXT) AS "phone", CAST(t."email" AS TEXT) AS "email", CAST(t."status"
+        AS TEXT) AS "status", CAST(t."merged_into" AS TEXT) AS "merged_into", CAST(t."version" AS TEXT)
+        AS "version", CAST(t."updated_by" AS TEXT) AS "updated_by", (SELECT CASE WHEN (SELECT COUNT(*)
+        FROM "patients" u1 WHERE CAST(CAST(u1."mrn" AS TEXT) AS TEXT) = CAST(CAST(a1."mrn" AS TEXT) AS
+        TEXT)) = 1 THEN CAST(a1."mrn" AS TEXT) END FROM "patients" a1 WHERE a1."id" = t."merged_into")
+        AS "p__new_merged_into" FROM "patients" t
+    raw_audit_log:
+      kind: sql
+      sql_driver: psycopg2
+      sql_connect_args:
+        dbname: wb_mockmed_v1
+        host: 127.0.0.1
+        port: 9770
+        user: wb_reader
+      sql_password_env: WB_READER_PASSWORD
+      sql_query: SELECT CAST(t."id" AS TEXT) AS "id", CAST(t."actor" AS TEXT) AS "actor", CAST(t."table_name"
+        AS TEXT) AS "table_name", CAST(t."record_id" AS TEXT) AS "record_id", CAST(t."event" AS TEXT)
+        AS "event" FROM "audit_log" t
+effects:
+- kind: record_written
+  probe: surface=record|the main record holds the task's values
+  match:
+    mrn:
+      param: mrn
+    p__new_merged_into:
+      param: new_merged_into
+    status:
+      param: new_status
+  expected_count: 1
+- kind: record_written
+  probe: surface=raw_audit_log|1 row(s) the app adds to audit_log
+  match:
+    actor:
+      param: agent_user
+    event:
+      literal: update
+    table_name:
+      literal: patients
+  expected_count: 1
+  count_new_only: true
+frame:
+  target_fields:
+  - merged_into
+  - p__new_merged_into
+  - status
+  - updated_by
+  - version
+  target_fields_by_surface:
+    record:
+    - merged_into
+    - p__new_merged_into
+    - status
+    - updated_by
+    - version
+  versions:
+    read:
+      kind: sql
+      sql_driver: psycopg2
+      sql_connect_args:
+        dbname: wb_mockmed_v1
+        host: 127.0.0.1
+        port: 9770
+        user: wb_reader
+      sql_password_env: WB_READER_PASSWORD
+      sql_query: SELECT CAST(t."id" AS TEXT) AS "id", CAST(t."version" AS TEXT) AS "ver" FROM "patients"
+        t
+    record_field: id
+    target_field: id
+    target_surface: record
+    version_field: ver
+  database:
+    dialect: postgresql
+    read:
+      sql_driver: psycopg2
+      sql_connect_args:
+        dbname: wb_mockmed_v1
+        host: 127.0.0.1
+        port: 9770
+        user: wb_reader
+      sql_password_env: WB_READER_PASSWORD
+    allow_tables: []
+    views:
+      audit_log: raw_audit_log
+    judged_by:
+      patients: record
+    settle_s: 1
+    settle_attempts: 5
+    new_row_fields:
+      audit_log:
+      - id
+      - record_id
+      patients:
+      - dob
+      - email
+      - first_name
+      - id
+      - last_name
+      - merged_into
+      - mrn
+      - phone
+      - status
+      - updated_by
+      - version
+    recheck_after_s: 15.0

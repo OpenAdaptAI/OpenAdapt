@@ -1,7 +1,9 @@
 """Value correspondence between a selected read and the frame's own rows.
 
-These bindings select rows, not permissions. Column, audit, side-record and
-completeness checks still apply. No record values belong in a binding.
+Row bindings select stored records. Optional field bindings identify the
+target columns checked against the selected read; other target columns are
+reported as unverified coverage. Other rows, tables, audit and completeness
+checks remain strict. No record values belong in a binding.
 """
 
 from __future__ import annotations
@@ -13,7 +15,9 @@ import re
 from collections.abc import Mapping, Sequence
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
+
+from openadapt_flow.runtime.effects.db_snapshot import SqliteBlob, SqliteText
 
 Canonicaliser = Literal["exact", "uuid"]
 _UUID = re.compile(
@@ -21,8 +25,24 @@ _UUID = re.compile(
 )
 
 
+# SQLite snapshot cells carry their storage class: text is a SqliteText and a
+# blob a SqliteBlob (its upper-case hex, the text the JSON read gave before).
+# Both are read as text here, as before; a SqliteReal is not.
+_TEXT = (str, SqliteText, SqliteBlob)
+
+
 class FrameIdentityError(ValueError):
     """A selected read cannot be mapped unambiguously to the frame."""
+
+
+class FrameColumn(BaseModel):
+    """A field/column correspondence learned from paired stored witnesses."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    column: str = Field(min_length=1)
+    canonicaliser: Canonicaliser
+    witnesses: int = Field(ge=1, strict=True)
 
 
 class FrameIdentity(BaseModel):
@@ -35,6 +55,36 @@ class FrameIdentity(BaseModel):
     read_config_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     witnesses: int = Field(ge=1, strict=True)
     diagnostics: list[Literal["single_witness"]] = Field(default_factory=list)
+    #: None is the legacy row-only contract. An empty mapping is an explicit
+    #: learned coverage result: none of the observed fields was unambiguous.
+    field_bindings: dict[str, FrameColumn] | None = None
+    field_columns: list[str] | None = None
+
+    @model_validator(mode="after")
+    def _field_coverage(self) -> "FrameIdentity":
+        if (self.field_bindings is None) != (self.field_columns is None):
+            raise ValueError("field bindings and stored-column inventory go together")
+        if self.field_columns is not None:
+            if len(set(self.field_columns)) != len(self.field_columns) or any(
+                not column for column in self.field_columns
+            ):
+                raise ValueError(
+                    "stored-column inventory must be unique nonempty names"
+                )
+            if any(
+                binding.column not in self.field_columns
+                for binding in (self.field_bindings or {}).values()
+            ):
+                raise ValueError("bound field names an unavailable stored column")
+        return self
+
+    @model_serializer(mode="wrap")
+    def _compact(self, handler: Any) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        if self.field_bindings is None:
+            data.pop("field_bindings", None)
+            data.pop("field_columns", None)
+        return data
 
 
 def read_config_digest(config: Mapping[str, Any]) -> str:
@@ -49,10 +99,10 @@ def canonical_identity(value: Any, canonicaliser: Canonicaliser) -> str:
     if canonicaliser == "uuid":
         if isinstance(value, bytes) and len(value) == 16:
             return value.hex()
-        if type(value) is str and _UUID.fullmatch(value):
+        if type(value) in _TEXT and _UUID.fullmatch(value):
             return value.replace("-", "").lower()
         raise FrameIdentityError("identity is not a canonicalisable UUID")
-    if type(value) is str and value:
+    if type(value) in _TEXT and value:
         return "text:" + value
     if type(value) is int:
         return "integer:" + str(value)
@@ -122,6 +172,74 @@ def learn_identity(
         witnesses=len(observed),
         diagnostics=["single_witness"] if len(observed) == 1 else [],
     )
+
+
+def canonical_field_value(value: Any, canonicaliser: Canonicaliser) -> str:
+    """Generic typed values only; no application-specific value transforms."""
+    if canonicaliser == "uuid":
+        return canonical_identity(value, canonicaliser)
+    if isinstance(value, bytes):
+        return "bytes:" + value.hex()
+    try:
+        return "json:" + json.dumps(
+            value, sort_keys=True, separators=(",", ":"), allow_nan=False
+        )
+    except (TypeError, ValueError) as error:
+        raise FrameIdentityError("field value cannot be canonicalised") from error
+
+
+def learn_field_bindings(
+    binding: FrameIdentity,
+    records: Sequence[Mapping[str, Any]],
+    rows: Sequence[Mapping[str, Any]],
+) -> dict[str, FrameColumn]:
+    """Pair the same identity witnesses, then compare every stored column.
+
+    Missing/null, ambiguous or inconsistent fields remain unbound. Values are
+    used only in memory and never included in the returned contract data.
+    """
+    by_identity = {
+        canonical_identity(row[binding.column], binding.canonicaliser): row
+        for row in rows
+    }
+    paired = [
+        by_identity[
+            canonical_identity(record[binding.surface_field], binding.canonicaliser)
+        ]
+        for record in records
+    ]
+    fields = set.intersection(*(set(record) for record in records))
+    columns = set.intersection(*(set(row) for row in paired))
+    result = {}
+    for name in sorted(fields):
+        values = [record[name] for record in records]
+        if any(value is None for value in values):
+            continue
+        try:
+            for value in values:
+                canonical_identity(value, "uuid")
+        except FrameIdentityError:
+            canonicaliser: Canonicaliser = "exact"
+        else:
+            canonicaliser = "uuid"
+        matches = []
+        for column in sorted(columns):
+            try:
+                same = all(
+                    row[column] is not None
+                    and canonical_field_value(value, canonicaliser)
+                    == canonical_field_value(row[column], canonicaliser)
+                    for value, row in zip(values, paired)
+                )
+            except FrameIdentityError:
+                same = False
+            if same:
+                matches.append(column)
+        if len(matches) == 1:
+            result[name] = FrameColumn(
+                column=matches[0], canonicaliser=canonicaliser, witnesses=len(records)
+            )
+    return result
 
 
 def identity_token(binding: FrameIdentity, value: Any, key: bytes) -> str:

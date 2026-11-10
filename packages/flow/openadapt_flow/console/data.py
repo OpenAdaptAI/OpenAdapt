@@ -487,7 +487,7 @@ def _load_report(path: Path) -> tuple[Optional[RunReport], Optional[str]]:
         report_file = _contained_file(path, path / "report.json")
         if report_file is None:
             raise OSError("report is not a contained regular file")
-        raw = json.loads(report_file.read_text())
+        raw = json.loads(report_file.read_text(encoding="utf-8"))
         return RunReport.model_validate(raw), None
     except Exception as e:  # noqa: BLE001
         return None, f"{type(e).__name__}: run report could not be loaded safely"
@@ -524,7 +524,7 @@ def _read_json_opt(
     if safe is None:
         return None
     try:
-        data = json.loads(safe.read_text())
+        data = json.loads(safe.read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else None
     except (OSError, json.JSONDecodeError):
         return None

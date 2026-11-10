@@ -1,0 +1,21 @@
+{
+  "id": "b57dcdf653c041ce92961b6a30b884fb",
+  "created_at": "2026-11-04T20:33:14.797395+00:00",
+  "viewport": [
+    1280,
+    800
+  ],
+  "coordinate_space": "page",
+  "app_url": "http://127.0.0.1:9662/projects/helpdesk/issues/new",
+  "params": {
+    "tracker": "Bug",
+    "subject": "Badge printer jams on second floor rec1533",
+    "description": "Paper feed stalls after ten sheets.",
+    "estimated_hours": "1.5"
+  },
+  "secret_params": [],
+  "network_capture": {
+    "file": "network.jsonl",
+    "exchanges": 5
+  }
+}

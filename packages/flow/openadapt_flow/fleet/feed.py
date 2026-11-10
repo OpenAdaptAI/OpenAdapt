@@ -81,7 +81,9 @@ class FilePatchFeed:
         found = []
         for path in sorted(self.root.glob("*.json")):
             try:
-                patch = SignedStructuralPatch.from_json(path.read_text())
+                patch = SignedStructuralPatch.from_json(
+                    path.read_text(encoding="utf-8")
+                )
             except ValueError:
                 # A malformed file is skipped here and could never verify.
                 continue
@@ -109,13 +111,15 @@ class FilePatchFeed:
         path = self.status_dir / "revocation-list.json"
         if not path.is_file():
             raise FleetStatusUnavailable("the feed has no revocation list")
-        return SignedRevocationList.model_validate_json(path.read_text())
+        return SignedRevocationList.model_validate_json(
+            path.read_text(encoding="utf-8")
+        )
 
     def kill_switch_documents(self) -> list[str]:
         if not self.status_dir.is_dir():
             return []
         return [
-            path.read_text()
+            path.read_text(encoding="utf-8")
             for path in sorted(self.status_dir.glob("kill-switch-*.json"))
         ]
 

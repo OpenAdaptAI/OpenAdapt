@@ -1,12 +1,16 @@
 # CHANGELOG
 
+## Unreleased
 
-## v0.30.0 (2026-11-08)
+- Check prefilled workflows without delivering application input when the
+  selected engine supports that mode.
 
-### Features
 
-- Add the prefilled, no-input check path. It refuses engines without
-  `--stop-before-effect`; the current bundled Flow pin still lacks that flag.
+## v0.29.3 (2026-11-08)
+
+### Bug Fixes
+
+- **flow**: refuse browser startup when animation frames cannot advance
 
 
 

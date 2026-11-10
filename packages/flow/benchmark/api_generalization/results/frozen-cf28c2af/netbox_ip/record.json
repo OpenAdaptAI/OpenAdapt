@@ -1,0 +1,16 @@
+the demonstration did not save the expected record; record again
+{
+ "recording": "/Users/abrichr/oa/scratch/api-generalization/netbox_ip/rec-cf28c2af",
+ "events": 7,
+ "exchanges": 3,
+ "judge": {
+  "new_records": 0,
+  "field_mismatches": [],
+  "collateral": {
+   "deleted": [],
+   "changed": []
+  },
+  "state_ok": false,
+  "new_ids": []
+ }
+}

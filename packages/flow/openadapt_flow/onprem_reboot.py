@@ -380,7 +380,7 @@ def boot_id(reader: Optional[Callable[[], str]] = None) -> str:
         ).stdout
     else:
         try:
-            raw = Path("/proc/sys/kernel/random/boot_id").read_text()
+            raw = Path("/proc/sys/kernel/random/boot_id").read_text(encoding="utf-8")
         except OSError:
             raw = str(int(time.time() - time.monotonic()))
     return hashlib.sha256(raw.strip().encode()).hexdigest()[:16]

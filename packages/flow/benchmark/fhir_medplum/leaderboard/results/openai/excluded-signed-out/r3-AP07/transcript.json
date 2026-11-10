@@ -1,0 +1,39 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0341bac8c0be6b2c016ae969dfcfc087d2be5ab5d4469f2bd0",
+     "call_id": "call_tBwaoMouXVzixOp4X2dhweNh",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE Medplum is showing the sign-in screen, so I cannot access the patient or appointment records.",
+   "calls": []
+  }
+ ],
+ "actions": [],
+ "usage": [
+  {
+   "in": 2314,
+   "out": 16,
+   "usd": 0.000628,
+   "cached": 2311
+  },
+  {
+   "in": 3531,
+   "out": 45,
+   "usd": 0.001162,
+   "cached": 3528
+  }
+ ]
+}

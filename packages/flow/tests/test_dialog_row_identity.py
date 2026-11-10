@@ -166,9 +166,16 @@ def test_whole_dialog_requires_positive_live_nonrow_census(census):
 
 
 def test_standalone_confirmation_can_read_dialog_result():
+    # The dialog as the Chromium test below draws it: its title and its
+    # message. The message alone has no identity-bearing token (all lowercase
+    # words), and since #1773 such a band abstains wherever it is read.
+    lines = [
+        Line("Check existing records", (220, 60, 300, 20)),
+        Line("No matching records were found", (220, 90, 350, 20)),
+    ]
     result = check(
-        [Line("No matching records were found", (220, 90, 350, 20))],
-        step("No matching records were found", dialog_row=False),
+        lines,
+        step("Check existing records No matching records were found", dialog_row=False),
         census={"row": False},
     )
     assert result.status == "verified"

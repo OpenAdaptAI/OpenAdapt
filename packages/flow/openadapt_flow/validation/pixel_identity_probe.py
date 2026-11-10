@@ -302,7 +302,9 @@ def render_value_crops(
     dsf = spec.dsf
     crops: dict[str, np.ndarray] = {}
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=True)
+        from openadapt_flow._browser_readiness import launch_rendering_ready
+
+        browser = launch_rendering_ready(pw.chromium, headless=True)
         page = browser.new_page(
             viewport={"width": viewport_w, "height": 1600},
             device_scale_factor=dsf,
@@ -536,7 +538,7 @@ def separation(same: list[float], diff: list[float]) -> dict:
 
 
 def ocr_string(bgr: np.ndarray) -> str:
-    from openadapt_flow.runtime.identity import squash
+    from openadapt_flow.runtime.identity import comparison_squash as squash
     from openadapt_flow.vision.ocr import ocr
 
     ok, png = cv2.imencode(".png", bgr)
@@ -709,7 +711,9 @@ def run_font_floor(fonts: list[str]) -> list[dict]:
 
     rows: list[dict] = []
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=True)
+        from openadapt_flow._browser_readiness import launch_rendering_ready
+
+        browser = launch_rendering_ready(pw.chromium, headless=True)
         page = browser.new_page(device_scale_factor=2)
         for ff in fonts:
             g = {c: _glyph_crop(page, c, ff) for c in ("O", "0", "l", "1", "I")}
@@ -1090,7 +1094,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     floor = run_font_floor(FLOOR_FONTS)
 
     md = render_markdown(sep, drift, floor, recommended)
-    (out / "PIXEL_IDENTITY.md").write_text(md)
+    (out / "PIXEL_IDENTITY.md").write_text(md, encoding="utf-8")
 
     # Strip the big raw sample arrays from the JSON for readability but keep
     # the separation stats, per-pair distances, drift, and floor.
@@ -1110,7 +1114,8 @@ def main(argv: Optional[list[str]] = None) -> int:
                 "best": best,
             },
             indent=2,
-        )
+        ),
+        encoding="utf-8",
     )
 
     if args.save_crops:

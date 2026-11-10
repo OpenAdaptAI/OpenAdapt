@@ -1,0 +1,33 @@
+app,workflow,bundle_kind,case,kind,arm,rep,correct,incorrect_write,false_success,stopped_after_right_write,missed_write,new_records,field_mismatches,collateral,engine_success,outcome,transaction_outcome,save_actuation,api_fallback,halt,save_posts,fault,injected,error,wall_s,setup_s,engine_s,load1,start_local,engine_sha
+wikijs_group,new-group,shipped,N1,normal,gui,1,True,False,False,False,False,1,[],"{""deleted"": [], ""changed"": []}",True,COMPLETED_UNVERIFIED,COMPLETED_UNVERIFIED,dom,API steps are off for this run,,1,,,,11.082,3.769,5.68,6.37,14:24:42,969cb939
+wikijs_group,new-group,shipped,N1,normal,api,1,False,False,False,False,True,0,[],"{""deleted"": [], ""changed"": []}",,,,,,,0,,,"TimeoutError: Timeout 30000ms exceeded.
+=========================== logs ===========================
+waiting for navigation to ""<function ImplToApiMapping.wrap_handler.<locals>.wrapper_func at 0x11fb30860>"" until 'load'
+============================================================ [no before-state]",32.58,30.95,0.0,7.01,14:24:53,969cb939
+wikijs_group,new-group,shipped,N2,normal,api,2,True,False,False,False,False,1,[],"{""deleted"": [], ""changed"": []}",True,COMPLETED_UNVERIFIED,COMPLETED_UNVERIFIED,api,,,1,,,,6.893,4.661,0.497,7.68,14:25:26,969cb939
+wikijs_group,new-group,shipped,N2,normal,gui,2,True,False,False,False,False,1,[],"{""deleted"": [], ""changed"": []}",True,COMPLETED_UNVERIFIED,COMPLETED_UNVERIFIED,dom,API steps are off for this run,,1,,,,14.538,4.864,7.785,9.21,14:25:33,969cb939
+wikijs_group,new-group,shipped,N3,normal,gui,3,True,False,False,False,False,1,[],"{""deleted"": [], ""changed"": []}",True,COMPLETED_UNVERIFIED,COMPLETED_UNVERIFIED,dom,API steps are off for this run,,1,,,,14.085,5.028,7.376,10.44,14:25:48,969cb939
+wikijs_group,new-group,shipped,N3,normal,api,3,True,False,False,False,False,1,[],"{""deleted"": [], ""changed"": []}",True,COMPLETED_UNVERIFIED,COMPLETED_UNVERIFIED,api,,,1,,,,6.781,4.633,0.484,13.19,14:26:02,969cb939
+wikijs_group,new-group,shipped,N1,normal,api,4,True,False,False,False,False,1,[],"{""deleted"": [], ""changed"": []}",True,COMPLETED_UNVERIFIED,COMPLETED_UNVERIFIED,api,,,1,,,,6.681,4.682,0.31,12.61,14:26:09,969cb939
+wikijs_group,new-group,shipped,N1,normal,gui,4,False,False,False,False,True,0,[],"{""deleted"": [], ""changed"": []}",,,,,,,0,,,"TimeoutError: Timeout 30000ms exceeded.
+=========================== logs ===========================
+waiting for navigation to ""<function ImplToApiMapping.wrap_handler.<locals>.wrapper_func at 0x10b256de0>"" until 'load'
+============================================================ [no before-state]",35.413,31.24,0.0,9.51,14:26:15,969cb939
+wikijs_group,new-group,shipped,N2,normal,gui,5,True,False,False,False,False,1,[],"{""deleted"": [], ""changed"": []}",True,COMPLETED_UNVERIFIED,COMPLETED_UNVERIFIED,dom,API steps are off for this run,,1,,,,16.282,6.909,7.539,10.06,14:26:51,969cb939
+wikijs_group,new-group,shipped,N2,normal,api,5,True,False,False,False,False,1,[],"{""deleted"": [], ""changed"": []}",True,COMPLETED_UNVERIFIED,COMPLETED_UNVERIFIED,api,,,1,,,,7.148,5.126,0.371,9.89,14:27:07,969cb939
+wikijs_group,new-group,shipped,N3,normal,api,6,True,False,False,False,False,1,[],"{""deleted"": [], ""changed"": []}",True,COMPLETED_UNVERIFIED,COMPLETED_UNVERIFIED,api,,,1,,,,6.191,4.183,0.376,10.14,14:27:15,969cb939
+wikijs_group,new-group,shipped,N3,normal,gui,6,True,False,False,False,False,1,[],"{""deleted"": [], ""changed"": []}",True,COMPLETED_UNVERIFIED,COMPLETED_UNVERIFIED,dom,API steps are off for this run,,1,,,,11.169,3.928,5.569,9.96,14:27:21,969cb939
+wikijs_group,new-group,shipped,N1,normal,gui,7,True,False,False,False,False,1,[],"{""deleted"": [], ""changed"": []}",True,COMPLETED_UNVERIFIED,COMPLETED_UNVERIFIED,dom,API steps are off for this run,,1,,,,13.786,4.674,7.375,10.12,14:27:32,969cb939
+wikijs_group,new-group,shipped,N1,normal,api,7,False,False,False,False,True,0,[],"{""deleted"": [], ""changed"": []}",,,,,,,0,,,"TimeoutError: Timeout 30000ms exceeded.
+=========================== logs ===========================
+waiting for navigation to ""<function ImplToApiMapping.wrap_handler.<locals>.wrapper_func at 0x12f659260>"" until 'load'
+============================================================ [no before-state]",33.003,31.373,0.0,14.32,14:27:46,969cb939
+wikijs_group,new-group,shipped,N2,normal,api,8,True,False,False,False,False,1,[],"{""deleted"": [], ""changed"": []}",True,COMPLETED_UNVERIFIED,COMPLETED_UNVERIFIED,api,,,1,,,,5.675,3.728,0.269,13.65,14:28:19,969cb939
+wikijs_group,new-group,shipped,N2,normal,gui,8,True,False,False,False,False,1,[],"{""deleted"": [], ""changed"": []}",True,COMPLETED_UNVERIFIED,COMPLETED_UNVERIFIED,dom,API steps are off for this run,,1,,,,12.534,4.841,6.022,14.14,14:28:25,969cb939
+wikijs_group,new-group,shipped,N3,normal,gui,9,True,False,False,False,False,1,[],"{""deleted"": [], ""changed"": []}",True,COMPLETED_UNVERIFIED,COMPLETED_UNVERIFIED,dom,API steps are off for this run,,1,,,,12.741,4.175,6.937,13.65,14:28:37,969cb939
+wikijs_group,new-group,shipped,N3,normal,api,9,True,False,False,False,False,1,[],"{""deleted"": [], ""changed"": []}",True,COMPLETED_UNVERIFIED,COMPLETED_UNVERIFIED,api,,,1,,,,5.775,3.808,0.342,13.12,14:28:50,969cb939
+wikijs_group,new-group,shipped,N1,normal,api,10,True,False,False,False,False,1,[],"{""deleted"": [], ""changed"": []}",True,COMPLETED_UNVERIFIED,COMPLETED_UNVERIFIED,api,,,1,,,,5.795,3.855,0.326,12.95,14:28:56,969cb939
+wikijs_group,new-group,shipped,N1,normal,gui,10,False,False,False,False,True,0,[],"{""deleted"": [], ""changed"": []}",,,,,,,0,,,"TimeoutError: Timeout 30000ms exceeded.
+=========================== logs ===========================
+waiting for navigation to ""<function ImplToApiMapping.wrap_handler.<locals>.wrapper_func at 0x10b2519e0>"" until 'load'
+============================================================ [no before-state]",32.633,30.98,0.0,11.53,14:29:02,969cb939

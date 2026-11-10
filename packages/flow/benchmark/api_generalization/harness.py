@@ -117,16 +117,23 @@ def start_proxy(app: AppBase) -> None:
 
 
 def cmd_record(a: argparse.Namespace, app: AppBase) -> None:
+    from playwright.sync_api import sync_playwright
+
     from openadapt_flow.backends.playwright_backend import PlaywrightBackend
     from openadapt_flow.network_capture import NetworkCapture
     from openadapt_flow.recorder import Recorder
-    from playwright.sync_api import sync_playwright
 
     out = Path(a.out)
     if out.exists():
         raise SystemExit(f"exists: {out}")
     start_proxy(app)
     values = app.recording_values()
+    if a.tag:
+        # A fresh demonstration never collides with a record an earlier run
+        # made (made unique the app's own way, as each run's values are).
+        values = dict(
+            app.unique(Case("recording", "normal", values, 1, {}), a.tag).params
+        )
     before = app.rows()
     pw = sync_playwright().start()
     browser = pw.chromium.launch(headless=True)
@@ -228,7 +235,15 @@ def cmd_compile(a: argparse.Namespace, app: AppBase) -> None:
         "compile_s": round(time.time() - t0, 1),
     } | frozen_check()
     if step is not None:
-        wf, admitted = admit_api_step(wf, admitted_by="benchmark-fixture")
+        # The person admitting it names the parameter that identifies the
+        # record: the one the record check selects on.
+        identity = getattr(app, "api_identity", None) or {
+            "subject_name": app.unique_param
+        }
+        result["identity"] = identity
+        wf, admitted = admit_api_step(
+            wf, admitted_by="benchmark-fixture", identity=identity
+        )
         result["admitted"] = admitted
         result["describe"] = describe_api_step(
             next(s for s in wf.steps if s.id == step.id)
@@ -320,6 +335,11 @@ def run_one(
     }
     t0 = time.time()
     ctx = env["browser"].new_context(viewport=VIEWPORT, device_scale_factor=1)
+    # As the CLI does when it opens the browser: the context's guards and
+    # session-header watch start before any page loads.
+    from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+    prepare_ws_guard(ctx)
     restore = False
     try:
         page = ctx.new_page()
@@ -334,6 +354,7 @@ def run_one(
             app.expire_session(page)
         set_fault(app, case.fault or "pass")
         before = app.rows()
+        dump_before = app.dump() if env.get("footprint") is not None else None
         n_log = proxy_log_len(app)
         t_setup = time.time()
         rep_ = Replayer(
@@ -380,6 +401,11 @@ def run_one(
         n_log = locals().get("n_log", proxy_log_len(app))
     time.sleep(1.5)
     set_fault(app, "pass")
+    if env.get("footprint") is not None and locals().get("dump_before") is not None:
+        from openadapt_flow.api_footprint import diff_dumps
+
+        # Kept in memory for the comparison; never written (values).
+        env["footprint"][str(out)] = diff_dumps(dump_before, app.dump())
     after = app.rows()
     if before is None:
         before = after
@@ -484,6 +510,133 @@ def cmd_matrix(a: argparse.Namespace, app: AppBase) -> None:
         env["pw"].stop()
 
 
+def cmd_footprint(a: argparse.Namespace, app: AppBase) -> None:
+    """Qualify the API step by its side effects, then admit it or keep it on the GUI.
+
+    ``--reps`` pairs: a GUI save and an API save on the same inputs (apart
+    from each run's marker), the whole database diffed around each. The
+    verdict (openadapt_flow.api_footprint) names tables and columns only.
+    The bundle's API step is admitted again with the verdict; one whose
+    footprint differs from the GUI save's loses its admission.
+    """
+
+    from openadapt_flow.api_footprint import footprint_verdict, verdict_digest
+    from openadapt_flow.compiler.api_proposal import ApiProposalError, admit_api_step
+    from openadapt_flow.ir import Workflow
+
+    out, bundle = Path(a.out), Path(a.bundle)
+    out.mkdir(parents=True, exist_ok=True)
+    identity = getattr(app, "api_identity", None) or {"subject_name": app.unique_param}
+
+    def readmit(footprint: Any) -> Any:
+        wf = Workflow.load(bundle)
+        step = next(
+            (
+                s
+                for s in wf.steps
+                if s.api_binding is not None and s.api_binding.kind == "web_form"
+            ),
+            None,
+        )
+        if step is None:
+            return wf, None
+        clean = step.api_binding.model_copy(update={"admission": None})
+        wf = wf.model_copy(
+            update={
+                "steps": [
+                    s.model_copy(update={"api_binding": clean}) if s is step else s
+                    for s in wf.steps
+                ]
+            }
+        )
+        try:
+            wf, _ = admit_api_step(
+                wf,
+                admitted_by="benchmark-fixture",
+                identity=identity,
+                footprint=footprint,
+            )
+            return wf, "admitted"
+        except ApiProposalError as exc:
+            return wf, f"stays on the GUI: {exc}"
+        finally:
+            wf.save(bundle)
+
+    # The qualification runs need the API step admitted; the verdict decides
+    # whether it keeps that admission.
+    readmit(None)
+    start_proxy(app)
+    env = _env()
+    env["footprint"] = {}
+    normal = [c for c in app.cases() if c.kind == "normal"]
+    gui, api, gm, am, problems = [], [], [], [], []
+    try:
+        for k in range(a.reps):
+            base = normal[0]  # the same inputs every time; only the run marker differs
+            pair: dict[str, Any] = {}
+            for arm in ["gui", "api"] if k % 2 == 0 else ["api", "gui"]:
+                marker = f"fp{k}{arm[0]}{a.tag}"
+                res = run_one(
+                    env,
+                    app,
+                    app.unique(base, marker),
+                    arm,
+                    bundle,
+                    out / f"fp{k}-{arm}",
+                    rep=k + 1,
+                )
+                pair[arm] = (
+                    res,
+                    marker,
+                    env["footprint"].get(str(out / f"fp{k}-{arm}")),
+                )
+            (gres, gmark, gch), (ares, amark, ach) = pair["gui"], pair["api"]
+            if not gres.get("correct") or gch is None:
+                problems.append(
+                    f"pair {k + 1}: the GUI save didn't make the expected record, so there is nothing to compare"
+                )
+            elif (
+                not ares.get("correct")
+                or ares.get("save_actuation") != "api"
+                or ach is None
+            ):
+                problems.append(
+                    f"pair {k + 1}: the API step didn't make the save ({ares.get('api_fallback') or ares.get('halt')})"
+                )
+            else:
+                gui.append(gch)
+                api.append(ach)
+                gm.append(gmark)
+                am.append(amark)
+    finally:
+        env["browser"].close()
+        env["pw"].stop()
+    verdict = (
+        footprint_verdict(gui, api, gm, am)
+        if len(gui) >= 2
+        else {"equivalent": False, "differences": [], "server_owned": [], "tables": {}}
+    )
+    verdict["differences"] = problems + verdict["differences"]
+    verdict["equivalent"] = bool(verdict["equivalent"]) and not problems
+    _, gate = readmit(verdict)
+    gate = gate or "no API step"
+    report = (
+        verdict
+        | {"gate": gate, "verdict_sha256": verdict_digest(verdict)}
+        | frozen_check()
+    )
+    (out / "footprint.json").write_text(json.dumps(report, indent=1, default=str))
+    print(
+        json.dumps(
+            {
+                k: report[k]
+                for k in ("equivalent", "gate", "differences", "server_owned")
+            },
+            indent=1,
+        )
+    )
+
+
 def cmd_timing(a: argparse.Namespace, app: AppBase) -> None:
     out, bundle = Path(a.out), Path(a.bundle)
     out.mkdir(parents=True, exist_ok=True)
@@ -494,7 +647,7 @@ def cmd_timing(a: argparse.Namespace, app: AppBase) -> None:
     try:
         for r in range(a.reps):
             for arm in ["gui", "api"] if r % 2 == 0 else ["api", "gui"]:
-                case = app.unique(normal[r % len(normal)], f"t{r:02d}{arm[0]}")
+                case = app.unique(normal[r % len(normal)], f"t{r:02d}{arm[0]}{a.tag}")
                 start = time.strftime("%H:%M:%S")
                 res = run_one(
                     env, app, case, arm, bundle, out / f"r{r:02d}-{arm}", rep=r + 1
@@ -532,7 +685,17 @@ def cmd_timing(a: argparse.Namespace, app: AppBase) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(allow_abbrev=False)
     ap.add_argument(
-        "cmd", choices=["up", "down", "record", "compile", "matrix", "timing", "rows"]
+        "cmd",
+        choices=[
+            "up",
+            "down",
+            "record",
+            "compile",
+            "footprint",
+            "matrix",
+            "timing",
+            "rows",
+        ],
     )
     ap.add_argument("--app", required=True)
     ap.add_argument("--out")
@@ -559,6 +722,7 @@ def main() -> None:
         {
             "record": cmd_record,
             "compile": cmd_compile,
+            "footprint": cmd_footprint,
             "matrix": cmd_matrix,
             "timing": cmd_timing,
         }[a.cmd](a, app)

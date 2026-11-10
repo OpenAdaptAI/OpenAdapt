@@ -1,0 +1,61 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I couldn't record the allergy because Medplum is showing its sign-in page instead of a signed-in session. I reloaded the page once and got the same screen. I don't have login credentials, and I won't register a new account, so I haven't searched for Rosa Delgado or changed any records.\n\nRESULT: NOT DONE Medplum is on the sign-in page, not signed in as the task says, and I have no credentials.",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6357,
+   "out": 93,
+   "usd": 0.002209,
+   "cached": 6353
+  },
+  {
+   "in": 7823,
+   "out": 153,
+   "usd": 0.003098,
+   "cached": 7821
+  },
+  {
+   "in": 9377,
+   "out": 133,
+   "usd": 0.006783,
+   "cached": 7821
+  }
+ ]
+}

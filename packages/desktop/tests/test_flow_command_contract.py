@@ -1,12 +1,18 @@
 """Every Flow command line Desktop builds parses under the Flow it bundles.
 
-Needs the bundled Flow runtime (``uv sync --extra build``); the
-qualification-contract job runs it. The plain test job skips it.
+The qualification job validates the bundled pin. The current-source unit lane
+names its mode explicitly and validates the same checkout's Flow origin and
+version before exercising its genuine parser and CLI.
 """
 
 from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError, version
+import os
+from pathlib import Path
+import subprocess
+import sysconfig
+import tomllib
 
 import pytest
 
@@ -21,9 +27,20 @@ def flow_parser():
         pytest.skip("the bundled openadapt-flow runtime is not installed (--extra build)")
     from openadapt_desktop.flow_bridge import REQUIRED_FLOW_VERSION
 
-    assert installed == REQUIRED_FLOW_VERSION, (
-        f"Desktop runs Flow {REQUIRED_FLOW_VERSION} but {installed} is installed"
-    )
+    mode = os.environ.get("OPENADAPT_DESKTOP_FLOW_CONTRACT", "bundled")
+    assert mode in {"bundled", "source"}, "unknown Flow command contract mode"
+    if mode == "bundled":
+        assert installed == REQUIRED_FLOW_VERSION, (
+            f"Desktop runs Flow {REQUIRED_FLOW_VERSION} but {installed} is installed"
+        )
+    else:
+        import openadapt_flow
+
+        source = Path(__file__).resolve().parents[2] / "flow"
+        expected = source / "openadapt_flow" / "__init__.py"
+        assert Path(openadapt_flow.__file__).resolve() == expected.resolve()
+        project = tomllib.loads((source / "pyproject.toml").read_text(encoding="utf-8"))
+        assert installed == project["project"]["version"]
     from openadapt_flow.__main__ import build_parser
 
     return build_parser
@@ -55,3 +72,61 @@ def test_every_flag_in_the_bridge_is_a_flow_flag(flow_parser) -> None:
     known = contract.parser_option_strings(flow_parser())
     unknown = sorted(contract.bridge_flag_literals() - known)
     assert not unknown, f"flow_bridge.py sends flags the bundled Flow doesn't have: {unknown}"
+
+
+@pytest.mark.parametrize(
+    "flag,probe", sorted(contract.CAPABILITY_PROBED_FLAGS.items())
+)
+def test_optional_flag_probe_matches_the_actual_installed_cli(
+    flow_parser, flag, probe
+) -> None:
+    from openadapt_desktop.flow_bridge import FlowBridge
+
+    executable = Path(sysconfig.get_path("scripts")) / (
+        "openadapt-flow.exe" if os.name == "nt" else "openadapt-flow"
+    )
+    assert executable.is_file()
+    calls = []
+
+    def observe(command, **kwargs):
+        calls.append(list(command))
+        return subprocess.run(command, **kwargs)
+
+    bridge = FlowBridge(flow_bin=str(executable), runner=observe)
+    method, help_args = probe
+    supported = getattr(bridge, method)()
+    assert supported is (flag in contract.parser_option_strings(flow_parser()))
+    assert len(calls) == 1 and calls[0] == [str(executable), *help_args]
+    assert getattr(bridge, method)() is supported
+    assert len(calls) == 1
+
+
+def test_missing_no_input_capability_refuses_before_any_replay(
+    flow_parser, tmp_path
+) -> None:
+    from openadapt_desktop.flow_bridge import FlowBridge, FlowNotAvailableError
+
+    executable = Path(sysconfig.get_path("scripts")) / (
+        "openadapt-flow.exe" if os.name == "nt" else "openadapt-flow"
+    )
+    assert executable.is_file()
+    calls = []
+
+    def observe(command, **kwargs):
+        calls.append(list(command))
+        return subprocess.run(command, **kwargs)
+
+    bridge = FlowBridge(flow_bin=str(executable), runner=observe)
+    bundle, output = tmp_path / "missing-bundle", tmp_path / "not-started"
+    supported = "--stop-before-effect" in contract.parser_option_strings(flow_parser())
+    if not supported:
+        with pytest.raises(FlowNotAvailableError, match="dry-run refused"):
+            bridge.replay(bundle, out_dir=output, stop_before_effect=True)
+        assert calls == [[str(executable), "replay", "--help"]]
+    else:
+        result = bridge.replay(bundle, out_dir=output, stop_before_effect=True)
+        assert calls[0] == [str(executable), "replay", "--help"]
+        assert len(calls) == 2 and "--stop-before-effect" in calls[1]
+        assert result.ok is False and result.returncode != 0
+        assert not contract.argparse_refused(result.stderr)
+    assert not bundle.exists() and not output.exists()

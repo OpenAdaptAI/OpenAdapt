@@ -1,0 +1,38 @@
+WARNING: writing a compiled bundle in plaintext at /Users/abrichr/oa/scratch/api-generalization/redmine/bundle: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+WARNING: openadapt-privacy is not installed, so reports and logs are not scrubbed of patient data (OPENADAPT_FLOW_SCRUB=auto). Install 'openadapt-flow[privacy]', or set OPENADAPT_FLOW_SCRUB=on to refuse instead.
+param-hygiene step_000: REGION_STABLE dropped — changed region (173, 139, 1062, 122) renders a demonstrated parameter value (Tr****************************************************** B); freezing it would false-halt every run whose value differs. This step has no pixel-region invariant.
+param-hygiene step_004: REGION_STABLE dropped — changed region (173, 173, 1062, 88) renders a demonstrated parameter value (Tr*****************************************************************************************************H2); freezing it would false-halt every run whose value differs. This step has no pixel-region invariant.
+param-hygiene step_008: REGION_STABLE dropped — changed region (0, 76, 1280, 724) renders a demonstrated parameter value (Ov*********************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************ng); freezing it would false-halt every run whose value differs. This step has no pixel-region invariant.
+{
+ "app": "redmine",
+ "workflow": "new-issue",
+ "steps": 9,
+ "params": [
+  "description",
+  "estimated_hours",
+  "subject",
+  "tracker"
+ ],
+ "optional_params": [
+  "description",
+  "estimated_hours"
+ ],
+ "compile_proposal": {
+  "proposed": true,
+  "step": "step_008",
+  "reasons": []
+ },
+ "proposed": true,
+ "reasons": [],
+ "compile_s": 15.6,
+ "frozen": "cf28c2af85e87965f248c8a75bd8f0aa32f2e634",
+ "head": "cf28c2af85e87965f248c8a75bd8f0aa32f2e634",
+ "engine_diff_vs_frozen": "",
+ "identity": {
+  "subject_name": "subject"
+ },
+ "admitted": [
+  "step_008"
+ ],
+ "describe": "step_008: save with one request, POST /projects/helpdesk/issues, in place of 9 GUI steps (step_000 to step_008).\n  sign-in: the replaying browser's own session; form read again from /projects/helpdesk/issues/new\n  fields: 1 empty_file, 11 form_default, 3 param, 1 select_label, 1 session, 1 submitter\n  run values: issue[tracker_id]={tracker}, issue[subject]={subject}, issue[description]={description}, issue[estimated_hours]={estimated_hours}\n  accepted when: HTTP [302] and the response matches '/issues/\\\\d+'\n  record check after: 4 effect(s) copied from the save step\n  right record (subject_name): the request sends {subject} in issue[subject] and the record check selects subject = {subject}\n  the form's own script runs before each save, in a scratch page with writes blocked, on the run's values: inline script, issue[parent_issue_id] onchange c05ae63ad9c2, issue[status_id] onchange c05ae63ad9c2, issue[tracker_id] onchange c05ae63ad9c2, script /assets/application-14833e45.js, script /assets/attachments-db17b2b6.js, and 9 more\n  screen-only checks, not repeated: ['step_000: region_stable', 'step_002: region_stable', 'step_004: region_stable', 'step_006: region_stable']\n  if the form or a check differs at run time, the GUI steps run instead"
+}
