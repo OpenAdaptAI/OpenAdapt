@@ -332,7 +332,9 @@ def write_report(
     out.mkdir(parents=True, exist_ok=True)
     if setup:
         doc = {**doc, "setup": setup}
-    (out / "report.json").write_text(json.dumps(doc, indent=2, default=str) + "\n")
+    (out / "report.json").write_text(
+        json.dumps(doc, indent=2, default=str) + "\n", encoding="utf-8"
+    )
     page = out / "report.html"
-    page.write_text(render_html(doc, setup))
+    page.write_text(render_html(doc, setup), encoding="utf-8")
     return page

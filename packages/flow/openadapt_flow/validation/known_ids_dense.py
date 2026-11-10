@@ -287,7 +287,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     args = parser.parse_args(argv)
 
     if args.from_json:
-        result = json.loads(Path(args.from_json).read_text())
+        result = json.loads(Path(args.from_json).read_text(encoding="utf-8"))
     else:
         from openadapt_flow.validation.dense_surface import run_trials
 
@@ -296,11 +296,16 @@ def main(argv: Optional[list[str]] = None) -> int:
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     (out / "results.json").write_text(
-        json.dumps({"meta": result["meta"], "scored": scored}, indent=2) + "\n"
+        json.dumps({"meta": result["meta"], "scored": scored}, indent=2) + "\n",
+        encoding="utf-8",
     )
     if args.save_trials:
-        (out / "trials.json").write_text(json.dumps(result, indent=1) + "\n")
-    (out / "KNOWN_IDS.md").write_text(render_markdown(scored, result["meta"]))
+        (out / "trials.json").write_text(
+            json.dumps(result, indent=1) + "\n", encoding="utf-8"
+        )
+    (out / "KNOWN_IDS.md").write_text(
+        render_markdown(scored, result["meta"]), encoding="utf-8"
+    )
     a = scored["all"]
     print(
         f"false stops {a['false_stops_before']} / "
