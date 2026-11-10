@@ -1,0 +1,29 @@
+WARNING: writing a compiled bundle in plaintext at /Users/abrichr/oa/scratch/api-generalization/wikijs_group/bundle: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+WARNING: openadapt-privacy is not installed, so reports and logs are not scrubbed of patient data (OPENADAPT_FLOW_SCRUB=auto). Install 'openadapt-flow[privacy]', or set OPENADAPT_FLOW_SCRUB=on to refuse instead.
+{
+ "app": "wikijs_group",
+ "workflow": "new-group",
+ "steps": 4,
+ "params": [
+  "name"
+ ],
+ "optional_params": [],
+ "compile_proposal": {
+  "proposed": true,
+  "step": "step_003",
+  "reasons": []
+ },
+ "proposed": true,
+ "reasons": [],
+ "compile_s": 9.1,
+ "frozen": "969cb939e7f246a55a7b49c319941a6aa3ff3d8c",
+ "head": "969cb939e7f246a55a7b49c319941a6aa3ff3d8c",
+ "engine_diff_vs_frozen": "",
+ "identity": {
+  "subject_name": "name"
+ },
+ "admitted": [
+  "step_003"
+ ],
+ "describe": "step_003: save with one request, POST /graphql, in place of 4 GUI steps (step_000 to step_003).\n  sign-in: the replaying browser's own session; form read again from /a/groups\n  fields: 1 param\n  run values: 0/variables/name={name}\n  accepted when: HTTP [200]\n  record check after: 1 effect(s) copied from the save step\n  right record (subject_name): the request sends {name} in 0/variables/name and the record check selects name = {name}\n  screen-only checks, not repeated: ['step_000: region_stable, text_present', 'step_001: region_stable']\n  if the form or a check differs at run time, the GUI steps run instead"
+}

@@ -1,0 +1,21 @@
+{
+  "id": "491019b430bc4e848c2190027098f244",
+  "created_at": "2026-11-04T19:35:45.350947+00:00",
+  "viewport": [
+    1280,
+    800
+  ],
+  "coordinate_space": "page",
+  "app_url": "http://127.0.0.1:9670/newticket",
+  "params": {
+    "summary": "Label printer skips every other label rec1435",
+    "description": "Seen on the shipping desk unit.",
+    "type": "defect",
+    "keywords": "printer shipping"
+  },
+  "secret_params": [],
+  "network_capture": {
+    "file": "network.jsonl",
+    "exchanges": 4
+  }
+}
