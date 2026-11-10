@@ -1,0 +1,61 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I couldn't book the appointment because Medplum isn't signed in. The browser shows the \"Sign in to Medplum\" page, and reloading it didn't change that. I wasn't given any credentials, and I won't register a new account or guess a login. I haven't looked up Tomasz Wren or Dr Ama Osei, and I haven't checked for an existing appointment or created one. If you sign in or send me credentials, I can pick the task up from the patient search.\n\nRESULT: NOT DONE Medplum is at the sign-in page, not signed in, and no credentials were provided.",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6283,
+   "out": 97,
+   "usd": 0.002234,
+   "cached": 6279
+  },
+  {
+   "in": 7753,
+   "out": 202,
+   "usd": 0.00696,
+   "cached": 6279
+  },
+  {
+   "in": 9356,
+   "out": 187,
+   "usd": 0.007432,
+   "cached": 7751
+  }
+ ]
+}

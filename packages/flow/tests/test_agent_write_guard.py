@@ -14,13 +14,15 @@ from pathlib import Path
 import pytest
 
 from openadapt_flow.integrations.agents import WriteGuard
-from tests._orders_portal import Portal, portal  # noqa: F401 - fixture
+from tests._orders_portal import Portal
 
 ORDER = {"customer": "Acme", "product": "Desk lamp", "units": "3"}
 
 
 def _guard(portal: Portal, tmp_path: Path, **options) -> WriteGuard:
-    return WriteGuard(portal.contract(), workdir=tmp_path, agent_id="bot-1", **options)
+    return WriteGuard(
+        portal.contract(), workdir=tmp_path, **({"agent_id": "bot-1"} | options)
+    )
 
 
 def _write(portal: Portal, args: dict):
@@ -247,3 +249,109 @@ def test_a_first_read_queued_behind_a_full_pool_writes_nothing(
         release.set()
     assert portal.posts == 0
     assert guard.run(ORDER, _write(portal, ORDER))["verified"] is True
+
+
+def test_a_cancelled_dispatched_write_with_absent_readback_stays_held(
+    portal: Portal, tmp_path: Path
+) -> None:
+    guard = _guard(portal, tmp_path)
+    portal.fault("no_persist")
+
+    async def cancelled_after_dispatch():
+        sent = asyncio.Event()
+        never_reply = asyncio.Event()
+
+        async def write():
+            output = await asyncio.to_thread(portal.save_order, **ORDER)
+            sent.set()
+            await never_reply.wait()
+            return output
+
+        task = asyncio.create_task(guard.arun(ORDER, write))
+        try:
+            await asyncio.wait_for(sent.wait(), timeout=10)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        finally:
+            if not task.done():
+                task.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await task
+
+    asyncio.run(cancelled_after_dispatch())
+    assert portal.posts == 1 and portal.orders() == []
+    portal.fault("")
+    retry = guard.run(ORDER, _write(portal, ORDER))
+    assert retry["verified"] is False
+    assert retry["verdict"] == "RECONCILIATION_REQUIRED"
+    assert retry["not_sent_again"] is True
+    assert portal.posts == 1 and portal.orders() == []
+
+
+def test_new_process_retry_does_not_resend_cancelled_dispatched_write(
+    portal: Portal, tmp_path: Path
+) -> None:
+    guard1 = _guard(portal, tmp_path, agent_id="worker-1")
+
+    async def slow_write():
+        out = await asyncio.to_thread(portal.save_order, **ORDER)
+        await asyncio.sleep(5)
+        return out
+
+    async def timed_out():
+        with pytest.raises(TimeoutError):
+            async with asyncio.timeout(0.5):
+                await guard1.arun(ORDER, slow_write)
+
+    asyncio.run(timed_out())
+    assert portal.posts == 1 and len(portal.orders()) == 1
+
+    # A second WriteGuard on the same workdir (new process / restarted worker)
+    # has an empty in-memory _lost_replies cache and must rely on the ledger (AlreadyWritten).
+    guard2 = _guard(portal, tmp_path, agent_id="worker-2")
+    retry = guard2.run(ORDER, _write(portal, ORDER))
+    assert retry["verified"] is True and retry["not_sent_again"] is True
+    assert portal.posts == 1 and len(portal.orders()) == 1
+
+
+def test_new_process_retry_does_not_resend_held_cancelled_write(
+    portal: Portal, tmp_path: Path
+) -> None:
+    guard1 = _guard(portal, tmp_path, agent_id="worker-1")
+    portal.fault("no_persist")
+
+    async def cancelled_after_dispatch():
+        sent = asyncio.Event()
+        never_reply = asyncio.Event()
+
+        async def write():
+            output = await asyncio.to_thread(portal.save_order, **ORDER)
+            sent.set()
+            await never_reply.wait()
+            return output
+
+        task = asyncio.create_task(guard1.arun(ORDER, write))
+        try:
+            await asyncio.wait_for(sent.wait(), timeout=10)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        finally:
+            if not task.done():
+                task.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await task
+
+    asyncio.run(cancelled_after_dispatch())
+    assert portal.posts == 1 and portal.orders() == []
+    portal.fault("")
+
+    # A second WriteGuard on the same workdir (new process / restarted worker)
+    # retries. It must also not send again, relying on the held result in the ledger.
+    guard2 = _guard(portal, tmp_path, agent_id="worker-2")
+    retry = guard2.run(ORDER, _write(portal, ORDER))
+    assert retry["verified"] is False
+    assert retry["verdict"] in ("RECONCILIATION_REQUIRED", "NOT_WRITTEN")
+    assert retry.get("not_sent_again") is True or "held" in retry.get("reason", "")
+    assert portal.posts == 1 and portal.orders() == []

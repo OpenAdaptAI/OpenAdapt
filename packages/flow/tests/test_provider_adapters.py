@@ -403,7 +403,7 @@ def test_claude_reserves_before_generation_and_disables_retries(monkeypatch):
     monkeypatch.setattr(
         compile_agent_module,
         "_image",
-        lambda _png: {"type": "image", "source": {"data": "test"}},
+        lambda _png, _harness=None: {"type": "image", "source": {"data": "test"}},
     )
     agent = build_agent(
         "claude",
@@ -461,7 +461,7 @@ def test_claude_token_count_precedes_bounded_generation(monkeypatch):
     monkeypatch.setattr(
         compile_agent_module,
         "_image",
-        lambda _png: {"type": "image", "source": {"data": "test"}},
+        lambda _png, _harness=None: {"type": "image", "source": {"data": "test"}},
     )
     agent = build_agent(
         "claude",

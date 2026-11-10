@@ -58,6 +58,7 @@ from pydantic import (
 )
 
 from openadapt_flow.fhir_read import (
+    check_collection_url,
     check_search_coverage,
     check_search_outcome,
     fhir_read_headers,
@@ -1117,7 +1118,8 @@ class FhirReader:
     ) -> list[dict[str, Any]]:
         """Every entry of a search or history Bundle, across all pages."""
 
-        url: Optional[str] = f"{self.base_url}/{path}"
+        initial_url = f"{self.base_url}/{path}"
+        url: Optional[str] = initial_url
         query: Optional[Mapping[str, Any]] = params
         entries: list[dict[str, Any]] = []
         total: Optional[int] = None
@@ -1125,7 +1127,7 @@ class FhirReader:
         match_identities: set[tuple[str, str]] = set()
         for _ in range(MAX_PAGES):
             assert url is not None
-            _, body = self.fetch(url, query)
+            headers, body = self.fetch(url, query)
             if not isinstance(body, dict) or body.get("resourceType") != "Bundle":
                 raise Unreadable(f"{path}: the reply is not a Bundle")
             if self.snapshot_path is not None:
@@ -1212,6 +1214,30 @@ class FhirReader:
             except ValueError as exc:
                 raise Unreadable(f"{path}: {exc}") from exc
             if not nxt:
+                if body.get("type") != "searchset" and body.get("type") != "history":
+                    try:
+                        if params:
+                            raise ValueError(
+                                "collection searches require an unrestricted empty query"
+                            )
+                        check_collection_url(initial_url)
+                        served = headers.get("content-location") or headers.get(
+                            "location"
+                        )
+                        if served:
+                            check_collection_url(served)
+                        links = body.get("link")
+                        if isinstance(links, list):
+                            for link in links:
+                                if (
+                                    isinstance(link, dict)
+                                    and link.get("relation") == "self"
+                                ):
+                                    self_url = link.get("url")
+                                    if isinstance(self_url, str):
+                                        check_collection_url(self_url)
+                    except ValueError as exc:
+                        raise Unreadable(f"{path}: {exc}") from exc
                 return entries
             if _origin(nxt) != _origin(self.base_url):
                 raise Unreadable(f"{path}: next page on another origin")
@@ -1758,6 +1784,25 @@ def _version_meta(version: Mapping[str, Any]) -> tuple[Optional[datetime], str]:
     return _when(meta.get("lastUpdated")), str(vid) if vid not in (None, "") else ""
 
 
+def window_versions_unbound(change: Change) -> Optional[str]:
+    """Why the observed window cannot identify its last version, or None.
+
+    This checks version metadata only. Readers must separately establish
+    complete history and exact version counts before treating it as proof.
+    """
+
+    if not change.bodies:
+        return "the created record's _history shows no version in the window"
+    timed = [_version_meta(body) for body in change.bodies]
+    if any(when is None or not vid for when, vid in timed):
+        return "a version in the window has no versionId or time to bind to"
+    newest = max(when for when, _ in timed if when is not None)
+    last = {vid for when, vid in timed if when == newest}
+    if len(last) != 1:
+        return "two versions share the newest time, so the last write can't be told"
+    return None
+
+
 def read_back_unbound(change: Change, created: Mapping[str, Any]) -> Optional[str]:
     """Why the read-back can't be shown to be the last version written, or None.
 
@@ -1770,15 +1815,12 @@ def read_back_unbound(change: Change, created: Mapping[str, Any]) -> Optional[st
 
     if change.versions is None:
         return None
-    if not change.bodies:
-        return "the created record's _history shows no version in the window"
+    unbound = window_versions_unbound(change)
+    if unbound is not None:
+        return unbound
     timed = [_version_meta(body) for body in change.bodies]
-    if any(when is None or not vid for when, vid in timed):
-        return "a version in the window has no versionId or time to bind to"
     newest = max(when for when, _ in timed if when is not None)
     last = {vid for when, vid in timed if when == newest}
-    if len(last) != 1:
-        return "two versions share the newest time, so the last write can't be told"
     _, got = _version_meta(created)
     if not got:
         return "the read-back carries no versionId to bind to"

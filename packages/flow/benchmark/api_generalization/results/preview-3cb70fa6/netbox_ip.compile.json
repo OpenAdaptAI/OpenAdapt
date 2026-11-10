@@ -1,0 +1,25 @@
+{
+ "app": "netbox_ip",
+ "workflow": "add-ip-address",
+ "steps": 7,
+ "params": [
+  "address",
+  "description",
+  "dns_name"
+ ],
+ "compile_proposal": {
+  "proposed": false,
+  "step": null,
+  "reasons": [
+   "no form request was sent by the save step"
+  ]
+ },
+ "proposed": false,
+ "reasons": [
+  "no form request was sent by the save step"
+ ],
+ "compile_s": 6.8,
+ "frozen": "",
+ "head": "3cb70fa649407782f150ae4b0f65058fcd84ec30",
+ "engine_diff_vs_frozen": ""
+}

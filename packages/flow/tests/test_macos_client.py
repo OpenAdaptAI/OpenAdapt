@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import sys
 import types
+from typing import Callable, Optional
 
 import pytest
 
@@ -235,6 +236,88 @@ def test_window_id_at_point_includes_nonzero_layer_overlay(monkeypatch) -> None:
     client = MacWindowClient()
     assert client.window_id_at_point(50, 50) == 99
     assert client.window_id_at_point(500, 500) is None
+
+
+def _quartz_with(windows: list[dict]) -> types.ModuleType:
+    quartz = types.ModuleType("Quartz")
+    quartz.kCGWindowListOptionOnScreenOnly = 1
+    quartz.kCGWindowListExcludeDesktopElements = 2
+    quartz.kCGNullWindowID = 0
+    quartz.CGWindowListCopyWindowInfo = lambda _opts, _window_id: windows
+    return quartz
+
+
+def _hit_module(pid_at: Callable[[float, float], Optional[int]]) -> types.ModuleType:
+    module = types.ModuleType("ApplicationServices")
+    module.AXUIElementCreateSystemWide = lambda: "system"
+
+    def at_position(_system, x, y, _out):
+        pid = pid_at(x, y)
+        return (0, ("element", pid)) if pid is not None else (-25204, None)
+
+    module.AXUIElementCopyElementAtPosition = at_position
+    module.AXUIElementGetPid = lambda element, _out: (0, element[1])
+    return module
+
+
+#: macOS 15: the Dock's full-screen window (layer 20), a notification banner's
+#: full-screen Notification Center window (layer 23), and the app's window.
+_DOCK = {
+    "kCGWindowNumber": 7,
+    "kCGWindowOwnerPID": 70,
+    "kCGWindowLayer": 20,
+    "kCGWindowBounds": {"X": 0, "Y": 0, "Width": 1024, "Height": 768},
+}
+_BANNER = {
+    "kCGWindowNumber": 15,
+    "kCGWindowOwnerPID": 150,
+    "kCGWindowLayer": 23,
+    "kCGWindowBounds": {"X": 0, "Y": 0, "Width": 1024, "Height": 768},
+}
+_APP = {
+    "kCGWindowNumber": 41,
+    "kCGWindowOwnerPID": 410,
+    "kCGWindowLayer": 0,
+    "kCGWindowBounds": {"X": 160, "Y": 220, "Width": 560, "Height": 388},
+}
+
+
+def test_a_full_screen_pass_through_window_is_skipped_only_on_the_hit_test(
+    monkeypatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "Quartz", _quartz_with([_BANNER, _DOCK, _APP]))
+    client = MacWindowClient()
+
+    # The hit test says the click goes to the app: the Dock and Notification
+    # Center windows in front are pass-through there.
+    monkeypatch.setitem(
+        sys.modules, "ApplicationServices", _hit_module(lambda x, y: 410)
+    )
+    assert client.window_id_at_point(250, 350) == 41
+
+    # Over the banner the hit test names Notification Center: the click goes
+    # to the banner, so the app is covered and its input is refused.
+    monkeypatch.setitem(
+        sys.modules, "ApplicationServices", _hit_module(lambda x, y: 150)
+    )
+    assert client.window_id_at_point(250, 350) == 15
+
+    # The hit test names a process with no window at the point: the frontmost
+    # window answers, as without a hit test.
+    monkeypatch.setitem(
+        sys.modules, "ApplicationServices", _hit_module(lambda x, y: 999)
+    )
+    assert client.window_id_at_point(250, 350) == 15
+
+    # No hit test answer: the frontmost window answers (fails closed).
+    monkeypatch.setitem(
+        sys.modules, "ApplicationServices", _hit_module(lambda x, y: None)
+    )
+    assert client.window_id_at_point(250, 350) == 15
+    monkeypatch.setitem(
+        sys.modules, "ApplicationServices", types.ModuleType("ApplicationServices")
+    )
+    assert client.window_id_at_point(250, 350) == 15
 
 
 def _ax_module(

@@ -461,8 +461,66 @@ class HarnessStats:
         return dict(self.__dict__)
 
 
+class _TaskValues:
+    """What both harnesses do with the task's bound values (``bindings``).
+
+    ``bindings`` maps a placeholder such as ``⟦task.identity_1⟧`` to the
+    value it stands for (:func:`openadapt_flow.privacy.task_bindings`). What
+    goes to the model carries the placeholder, never the value; what the agent
+    types may carry a placeholder, and the harness types the value.
+    """
+
+    bindings: Mapping[str, str]
+
+    def task_text(self, text: str) -> str:
+        """The task text for the model: every value the task names (its
+        record identity and its inputs) is its placeholder. The agent types
+        an input as its placeholder, and the harness types the value."""
+
+        return self._bound(text, self.bindings)
+
+    def shown_as(self, text: str) -> str:
+        """``text`` as the agent sees it in listings: each bound value is its
+        placeholder, when the listings are scrubbed (otherwise unchanged)."""
+
+        from openadapt_flow.privacy import listing_bindings
+
+        return self._bound(text, listing_bindings(self.bindings))
+
+    def _bound(self, text: str, bound: Mapping[str, str]) -> str:
+        from openadapt_flow.privacy import bind_text, text_scrubbing_works
+
+        if not bound or not text or not text_scrubbing_works():
+            return text
+        return bind_text(text, bound) or text
+
+    def placeholder_regions(
+        self, png: bytes
+    ) -> list[tuple[tuple[int, int, int, int], str]]:
+        """Where ``png`` (a screenshot of this harness's page) shows a bound
+        value, as regions to label. None without a page."""
+
+        page = getattr(self.computer, "page", None)  # type: ignore[attr-defined]
+        if not self.bindings or page is None or not png:
+            return []
+        import io
+
+        from PIL import Image
+
+        width, height = Image.open(io.BytesIO(png)).size
+        return _observe.placeholder_regions(page, self.bindings, width, height)
+
+    def _expand(self, native: Mapping[str, Any]) -> Mapping[str, Any]:
+        text = native.get("text")
+        if not self.bindings or not isinstance(text, str) or "\u27e6" not in text:
+            return native
+        for name, value in self.bindings.items():
+            text = text.replace(name, value)
+        return {**native, "text": text}
+
+
 @dataclass
-class Harness:
+class Harness(_TaskValues):
     """One run's harness. Built by the compile-agent pipeline around the capture
     computer; agents call its methods."""
 
@@ -479,6 +537,8 @@ class Harness:
     readback_wait_s: float = 3.0
     readback_log: list[dict[str, Any]] = field(default_factory=list)
     _last: Optional[_observe.StructuralObservation] = None
+    #: Placeholder to value for the task's own values (see :class:`_TaskValues`).
+    bindings: Mapping[str, str] = field(default_factory=dict)
 
     @property
     def page(self) -> Any:
@@ -498,9 +558,9 @@ class Harness:
     # -- observation -------------------------------------------------------------
 
     def observe(self) -> _observe.StructuralObservation:
-        """The page's structure, scrubbed except for the task's own values."""
+        """The page's structure, scrubbed; the task's own values are placeholders."""
 
-        self._last = _observe.observe(self.page, keep=self.keep)
+        self._last = _observe.observe(self.page, keep=self.keep, bindings=self.bindings)
         self.stats.observations += 1
         return self._last
 
@@ -603,6 +663,7 @@ class Harness:
                 in it was performed.
         """
 
+        native = self._expand(native)
         commit = self._commit_target(native) if self.has_page else None
         if commit is None:
             commit = self._hinted_commit(native, hint)
@@ -897,7 +958,7 @@ _FOCUS_KEYS = frozenset(
 
 
 @dataclass
-class SurfaceHarness:
+class SurfaceHarness(_TaskValues):
     """The harness for a native window or a remote session.
 
     It has the same methods as :class:`Harness`, so an agent drives either.
@@ -931,6 +992,7 @@ class SurfaceHarness:
     _focused_role: Optional[str] = None
 
     page: Any = None
+    bindings: Mapping[str, str] = field(default_factory=dict)
 
     @property
     def dialect(self) -> str:
@@ -1034,12 +1096,15 @@ class SurfaceHarness:
             UnsupportedAction: the recording can't hold the action.
         """
 
+        native = self._expand(native)
         commit = self.commit_target(native, ref)
         if commit is not None:
             self._check_gate(commit)
             _before_write(self, commit)
         try:
-            obs = self.computer.execute(native)
+            obs = self.computer.execute(
+                native, node_id=ref if native.get("kind") == "click" else None
+            )
         except BaseException as exc:
             if commit is not None:
                 _expect_write(self, 0.0)

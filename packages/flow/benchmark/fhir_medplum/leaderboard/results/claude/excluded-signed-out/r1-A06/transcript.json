@@ -1,0 +1,61 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I couldn't record the penicillin allergy for Rosa Delgado because Medplum is showing the sign-in page, not an open session. The task said I'd already be signed in. I reloaded the page and it still asks for an email address. I wasn't given any credentials, and I won't guess them or register a new account. I haven't looked up the patient or changed any records. Once someone signs in or gives me login details, I can find the right Rosa Delgado (born 1979-06-14), check for an existing penicillin allergy, and add one only if it's missing.\n\nRESULT: NOT DONE Medplum is on the sign-in page, not signed in as the task said, and I have no credentials.",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6357,
+   "out": 101,
+   "usd": 0.002289,
+   "cached": 6353
+  },
+  {
+   "in": 7831,
+   "out": 172,
+   "usd": 0.006685,
+   "cached": 6353
+  },
+  {
+   "in": 9399,
+   "out": 216,
+   "usd": 0.00765,
+   "cached": 7829
+  }
+ ]
+}

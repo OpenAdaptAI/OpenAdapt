@@ -1,0 +1,34 @@
+WARNING: writing a compiled bundle in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_category/bundle: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+WARNING: openadapt-privacy is not installed, so reports and logs are not scrubbed of patient data (OPENADAPT_FLOW_SCRUB=auto). Install 'openadapt-flow[privacy]', or set OPENADAPT_FLOW_SCRUB=on to refuse instead.
+param-hygiene step_002: REGION_STABLE dropped — changed region (150, 238, 419, 96) renders a demonstrated parameter value (Na******************************************************************e.); freezing it would false-halt every run whose value differs. This step has no pixel-region invariant.
+{
+ "app": "wordpress_category",
+ "workflow": "add-category",
+ "steps": 8,
+ "params": [
+  "description",
+  "name",
+  "parent"
+ ],
+ "optional_params": [
+  "description"
+ ],
+ "compile_proposal": {
+  "proposed": true,
+  "step": "step_007",
+  "reasons": []
+ },
+ "proposed": true,
+ "reasons": [],
+ "compile_s": 25.1,
+ "frozen": "cf28c2af85e87965f248c8a75bd8f0aa32f2e634",
+ "head": "cf28c2af85e87965f248c8a75bd8f0aa32f2e634",
+ "engine_diff_vs_frozen": "",
+ "identity": {
+  "subject_name": "name"
+ },
+ "admitted": [
+  "step_007"
+ ],
+ "describe": "step_007: save with one request, POST /wp-admin/admin-ajax.php, in place of 8 GUI steps (step_000 to step_007).\n  sign-in: the replaying browser's own session; form read again from /wp-admin/edit-tags.php?taxonomy=category\n  fields: 6 form_default, 2 param, 1 select_label, 1 session\n  run values: tag-name={name}, parent={parent}, description={description}\n  accepted when: HTTP [200]\n  record check after: 3 effect(s) copied from the save step\n  right record (subject_name): the request sends {name} in tag-name and the record check selects name = {name}\n  the form's own script runs before each save, in a scratch page with writes blocked, on the run's values: inline script, script http://127.0.0.1:9664/wp-admin/js/common.min.js?ver=6.6.2, script http://127.0.0.1:9664/wp-admin/js/inline-edit-tax.min.js?ver=6.6.2, script http://127.0.0.1:9664/wp-admin/js/svg-painter.js?ver=6.6.2, script http://127.0.0.1:9664/wp-admin/js/tags.min.js?ver=6.6.2, script http://127.0.0.1:9664/wp-admin/load-scripts.php?c=0&amp;load%5Bchunk_0%5D=hoverIntent,wp-hooks&amp;ver=6.6.2, and 9 more\n  screen-only checks, not repeated: ['step_000: region_stable', 'step_002: region_stable', 'step_004: region_stable']\n  if the form or a check differs at run time, the GUI steps run instead"
+}

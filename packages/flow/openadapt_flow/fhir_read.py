@@ -77,12 +77,27 @@ def search_total(bundle: Mapping[str, Any], previous: Optional[int]) -> Optional
     return total
 
 
-def check_collection_search(bundle: Mapping[str, Any], resource_type: str) -> None:
+def check_collection_search(
+    bundle: Mapping[str, Any],
+    resource_type: str,
+    *,
+    search_params: Optional[Mapping[str, Any]] = None,
+    request_urls: tuple[str, ...] = (),
+) -> None:
     """Validate the unpaged collection exception without granting read authority.
+
+    Only the learner's unrestricted, empty-query search is supported here.
+    A collection total can count a capped response instead of all matches;
+    equal passes do not make unknown query semantics complete. Searchset
+    pagination uses its separate protocol path.
 
     FHIR omits an empty entry array. An explicit zero total is still required;
     an absent total or a paging link cannot prove that no matches exist.
     """
+    if search_params:
+        raise ValueError("collection searches require an unrestricted empty query")
+    for url in request_urls:
+        _check_collection_url(url)
     total = search_total(bundle, None)
     if total is None:
         raise ValueError("a collection search Bundle requires a total")
@@ -103,10 +118,7 @@ def check_collection_search(bundle: Mapping[str, Any], resource_type: str) -> No
             or any(character.isspace() for character in link["url"])
         ):
             raise ValueError("a collection search Bundle permits only valid self links")
-        try:
-            urlsplit(link["url"])
-        except ValueError as error:
-            raise ValueError("a collection self link has a malformed URL") from error
+        _check_collection_url(link["url"])
     for entry in entries:
         if not isinstance(entry, dict):
             raise ValueError("a collection Bundle entry is not an object")
@@ -121,6 +133,19 @@ def check_collection_search(bundle: Mapping[str, Any], resource_type: str) -> No
             search = entry["search"]
             if not isinstance(search, dict) or search.get("mode", "match") != "match":
                 raise ValueError("a collection search entry is not a matching resource")
+
+
+def check_collection_url(url: str) -> None:
+    """The same empty-query rule covers sent, effective and self-link URLs."""
+    try:
+        query = urlsplit(url).query
+    except ValueError as error:
+        raise ValueError("a collection search has a malformed URL") from error
+    if query:
+        raise ValueError("collection searches require an unrestricted empty query")
+
+
+_check_collection_url = check_collection_url
 
 
 def check_search_coverage(total: Optional[int], matches: int) -> None:

@@ -102,6 +102,7 @@ from uuid import UUID
 if TYPE_CHECKING:  # pragma: no cover
     from openadapt_flow.backend import Backend
     from openadapt_flow.ir import ExecutionTargetKind, RunReport
+    from openadapt_flow.record_check_proof import Fixture
     from openadapt_flow.runtime.authorization import RuntimeParamScalar
     from openadapt_flow.tutorial import BreakItResult
 
@@ -1588,6 +1589,8 @@ def _propose_lookup_check(args: argparse.Namespace, *, from_lookup: bool) -> Non
 
 
 def _cmd_record_capture(args: argparse.Namespace) -> int:
+    if getattr(args, "surface", None) or _records_automatically(args):
+        return _cmd_record_surfaces(args)
     # The interactive (web) recorder installs in-page DOM listeners against a
     # headed Playwright page. The DESKTOP recorder (--backend windows) captures
     # the operator's native OS input over the win_agent contract; both emit the
@@ -1810,6 +1813,212 @@ def _recording_privacy_notices(recording_dir: Path) -> list[str]:
             "actions."
         )
     return notices
+
+
+def _cmd_confirm_surfaces(args: argparse.Namespace) -> int:
+    from openadapt_flow.multi_surface_record import (
+        MultiSurfaceRecordError,
+        confirm_review,
+        review_lines,
+    )
+
+    recording = Path(args.recording)
+    try:
+        lines = review_lines(recording)
+    except (OSError, ValueError, KeyError) as exc:
+        raise SystemExit(f"confirm-surfaces: cannot read {recording}: {exc}") from exc
+    print("This recording used:")
+    for line in lines:
+        print(line)
+    if not args.yes:
+        if not sys.stdin.isatty():
+            print("Not confirmed: run it in a terminal, or pass --yes.")
+            return 2
+        if input("Confirm these surfaces? [y/N] ").strip().lower() not in ("y", "yes"):
+            print("Not confirmed.")
+            return 1
+    try:
+        confirm_review(recording)
+    except MultiSurfaceRecordError as exc:
+        raise SystemExit(f"confirm-surfaces: {exc}") from exc
+    print("Confirmed. The recording can be compiled.")
+    return 0
+
+
+def _cmd_browser_accessibility(args: argparse.Namespace) -> int:
+    from openadapt_flow import browser_accessibility as ba
+
+    if not sys.platform.startswith("linux"):
+        print(
+            "Nothing to do here: on Windows and macOS, record makes the "
+            "browser's page readable by itself while it records."
+        )
+        return 0
+    if args.enable:
+        lines = ba.enable_linux()
+        for line in lines or ["no Chromium-family browser launcher found"]:
+            print(line)
+        from openadapt_flow.cli_hints import command
+
+        print(
+            "Restart the browser for this to take effect. Undo with "
+            f"'{command('browser-accessibility')} --disable'."
+        )
+    elif args.disable:
+        for line in ba.disable_linux() or ["nothing to remove"]:
+            print(line)
+    else:
+        for line in ba.linux_status():
+            print(line)
+    return 0
+
+
+def _records_automatically(args: argparse.Namespace) -> bool:
+    """``record`` with no target: follow the person across windows."""
+
+    if getattr(args, "backend", None) or getattr(args, "url", None):
+        return False
+    if getattr(args, "profile", None) in ("standard", "regulated"):
+        return False  # a production posture names its surface
+    target_flags = (
+        "window",
+        "window_title",
+        "rdp_window",
+        "rdp_window_title",
+        "rdp_readiness_text",
+        "browser_cdp_endpoint",
+        "browser_page_url",
+        "capture_network",
+    ) + tuple(attr for attr, _ in _RECORD_TARGET_FLAGS)
+    return not any(getattr(args, attr, None) for attr in target_flags)
+
+
+def _cmd_record_surfaces(args: argparse.Namespace) -> int:
+    """``record`` across windows: found automatically, or ``--surface``."""
+
+    from openadapt_flow.multi_surface_record import (
+        MultiSurfaceRecordError,
+        host_surface_kind,
+        parse_record_surfaces,
+        record_multi_surface,
+        review_lines,
+    )
+
+    url = getattr(args, "url", None)
+    declared = [f for f in (getattr(args, "surface", None) or []) if f != "auto"]
+    try:
+        surfaces = (
+            parse_record_surfaces(declared, web_primary=bool(url)) if declared else []
+        )
+    except MultiSurfaceRecordError as exc:
+        raise SystemExit(f"record: {exc}. Nothing was recorded.") from exc
+    backend = getattr(args, "backend", None)
+    lead = "web" if url else (surfaces[0].kind if surfaces else host_surface_kind())
+    if backend is not None and backend != lead:
+        raise SystemExit(
+            f"record --surface: the recording starts on {lead} "
+            f"({'--url' if url else 'the first --surface'}), not --backend "
+            f"{backend}. Drop --backend. Nothing was recorded."
+        )
+    unsupported = [
+        flag
+        for attr, flag in (
+            ("window", "--window"),
+            ("window_title", "--window-title"),
+            ("rdp_window", "--rdp-window"),
+            ("rdp_window_title", "--rdp-window-title"),
+            ("rdp_readiness_text", "--rdp-readiness-text"),
+            ("browser_cdp_endpoint", "--browser-cdp-endpoint"),
+            ("browser_page_url", "--browser-page-url"),
+            ("capture_network", "--capture-network"),
+            ("identifier", "--identifier"),
+        )
+        if getattr(args, attr, None)
+    ]
+    if unsupported:
+        raise SystemExit(
+            f"record --surface: {', '.join(unsupported)} cannot be combined "
+            "with --surface (each declared window is found by its "
+            "--surface WINDOW). Nothing was recorded."
+        )
+    # A capture session runs for every cross-window recording, and Flow
+    # cannot encrypt it yet: the desktop recording policy applies.
+    _recording_encryption_key(
+        args, surfaces[0].kind if surfaces else host_surface_kind()
+    )
+    desktop_params: dict[str, str] = {}
+    web_params: list[str] = []
+    for entry in args.param or ():
+        if "=" in entry:
+            desktop_params.update(_parse_params([entry]))
+        elif url:
+            web_params.append(entry)
+        else:
+            raise SystemExit(
+                f"record --surface: --param {entry!r}: a desktop window has "
+                "no field names; use NAME=VALUE. Nothing was recorded."
+            )
+    if args.secret and not url:
+        raise SystemExit(
+            "record --surface: --secret names browser fields and needs --url. "
+            "Nothing was recorded."
+        )
+    try:
+        out = record_multi_surface(
+            Path(args.out),
+            surfaces=surfaces,
+            url=url,
+            params=desktop_params,
+            web_params=web_params,
+            web_secrets=tuple(args.secret or ()),
+            headless=bool(getattr(args, "headless", False)),
+            task_description=args.task or "openadapt-flow recording",
+            stop=_record_until_stop(args),
+        )
+    except MultiSurfaceRecordError as exc:
+        raise SystemExit(f"record: {exc}. Nothing was kept.") from exc
+    from openadapt_flow.cli_hints import command
+    from openadapt_flow.multi_surface_record import (
+        confirm_review,
+        write_unconfirmed_review,
+    )
+
+    print("This recording used:")
+    for line in review_lines(out):
+        print(line)
+    if getattr(args, "yes", False):
+        confirm_review(out)
+    elif sys.stdin.isatty():
+        answer = input("Keep it? [Y/n] ").strip().lower()
+        if answer in ("n", "no"):
+            import shutil
+
+            shutil.rmtree(out, ignore_errors=True)
+            print("Deleted. Nothing was kept.")
+            return 1
+        confirm_review(out)
+    else:
+        review = write_unconfirmed_review(out)
+        print(
+            f"No one confirmed these surfaces, so compile refuses the recording "
+            f"until a person runs '{command('confirm-surfaces')} {out}' "
+            f"(the list is in {review.name})."
+        )
+    print(f"Recording written to {out}")
+    import json as _json
+
+    listed = _json.loads((Path(out) / "meta.json").read_text())["surfaces"]
+    lead_flag = "--url <app>" if url else f"--backend {listed[0]['kind']} <target>"
+    binds = " ".join(
+        f"--surface {s['id']}={s['kind']}:<target>"
+        for s in listed[1:]
+        if s["kind"] != "web"
+    )
+    print(
+        f"Compile it:  {command('compile')} {out} --out <bundle> --name <workflow>\n"
+        f"Then replay: {command('replay')} <bundle> {lead_flag} {binds}"
+    )
+    return 0
 
 
 def _cmd_record_desktop(args: argparse.Namespace, backend: str) -> int:
@@ -2696,6 +2905,15 @@ def _attached_web_page(backend_cfg, *, url: Optional[str], workflow=None):
                 page_url=backend_cfg.browser_page_url,
             )
         except BrowserAttachError as exc:
+            raise SystemExit(f"REFUSED: {exc}. Nothing was executed.") from None
+        from openadapt_flow._browser_readiness import (
+            BrowserReadinessError,
+            require_rendering_ready,
+        )
+
+        try:
+            require_rendering_ready(browser, attached_page=page)
+        except BrowserReadinessError as exc:
             raise SystemExit(f"REFUSED: {exc}. Nothing was executed.") from None
         from openadapt_flow.backends.playwright_backend import prepare_ws_guard
 
@@ -4239,6 +4457,16 @@ def _cmd_run(args: argparse.Namespace) -> int:
             if refused is not None:
                 return refused
     policy_source = args.policy or cfg.policy.policy
+    subroutine_library = None
+    library_path = getattr(args, "subroutine_library", None)
+    if library_path:
+        from openadapt_flow.subroutines import SubroutineError, load_library
+
+        try:
+            subroutine_library = load_library(library_path)
+        except SubroutineError as exc:
+            print(f"run REFUSED: {exc}. Nothing was executed.")
+            return 2
 
     report = evaluate_run_gate(
         workflow,
@@ -4259,6 +4487,10 @@ def _cmd_run(args: argparse.Namespace) -> int:
             effective_require_settled if profile is not None else None
         ),
         qualification_evidence_only=qualification_case is not None,
+        # Re-admit embedded subroutines against the CURRENT library: a
+        # certificate cannot know a newer version was published since.
+        subroutine_library=subroutine_library,
+        subroutine_workflow_id=getattr(args, "subroutine_workflow_id", None),
     )
     print(report.render())
 
@@ -5881,7 +6113,9 @@ def _cmd_silent_saves(args: argparse.Namespace) -> int:
         module = importlib.util.module_from_spec(spec)
         sys.modules["silent_saves"] = module
         spec.loader.exec_module(module)
-    from silent_saves.cli import main as silent_saves_main  # type: ignore[import-not-found]
+    from silent_saves.cli import (  # type: ignore[import-not-found]
+        main as silent_saves_main,
+    )
 
     return int(silent_saves_main(list(args.silent_saves_argv)))
 
@@ -6000,14 +6234,42 @@ def _cmd_scaffold_verifier(args: argparse.Namespace) -> int:
         db=optional_path("db"),
         verifier=optional_path("verifier"),
         prove=getattr(args, "prove", None),
+        proof_source=getattr(args, "_record_check_proof_source", None),
         recording=optional_path("recording"),
         bundle=optional_path("bundle"),
         complete_read=bool(getattr(args, "complete_read", False)),
         fault_gate=bool(getattr(args, "fault_gate", False)),
+        probe_reads=bool(getattr(args, "probe_reads", False)),
+        probe_base=getattr(args, "probe_base", None),
     )
     if built is not None:
         print(built.summary)
         return 0 if built.working else 1
+    if getattr(args, "probe_reads", False):
+        import json as _json
+
+        from openadapt_flow import sealed_set as _sealed_set
+        from openadapt_flow.scaffold_verifier import READ_DISCOVERY_FILE
+
+        found = (out_dir or Path(args.source)) / READ_DISCOVERY_FILE
+        status, reason = "unavailable", ""
+        try:
+            data = _json.loads(_sealed_set.read_text(found))
+            status, reason = str(data.get("status")), str(data.get("reason") or "")
+        except (OSError, ValueError, _sealed_set.SealedSetError):
+            pass
+        if status == "refused":
+            print(
+                "Read discovery: REFUSED. A probed read confirmed the written "
+                f"values but can't see the whole save, so no check was written: "
+                f"{reason} ({found})."
+            )
+        else:
+            print(
+                "Read discovery: UNAVAILABLE. No probed read confirmed the "
+                "written values, so no read was proposed; a person must name "
+                f"one ({found})."
+            )
     out, count = write_draft(Path(args.source), out_dir)
     print(
         "No read in the recording returns the saved record (no network capture, "
@@ -7219,18 +7481,36 @@ def _save_subroutine_library(library: Any, path: Optional[str], before: str) -> 
     save_library(library, path)
 
 
-def _add_subroutine_library_flags(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument(
-        "--subroutine-library",
-        default=None,
-        metavar="JSON",
-        help=(
+def _add_subroutine_library_flags(
+    parser: argparse.ArgumentParser, *, for_run: bool = False
+) -> None:
+    if for_run:
+        help_text = (
+            "Current subroutine library to re-admit embedded subroutines "
+            "against before this run. Required when the bundle embeds a "
+            "subroutine; a certification made before a newer version was "
+            "published does not let the old version run."
+        )
+    else:
+        help_text = (
             "Subroutine library to admit embedded subroutines against. "
             "Certifying registers this workflow in it, so a new version of a "
             "subroutine it uses re-qualifies it. Required when the bundle "
             "embeds a subroutine."
-        ),
+        )
+    parser.add_argument(
+        "--subroutine-library", default=None, metavar="JSON", help=help_text
     )
+    if for_run:
+        parser.add_argument(
+            "--subroutine-workflow-id",
+            default=None,
+            metavar="ID",
+            help=(
+                "Id this workflow was registered under when it was certified "
+                "(default: the workflow name)"
+            ),
+        )
 
 
 def _cmd_qualify_proposal(args: argparse.Namespace) -> int:
@@ -9170,8 +9450,9 @@ def _cmd_qualify_campaign(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     """Build the top-level argument parser."""
     from openadapt_flow.cli_hints import command
+    from openadapt_flow.cli_tasks import TaskParser
 
-    parser = argparse.ArgumentParser(
+    parser = TaskParser(
         prog="openadapt-flow",
         description=(
             "Record a task and compile it into a program that runs on "
@@ -9192,7 +9473,9 @@ def build_parser() -> argparse.ArgumentParser:
         action="version",
         version=f"%(prog)s {_package_version()}",
     )
-    sub = parser.add_subparsers(dest="command", required=True)
+    sub = parser.add_subparsers(
+        dest="command", required=True, parser_class=argparse.ArgumentParser
+    )
 
     p = sub.add_parser(
         "demo",
@@ -9237,6 +9520,34 @@ def build_parser() -> argparse.ArgumentParser:
         help="Also print each engine stage as it runs",
     )
     p.set_defaults(func=_cmd_demo)
+
+    p = sub.add_parser(
+        "confirm-surfaces",
+        help=(
+            "Review the windows a cross-window recording used, and confirm "
+            "them so the recording can be compiled"
+        ),
+        allow_abbrev=False,
+    )
+    p.add_argument("recording", help="Recording directory")
+    p.add_argument("--yes", action="store_true", help="Confirm without asking")
+    p.set_defaults(func=_cmd_confirm_surfaces)
+
+    p = sub.add_parser(
+        "browser-accessibility",
+        help=(
+            "Linux: start Chrome, Chromium, Edge and Brave with their page "
+            "readable to accessibility tools, so record can read clicks in "
+            "your everyday browser. Writes your own launcher entries only"
+        ),
+        allow_abbrev=False,
+    )
+    mode = p.add_mutually_exclusive_group()
+    mode.add_argument("--enable", action="store_true", help="Add the setting")
+    mode.add_argument(
+        "--disable", action="store_true", help="Remove what --enable added"
+    )
+    p.set_defaults(func=_cmd_browser_accessibility)
 
     p = sub.add_parser(
         "record",
@@ -9423,6 +9734,35 @@ def build_parser() -> argparse.ArgumentParser:
             "verify.proposed.yaml. Both reads go to sor_snapshots.json "
             "(mode 0600). With no file, look the record up after you save: "
             "that look-up becomes the proposed check"
+        ),
+    )
+    p.add_argument(
+        "--surface",
+        action="append",
+        default=None,
+        metavar="NAME=KIND:WINDOW",
+        help=(
+            "With no --backend or --url, record follows you across windows "
+            "on its own. Use --surface to name the windows yourself instead, "
+            "or --surface auto with --url to add automatic windows to a "
+            "browser recording. Declare each desktop or remote window the "
+            "person works in (repeatable). "
+            "KIND is windows, macos, linux, rdp or citrix; WINDOW is part of "
+            "that window's title (on macOS, the app name). Repeat a NAME to "
+            "add another window to it, such as its dialog. With --url the "
+            "browser leads; otherwise the first --surface does. Each change "
+            "of window becomes a checked switch step. An action in a window "
+            "you did not declare stops the recording. See "
+            "docs/MULTI_SURFACE.md."
+        ),
+    )
+    p.add_argument(
+        "--yes",
+        action="store_true",
+        help=(
+            "Keep a cross-window recording's surfaces without asking. Without "
+            "a terminal and without --yes, the recording is kept unconfirmed "
+            "and compile refuses it until confirm-surfaces is run."
         ),
     )
     _add_backend_flags(p)
@@ -10233,6 +10573,7 @@ def build_parser() -> argparse.ArgumentParser:
     # Set by the agent runner for an intake-granted run (#1890): the exact
     # bundle digest the grant admitted. Not an operator knob.
     p.add_argument("--admitted-bundle-sha256", default=None, help=argparse.SUPPRESS)
+    _add_subroutine_library_flags(p, for_run=True)
     p.add_argument("--managed-dispatch-file", default=None, help=argparse.SUPPRESS)
     p.add_argument(
         "--permission-trust",
@@ -10938,10 +11279,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--prove",
         default=None,
-        choices=("mockmed", "effect-e2e"),
+        metavar="FIXTURE",
         help=(
             "Also run the proposed check end to end against this "
-            "fault-injection fixture (the check must match its record service)"
+            "caller-supplied fault fixture (requires an injected proof source)"
         ),
     )
     p.add_argument(
@@ -10959,6 +11300,25 @@ def build_parser() -> argparse.ArgumentParser:
             "With --db: write each bad save to a copy of the database and let "
             "the check read it through its own read (the fault gate). A fault "
             "the read can't see keeps the check a draft"
+        ),
+    )
+    p.add_argument(
+        "--probe-reads",
+        action="store_true",
+        help=(
+            "When the recording never reads the saved record back, derive "
+            "reads from the captured write and probe them with GET on a local "
+            "copy of the app; use one only when it returns the written values. "
+            "Every probe is recorded in the proof"
+        ),
+    )
+    p.add_argument(
+        "--probe-base",
+        default=None,
+        metavar="URL",
+        help=(
+            "With --probe-reads: the local copy of the app to probe (default: "
+            "the recorded origin, which must be the local machine)"
         ),
     )
     p.add_argument(
@@ -11629,6 +11989,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_browser_session_flags(q)
     _add_deployment_flags(q)
     _add_approval_flags(q)
+    _add_subroutine_library_flags(q, for_run=True)
     q.set_defaults(func=_cmd_qualify)
 
     q = qsub.add_parser(
@@ -12805,6 +13166,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Write the synthetic MockMed ok and banner-lie admissions",
     )
+    p.add_argument(
+        "--config",
+        default=None,
+        metavar="DEPLOY_YAML",
+        help=(
+            "Deployment file for bundles recorded off the web (Windows, "
+            "macOS, Linux, RDP, Citrix): they run through `openadapt-flow run "
+            "--config` on its backend. An admission's own `deployment` wins."
+        ),
+    )
     p.set_defaults(func=_cmd_serve_execute)
 
     p = sub.add_parser(
@@ -12994,6 +13365,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     _register_learn(sub)
 
+    from openadapt_flow.cli_reconcile import register as _register_reconcile
+
+    _register_reconcile(sub)
+
     from openadapt_flow.cli_cleanup import register as _register_cleanup
 
     _register_cleanup(sub)
@@ -13014,6 +13389,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     register_fleet_parser(sub)
 
+    parser.add_task_help()
     return parser
 
 
@@ -13210,6 +13586,7 @@ def _cmd_serve_execute(args: argparse.Namespace) -> int:
         data_dir,
         token=args.token,
         seed_mockmed=bool(args.seed_mockmed),
+        deployment=getattr(args, "config", None),
     )
     print("openadapt-flow reference Execute")
     print(f"  http://{args.host}:{args.port}")
@@ -13553,6 +13930,7 @@ _STRICT_SELF_SEALING: frozenset[str] = frozenset(
         "openadapt_flow.__main__:_cmd_resume",
         "openadapt_flow.__main__:_cmd_teach",
         "openadapt_flow.__main__:_cmd_push",
+        "openadapt_flow.__main__:_cmd_seal",
     }
 )
 
@@ -13560,8 +13938,8 @@ _STRICT_SELF_SEALING: frozenset[str] = frozenset(
 def _plaintext_directories_in(args: argparse.Namespace) -> list[Path]:
     """Existing directories among the arguments that are not inside a sealed
     set. Files a person passes (a config, a results JSON) are not artifacts
-    and are not checked."""
-    from openadapt_flow import sealed_set
+    and are not checked. A path the filesystem can't classify, a broken link
+    and a link to a file are returned too, so the caller refuses them."""
 
     found: list[Path] = []
     for name, value in vars(args).items():
@@ -13571,17 +13949,24 @@ def _plaintext_directories_in(args: argparse.Namespace) -> list[Path]:
             if not isinstance(item, (str, Path)) or not str(item):
                 continue
             text = str(item)
-            if "://" in text or "\n" in text or len(text) > 4096:
-                continue
+            # Every string is checked against the filesystem, whatever it
+            # looks like: a newline, "://" or any length can spell a local
+            # path. NAME=PATH arguments name a path after the first "=".
             candidates = [text]
             if isinstance(item, str) and "=" in text:
                 candidates.append(text.split("=", 1)[1])
             for candidate in candidates:
+                if not candidate:
+                    continue
                 path = Path(candidate)
-                if not path.is_dir():
+                kind = _local_path_kind(candidate)
+                if kind is None or kind == "other":
                     continue
-                if sealed_set.is_sealed(path) or sealed_set.sealed_root(path):
+                if kind == "directory" and _inside_sealed_set(path):
                     continue
+                # A plaintext directory, or a path that can't be checked: a
+                # broken or looping link, a link to a file (either could be
+                # pointed at plaintext after this check), or a stat error.
                 if path not in found:
                     found.append(path)
     return found
@@ -13599,6 +13984,153 @@ _SEALED_OUTPUT_FROM_SEALED_INPUT: dict[str, tuple[str, ...]] = {
 _SEALED_OUTPUT_IN_STRICT: frozenset[str] = frozenset(
     {"openadapt_flow.__main__:_cmd_teach", "openadapt_flow.__main__:_cmd_push"}
 )
+
+
+def _local_path_kind(text: str) -> Optional[str]:
+    """``directory``, ``other`` (an existing non-directory that is not a
+    link), ``unchecked`` (a link that isn't a directory, or a path the
+    filesystem can't classify), or None when no such path can exist."""
+
+    import errno
+    import os
+    import stat
+
+    no_such_path = (errno.ENOENT, errno.ENOTDIR, errno.ENAMETOOLONG)
+    # Windows rejects a name it cannot hold, such as "http:" with a colon
+    # (ERROR_INVALID_NAME, ERROR_BAD_PATHNAME): no such path can exist.
+    invalid_name = (123, 161)
+
+    def absent(exc: OSError) -> bool:
+        return (
+            exc.errno in no_such_path or getattr(exc, "winerror", None) in invalid_name
+        )
+
+    try:
+        link = os.lstat(text)
+    except ValueError:  # an embedded NUL: no such path
+        return None
+    except OSError as exc:
+        return None if absent(exc) else "unchecked"
+    try:
+        st = os.stat(text)
+    except (OSError, ValueError):
+        return "unchecked"  # a broken or looping link, or unreadable
+    if stat.S_ISDIR(st.st_mode):
+        return "directory"
+    return "unchecked" if stat.S_ISLNK(link.st_mode) else "other"
+
+
+#: A plaintext copy of one of these inside a sealed set's directory is a
+#: plaintext artifact placed there, not part of the set.
+_PLAINTEXT_ARTIFACT_MARKERS = ("workflow.json", "events.jsonl", "report.json")
+
+
+def _complete_inventory(top: Path) -> Optional[list[Path]]:
+    """Every regular file under ``top``, read from the filesystem now, or
+    None when any entry can't be inspected: a directory that can't be
+    listed, a symlink (it could point anywhere, now or later), or an entry
+    that is neither a regular file nor a directory."""
+    import os
+    import stat
+
+    files: list[Path] = []
+    pending = [top]
+    while pending:
+        current = pending.pop()
+        try:
+            with os.scandir(current) as entries:
+                listed = list(entries)
+        except OSError:
+            return None
+        for entry in listed:
+            try:
+                mode = entry.stat(follow_symlinks=False).st_mode
+            except OSError:
+                return None
+            if stat.S_ISDIR(mode):
+                pending.append(Path(entry.path))
+            elif stat.S_ISREG(mode):
+                files.append(Path(entry.path))
+            else:  # a symlink, socket, device or FIFO
+                return None
+    return files
+
+
+def _inside_sealed_set(path: Path) -> bool:
+    """Whether ``path`` really is, or is inside, a sealed set.
+
+    Symlinks are resolved first, so a link inside a set to a directory
+    elsewhere is judged by where it points. The set's header must read, and
+    every entry under the path must be inspected now: a directory that can't
+    be listed or a symlink below the path refuses. The path must be part of
+    the set: with a key, the set and every set nested under the path are
+    opened afresh (never from a cached open), and each authenticated index
+    refuses any file it doesn't list; without one, every file under the path
+    must be ciphertext or a structural file. A plaintext workflow, event log
+    or report inside a set's directory is plaintext.
+    """
+    import os
+
+    from openadapt_flow import crypto, sealed_set
+
+    real = Path(os.path.realpath(path))
+    root = real if sealed_set.is_sealed(real) else sealed_set.sealed_root(real)
+    if root is None:
+        return False
+    if any((real / name).exists() for name in _PLAINTEXT_ARTIFACT_MARKERS):
+        return False
+    inventory = _complete_inventory(real)
+    if inventory is None:
+        return False
+
+    def read_key(set_root: Path) -> tuple[Optional[str], bool]:
+        try:
+            kind = str(sealed_set.read_header(set_root)["kind"])
+        except (sealed_set.SealedSetError, KeyError):
+            return None, False
+        key = (
+            os.environ.get(sealed_set.RECORDING_ENV_KEY)
+            if kind == "recording"
+            else None
+        ) or crypto.resolve_read_key(None)
+        return key, True
+
+    key, readable = read_key(root)
+    if not readable:
+        return False
+    if key:
+
+        def opened_afresh(set_root: Path, set_key: str) -> Optional[list[str]]:
+            # Never open_set's cache: a cached open says what was on disk
+            # then, not what is there now.
+            try:
+                return sealed_set.SealedSet.open(set_root, set_key).files("")
+            except (sealed_set.SealedSetError, crypto.CryptoError):
+                return None
+
+        files = opened_afresh(root, key)
+        if files is None:
+            return False
+        nested = {f.parent for f in inventory if f.name == sealed_set.HEADER}
+        for set_root in sorted(nested - {root}):
+            set_key, readable = read_key(set_root)
+            if not readable or not set_key:
+                return False
+            if opened_afresh(set_root, set_key) is None:
+                return False
+        rel = Path(os.path.relpath(real, root)).as_posix()
+        return rel == "." or any(f == rel or f.startswith(rel + "/") for f in files)
+    for file in inventory:
+        name = file.name
+        if not (
+            name.endswith(sealed_set.SEALED_SUFFIX)
+            or name == sealed_set.HEADER
+            or name == "manifest.json"
+            or name.endswith(".lock")
+            or name.startswith(".")
+        ):
+            return False
+    return True
 
 
 def _unsealed_output_check(args: argparse.Namespace) -> None:
@@ -13849,10 +14381,17 @@ def _sealed_input_refusal(args: argparse.Namespace) -> Optional[str]:
     return None
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(
+    argv: Sequence[str] | None = None,
+    *,
+    record_check_proof_source: Optional[Fixture] = None,
+) -> int:
     """CLI entry point. Returns a process exit code."""
+    from openadapt_flow.cli_tasks import alias_notice, translate
+
     raw = list(sys.argv[1:] if argv is None else argv)
-    if raw[:1] in (["demo"], ["tutorial"]) and not _PREWARM_SKIP_FLAGS & set(raw):
+    routed = translate(raw)
+    if routed[:1] in (["demo"], ["tutorial"]) and not _PREWARM_SKIP_FLAGS & set(routed):
         # Building the parser imports for a second or two on a new install;
         # start loading OCR and checking the browser driver meanwhile.
         from openadapt_flow import _prewarm
@@ -13861,8 +14400,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     from openadapt_flow._browser_setup import BrowserSupportMissing
 
-    argv = list(sys.argv[1:] if argv is None else argv)
-    argv = _qualify_default_form(argv)
+    argv = _qualify_default_form(routed)
     from openadapt_flow.cli_admit import admit_default_form
 
     argv = admit_default_form(argv)
@@ -13873,7 +14411,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     from openadapt_flow import no_outbound
 
     no_outbound.enforce_from_env()
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    alias_notice(raw, getattr(parser, "task_names", {}), "openadapt-flow")
+    if record_check_proof_source is not None:
+        if getattr(args, "func", None) is not _cmd_scaffold_verifier:
+            print("REFUSED: proof source requires scaffold-verifier", file=sys.stderr)
+            return 2
     if getattr(args, "config_sha256", None):
         if not getattr(args, "config", None):
             print("REFUSED: --config-sha256 needs --config", file=sys.stderr)
@@ -13910,6 +14454,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"REFUSED: {safe_errors.message(exc)}", file=sys.stderr)
         return 2
     try:
+        # Inject only after the ordinary input/output argument guards. This
+        # object is not a CLI flag, path exemption or serialized capability.
+        if record_check_proof_source is not None:
+            args._record_check_proof_source = record_check_proof_source
         code = args.func(args)
         if getattr(args, "command", None) in ("run", "replay"):
             # Offline Seal by default (OPENADAPT_LOCAL_SEAL=off disables). It

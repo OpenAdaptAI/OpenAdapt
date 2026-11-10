@@ -1,0 +1,35 @@
+WARNING: writing a compiled bundle in plaintext at /Users/abrichr/oa/scratch/api-generalization/wordpress_comment/bundle: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+WARNING: openadapt-privacy is not installed, so reports and logs are not scrubbed of patient data (OPENADAPT_FLOW_SCRUB=auto). Install 'openadapt-flow[privacy]', or set OPENADAPT_FLOW_SCRUB=on to refuse instead.
+param-hygiene step_006: REGION_STABLE dropped — changed region (296, 602, 688, 117) renders a demonstrated parameter value (Em************************************te); freezing it would false-halt every run whose value differs. This step has no pixel-region invariant.
+{
+ "app": "wordpress_comment",
+ "workflow": "post-comment",
+ "steps": 10,
+ "params": [
+  "author",
+  "comment",
+  "email",
+  "url"
+ ],
+ "optional_params": [
+  "url"
+ ],
+ "compile_proposal": {
+  "proposed": true,
+  "step": "step_009",
+  "reasons": []
+ },
+ "proposed": true,
+ "reasons": [],
+ "compile_s": 11.8,
+ "frozen": "cf28c2af85e87965f248c8a75bd8f0aa32f2e634",
+ "head": "cf28c2af85e87965f248c8a75bd8f0aa32f2e634",
+ "engine_diff_vs_frozen": "",
+ "identity": {
+  "subject_name": "comment"
+ },
+ "admitted": [
+  "step_009"
+ ],
+ "describe": "step_009: save with one request, POST /wp-comments-post.php, in place of 10 GUI steps (step_000 to step_009).\n  sign-in: the replaying browser's own session; form read again from /?p=1\n  fields: 2 form_default, 4 param, 1 submitter\n  run values: comment={comment}, author={author}, email={email}, url={url}\n  accepted when: HTTP [302] and the response matches '/.*?p=\\\\d+.*?unapproved=\\\\d+.*?moderation\\\\-hash=[^&#\\\\s]+'\n  record check after: 4 effect(s) copied from the save step\n  right record (subject_name): the request sends {comment} in comment and the record check selects comment = {comment}\n  the form's own script runs before each save, in a scratch page with writes blocked, on the run's values: inline script, script http://127.0.0.1:9664/wp-includes/blocks/navigation/view.min.js?ver=6.6.2, script http://127.0.0.1:9664/wp-includes/js/comment-reply.min.js?ver=6.6.2, script http://127.0.0.1:9664/wp-includes/js/dist/vendor/wp-polyfill-importmap.min.js?ver=1.8.2\n  screen-only checks, not repeated: ['step_000: region_stable', 'step_002: region_stable', 'step_004: region_stable', 'step_006: region_stable']\n  if the form or a check differs at run time, the GUI steps run instead"
+}

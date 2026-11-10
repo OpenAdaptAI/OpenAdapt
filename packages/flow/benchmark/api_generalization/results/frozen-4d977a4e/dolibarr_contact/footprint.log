@@ -1,0 +1,16 @@
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/dolibarr_contact/footprint/fp0-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/dolibarr_contact/footprint/fp0-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/dolibarr_contact/footprint/fp1-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/dolibarr_contact/footprint/fp1-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/dolibarr_contact/footprint/fp2-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/dolibarr_contact/footprint/fp2-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{
+ "equivalent": false,
+ "gate": "stays on the GUI: the API step's side effects differ from the GUI save's, so it stays on the GUI (pair 1: the GUI save didn't make the expected record, so there is nothing to compare; pair 2: the GUI save didn't make the expected record, so there is nothing to compare; pair 3: the GUI save didn't make the expected record, so there is nothing to compare)",
+ "differences": [
+  "pair 1: the GUI save didn't make the expected record, so there is nothing to compare",
+  "pair 2: the GUI save didn't make the expected record, so there is nothing to compare",
+  "pair 3: the GUI save didn't make the expected record, so there is nothing to compare"
+ ],
+ "server_owned": []
+}

@@ -1,0 +1,152 @@
+{
+ "app": "wordpress_category",
+ "workflow": "add-category",
+ "steps": 8,
+ "params": [
+  "description",
+  "name",
+  "parent"
+ ],
+ "optional_params": [
+  "description"
+ ],
+ "compile_proposal": {
+  "proposed": true,
+  "step": "step_007",
+  "reasons": []
+ },
+ "proposed": true,
+ "reasons": [],
+ "compile_s": 70.5,
+ "frozen": "f761fff8e669c0d6e851ad8a27ed75d562003b96",
+ "head": "f761fff8e669c0d6e851ad8a27ed75d562003b96",
+ "engine_diff_vs_frozen": "",
+ "identity": {
+  "subject_name": "name"
+ },
+ "admitted": [
+  "step_007"
+ ],
+ "describe": "step_007: save with one request, POST /wp-admin/admin-ajax.php, in place of 8 GUI steps (step_000 to step_007).\n  sign-in: the replaying browser's own session; form read again from /wp-admin/edit-tags.php?taxonomy=category\n  fields: 6 form_default, 2 param, 1 select_label, 1 session\n  run values: tag-name={name}, parent={parent}, description={description}\n  accepted when: HTTP [200]\n  record check after: 3 effect(s) copied from the save step\n  right record (subject_name): the request sends {name} in tag-name and the record check selects name = {name}\n  the form's own script runs before each save, in a scratch page with writes blocked, on the run's values: inline script, script http://127.0.0.1:9664/wp-admin/js/common.min.js?ver=6.6.2, script http://127.0.0.1:9664/wp-admin/js/inline-edit-tax.min.js?ver=6.6.2, script http://127.0.0.1:9664/wp-admin/js/svg-painter.js?ver=6.6.2, script http://127.0.0.1:9664/wp-admin/js/tags.min.js?ver=6.6.2, script http://127.0.0.1:9664/wp-admin/load-scripts.php?c=0&amp;load%5Bchunk_0%5D=hoverIntent,wp-hooks&amp;ver=6.6.2, and 9 more\n  screen-only checks, not repeated: ['step_000: region_stable', 'step_002: region_stable', 'step_004: region_stable']\n  if the form or a check differs at run time, the GUI steps run instead",
+ "binding": {
+  "form_path": "/wp-admin/edit-tags.php?taxonomy=category",
+  "fields": [
+   {
+    "name": "action",
+    "source": "form_default",
+    "param": null,
+    "value": "add-tag"
+   },
+   {
+    "name": "screen",
+    "source": "form_default",
+    "param": null,
+    "value": "edit-category"
+   },
+   {
+    "name": "taxonomy",
+    "source": "form_default",
+    "param": null,
+    "value": "category"
+   },
+   {
+    "name": "post_type",
+    "source": "form_default",
+    "param": null,
+    "value": "post"
+   },
+   {
+    "name": "_wpnonce_add-tag",
+    "source": "session",
+    "param": null,
+    "value": null
+   },
+   {
+    "name": "_wp_http_referer",
+    "source": "form_default",
+    "param": null,
+    "value": "/wp-admin/edit-tags.php?taxonomy=category"
+   },
+   {
+    "name": "tag-name",
+    "source": "param",
+    "param": "name",
+    "value": null
+   },
+   {
+    "name": "slug",
+    "source": "form_default",
+    "param": null,
+    "value": ""
+   },
+   {
+    "name": "parent",
+    "source": "select_label",
+    "param": "parent",
+    "value": null
+   },
+   {
+    "name": "description",
+    "source": "param",
+    "param": "description",
+    "value": null
+   }
+  ],
+  "controls": [
+   "_wp_http_referer",
+   "_wpnonce_add-tag",
+   "action",
+   "description",
+   "parent",
+   "post_type",
+   "screen",
+   "slug",
+   "tag-name",
+   "taxonomy"
+  ],
+  "form_action": "/wp-admin/edit-tags.php",
+  "client_rules": null,
+  "client_scripts": [
+   "inline script",
+   "script http://127.0.0.1:9664/wp-admin/js/common.min.js?ver=6.6.2",
+   "script http://127.0.0.1:9664/wp-admin/js/inline-edit-tax.min.js?ver=6.6.2",
+   "script http://127.0.0.1:9664/wp-admin/js/svg-painter.js?ver=6.6.2",
+   "script http://127.0.0.1:9664/wp-admin/js/tags.min.js?ver=6.6.2",
+   "script http://127.0.0.1:9664/wp-admin/load-scripts.php?c=0&amp;load%5Bchunk_0%5D=hoverIntent,wp-hooks&amp;ver=6.6.2",
+   "script http://127.0.0.1:9664/wp-admin/load-scripts.php?c=0&amp;load%5Bchunk_0%5D=jquery-core,jquery-migrate,utils&amp;ver=6.6.2",
+   "script http://127.0.0.1:9664/wp-includes/js/admin-bar.min.js?ver=6.6.2",
+   "script http://127.0.0.1:9664/wp-includes/js/dist/a11y.min.js?ver=d90eebea464f6c09bfd5",
+   "script http://127.0.0.1:9664/wp-includes/js/dist/dom-ready.min.js?ver=f77871ff7694fffea381",
+   "script http://127.0.0.1:9664/wp-includes/js/dist/i18n.min.js?ver=5e580eb46a90c2b997e6",
+   "script http://127.0.0.1:9664/wp-includes/js/heartbeat.min.js?ver=6.6.2",
+   "script http://127.0.0.1:9664/wp-includes/js/hoverintent-js.min.js?ver=2.2.1",
+   "script http://127.0.0.1:9664/wp-includes/js/wp-ajax-response.min.js?ver=6.6.2",
+   "script http://127.0.0.1:9664/wp-includes/js/wp-auth-check.min.js?ver=6.6.2"
+  ],
+  "submitter": "#submit",
+  "submitter_requests": [
+   "POST /wp-admin/admin-ajax.php"
+  ],
+  "confirm": null,
+  "prechecks": [],
+  "success_pattern": null,
+  "replaces_steps": [
+   "step_000",
+   "step_001",
+   "step_002",
+   "step_003",
+   "step_004",
+   "step_005",
+   "step_006",
+   "step_007"
+  ],
+  "other_writes_seen": [],
+  "writes": [],
+  "screen_only_checks": [
+   "step_000: region_stable",
+   "step_002: region_stable",
+   "step_004: region_stable"
+  ],
+  "folded_checks_digest": "sha256:40aa9928f9e6299ae254e6db958703f370b22174b53e40ad590c49a15060e2da"
+ }
+}

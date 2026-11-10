@@ -187,13 +187,21 @@ class WorkerPool:
         visible: bool,
         browser: str = "",
         target: Callable[..., None] = _worker_main,
+        worker_args: Optional[Sequence[tuple[Any, ...]]] = None,
+        stall_s: float = STALL_S,
+        ready_timeout_s: float = READY_TIMEOUT_S,
     ) -> None:
+        """``worker_args[i]`` follows the usual three arguments of worker i."""
+
         context = multiprocessing.get_context("spawn")
         self._workers: dict[Connection, Any] = {}
-        for _ in range(size):
+        self._stall_s = stall_s
+        self._ready_timeout_s = ready_timeout_s
+        for number in range(size):
             parent, child = context.Pipe()
+            extra = tuple(worker_args[number]) if worker_args else ()
             process = context.Process(
-                target=target, args=(child, visible, browser), daemon=True
+                target=target, args=(child, visible, browser, *extra), daemon=True
             )
             process.start()
             child.close()
@@ -267,10 +275,10 @@ class WorkerPool:
             give(conn)
         while (self._starting() and pending) or given:
             now = clock()
-            deadlines = [since + STALL_S for _job, since in given.values()]
+            deadlines = [since + self._stall_s for _job, since in given.values()]
             starting = self._starting() if pending else set()
             if starting:
-                deadlines.append(started + READY_TIMEOUT_S)
+                deadlines.append(started + self._ready_timeout_s)
             timeout = max(0.0, min(deadlines) - now) if deadlines else None
             for conn in wait(list(starting | set(given)), timeout=timeout):
                 if conn not in given:
@@ -297,11 +305,11 @@ class WorkerPool:
                     back.append(_again(job))
             now = clock()
             for conn, (job, since) in list(given.items()):
-                if now - since >= STALL_S:
+                if now - since >= self._stall_s:
                     given.pop(conn)
                     self._drop(conn)
                     back.append(_again(job))
-            if pending and now - started >= READY_TIMEOUT_S:
+            if pending and now - started >= self._ready_timeout_s:
                 for conn in self._starting():
                     self._drop(conn)
         return sorted(back + pending)

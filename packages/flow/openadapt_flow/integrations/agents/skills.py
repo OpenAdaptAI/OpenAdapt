@@ -216,7 +216,9 @@ class FrameworkAgent:
         self.last_ledger = ledger
         tools = BrowserTools(harness)
         try:
-            task = f"Task: {request.instruction}"
+            from openadapt_flow.compile_agent.agents import _task_text
+
+            task = f"Task: {_task_text(harness, request)}"
             usage = tools.serve_while(lambda: self._run(task, tools))
         finally:
             ledger.wall_seconds = time.monotonic() - ledger.started_at
@@ -347,8 +349,12 @@ class SkillCache:
         reset: Optional[Callable[[], None]] = None,
         environment: str = "",
         python: str = sys.executable,
+        before_capture: Optional[Callable[[Any], None]] = None,
         **compile_options: Any,
     ) -> None:
+        if before_capture is not None and not callable(before_capture):
+            raise TypeError("before_capture must be callable")
+        self.before_capture = before_capture
         self.common: dict[str, Any] = dict(
             url=url,
             verify=verify,
@@ -408,9 +414,18 @@ class SkillCache:
             if k not in ("reset", "task_id", "review", "hold")
         }
         compiler = FirstRunCompiler(
-            prompt, params=list(params), task_id=self.task_id(prompt, params), **common
+            prompt,
+            params=list(params),
+            task_id=self.task_id(prompt, params),
+            before_capture=self.before_capture,
+            **common,
         )
         return compiler, key
+
+    def receipt_root(self, prompt: str, params: Mapping[str, Any]) -> Path:
+        """The producer's receipt subtree, without opening a halted server."""
+        compiler, _key = self._compiler(prompt, params)
+        return compiler.dir
 
     def server(self, prompt: str, params: Mapping[str, Any]) -> Optional[Path]:
         """The task's compiled MCP server, when it has an admitted one."""
@@ -438,6 +453,18 @@ class SkillCache:
         if not emitted.is_file():
             compiler.emit()
         return Path(json.loads(emitted.read_text())["mcp_server"])
+
+    def held(self, prompt: str, params: Mapping[str, Any]) -> bool:
+        """True when a previous cached attempt of this task is held.
+
+        A held task is never rerun by the agent: :meth:`run` returns
+        ``CACHE_HALTED`` until the hold is reconciled or repaired, so a caller
+        needs no model budget for it.
+        """
+
+        compiler, _key = self._compiler(prompt, params)
+        stop = compiler.dir / _STOP_FILE
+        return stop.exists() or stop.is_symlink()
 
     def evict(self, prompt: str, params: Mapping[str, Any]) -> Optional[Path]:
         """Set the task's skill aside (kept as evidence); None if it had none."""
@@ -488,8 +515,13 @@ class SkillCache:
                 raise ValueError("unreadable hold")
             stopped = json.loads(path.read_text())
             replay = stopped.get("replay", {}) if isinstance(stopped, dict) else {}
+            reason = stopped.get("reason") if isinstance(stopped, dict) else None
+            if isinstance(replay, dict) and reason and not replay.get("halt_reason"):
+                # A hold with no replay (for example repair selection was
+                # unavailable) still says why it holds.
+                replay = dict(replay, halt_reason=str(reason))
         except (OSError, ValueError):
-            replay = {}
+            replay = {"halt_reason": "unreadable_hold"}
         return SkillRun(
             path="skill",
             status="CACHE_HALTED",
@@ -822,6 +854,7 @@ class SkillCache:
             person=self.person,
             canary_params=self.canary_params,
             model_key=self.model_key,
+            before_capture=self.before_capture,
             **common,
         )
         if result.admitted:
@@ -1023,7 +1056,14 @@ async def _call_skill(python: str, server: Path, params: dict[str, Any]) -> dict
             tools = (await session.list_tools()).tools
             if len(tools) != 1:
                 raise RuntimeError("a compiled skill's server has exactly one tool")
-            result = await session.call_tool(tools[0].name, params)
+            from openadapt_flow.request_binding import request_meta
+
+            metadata = request_meta()
+            if metadata is None:
+                result = await session.call_tool(tools[0].name, params)
+            else:
+                # Unsupported metadata APIs refuse; never retry without context.
+                result = await session.call_tool(tools[0].name, params, meta=metadata)
     # mcp 2 names these fields in snake case, mcp 1 in camel case.
     if getattr(result, "is_error", None) or getattr(result, "isError", None):
         text = " ".join(getattr(c, "text", "") for c in result.content)

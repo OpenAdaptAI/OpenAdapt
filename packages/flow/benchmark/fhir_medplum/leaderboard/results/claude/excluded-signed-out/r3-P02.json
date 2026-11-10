@@ -1,0 +1,54 @@
+{
+ "id": "P02",
+ "class": "clean",
+ "type": "patient",
+ "expect": "found",
+ "note": "The person is already registered; nothing should be written.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 11.4,
+ "cost_usd": 0.012598,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "RESULT: NOT DONE Medplum is on the sign-in page, not signed in, and I have no credentials, so I couldn't search for or create the Patient record.",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/signin?next=%2F",
+  "final_text": "I couldn't finish this task. Medplum is showing the \"Sign in to Medplum\" page rather than being signed in as the task said, and I reloaded the page to check. I wasn't given any login credentials. I didn't use the \"Register\" link, because that would create a new account, which isn't what you asked for. I haven't searched for or written any Patient record for Lena Okafor.\n\nRESULT: NOT DONE Medplum is on the sign-in page, not signed in, and I have no credentials, so I couldn't search for or create the Patient record.",
+  "model_calls": 3,
+  "actions": 2,
+  "tokens_in": 23287,
+  "tokens_out": 432
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {}
+ },
+ "proxy": [],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 27.1,
+  "end": 29.8,
+  "waited_s": 0
+ }
+}

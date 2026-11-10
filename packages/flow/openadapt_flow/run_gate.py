@@ -33,6 +33,13 @@ FAILS CLOSED with a structured reason naming every failed requirement.
 7. **Sealed manifest + version pin** -- the bundle carries an integrity-sealed
    manifest whose digest re-verifies (no post-seal tampering), and any supplied
    version pin (content digest / compiler version) matches. A mismatch refuses.
+8. **Subroutine admission** -- a bundle that embeds reusable subroutines
+   (``subroutine/<name>/<sha256>`` subflows) is admitted again against the
+   CURRENT subroutine library on every run
+   (:func:`openadapt_flow.subroutines.admit_for_run`). A certification made
+   before a newer version was published does not let the old version run.
+   With no library such a bundle is refused. A bundle that embeds none is
+   unaffected.
 
 The gate reuses -- never re-implements -- the existing analysis primitives:
 policy certification (:func:`openadapt_flow.policy.evaluate_policy`), the
@@ -90,6 +97,11 @@ from openadapt_flow.runtime.authorization import (
     interstitial_declarations_digest,
     runtime_inputs_digest,
 )
+from openadapt_flow.subroutines import (
+    SubroutineLibrary,
+    admit_for_run,
+    uses_subroutines,
+)
 from openadapt_flow.traversal import iter_workflow_steps
 from openadapt_flow.verification import VerificationTier, verifier_effect_tier
 
@@ -105,6 +117,7 @@ GATE_APPROVAL = "approval_fallback"
 GATE_INTERSTITIALS = "interstitial_admission"
 GATE_ENCRYPTION = "encryption"
 GATE_MANIFEST = "manifest_integrity"
+GATE_SUBROUTINES = "subroutine_admission"
 
 #: The gates, in the order the report renders them.
 GATE_ORDER = (
@@ -116,6 +129,7 @@ GATE_ORDER = (
     GATE_INTERSTITIALS,
     GATE_ENCRYPTION,
     GATE_MANIFEST,
+    GATE_SUBROUTINES,
 )
 
 _GATE_TITLES = {
@@ -127,6 +141,7 @@ _GATE_TITLES = {
     GATE_INTERSTITIALS: "Interstitial admission",
     GATE_ENCRYPTION: "Encrypted bundle",
     GATE_MANIFEST: "Sealed manifest + version pin",
+    GATE_SUBROUTINES: "Subroutine admission",
 }
 
 
@@ -323,6 +338,8 @@ def evaluate_run_gate(
     effective_durable: Optional[bool] = None,
     effective_require_settled: Optional[bool] = None,
     qualification_evidence_only: bool = False,
+    subroutine_library: Optional[SubroutineLibrary] = None,
+    subroutine_workflow_id: Optional[str] = None,
 ) -> RunGateReport:
     """Admit or refuse ``workflow`` for a regulated run in this deployment.
 
@@ -359,6 +376,11 @@ def evaluate_run_gate(
             (:func:`openadapt_flow.repair.readmission.lineage_check`), passes
             the pin; any other bundle, or a lineage that doesn't verify, is
             refused.
+        subroutine_library / subroutine_workflow_id: The current subroutine
+            library and the id the workflow was registered under when it was
+            certified (default: the workflow name). Gate 8 re-admits every
+            embedded subroutine against this library on every run, under
+            every profile. A bundle that embeds one is refused without it.
     """
     bundle = Path(bundle_dir)
     policy_name = (
@@ -500,6 +522,12 @@ def evaluate_run_gate(
                 pinned_content_digest,
                 pinned_compiler_version,
                 pinned_lineage,
+            ),
+            _gate_subroutines(
+                workflow,
+                subroutine_library,
+                workflow_id=subroutine_workflow_id,
+                qualification_evidence=qualification_evidence_only,
             ),
         ]
     )
@@ -1089,9 +1117,15 @@ def build_runtime_authorization(
     if report.policy_contract_sha256 is None:
         raise ValueError("run gate report has no exact admitted policy digest")
 
-    from openadapt_flow.bundle_validation import compute_content_digest
+    from openadapt_flow.bundle_validation import (
+        BundleIntegrityError,
+        content_identity_digest,
+    )
 
-    recomputed = compute_content_digest(workflow, workflow.manifest.file_hashes)
+    try:
+        recomputed = content_identity_digest(workflow, workflow.manifest.file_hashes)
+    except BundleIntegrityError as exc:
+        raise ValueError("workflow changed after the run gate evaluated it") from exc
     if recomputed != report.bundle_content_digest:
         raise ValueError("workflow changed after the run gate evaluated it")
 
@@ -1305,6 +1339,51 @@ def _template_asset_encryption(
             ):
                 uncovered.add(rel)
     return sorted(assets), sorted(unsealed), sorted(uncovered)
+
+
+def _gate_subroutines(
+    workflow: Workflow,
+    library: Optional[SubroutineLibrary],
+    *,
+    workflow_id: Optional[str],
+    qualification_evidence: bool,
+) -> GateResult:
+    """Gate 8: every embedded subroutine is admitted by the CURRENT library.
+
+    Applies under every profile, Demo included: a superseded or edited
+    subroutine body is not the one anyone qualified. Refusals carry the same
+    stable codes as certification (``superseded``, ``not_qualified``, ...)
+    and name subroutines and codes only, never screen text or values.
+    """
+
+    if not uses_subroutines(workflow):
+        return _result(GATE_SUBROUTINES, True, "bundle embeds no subroutine")
+    admission = admit_for_run(
+        workflow,
+        library,
+        workflow_id=workflow_id,
+        qualification_evidence=qualification_evidence,
+    )
+    if admission.admitted:
+        names = sorted({use.name for use in admission.uses})
+        return _result(
+            GATE_SUBROUTINES,
+            True,
+            f"{len(admission.uses)} embedded subroutine use(s) admitted by the "
+            f"current library ({', '.join(names)})",
+        )
+    shown = "; ".join(
+        f"{refusal.code}: {refusal.message}" for refusal in admission.refusals[:4]
+    )
+    if len(admission.refusals) > 4:
+        shown += f"; ... (+{len(admission.refusals) - 4} more)"
+    return _result(
+        GATE_SUBROUTINES,
+        False,
+        f"{len(admission.refusals)} embedded subroutine refusal(s) against the "
+        f"current library ({shown})",
+        [refusal.subflow for refusal in admission.refusals],
+    )
 
 
 def _gate_encryption(

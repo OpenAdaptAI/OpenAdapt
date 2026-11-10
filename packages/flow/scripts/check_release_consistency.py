@@ -379,6 +379,7 @@ PENDING_PUBLIC_ARTIFACT_INVENTORY_PATHS = frozenset(
 # per file is what catches a renamed raw-results or recipe file.
 PUBLIC_ARTIFACT_APPROVED_DIRECTORIES = (
     "benchmark/auto_repair/",
+    "benchmark/fhir_medplum/leaderboard/results/",
     "benchmark/openemr_api_tier/",
     "benchmark/run_player/",
     "benchmark/scoreboard/",

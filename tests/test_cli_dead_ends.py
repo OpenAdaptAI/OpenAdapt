@@ -206,3 +206,13 @@ def test_root_alias_keeps_the_supported_python_guard(monkeypatch, verb):
     result = CliRunner().invoke(cli_main, [verb, "--help"])
     assert result.exit_code == 1
     assert "uv tool install --python 3.12 openadapt" in result.output
+
+
+@pytest.mark.parametrize("verb", ["run", "record", "compile"])
+def test_visible_tasks_resolve_directly_even_without_parser_discovery(
+    monkeypatch, flow_calls, verb
+):
+    monkeypatch.setattr("openadapt.cli._flow_subparsers", lambda: None)
+    result = CliRunner().invoke(cli_main, [verb, "literal path"])
+    assert result.exit_code == 0, result.output
+    assert flow_calls == [[verb, "literal path"]]

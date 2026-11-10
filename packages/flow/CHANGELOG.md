@@ -15,22 +15,218 @@
 
 <!-- version list -->
 
-## Unreleased
+## v2.7.1 (2026-11-09)
 
-### Changed
+Flow 2.7.1 fixes loading of programs certified before Nov 8. Two optional
+workflow fields added since then changed their certification digest, so they
+failed to load. They now load under the reviewed sealed-omission rule, while a
+program whose content changed is still refused. The release also makes write
+ledger settlement atomic and extends zero-config verifier generation.
 
-- No command falls back to the demo app on its own. `replay` needs a target: `--url`, `backend.url` in `--config`, or `--demo-app` to serve the bundled MockMed (the tutorial and quickstart commands pass it; `--drift` needs it). The variant router's first-screen probe captures nothing without a URL. `qualify accept`'s break-it check no longer runs every workflow's oracle against MockMed: it builds the lie from the workflow itself (a store that did not change, and a screen showing the workflow's own success text and every value the run typed). The reference Execute worker refuses, before running anything, an admission whose `target_url` it cannot drive, instead of resetting and reading that app as if it were the demo.
+### Upgrade notes
+
+- A custom `LedgerBackend` must provide `transaction(key)`, an exclusive journal transaction shared by `events()` and `append()`; a backend without it refuses ledger mutations. A held write is released only by a person: `settle_s` no longer releases it, and `halted_before_effect` is now `REFUTED` with `retry_safe=False`. See [Verifier API](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/VERIFIER_API.md).
+- `scaffold-verifier --prove` no longer accepts the built-in `mockmed` and `effect-e2e` fixtures. It runs only against a proof source the caller passes to `main(record_check_proof_source=...)`.
 
 ### Fixes
 
+- Programs certified before the `Anchor.form_identity` and `TokenTemplate.bearing` fields were added load again. When the current workflow-contract digest does not match, the loader tries the older form, leaving out only fields on the reviewed sealed-omission list for the bundle's format version that are unset and `None`, and accepts it only if it reproduces the bound digest exactly. A program whose content changed is still refused.
+- Ledger settlements record the journal revision they observed, so a stale or concurrent observation cannot release a hold, grant a retry, complete a recheck or hand back an older result. Rechecks are bound to the original receipt and the exact set of validated later receipts.
 - A person's approval of a desktop save is no longer voided by text that changes by itself outside the app, such as the taskbar clock ticking over a minute while the run waits. Off the browser, the approval's "form unchanged" check read every word on the screen. On Windows it now reads the app window the item's verified steps were in, in reading order, with the window's frame in the digest, so any change inside that window, or a moved window, still stops the save. When a window of the app reaches outside that frame, the whole screen is read. A resumed run names the window under the earlier steps' recorded points, so an approval given during a hold still holds when the form is unchanged. Elsewhere the whole screen is read as before ([#1697](https://github.com/OpenAdaptAI/OpenAdapt/issues/1697)).
-- A headed browser launch no longer hangs before the browser opens. Flow's first-launch check held its guard while calling a function that takes the same guard, so every first headed launch with auto-install on (including `record --url`) waited forever.
-- Setup can learn the correspondence between a selected record reader and the database frame from their observed values. Missing or ambiguous identities refuse setup; later records use the learned column mapping without changing audit or collateral-write checks.
-- The OpenEMR contracts (`benchmark/lifecycle_proof/verify.yaml`, `benchmark/openemr_local/verify.yaml`) now declare how the New Patient form stores what was typed: street and city in capitals, names with each word capitalized. Without it the exact record check refuted 19 of 20 correct saves on the stand-in suites (#1811). A contract value's `stored` form gains `capitalize_words` (OpenEMR's "C" fields); the set stays closed and the check stays exact.
 
 ### Features
 
-- Verifier audit: `python -m openadapt_flow.verifier_audit run --target module:factory --out DIR` tests an environment's own scorer rather than an agent. It replays a reference trajectory with mechanical faults (an unauthorized side effect, the wrong record, a wrong value, a duplicate write, a partial write, a write after the success claim, a claim with no write) plus an incidental-change positive control. It reads the end state independently and reports, per family, where the scorer accepted a wrong end state or rejected a legitimate one, with counterexamples and Wilson 95% intervals. Adapters for AgentDojo and AppWorld ship as examples; private family sets plug in with `--families-module`. Design: `docs/VERIFIER_AUDIT.md`.
+- Interruption classes: a run clears a known interruption, such as a session warning, a banner or a tour, by itself, but only when the dismissal is provably read-only. The class must match by its text and control, the control's label must be in a closed non-committing set and be the live label of the control that is clicked, held for the whole click by a page-side click guard, and no write watcher may see a write. On the web the watcher is the browser write fence; on any backend, including desktop and RDP, it is the system-of-record read-back. Afterwards the step's normal identity check must pass. Classes are per-app data (`runtime.interruptions_path`) or learned from a halt (`learn_interruption`). Each dismissal is in the run report. See `docs/INTERRUPTION_RECOVERY.md`.
+
+### Changed
+
+- `scaffold-verifier` closes three gaps the zero-config benchmark found. A generated REST read now carries `records_complete: true` when `--complete-read` declares it or one unpaged response was seen to hold the whole collection; otherwise it stays incomplete and `verify-run` returns INDETERMINATE. A step counts as a write when the capture shows the page sending a POST, PUT, PATCH or DELETE to its own origin, or its store snapshots differ, not only when its label looks like Save. `--probe-reads` (with optional `--probe-base`) finds a read for an app that never reads the saved record back: it probes the collection and item reads the write implies with GET on the local machine, uses one only when it returns the written values and nothing outside it could change unseen (otherwise it refuses and writes the TODO draft), and records every probe (`read_discovery` in the proof, or `read_discovery.json` when none confirms).
+- `scaffold-verifier --probe-reads` now looks for a read that covers the whole save before it refuses a probed collection read. It probes the sibling collections under the same prefix that the app itself read (path only, from its captured GETs) and the prefix root. It uses the root instead of the collection only when the root holds the written record and every record the collection and siblings returned, in one unpaged response, every captured write went under the prefix, and every top-level value is a list of objects or a scalar (an object, such as a nested collection or an id-keyed map, refuses the root). The check reads every list the root returns, an empty one included, and the save may add exactly one row to the list holding the written record. It also reads any list that appears later (`records_other_lists`), where the save may add no row; a list it was built on that disappears makes the read unreadable (`records_list_keys`). Otherwise the refusal stands, and its reason lists what was probed. Probes still send only GET, only to the local machine, with no credentials, proxy or redirects. `read_discovery.json` is now also written when a probed read is used.
+
+### Fixes
+
+- A frame with `audit_read` attribution and no `frame.database` never holds: it reports `not_checked`, so `verify-run` can't call the save `verified`. The bot's log entries for the saved record were excused whatever table they wrote, so an extra insurance row, allergy or note for the new patient passed when the frame read only the record's own table ([#1505](https://github.com/OpenAdaptAI/OpenAdapt/issues/1505)). Add `frame.database` (the whole-database diff) to such a contract; its own refutations are unchanged.
+
+## v2.7.0 (2026-11-09)
+
+Flow adds `openadapt wrap`, which turns one agent task into a compiled program
+that replays with new inputs and no model calls. It also teaches writes in the
+browser and on desktop apps under a signed authorization, and checks more of
+what a write changed. Verification still refuses a write when the record or its
+outcome cannot be established.
+
+### Upgrade notes
+
+- No command falls back to the demo app on its own. `replay` needs a target:
+  `--url`, `backend.url` in `--config`, or `--demo-app` to serve the bundled
+  MockMed (the tutorial and quickstart commands pass it; `--drift` needs it).
+  `--demo-app` with an attached browser is refused. The variant router's
+  first-screen probe captures nothing without a URL. `qualify accept`'s break-it
+  check no longer runs every workflow's oracle against MockMed: it builds the
+  lie from the workflow itself (a store that did not change, and a screen
+  showing the workflow's own success text and every value the run typed). The
+  reference Execute worker refuses, before running anything, an admission whose
+  `target_url` it cannot drive.
+- Every command-line parser rejects abbreviated long options. Spell each
+  option in full: `run --permission` no longer selects `--permission-trust`.
+- Paged REST and FHIR reads must declare an immutable-snapshot contract and
+  completeness. A read that does not declare `records_complete` (or that
+  returns a missing or changing snapshot token, duplicate identities or mixed
+  identity domains) is indeterminate, not confirmed.
+- FHIR reads refuse query parameters in configured searches, requests,
+  effective URLs and self links, because a capped or filtered result cannot
+  establish a complete read-back. A `collection` bundle is accepted only with a
+  total equal to its entry count. Standard searchset paging is unchanged.
+- A workflow recorded with locale, date-order and keyboard-layout facts refuses
+  replay on a computer whose facts differ or cannot be read. Workflows recorded
+  before this release carry no such binding and are not checked.
+- Identity bands are stricter. A recorded token that carries a digit (an id,
+  date, age or count) must match the live band raw, label and hint words no
+  longer count toward coverage, and a band with no identity-bearing token
+  abstains. Some same-name rows that verified before now refuse.
+- SQLite rows are hashed with each cell's storage class, so a value that
+  changes from integer to text (or similar) changes the row hash. A connection
+  with type converters is refused.
+- All database watch routes in one shadow configuration must share the same
+  `frame.database` settings.
+
+### Features
+
+- `openadapt wrap` (and `python -m openadapt_flow.wrap.cli`) runs one
+  operator-configured, parameterized task. The first call for a task runs the
+  agent once, checks the saved record independently, compiles the run and
+  admits it; later calls replay the admitted program with new inputs and no
+  model calls. `--serve` exposes the task as a local stdio MCP tool whose input
+  schema is exactly the task's declared parameters. A request ID makes a
+  repeated or interrupted call return the original run instead of sending the
+  write again. A failed or uncertain replay is held until a person approves a
+  repair through the normal signed admission and canaries. Model spend and run
+  time are capped before each model call (`--max-cost-usd`,
+  `--max-run-seconds`), and the run reports its usage.
+- The model never sees the task's own identity or inputs. Where a listing or
+  screenshot shows a value bound to the task (a declared `on_screen` identity
+  string or a task input), it is sent as a typed placeholder such as
+  `⟦task.identity_1⟧` or `⟦task.note⟧`: in text, and as a labelled box in the
+  redacted screenshot. Before, the scrubber redacted the task's own patient name
+  and MRN, and Claude stopped at read-back because it could not tell the task's
+  row from any other. Unbound personal data is still redacted generically. The
+  agent may type a placeholder; the harness types the value. The save gate and
+  the read-back still check the real values locally.
+- `openadapt wrap` takes `--max-input-bytes`. Claude's default ceiling on one
+  rendered request is now 4 MiB (was 64 KiB, which ended every
+  screenshot-per-turn run on turn 2); OpenAI keeps 64 KiB. No setting may exceed
+  32 MiB, and a request above the setting is still never sent.
+- Commands are grouped into 15 tasks in `openadapt-flow --help` (for example
+  `setup teach-authorization`, `verify shadow`). Every earlier command name
+  still works as an alias.
+- Browser teach writes: an agent can teach a save in the browser under a
+  person-signed teach authorization (`openadapt.teach-authorization/v1`). The
+  authorization names the task, inputs, origins, permitted writes and forbidden
+  actions; run 1 starts only when it verifies and covers the write, and every
+  click, key and select is checked against it. `openadapt-flow
+  teach-authorization create`, `sign` and `verify` manage authorizations.
+- An agent can teach a save on a desktop or remote app over MCP, get it
+  admitted, and call the taught tool. Teach authorizations accept desktop and
+  remote surface origins, and a desktop teach scope is bound to the app the
+  person taught.
+- Native authoring trees: `authoring_tree()` on the Windows (UI Automation),
+  macOS (Accessibility) and Linux (AT-SPI) backends lists each control by its
+  element identity. `compile-agent --config` and `serve-execute --config` run
+  desktop and remote apps from the deployment's `backend` section.
+- Verifier audit: `python -m openadapt_flow.verifier_audit run --target
+  module:factory --out DIR` tests an environment's own scorer rather than an
+  agent. It replays a reference trajectory with mechanical faults (an
+  unauthorized side effect, the wrong record, a wrong value, a duplicate write,
+  a partial write, a write after the success claim, a claim with no write) plus
+  an incidental-change positive control. It reads the end state independently
+  and reports, per family, where the scorer accepted a wrong end state or
+  rejected a legitimate one, with counterexamples and Wilson 95% intervals.
+  Adapters for AgentDojo and AppWorld ship as examples; private family sets
+  plug in with `--families-module`. Design: `docs/VERIFIER_AUDIT.md`.
+- Database shadow mode watches clients that write directly to a database. The
+  agent announces each action (`/begin`, `/end`); Flow checks the action's
+  database contract and watches for changes between actions. A change no action
+  covers is `REFUTED` when the app's audit names the agent's user and
+  `UNCERTAIN` otherwise. `--guard` refuses actions that cannot be checked or
+  that follow an unconfirmed result.
+- Writes stay provisional while a history recheck is owed. The recheck reads
+  retained versions and deletions, refuses incomplete history, and needs
+  server-controlled provenance to attribute another actor's edit.
+- Reusable subroutines: a typed signature plus a program body, identified by
+  digest and kept in a versioned library. Certification registers each
+  workflow's uses, and every run re-admits embedded subroutines against the
+  current library (`--subroutine-library`), so publishing a new version sends
+  older users back to qualification.
+- A small, safe expression language computes parameters between steps and
+  evaluates generated effect predicates. It has its own parser and type
+  checker (no `eval`), a closed standard library and hard bounds; anything
+  outside it refuses. See `docs/EXPRESSIONS.md`.
+- API steps cover multipart saves, the clicked submit button's `name=value`,
+  and saves sent by page scripts.
+- A new built-in certification policy, `record-write`, asks for the same
+  evidence as `clinical-write` for any non-clinical system of record. Select it
+  with `campaign.policy: record-write` or `--policy record-write`.
+- Setup learns how a selected record reader corresponds to database rows and
+  columns (`learn_frame_identities`), and drafts REST read setups from explicit
+  API paging, total, snapshot and equality semantics. Missing or ambiguous
+  correspondences refuse setup.
+- `verifier.session` works for FHIR and GraphQL read-backs, renewed for each
+  qualification trial.
+- Taught-tool parameters can declare the intake field they come from. A run is
+  refused when a value disagrees with an operator-registered intake grant bound
+  to the source document and the exact bundle that runs.
+- Regulated approvals can require a named-person binding (WebAuthn passkey,
+  OIDC or SAML evidence), carried in the Seal as digests only.
+- The local console authorizes each request against a deployment-resolved
+  identity with reader, operator and administrator permissions.
+- Explicit retention removes finalized sealed runs after a signed policy
+  interval (dry run by default), and sealed-set data keys can be rewrapped
+  without re-encrypting payloads. `OPENADAPT_FLOW_AT_REST=strict` encrypts
+  every run directory and refuses what it cannot encrypt.
+- Recorded native single-select choices replay by their exact option value.
+- Flow ingests evidence from an optional Manifest V3 Chrome extension: open
+  shadow-DOM target paths, cross-origin iframe context and redacted network
+  saves, with secrets withheld before they leave the page.
+- Trusted `before_capture(backend)` preparation runs on the recording's own
+  backend before the first capture; publication waits for cleanup.
+- A modal dialog target's identity band is read on the dialog alone, so
+  confirm steps in dialogs (such as a duplicate-record prompt) can arm
+  identity.
+
+### Fixes
+
+- The scrubber no longer rewrites a listing's element refs: `[e3] button "Open"`
+  came back as `[<US_DRIVER_LICENSE>] button "Open"`. Only page text is
+  scrubbed, cell by cell; ref tokens never reach the scrubber.
+- `openadapt wrap` on a held task reports `CACHE_HALTED` with the halt reason
+  and exits 1. It used to treat the hold as a cache miss and exit 2 asking for
+  `--max-cost-usd`. A held task never runs the agent.
+- A headed browser launch no longer hangs before the browser opens. Flow's
+  first-launch check held its guard while calling a function that takes the
+  same guard, so every first headed launch with auto-install on (including
+  `record --url`) waited forever.
+- Browser startup refuses when animation frames cannot advance, instead of
+  acting on a page that never renders.
+- Confirmation-shaped clicks that open a dialog keep their reversible
+  classification, so the write check no longer demands a saved effect from a
+  click that saves nothing.
+- Native form destinations are read correctly when named controls mask the
+  form's `action` or `method`.
+- An early database recheck stays pending until its read reaches the
+  deadline, instead of confirming an earlier snapshot.
+- Durable history stays ordered when the wall clock steps back.
+- The space bar is kept as typed text in recordings.
+- Response-path synthesis finds fields in later and nested items of repeated
+  lists, and refuses ambiguous matches.
+- Append-only MySQL and MariaDB logs are read incrementally, with a row budget
+  that fails closed.
+- Planted qualification faults avoid unique indexes, and update variant
+  enumeration stops at its 64-variant limit.
+- Bundle manifests and API proposal sidecars are read as UTF-8.
+- Captured HTML withholds every hidden token and token meta tag.
+- Evidence exports refuse key and credential files before reading them.
+- `ensure_record` binds its read-back to the last version written and orders
+  versions by their parsed instant.
 
 ## v2.6.0 (2026-11-04)
 
@@ -62,6 +258,17 @@ refuses a write when the record or its outcome cannot be established.
   to its recorded identity band.
 
 ### Features
+
+- A teach authorization's forbidden controls are read from Chromium's accessibility tree, not by a script in the page. Every key (Enter, Space, any key, typing) is checked against the control that has focus when it arrives, in any frame, and Enter in a form field against the form's default button too, so a forbidden control reached by Tab or by implicit submission is refused like a click. Key chords are refused while controls are forbidden. A click is matched by every name its target goes by: the accessible name, the text of a control with no role (a `div` with a click handler), and the control a `<label>` is for; the default button is the browser's own (`:default`), read in an isolated world. Behaviour change: on surfaces without a web page, a statement that forbids any control now refuses clicks and keys.
+
+- Browser teach writes again, bound to a person's signed teach authorization (`serve --teach-browser --teach-authorization`), for task `browser-tool.<name>`. Run 1 opens no WebSocket and reaches only the statement's origins. Run 1 of a write starts only when the statement covers it: the app's origin, the contract as its record kind, a write adapter, run 1's inputs, and exactly the record fields the contract checks, with run 1's values. During run 1 the write adapter reads every write before it is sent. A taught tool keeps the statement and is signed with the local admission key; every call checks the statement again (signature, roster, purpose, task, expiry). The example app ships its write adapter (`openadapt_flow.agent.example_app:OrderWrites`). Docs: `docs/TEACH_AUTHORIZATION.md`, `docs/VERIFY_WRITES.md`.
+
+  Teaching and every later call stop on missing worker containment or an
+  observed worker violation and connect no WebSocket. Redirect hops receive
+  the wire check, and declared GET writes pin query field names, including
+  empty fields. Requests from independently targeted frames are refused.
+  Guarded clicks use the exact fragment point checked; keyboard checks also
+  read visible text.
 
 - A code-as-action agent is now the default for the first run. Every save is
   read back before that run becomes a replayable program. Form scripts can run

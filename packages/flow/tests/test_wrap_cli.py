@@ -72,6 +72,7 @@ def test_factory_receives_explicit_bounds_and_price_provenance(
         "prices": {"input": 1, "output": 2, "cache_write": 3, "cache_read": 4},
         "max_run_seconds": 110,
         "request_timeout_seconds": 25,
+        "max_input_bytes": None,
         "price_model": "exact-model",
         "pricing_source_url": "https://example.test/prices",
         "pricing_verified_at": "2026-11-07",
@@ -200,3 +201,130 @@ def test_admission_policy_without_key_refuses_before_task_load(monkeypatch):
     with pytest.raises(SystemExit):
         cli._task(args, parser)
     assert calls == []
+
+
+def _parse(tmp_path, *extra):
+    parser = cli.build_parser()
+    return parser, parser.parse_args(
+        ["--task", str(tmp_path / "task.json"), "--max-cost-usd", "5", *extra]
+    )
+
+
+def test_max_input_bytes_reaches_the_factory(monkeypatch, tmp_path):
+    setup = SimpleNamespace(
+        cache=SimpleNamespace(server=lambda *_: None, held=lambda *_: False),
+        instruction="Save {note}",
+        parameters=("note",),
+    )
+    monkeypatch.setattr(recording, "load_task", lambda *_args, **_kwargs: setup)
+    observed = {}
+
+    def build(selected, **kwargs):
+        observed.update(kwargs)
+        return SimpleNamespace(requires_model_key=False)
+
+    monkeypatch.setattr(providers, "build_agent", build)
+    parser, args = _parse(tmp_path, "--max-input-bytes", "1048576")
+    cli._task(args, parser)
+    assert observed["max_input_bytes"] == 1048576
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["0", str(providers.MAX_INPUT_BYTES_CEILING + 1)],
+    ids=("zero-bound", "over-ceiling"),
+)
+def test_max_input_bytes_outside_the_hard_cap_is_refused(monkeypatch, tmp_path, value):
+    setup = SimpleNamespace(
+        cache=SimpleNamespace(server=lambda *_: None, held=lambda *_: False),
+        instruction="Save {note}",
+        parameters=("note",),
+    )
+    monkeypatch.setattr(recording, "load_task", lambda *_args, **_kwargs: setup)
+    monkeypatch.setattr(
+        providers,
+        "build_agent",
+        lambda *_a, **_k: pytest.fail("no agent above the hard cap"),
+    )
+    parser, args = _parse(tmp_path, "--max-input-bytes", value)
+    with pytest.raises(SystemExit):
+        cli._task(args, parser)
+
+
+def test_claude_default_input_ceiling_fits_a_screenshot_loop():
+    agent = providers.build_agent("claude", max_turns=40, max_cost_usd=3)
+    assert agent.max_input_bytes == providers.CLAUDE_MAX_INPUT_BYTES
+    assert agent.max_input_bytes >= 4 * 1024 * 1024
+    with pytest.raises(ValueError, match="at most"):
+        providers.build_agent(
+            "claude",
+            max_turns=40,
+            max_cost_usd=3,
+            max_input_bytes=providers.MAX_INPUT_BYTES_CEILING + 1,
+        )
+
+
+def test_held_task_reports_cache_halted_and_never_runs_a_paid_miss(
+    monkeypatch, tmp_path, capsys
+):
+    from openadapt_flow.integrations.agents.skills import SkillRun
+
+    agents = []
+
+    def run(prompt, params, agent):
+        agents.append(agent)
+        return SkillRun(
+            path="skill",
+            status="CACHE_HALTED",
+            verified=False,
+            model_calls=0,
+            cost_usd=0.0,
+            seconds=0.0,
+            usage=[],
+            usage_known=True,
+            replay={
+                "halt_reason": "record_written refuted at step_005",
+                "receipt_outcome": "RECONCILIATION_REQUIRED",
+            },
+        )
+
+    cache = SimpleNamespace(
+        held=lambda *_: True,
+        server=lambda *_: pytest.fail("a held task is not looked up as a hit"),
+        key=lambda prompt, params: {"prompt": prompt},
+        run=run,
+    )
+    setup = SimpleNamespace(
+        cache=cache, instruction="Save {note}", parameters=("note",)
+    )
+    monkeypatch.setattr(recording, "load_task", lambda *_args, **_kwargs: setup)
+    monkeypatch.setattr(
+        providers,
+        "build_agent",
+        lambda *_a, **_k: pytest.fail("a held task builds no model agent"),
+    )
+    monkeypatch.setattr(
+        keys,
+        "load_customer_model_key",
+        lambda *_a: pytest.fail("a held task loads no model key"),
+    )
+    code = cli.main(
+        [
+            "--task",
+            str(tmp_path / "task.json"),
+            "--runs-dir",
+            str(tmp_path / "runs"),
+            "--request-id",
+            "after-halt",
+            "--param",
+            "note=next",
+        ]
+    )
+    import json
+
+    result = json.loads(capsys.readouterr().out)
+    assert code != 0 and code != 2
+    assert result["status"] == "CACHE_HALTED" and result["verified"] is False
+    assert result["halt_reason"] == "record_written refuted at step_005"
+    assert result["receipt_outcome"] == "RECONCILIATION_REQUIRED"
+    assert agents == [None]

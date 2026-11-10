@@ -128,7 +128,9 @@ def test_malformed_task_refuses_before_materializing(task, key, value):
 
 
 @pytest.mark.parametrize(
-    "data", [b'{"instruction":1,"instruction":2}', b'{"x":NaN}', b"\xff", b" " * 65537]
+    "data",
+    [b'{"instruction":1,"instruction":2}', b'{"x":NaN}', b"\xff", b" " * 65537],
+    ids=("duplicate-key", "nonfinite-number", "invalid-utf8", "oversize-json"),
 )
 def test_bounded_closed_json(task, data):
     path, _, _ = task
