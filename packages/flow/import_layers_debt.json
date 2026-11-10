@@ -51,9 +51,9 @@
     {
       "module": "openadapt_flow.runtime.replayer",
       "path": "packages/flow/openadapt_flow/runtime/replayer.py",
-      "line": 1067,
+      "line": 1068,
       "edge_kind": "direct",
-      "diagnostic": "openadapt_flow.runtime.replayer:1067: unresolvable dynamic import (importer value escape)",
+      "diagnostic": "openadapt_flow.runtime.replayer:1068: unresolvable dynamic import (importer value escape)",
       "reason": "vision-transfer",
       "follow_up": "unresolved-import-provider-migration",
       "source_statement_sha256": "96c55d12f7cc7a5bf8d66ad65e1bd9345ac809c26a0edfad73989ec1e17f0f82"
@@ -61,9 +61,9 @@
     {
       "module": "openadapt_flow.runtime.replayer",
       "path": "packages/flow/openadapt_flow/runtime/replayer.py",
-      "line": 7729,
+      "line": 7738,
       "edge_kind": "direct",
-      "diagnostic": "openadapt_flow.runtime.replayer:7729: unresolvable dynamic import (importer value escape)",
+      "diagnostic": "openadapt_flow.runtime.replayer:7738: unresolvable dynamic import (importer value escape)",
       "reason": "namespace-query",
       "follow_up": "unresolved-import-provider-migration",
       "source_statement_sha256": "3d40e6e86e6b643d97f8503b9aea981169e8f3accba562b5fec81fb78019cd37"
@@ -241,9 +241,9 @@
     {
       "module": "openadapt_flow.runtime.replayer",
       "path": "packages/flow/openadapt_flow/runtime/replayer.py",
-      "line": 1067,
+      "line": 1068,
       "edge_kind": "transitive",
-      "diagnostic": "openadapt_flow.runtime.replayer:1067: unresolvable dynamic import (importer value escape)",
+      "diagnostic": "openadapt_flow.runtime.replayer:1068: unresolvable dynamic import (importer value escape)",
       "reason": "vision-transfer",
       "follow_up": "unresolved-import-provider-migration",
       "source_statement_sha256": "96c55d12f7cc7a5bf8d66ad65e1bd9345ac809c26a0edfad73989ec1e17f0f82"
@@ -251,9 +251,9 @@
     {
       "module": "openadapt_flow.runtime.replayer",
       "path": "packages/flow/openadapt_flow/runtime/replayer.py",
-      "line": 7729,
+      "line": 7738,
       "edge_kind": "transitive",
-      "diagnostic": "openadapt_flow.runtime.replayer:7729: unresolvable dynamic import (importer value escape)",
+      "diagnostic": "openadapt_flow.runtime.replayer:7738: unresolvable dynamic import (importer value escape)",
       "reason": "namespace-query",
       "follow_up": "unresolved-import-provider-migration",
       "source_statement_sha256": "3d40e6e86e6b643d97f8503b9aea981169e8f3accba562b5fec81fb78019cd37"
