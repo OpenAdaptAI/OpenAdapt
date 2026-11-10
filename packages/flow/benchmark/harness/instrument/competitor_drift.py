@@ -62,6 +62,7 @@ from benchmark.harness.silent_wrong_action import (
     _effect_verify,
     _screen_shows_success,
 )
+from openadapt_flow.mockmed.fault_server import mockmed_rest_read_kwargs
 from openadapt_flow.mockmed.fault_server import serve as fault_serve
 from openadapt_flow.runtime.effects import RestRecordVerifier
 
@@ -416,9 +417,7 @@ class StubExternalAgentAdapter:
         self, task: DriftTask, target_url: str, *, max_steps: int
     ) -> AgentRunResult:
         base = self._base_of(target_url)
-        verifier = RestRecordVerifier(
-            base, records_path="/api/db", records_key="records"
-        )
+        verifier = RestRecordVerifier(base, **mockmed_rest_read_kwargs())
         # Observe the system of record BEFORE acting (an agent may inspect
         # state around its own action) so the honest policy can detect
         # collateral loss, not just its own row.
@@ -738,7 +737,7 @@ def _run_one(
     db.reset(seed_concurrent=task.scenario.seed_concurrent)
     before_snapshot = db.snapshot()["records"]
 
-    verifier = RestRecordVerifier(base, records_path="/api/db", records_key="records")
+    verifier = RestRecordVerifier(base, **mockmed_rest_read_kwargs())
     before_state = verifier.capture_pre_state()
 
     target_url = f"{base}/?fault={task.scenario.name}"
@@ -880,8 +879,8 @@ def write_outputs(report: InstrumentReport, out_dir: Path | str) -> None:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     payload = assert_anonymized(json.dumps(report.to_dict(), indent=2) + "\n")
-    (out / "results.json").write_text(payload)
-    (out / "COMPETITOR_DRIFT.md").write_text(render_markdown(report))
+    (out / "results.json").write_text(payload, encoding="utf-8")
+    (out / "COMPETITOR_DRIFT.md").write_text(render_markdown(report), encoding="utf-8")
 
 
 # --------------------------------------------------------------------------
@@ -906,7 +905,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             "and a dry-run estimator; a real (paid) competitor adapter is "
             "wired in code and run as a separate user decision. No vendor is "
             "named; no model is called."
-        )
+        ),
+        allow_abbrev=False,
     )
     parser.add_argument("--out", default=DEFAULT_OUT_DIR, help="output directory")
     parser.add_argument(

@@ -618,7 +618,9 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     import uvicorn
 
-    parser = argparse.ArgumentParser(description="Serve a Windows desktop environment")
+    parser = argparse.ArgumentParser(
+        description="Serve a Windows desktop environment", allow_abbrev=False
+    )
     parser.add_argument("env_dir")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)

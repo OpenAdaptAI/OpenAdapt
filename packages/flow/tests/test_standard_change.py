@@ -54,6 +54,8 @@ from openadapt_flow.repair.standard_change import (
     revert,
 )
 
+from tests._rest_read_contract_fixtures import mockmed_rest_read_kwargs
+
 pytest.importorskip("playwright.sync_api")
 
 from tests.test_self_repair import (  # noqa: E402 - after the playwright skip
@@ -160,8 +162,7 @@ def _target(
         open_session,
         effect_verifier=RestRecordVerifier(
             base_url,
-            records_path="/api/db",
-            records_key="records",
+            **mockmed_rest_read_kwargs(),
             timeout_s=2.0,
             poll_interval_s=0.05,
         ),

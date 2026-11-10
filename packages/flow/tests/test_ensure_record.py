@@ -183,12 +183,12 @@ def bundle(*resources, total=None, next_url=None, kind="searchset"):
     return body
 
 
-def with_outcome(body, severity):
+def with_outcome(body, severity, *, code="processing"):
     body["entry"] = list(body.get("entry") or []) + [
         {
             "resource": {
                 "resourceType": "OperationOutcome",
-                "issue": [{"severity": severity, "code": "processing"}],
+                "issue": [{"severity": severity, "code": code}],
             },
             "search": {"mode": "outcome"},
         }
@@ -296,15 +296,28 @@ def test_every_incomplete_read_is_unreadable(routes):
 
 
 def test_a_warning_outcome_is_a_message_not_an_unreadable_search():
-    """Epic answers an empty search with a warning outcome entry."""
+    """An explicitly informational warning is not a matching resource."""
 
     r = reader_for(
-        {"Observation": bundle(), "AuditEvent": with_outcome(bundle(), "warning")}
+        {
+            "Observation": bundle(),
+            "AuditEvent": with_outcome(bundle(), "warning", code="informational"),
+        }
     )
     changes = read_changes(
         contract(change_feed={"audit": {}, "sweep_types": ["Observation"]}), r, T0
     )
     assert changes == {}
+
+
+def test_a_processing_warning_is_an_unreadable_search():
+    r = reader_for(
+        {"Observation": bundle(), "AuditEvent": with_outcome(bundle(), "warning")}
+    )
+    with pytest.raises(Unreadable):
+        read_changes(
+            contract(change_feed={"audit": {}, "sweep_types": ["Observation"]}), r, T0
+        )
 
 
 def test_a_server_without_history_authors_relies_on_the_audit_trail():
@@ -1574,3 +1587,64 @@ def test_version_trail_names_authors_when_the_order_is_unambiguous():
         ],
     )
     assert [v["author"] for v in version_trail(change)] == [BOT, OTHER]
+
+
+def test_bundle_refuses_parameterized_non_searchset_bundle():
+    records = [patient("1"), patient("2")]
+    routes = {
+        "Patient": bundle(*records, kind="collection"),
+        "Patient?_count=1": bundle(*records, kind="collection"),
+    }
+    reader = reader_for(routes)
+
+    # Configured query params on non-searchset bundle are refused
+    with pytest.raises(
+        Unreadable, match="collection searches require an unrestricted empty query"
+    ):
+        reader.bundle("Patient", {"_count": "1"})
+
+    # Query in path/URL is refused
+    with pytest.raises(
+        Unreadable, match="collection searches require an unrestricted empty query"
+    ):
+        reader.bundle("Patient?_count=1")
+
+    # Query in self link is refused
+    collection_with_self_query = bundle(*records, kind="collection")
+    collection_with_self_query["link"] = [
+        {"relation": "self", "url": "http://fhir.test/Patient?_count=1"}
+    ]
+    reader_self = reader_for({"Patient": collection_with_self_query})
+    with pytest.raises(
+        Unreadable, match="collection searches require an unrestricted empty query"
+    ):
+        reader_self.bundle("Patient")
+
+    # Query in effective/served URL (Content-Location) is refused
+    def get_with_served(url, params):
+        return (
+            200,
+            {"content-location": "http://fhir.test/Patient?_count=1"},
+            bundle(*records, kind="collection"),
+        )
+
+    reader_served = FhirReader(
+        contract(change_feed={"audit": {}, "sweep_types": ["Observation"]}),
+        get_with_served,
+    )
+    with pytest.raises(
+        Unreadable, match="collection searches require an unrestricted empty query"
+    ):
+        reader_served.bundle("Patient")
+
+    # Unqueried collection bundle without next link is accepted as complete
+    unqueried = reader.bundle("Patient")
+    assert len(unqueried) == 2
+
+    # A searchset bundle with parameters retains normal searchset pagination/coverage
+    searchset_routes = {
+        "Patient": bundle(*records, total=2, kind="searchset"),
+    }
+    reader_searchset = reader_for(searchset_routes)
+    searchset_entries = reader_searchset.bundle("Patient", {"_count": "2"})
+    assert len(searchset_entries) == 2

@@ -260,6 +260,55 @@ class AppBase:
         return cases
 
 
+def dump_database(dialect: str, query: Any) -> dict[str, list[dict[str, Any]]]:
+    """Every row of every table, read in one query through the app's own SQL access.
+
+    For the side-effect footprint (openadapt_flow.api_footprint): what a save
+    changed anywhere in the database, not only in the record it names.
+    ``query(sql)`` returns rows as dicts (the adapter's read-only access).
+    """
+
+    if dialect == "postgresql":
+        tables = [r["t"] for r in query(
+            "SELECT tablename AS t FROM pg_tables WHERE schemaname = 'public' ORDER BY 1")]
+        parts = [f"SELECT '{t}' AS t, COALESCE(json_agg(r)::text, '[]') AS j FROM \"{t}\" r" for t in tables]
+    elif dialect == "mysql":
+        cols: dict[str, list[str]] = {}
+        for r in query("SELECT table_name AS t, column_name AS c FROM information_schema.columns "
+                       "WHERE table_schema = DATABASE() ORDER BY table_name, ordinal_position"):
+            cols.setdefault(r["t"], []).append(r["c"])
+        parts = [
+            # Base64, so the client's tab-separated output can't mangle it.
+            f"SELECT '{t}' AS t, TO_BASE64(COALESCE(JSON_ARRAYAGG(JSON_OBJECT("
+            + ", ".join(f"'{c}', `{c}`" for c in cs)
+            + f")), '[]')) AS j FROM `{t}`"
+            for t, cs in cols.items()
+        ]
+    elif dialect == "sqlite":
+        cols = {}
+        for r in query("SELECT m.name AS t, p.name AS c FROM sqlite_master m "
+                       "JOIN pragma_table_info(m.name) p WHERE m.type = 'table' ORDER BY m.name, p.cid"):
+            cols.setdefault(r["t"], []).append(r["c"])
+        parts = [
+            f"SELECT '{t}' AS t, COALESCE((SELECT json_group_array(json_object("
+            + ", ".join(f"'{c}', \"{c}\"" for c in cs)
+            + f")) FROM \"{t}\"), '[]') AS j"
+            for t, cs in cols.items()
+        ]
+    else:
+        raise ValueError(f"no dump for {dialect}")
+    out: dict[str, list[dict[str, Any]]] = {}
+    for i in range(0, len(parts), 40):  # keep each statement a reasonable size
+        for r in query(" UNION ALL ".join(parts[i:i + 40])):
+            raw = r["j"]
+            if dialect == "mysql":
+                import base64
+
+                raw = base64.b64decode("".join(str(raw).split())).decode("utf-8")
+            out[r["t"]] = json.loads(raw) if isinstance(raw, str) else (raw or [])
+    return out
+
+
 def center(page: Any, rec: Any, selector: str) -> tuple[int, int]:
     """The control's center, scrolling (as a recorded wheel event) until it is in view."""
 

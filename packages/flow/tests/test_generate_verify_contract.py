@@ -26,6 +26,8 @@ from typing import Any, Callable
 import pytest
 import yaml
 
+from tests.test_verifier_recheck import due_now as due_now
+
 psycopg2 = pytest.importorskip("psycopg2")
 
 from openadapt_flow.generate import verify_contract as gen  # noqa: E402
@@ -516,10 +518,8 @@ def _write_then_recheck(
     """A write, its verdict, a late write after the verdict, and the
     recheck's verdict."""
 
-    from openadapt_flow import verifier
     from openadapt_flow.verifier import Actor, begin_write, recheck, verify_write
 
-    monkeypatch.setattr(verifier, "seconds_until", lambda due: 0.0)
     actor = Actor("agent", "ops-bot")
     contract, params = gen.choose(
         generated["out"] / "manifest.yaml", kind, values, {"bot_user_id": str(BOT)}
@@ -563,7 +563,7 @@ def test_the_generated_frame_compares_its_own_tables(generated: dict[str, Any]) 
 
 
 def test_a_late_update_of_a_look_alike_is_refuted_at_the_recheck(
-    generated: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+    generated: dict[str, Any], monkeypatch: pytest.MonkeyPatch, due_now: None
 ) -> None:
     """A correct update, then a change to the look-alike issue in the other
     project after the verdict: the recheck stops it. The columns the update
@@ -594,7 +594,7 @@ def test_a_late_update_of_a_look_alike_is_refuted_at_the_recheck(
 
 
 def test_a_late_duplicate_create_is_refuted_at_the_recheck(
-    generated: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+    generated: dict[str, Any], monkeypatch: pytest.MonkeyPatch, due_now: None
 ) -> None:
     app = generated["app"]
     first, late = _write_then_recheck(
@@ -608,7 +608,7 @@ def test_a_late_duplicate_create_is_refuted_at_the_recheck(
 
 @pytest.mark.parametrize("kind", ["create_issue", "update_issue"])
 def test_a_correct_write_with_nothing_late_is_confirmed_at_the_recheck(
-    generated: dict[str, Any], monkeypatch: pytest.MonkeyPatch, kind: str
+    generated: dict[str, Any], monkeypatch: pytest.MonkeyPatch, due_now: None, kind: str
 ) -> None:
     app = generated["app"]
     if kind == "create_issue":

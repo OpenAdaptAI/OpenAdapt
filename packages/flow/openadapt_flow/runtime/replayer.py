@@ -49,6 +49,7 @@ import threading
 import time
 import uuid
 from collections import Counter
+from contextlib import ExitStack
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
@@ -81,6 +82,7 @@ from openadapt_flow.backend import (
     GuardedKeyboardActionBackend,
     GuardedRemotePointerActionBackend,
     GuardedSelectOptionBackend,
+    NativeSelectBackend,
     PreparedPointerActuationBackend,
     RemoteActuationBackend,
     RemoteFrameContractBackend,
@@ -95,6 +97,13 @@ from openadapt_flow.bundle_validation import compute_parameter_schema_digest
 from openadapt_flow.identity_signals import (
     normalize_signal_text,
     parameterize_identity_text,
+)
+from openadapt_flow.interruptions import (
+    LabelChangedDuringClick,
+    class_texts,
+    dismiss_label,
+    live_control_error,
+    whole_interruption_error,
 )
 from openadapt_flow.ir import (
     ActionDeliveryUncertainty,
@@ -137,6 +146,8 @@ from openadapt_flow.ir import (
     StateKind,
     Step,
     StepResult,
+    StructuralHandle,
+    StructuralLocator,
     UnarmedStep,
     VisualResolutionEvidence,
     Workflow,
@@ -188,6 +199,7 @@ from openadapt_flow.runtime.durable.program_checkpoint import (
 from openadapt_flow.runtime.durable.program_checkpoint import (
     history_hash as _history_hash,
 )
+from openadapt_flow.runtime.effect_watch import EffectWatchReport, watch_effects
 from openadapt_flow.runtime.effects import (
     Effect,
     EffectState,
@@ -499,16 +511,28 @@ def _pipeline_safe_verifier(verifier: Any) -> bool:
     ):
         return False
     safe: list[type] = []
-    for module, name in (
-        ("openadapt_flow.runtime.effects.rest", "RestRecordVerifier"),
-        ("openadapt_flow.runtime.effects.fhir", "FhirEffectVerifier"),
-        ("openadapt_flow.runtime.effects.graphql", "GraphQLRecordVerifier"),
-        ("openadapt_flow.runtime.effects.sql", "SqlRecordVerifier"),
+    for load, name in (
+        (
+            lambda: importlib.import_module("openadapt_flow.runtime.effects.rest"),
+            "RestRecordVerifier",
+        ),
+        (
+            lambda: importlib.import_module("openadapt_flow.runtime.effects.fhir"),
+            "FhirEffectVerifier",
+        ),
+        (
+            lambda: importlib.import_module("openadapt_flow.runtime.effects.graphql"),
+            "GraphQLRecordVerifier",
+        ),
+        (
+            lambda: importlib.import_module("openadapt_flow.runtime.effects.sql"),
+            "SqlRecordVerifier",
+        ),
     ):
         try:
             import importlib
 
-            safe.append(getattr(importlib.import_module(module), name))
+            safe.append(getattr(load(), name))
         except Exception:  # noqa: BLE001 - an unavailable kind is not safe
             continue
     return isinstance(verifier, tuple(safe))
@@ -930,6 +954,7 @@ class Replayer:
         state_verifier: Optional[Any] = None,
         effect_verifier: Optional[EffectVerifier] = None,
         effect_compensator: Optional[Any] = None,
+        duplicate_record_source: Any = "auto",
         api_actuator: Optional[Any] = None,
         web_form_actuator: Optional[Any] = None,
         api_steps: bool = True,
@@ -1082,6 +1107,14 @@ class Replayer:
         # makes a model call — the $0 runtime guarantee is preserved.
         self.effect_verifier = effect_verifier
         self.effect_compensator = effect_compensator
+        # The duplicate check's record channel (``runtime/checks/
+        # duplicate_record.py``). Resolved from this run's own effect verifier
+        # when the check runs (``_duplicate_source``), so every construction
+        # path (qualification, run, resume, proof) that reads the same system
+        # of record uses the same check. Only tests and embedders pass one.
+        self._duplicate_requested = duplicate_record_source
+        self._last_duplicate_check: Optional[Any] = None
+        self._last_duplicate_outcome: Optional[str] = None
         # ``run``-only, bundle-bound admission capability.  The ordinary
         # ``replay`` path leaves this unset and preserves its permissive
         # behavior.  When present it carries exact identity/effect decisions
@@ -1894,6 +1927,17 @@ class Replayer:
         campaign_refusal = self._qualification_campaign_refusal(workflow)
         if campaign_refusal is not None:
             raise ValueError(campaign_refusal)
+        # Locale / date-order / keyboard layout (#1897): refuse before any
+        # keystroke when the recording's environment does not match this one.
+        from openadapt_flow.locale_invariants import (
+            LocaleInvariantMismatch,
+            enforce_workflow_locale_invariants,
+        )
+
+        try:
+            enforce_workflow_locale_invariants(workflow)
+        except LocaleInvariantMismatch as exc:
+            raise ValueError(exc.reason) from exc
         if bundle_dir is not None:
             # Every execution path runs through here, so a JIT draft with no
             # valid admission, or an admitted one run on another app or
@@ -7999,13 +8043,15 @@ class Replayer:
             ok, frame = self._poll_postconditions(step, frame, bundle_dir, start_state)
             if not ok:
                 frame = self.vision.wait_settled(self.backend)
-                failed = [
-                    self._describe_postcondition(pc)
+                failed_pcs = [
+                    pc
                     for pc in step.expect
                     if not self._postcondition_passes(
                         pc, frame, bundle_dir, start_state
                     )
                 ]
+                self._stamp_duplicate_check(result, failed_pcs)
+                failed = [self._describe_postcondition(pc) for pc in failed_pcs]
             result.after_png = self._save_step_png(
                 run_dir, evidence_step_id, "after", frame
             )
@@ -11353,6 +11399,22 @@ class Replayer:
 
         if step.action is not ActionKind.SELECT_OPTION:
             return None
+        if step.native_selection is not None:
+            try:
+                Step.model_validate(step.model_dump(mode="json"))
+            except Exception:
+                return f"Step '{step.id}' has an invalid native selection contract"
+            kind, _mode = self._active_surface_binding(workflow)
+            if (
+                kind not in (None, "web")
+                or isinstance(self.backend, RemoteActuationBackend)
+                or not isinstance(self.backend, NativeSelectBackend)
+            ):
+                return (
+                    f"Step '{step.id}' requires an exact native HTML selection "
+                    "capability on a browser surface; refusing input"
+                )
+            return None
         if step.selection_region is None or step.selection_commit_key is None:
             return (
                 f"Step '{step.id}' ({step.intent}) has an incomplete exact "
@@ -12186,7 +12248,8 @@ class Replayer:
         # is None and resolution uses the visual ladder unchanged.
         structural = (
             self.backend
-            if self.use_structural and hasattr(self.backend, "locate_structural")
+            if (self.use_structural or step.native_selection is not None)
+            and hasattr(self.backend, "locate_structural")
             else None
         )
         try:
@@ -12194,7 +12257,9 @@ class Replayer:
                 step.anchor,
                 screen_png,
                 self.vision,
-                self.grounder if allow_grounder else None,
+                self.grounder
+                if allow_grounder and step.native_selection is None
+                else None,
                 step.intent,
                 template_png=template_png,
                 viewport=_frame_viewport(screen_png),
@@ -12221,6 +12286,8 @@ class Replayer:
                 ),
             )
         resolution, matched_region = resolved
+        if step.native_selection is not None and resolution.rung != "structural":
+            return None, None, "Native selection requires exact structural resolution"
         resolution, matched_region = self._retarget_by_record_key(
             step, resolution, matched_region
         )
@@ -14015,6 +14082,46 @@ class Replayer:
                 )
             return None
 
+        if (
+            step.action is ActionKind.SELECT_OPTION
+            and step.native_selection is not None
+        ):
+            contract_error = self._selection_contract_error(step, workflow)
+            if contract_error is not None:
+                result.safety_halt = True
+                result.failure_category = "safety_halt"
+                return contract_error
+            if (
+                resolution is None
+                or resolution.rung != "structural"
+                or resolution.structural_handle is None
+                or step.anchor is None
+                or step.anchor.structural is None
+            ):
+                result.safety_halt = True
+                result.failure_category = "safety_halt"
+                return "Native selection requires the exact fresh structural target"
+            refusal = self._delivery_authorization_refusal(
+                workflow, params, step, result
+            )
+            if refusal is not None:
+                return refusal
+            self._require_qualification_environment_current()
+            native_select = cast(NativeSelectBackend, self.backend)
+            native_contract = step.native_selection
+            native_locator = step.anchor.structural
+            native_handle = resolution.structural_handle
+            result.delivery_receipt = self._deliver_backend_call(
+                result,
+                lambda: native_select.select_native_option_guarded(
+                    native_contract,
+                    locator=native_locator,
+                    handle=native_handle,
+                ),
+            )
+            result.actuation = "dom"
+            return None
+
         if step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION):
             if step.secret:
                 # Secret value is never in the bundle/params: inject it from
@@ -14270,6 +14377,13 @@ class Replayer:
             baseline_field_value = self._text_value_at(field_point)
             if baseline_field_value is None:
                 baseline_field_value = self._text_value_at(None)
+            # Focus (this step's click or the previous click-to-focus) may have
+            # changed the active keyboard layout. Recheck before any keystroke.
+            locale_refusal = self._require_locale_invariants_before_keyboard(workflow)
+            if locale_refusal is not None:
+                result.safety_halt = True
+                result.failure_category = "safety_halt"
+                return locale_refusal
             if step.selection_commit_key is not None:
                 selection_commit_key = step.selection_commit_key
                 assert step.selection_region is not None
@@ -14406,6 +14520,11 @@ class Replayer:
                 if step.action is ActionKind.HOTKEY
                 else step.key
             )
+            locale_refusal = self._require_locale_invariants_before_keyboard(workflow)
+            if locale_refusal is not None:
+                result.safety_halt = True
+                result.failure_category = "safety_halt"
+                return locale_refusal
             requires_atomic_keyboard = self._requires_atomic_identity_keyboard(
                 step, workflow
             )
@@ -14524,6 +14643,64 @@ class Replayer:
             for declaration in validated
         )
         return validated, canonical
+
+    def _deliver_guarded_dismissal(
+        self,
+        result: StepResult,
+        event: InterstitialActionResult,
+        locator: StructuralLocator,
+        handle: Optional[StructuralHandle],
+        native_act: Callable[..., Any],
+    ) -> None:
+        """Click an interruption class's dismiss control under the backend's
+        click guard, which keeps the checked label for the whole click
+        (``structural_label_guard``). No guard, or one that can't arm, is a
+        refusal before input; anything the guard blocked raises
+        :class:`LabelChangedDuringClick` after it."""
+
+        opener = getattr(self.backend, "structural_label_guard", None)
+        if (
+            not callable(opener)
+            or handle is None
+            or not locator.role
+            or not locator.name
+        ):
+            raise StructuralResolutionRefused(
+                "this backend can't keep the control's label for the whole "
+                "click, so the dismissal is not delivered"
+            )
+        label_report: Any = None
+        try:
+            with opener(
+                locator, handle, role=locator.role, name=locator.name
+            ) as label_report:
+                if label_report.refusal is not None:
+                    raise StructuralResolutionRefused(label_report.refusal)
+                self._deliver_backend_call(result, lambda: native_act(locator, handle))
+        except StructuralResolutionRefused:
+            if label_report is not None and label_report.violations:
+                raise LabelChangedDuringClick(label_report.violations) from None
+            raise
+        except Exception as exc:
+            if label_report is not None and label_report.violations:
+                raise LabelChangedDuringClick(label_report.violations) from exc
+            raise
+        if label_report.violations:
+            raise LabelChangedDuringClick(label_report.violations)
+
+    def _interruption_control_error(
+        self, it: Interstitial, resolution: Optional[Resolution]
+    ) -> Optional[str]:
+        """Why an interruption class's resolved dismiss control can't be shown
+        to be the declared one, or None. Only a structural resolution, bound
+        to one live element, can be checked; anything else halts."""
+
+        if resolution is None or resolution.rung != "structural":
+            return (
+                "the dismiss control did not resolve structurally, so the "
+                "control that would be clicked can't be checked"
+            )
+        return live_control_error(it, self.backend, resolution.structural_handle)
 
     def _interstitial_declaration_mutation(
         self, workflow: Optional[Workflow]
@@ -14879,6 +15056,31 @@ class Replayer:
         set_guard(self._require_qualification_environment_current)
         return None, observed, ids
 
+    def _require_locale_invariants_before_keyboard(
+        self, workflow: Workflow
+    ) -> Optional[str]:
+        """Recheck locale/layout after focus, before keystroke delivery (#1897).
+
+        The run-start gate is not enough: a focusing click can change the
+        active input layout before TYPE/KEY/HOTKEY. Re-observe the target
+        facts now and refuse when they disagree with the recording or when
+        a needed fact cannot be read. A workflow with no binding (pre-#1897)
+        is unchecked.
+        """
+
+        if getattr(workflow, "locale_invariants", None) is None:
+            return None
+        from openadapt_flow.locale_invariants import (
+            LocaleInvariantMismatch,
+            enforce_workflow_locale_invariants,
+        )
+
+        try:
+            enforce_workflow_locale_invariants(workflow)
+        except LocaleInvariantMismatch as exc:
+            return exc.reason
+        return None
+
     def _require_qualification_environment_current(self) -> None:
         """Recheck the bound environment immediately before an input edge."""
 
@@ -15117,10 +15319,37 @@ class Replayer:
             mutation_error = self._interstitial_declaration_mutation(workflow)
             if mutation_error is not None:
                 return before_png, mutation_error
+            if it.effect_watch:
+                # Classify the whole interruption, never its button word: a
+                # business question dressed as a session prompt halts here,
+                # before any input.
+                reader = getattr(self.backend, "interruption_text", None)
+                locator = (
+                    it.dismiss_anchor.structural
+                    if it.dismiss_anchor is not None
+                    else None
+                )
+                try:
+                    whole = (
+                        reader(locator, class_texts(it)) if callable(reader) else None
+                    )
+                except Exception:  # noqa: BLE001 - unreadable means unproven
+                    whole = None
+                class_error = whole_interruption_error(it, whole)
+                if class_error is None and it.dismiss_anchor is not None:
+                    # The declared label proves nothing until the control
+                    # that will be clicked is shown to carry it.
+                    class_error = self._interruption_control_error(it, resolution)
+                if class_error is not None:
+                    return before_png, (
+                        f"Interruption '{it.name}' was not cleared: {class_error} "
+                        "- refusing to act beneath it; run aborted."
+                    )
             # Append BEFORE delivery: a backend exception can never create an
             # unreported key/click attempt. The event carries the exact admitted
             # policy and expected visual outcome.
             event = InterstitialActionResult(
+                control_label=dismiss_label(it),
                 interstitial=it.name,
                 action=action,
                 key=it.dismiss_key,
@@ -15153,76 +15382,145 @@ class Replayer:
                         f"durable continuation was preempted before delivery: {exc}"
                     )
                     return before_png, event.error
-            try:
-                if it.dismiss_key is not None:
-                    self._require_qualification_environment_current()
-                    self._deliver_backend_call(
-                        result, lambda: self.backend.press(it.dismiss_key or "Escape")
+            watch_stack = ExitStack()
+            watch: Optional[EffectWatchReport] = None
+            if it.effect_watch:
+                # An interruption class is cleared only when the dismissal is
+                # proven write-free: every watcher this run has is up around
+                # it, or nothing is sent.
+                watched: list[EffectWatchReport] = []
+
+                def _record_watch() -> None:
+                    # Registered first, so it runs after the watchers close
+                    # on every exit, a failed delivery included.
+                    if watched:
+                        event.effect_watchers = list(watched[0].watchers)
+                        event.write_attempts = list(watched[0].attempts)
+                        event.requests_seen = list(watched[0].requests)
+
+                watch_stack.callback(_record_watch)
+                watch = watch_stack.enter_context(
+                    watch_effects(self.backend, self.effect_verifier)
+                )
+                watched.append(watch)
+                if watch.refusal is not None:
+                    watch_stack.close()
+                    event.error = f"dismissal not watched: {watch.refusal}"
+                    return before_png, (
+                        f"Interruption '{it.name}' can't be cleared: "
+                        f"{watch.refusal} - refusing to act beneath it; run "
+                        "aborted."
                     )
-                else:
-                    assert resolution is not None
-                    assert it.dismiss_anchor is not None
-                    if resolution.rung == "structural":
-                        native_act = getattr(self.backend, "act_structural", None)
-                        structural_anchor = it.dismiss_anchor.structural
-                        if (
-                            not callable(native_act)
-                            or resolution.structural_handle is None
-                            or structural_anchor is None
-                        ):
-                            raise StructuralResolutionRefused(
-                                "structural dismissal cannot be delivered "
-                                "natively without a stable element handle"
-                            )
+            with watch_stack:
+                try:
+                    if it.dismiss_key is not None:
                         self._require_qualification_environment_current()
                         self._deliver_backend_call(
                             result,
-                            lambda: native_act(
-                                structural_anchor,
-                                resolution.structural_handle,
-                            ),
+                            lambda: self.backend.press(it.dismiss_key or "Escape"),
                         )
                     else:
-                        self._require_qualification_environment_current()
-                        self._deliver_backend_call(
-                            result,
-                            lambda: self.backend.click(
-                                int(resolution.point[0]), int(resolution.point[1])
-                            ),
-                        )
-                event.delivered = True
-            except Exception as exc:
-                if not isinstance(
-                    exc, (FreshActuationRequired, StructuralResolutionRefused)
-                ):
-                    target_fingerprint = None
-                    if (
-                        resolution is not None
-                        and resolution.structural_handle is not None
+                        assert resolution is not None
+                        assert it.dismiss_anchor is not None
+                        if resolution.rung == "structural":
+                            native_act = getattr(self.backend, "act_structural", None)
+                            structural_anchor = it.dismiss_anchor.structural
+                            if (
+                                not callable(native_act)
+                                or resolution.structural_handle is None
+                                or structural_anchor is None
+                            ):
+                                raise StructuralResolutionRefused(
+                                    "structural dismissal cannot be delivered "
+                                    "natively without a stable element handle"
+                                )
+                            if it.effect_watch:
+                                # Again at the last no-input boundary: the
+                                # label may have changed since the check.
+                                control_error = self._interruption_control_error(
+                                    it, resolution
+                                )
+                                if control_error is not None:
+                                    raise StructuralResolutionRefused(control_error)
+                                self._require_qualification_environment_current()
+                                self._deliver_guarded_dismissal(
+                                    result,
+                                    event,
+                                    structural_anchor,
+                                    resolution.structural_handle,
+                                    native_act,
+                                )
+                            else:
+                                self._require_qualification_environment_current()
+                                self._deliver_backend_call(
+                                    result,
+                                    lambda: native_act(
+                                        structural_anchor,
+                                        resolution.structural_handle,
+                                    ),
+                                )
+                        else:
+                            self._require_qualification_environment_current()
+                            self._deliver_backend_call(
+                                result,
+                                lambda: self.backend.click(
+                                    int(resolution.point[0]), int(resolution.point[1])
+                                ),
+                            )
+                    event.delivered = True
+                except Exception as exc:
+                    if isinstance(exc, LabelChangedDuringClick):
+                        # The press reached the page's guard, which blocked
+                        # it: delivery was attempted, and nothing beneath
+                        # the label change is trusted.
+                        event.delivered = True
+                        event.label_violations = list(exc.violations)
+                        result.safety_halt = True
+                    if not isinstance(
+                        exc, (FreshActuationRequired, StructuralResolutionRefused)
                     ):
-                        target_fingerprint = (
-                            resolution.structural_handle.target_fingerprint
+                        target_fingerprint = None
+                        if (
+                            resolution is not None
+                            and resolution.structural_handle is not None
+                        ):
+                            target_fingerprint = (
+                                resolution.structural_handle.target_fingerprint
+                            )
+                        result.delivery_uncertainty = ActionDeliveryUncertainty(
+                            operation="interstitial_dismiss",
+                            native=(
+                                resolution is not None
+                                and resolution.rung == "structural"
+                            ),
+                            target_fingerprint=target_fingerprint,
+                            observed_at=datetime.now(timezone.utc).isoformat(),
+                            cause_type=type(exc).__name__,
                         )
-                    result.delivery_uncertainty = ActionDeliveryUncertainty(
-                        operation="interstitial_dismiss",
-                        native=(
-                            resolution is not None and resolution.rung == "structural"
-                        ),
-                        target_fingerprint=target_fingerprint,
-                        observed_at=datetime.now(timezone.utc).isoformat(),
-                        cause_type=type(exc).__name__,
+                    event.error = (
+                        "dismissal delivery failed "
+                        f"({type(exc).__name__}); outcome is unknown"
                     )
-                event.error = (
-                    "dismissal delivery failed "
-                    f"({type(exc).__name__}); outcome is unknown"
-                )
-                return before_png, (
-                    f"Interstitial '{it.name}' dismissal delivery failed "
-                    f"({type(exc).__name__}) - refusing to act beneath it; run "
-                    "aborted."
-                )
+                    if it.effect_watch and str(exc):
+                        event.error += f": {exc}"
+                    return before_png, (
+                        f"Interstitial '{it.name}' dismissal delivery failed "
+                        f"({type(exc).__name__}"
+                        + (f": {exc}" if it.effect_watch and str(exc) else "")
+                        + ") - refusing to act beneath it; run aborted."
+                    )
 
-            before_png, settle_error = self._resettle_after_interstitial(before_png)
+                before_png, settle_error = self._resettle_after_interstitial(before_png)
+            if watch is not None:
+                if watch.attempts:
+                    event.after_frame_sha256 = hashlib.sha256(before_png).hexdigest()
+                    event.error = "the dismissal tried to write"
+                    result.safety_halt = True
+                    return before_png, (
+                        f"Interruption '{it.name}': its dismissal tried to "
+                        f"write ({'; '.join(watch.attempts)}) - it is not a "
+                        "benign interruption; refusing to continue; run aborted."
+                    )
             event.after_frame_sha256 = hashlib.sha256(before_png).hexdigest()
             if settle_error is not None:
                 event.error = settle_error
@@ -16442,7 +16740,7 @@ class Replayer:
                 for line in lines
             ):
                 return ""
-            return identity_mod.squash(
+            return identity_mod.comparison_squash(
                 " ".join(str(getattr(line, "text", "") or "") for line in lines)
             )
 
@@ -17327,10 +17625,17 @@ class Replayer:
                 )
                 for known, known_res, known_region, _ in eligible
             ]
-            for (_, known_res, _, known_identity), known_changed in zip(
-                eligible, changes
+            for back, ((_, known_res, _, known_identity), known_changed) in enumerate(
+                zip(eligible, changes)
             ):
                 if not known_changed:
+                    if back:
+                        # Matched an earlier confirmed frame, not the latest.
+                        result.check_to_click.append(
+                            CheckToClickRecheck(
+                                changed=[], outcome="settled", settled_on=back
+                            )
+                        )
                     if known_res is not resolution:
                         result.resolution = known_res
                     # The step's identity evidence is the check on this frame.
@@ -17610,7 +17915,7 @@ class Replayer:
     def _ocr_squashed(self, png: bytes, region: Optional[Region]) -> str:
         """Squashed OCR text of a (region of a) frame."""
         lines = self.vision.ocr(png, region=region)
-        return identity_mod.squash(" ".join(line.text for line in lines))
+        return identity_mod.comparison_squash(" ".join(line.text for line in lines))
 
     def _readable_chars(self, png: bytes, region: Optional[Region]) -> int:
         """Confidently readable alphanumeric characters in a region.
@@ -17736,22 +18041,22 @@ class Replayer:
                     label = None
             if (
                 isinstance(label, str)
-                and identity_mod.squash(text)
-                and identity_mod.squash(label).casefold()
-                == identity_mod.squash(text).casefold()
+                and identity_mod.comparison_squash(text)
+                and identity_mod.comparison_squash(label).casefold()
+                == identity_mod.comparison_squash(text).casefold()
             ):
                 return True, True
         if not changed:
             return False, False
-        needle = identity_mod.squash(text)
+        needle = identity_mod.comparison_squash(text)
 
         def exact_ocr_value(
             before: bytes, after: bytes, crop: Optional[Region]
         ) -> bool:
             observed = [
-                identity_mod.squash(line.text)
+                identity_mod.comparison_squash(line.text)
                 for line in self.vision.ocr(after, region=crop)
-                if identity_mod.squash(line.text)
+                if identity_mod.comparison_squash(line.text)
             ]
             if needle and "".join(observed) == needle:
                 return True
@@ -17761,7 +18066,7 @@ class Replayer:
             # field. Remove whole unchanged OCR lines, with multiplicity;
             # every remaining character must belong to the complete value.
             previous = Counter(
-                identity_mod.squash(line.text)
+                identity_mod.comparison_squash(line.text)
                 for line in self.vision.ocr(before, region=crop)
             )
             added = []
@@ -18001,6 +18306,12 @@ class Replayer:
         if refusal is not None:
             result.input_verified = False
             return refusal
+        locale_refusal = self._require_locale_invariants_before_keyboard(workflow)
+        if locale_refusal is not None:
+            result.input_verified = False
+            result.safety_halt = True
+            result.failure_category = "safety_halt"
+            return locale_refusal
         self._require_qualification_environment_current()
         self._deliver_backend_call(result, lambda: self.backend.type_text(text))
         landed, _changed = self._typed_input_landed(
@@ -18046,6 +18357,34 @@ class Replayer:
         caller passes the one final frame used by all post-action checks.
         """
 
+        if step.native_selection is not None:
+            result.input_verified = False
+            resolution, _region, error = self._resolve_step(
+                step, after_png, bundle_dir, workflow, allow_grounder=False
+            )
+            if (
+                error is None
+                and resolution is not None
+                and resolution.rung == "structural"
+                and isinstance(self.backend, NativeSelectBackend)
+            ):
+                observed = self.backend.native_selected_option_at(*resolution.point)
+                contract = step.native_selection
+                if (
+                    isinstance(observed, dict)
+                    and observed.get("value") == contract.value
+                    and observed.get("label") == contract.label
+                    and observed.get("options")
+                    == [option.model_dump(mode="json") for option in contract.options]
+                ):
+                    result.input_verified = True
+                    return None
+            result.safety_halt = True
+            result.failure_category = "governed_refusal"
+            return (
+                f"Native selected option for step '{step.id}' could not be verified "
+                "on the same committed control; refusing continuation without retry"
+            )
         qualified_readback = step.selection_region
         qualified_target = step.anchor.region if step.anchor is not None else None
         if qualified_readback is None or qualified_target is None:
@@ -18092,12 +18431,14 @@ class Replayer:
             )
         exact = self._text_value_at(resolution.point)
         if exact is not None:
-            verified = identity_mod.squash(exact) == identity_mod.squash(text)
+            verified = identity_mod.comparison_squash(
+                exact
+            ) == identity_mod.comparison_squash(text)
         else:
-            needle = identity_mod.squash(text)
+            needle = identity_mod.comparison_squash(text)
             verified = any(
                 getattr(line, "confidence", 1.0) >= 0.5
-                and identity_mod.squash(line.text) == needle
+                and identity_mod.comparison_squash(line.text) == needle
                 for line in self.vision.ocr(after_png, region=live_readback)
             )
             if not verified:
@@ -18105,7 +18446,7 @@ class Replayer:
                 if upscaled is not None:
                     verified = any(
                         getattr(line, "confidence", 1.0) >= 0.5
-                        and identity_mod.squash(line.text) == needle
+                        and identity_mod.comparison_squash(line.text) == needle
                         for line in self.vision.ocr(upscaled, region=None)
                     )
         result.input_verified = verified
@@ -18745,6 +19086,7 @@ class Replayer:
             and not self._postcondition_confirms_a_write(step, workflow)
         ):
             failed_pcs = self._drift_oracle_rescue(failed_pcs, frame_png, result)
+        self._stamp_duplicate_check(result, failed_pcs)
         failed = [self._describe_postcondition(pc) for pc in failed_pcs]
         return not failed_pcs, frame_png, failed
 
@@ -18933,16 +19275,32 @@ class Replayer:
         return problems
 
     def _no_duplicate_candidate(self, pc: Any, frame_png: bytes) -> bool:
-        """The app's possible-duplicate list has loaded and names no candidate.
+        """The duplicate check passes: no chart is, or may be, this patient.
 
-        A row is a candidate when its words include every word of this run's
+        Records why it failed in ``self._last_duplicate_outcome`` (``exact``,
+        ``close``, ``candidate`` or ``unreadable``; None when it passed), which
+        the halted step's ``StepResult.duplicate_check`` carries.
+        """
+
+        outcome = self._duplicate_outcome(pc, frame_png)
+        self._last_duplicate_outcome = outcome
+        return outcome is None
+
+    def _duplicate_outcome(self, pc: Any, frame_png: bytes) -> Optional[str]:
+        """None when the check passes, else why it failed.
+
+        With a record source (``runtime/checks/duplicate_record.py``): the
+        decision, ``exact``, ``close`` or ``unreadable``. On the screen: the
+        app's possible-duplicate list has loaded and names no candidate. A
+        row is a candidate when its words include every word of this run's
         value of any ``pc.candidate_params`` parameter (case-insensitive). A
         value that is an ISO date is also compared as a date: every date the
         row shows, in any format intake reads (``Apr 20, 1944``,
         ``20.04.1944``, ``04/20/1944``), is normalized and compared, and a
         row date that reads either way counts when either reading matches.
-        Fails closed: an unreadable list, a missing or empty parameter, or an
-        empty list without its "no matches" marker all fail the check.
+        A listed candidate is ``candidate``. Fails closed as ``unreadable``:
+        an unreadable list, a missing or empty parameter, or an empty list
+        without its "no matches" marker.
         """
 
         params = (
@@ -18950,15 +19308,44 @@ class Replayer:
             or getattr(self, "_run_params", None)
             or {}
         )
+        self._last_duplicate_check = None
+        pinned = getattr(pc, "candidate_source", None)
+        source = (
+            None
+            if pinned == "screen"
+            else self._duplicate_source(
+                pinned == "record", getattr(pc, "candidate_channel", None)
+            )
+        )
+        if pinned == "record" and source is None:
+            # The program was qualified with the record check; without a
+            # record channel it must not fall back to the screen.
+            from openadapt_flow.runtime.checks.duplicate_record import (
+                DuplicateCheckResult,
+            )
+
+            self._last_duplicate_check = DuplicateCheckResult(
+                "unreadable",
+                channel="none",
+                reason="the program requires the record check and this run has "
+                "no record channel",
+            )
+            return "unreadable"
+        if source is not None:
+            if self._no_duplicate_record(source, params, pc):
+                return None
+            checked = self._last_duplicate_check
+            decision = getattr(checked, "decision", "unreadable")
+            return decision if decision in ("exact", "close") else "unreadable"
         names = tuple(pc.candidate_params or ())
         if not pc.candidate_rows or not names or not pc.text:
-            return False
+            return "unreadable"
         reader = getattr(self.backend, "element_texts", None)
         if not callable(reader):
-            return False
+            return "unreadable"
         rows = reader(pc.candidate_rows, tuple(pc.candidate_frame_path or ()))
         if rows is None:
-            return False
+            return "unreadable"
 
         def words(value: str) -> list[str]:
             return re.findall(r"[0-9a-z]+", value.casefold())
@@ -18969,7 +19356,7 @@ class Replayer:
             text = runtime_param_text(params[name]) if name in params else ""
             value = words(text)
             if not value:
-                return False
+                return "unreadable"
             wanted.append(value)
             if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text.strip()):
                 wanted_dates.add(text.strip())
@@ -18977,15 +19364,84 @@ class Replayer:
             # Nothing listed: only the list's own "no matches" marker shows
             # the search finished.
             if self._dom_text_visible(pc.text):
-                return True
-            return self.vision.text_present(frame_png, pc.text)
+                return None
+            if self.vision.text_present(frame_png, pc.text):
+                return None
+            return "unreadable"  # the list never loaded
         for row in rows:
             row_words = set(words(row))
             if any(all(w in row_words for w in value) for value in wanted):
-                return False
+                return "candidate"
             if wanted_dates and wanted_dates & _row_dates(row):
-                return False
-        return True
+                return "candidate"
+        return None
+
+    def _stamp_duplicate_check(self, result: Any, failed_pcs: Any) -> None:
+        """Put the duplicate check's failure on the halted step's result."""
+
+        if result is None or not any(
+            getattr(pc.kind, "value", pc.kind) == "no_duplicate_candidate"
+            for pc in failed_pcs
+        ):
+            return
+        result.duplicate_check = (
+            getattr(self, "_last_duplicate_outcome", None) or "unreadable"
+        )
+
+    def _duplicate_source(
+        self, pinned_record: bool = False, channel: Any = None
+    ) -> Any:
+        """This run's duplicate-check record source, or None (the screen)."""
+
+        from openadapt_flow.runtime.checks.duplicate_record import (
+            resolve_duplicate_source,
+        )
+
+        return resolve_duplicate_source(
+            self.effect_verifier,
+            getattr(self, "_duplicate_requested", "auto"),
+            pinned_record=pinned_record,
+            channel=channel,
+        )
+
+    def _no_duplicate_record(
+        self, source: Any, params: dict[str, Any], pc: Any = None
+    ) -> bool:
+        """The duplicate check with the system of record as its source.
+
+        Proceeds only when the record channel answers completely and no chart
+        is this patient (``decision == "none"``). An exact or close match, or
+        an unreadable channel, fails the check, and the halt names the
+        records found and why (``_describe_postcondition``).
+        """
+
+        from openadapt_flow.runtime.checks.duplicate_record import (
+            RECORD_FIELDS,
+            check_duplicate,
+        )
+
+        # Which run parameter fills each field: RECORD_FIELDS by default,
+        # ``pc.candidate_record_fields`` for any other program.
+        mapped = getattr(pc, "candidate_record_fields", None) or {}
+        names = {**RECORD_FIELDS, **dict(mapped)}
+        want = {
+            field: runtime_param_text(params[name]) if name in params else ""
+            for field, name in names.items()
+        }
+        try:
+            result = check_duplicate(source, want)
+        except Exception as exc:  # noqa: BLE001 - any failure fails closed
+            from openadapt_flow.runtime.checks.duplicate_record import (
+                DuplicateCheckResult,
+            )
+
+            result = DuplicateCheckResult(
+                "unreadable",
+                channel=getattr(source, "channel", ""),
+                reason=f"the record check failed ({type(exc).__name__})",
+            )
+        self._last_duplicate_check = result
+        return result.proceed
 
     def _field_value_shown(self, pc: Any) -> bool:
         """The focused field shows this run's value of ``pc.param``.
@@ -19018,10 +19474,21 @@ class Replayer:
         value = read("focused_text_value")
         return value is not None and value == expected
 
-    @staticmethod
-    def _describe_postcondition(pc: Any) -> str:
+    def _describe_postcondition(self, pc: Any) -> str:
         """Human-readable one-liner for a postcondition (for error messages)."""
         kind = pc.kind.value if hasattr(pc.kind, "value") else pc.kind
+        checked = getattr(self, "_last_duplicate_check", None)
+        if kind == "no_duplicate_candidate" and checked is not None:
+            found = "; ".join(
+                f"{c.match} record {c.record.record_id} ({c.why})"
+                for c in checked.candidates
+            )
+            return (
+                f"no_duplicate_candidate (record check via {checked.channel}: "
+                f"{checked.decision}, {checked.reason}"
+                + (f": {found}" if found else "")
+                + ")"
+            )
         if kind == "local_edit":
             return "local_edit (URL, title, page count and focus unchanged)"
         if kind == "focus_on":

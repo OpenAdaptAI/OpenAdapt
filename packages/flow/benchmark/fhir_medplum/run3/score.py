@@ -360,7 +360,9 @@ def score(all_rows: list[dict[str, Any]], costs: Mapping[str, Any]) -> dict[str,
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     ap.add_argument("rows")
     ap.add_argument("--costs", default=str(COSTS))
     ap.add_argument("--json")

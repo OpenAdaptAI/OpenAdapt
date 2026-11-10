@@ -15,6 +15,10 @@ from openadapt_capture.capture import CaptureSession
 from openadapt_capture.db import create_db, crud
 from openadapt_capture.db.models import ActionEvent, Recording, Screenshot, WindowEvent
 from openadapt_capture.events import window_geometry_epoch_sha256
+from openadapt_capture.source_skips import (
+    SOURCE_ORDINAL_SKIPS_FILENAME,
+    write_source_ordinal_skips,
+)
 from openadapt_capture.terminal import (
     ARTIFACT_MANIFEST_FILENAME,
     CAPTURE_TERMINAL_FILENAME,
@@ -74,6 +78,7 @@ def _v2_capture_directory(
     before_binding_ordinal: int | None = None,
     after_binding_ordinal: int | None = None,
     wrong_png_digest: bool = False,
+    skipped: tuple[tuple[int, str], ...] = (),
     video: bool = False,
 ) -> Path:
     """Build one sealed v2 capture for artifact-contract regressions."""
@@ -199,6 +204,7 @@ def _v2_capture_directory(
 
     if video:
         (capture_dir / "video.mp4").write_bytes(b"fixture")
+    write_source_ordinal_skips(capture_dir, skipped)
     seal_capture(
         capture_dir,
         session_id="v2-session",
@@ -212,7 +218,9 @@ def _v2_capture_directory(
             "browser": 0,
             "video": len(frame_ordinals) if video else 0,
         },
-        last_source_ordinal=max((*frame_ordinals, action_ordinal or 0)),
+        last_source_ordinal=max(
+            (*frame_ordinals, action_ordinal or 0, *(ordinal for ordinal, _ in skipped))
+        ),
     )
     return capture_dir
 
@@ -226,6 +234,7 @@ def _desktop_capture_directory(
     before_binding_ordinal: int | None = None,
     after_binding_ordinal: int | None = None,
     wrong_png_digest: bool = False,
+    skipped: tuple[tuple[int, str], ...] = (),
     retain_png: bool = True,
 ) -> Path:
     """Build one sealed virtual-desktop capture for contract regressions."""
@@ -326,6 +335,7 @@ def _desktop_capture_directory(
         session.close()
         engine.dispose()
 
+    write_source_ordinal_skips(capture_dir, skipped)
     seal_capture(
         capture_dir,
         session_id="desktop-session",
@@ -340,7 +350,12 @@ def _desktop_capture_directory(
             "video": 0,
         },
         last_source_ordinal=max(
-            (*frame_ordinals, *window_ordinals, action_ordinal or 0)
+            (
+                *frame_ordinals,
+                *window_ordinals,
+                action_ordinal or 0,
+                *(ordinal for ordinal, _ in skipped),
+            )
         )
         or None,
     )
@@ -629,6 +644,107 @@ def test_verified_loader_rejects_a_gap_in_the_v2_source_journal(tmp_path) -> Non
     )
 
     with pytest.raises(ValueError, match="source journal has a missing ordinal"):
+        CaptureSession.load_verified(capture_dir)
+
+
+def test_verified_loader_accepts_a_sealed_policy_skip_in_the_v2_journal(tmp_path) -> None:
+    """A dropped click's ordinal holds no event; the sealed skip record names it."""
+    capture_dir = _v2_capture_directory(
+        tmp_path,
+        frame_ordinals=(1, 3),
+        action_ordinal=None,
+        skipped=((2, "pointer_over_other_window"),),
+    )
+
+    CaptureSession.validate_sealed(capture_dir)
+    with CaptureSession.load_verified(capture_dir) as capture:
+        assert [frame.source_ordinal for frame in capture.frames()] == [1, 3]
+
+
+def test_verified_loader_accepts_policy_skips_after_the_last_event(tmp_path) -> None:
+    capture_dir = _v2_capture_directory(
+        tmp_path,
+        frame_ordinals=(1, 3),
+        action_ordinal=2,
+        skipped=((4, "pointer_over_other_window"), (5, "continues_dropped_input")),
+    )
+
+    CaptureSession.validate_sealed(capture_dir)
+
+
+def test_verified_loader_rejects_an_unrecorded_hole_beside_a_recorded_skip(tmp_path) -> None:
+    capture_dir = _v2_capture_directory(
+        tmp_path,
+        frame_ordinals=(1, 5),
+        action_ordinal=None,
+        skipped=((2, "pointer_over_other_window"), (4, "keyboard_focus_elsewhere")),
+    )
+
+    with pytest.raises(ValueError, match="source journal has a missing ordinal"):
+        CaptureSession.load_verified(capture_dir)
+
+
+def test_verified_loader_rejects_a_skip_that_hides_a_retained_event(tmp_path) -> None:
+    capture_dir = _v2_capture_directory(
+        tmp_path,
+        skipped=((2, "pointer_over_other_window"),),
+    )
+
+    with pytest.raises(ValueError, match="event at a skipped source ordinal"):
+        CaptureSession.load_verified(capture_dir)
+
+
+def test_verified_loader_rejects_policy_skips_outside_window_scope(tmp_path) -> None:
+    capture_dir = _desktop_capture_directory(
+        tmp_path,
+        frame_ordinals=(1, 3),
+        action_ordinal=None,
+        skipped=((2, "pointer_over_other_window"),),
+    )
+
+    with pytest.raises(ValueError, match="only valid for a window-scoped capture"):
+        CaptureSession.load_verified(capture_dir)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        # An unknown reason is not a policy drop.
+        b'{"runs":[{"first":2,"last":2,"reason":"crashed"}],'
+        b'"schema_version":"openadapt.capture.source-ordinal-skips/v1"}\n',
+        # Not canonical: whitespace.
+        b'{"runs": [{"first": 2, "last": 2, "reason": "pointer_over_other_window"}],'
+        b' "schema_version": "openadapt.capture.source-ordinal-skips/v1"}\n',
+        # An empty record never stands in for a hole.
+        b'{"runs":[],"schema_version":"openadapt.capture.source-ordinal-skips/v1"}\n',
+    ],
+    ids=["unknown-reason", "non-canonical", "empty"],
+)
+def test_verified_loader_rejects_a_malformed_skip_record(tmp_path, payload) -> None:
+    capture_dir = _v2_capture_directory(tmp_path, frame_ordinals=(1, 3), action_ordinal=None)
+    # Re-seal over a hand-written record, as a writer bug would.
+    (capture_dir / ARTIFACT_MANIFEST_FILENAME).unlink()
+    (capture_dir / CAPTURE_TERMINAL_FILENAME).unlink()
+    (capture_dir / SOURCE_ORDINAL_SKIPS_FILENAME).write_bytes(payload)
+    seal_capture(
+        capture_dir,
+        session_id="v2-session",
+        process_started_at=9.0,
+        capture_started_at=10.0,
+        capture_ended_at=14.0,
+        event_counts={"action": 0, "screen": 2, "window": 2, "browser": 0, "video": 0},
+        last_source_ordinal=3,
+    )
+
+    with pytest.raises(ValueError, match="source-ordinal skip record"):
+        CaptureSession.load_verified(capture_dir)
+
+
+def test_verified_loader_rejects_a_skip_record_added_after_sealing(tmp_path) -> None:
+    capture_dir = _v2_capture_directory(tmp_path, frame_ordinals=(1, 3), action_ordinal=None)
+    write_source_ordinal_skips(capture_dir, [(2, "pointer_over_other_window")])
+
+    with pytest.raises(CaptureSealError):
         CaptureSession.load_verified(capture_dir)
 
 

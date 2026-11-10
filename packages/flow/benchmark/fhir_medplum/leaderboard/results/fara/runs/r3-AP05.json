@@ -1,0 +1,134 @@
+{
+ "id": "AP05",
+ "class": "duplicate",
+ "type": "appointment",
+ "expect": "create",
+ "note": "The write path sends the booking twice.",
+ "agent_s": 2484.2,
+ "cost_usd": 0.0,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "The global search bar click did not navigate away. Load the FHIR search results directly for Practitioner with name 'Ama Osei' to find and reference the practitioner resource.",
+  "claim_line": false,
+  "stopped": "time cap: 2400 s",
+  "end_url": "http://localhost:9821/Patient/a9a18e55-455d-4dff-80d3-5402f9488dc9/details",
+  "final_text": "The global search bar click did not navigate away. Load the FHIR search results directly for Practitioner with name 'Ama Osei' to find and reference the practitioner resource.",
+  "model_calls": 30,
+  "actions": 28,
+  "tokens_in": 224608,
+  "tokens_out": 2129
+ },
+ "verifier": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "the agent created 0 Appointment records, not one",
+   "the agent wrote 1 other resource(s): Patient"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 0,
+   "agent_writes": 1,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "Patient"
+   ],
+   "window_until": "2026-11-05T18:28:02+00:00"
+  },
+  "unreadable": false
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "the agent created 0 Appointment records, not one",
+   "the agent wrote 1 other resource(s): Patient"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 0,
+   "agent_writes": 1,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "Patient"
+   ],
+   "window_until": "2026-11-05T18:28:04+00:00"
+  },
+  "unreadable": false
+ },
+ "verify_s": 5.2,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "absent",
+  "reasons": [
+   "no Appointment was written"
+  ],
+  "changes": {}
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "PUT",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AuditEvent",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": false,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 12.4,
+  "end": 12.4,
+  "waited_s": 0
+ }
+}

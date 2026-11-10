@@ -62,6 +62,7 @@ from typing import Any, Callable, Optional
 
 import requests
 
+from openadapt_flow.mockmed.fault_server import mockmed_rest_read_kwargs
 from openadapt_flow.mockmed.fault_server import serve as fault_serve
 from openadapt_flow.runtime.effects import (
     Effect,
@@ -322,7 +323,7 @@ def run_one(base: str, db: Any, scenario: Scenario) -> dict[str, Any]:
     db.reset(seed_concurrent=scenario.seed_concurrent)
     before_snapshot = db.snapshot()["records"]
 
-    verifier = RestRecordVerifier(base, records_path="/api/db", records_key="records")
+    verifier = RestRecordVerifier(base, **mockmed_rest_read_kwargs())
     before_state = verifier.capture_pre_state()
 
     statuses = _drive(base, scenario)
@@ -656,8 +657,12 @@ def render_chart(results: dict[str, Any], out_png: Path) -> Path:
 def write_outputs(results: dict[str, Any], out_dir: Path) -> None:
     """Write ``results.json``, ``SILENT_WRONG_ACTION.md``, and the chart PNG."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "results.json").write_text(json.dumps(results, indent=2) + "\n")
-    (out_dir / "SILENT_WRONG_ACTION.md").write_text(render_markdown(results))
+    (out_dir / "results.json").write_text(
+        json.dumps(results, indent=2) + "\n", encoding="utf-8"
+    )
+    (out_dir / "SILENT_WRONG_ACTION.md").write_text(
+        render_markdown(results), encoding="utf-8"
+    )
     from benchmark.harness.chart_fonts import safe_render
 
     safe_render(render_chart, results, out_dir / "silent_wrong_action.png")
@@ -696,7 +701,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             "screen-verify silently passes a wrong/absent/duplicate write on "
             "the MockMed transactional-fault suite versus effect-verify "
             "(#63) catching it. $0, localhost only, no model calls."
-        )
+        ),
+        allow_abbrev=False,
     )
     parser.add_argument(
         "--out",

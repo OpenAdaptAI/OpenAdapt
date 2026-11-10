@@ -32,8 +32,11 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import math
+import os
 import queue
 import sys
+import tempfile
 import threading
 import time
 from concurrent.futures import Future
@@ -209,15 +212,28 @@ class FrameworkAgent:
 
     def drive(self, request: Any, harness: Any) -> AgentLedger:
         ledger = AgentLedger(agent="framework", model=self.model, prices=self.prices)
+        ledger.usage_known = False
         self.last_ledger = ledger
         tools = BrowserTools(harness)
         try:
-            task = f"Task: {request.instruction}"
-            usage = tools.serve_while(lambda: self._run(task, tools)) or {}
+            from openadapt_flow.compile_agent.agents import _task_text
+
+            task = f"Task: {_task_text(harness, request)}"
+            usage = tools.serve_while(lambda: self._run(task, tools))
         finally:
             ledger.wall_seconds = time.monotonic() - ledger.started_at
-        for turn, call in enumerate(usage.get("calls") or (), start=1):
+        if usage is None:
+            usage_calls: Sequence[Mapping[str, Any]] = ()
+        elif isinstance(usage, Mapping) and isinstance(usage.get("calls"), Sequence):
+            usage_calls = usage["calls"]
+        else:
+            raise ValueError("framework usage must contain a calls sequence")
+        if any(not isinstance(call, Mapping) for call in usage_calls):
+            raise ValueError("framework usage calls must be objects")
+        ledger.model_requests_started = len(usage_calls)
+        for turn, call in enumerate(usage_calls, start=1):
             ledger.calls.append(_model_call(turn, call))
+        ledger.usage_known = usage is not None
         ledger.model_seconds = sum(c.seconds for c in ledger.calls)
         ledger.tool_errors = tools.errors
         if tools.stopped is not None:
@@ -228,13 +244,27 @@ class FrameworkAgent:
 
 
 def _model_call(turn: int, call: Mapping[str, Any]) -> ModelCall:
+    def nonnegative_int(name: str) -> int:
+        value = call.get(name)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ValueError(f"framework usage {name} must be a non-negative integer")
+        return value
+
+    seconds = call.get("seconds", 0.0)
+    if (
+        isinstance(seconds, bool)
+        or not isinstance(seconds, (int, float))
+        or not math.isfinite(float(seconds))
+        or seconds < 0
+    ):
+        raise ValueError("framework usage seconds must be finite and non-negative")
     return ModelCall(
         turn=turn,
-        input_tokens=int(call.get("input_tokens") or 0),
-        output_tokens=int(call.get("output_tokens") or 0),
-        cache_creation_input_tokens=int(call.get("cache_creation_input_tokens") or 0),
-        cache_read_input_tokens=int(call.get("cache_read_input_tokens") or 0),
-        seconds=float(call.get("seconds") or 0.0),
+        input_tokens=nonnegative_int("input_tokens"),
+        output_tokens=nonnegative_int("output_tokens"),
+        cache_creation_input_tokens=nonnegative_int("cache_creation_input_tokens"),
+        cache_read_input_tokens=nonnegative_int("cache_read_input_tokens"),
+        seconds=float(seconds),
         stop_reason=call.get("stop_reason"),
         images_in_request=0,
     )
@@ -255,14 +285,16 @@ class SkillRun:
     path: str
     status: str
     verified: bool
-    model_calls: int
-    cost_usd: float
+    model_calls: Optional[int]
+    cost_usd: Optional[float]
     seconds: float
     detail: Optional[str] = None
     wire_checked: bool = False
     compile: dict[str, Any] = field(default_factory=dict)
     replay: dict[str, Any] = field(default_factory=dict)
     record_check: dict[str, Any] = field(default_factory=dict)
+    usage: Optional[list[dict[str, Any]]] = None
+    usage_known: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return dict(self.__dict__)
@@ -271,6 +303,7 @@ class SkillRun:
 #: Where skills are kept unless ``cache_dir`` says otherwise: per user.
 DEFAULT_CACHE_DIR = "~/.openadapt/skills"
 _KEY_FILE = "skill-key.json"
+_STOP_FILE = "skill-stop.json"
 
 
 class SkillCache:
@@ -292,8 +325,10 @@ class SkillCache:
     checks (its receipt) and by :func:`task_record_check`: exactly one new
     record of this task's record (matching ``expect``), with this task's
     values, and nothing else changed on that record. Other users' writes to
-    other records during the run are counted, not refused. A skill run that fails either is evicted, and the next run of
-    the task goes to the agent again.
+    other records during the run are counted, not refused. A failed or interrupted
+    skill run stays held; a later call never falls back to the full agent task.
+    A proved pre-effect target drift can be handed explicitly to the existing
+    one-click repair workflow with :meth:`open_repair`.
     """
 
     def __init__(
@@ -314,8 +349,12 @@ class SkillCache:
         reset: Optional[Callable[[], None]] = None,
         environment: str = "",
         python: str = sys.executable,
+        before_capture: Optional[Callable[[Any], None]] = None,
         **compile_options: Any,
     ) -> None:
+        if before_capture is not None and not callable(before_capture):
+            raise TypeError("before_capture must be callable")
+        self.before_capture = before_capture
         self.common: dict[str, Any] = dict(
             url=url,
             verify=verify,
@@ -369,29 +408,63 @@ class SkillCache:
         from openadapt_flow.compile_agent import FirstRunCompiler
 
         key = self.key(prompt, params)
-        common = {k: v for k, v in self.common.items() if k not in ("reset", "task_id")}
+        common = {
+            k: v
+            for k, v in self.common.items()
+            if k not in ("reset", "task_id", "review", "hold")
+        }
         compiler = FirstRunCompiler(
-            prompt, params=list(params), task_id=self.task_id(prompt, params), **common
+            prompt,
+            params=list(params),
+            task_id=self.task_id(prompt, params),
+            before_capture=self.before_capture,
+            **common,
         )
         return compiler, key
+
+    def receipt_root(self, prompt: str, params: Mapping[str, Any]) -> Path:
+        """The producer's receipt subtree, without opening a halted server."""
+        compiler, _key = self._compiler(prompt, params)
+        return compiler.dir
 
     def server(self, prompt: str, params: Mapping[str, Any]) -> Optional[Path]:
         """The task's compiled MCP server, when it has an admitted one."""
 
         compiler, key = self._compiler(prompt, params)
-        return self._server(compiler, key)
+        from openadapt_flow.compile_agent.repair_selection import RepairSelectionError
+
+        try:
+            return self._server(compiler, key)
+        except RepairSelectionError:
+            return None
 
     def _server(self, compiler: Any, key: dict[str, Any]) -> Optional[Path]:
+        if (compiler.dir / _STOP_FILE).exists() or (
+            compiler.dir / _STOP_FILE
+        ).is_symlink():
+            return None
         stored = compiler.dir / _KEY_FILE
         if not compiler._jit().admitted or not stored.is_file():
             return None
-        if json.loads(stored.read_text()) != key:
+        if json.loads(stored.read_text(encoding="utf-8")) != key:
             # Never serve a program compiled for another task or record.
             return None
         emitted = compiler.out_dir / "emitted.json"
         if not emitted.is_file():
             compiler.emit()
-        return Path(json.loads(emitted.read_text())["mcp_server"])
+        return Path(json.loads(emitted.read_text(encoding="utf-8"))["mcp_server"])
+
+    def held(self, prompt: str, params: Mapping[str, Any]) -> bool:
+        """True when a previous cached attempt of this task is held.
+
+        A held task is never rerun by the agent: :meth:`run` returns
+        ``CACHE_HALTED`` until the hold is reconciled or repaired, so a caller
+        needs no model budget for it.
+        """
+
+        compiler, _key = self._compiler(prompt, params)
+        stop = compiler.dir / _STOP_FILE
+        return stop.exists() or stop.is_symlink()
 
     def evict(self, prompt: str, params: Mapping[str, Any]) -> Optional[Path]:
         """Set the task's skill aside (kept as evidence); None if it had none."""
@@ -404,43 +477,358 @@ class SkillCache:
     def run(self, prompt: str, params: Mapping[str, Any], agent: Any) -> SkillRun:
         started = time.monotonic()
         compiler, key = self._compiler(prompt, params)
-        server = self._server(compiler, key)
-        if server is not None:
-            return self._skill_run(compiler, server, params, started)
+        if (compiler.dir / _STOP_FILE).exists() or (
+            compiler.dir / _STOP_FILE
+        ).is_symlink():
+            return self._held(compiler, started)
+        from openadapt_flow.compile_agent.repair_selection import RepairSelectionError
+
+        try:
+            server = self._server(compiler, key)
+            if server is not None:
+                return self._skill_run(compiler, server, params, started)
+        except RepairSelectionError:
+            compiler.dir.mkdir(parents=True, exist_ok=True)
+            try:
+                descriptor = os.open(
+                    compiler.dir / _STOP_FILE,
+                    os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                    0o600,
+                )
+            except FileExistsError:
+                pass
+            else:
+                with os.fdopen(descriptor, "w") as stream:
+                    json.dump(
+                        {"phase": "halted", "reason": "repair_selection_unavailable"},
+                        stream,
+                    )
+                    stream.flush()
+                    os.fsync(stream.fileno())
+            return self._held(compiler, started)
         return self._first_run(compiler, key, prompt, params, agent, started)
+
+    def _held(self, compiler: Any, started: float) -> SkillRun:
+        try:
+            path = compiler.dir / _STOP_FILE
+            if path.is_symlink():
+                raise ValueError("unreadable hold")
+            stopped = json.loads(path.read_text())
+            replay = stopped.get("replay", {}) if isinstance(stopped, dict) else {}
+            reason = stopped.get("reason") if isinstance(stopped, dict) else None
+            if isinstance(replay, dict) and reason and not replay.get("halt_reason"):
+                # A hold with no replay (for example repair selection was
+                # unavailable) still says why it holds.
+                replay = dict(replay, halt_reason=str(reason))
+        except (OSError, ValueError):
+            replay = {"halt_reason": "unreadable_hold"}
+        return SkillRun(
+            path="skill",
+            status="CACHE_HALTED",
+            verified=False,
+            model_calls=0,
+            cost_usd=0.0,
+            usage=[],
+            usage_known=True,
+            seconds=round(time.monotonic() - started, 3),
+            detail="A previous cached attempt is held. Reconcile it or request an "
+            "explicit repair; the agent task was not rerun.",
+            replay=replay if isinstance(replay, dict) else {},
+        )
+
+    def open_repair(
+        self, prompt: str, params: Mapping[str, Any], *, repair_desk: Any
+    ) -> dict[str, Any]:
+        """Offer the existing one-click repair for a proved pre-effect drift.
+
+        This neither runs the agent task nor clears the cache hold. The repair
+        desk retains its existing screen-access, one-use demonstration,
+        compiler, approval and staging rules. Unknown or possibly sent writes
+        are reconciled instead of repaired.
+        """
+        from openadapt_flow.agent.repair import RepairError
+        from openadapt_flow.ir import RunReport, Workflow
+        from openadapt_flow.jit import lifecycle
+        from openadapt_flow.repair.self_repair import _repairable
+        from openadapt_flow.transaction import steps_requiring_reconciliation
+
+        compiler, _key = self._compiler(prompt, params)
+        try:
+            stop = compiler.dir / _STOP_FILE
+            if stop.is_symlink():
+                raise ValueError("unreadable hold")
+            stopped = json.loads(stop.read_text())
+            if not isinstance(stopped, dict) or stopped.get("phase") != "halted":
+                raise ValueError("no terminal cached halt")
+            replay = stopped["replay"]
+            run_dir = Path(replay["run_dir"]).resolve(strict=True)
+            jit = compiler._jit()
+            if not run_dir.is_relative_to(jit.runs_dir.resolve(strict=True)):
+                raise ValueError("foreign run")
+            report_path = run_dir / "report.json"
+            if report_path.is_symlink():
+                raise ValueError("foreign report")
+            workflow = Workflow.load(jit.bundle_dir)
+            admission = lifecycle.verify_admission(
+                jit.bundle_dir, key_dir=compiler.key_dir
+            )
+            report = RunReport.model_validate_json(report_path.read_text())
+            if not (
+                report.workflow_name == workflow.name
+                and report.bundle_content_digest == stopped["bundle_digest"]
+                and report.bundle_content_digest == admission["digest"]
+                and report.execution_outcome == "HALTED"
+                and report.transaction_outcome == "HALTED_BEFORE_EFFECT"
+                and not steps_requiring_reconciliation(report)
+            ):
+                raise ValueError("not a proved before-effect halt")
+            found = _repairable(report, workflow)
+            if isinstance(found, str) or found[1] != "replace" or report.halt is None:
+                raise ValueError("not a one-step target replacement")
+        except (OSError, ValueError, KeyError, TypeError, lifecycle.AdmissionError):
+            raise RepairError(
+                "This cached attempt has no proved one-step drift repair."
+            ) from None
+        return repair_desk.open(
+            run_id=run_dir.name,
+            workflow=workflow.name,
+            step_id=found[0].id,
+            halt_reason=report.halt.reason,
+            bundle_dir=jit.bundle_dir,
+            run_dir=run_dir,
+        )
+
+    def adopt_repair(
+        self,
+        prompt: str,
+        params: Mapping[str, Any],
+        *,
+        repair_desk: Any,
+        candidate_id: str,
+        verified_run_dir: Union[str, Path],
+        receipt: Union[str, Path],
+    ) -> Path:
+        """Select an already promoted, normally admitted one-step repair.
+
+        The supplied paths name an actual normal compiled canary's report and
+        independent verify-run receipt, not an approval callback. No program
+        runs here. A new explicit request may use the selection only while its
+        ordinary ACTIVE, admission and evidence checks still hold.
+        """
+        from openadapt_flow.agent.repair import RepairError
+        from openadapt_flow.compile_agent.repair_selection import (
+            SELECTION_FILE,
+            RepairSelectionError,
+            validate_selection,
+        )
+        from openadapt_flow.ir import Workflow
+
+        compiler, key = self._compiler(prompt, params)
+        try:
+            stop = compiler.dir / _STOP_FILE
+            if stop.is_symlink():
+                raise ValueError("unreadable hold")
+            stopped = json.loads(stop.read_text())
+            if not isinstance(stopped, dict) or stopped.get("phase") != "halted":
+                raise ValueError("no terminal halt")
+            if json.loads((compiler.dir / _KEY_FILE).read_text()) != key:
+                raise ValueError("another task")
+            jit = compiler._jit()
+            workflow = Workflow.load(jit.bundle_dir)
+            halted_run = Path(stopped["replay"]["run_dir"]).resolve(strict=True)
+            runs = jit.runs_dir.resolve(strict=True)
+            if halted_run.parent != runs:
+                raise ValueError("foreign halt")
+            from openadapt_flow.ir import RunReport
+
+            halted = RunReport.model_validate_json(
+                (halted_run / "report.json").read_text()
+            )
+            if halted.halt is None or workflow.manifest is None:
+                raise ValueError("no target halt")
+            if workflow.manifest.content_digest != stopped["bundle_digest"]:
+                raise ValueError("another bundle")
+            selected = {
+                "version": 1,
+                "store": str(
+                    Path(repair_desk.store_for(workflow.name)).resolve(strict=True)
+                ),
+                "candidate_id": candidate_id,
+                "prior_digest": stopped["bundle_digest"],
+                "halted_run": halted_run.name,
+                "step_id": halted.halt.state_id,
+                "verified_run": str(
+                    Path(verified_run_dir).resolve(strict=True).relative_to(runs)
+                ),
+                "receipt": str(
+                    Path(receipt)
+                    .resolve(strict=True)
+                    .relative_to((compiler.dir / "receipts").resolve(strict=True))
+                ),
+            }
+            target = validate_selection(jit, selected)
+            proof = RunReport.model_validate_json(
+                (Path(verified_run_dir) / "report.json").read_text()
+            )
+            if {k: str(v) for k, v in proof.params.items()} != {
+                k: str(v) for k, v in params.items()
+            }:
+                raise ValueError("proof used other values")
+            # A fresh independent read must still find the synthetic canary's
+            # unique task record and all input values. It is a state check,
+            # not a new causal write claim; the normal receipt is separate.
+            rows = compiler.observer.system_of_record
+            values = set(map(str, params.values()))
+            matching = (
+                []
+                if rows is None
+                else [
+                    row
+                    for row in rows
+                    if all(
+                        str(row.get(k)) == str(v)
+                        for k, v in self.common["expect"].items()
+                    )
+                    and values.issubset({str(v) for v in row.values() if v is not None})
+                ]
+            )
+            if len(matching) != 1:
+                raise ValueError("fresh record check failed")
+            archive = compiler.dir / f"skill-stop-repaired-{candidate_id}.json"
+            if archive.exists() or archive.is_symlink():
+                raise ValueError("repair already consumed")
+            descriptor, name = tempfile.mkstemp(
+                dir=compiler.dir, prefix=".skill-repair-"
+            )
+            try:
+                with os.fdopen(descriptor, "w") as stream:
+                    json.dump(selected, stream)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.replace(name, compiler.dir / SELECTION_FILE)
+            finally:
+                Path(name).unlink(missing_ok=True)
+            # Retain the exact old halt; adoption does not erase its evidence.
+            stop.rename(archive)
+            return target
+        except (OSError, ValueError, KeyError, TypeError, RepairSelectionError):
+            raise RepairError(
+                "This promoted repair has no matching verified cache handoff."
+            ) from None
+
+    def complete_repair(
+        self,
+        prompt: str,
+        params: Mapping[str, Any],
+        *,
+        repair_desk: Any,
+        candidate_id: str,
+        canary_params: Sequence[Mapping[str, Any]],
+    ) -> Any:
+        """Run an approved repair on explicit synthetic canaries, then select it."""
+        from openadapt_flow.compile_agent.repair_bridge import complete_approved_repair
+
+        return complete_approved_repair(
+            self,
+            prompt,
+            params,
+            repair_desk=repair_desk,
+            candidate_id=candidate_id,
+            canary_params=canary_params,
+        )
 
     def _skill_run(
         self, compiler: Any, server: Path, params: Mapping[str, Any], started: float
     ) -> SkillRun:
+        from openadapt_flow.ir import Workflow
+
+        stop = compiler.dir / _STOP_FILE
+        workflow = Workflow.load(compiler._jit().bundle_dir)
+        if workflow.manifest is None:
+            raise ValueError("The compiled bundle has no verified manifest.")
+        digest = workflow.manifest.content_digest
+        try:
+            descriptor = os.open(stop, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        except FileExistsError:
+            return self._held(compiler, started)
+        with os.fdopen(descriptor, "w") as stream:
+            json.dump({"phase": "running", "bundle_digest": digest}, stream)
+            stream.flush()
+            os.fsync(stream.fileno())
         before = compiler.observer.system_of_record
-        reply = asyncio.run(_call_skill(self.python, server, dict(params)))
-        after = compiler.observer.system_of_record
+        if before is None:
+            reply = {
+                "status": "BASELINE_UNAVAILABLE",
+                "verified": False,
+                "model_calls": 0,
+                "detail": "The independent baseline is unavailable; nothing ran.",
+            }
+            after = None
+        else:
+            reply = asyncio.run(_call_skill(self.python, server, dict(params)))
+            after = compiler.observer.system_of_record
         check = task_record_check(
             before,
             after,
             expect=self.common["expect"],
             values={k: str(v) for k, v in params.items()},
         )
-        verified = bool(reply.get("verified")) and check.passed
+        verified = (
+            reply.get("verified") is True
+            and type(reply.get("model_calls")) is int
+            and reply["model_calls"] == 0
+            and reply.get("receipt_outcome") == "VERIFIED"
+            and check.passed
+        )
         status = str(reply.get("status"))
         detail = reply.get("detail") or reply.get("halt_reason")
+        if not isinstance(detail, str):
+            detail = None
+        if reply.get("verified") is True and reply.get("receipt_outcome") != "VERIFIED":
+            status, detail = (
+                "RECEIPT_NOT_VERIFIED",
+                "The normal verify-run receipt is not VERIFIED.",
+            )
+        elif reply.get("verified") is True and (
+            type(reply.get("model_calls")) is not int or reply["model_calls"] != 0
+        ):
+            status, detail = (
+                "MODEL_CALLS_NOT_ZERO",
+                "The compiled reply did not prove zero model calls.",
+            )
         if bool(reply.get("verified")) and not check.passed:
             status = "RECORD_CHECK_FAILED"
             detail = "; ".join(check.reasons)
-        if not verified:
-            # A halted or refuted skill is not served again: the next run of
-            # this task goes to the agent and compiles afresh.
-            _set_aside(compiler)
+        if verified:
+            stop.unlink()
+        else:
+            # Keep the original cache and halt evidence. A lost reply, drift,
+            # or unverified write must never turn into an automatic agent miss.
+            descriptor, name = tempfile.mkstemp(dir=compiler.dir, prefix=".skill-stop-")
+            try:
+                with os.fdopen(descriptor, "w") as stream:
+                    json.dump(
+                        {"phase": "halted", "bundle_digest": digest, "replay": reply},
+                        stream,
+                    )
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.replace(name, stop)
+            finally:
+                Path(name).unlink(missing_ok=True)
+        model_calls, cost_usd, usage, usage_known = _skill_usage(reply)
         return SkillRun(
             path="skill",
             status=status,
             verified=verified,
-            model_calls=int(reply.get("model_calls") or 0),
-            cost_usd=0.0,
+            model_calls=model_calls,
+            cost_usd=cost_usd,
             seconds=round(time.monotonic() - started, 3),
             detail=detail,
             replay=reply,
             record_check=check.to_dict(),
+            usage=usage,
+            usage_known=usage_known,
         )
 
     def _first_run(
@@ -466,25 +854,104 @@ class SkillCache:
             person=self.person,
             canary_params=self.canary_params,
             model_key=self.model_key,
+            before_capture=self.before_capture,
             **common,
         )
         if result.admitted:
-            (compiler.dir / _KEY_FILE).write_text(json.dumps(key, sort_keys=True))
+            (compiler.dir / _KEY_FILE).write_text(
+                json.dumps(key, sort_keys=True), encoding="utf-8"
+            )
         agent_run = result.run1.get("agent") or {}
         check = result.record_check or {}
+        usage_known = bool(agent_run.get("usage_known", False))
+        model_calls = agent_run.get("model_calls")
+        if isinstance(model_calls, bool) or not isinstance(model_calls, int):
+            model_calls = None
+            usage_known = False
+        raw_cost = agent_run.get("cost_usd")
+        if (
+            isinstance(raw_cost, bool)
+            or not isinstance(raw_cost, (int, float))
+            or not math.isfinite(float(raw_cost))
+            or raw_cost < 0
+        ):
+            cost_usd: Optional[float] = None
+            usage_known = False
+        else:
+            cost_usd = float(raw_cost) if usage_known else None
+        usage = (
+            [{"calls": model_calls, "usd": cost_usd}]
+            if model_calls is not None
+            else None
+        )
         return SkillRun(
             path="agent",
             status=result.status,
             # Run 1's own write, read back by the record check.
             verified=bool(check.get("passed")),
-            model_calls=int(agent_run.get("model_calls") or 0),
-            cost_usd=float(agent_run.get("cost_usd") or 0.0),
+            model_calls=model_calls,
+            cost_usd=cost_usd,
             seconds=round(time.monotonic() - started, 3),
             detail=result.detail,
             wire_checked=self.common.get("write_adapter") is not None,
             compile=result.to_dict(),
             record_check=check,
+            usage=usage,
+            usage_known=usage_known,
         )
+
+
+def _skill_usage(
+    reply: Mapping[str, Any],
+) -> tuple[Optional[int], Optional[float], Optional[list[dict[str, Any]]], bool]:
+    """Read explicit skill/fallback model usage without inferring from path."""
+
+    raw_calls = reply.get("model_calls")
+    model_calls = (
+        raw_calls
+        if isinstance(raw_calls, int)
+        and not isinstance(raw_calls, bool)
+        and raw_calls >= 0
+        else None
+    )
+    usage_known = reply.get("usage_known") is True
+    raw_usage = reply.get("usage")
+    if not isinstance(raw_usage, list):
+        return model_calls, None, None, False
+
+    rows: list[dict[str, Any]] = []
+    total_calls = 0
+    total_cost = 0.0
+    all_costs_known = usage_known
+    for row in raw_usage:
+        if not isinstance(row, Mapping):
+            return model_calls, None, None, False
+        count = row.get("calls")
+        if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+            return model_calls, None, None, False
+        total_calls += count
+        raw_cost = row.get("usd")
+        if (
+            isinstance(raw_cost, bool)
+            or not isinstance(raw_cost, (int, float))
+            or not math.isfinite(float(raw_cost))
+            or raw_cost < 0
+        ):
+            all_costs_known = False
+            cost: Optional[float] = None
+        else:
+            cost = float(raw_cost)
+            total_cost += cost
+        rows.append({"calls": count, "usd": cost})
+
+    if model_calls is not None and model_calls != total_calls:
+        return model_calls, None, rows, False
+    model_calls = total_calls
+    if not usage_known or not all_costs_known:
+        return model_calls, None, rows, False
+    if model_calls == 0 and total_cost == 0:
+        return 0, 0.0, [], True
+    return model_calls, total_cost, rows, True
 
 
 @dataclass
@@ -591,7 +1058,14 @@ async def _call_skill(python: str, server: Path, params: dict[str, Any]) -> dict
             tools = (await session.list_tools()).tools
             if len(tools) != 1:
                 raise RuntimeError("a compiled skill's server has exactly one tool")
-            result = await session.call_tool(tools[0].name, params)
+            from openadapt_flow.request_binding import request_meta
+
+            metadata = request_meta()
+            if metadata is None:
+                result = await session.call_tool(tools[0].name, params)
+            else:
+                # Unsupported metadata APIs refuse; never retry without context.
+                result = await session.call_tool(tools[0].name, params, meta=metadata)
     # mcp 2 names these fields in snake case, mcp 1 in camel case.
     if getattr(result, "is_error", None) or getattr(result, "isError", None):
         text = " ".join(getattr(c, "text", "") for c in result.content)

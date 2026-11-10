@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import pytest
+from hypothesis import given, strategies as st
 from PIL import Image
 
 from openadapt_flow import bundle_validation as bundles
@@ -236,6 +240,96 @@ def test_verified_template_replacement_saves_plaintext_derivative(tmp_path):
     assert (tmp_path / "derivative/templates/button.png").read_bytes() == replacement
     assert (tmp_path / "unchanged/templates/button.png").read_bytes() == original_asset
     assert Workflow.load(tmp_path / "derivative").manifest.content_digest
+
+
+@pytest.mark.parametrize("storage", ["plaintext", "sealed"])
+@pytest.mark.parametrize("location", ["in_place", "relative", "save_as"])
+@given(replacement=st.sampled_from([b"replacement crop one", b"replacement crop two"]))
+def test_verified_replacement_preserves_source_authority_across_save_paths(
+    storage, location, replacement
+):
+    with TemporaryDirectory() as directory, pytest.MonkeyPatch.context() as patch:
+        root = Path(directory)
+        key = "synthetic replacement test key"
+        patch.setenv(crypto.ENV_KEY, key)
+        source = saved_bundle(root)
+        if storage == "sealed":
+            encrypted = root / "encrypted-source"
+            seal_bundle(source, encrypted)
+            source = encrypted
+        loaded = Workflow.load(source, key=key if storage == "sealed" else None)
+        source_before = _bundle_files(source)
+        original_digest = loaded.manifest.content_digest
+        original_hash = loaded.manifest.file_hashes["templates/button.png"]
+        loaded.stage_verified_template_replacement("templates/button.png", replacement)
+        assert _bundle_files(source) == source_before
+        assert loaded.manifest.file_hashes["templates/button.png"] == original_hash
+
+        destination = source
+        if location == "relative":
+            patch.chdir(root)
+            destination = source.relative_to(root)
+        elif location == "save_as":
+            destination = root / "derivative"
+        if storage == "sealed" and location == "save_as":
+            with sealed_set.writing(destination, "bundle", key):
+                loaded.save(destination, key=key)
+        else:
+            loaded.save(destination, key=key if storage == "sealed" else None)
+
+        reopened = Workflow.load(
+            destination, key=key if storage == "sealed" else None
+        )
+        assert reopened.manifest.content_digest != original_digest
+        assert reopened.manifest.file_hashes["templates/button.png"] == (
+            hashlib.sha256(replacement).hexdigest()
+        )
+        if storage == "sealed":
+            sealed_set.open_set(destination, key).verify_all()
+            assert reopened.decrypted_template("templates/button.png") == replacement
+            assert not (destination / "templates/button.png").exists()
+        else:
+            bundles.verify_integrity(reopened, destination, reopened.manifest)
+            assert (destination / "templates/button.png").read_bytes() == replacement
+        assert loaded._pending_template_replacements == {}
+        if location == "save_as":
+            assert _bundle_files(source) == source_before
+
+
+@pytest.mark.parametrize("source_storage", ["plaintext", "sealed"])
+@pytest.mark.parametrize("destination_storage", ["plaintext", "sealed"])
+def test_staged_replacement_refuses_foreign_destination_without_changes(
+    tmp_path, monkeypatch, source_storage, destination_storage
+):
+    key = "synthetic replacement test key"
+    monkeypatch.setenv(crypto.ENV_KEY, key)
+    source = saved_bundle(tmp_path / "source")
+    if source_storage == "sealed":
+        encrypted = tmp_path / "encrypted-source"
+        seal_bundle(source, encrypted)
+        source = encrypted
+    loaded = Workflow.load(source, key=key if source_storage == "sealed" else None)
+    loaded.stage_verified_template_replacement(
+        "templates/button.png", b"authorized replacement"
+    )
+    foreign = saved_bundle(tmp_path / "foreign", template_color="black")
+    destination = foreign
+    if destination_storage == "sealed":
+        destination = tmp_path / "foreign-sealed"
+        seal_bundle(foreign, destination)
+    source_before = _bundle_files(source)
+    destination_before = _bundle_files(destination)
+
+    with pytest.raises(
+        bundles.BundleIntegrityError,
+        match=r"save-as destination asset.*conflicts with verified source",
+    ):
+        loaded.save(
+            destination, key=key if destination_storage == "sealed" else None
+        )
+
+    assert _bundle_files(source) == source_before
+    assert _bundle_files(destination) == destination_before
 
 
 def test_save_as_refuses_foreign_existing_template_before_writing(tmp_path):

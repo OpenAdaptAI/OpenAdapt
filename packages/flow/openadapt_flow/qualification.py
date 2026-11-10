@@ -17,6 +17,7 @@ import hashlib
 import json
 import math
 import re
+import weakref
 from base64 import b64decode, b64encode
 from collections import Counter
 from datetime import datetime, timezone
@@ -72,6 +73,7 @@ from openadapt_flow.verification import VerificationTier
 if TYPE_CHECKING:  # pragma: no cover
     from openadapt_flow.ir import BusinessDecisionSpec, IdentityTemplate, Step, Workflow
     from openadapt_flow.policy import Policy
+    from openadapt_flow.subroutines import SubroutineLibrary
 
 
 QUALIFICATION_SCHEMA: Final[Literal["openadapt.qualification-project/v1"]] = (
@@ -1125,6 +1127,7 @@ class QualificationRefusalCode(str, Enum):
     JUDGMENT_CASE_EVIDENCE_UNVERIFIED = "judgment_case_evidence_unverified"
     BUSINESS_DECISION_DELIVERY_INVALID = "business_decision_delivery_invalid"
     POLICY_VIOLATION = "policy_violation"
+    SUBROUTINE_NOT_ADMITTED = "subroutine_not_admitted"
 
 
 class QualificationRefusal(BaseModel):
@@ -1193,18 +1196,7 @@ class QualificationError(ValueError):
     """A requested qualification mutation could not be applied."""
 
 
-def workflow_contract_sha256(workflow: "Workflow") -> str:
-    """Digest executable intent and its already-sealed visual assets.
-
-    Qualification state and manifest certification metadata are excluded to
-    avoid self-reference.  Existing manifest file hashes bind the plaintext
-    template assets while keeping their contents inside the declared boundary.
-    """
-
-    content = workflow.model_dump(
-        mode="json",
-        exclude={"manifest", "qualification"},
-    )
+def _workflow_contract_hash(workflow: "Workflow", content: dict[str, Any]) -> str:
     payload = {
         "workflow": content,
         "file_hashes": (
@@ -1220,6 +1212,97 @@ def workflow_contract_sha256(workflow: "Workflow") -> str:
         ensure_ascii=False,
     ).encode()
     return hashlib.sha256(encoded).hexdigest()
+
+
+WorkflowContractForm = Literal["current", "sealed_absent_defaults"]
+
+
+def _bound_workflow_contracts(workflow: "Workflow") -> set[str]:
+    """Workflow-contract digests the persisted qualification is bound to."""
+
+    project = workflow.qualification
+    if project is None:
+        return set()
+    bound = {
+        result.workflow_contract_sha256
+        for case in project.cases
+        for result in case.results
+    }
+    if project.last_certification is not None:
+        bound.add(project.last_certification.workflow_contract_sha256)
+    return bound
+
+
+def workflow_contract_digest(
+    workflow: "Workflow",
+) -> tuple[str, WorkflowContractForm]:
+    """Return the workflow-contract digest and which form produced it.
+
+    The current form is computed first and wins whenever the persisted
+    qualification is bound to it, or to nothing. Only when it is bound to a
+    different digest is the older form tried: the same content with the
+    reviewed additive fields the loaded file never held left out
+    (:func:`bundle_validation.omit_unset_sealed_defaults`). That form is used
+    only if it reproduces a bound digest exactly; otherwise the current digest
+    is returned and the caller's comparison fails as before.
+    """
+
+    from openadapt_flow.bundle_validation import omit_unset_sealed_defaults
+
+    content = workflow.model_dump(mode="json", exclude={"manifest", "qualification"})
+    current = _workflow_contract_hash(workflow, content)
+    bound = _bound_workflow_contracts(workflow)
+    if not bound or current in bound:
+        return current, "current"
+    omit_unset_sealed_defaults(
+        workflow, content, schema_version=workflow.schema_version
+    )
+    older = _workflow_contract_hash(workflow, content)
+    if older != current and older in bound:
+        return older, "sealed_absent_defaults"
+    return current, "current"
+
+
+def workflow_contract_sha256(workflow: "Workflow") -> str:
+    """Digest executable intent and its already-sealed visual assets.
+
+    Qualification state and manifest certification metadata are excluded to
+    avoid self-reference.  Existing manifest file hashes bind the plaintext
+    template assets while keeping their contents inside the declared boundary.
+    A certification sealed before a reviewed additive field existed is
+    reproduced through :func:`workflow_contract_digest`.
+    """
+
+    return workflow_contract_digest(workflow)[0]
+
+
+_CERTIFIED_CONTRACT_FORMS: dict[int, tuple["weakref.ref[Any]", str]] = {}
+
+
+def record_certified_contract_form(workflow: "Workflow") -> str:
+    """Record which contract form reproduced ``workflow``'s certification.
+
+    Called by ``Workflow.load`` after the governed certification check. Kept
+    outside the model so it never enters equality or any digest.
+    """
+
+    form = workflow_contract_digest(workflow)[1]
+    key = id(workflow)
+
+    def _forget(_ref: "weakref.ref[Any]") -> None:
+        _CERTIFIED_CONTRACT_FORMS.pop(key, None)
+
+    _CERTIFIED_CONTRACT_FORMS[key] = (weakref.ref(workflow, _forget), form)
+    return form
+
+
+def certified_contract_form(workflow: "Workflow") -> Optional[str]:
+    """The form recorded by ``Workflow.load``, or None if none was checked."""
+
+    entry = _CERTIFIED_CONTRACT_FORMS.get(id(workflow))
+    if entry is None or entry[0]() is not workflow:
+        return None
+    return entry[1]
 
 
 def _steps_by_id(workflow: "Workflow") -> dict[str, "Step"]:
@@ -3216,6 +3299,13 @@ def _case_run_report_integrity_error(
                 ("physical_press", False),
             },
         }.get((item.actuation, step.action), set())
+        if (
+            step.action is ActionKind.SELECT_OPTION
+            and step.native_selection is not None
+        ):
+            allowed_receipts = (
+                {("guarded_dom_select", False)} if item.actuation == "dom" else set()
+            )
         if (receipt.operation, receipt.native) not in allowed_receipts:
             return "delivery receipt operation conflicts with the compiled action"
 
@@ -3226,6 +3316,7 @@ def _case_run_report_integrity_error(
         )
         if (
             step.action is not ActionKind.DRAG
+            and step.native_selection is None
             and item.actuation in {"uia", "dom"}
             and source_handle is not None
         ):
@@ -3326,15 +3417,29 @@ def _case_run_report_integrity_error(
         ):
             return "non-selection delivery receipt contains selection metadata"
         if step.action is ActionKind.SELECT_OPTION:
-            scoped = scoped_case_params(item)
-            if scoped is None:
-                return "selection delivery receipt lacks exact parameter scope"
-            selected_value = (
-                scoped.get(step.param) if step.param is not None else step.text
-            )
-            if selected_value is None or step.selection_commit_key is None:
-                return "selection delivery receipt lacks its compiled input contract"
-            selected_text = runtime_param_text(selected_value)
+            if step.native_selection is not None:
+                if (
+                    step.param is not None
+                    or step.selection_commit_key is not None
+                    or step.selection_region is not None
+                    or step.text != step.native_selection.label
+                ):
+                    return (
+                        "native selection delivery receipt has a mixed input contract"
+                    )
+                selected_text = step.native_selection.value
+            else:
+                scoped = scoped_case_params(item)
+                if scoped is None:
+                    return "selection delivery receipt lacks exact parameter scope"
+                selected_value = (
+                    scoped.get(step.param) if step.param is not None else step.text
+                )
+                if selected_value is None or step.selection_commit_key is None:
+                    return (
+                        "selection delivery receipt lacks its compiled input contract"
+                    )
+                selected_text = runtime_param_text(selected_value)
             if (
                 receipt.selection_value_sha256
                 != hashlib.sha256(selected_text.encode("utf-8")).hexdigest()
@@ -3347,7 +3452,14 @@ def _case_run_report_integrity_error(
             if selection_resolution.rung == "structural":
                 selection_handle = selection_resolution.structural_handle
                 selection_locator = step.anchor.structural
-                if selection_handle is None or selection_locator is None:
+                if (
+                    selection_handle is None
+                    or selection_locator is None
+                    or (
+                        step.native_selection is not None
+                        and selection_handle.target_fingerprint is None
+                    )
+                ):
                     return "selection delivery receipt lacks structural target proof"
                 from openadapt_flow.runtime.resolver import (
                     structural_resolution_fingerprint,
@@ -3358,6 +3470,8 @@ def _case_run_report_integrity_error(
                     selection_handle,
                 )
             else:
+                if step.native_selection is not None:
+                    return "native selection delivery receipt lacks structural target proof"
                 selection_visual = selection_resolution.visual_evidence
                 if selection_visual is None:
                     return "selection delivery receipt lacks visual target proof"
@@ -5441,6 +5555,34 @@ def evaluate_qualification(
     )
 
 
+def subroutine_certification_refusals(
+    workflow: "Workflow",
+    library: Optional["SubroutineLibrary"],
+    *,
+    workflow_id: Optional[str] = None,
+) -> list[QualificationRefusal]:
+    """Certification refusals for the subroutines ``workflow`` embeds.
+
+    Runs :func:`openadapt_flow.subroutines.certify_subroutine_uses`, which
+    registers the workflow as a user of each embedded digest and then admits
+    every use. Empty for a workflow that embeds no subroutine. Messages name
+    subroutines, inputs and codes only.
+    """
+
+    from openadapt_flow.subroutines import certify_subroutine_uses
+
+    admission = certify_subroutine_uses(workflow, library, workflow_id=workflow_id)
+    return [
+        QualificationRefusal(
+            code=QualificationRefusalCode.SUBROUTINE_NOT_ADMITTED,
+            path=f"subflows.{refusal.subflow}",
+            message=refusal.message,
+            details={"subroutine_code": refusal.code},
+        )
+        for refusal in admission.refusals
+    ]
+
+
 def certify_project(
     workflow: "Workflow",
     *,
@@ -5448,8 +5590,18 @@ def certify_project(
     evidence_root: Path | str,
     transition_predicate_vision: Any | None = None,
     execution_profile: Literal["standard", "regulated"] = "standard",
+    subroutine_library: Optional["SubroutineLibrary"] = None,
+    subroutine_workflow_id: Optional[str] = None,
 ) -> QualificationReport:
-    """Evaluate and persist the exact qualification decision in memory."""
+    """Evaluate and persist the exact qualification decision in memory.
+
+    A workflow that embeds subroutines (``subroutine/<name>/<sha256>``
+    subflows) is certified only when every use is admitted by
+    ``subroutine_library``; certifying also registers the workflow with the
+    library so a later version of any of those subroutines re-qualifies it.
+    Without a library such a workflow is refused. A workflow that embeds no
+    subroutine is evaluated exactly as before.
+    """
 
     project = workflow.qualification
     report = evaluate_qualification(
@@ -5458,6 +5610,16 @@ def certify_project(
         evidence_root=evidence_root,
         transition_predicate_vision=transition_predicate_vision,
     )
+    subroutine_refusals = subroutine_certification_refusals(
+        workflow, subroutine_library, workflow_id=subroutine_workflow_id
+    )
+    if subroutine_refusals:
+        report = report.model_copy(
+            update={
+                "passed": False,
+                "refusals": [*report.refusals, *subroutine_refusals],
+            }
+        )
     if project is not None:
         from openadapt_flow.policy import policy_contract_sha256
 
@@ -5698,6 +5860,31 @@ def current_certification_matches(
         and certification.lookup_sha256
         == (project.lookup.contract_sha256() if project.lookup is not None else None)
     )
+
+
+def persist_registration_before_certificate(
+    workflow: "Workflow",
+    bundle_dir: Path | str,
+    persist: Optional[Callable[[], None]],
+) -> None:
+    """Write certification's subroutine registration before any certificate.
+
+    ``certify_project`` registers the workflow with the subroutine library in
+    memory; ``persist`` writes that library. It must succeed before a new
+    certificate becomes durable, or a later version of a subroutine could not
+    list this workflow for re-qualification. When it raises, the certificate
+    is withdrawn in memory, ``bundle_dir`` is saved uncertified and the error
+    is re-raised, so no valid new certificate is left behind.
+    """
+
+    if persist is None:
+        return
+    try:
+        persist()
+    except BaseException:
+        _invalidate_certification(workflow)
+        save_qualified_workflow(workflow, bundle_dir)
+        raise
 
 
 def save_qualified_workflow(

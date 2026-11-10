@@ -124,3 +124,15 @@ def _isolated_flow_at_rest(tmp_path_factory, monkeypatch):
     )
     monkeypatch.setenv("OPENADAPT_FLOW_PLAINTEXT_AT_REST", "test suite: synthetic data")
     monkeypatch.delenv("OPENADAPT_FLOW_AT_REST", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def no_usage_stats_or_update_check(monkeypatch):
+    """Keep the suite from sending usage stats or asking GitHub for releases.
+
+    A developer machine may have said Share; tests that exercise either path
+    clear these and point ``OPENADAPT_CONFIG_TOML`` at a temporary file.
+    """
+
+    monkeypatch.setenv("DO_NOT_TRACK", "1")
+    monkeypatch.setenv("OPENADAPT_UPDATE_CHECK", "false")

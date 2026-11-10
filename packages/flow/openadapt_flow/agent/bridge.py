@@ -241,6 +241,11 @@ class AgentBridge:
         self._entries_by_id = {
             entry.legacy_id: entry for entry in self.catalog.values() if entry.legacy_id
         }
+        #: Operator-registered, single-use intake grants per workflow. Never
+        #: accepted from tool arguments (#1890).
+        from openadapt_flow.intake.param_gate import IntakeGrantRegistry
+
+        self.intake_grants = IntakeGrantRegistry()
 
     def add_catalog_entry(self, entry: CatalogEntry) -> None:
         """Add a workflow while the server runs (a program taught over MCP).
@@ -266,6 +271,7 @@ class AgentBridge:
                 allow_run=self.allow_run,
                 require_all_inputs=not self.allow_recorded_defaults,
                 repair_desk=self.repair_desk,
+                intake_grants=self.intake_grants,
             )
         return self._service
 
@@ -923,7 +929,7 @@ class AgentBridge:
                 return self._legacy_from_record(run_id, record)
             raise BridgeError("no local report exists for that run id")
         try:
-            report = json.loads(report_path.read_text())
+            report = json.loads(report_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             _LOG.exception("protected local report could not be read")
             raise BridgeError("the local report could not be read safely") from exc
@@ -979,6 +985,54 @@ class AgentBridge:
         payload.pop("workflow_id", None)
         return payload
 
+    def register_intake_provenance(
+        self,
+        workflow: str,
+        path: Path | str,
+        *,
+        document_sha256: Optional[str] = None,
+    ) -> Any:
+        """Grant one run of an operator bundle against one intake document.
+
+        ``path`` is the ``*.provenance.json`` written by ``openadapt-flow
+        intake``. The grant is bound to the provenance's source document(s)
+        and to the digest of the bundle that will run, expires, and is used
+        up by the first run that passes. Tool callers can't supply or replace
+        it (#1890). Workflows taught over MCP have no bundle the gate can
+        read, so registering for one is refused rather than silently
+        unchecked.
+        """
+
+        from openadapt_flow.intake.param_gate import IntakeGrantError
+
+        entry = self.catalog.get(workflow)
+        if entry is None:
+            entry = next(
+                (e for e in self.catalog.values() if e.legacy_id == workflow), None
+            )
+        if entry is not None:
+            if entry.info is None:
+                raise BridgeError(
+                    "intake provenance can't be checked for a workflow taught "
+                    "over MCP; save it as an operator bundle first"
+                )
+            info = entry.info
+            names = [entry.name, entry.legacy_id or ""]
+        elif workflow in self.workflows:
+            info = self.workflows[workflow]
+            names = [workflow]
+        else:
+            raise BridgeError("unknown workflow for intake provenance")
+        bundle_dir = Path(info.bundle_dir)
+        if self.repair_desk is not None and entry is not None:
+            bundle_dir = self.repair_desk.active_bundle(entry.name, bundle_dir)
+        try:
+            return self.intake_grants.register(
+                names, path, bundle_dir, document_sha256=document_sha256
+            )
+        except IntakeGrantError as exc:
+            raise BridgeError(str(exc)) from exc
+
     def _run(self, workflow_id: str, arguments: dict) -> dict:
         info = self._require_workflow(workflow_id)
         if not self.allow_run:
@@ -1007,11 +1061,22 @@ class AgentBridge:
                 "arguments do not match the declared workflow parameter schema"
             )
         params = dict(arguments)
+        names = [workflow_id] + [
+            name for name, e in self.catalog.items() if e.legacy_id == workflow_id
+        ]
+        intake = self.intake_grants.gate(
+            names, info.bundle_dir, params, param_types=info.param_types
+        )
+        if not intake.ok:
+            raise BridgeError(intake.reason)
+        # Run with the proven intake values, not the caller's spelling of them.
+        params = intake.values
         outcome = self.runner.run(
             workflow=workflow_id,
             bundle_dir=info.bundle_dir,
             params=params,
             url_override=url_override,
+            admitted_bundle_sha256=intake.bundle_sha256,
         )
         attention = (
             attention_for(self.attended, outcome.run_dir)

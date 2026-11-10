@@ -9,7 +9,12 @@ from __future__ import annotations
 import subprocess
 from typing import Any
 
-from benchmark.api_generalization.common import AppBase, mysql_rows, podman
+from benchmark.api_generalization.common import (
+    AppBase,
+    dump_database,
+    mysql_rows,
+    podman,
+)
 
 POD = "apigen-doli"
 DB_C, APP_C = "apigen-doli-db", "apigen-doli-app"
@@ -17,7 +22,7 @@ APP_IMAGE = "docker.io/dolibarr/dolibarr:20.0.2"
 DB_IMAGE = "docker.io/library/mariadb@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4"
 DB_PASS = "synthetic-db-pass"  # throwaway local container
 ADMIN_PASS = "synthetic-admin-pass"  # throwaway local container
-UPSTREAM, PROXY = 9851, 9852
+UPSTREAM, PROXY = 9667, 9668
 
 
 def dsql(query: str) -> list[dict[str, Any]]:
@@ -25,6 +30,9 @@ def dsql(query: str) -> list[dict[str, Any]]:
 
 
 class DolibarrBase(AppBase):
+    def dump(self) -> dict[str, list[dict[str, Any]]]:
+        return dump_database('mysql', dsql)
+
     upstream_port = UPSTREAM
     proxy_port = PROXY
 

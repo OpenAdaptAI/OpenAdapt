@@ -51,6 +51,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+from openadapt_flow.runtime.identity import squash, verify_target_identity
+
 # Reuse the dense-surface fixture's RENDERING and the real identity/OCR path
 # unchanged (read them, call them, never re-implement).
 from openadapt_flow.validation.dense_surface import (
@@ -59,7 +61,6 @@ from openadapt_flow.validation.dense_surface import (
     _filler_row,
     render_table_html,
 )
-from openadapt_flow.runtime.identity import squash, verify_target_identity
 
 HERE = Path(__file__).resolve().parent
 
@@ -269,9 +270,14 @@ _VERDICT_PLAIN = {
 
 # Human names for the confusable characters, for the per-card difference callout.
 _GLYPH_NAMES = {
-    "O": "the letter O", "o": "a lowercase o", "0": "the digit 0",
-    "l": "a lowercase L", "I": "a capital I", "1": "the digit 1",
-    "|": "a pipe", "!": "an exclamation mark",
+    "O": "the letter O",
+    "o": "a lowercase o",
+    "0": "the digit 0",
+    "l": "a lowercase L",
+    "I": "a capital I",
+    "1": "the digit 1",
+    "|": "a pipe",
+    "!": "an exclamation mark",
 }
 
 
@@ -285,9 +291,7 @@ def glyph_diff(recorded: str, live: str) -> list[tuple[int, str, str]]:
     Used only to point the reader at the one look-alike character that makes two
     different patients read the same; it does not feed the gate.
     """
-    return [
-        (i, a, b) for i, (a, b) in enumerate(zip(recorded, live)) if a != b
-    ]
+    return [(i, a, b) for i, (a, b) in enumerate(zip(recorded, live)) if a != b]
 
 
 def _mark_id(mrn: str, positions: set[int]) -> str:
@@ -306,7 +310,9 @@ VIEWPORT_W = 1120
 DSF = 2
 
 
-def _values_table(rows: dict[str, Row], seed: int = 7) -> tuple[DenseTable, dict[str, int]]:
+def _values_table(
+    rows: dict[str, Row], seed: int = 7
+) -> tuple[DenseTable, dict[str, int]]:
     """Place each labelled row at a stable index in a realistic dense table
     (each preceded by one deterministic filler so backgrounds are consistent),
     mirroring the pixel-identity probe's stable-index trick. Returns the table
@@ -326,12 +332,15 @@ def _values_table(rows: dict[str, Row], seed: int = 7) -> tuple[DenseTable, dict
 
 @dataclass
 class RowCrops:
-    row_png: bytes   # full-row crop (what paints on screen)
-    mrn_png: bytes   # the identifier cell only (magnified in the gallery)
+    row_png: bytes  # full-row crop (what paints on screen)
+    mrn_png: bytes  # the identifier cell only (magnified in the gallery)
 
 
 def render_row_crops(
-    rows: dict[str, Row], *, top_offset_px: int, font_family: str = "Arial",
+    rows: dict[str, Row],
+    *,
+    top_offset_px: int,
+    font_family: str = "Arial",
     font_px: int = 15,
 ) -> dict[str, RowCrops]:
     """Render ``rows`` in a dense table and return the full-row and MRN-cell PNG
@@ -343,14 +352,18 @@ def render_row_crops(
 
     table, index = _values_table(rows)
     html_doc = render_table_html(
-        table, font_family=font_family, font_px=font_px, row_pad_px=6,
+        table,
+        font_family=font_family,
+        font_px=font_px,
+        row_pad_px=6,
         top_offset_px=top_offset_px,
     )
     out: dict[str, RowCrops] = {}
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=True)
         page = browser.new_page(
-            viewport={"width": VIEWPORT_W, "height": 1600}, device_scale_factor=DSF,
+            viewport={"width": VIEWPORT_W, "height": 1600},
+            device_scale_factor=DSF,
         )
         page.set_content(html_doc, wait_until="networkidle")
         full_h = page.evaluate("document.body.scrollHeight")
@@ -461,7 +474,9 @@ def evaluate(cases: Optional[list[CaseSpec]] = None) -> list[CaseResult]:
                 status=check.status,
                 coverage=round(float(check.coverage), 4),
                 safe=safe,
-                ocr_collapsed=(squash(ocr_rec) == squash(ocr_liv) and bool(squash(ocr_rec))),
+                ocr_collapsed=(
+                    squash(ocr_rec) == squash(ocr_liv) and bool(squash(ocr_rec))
+                ),
                 oneliner=verdict_oneliner(c.kind, check.status),
             )
         )
@@ -555,8 +570,8 @@ def _difference_callout(r: CaseResult) -> str:
         if (a, b) not in seen:
             seen.append((a, b))
     pairs = ", ".join(
-        f"<strong class=\"glyph\">{_e(a)}</strong> vs "
-        f"<strong class=\"glyph\">{_e(b)}</strong> ({_glyph_name(a)} vs "
+        f'<strong class="glyph">{_e(a)}</strong> vs '
+        f'<strong class="glyph">{_e(b)}</strong> ({_glyph_name(a)} vs '
         f"{_glyph_name(b)})"
         for a, b in seen
     )
@@ -581,9 +596,7 @@ def _difference_callout(r: CaseResult) -> str:
 
 def _case_card(r: CaseResult) -> str:
     _, kind = _VERDICT_STYLE.get(r.status, (r.status.upper(), "halt"))
-    plain_label, tech = _VERDICT_PLAIN.get(
-        r.status, (r.status.upper(), r.status)
-    )
+    plain_label, tech = _VERDICT_PLAIN.get(r.status, (r.status.upper(), r.status))
     safe_cls = "safe" if r.safe else "unsafe"
     safe_txt = "SAFE" if r.safe else "UNSAFE — P0"
     safe_mark = "&#10003;" if r.safe else "&#10007;"
@@ -698,7 +711,7 @@ def render_html(results: list[CaseResult]) -> str:
         )
     cards = "\n".join(_case_card(r) for r in results)
     limits = "\n".join(
-        f'<li><strong>{_e(t)}</strong><p>{_e(b)}</p></li>' for t, b in LIMITS_ITEMS
+        f"<li><strong>{_e(t)}</strong><p>{_e(b)}</p></li>" for t, b in LIMITS_ITEMS
     )
     return f"""<!doctype html>
 <html lang="en">
@@ -942,9 +955,12 @@ def build(outdir: Path = HERE) -> dict:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--out", default=str(HERE),
-                        help="output directory (default: this module's directory)")
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
+    parser.add_argument(
+        "--out",
+        default=str(HERE),
+        help="output directory (default: this module's directory)",
+    )
     args = parser.parse_args(argv)
 
     hd = build(Path(args.out))

@@ -1,0 +1,199 @@
+{
+ "id": "P08",
+ "class": "lost_response",
+ "type": "patient",
+ "expect": "create",
+ "note": "The create lands, but the agent gets a 504 instead of the reply.",
+ "agent_s": 157.2,
+ "cost_usd": 0.341352,
+ "claim": {
+  "status": "done",
+  "id": "Patient/ea51adcb-fe23-417b-9489-783c95c7cd6e",
+  "note": "RESULT: DONE Patient/ea51adcb-fe23-417b-9489-783c95c7cd6e",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/Patient?_count=20&_fields=id,_lastUpdated,name,birthDate,gender&_sort=-_lastUpdated",
+  "final_text": "There is now exactly one Patient record for Lena Okafor: Patient/ea51adcb-fe23-417b-9489-783c95c7cd6e. It holds the name, birth date 1988-04-22, female, 14 Birch Lane, Springfield, MA 01103, home phone 413-555-0187 and email lena.okafor@example.org.\n\nThe Patient list was empty when I started, and a search for \"Okafor\" found nothing, so I created her record. My first click on OK created it without any confirmation on screen, and I clicked OK again, which created a second identical record (fde8091c-cb89-45b7-8a6b-1a5d0e81142e). I deleted that second record. After reloading the page, the Patient list shows only the one record.\n\nRESULT: DONE Patient/ea51adcb-fe23-417b-9489-783c95c7cd6e",
+  "model_calls": 29,
+  "actions": 73,
+  "tokens_in": 831844,
+  "tokens_out": 5761
+ },
+ "verifier": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "the agent created 2 Patient records, not one",
+   "the agent wrote 2 other resource(s): Patient"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 1,
+   "agent_writes": 2,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "Patient"
+   ]
+  },
+  "unreadable": false
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "the agent created 2 Patient records, not one",
+   "the agent wrote 2 other resource(s): Patient"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 1,
+   "agent_writes": 2,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "Patient"
+   ]
+  },
+  "unreadable": false
+ },
+ "verify_s": 4.8,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "Patient/ea51adcb-fe23-417b-9489-783c95c7cd6e"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "Patient/ea51adcb-fe23-417b-9489-783c95c7cd6e": "created"
+  }
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "Patient",
+   "write": 1,
+   "faulted": true
+  },
+  {
+   "fault": "drop_response"
+  },
+  {
+   "fault": "drop_response",
+   "upstream_status": 201
+  },
+  {
+   "method": "POST",
+   "type": "Patient",
+   "write": 2,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ServiceRequest",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "DELETE",
+   "type": "Patient",
+   "write": 3,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 1,
+ "host_load": {
+  "start": 33.4,
+  "end": 13.8,
+  "waited_s": 30
+ }
+}

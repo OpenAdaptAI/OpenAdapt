@@ -45,9 +45,21 @@ mirrors the real FHIR wire shape, never MockMed's screen.
 from __future__ import annotations
 
 import time
-from typing import Any, Optional, Protocol
+from typing import Any, Callable, Optional, Protocol
 
-from openadapt_flow.runtime.effects._common import drop_record_fields, judge_records
+from openadapt_flow.fhir_read import (
+    check_collection_search,
+    check_search_coverage,
+    check_search_outcome,
+    fhir_read_headers,
+    next_page_url,
+    search_total,
+)
+from openadapt_flow.runtime.effects._common import (
+    drop_record_fields,
+    judge_records,
+    page_snapshot_token,
+)
 from openadapt_flow.runtime.effects.adapter import VerifierAdapterBase
 from openadapt_flow.runtime.effects.effect import (
     Effect,
@@ -55,6 +67,9 @@ from openadapt_flow.runtime.effects.effect import (
     EffectVerdict,
 )
 from openadapt_flow.verification import VerificationTier
+
+COLLECTION_DIAGNOSTIC = "search_bundle_type_nonconformant: collection"
+
 
 #: A field map for a note kept as a FHIR R4 Observation (the note in
 #: ``valueString``). Not a default: a caller whose app stores its writes this
@@ -71,19 +86,6 @@ DEFAULT_OBSERVATION_PATHS: dict[str, str] = {
 #: A search result longer than this many pages reads as unreadable, never as
 #: the first pages.
 MAX_PAGES = 50
-
-
-def _next_link(bundle: dict[str, Any]) -> Optional[str]:
-    """The Bundle's ``next`` page URL, if any."""
-
-    links = bundle.get("link")
-    if not isinstance(links, list):
-        return None
-    for link in links:
-        if isinstance(link, dict) and link.get("relation") == "next":
-            url = link.get("url")
-            return url if isinstance(url, str) and url else None
-    return None
 
 
 def _origin(url: str) -> str:
@@ -134,14 +136,16 @@ def parse_filter(cond: str) -> Optional[tuple[str, str, bool]]:
 
 
 def filter_matches(item: Any, want: tuple[str, str, bool]) -> bool:
-    """True when ``item`` is an element the filter keeps."""
+    """Match scalar strings through objects or unambiguous singleton lists."""
 
     if not isinstance(item, dict):
         return False
     node: Any = item
     for part in want[0].split("."):
         if isinstance(node, list):
-            node = node[0] if node else None
+            if len(node) != 1:
+                return False
+            node = node[0]
         if not isinstance(node, dict) or part not in node:
             return False
         node = node[part]
@@ -157,12 +161,13 @@ def extract_path(resource: dict[str, Any], dotted: str) -> Any:
     A segment that lands on a list takes the list's first element (the common
     ``component[0]`` / single-coding case), so ``code.coding.code`` reads the
     first coding's code. A segment may filter a list first:
-    ``telecom[system=email].value`` reads the first telecom whose ``system``
+    ``telecom[system=email].value`` reads the unique telecom whose ``system``
     is ``email`` (a Patient keeps its phone and its email in one list). The
     filter's key may be dotted, and ``^=`` keeps the elements whose value
     starts with the text: ``participant[actor.reference^=Patient/]`` reads
     an Appointment's patient participant.
-    Returns ``None`` when any segment is missing or no element matches.
+    Returns ``None`` when a segment is missing or a filter has zero or
+    multiple matches. Unfiltered paths retain their first-element behavior.
     """
     node: Any = resource
     for seg in split_path(dotted):
@@ -179,13 +184,49 @@ def extract_path(resource: dict[str, Any], dotted: str) -> Any:
         node = node.get(name)
         if want is not None:
             items = node if isinstance(node, list) else [node]
-            node = next(
-                (item for item in items if filter_matches(item, want)),
-                None,
-            )
+            matches = [item for item in items if filter_matches(item, want)]
+            if len(matches) != 1:
+                return None
+            node = matches[0]
     if isinstance(node, list):
         node = node[0] if node else None
     return node
+
+
+def extract_all(resource: dict[str, Any], dotted: str) -> list[Any]:
+    """Every value ``dotted`` reaches in ``resource``: :func:`extract_path`
+    with each list fanned out instead of cut to its first element. A filter
+    keeps its rule (exactly one match, else no value), and a branch that
+    reaches nothing gives ``None``."""
+
+    nodes: list[Any] = [resource]
+    for seg in split_path(dotted):
+        name, want = seg, None
+        if seg.endswith("]") and "[" in seg:
+            name, _, cond = seg[:-1].partition("[")
+            want = parse_filter(cond)
+            if want is None:
+                return [None]
+        nxt: list[Any] = []
+        for node in nodes:
+            for item in node if isinstance(node, list) else [node]:
+                if not isinstance(item, dict):
+                    nxt.append(None)
+                    continue
+                value = item.get(name)
+                if want is not None:
+                    items = value if isinstance(value, list) else [value]
+                    matches = [i for i in items if filter_matches(i, want)]
+                    value = matches[0] if len(matches) == 1 else None
+                nxt.append(value)
+        nodes = nxt
+    out: list[Any] = []
+    for node in nodes:
+        if isinstance(node, list):
+            out.extend(node if node else [None])
+        else:
+            out.append(node)
+    return out
 
 
 class FhirEffectVerifier(VerifierAdapterBase):
@@ -210,6 +251,8 @@ class FhirEffectVerifier(VerifierAdapterBase):
         poll_interval_s: Gap between polls while waiting for the write.
         drop_fields: Record fields removed before judging (``["id"]`` judges
             records by their whole content); see :class:`RestRecordVerifier`.
+        snapshot_path: Dotted body path to a reviewed immutable result-set
+            token. Multi-page reads require its exact type and value to match.
     """
 
     substrate = "fhir"
@@ -229,14 +272,31 @@ class FhirEffectVerifier(VerifierAdapterBase):
         verify_tls: bool = True,
         poll_interval_s: float = 0.3,
         drop_fields: tuple[str, ...] = (),
+        snapshot_path: Optional[str] = None,
+        consistency: Optional[str] = None,
+        quiescence: Any = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.drop_fields = tuple(drop_fields)
+        self.snapshot_path = snapshot_path
+        self.consistency, self.quiescence = consistency, quiescence
+        if consistency not in (None, "quiescent-two-pass") or (
+            consistency and snapshot_path
+        ):
+            raise ValueError("unsupported or conflicting FHIR consistency contract")
         self.resource_type = resource_type
         self.search_params = dict(search_params or {})
         if not resource_type or not field_paths:
             raise ValueError("a FHIR read needs its resource_type and field_paths")
         self.field_paths = dict(field_paths)
+        # A search answered with Bundles that wrap the requested resource
+        # (one Bundle per match) is read only when every field is projected
+        # out of an entry of the requested type; any other match must itself
+        # be the requested type.
+        nested = f"entry[resource.resourceType={resource_type}]."
+        self._match_types = {resource_type}
+        if all(path.startswith(nested) for path in self.field_paths.values()):
+            self._match_types.add("Bundle")
         if access_token and token_source is not None:
             raise ValueError("give access_token or token_source, not both")
         self.access_token = access_token
@@ -253,6 +313,7 @@ class FhirEffectVerifier(VerifierAdapterBase):
         self._verify_per_request = True
         #: Why the last read was unreadable, for the state and the verdict.
         self.read_problem: Optional[str] = None
+        self.read_diagnostics: list[str] = []
 
     # -- transport ----------------------------------------------------------
 
@@ -285,7 +346,7 @@ class FhirEffectVerifier(VerifierAdapterBase):
 
     def _headers(self) -> Optional[dict[str, str]]:
         """Request headers, or None when the token source has no token."""
-        headers = {"Accept": "application/fhir+json"}
+        headers = fhir_read_headers()
         token = self.access_token
         if self.token_source is not None:
             token = self.token_source.access_token()
@@ -295,16 +356,66 @@ class FhirEffectVerifier(VerifierAdapterBase):
             headers["Authorization"] = f"Bearer {token}"
         return headers
 
+    #: How a field that reaches several values is read. ``None`` keeps
+    #: :func:`extract_path`'s first-element rule; a resolver (the
+    #: reconciler's ``resolve``) is given every value :func:`extract_all`
+    #: reaches and returns the one value they agree on.
+    value_resolver: Optional[Callable[[list[Any]], Any]] = None
+
     def _flatten(self, resource: dict[str, Any]) -> dict[str, Any]:
-        flat = {
-            key: extract_path(resource, path) for key, path in self.field_paths.items()
-        }
+        if self.value_resolver is not None:
+            resolver = self.value_resolver
+            flat = {
+                key: resolver(extract_all(resource, path))
+                for key, path in self.field_paths.items()
+            }
+        else:
+            flat = {
+                key: extract_path(resource, path)
+                for key, path in self.field_paths.items()
+            }
         # Always carry a stable id for delta / collateral accounting.
         if "id" not in flat or flat["id"] is None:
             flat["id"] = resource.get("id")
         return flat
 
     def _search(self) -> Optional[list[dict[str, Any]]]:
+        if self.consistency is None:
+            return self._search_pass()
+        from openadapt_flow.runtime.effects.quiescence import two_pass_read
+
+        diagnostics: list[str] = []
+        self.read_diagnostics = []
+
+        def read_once(check: Any) -> Optional[list[dict[str, Any]]]:
+            records = self._search_pass(check)
+            for diagnostic in self.read_diagnostics:
+                if diagnostic not in diagnostics:
+                    diagnostics.append(diagnostic)
+            return records
+
+        try:
+            records = two_pass_read(
+                self.quiescence,
+                {
+                    "kind": "fhir",
+                    "base_url": self.base_url,
+                    "resource_type": self.resource_type,
+                    "search_params": self.search_params,
+                    "field_paths": self.field_paths,
+                },
+                read_once,
+            )
+        except Exception:  # noqa: BLE001 - failed exclusion/coverage cannot confirm
+            self.read_problem = "quiescent complete-read validation failed"
+            return None
+        finally:
+            self.read_diagnostics = diagnostics
+        return drop_record_fields(records, self.drop_fields)
+
+    def _search_pass(
+        self, check_quiescence: Any = None
+    ) -> Optional[list[dict[str, Any]]]:
         """Run the configured FHIR search; return flattened resources.
 
         Returns ``None`` (read as unreadable -> INDETERMINATE) on any
@@ -312,6 +423,7 @@ class FhirEffectVerifier(VerifierAdapterBase):
         malformed entries. Never raises.
         """
         self.read_problem = None
+        self.read_diagnostics = []
         url = f"{self.base_url}/{self.resource_type}"
         headers = self._headers()
         if headers is None:
@@ -328,22 +440,35 @@ class FhirEffectVerifier(VerifierAdapterBase):
         if (type(session).__module__ or "").startswith("requests"):
             tls_kwargs["allow_redirects"] = False
 
+        collection_seen = False
+
         def get(target: str, params: Optional[dict[str, str]]) -> Any:
             """One page: the parsed Bundle, or None with ``read_problem``."""
+            nonlocal collection_seen
 
             try:
+                if check_quiescence is not None:
+                    check_quiescence()
                 kwargs = dict(tls_kwargs)
                 if params is not None:
                     kwargs["params"] = params
+                import httpx
+
+                if isinstance(session, httpx.Client):
+                    kwargs.pop("verify", None)
+                    kwargs.pop("allow_redirects", None)
+                    kwargs["follow_redirects"] = False
                 resp = session.get(
                     target, headers=headers, timeout=self.timeout_s, **kwargs
                 )
+                if check_quiescence is not None:
+                    check_quiescence()
             except Exception as exc:  # noqa: BLE001 - transport failure is unreadable
                 self.read_problem = f"GET {target} failed: {type(exc).__name__}"
                 return None
             if resp.status_code == 401 and self.token_source is not None:
                 self.token_source.invalidate()
-            if resp.status_code // 100 != 2:
+            if resp.status_code // 100 != 2 or resp.status_code == 206:
                 self.read_problem = f"GET {target} returned HTTP {resp.status_code}"
                 return None
             landed = getattr(resp, "url", None)
@@ -361,15 +486,55 @@ class FhirEffectVerifier(VerifierAdapterBase):
             if not isinstance(bundle, dict) or bundle.get("resourceType") != "Bundle":
                 self.read_problem = f"GET {target} returned no Bundle"
                 return None
+            if bundle.get("type") == "collection":
+                try:
+                    check_collection_search(
+                        bundle,
+                        self.resource_type,
+                        search_params=self.search_params,
+                        request_urls=(target, landed),
+                    )
+                except ValueError as error:
+                    self.read_problem = str(error)
+                    return None
+                collection_seen = True
+            elif check_quiescence is not None and (
+                bundle.get("type") != "searchset" or "total" not in bundle
+            ):
+                self.read_problem = (
+                    "quiescent FHIR reads require searchset totals on every page"
+                )
+                return None
             return bundle
 
         bundle = get(url, self.search_params)
         if bundle is None:
             return None
         out: list[dict[str, Any]] = []
+        outcomes: list[dict[str, Any]] = []
         matches = 0
-        total: Any = bundle.get("total")
+        match_identities: set[tuple[str, str]] = set()
+        total: Optional[int] = None
+        snapshot: str | int | None = None
         for _page in range(MAX_PAGES):
+            if self.snapshot_path is not None:
+                try:
+                    current_snapshot = page_snapshot_token(bundle, self.snapshot_path)
+                except ValueError as error:
+                    self.read_problem = str(error)
+                    return None
+                if snapshot is not None and (
+                    type(current_snapshot) is not type(snapshot)
+                    or current_snapshot != snapshot
+                ):
+                    self.read_problem = "the declared snapshot changed across pages"
+                    return None
+                snapshot = current_snapshot
+            try:
+                total = search_total(bundle, total)
+            except ValueError as exc:
+                self.read_problem = str(exc)
+                return None
             entries = bundle.get("entry", [])
             if not isinstance(entries, list):
                 self.read_problem = "a Bundle's entry is not a list"
@@ -383,27 +548,56 @@ class FhirEffectVerifier(VerifierAdapterBase):
                     self.read_problem = "a Bundle entry has no resource"
                     return None
                 mode = (entry.get("search") or {}).get("mode")
-                if mode == "outcome" or (
-                    mode is None and resource.get("resourceType") == "OperationOutcome"
+                if (
+                    mode == "outcome"
+                    or resource.get("resourceType") == "OperationOutcome"
                 ):
-                    # A message about the search, not a record (Epic sends a
-                    # warning "returns no results" on an empty search). An
-                    # error in it means the set may be partial.
-                    issues = resource.get("issue") or []
-                    if not isinstance(issues, list) or any(
-                        not isinstance(i, dict)
-                        or i.get("severity") not in ("warning", "information")
-                        for i in issues
-                    ):
-                        self.read_problem = "the search returned an error outcome"
-                        return None
+                    outcomes.append(resource)
                     continue
                 if mode != "include":
+                    resource_type, resource_id = (
+                        resource.get("resourceType"),
+                        resource.get("id"),
+                    )
+                    if (
+                        not isinstance(resource_type, str)
+                        or not resource_type
+                        or not isinstance(resource_id, str)
+                        or not resource_id
+                    ):
+                        self.read_problem = (
+                            "a matching search resource has no stable identity"
+                        )
+                        return None
+                    if resource_type not in self._match_types:
+                        self.read_problem = (
+                            "a matching search resource is not the requested "
+                            "resource type"
+                        )
+                        return None
+                    identity = (resource_type, resource_id)
+                    if identity in match_identities:
+                        self.read_problem = "a matching search resource identity was repeated; coverage is ambiguous"
+                        return None
+                    match_identities.add(identity)
                     matches += 1
                 out.append(self._flatten(resource))
-            next_url = _next_link(bundle)
+            try:
+                for outcome in outcomes:
+                    check_search_outcome(outcome, has_matches=matches > 0)
+            except ValueError as exc:
+                self.read_problem = str(exc)
+                return None
+            try:
+                next_url = next_page_url(bundle)
+            except ValueError as exc:
+                self.read_problem = str(exc)
+                return None
             if next_url is None:
                 break
+            from urllib.parse import urljoin
+
+            next_url = urljoin(url, next_url)
             if not _same_origin(next_url, self.base_url):
                 # A next page elsewhere is not this system of record.
                 self.read_problem = (
@@ -411,19 +605,37 @@ class FhirEffectVerifier(VerifierAdapterBase):
                     f"{_origin(self.base_url)}"
                 )
                 return None
+            if self.snapshot_path is None and check_quiescence is None:
+                self.read_problem = (
+                    "multi-page reads require declared immutable snapshot semantics"
+                )
+                return None
+            from urllib.parse import urlsplit
+
+            if check_quiescence is not None and (
+                urlsplit(next_url).path != urlsplit(url).path
+                or urlsplit(next_url).fragment
+            ):
+                self.read_problem = "next link leaves the declared endpoint path"
+                return None
             bundle = get(next_url, None)
             if bundle is None:
                 return None  # a lost page makes the set partial
         else:
             self.read_problem = f"more than {MAX_PAGES} pages"
             return None  # never a truncated read
-        if isinstance(total, int) and not isinstance(total, bool) and total != matches:
-            # The server counts a different number of matches than it returned.
-            self.read_problem = (
-                f"the Bundle's total is {total}, the read returned {matches} matches"
-            )
+        try:
+            check_search_coverage(total, matches)
+        except ValueError as exc:
+            self.read_problem = str(exc)
             return None
-        return drop_record_fields(out, self.drop_fields)
+        if collection_seen:
+            self.read_diagnostics.append(COLLECTION_DIAGNOSTIC)
+        return (
+            out
+            if check_quiescence is not None
+            else drop_record_fields(out, self.drop_fields)
+        )
 
     # -- EffectVerifier protocol --------------------------------------------
 
@@ -436,10 +648,15 @@ class FhirEffectVerifier(VerifierAdapterBase):
         }
         if records is None and self.read_problem:
             detail["read_problem"] = self.read_problem
+        if self.read_diagnostics:
+            detail["read_diagnostics"] = list(self.read_diagnostics)
+        if self.consistency:
+            detail["consistency"] = self.consistency
         return EffectState(
             substrate=self.substrate,
             reachable=records is not None,
             records=records or [],
+            readback_complete=(records is not None) if self.consistency else None,
             detail=detail,
         )
 
@@ -454,6 +671,12 @@ class FhirEffectVerifier(VerifierAdapterBase):
             if current is None and self.read_problem:
                 last = last.model_copy(
                     update={"reason": f"{last.reason} ({self.read_problem})"}
+                )
+            if self.read_diagnostics:
+                last = last.model_copy(
+                    update={
+                        "reason": f"{last.reason} ({'; '.join(self.read_diagnostics)})"
+                    }
                 )
             if last.confirmed or time.monotonic() >= deadline:
                 return last

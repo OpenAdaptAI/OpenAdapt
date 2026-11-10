@@ -114,9 +114,12 @@ jobs:
       # bundled Flow doesn't know passes them all and fails every real run.
       # Parse each command line Desktop builds with the bundled Flow's parser.
       - name: Exercise the Desktop and Flow command-line contract
+        env:
+          OPENADAPT_DESKTOP_REQUIRE_BUNDLED_FLOW: "1"
         run: >-
           uv run --locked pytest
           tests/test_flow_command_contract.py
+          tests/test_flow_import_contract.py
           tests/test_dependency_compat.py
           -v
 

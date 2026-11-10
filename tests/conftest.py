@@ -49,6 +49,9 @@ def _no_real_quickstart_runs(request, monkeypatch):
         )
 
     monkeypatch.setattr(engine.FlowEngine, "__enter__", refuse)
+    from openadapt.quickstart import openemr
+
+    monkeypatch.setattr(openemr.OpenEMREngine, "__enter__", refuse)
     yield
 
 

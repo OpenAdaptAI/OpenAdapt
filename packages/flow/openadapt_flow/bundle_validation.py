@@ -62,6 +62,7 @@ from openadapt_flow.ir import (
     StateKind,
     Step,
     StructuralLocator,
+    TokenTemplate,
     Workflow,
     business_decision_transitions,
 )
@@ -307,6 +308,15 @@ _SEALED_CANONICAL_OMISSIONS_BY_VERSION: dict[
             ),
         ),
         _SealedCanonicalOmission(
+            owner=TokenTemplate,
+            field_name="bearing",
+            omitted_values=(None,),
+            reason=(
+                "an absent identity-bearing flag predates the v2 field; "
+                "explicit token classifications remain sealed content"
+            ),
+        ),
+        _SealedCanonicalOmission(
             owner=Effect,
             field_name="new_records",
             omitted_values=([],),
@@ -432,15 +442,47 @@ _SOURCE_V2_CHILDREN = {
     },
     "Guard": {"predicate": ("Predicate", "one")},
     "Predicate": {"anchor": ("Anchor", "one"), "operands": ("Predicate", "list")},
-    "Anchor": {"structural": ("StructuralLocator", "one")},
+    "Anchor": {
+        "structural": ("StructuralLocator", "one"),
+        "identity_template": ("IdentityTemplate", "one"),
+    },
+    "IdentityTemplate": {
+        "tokens": ("TokenTemplate", "list"),
+        "ocr_noise": ("IdentityTemplate", "one"),
+    },
     "ApiBinding": {"effects": ("Effect", "list")},
 }
+
+
+def _source_v2_reachable_owners() -> set[str]:
+    seen, pending = set(), ["Workflow"]
+    while pending:
+        owner = pending.pop()
+        if owner not in seen:
+            seen.add(owner)
+            pending.extend(
+                child for child, _ in _SOURCE_V2_CHILDREN.get(owner, {}).values()
+            )
+    return seen
+
+
+# Every v2 omission rule must be reachable from the source walk, or a field the
+# current serializer emits (and compute_content_digest omits) would stay in the
+# source projection and every re-save of an upgraded bundle would refuse.
+_unreachable_v2_owners = {
+    rule.owner.__name__ for rule in _SEALED_CANONICAL_OMISSIONS_BY_VERSION[2]
+} - _source_v2_reachable_owners()
+if _unreachable_v2_owners:  # pragma: no cover - import-time format guard
+    raise RuntimeError(
+        "schema-2 omission owners missing from _SOURCE_V2_CHILDREN: "
+        + ", ".join(sorted(_unreachable_v2_owners))
+    )
 
 
 def _source_v2_omissions(content: object, owner: str = "Workflow") -> None:
     if not isinstance(content, dict):
         return
-    for rule in _SEALED_CANONICAL_OMISSIONS_BY_VERSION[2]:
+    for rule in _SEALED_CANONICAL_OMISSIONS_BY_VERSION.get(2, ()):
         if (
             rule.owner.__name__ == owner
             and rule.field_name in content
@@ -649,6 +691,60 @@ def verify_loaded_source_integrity(
     _verify_asset_hashes(
         loaded.source_bundle_dir, stored, decrypted_assets=decrypted_assets
     )
+
+
+def omit_unset_sealed_defaults(
+    model: object,
+    rendered: object,
+    *,
+    schema_version: int,
+) -> None:
+    """Drop listed fields that the sealed file never held, for older contracts.
+
+    This reuses the reviewed registry above, more narrowly than the content
+    digest does. A field is dropped only when all of these hold: its exact
+    owner and name are on the list for ``schema_version``, the list accepts
+    ``None`` for it, its value is ``None``, and the loaded file did not set it
+    (it is not in the model's ``model_fields_set``). A field the file wrote,
+    even as ``null``, stays, and so does any non-``None`` value.
+    """
+
+    rules = tuple(
+        rule
+        for rule in _SEALED_CANONICAL_OMISSIONS_BY_VERSION.get(schema_version, ())
+        if any(value is None for value in rule.omitted_values)
+    )
+    if not rules:
+        return
+    _omit_unset_sealed_defaults(model, rendered, rules)
+
+
+def _omit_unset_sealed_defaults(
+    model: object,
+    rendered: object,
+    rules: tuple[_SealedCanonicalOmission, ...],
+) -> None:
+    if isinstance(model, BaseModel) and isinstance(rendered, dict):
+        for rule in rules:
+            if (
+                type(model) is rule.owner
+                and rule.field_name in rendered
+                and rule.field_name not in model.model_fields_set
+                and getattr(model, rule.field_name) is None
+            ):
+                rendered.pop(rule.field_name)
+        for field_name in type(model).model_fields:
+            if field_name in rendered:
+                _omit_unset_sealed_defaults(
+                    getattr(model, field_name), rendered[field_name], rules
+                )
+    elif isinstance(model, dict) and isinstance(rendered, dict):
+        for key, value in model.items():
+            if key in rendered:
+                _omit_unset_sealed_defaults(value, rendered[key], rules)
+    elif isinstance(model, (list, tuple)) and isinstance(rendered, list):
+        for value, rendered_value in zip(model, rendered, strict=True):
+            _omit_unset_sealed_defaults(value, rendered_value, rules)
 
 
 def _referenced_asset_paths(workflow: "Workflow") -> set[str]:
@@ -1016,8 +1112,7 @@ def verify_integrity(
        (re-saving reseals them).
 
     Only meaningful for a bundle that carries a persisted manifest with a
-    non-empty digest. An explicit legacy migration opt-in creates a new seal
-    before the caller can save it."""
+    non-empty digest. Verified loads refuse a missing persisted seal."""
     if not stored.content_digest and workflow._loaded_seal is None:
         return
     # 1. Recompute the digest over the loaded workflow content using the SEALED

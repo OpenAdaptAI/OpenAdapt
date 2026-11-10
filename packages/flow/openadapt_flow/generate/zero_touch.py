@@ -1363,7 +1363,7 @@ def location_options(report: Mapping[str, Any]) -> dict[str, dict[str, int]]:
 
 
 def _load_yaml(path: Path) -> Any:
-    return yaml.safe_load(Path(path).read_text()) if path else None
+    return yaml.safe_load(Path(path).read_text(encoding="utf-8")) if path else None
 
 
 def run_verdict(
@@ -1408,7 +1408,9 @@ def validate(
     if modes is None:
         modes = {}
     try:
-        report = json.loads((Path(manifest).parent / "report.json").read_text())
+        report = json.loads(
+            (Path(manifest).parent / "report.json").read_text(encoding="utf-8")
+        )
     except (OSError, ValueError):
         report = {}  # no bindings: no column counts as the task's
 
@@ -1814,8 +1816,10 @@ def onboard(
         result = {"minutes": round((time.time() - t0) / 60, 2), "person_decisions": 0,
                   "answers": {}, "ledger": [], "admitted": [], "kinds": summary,
                   "exceptions": len(summary), "stopped": broken}  # fmt: skip
-        (out / "ONBOARDING.json").write_text(json.dumps(result, indent=2, default=str))
-        (out / "EXCEPTIONS.md").write_text(exceptions_md(summary, {}))
+        (out / "ONBOARDING.json").write_text(
+            json.dumps(result, indent=2, default=str), encoding="utf-8"
+        )
+        (out / "EXCEPTIONS.md").write_text(exceptions_md(summary, {}), encoding="utf-8")
         return result
     # The production contracts: the same answers, against the app's own
     # store, staged beside the final folder. A kind is kept only when its
@@ -1847,14 +1851,18 @@ def onboard(
         "validated_field_sets": validated_sets,
         "sandbox_fk_errors": list(sb.fk_errors),
     }
-    (out / "ONBOARDING.json").write_text(json.dumps(result, indent=2, default=str))
+    (out / "ONBOARDING.json").write_text(
+        json.dumps(result, indent=2, default=str), encoding="utf-8"
+    )
     text = exceptions_md(summary, prod)
     if sb.fk_errors:
         text += ("\nForeign keys the sandbox couldn't copy (contracts that depend "
                  "on them differ from production and are not admitted):\n"
                  + "".join(f"- {e}\n" for e in sb.fk_errors))  # fmt: skip
-    (out / "EXCEPTIONS.md").write_text(text)
-    (out / "VALIDATION.jsonl").write_text("".join(json.dumps(c) + "\n" for c in cases))
+    (out / "EXCEPTIONS.md").write_text(text, encoding="utf-8")
+    (out / "VALIDATION.jsonl").write_text(
+        "".join(json.dumps(c) + "\n" for c in cases), encoding="utf-8"
+    )
     return result
 
 
@@ -1864,6 +1872,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         description="Set up verify contracts with no person decisions: answer the "
         "generator's questions by rule, validate them in a sandbox copy with "
         "held-out writes and planted faults, and admit only what validates.",
+        allow_abbrev=False,
     )
     ap.add_argument(
         "--read", required=True, type=Path, help="read-only account (read.yaml)"

@@ -325,7 +325,7 @@ def run_arm(
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    p = argparse.ArgumentParser(description=__doc__.splitlines()[0], allow_abbrev=False)
     p.add_argument("--app", default="openemr", choices=("openemr", "fake"))
     p.add_argument(
         "--arm",

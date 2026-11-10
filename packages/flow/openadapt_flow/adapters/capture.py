@@ -309,6 +309,41 @@ def _desktop_capture_meta(session: "CaptureSession") -> Optional[dict[str, Any]]
     return None
 
 
+def _capture_locale_meta(session: "CaptureSession") -> Optional[dict[str, Any]]:
+    """The locale facts capture recorded with the session, else None (#1897).
+
+    Reads ``CaptureSession.locale_facts`` and falls back to the recording's
+    ``config`` JSON (key ``capture_locale``), like the scope metadata above.
+    None means a session recorded before capture persisted these facts. A
+    present but malformed value refuses, so a damaged binding can't drop the
+    check. Unknown facts stay ``None``; they are never filled in from this
+    computer.
+    """
+
+    raw = getattr(session, "locale_facts", None)
+    if raw is None:
+        recording = getattr(session, "_recording", None)
+        config = getattr(recording, "config", None)
+        if isinstance(config, dict):
+            raw = config.get("capture_locale")
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError(
+            "capture session declares malformed locale facts; expected an "
+            "object or null"
+        )
+    from openadapt_flow.locale_invariants import LocaleInvariants
+
+    try:
+        facts = LocaleInvariants.model_validate(raw)
+    except ValueError as exc:
+        raise ValueError(
+            "capture session locale facts do not match the locale schema"
+        ) from exc
+    return facts.model_dump()
+
+
 def _is_viewport(value: Any) -> TypeGuard[Sequence[float]]:
     """True when ``value`` is an exact positive integer pixel pair."""
     return (
@@ -757,14 +792,88 @@ def _window_identity_int(value: Any) -> Optional[int]:
     return None
 
 
-def _capture_structural_locator(action: "Action") -> Optional[dict[str, str]]:
-    """Map a Capture Windows UIA observation to Flow's locator contract.
+def _windows_role(element: dict[str, Any]) -> Optional[str]:
+    control_type = element.get("control_type")
+    if not isinstance(control_type, str):
+        return None
+    return _WINDOWS_CONTROL_TYPE_TO_ROLE.get(control_type)
 
+
+def _macos_role(element: dict[str, Any]) -> Optional[str]:
+    from openadapt_flow.backends.macos_backend import _MAC_ROLE_MAP
+
+    role = element.get("role")
+    # Only roles the macOS resolver maps to a neutral role are actionable
+    # targets; an unmapped container role is never compiled into a locator.
+    return _MAC_ROLE_MAP.get(role) if isinstance(role, str) else None
+
+
+def _linux_role(element: dict[str, Any]) -> Optional[str]:
+    from openadapt_flow.backends.linux_backend import _ROLE_MAP
+
+    role = element.get("role")
+    return _ROLE_MAP.get(role) if isinstance(role, str) else None
+
+
+#: Capture accessibility provider -> the role mapping of the Flow backend that
+#: replays it, so a recorded locator uses the roles that backend resolves.
+_PROVIDER_ROLE = {
+    "windows_uia": _windows_role,
+    "macos_ax": _macos_role,
+    "linux_atspi": _linux_role,
+}
+
+
+def _observed_process(action: "Action") -> Optional[dict[str, Any]]:
+    """The process and window an action went to, from its observation."""
+
+    observation = getattr(action, "structural_observation", None)
+    if observation is None:
+        return None
+    if hasattr(observation, "model_dump"):
+        try:
+            observation = observation.model_dump(mode="json", exclude_none=True)
+        except Exception:
+            return None
+    if not isinstance(observation, dict):
+        return None
+    process = observation.get("process")
+    if not isinstance(process, dict) or not process.get("process_name"):
+        return None
+    out: dict[str, Any] = {"name": str(process["process_name"])}
+    if isinstance(process.get("process_id"), int):
+        out["pid"] = process["process_id"]
+    element = observation.get("element")
+    if isinstance(element, dict) and isinstance(element.get("role"), str):
+        out["element_role"] = element["role"]
+        out["element_named"] = bool((element.get("name") or "").strip())
+    window = observation.get("window")
+    bounds = window.get("bounds") if isinstance(window, dict) else None
+    if isinstance(bounds, dict):
+        try:
+            left, top = float(bounds["left"]), float(bounds["top"])
+            right, bottom = float(bounds["right"]), float(bounds["bottom"])
+        except (KeyError, TypeError, ValueError):
+            pass
+        else:
+            if right > left and bottom > top:
+                out["window_bounds"] = [
+                    round(left),
+                    round(top),
+                    round(right - left),
+                    round(bottom - top),
+                ]
+    return out
+
+
+def _capture_structural_locator(action: "Action") -> Optional[dict[str, str]]:
+    """Map a Capture accessibility observation to Flow's locator contract.
+
+    Windows UIA, macOS AX and Linux AT-SPI observations each map through the
+    role table of the Flow backend that replays them (``_PROVIDER_ROLE``).
     Unknown or malformed observation versions stay optional instead of being
-    guessed into a target. Capture's friendly-class ``role`` is intentionally
-    ignored: Flow's Windows resolver expects lowercase ARIA-style roles, which
-    are derived from the native UIA ``control_type`` through the same mapping
-    used by :class:`~openadapt_flow.backends.windows_backend.WindowsBackend`.
+    guessed into a target. On Windows, Capture's friendly-class ``role`` is
+    ignored: the resolver expects the role derived from ``control_type``.
     """
 
     observation = getattr(action, "structural_observation", None)
@@ -777,9 +886,10 @@ def _capture_structural_locator(action: "Action") -> Optional[dict[str, str]]:
             return None
     if not isinstance(observation, dict):
         return None
+    provider = observation.get("provider")
     if (
         observation.get("schema_version") != _CAPTURE_STRUCTURAL_SCHEMA
-        or observation.get("provider") != "windows_uia"
+        or provider not in _PROVIDER_ROLE
         or observation.get("query_kind") != "point"
     ):
         return None
@@ -788,10 +898,10 @@ def _capture_structural_locator(action: "Action") -> Optional[dict[str, str]]:
     if not isinstance(raw_element, dict):
         return None
 
-    # Capture observes the exact element under the pointer. Common Windows
-    # controls expose a non-actionable Text child inside the actionable Button,
-    # Edit, or selection control. Use the nearest supported actionable node,
-    # matching WindowsBackend.structural_locator_at instead of compiling a
+    # Capture observes the exact element under the pointer. Common controls
+    # expose a non-actionable text child inside the actionable button, field,
+    # or selection control. Use the nearest supported actionable node,
+    # matching each backend's structural_locator_at instead of compiling a
     # child handle that the native actuator cannot safely invoke.
     raw_ancestry = observation.get("ancestry")
     candidates = [raw_element]
@@ -799,13 +909,9 @@ def _capture_structural_locator(action: "Action") -> Optional[dict[str, str]]:
         candidates.extend(item for item in raw_ancestry if isinstance(item, dict))
     selected: Optional[dict[str, Any]] = None
     role: Optional[str] = None
+    role_of = _PROVIDER_ROLE[provider]
     for candidate in candidates:
-        control_type = candidate.get("control_type")
-        candidate_role = (
-            _WINDOWS_CONTROL_TYPE_TO_ROLE.get(control_type)
-            if isinstance(control_type, str)
-            else None
-        )
+        candidate_role = role_of(candidate)
         automation_id = candidate.get("automation_id")
         name = candidate.get("name")
         if candidate_role is not None and (
@@ -844,6 +950,7 @@ def _flow_events(
     value_to_param: dict[str, str],
     *,
     include_structural: bool = True,
+    include_process: bool = False,
 ) -> list[dict[str, Any]]:
     """Convert capture ``Action``s into ordered flow event dicts.
 
@@ -859,7 +966,7 @@ def _flow_events(
     events: list[dict[str, Any]] = []
     # A run of typed characters, buffered so the compiler sees one ``type``
     # event per typed value (capture emits one key.type per key-release burst).
-    text_run: dict[str, Any] = {"chars": [], "ts": None}
+    text_run: dict[str, Any] = {"chars": [], "ts": None, "process": None}
 
     def flush_text() -> None:
         if not text_run["chars"]:
@@ -872,13 +979,17 @@ def _flow_events(
         }
         if text in value_to_param:
             line["param"] = value_to_param[text]
+        if include_process and text_run["process"] is not None:
+            line["observed_process"] = text_run["process"]
         events.append(line)
         text_run["chars"] = []
         text_run["ts"] = None
+        text_run["process"] = None
 
     for action in actions:
         atype = action.type
         ts = float(action.timestamp)
+        count_before = len(events)
 
         if atype in ("mouse.singleclick", "mouse.doubleclick"):
             flush_text()
@@ -980,6 +1091,11 @@ def _flow_events(
             )
         else:
             continue  # non-input auxiliary action; safely ignored
+        if include_process:
+            observed = _observed_process(action)
+            for event in events[count_before:]:
+                if observed is not None and event.get("kind") != "type":
+                    event.setdefault("observed_process", observed)
 
     flush_text()
     return events
@@ -1016,8 +1132,21 @@ def _convert_key_type(
     if action.text:
         # Literal typed characters (a shifted character carries shift in .keys
         # but is still just text). Accumulated into the run buffer.
+        observed = _observed_process(action)
+        running = text_run["process"]
+        if (
+            text_run["chars"]
+            and observed is not None
+            and running is not None
+            and (observed.get("name"), observed.get("pid"))
+            != (running.get("name"), running.get("pid"))
+        ):
+            # Focus moved to another application mid-typing: the characters
+            # after the move are a separate action on another window.
+            flush_text()
         if not text_run["chars"]:
             text_run["ts"] = ts
+            text_run["process"] = observed
         text_run["chars"].append(action.text)
         return
 
@@ -1030,6 +1159,14 @@ def _convert_key_type(
             f"flow equivalent (t={ts:.3f})"
         )
     name = non_mods[0]
+    if name.lower() == "space" and not mods:
+        # The macOS and X11 observers report the space bar as the named key
+        # ``space`` with no text, so a recording made by an openadapt-capture
+        # that does not merge it into the typed text still types a space.
+        if not text_run["chars"]:
+            text_run["ts"] = ts
+        text_run["chars"].append(" ")
+        return
     mapped = _KEY_NAME_MAP.get(name.lower())
     if mapped is None:
         raise ValueError(f"unmapped key {name!r} at t={ts:.3f}; extend _KEY_NAME_MAP")
@@ -1049,6 +1186,7 @@ def convert_capture(
     params: Optional[dict[str, str]] = None,
     settle_s: float = 1.0,
     include_structural: bool = False,
+    include_process: bool = False,
 ) -> Path:
     """Convert an openadapt-capture session into a flow recording directory.
 
@@ -1090,6 +1228,11 @@ def convert_capture(
             remote-client canvas. Direct conversion defaults to ``False``
             because a capture directory alone does not prove which substrate
             was recorded.
+        include_process: Add ``observed_process`` (process name and id, the
+            observed element's role, and the window bounds) to each event, for
+            a recording that places actions on surfaces by process
+            (``multi_surface_record``). Off by default, so single-surface
+            recordings are unchanged.
 
     Returns:
         The recording directory path (compile-ready).
@@ -1186,6 +1329,7 @@ def convert_capture(
             scale,
             value_to_param,
             include_structural=include_structural,
+            include_process=include_process,
         )
         if not events:
             raise ValueError(
@@ -1247,7 +1391,7 @@ def convert_capture(
             lines.append(json.dumps(line))
             step_times.append({"i": i, "t": line["t"], "kind": event["kind"]})
 
-        (out_dir / "events.jsonl").write_text("\n".join(lines) + "\n")
+        (out_dir / "events.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
         meta: dict[str, Any] = {
             "id": uuid.uuid4().hex,
@@ -1258,6 +1402,16 @@ def convert_capture(
             "source": "openadapt-capture",
             "task_description": session.task_description,
         }
+        # Native replay types by keycode, so the recording computer's locale,
+        # date order and keyboard layout travel with the recording and are
+        # checked before replay (#1897). They are the facts capture persisted
+        # when recording started, copied as they are, unknowns included. This
+        # computer's facts are never read here: conversion can run later or
+        # elsewhere. A session from before capture persisted them stays
+        # unbound.
+        recorded_locale = _capture_locale_meta(session)
+        if recorded_locale is not None:
+            meta["locale_invariants"] = recorded_locale
         # Name the space every recorded x/y is in, so a consumer fails closed
         # instead of assuming. Window and desktop scope are mutually exclusive
         # (a session carrying both is refused above). A session that declares
@@ -1294,7 +1448,7 @@ def convert_capture(
                 meta["window_capture"]["resolved_window_id"] = resolved_window_id
         elif desktop_provenance is not None:
             meta["desktop_capture"] = desktop_provenance
-        (out_dir / "meta.json").write_text(json.dumps(meta, indent=2))
+        (out_dir / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
         _write_capture_narration(session, out_dir, started_at, step_times)
         return out_dir
     finally:

@@ -1,0 +1,12 @@
+{
+ "id": "A08",
+ "class": "collateral",
+ "type": "allergy",
+ "infra_error": "FixtureError: POST http://localhost:9820/auth/login -> HTTP 400: {\"resourceType\":\"OperationOutcome\",\"issue\":[{\"severity\":\"error\",\"code\":\"invalid\",\"details\":{\"text\":\"the database system is in recovery mode\"}}],\"extension\":[{\"url\":\"https://medplum.com/fhir/StructureDefinition/tracing\",\"extension\":[{\"url\":\"requestId\",\"valueId\":\"a6513197-ada4-4485-ae66-f170bd93db41\"},{\"url\":\"traceId\",\"valueId\":\"33bb883d4140ff3f3b8af8f59a30e362\"}]}]}\noard-6812f3/packages/flow/benchmark/fhir_medplum/readpath/suite.py\", line 121, in token\n    tok = self.fx.admin_token()\n          ^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/write-leaderboard-6812f3/packages/flow/benchmark/fhir_medplum/fixture.py\", line 216, in admin_token\n    return self._cached(\"admin\", self._admin_token)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/write-leaderboard-6812f3/packages/flow/benchmark/fhir_medplum/fixture.py\", line 202, in _cached\n    token = fetch()\n            ^^^^^^^\n  File \"/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/write-leaderboard-6812f3/packages/flow/benchmark/fhir_medplum/fixture.py\", line 220, in _admin_token\n    login = _http(\n            ^^^^^^\n  File \"/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/write-leaderboard-6812f3/packages/flow/benchmark/fhir_medplum/fixture.py\", line 84, in _http\n    raise FixtureError(f\"{method} {url} -> HTTP {exc.code}: {detail}\") from exc\nbenchmark.fhir_medplum.fixture.FixtureError: POST http://localhost:9820/auth/login -> HTTP 400: {\"resourceType\":\"OperationOutcome\",\"issue\":[{\"severity\":\"error\",\"code\":\"invalid\",\"details\":{\"text\":\"the database system is in recovery mode\"}}],\"extension\":[{\"url\":\"https://medplum.com/fhir/StructureDefinition/tracing\",\"extension\":[{\"url\":\"requestId\",\"valueId\":\"a6513197-ada4-4485-ae66-f170bd93db41\"},{\"url\":\"traceId\",\"valueId\":\"33bb883d4140ff3f3b8af8f59a30e362\"}]}]}\n",
+ "rep": 2,
+ "host_load": {
+  "start": 3.6,
+  "end": 170.8,
+  "waited_s": 0
+ }
+}

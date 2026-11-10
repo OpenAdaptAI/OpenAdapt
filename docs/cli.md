@@ -2,23 +2,62 @@
 
 > **Canonical reference.** The complete current option list is at
 > [docs.openadapt.ai/reference/cli](https://docs.openadapt.ai/reference/cli/).
-> Run `openadapt flow <command> --help` for the exact installed engine version.
+> Run `openadapt <task> --help` for the installed command's options.
 
 The launcher command is `openadapt`. It delegates the product lifecycle to the
 installed `openadapt-flow` engine.
 
+## Command tasks
+
+`openadapt --help` lists 15 shared engine tasks and the launcher's `wrap` task:
+
+`demo`, `verify`, `record`, `teach`, `compile`, `run`, `approve`, `undo`,
+`qualify`, `repair`, `inspect`, `workflow`, `services`, `setup`, `research`, and `wrap`.
+
+Run `<task> --help` to see its arguments or related operations. For example:
+
+```bash
+openadapt demo quickstart --break-it
+openadapt verify effect --help
+openadapt inspect lint bundle
+openadapt run --replay bundle --run-dir run
+openadapt services agent serve --bundles bundle --mode production
+openadapt setup doctor --backend web
+openadapt wrap --help
+```
+
+`workflow` manages reusable libraries: pull, push, skills, and generated skill
+or MCP exports. Execution variants belong under `run`; reports belong under
+`inspect`.
+
+The old names, including `openadapt flow ...`, remain callable. An alias notice
+appears only on interactive stderr; redirected streams and machine output keep
+their existing format. Commands that accept paths remain leaves. For example,
+`openadapt run replay` still names a bundle called `replay`. Select an alternate
+operation immediately after the task name: `openadapt run --replay bundle`.
+A `--` before the task ends launcher options: `openadapt -- run --replay bundle`.
+After the operation, `--` protects a literal path beginning with `-`:
+`openadapt run --replay -- --bundle` and `openadapt flow replay -- --bundle`
+pass the same literal path to Flow.
+
+`openadapt-flow` presents the 15 shared engine tasks. Launcher operations such
+as `demo quickstart`, `record capture`, `services agent`, `setup doctor`, and
+`wrap` stay in `openadapt`. `wrap` runs an agent task once and reuses its checked
+compiled tool. Run `openadapt wrap --help` for its installed options. The
+`openadapt-agent` command and other module entrypoints keep their existing grammar.
+
 ## First run
 
 ```bash
-uvx --python 3.12 openadapt flow tutorial [--headed] [--break-it] [--out NEW_DIRECTORY]
+uvx --python 3.12 openadapt demo tutorial [--headed] [--break-it] [--out NEW_DIRECTORY]
 ```
 
 uv fetches Python 3.12 for the run. With `openadapt` installed, run
-`openadapt flow tutorial` directly.
+`openadapt demo tutorial` directly.
 
-`openadapt flow tutorial` is the command that writes a `VERIFIED` receipt. It
+`openadapt demo tutorial` is the command that writes a `VERIFIED` receipt. It
 runs the bundled synthetic MockMed workflow from recording through an
-independently verified Standard-profile result. `openadapt quickstart --break-it`
+independently verified Standard-profile result. `openadapt demo quickstart --break-it`
 is the halt demo. It reruns the same certified bundle against a backend that
 rejects the write after the app shows success. The independent read finds no
 saved record, and the run halts with transaction outcome
@@ -39,41 +78,41 @@ openadapt-agent serve --bundles <bundle or directory of bundles> --allow-run
 
 ## Flow lifecycle
 
-The launcher and engine forms are equivalent:
+For shared engine tasks, the launcher and engine forms are equivalent:
 
 ```bash
-openadapt flow <command> [options]
-openadapt-flow <command> [options]
+openadapt <task> [options]
+openadapt-flow <task> [options]
 ```
 
-Use one form for the complete command. `demo-record` is a Flow subcommand. It
+Use one form for the complete command. `demo record` is a Flow command path. It
 is not a standalone executable.
 
 | Command | Purpose |
 | --- | --- |
 | `record` | Record a human demonstration on a declared surface. |
-| `demo-record` | Create the bundled synthetic demonstration. |
+| `demo record` | Create the bundled synthetic demonstration. |
 | `compile` | Compile a recording into a deterministic bundle. |
-| `lint` | Report identity, action-risk, effect, and policy gaps. |
-| `certify` | Evaluate a bundle against a named policy. |
-| `replay` | Run a bundle in the explicit Demo posture. |
+| `inspect lint` | Report identity, action-risk, effect, and policy gaps. |
+| `qualify --certify` | Evaluate a bundle against a named policy. |
+| `run --replay` | Run a bundle in the explicit Demo posture. |
 | `run` | Admit and run a bundle with a deployment configuration. |
-| `resume` | Resume a verified durable pause. |
-| `visualize` | Render the compiled program for inspection. |
-| `report-run` | Create a closed-schema receipt from a verified run. |
-| `sanitize` | Create a sanitized derivative without changing the source. |
-| `review-sanitized` | Compare a derivative with its local source. |
-| `approve-sanitized` | Bind approval to the exact derivative bytes. |
+| `run --resume` | Resume a verified durable pause. |
+| `inspect visualize` | Render the compiled program for inspection. |
+| `inspect report-run` | Create a closed-schema receipt from a verified run. |
+| `compile --sanitize` | Create a sanitized derivative without changing the source. |
+| `approve --review-sanitized` | Compare a derivative with its local source. |
+| `approve --sanitized` | Bind approval to the exact derivative bytes. |
 | `repair` | Review, test, promote, or roll back a repair candidate. |
 
 The manual synthetic lifecycle is:
 
 ```bash
-openadapt flow demo-record --out rec
-openadapt flow compile rec --out bundle --name my-task
-openadapt flow lint bundle --strict
-openadapt flow certify bundle --policy permissive
-openadapt flow replay bundle --demo-app --run-dir run
+openadapt demo record --out rec
+openadapt compile rec --out bundle --name my-task
+openadapt inspect lint bundle --strict
+openadapt qualify --certify bundle --policy permissive
+openadapt run --replay bundle --demo-app --run-dir run
 ```
 
 The strict lint step refuses the unarmed demo write. The permissive policy is a
@@ -83,28 +122,64 @@ smoke gate. The replay uses the Demo profile and returns
 ## Record and replay one surface
 
 ```bash
-openadapt flow record --out rec
-openadapt flow record --url https://your-app.example --out rec
-openadapt flow replay bundle --url https://your-app.example --run-dir run
+openadapt record --backend <web|windows|macos|linux|rdp|citrix> <target> --out rec
 ```
 
-Omit `--backend`. No `--url` records this OS. `--url` records the browser.
+The target is `--url` for a web app and `--window` (plus `--window-title`) for
+a desktop app or a local RDP or Citrix client window. Network RDP is recorded
+inside the remote session, and Linux records the local desktop. Side by side:
+
+```bash
+# A web app
+openadapt record --backend web --url https://your-app.example --out rec
+openadapt run --replay bundle --url https://your-app.example --run-dir run
+
+# A desktop app (macOS here; Windows and Citrix take --window too).
+# Desktop recording and macOS replay are separate extras.
+python -m pip install --upgrade 'openadapt[capture,macos]'
+openadapt record --backend macos --window "Your App" --out rec
+openadapt run --replay bundle --macos-app "Your App" --run-dir run
+```
+
+`run --replay` performs every recorded action, including real saves; point it
+at a test or staging copy. `--backend` can be left out: with `--url` it records
+the browser, and without it records this computer's desktop. The commands for
+every surface are in
+[SURFACES.md](../packages/flow/docs/SURFACES.md#first-workflow-per-surface).
 
 Supported selectors are `web`, `windows`, `macos`, `linux`, `rdp`, and
 `citrix`. The required target flags differ by surface. Run these commands for
 the installed option contract:
 
 ```bash
-openadapt flow record --help
-openadapt flow replay --help
+openadapt record --help
+openadapt run --replay --help
 ```
+
+## Record a workflow that crosses windows
+
+When the work moves from a browser to a desktop app or a remote desktop
+window and back, record it in one session. Declare each window once; the
+browser is `--url`:
+
+```bash
+openadapt flow record --url https://portal.example --surface chart=linux:Chart --out rec
+openadapt flow compile rec --out bundle --name referral
+openadapt flow replay bundle --url https://portal.example --surface chart=linux:chart --run-dir run
+```
+
+`--surface NAME=KIND:WINDOW` names the surface, its kind (`windows`,
+`macos`, `linux`, `rdp` or `citrix`) and part of its window title. Switch
+windows as you normally would; each change becomes a checked switch step.
+An action in a window you did not declare stops the recording. See
+[MULTI_SURFACE.md](../packages/flow/docs/MULTI_SURFACE.md#recording-across-windows-record).
 
 ## Launcher diagnostics
 
 ```bash
-openadapt version
-openadapt doctor --backend web
-openadapt deploy --backend web
+openadapt setup version
+openadapt setup doctor --backend web
+openadapt setup deploy --backend web
 ```
 
 `doctor` checks the required launcher packages. For the default and `web`
@@ -130,9 +205,9 @@ Flow and Desktop path. Neither command certifies a customer workflow.
 ## Hosted connection
 
 ```bash
-openadapt flow connect
-openadapt flow login --token oai_ingest_...
-openadapt flow push APPROVED_DERIVATIVE --kind recording
+openadapt setup connect
+openadapt setup login --token oai_ingest_...
+openadapt workflow push APPROVED_DERIVATIVE --kind recording
 ```
 
 Do not upload a raw recording. The push path accepts an approved sanitized
@@ -140,10 +215,11 @@ derivative and validates its exact bytes.
 
 ## Capture and research commands
 
-The optional `capture` group exposes the supported low-level Capture component
-for raw native sessions. Use `openadapt flow record` when the output must enter
-the compiler directly. The `train` and `eval` groups are research surfaces and
-are not required for the record-compile-replay product path.
+The optional `record capture` group exposes the supported low-level Capture
+component for raw native sessions. Use `openadapt record` when the output must
+enter the compiler directly. The `research train` and `research eval` groups
+are research surfaces and are not required for the record-compile-replay
+product path.
 
 ## Exit status
 
@@ -157,9 +233,9 @@ configured contract.
 A Seal is OpenAdapt Cloud's Ed25519 signature on an Execute receipt. Check one offline against keys you pinned:
 
 ```bash
-openadapt seal keys pin                        # once; compare the fingerprint before you type the key id
-openadapt seal verify runs/<run_id>/report.json
-openadapt seal verify https://example.com/receipt.json --json
+openadapt verify seal keys pin                        # once; compare the fingerprint before you type the key id
+openadapt verify seal verify runs/<run_id>/report.json
+openadapt verify seal verify https://example.com/receipt.json --json
 ```
 
 `verify` never downloads keys. It exits 0 only for a genuine Seal over a verified outcome. Run `keys pin` again when OpenAdapt rotates its key; a new key needs your confirmation, and a revoked key stops verifying Seals issued after its revocation.

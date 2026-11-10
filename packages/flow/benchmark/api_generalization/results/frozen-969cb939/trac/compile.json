@@ -1,0 +1,30 @@
+{
+ "app": "trac",
+ "workflow": "new-ticket",
+ "steps": 10,
+ "params": [
+  "description",
+  "keywords",
+  "summary",
+  "type"
+ ],
+ "optional_params": [
+  "description",
+  "keywords"
+ ],
+ "compile_proposal": {
+  "proposed": false,
+  "step": null,
+  "reasons": [
+   "step_008 also sent POST /newticket; its field 'preview' is not a typed value, a form default or a session value"
+  ]
+ },
+ "proposed": false,
+ "reasons": [
+  "step_008 also sent POST /newticket; its field 'preview' is not a typed value, a form default or a session value"
+ ],
+ "compile_s": 16.1,
+ "frozen": "969cb939e7f246a55a7b49c319941a6aa3ff3d8c",
+ "head": "969cb939e7f246a55a7b49c319941a6aa3ff3d8c",
+ "engine_diff_vs_frozen": ""
+}

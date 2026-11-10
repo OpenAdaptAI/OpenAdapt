@@ -2249,8 +2249,12 @@ class InteractiveRecorder:
         surface: str = "web",
         capture_network: bool = False,
         encryption_key: Optional[str] = None,
+        event_clock: Optional[list[float]] = None,
     ) -> None:
         self._url = url
+        # record --surface: the wall-clock time each event was observed, so
+        # the desktop capture's actions can be ordered around it.
+        self._event_clock = event_clock
         self._surface = surface
         # Encrypted recording: with a key the recorder writes ciphertext only
         # (openadapt_flow.sealed_set), and the published directory is a
@@ -2405,6 +2409,9 @@ class InteractiveRecorder:
                     app_url=self._url,
                     page_url=self._browser_page_url,
                 )
+                from openadapt_flow._browser_readiness import require_rendering_ready
+
+                require_rendering_ready(self._browser, attached_page=self.page)
 
             self._context = self.page.context
             if self._capture_network:
@@ -2518,6 +2525,7 @@ class InteractiveRecorder:
                 page_backend_factory=self._surface_page_backend,
                 encryption_key=self._encryption_key,
                 finalize_on_finish=False,
+                event_clock=self._event_clock,
                 **self._settle,
             )
             if self._owns_browser:
@@ -2525,7 +2533,7 @@ class InteractiveRecorder:
                 self._last_structural = self._structural_state()
             else:
                 self._rebaseline_attached_viewport()
-        except Exception:
+        except BaseException:
             self.abort()
             raise
 
@@ -3396,6 +3404,7 @@ class InteractiveRecorder:
         event = dict(detail)
         if event.pop("__oaflow_session", None) != self._session_id:
             return
+        event["_oaflow_observed_at"] = time.time()
         raw_event_origin = event.pop("__oaflow_origin", None)
         raw_doc_id = event.pop("__oaflow_doc", None)
         doc_holds_secret = event.pop("__oaflow_doc_holds_secret", None) is True
@@ -4046,6 +4055,7 @@ class InteractiveRecorder:
                 "secret": bool(ev.get("secret")),
                 "value": "",
                 "rect": ev.get("rect"),
+                "observed_at": ev.get("_oaflow_observed_at"),
             }
         pt = self._pending_type
         pt["secret"] = pt["secret"] or bool(ev.get("secret"))
@@ -4095,6 +4105,7 @@ class InteractiveRecorder:
                 redact_region=redact,
                 after_png=after_png,
                 structural_after=structural_after,
+                observed_at=pt.get("observed_at"),
             )
         elif field and field in self._param_fields:
             # The rect also tells the compiler where this value shows: a
@@ -4110,6 +4121,7 @@ class InteractiveRecorder:
                 param=field,
                 after_png=after_png,
                 structural_after=structural_after,
+                observed_at=pt.get("observed_at"),
             )
         else:
             # Non-secret, unparameterized: recorded as a literal (replayed
@@ -4125,6 +4137,7 @@ class InteractiveRecorder:
                 structural_before=structural_before,
                 after_png=after_png,
                 structural_after=structural_after,
+                observed_at=pt.get("observed_at"),
             )
         self._set_last(after_png, structural_after)
 
@@ -4134,6 +4147,7 @@ class InteractiveRecorder:
                 "dx": 0,
                 "dy": 0,
                 "structural_before": dict(self._last_structural),
+                "observed_at": ev.get("_oaflow_observed_at"),
             }
         ps = self._pending_scroll
         ps["dx"] += int(ev.get("dx", 0))
@@ -4157,6 +4171,7 @@ class InteractiveRecorder:
             structural_before=ps.get("structural_before", self._last_structural),
             after_png=after_png,
             structural_after=structural_after,
+            observed_at=ps.get("observed_at"),
         )
         self._set_last(after_png, structural_after)
 
@@ -4213,6 +4228,7 @@ class InteractiveRecorder:
             structured_identity=ev.get("sid"),
             after_png=after_png,
             structural_after=structural_after,
+            observed_at=ev.get("_oaflow_observed_at"),
         )
         if after_png is not None:
             self._set_last(after_png, structural_after)
@@ -4228,6 +4244,7 @@ class InteractiveRecorder:
             event,
             before_png=self._last_frame,
             structural_before=self._last_structural,
+            observed_at=ev.get("_oaflow_observed_at"),
         )
         self._advance()
 
