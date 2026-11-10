@@ -412,21 +412,27 @@ def _proposed_duplicate_key(
 ) -> tuple[Optional[ValueExpr], dict[str, ValueExpr], list[str]]:
     """Idempotency key or composite key for a new ``record_written`` effect.
 
-    Prefer the app's single-field key when the read set carries it. Otherwise
-    propose a ``composite_key`` from parameter-bound match fields plus the
-    record-identity fields a person named. Never invent a key that was not
-    observed or named; the effect stays ``needs_operator_confirmation`` so a
-    person must confirm before clinical-write policy accepts it.
+    Prefer the app's single-field key when the read set carries it and it
+    is bound to a parameter (proposing the demonstration's literal key freezes
+    the key across runs, P0-3). Otherwise propose a ``composite_key`` from
+    parameter-bound match fields plus the record-identity fields a person
+    named. Never invent a key that was not observed or named; the effect stays
+    ``needs_operator_confirmation`` so a person must confirm before
+    clinical-write policy accepts it.
     """
 
     notes: list[str] = []
     key_val = record.get(DEFAULT_IDEMPOTENCY_KEY_FIELD)
     if key_val is not None and str(key_val).strip() != "":
-        # Prefer the match binding (parameter when equality told us so).
+        # Prefer the match binding when bound to a run parameter.
         key_expr = match.get(DEFAULT_IDEMPOTENCY_KEY_FIELD)
-        if key_expr is None:
-            key_expr = ValueExpr(literal=str(key_val))
-        return key_expr, {}, notes
+        if key_expr is not None and key_expr.param is not None:
+            return key_expr, {}, notes
+        notes.append(
+            f"record carries literal {DEFAULT_IDEMPOTENCY_KEY_FIELD!r} "
+            "from demonstration; not proposing as idempotency_key to avoid "
+            "freezing key across runs (P0-3)"
+        )
 
     composite: dict[str, ValueExpr] = {}
     for name, expr in match.items():
@@ -434,18 +440,24 @@ def _proposed_duplicate_key(
             composite[name] = expr
     if composite:
         notes.append(
-            "no "
-            f"{DEFAULT_IDEMPOTENCY_KEY_FIELD!r} field on the new record; "
-            "proposed composite_key from parameter-bound match fields"
+            (
+                f"no parameter-bound {DEFAULT_IDEMPOTENCY_KEY_FIELD!r} on the new record; "
+                if key_val is not None and str(key_val).strip() != ""
+                else f"no {DEFAULT_IDEMPOTENCY_KEY_FIELD!r} field on the new record; "
+            )
+            + "proposed composite_key from parameter-bound match fields"
             + (" plus record identity fields" if record_field_names else "")
             + " for a person to confirm"
         )
         return None, composite, notes
 
     notes.append(
-        "no "
-        f"{DEFAULT_IDEMPOTENCY_KEY_FIELD!r} field on the new record and no "
-        "parameter-bound or record-identity match fields to build a "
+        (
+            f"no parameter-bound {DEFAULT_IDEMPOTENCY_KEY_FIELD!r} on the new record"
+            if key_val is not None and str(key_val).strip() != ""
+            else f"no {DEFAULT_IDEMPOTENCY_KEY_FIELD!r} field on the new record"
+        )
+        + " and no parameter-bound or record-identity match fields to build a "
         "composite_key from; clinical-write policy will refuse until a person "
         "adds an idempotency or composite key by hand"
     )
