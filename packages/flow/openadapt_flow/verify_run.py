@@ -75,6 +75,7 @@ from openadapt_flow.fault_gate import (
     load_coverage,
 )
 from openadapt_flow.qualify.result import verify_config_sha256
+from openadapt_flow.request_binding import RequestContext
 from openadapt_flow.runtime.effects import late_write
 from openadapt_flow.runtime.effects.adapter import verifier_identity
 from openadapt_flow.runtime.effects.effect import (
@@ -201,6 +202,7 @@ _SIGNATURE_FIELDS = frozenset(
 
 _RECEIPT_VALIDATION_REASONS = frozenset(
     {
+        "request_context",
         "schema_version",
         "unknown_field",
         "missing_field",
@@ -2731,6 +2733,7 @@ def verify_run(
     second_extractor: Optional[Any] = None,
     post_state_out: Optional[dict[str, Any]] = None,
     read_provider: Optional[CompleteReadProvider] = None,
+    request_context: Optional[RequestContext] = None,
 ) -> dict[str, Any]:
     """Read the system of record and return ``{"receipt", "evidence"}``.
 
@@ -2739,6 +2742,10 @@ def verify_run(
     itself. No other field of it is read. ``verified`` requires every effect
     CONFIRMED by a system-of-record read at or above
     ``minimum_effect_strength``; anything weaker is never upgraded.
+
+    ``request_context`` is an explicit producer correlation context, separate
+    from ``execution_id``. It does not authenticate a caller. An ambient
+    wrapper scope alone does not bind direct verifier or canary receipts.
 
     With ``baseline_path`` the run continues the one the baseline started
     (its ``execution_id`` and salt) and the baseline is consumed. Without one,
@@ -2766,6 +2773,17 @@ def verify_run(
 
     if not isinstance(run_record, Mapping):
         raise VerifyRunError("run record must be a JSON object")
+    if request_context is not None:
+        from openadapt_flow.request_binding import BindingError
+
+        try:
+            if type(request_context) is not RequestContext:
+                raise BindingError("request_context_type")
+            request_context = RequestContext.parse(request_context.to_dict())
+        except BindingError:
+            raise VerifyRunError(
+                "invalid request context", validation_reason="request_context"
+            ) from None
     if not isinstance(authorization_ref, str) or not authorization_ref:
         raise VerifyRunError("an authorization reference is required")
     remediates = _opaque_or_none("remediates", remediates)
@@ -3181,6 +3199,8 @@ def verify_run(
         model_used=executor_kind != "flow_replay",
         external_network_used=executor_kind != "flow_replay",
     )
+    if request_context is not None:
+        evidence["request_context"] = request_context.to_dict()
     contract_hex = contract_digest.split(":", 1)[1]
     issued_at = _now()
     v1 = ExecuteEvidenceReceiptV1(
@@ -3213,6 +3233,8 @@ def verify_run(
         receipt["correlation_id"] = correlation_id
     if recheck_due_at is not None:
         receipt[RECHECK_RECEIPT_FIELD] = recheck_due_at
+    if request_context is not None:
+        receipt["request_context"] = request_context.to_dict()
     problem = receipt_problem(receipt) or evidence_problem(evidence, receipt)
     if problem is not None:  # pragma: no cover - a producer bug, never input
         raise VerifyRunError(
@@ -3597,12 +3619,19 @@ def receipt_problem(receipt: Mapping[str, Any]) -> Optional[str]:
         v1_names
         | set(_NEW_RECEIPT_FIELDS)
         | set(_OPTIONAL_RECEIPT_FIELDS)
-        | {"checked_how", "checked", RECHECK_RECEIPT_FIELD}
+        | {"checked_how", "checked", RECHECK_RECEIPT_FIELD, "request_context"}
     )
     if set(receipt) - allowed:
         return "unknown_field"
     if any(name not in receipt for name in _NEW_RECEIPT_FIELDS):
         return "missing_field"
+    if "request_context" in receipt:
+        from openadapt_flow.request_binding import BindingError, RequestContext
+
+        try:
+            RequestContext.parse(receipt["request_context"])
+        except BindingError:
+            return "request_context"
     v1 = {k: v for k, v in receipt.items() if k in v1_names and k != "seal_signature"}
     v1["schema_version"] = EXECUTE_EVIDENCE_RECEIPT_SCHEMA
     try:
@@ -3693,6 +3722,16 @@ def evidence_problem(
 
     if sha256_tagged(dict(evidence)) != receipt.get("evidence_digest"):
         return "evidence_mismatch"
+    if "request_context" in receipt or "request_context" in evidence:
+        from openadapt_flow.request_binding import BindingError, RequestContext
+
+        try:
+            if RequestContext.parse(
+                receipt.get("request_context")
+            ) != RequestContext.parse(evidence.get("request_context")):
+                return "request_context"
+        except BindingError:
+            return "request_context"
     executor = evidence.get("executor") or {}
     readback = evidence.get("readback") or {}
     authorization = evidence.get("authorization") or {}

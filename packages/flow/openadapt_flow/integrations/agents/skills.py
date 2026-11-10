@@ -422,6 +422,11 @@ class SkillCache:
         )
         return compiler, key
 
+    def receipt_root(self, prompt: str, params: Mapping[str, Any]) -> Path:
+        """The producer's receipt subtree, without opening a halted server."""
+        compiler, _key = self._compiler(prompt, params)
+        return compiler.dir
+
     def server(self, prompt: str, params: Mapping[str, Any]) -> Optional[Path]:
         """The task's compiled MCP server, when it has an admitted one."""
 
@@ -1051,7 +1056,14 @@ async def _call_skill(python: str, server: Path, params: dict[str, Any]) -> dict
             tools = (await session.list_tools()).tools
             if len(tools) != 1:
                 raise RuntimeError("a compiled skill's server has exactly one tool")
-            result = await session.call_tool(tools[0].name, params)
+            from openadapt_flow.request_binding import request_meta
+
+            metadata = request_meta()
+            if metadata is None:
+                result = await session.call_tool(tools[0].name, params)
+            else:
+                # Unsupported metadata APIs refuse; never retry without context.
+                result = await session.call_tool(tools[0].name, params, meta=metadata)
     # mcp 2 names these fields in snake case, mcp 1 in camel case.
     if getattr(result, "is_error", None) or getattr(result, "isError", None):
         text = " ".join(getattr(c, "text", "") for c in result.content)
