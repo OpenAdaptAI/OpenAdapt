@@ -573,8 +573,10 @@ jobs:
       - name: Test
         # A pull request runs the fast lane: tests/nightly_only.txt lists the
         # slow tests (over about 5 s on CI) that main and nightly run instead.
+        # Main runs the `main` lane, which leaves out only the entries marked
+        # `live `; the nightly run (a schedule, or a dispatch) runs them all.
         env:
-          OPENADAPT_TEST_LANE: ${{ github.event_name == 'pull_request' && 'fast' || 'full' }}
+          OPENADAPT_TEST_LANE: ${{ github.event_name == 'pull_request' && 'fast' || (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'full' || 'main' }}
           # Each shard keeps its coverage data; flow-coverage combines them.
           COVERAGE_FILE: runs/coverage-shard-${{ matrix.shard }}.data
           # Coverage only on the nightly tier, so it adds no time to a pull

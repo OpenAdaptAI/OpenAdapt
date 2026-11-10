@@ -23,7 +23,7 @@ from tests.repo_tree_guard import (  # noqa: E402 - needs the sys.path line abov
 def pytest_collection_modifyitems(
     config: pytest.Config, items: list[pytest.Item]
 ) -> None:
-    """In the fast lane, leave out the tests in tests/nightly_only.txt."""
+    """In the fast and main lanes, leave out tests in tests/nightly_only.txt."""
 
     lanes.deselect(config, items)
 
