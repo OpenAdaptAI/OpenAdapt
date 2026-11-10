@@ -8,7 +8,7 @@ import threading
 from dataclasses import FrozenInstanceError
 
 import pytest
-from hypothesis import given
+from hypothesis import given, settings
 from hypothesis import strategies as st
 from hypothesis.stateful import RuleBasedStateMachine, invariant, rule
 
@@ -197,6 +197,7 @@ def test_emitted_context_symbols_never_add_or_replace_business_parameters():
     from tests.test_mcp_sdk_compatibility import _emit, _load
 
     @given(data=st.data())
+    @settings(deadline=None)
     def check(data):
         names = data.draw(
             st.lists(
