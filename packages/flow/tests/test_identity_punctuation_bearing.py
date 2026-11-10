@@ -161,7 +161,8 @@ def test_generic_label_separator_has_exact_role_owned_witness(api, labels, separ
         )
     # A generic label elsewhere cannot lend ownership to a numeric span.
     ambiguous = f"{row} RC79 {separator} {separator} 284"
-    assert _check(api, ambiguous, ambiguous).status == "abstain"
+    assert _check(api, ambiguous, ambiguous).status == "verified"
+    assert _check(api, ambiguous, f"{row} RC79 {separator} 284").status == "abstain"
 
 
 @pytest.mark.parametrize("api", APIS)

@@ -341,6 +341,12 @@ def _template_punctuation_agrees(tmpl: IdentityTemplate, obs: list[str]) -> bool
     if not _punctuation_metadata_complete(tmpl):
         return False
     salt = _salt_bytes(tmpl.salt)
+    if (
+        tmpl.standalone_punctuation_indices
+        and len(tmpl.tokens) == len(obs)
+        and all(t.r == _hash(salt, o) for t, o in zip(tmpl.tokens, obs))
+    ):
+        return True
     keys = [token.c for token in tmpl.tokens]
     body_keys = [tmpl.punctuation_body_keys.get(i, key) for i, key in enumerate(keys)]
     expected = _id._punctuation_signature(

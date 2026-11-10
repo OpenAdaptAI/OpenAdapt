@@ -476,6 +476,9 @@ def _punctuation_signature(
 
 
 def _punctuation_tokens_agree(expected: list[str], observed: list[str]) -> bool:
+    if expected == observed and any(_standalone_punctuation(t) for t in expected):
+        return True
+
     def witness(words: list[str]) -> Optional[Counter[tuple[str, str, str, str]]]:
         return _punctuation_signature(
             [ocr_canonical(t) for t in words],

@@ -87,7 +87,7 @@ def test_numeric_band_cannot_borrow_text_only_standalone_permission(api, reverse
     changed = "Ashford Jane RC79 . 284 02/23/1975"
     expected, observed = (changed, original) if reverse else (original, changed)
     assert _check(api, expected, observed).status != "verified"
-    assert _check(api, original, original).status != "verified"
+    assert _check(api, original, original).status == "verified"
 
 
 def test_legacy_diagnostics_never_become_verdict_or_budget_authority():
