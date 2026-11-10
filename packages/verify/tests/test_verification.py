@@ -156,3 +156,16 @@ def test_signer_failure_does_not_become_signature_success(store, tmp_path, monke
         and result.write_receipt_path is None
     )
     assert result.seal.startswith("unsealed:")
+
+
+@pytest.mark.parametrize("complete", [None, False], ids=["undeclared", "false"])
+def test_rest_completeness_is_required_before_writer_dispatch(store, tmp_path, complete):
+    contract = store.contract("rest")
+    if complete is None:
+        del contract["verifier"]["records_complete"]
+    else:
+        contract["verifier"]["records_complete"] = complete
+    guard = WriteGuard(contract, workdir=tmp_path / "writes")
+    reply = guard.run(VALUES, lambda: store.save(VALUES))
+    assert reply["verified"] is False and reply["written"] is False
+    assert store.posts == 0 and store.records() == []

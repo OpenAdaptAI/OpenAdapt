@@ -17,6 +17,7 @@ def test_mcp_restored_rows_never_clear_refutation(store, tmp_path, first_refuter
     import anyio
     from mcp import ClientSession
     from mcp.shared.memory import create_client_server_memory_streams
+    from openadapt_flow.runtime.effects.late_write import seconds_until
     from openadapt_flow.verifier import Actor, Contract, RecheckState, recheck
     from openadapt_flow.write_ledger import default_ledger
 
@@ -42,7 +43,9 @@ def test_mcp_restored_rows_never_clear_refutation(store, tmp_path, first_refuter
                     with sqlite3.connect(store.path) as db:
                         db.execute("INSERT INTO item(code,quantity) VALUES ('unexplained','9')")
                     if first_refuter == "mcp":
-                        await anyio.sleep(0.02)
+                        await anyio.sleep(
+                            max(0.0, seconds_until(first["recheck_due_at"])) + 0.02
+                        )
                         refuted = await session.call_tool("verify_recheck", {"write_id": write_id})
                         assert json.loads(refuted.content[0].text)["outcome"] == "REFUTED"
                     else:

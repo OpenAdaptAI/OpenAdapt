@@ -104,6 +104,8 @@ class Store:
                 "base_url": self.base,
                 "records_path": "/records",
                 "records_key": "records",
+                # This owned endpoint returns SELECT-all with no pagination.
+                "records_complete": True,
             }
         )
         return {
