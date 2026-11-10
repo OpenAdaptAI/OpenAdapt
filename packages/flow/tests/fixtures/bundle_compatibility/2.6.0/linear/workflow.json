@@ -1,0 +1,112 @@
+{
+  "schema_version": 2,
+  "name": "release-compatibility",
+  "recording_id": null,
+  "contains_phi": false,
+  "phi_scrubbed": false,
+  "encrypted": false,
+  "created_at": "2026-01-02T03:04:05+00:00",
+  "viewport": [
+    320,
+    200
+  ],
+  "params": {},
+  "param_specs": {},
+  "secret_params": [],
+  "steps": [
+    {
+      "id": "apply",
+      "intent": "apply synthetic change",
+      "action": "click",
+      "anchor": {
+        "template": "templates/button.png",
+        "structural": {
+          "selector": "#apply",
+          "frame_path": null,
+          "role": null,
+          "name": null,
+          "automation_id": null,
+          "window_name": null
+        },
+        "region": [
+          40,
+          50,
+          80,
+          40
+        ],
+        "click_point": [
+          80,
+          70
+        ],
+        "ocr_text": "Apply",
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": null,
+        "identifier_crop": null,
+        "identifier_region": null,
+        "form_identity": null,
+        "landmarks": [],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "field_label": null,
+      "selection_commit_key": null,
+      "selection_region": null,
+      "key": null,
+      "modifiers": [],
+      "drag_end_anchor": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "risk_explanation": null,
+      "risk_review_required": false,
+      "wait_until": null,
+      "guard": null,
+      "read": null,
+      "read_gate": null,
+      "surface": null,
+      "opens": [],
+      "surface_origin": null,
+      "closes_surface": false,
+      "dialog": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null,
+      "hover": null,
+      "submit_binding": null,
+      "submit_binding_unbound_reason": null
+    }
+  ],
+  "interstitials": [],
+  "program": null,
+  "subflows": {},
+  "data_sources": {},
+  "manifest": {
+    "schema_version": 2,
+    "content_digest": "f44b31062baf7e119b04bea142ad87120568cf5c9f94712a0c3e137a123edf7b",
+    "file_hashes": {
+      "templates/button.png": "fa53ee8e6f7730a17a6b8ea30ebab860d2811526204fcf2c76946850b582b493"
+    },
+    "provenance": {
+      "compiler_version": "2.6.0",
+      "source_recording_sha256": null,
+      "compiler_config_sha256": null,
+      "created_at": "2026-01-02T03:04:05+00:00",
+      "policy_name": null,
+      "certified": false,
+      "certification_status": null,
+      "certified_at": null,
+      "expires_at": null,
+      "certification_invalidated_at": null,
+      "certification_invalidation_reason": null,
+      "governed_authorization_template": null
+    },
+    "encrypted": false
+  }
+}
