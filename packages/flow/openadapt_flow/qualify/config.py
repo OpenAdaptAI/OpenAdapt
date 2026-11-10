@@ -608,6 +608,10 @@ class VerifyConfig(BaseModel):
             name not in record.fields for name in record.duplicate_key_fields
         ):
             raise ValueError("record.duplicate_key must name fields in record.fields")
+        if record.surface:
+            _, problems = record_reader(self.verifier.verifier, record.surface)
+            if problems:
+                raise ValueError("; ".join(problems))
         if isinstance(record.duplicate_key, list):
             problems = composite_key_read_problems(
                 record.duplicate_key, self.verifier.verifier, record.surface

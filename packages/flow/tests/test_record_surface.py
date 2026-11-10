@@ -215,3 +215,70 @@ def test_a_complete_selected_read_finds_the_older_same_key_row(
         baseline_path=tmp_path / "b.json",
     )["receipt"]["outcome"]
     assert outcome == "reconciliation_required"
+
+
+@pytest.mark.parametrize(
+    "duplicate_key",
+    [None, "group_key", ["group_key"]],
+)
+def test_parsers_refuse_record_surface_on_non_surfaces_verifier_for_every_key_shape(
+    duplicate_key: str | list[str] | None,
+) -> None:
+    from openadapt_flow.qualify.config import QualifyConfigError
+    from openadapt_flow.qualify.config import parse_verify_config as parse_qualify
+    from openadapt_flow.verify_run import VerifyRunError
+    from openadapt_flow.verify_run import parse_verify_config as parse_verify
+
+    record: dict = {
+        "name": "row",
+        "match": ["name"],
+        "fields": {"name": "name", "group_key": "group_key"},
+        "surface": "patient",
+    }
+    if duplicate_key is not None:
+        record["duplicate_key"] = duplicate_key
+    data = {
+        "schema_version": "openadapt.verify/v1",
+        "app": {
+            "name": "Synthetic",
+            "version": "1",
+            "url": "http://127.0.0.1:9301/",
+            "reset": {"command": "true"},
+        },
+        "verifier": {
+            "kind": "sql",
+            "sqlite_database": "test.db",
+            "sql_query": "SELECT * FROM main_rows",
+        },
+        "record": record,
+    }
+    match = "record.surface needs verifier.kind: surfaces; verifier.kind is 'sql'"
+    with pytest.raises(QualifyConfigError, match=match):
+        parse_qualify(data, env={})
+    data_verify = {k: v for k, v in data.items() if k != "app"}
+    with pytest.raises(VerifyRunError, match=match):
+        parse_verify(data_verify)
+
+
+@pytest.mark.parametrize(
+    "duplicate_key",
+    [None, "group_key", ["group_key"]],
+)
+def test_parsers_refuse_unknown_surface_for_every_key_shape(
+    tmp_path: Path,
+    duplicate_key: str | list[str] | None,
+) -> None:
+    from openadapt_flow.qualify.config import QualifyConfigError
+    from openadapt_flow.qualify.config import parse_verify_config as parse_qualify
+    from openadapt_flow.verify_run import VerifyRunError
+
+    data = _keyed(tmp_path / "s.db", "SELECT * FROM main_rows", surface="nowhere")
+    if duplicate_key is None:
+        del data["record"]["duplicate_key"]
+    else:
+        data["record"]["duplicate_key"] = duplicate_key
+    match = "record.surface names 'nowhere'"
+    with pytest.raises(QualifyConfigError, match=match):
+        parse_qualify(data, env={})
+    with pytest.raises(VerifyRunError, match=match):
+        _verify_run_parse(data)
