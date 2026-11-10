@@ -180,7 +180,9 @@ def _open_page(pw: Any, table: Any, cond: Any, top_offset_px: int) -> tuple[Any,
         row_pad_px=cond.row_pad_px,
         top_offset_px=top_offset_px,
     )
-    browser = pw.chromium.launch(headless=True)
+    from openadapt_flow._browser_readiness import launch_rendering_ready
+
+    browser = launch_rendering_ready(pw.chromium, headless=True)
     page = browser.new_page(
         viewport={"width": 1120, "height": 1600},
         device_scale_factor=cond.device_scale_factor,
@@ -473,7 +475,7 @@ def unarmed(result: dict[str, Any]) -> int:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--out", required=True)
     parser.add_argument("--seeds", type=int, nargs="+", default=[1, 2, 3])
     parser.add_argument("--n-rows", type=int, default=40)
@@ -493,7 +495,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             },
             indent=1,
         )
-        + "\n"
+        + "\n",
+        encoding="utf-8",
     )
     for key, groups in scored.items():
         a = groups["all"]

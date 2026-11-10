@@ -25,6 +25,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Optional, Sequence
 
+from openadapt.quickstart.scene import MOCKMED
+
 #: Synthetic notes for the five runs. None of them is clinical advice.
 RUN_NOTES = (
     "Follow-up in two weeks",
@@ -95,6 +97,12 @@ class BreakFacts:
     halt_reason: str
     model_calls: int
     seconds: float
+    #: True only when the run's own evidence shows it stopped at the check
+    #: this act sets off (the record check refuting the save, or the app's
+    #: own check the program waits on). A stop for any other reason, or one
+    #: whose cause the evidence doesn't show, stays False, and the views then
+    #: describe a generic stop instead of the demonstration.
+    stop_attributed: bool = False
     result: Any = field(default=None, repr=False)
 
     @property
@@ -346,6 +354,10 @@ def _sha256(path: Path) -> Optional[str]:
 class FlowEngine:
     """The bundled tutorial, one stage per call, inside one browser process."""
 
+    #: Act 2's inputs: one new note per run.
+    inputs = RUN_NOTES
+    scene = MOCKMED
+
     def __init__(self, root: Path, *, visible: bool, pace_s: float = 0.0) -> None:
         self.root = root
         self.visible = visible
@@ -581,6 +593,9 @@ class FlowEngine:
             halt_reason=str(result.halt_reason),
             model_calls=int(getattr(report, "model_calls", 0) or 0),
             seconds=seconds,
+            # The record check read the save back and refuted it: the
+            # silent failure this act injects, not some other refusal.
+            stop_attributed=int(result.effects_refuted) > 0,
             result=result,
         )
 
@@ -605,20 +620,7 @@ class FlowEngine:
         no Seal and no command to check one.
         """
 
-        try:
-            from openadapt_flow.offline_seal import seal_home, seal_run
-        except ImportError:
-            return None
-        checked = [run for run in runs if run.checked]
-        if not checked:
-            return None
-        key_id = ""
-        for run in checked:
-            # The configured Seal key, or one generated under the Seal home
-            # on first use (the offline-Seal default).
-            seal = seal_run(run.run_dir, home=seal_home(), enqueue=False)
-            key_id = str(seal.key_id)
-        return SealFacts(key_id=key_id, sealed=len(checked))
+        return seal_runs(runs)
 
     def seal_broken(self, broken: BreakFacts) -> bool:
         """Sign the stopped run's report too; True once its Seal is written.
@@ -721,6 +723,25 @@ class FlowEngine:
         )
         evidence = demo_proof.collect_evidence(result, self.root)
         return demo_proof.write_demo_page(evidence)
+
+
+def seal_runs(runs: list[RunFacts]) -> Optional[SealFacts]:
+    """Sign each checked run's report with this computer's Seal key."""
+
+    try:
+        from openadapt_flow.offline_seal import seal_home, seal_run
+    except ImportError:
+        return None
+    checked = [run for run in runs if run.checked]
+    if not checked:
+        return None
+    key_id = ""
+    for run in checked:
+        # The configured Seal key, or one generated under the Seal home on
+        # first use (the offline-Seal default).
+        seal = seal_run(run.run_dir, home=seal_home(), enqueue=False)
+        key_id = str(seal.key_id)
+    return SealFacts(key_id=key_id, sealed=len(checked))
 
 
 def return_focus_to_terminal(

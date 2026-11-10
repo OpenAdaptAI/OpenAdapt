@@ -1349,11 +1349,15 @@ def write_dom_outputs(results: dict[str, Any], out_dir: Path) -> None:
         out_dir: Output directory (created if needed).
     """
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "results.json").write_text(json.dumps(results, indent=2) + "\n")
+    (out_dir / "results.json").write_text(
+        json.dumps(results, indent=2) + "\n", encoding="utf-8"
+    )
     from benchmark.harness.chart_fonts import safe_render
 
     safe_render(render_dom_chart, results, out_dir / "outcome_matrix.png")
-    (out_dir / "BENCHMARK.md").write_text(render_dom_markdown(results))
+    (out_dir / "BENCHMARK.md").write_text(
+        render_dom_markdown(results), encoding="utf-8"
+    )
 
 
 # -- orchestrator -----------------------------------------------------------------
@@ -1504,7 +1508,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         description=(
             "DOM-selector benchmark arm vs. compiled vision replay on "
             "MockMed. $0: no model calls anywhere."
-        )
+        ),
+        allow_abbrev=False,
     )
     parser.add_argument(
         "--out",

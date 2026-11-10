@@ -161,7 +161,9 @@ class LabelLog:
         if not self.path.exists():
             return []
         out = []
-        for number, line in enumerate(self.path.read_text().splitlines(), 1):
+        for number, line in enumerate(
+            self.path.read_text(encoding="utf-8").splitlines(), 1
+        ):
             if not line.strip():
                 continue
             try:

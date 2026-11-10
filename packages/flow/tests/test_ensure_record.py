@@ -183,12 +183,12 @@ def bundle(*resources, total=None, next_url=None, kind="searchset"):
     return body
 
 
-def with_outcome(body, severity):
+def with_outcome(body, severity, *, code="processing"):
     body["entry"] = list(body.get("entry") or []) + [
         {
             "resource": {
                 "resourceType": "OperationOutcome",
-                "issue": [{"severity": severity, "code": "processing"}],
+                "issue": [{"severity": severity, "code": code}],
             },
             "search": {"mode": "outcome"},
         }
@@ -296,15 +296,28 @@ def test_every_incomplete_read_is_unreadable(routes):
 
 
 def test_a_warning_outcome_is_a_message_not_an_unreadable_search():
-    """Epic answers an empty search with a warning outcome entry."""
+    """An explicitly informational warning is not a matching resource."""
 
     r = reader_for(
-        {"Observation": bundle(), "AuditEvent": with_outcome(bundle(), "warning")}
+        {
+            "Observation": bundle(),
+            "AuditEvent": with_outcome(bundle(), "warning", code="informational"),
+        }
     )
     changes = read_changes(
         contract(change_feed={"audit": {}, "sweep_types": ["Observation"]}), r, T0
     )
     assert changes == {}
+
+
+def test_a_processing_warning_is_an_unreadable_search():
+    r = reader_for(
+        {"Observation": bundle(), "AuditEvent": with_outcome(bundle(), "warning")}
+    )
+    with pytest.raises(Unreadable):
+        read_changes(
+            contract(change_feed={"audit": {}, "sweep_types": ["Observation"]}), r, T0
+        )
 
 
 def test_a_server_without_history_authors_relies_on_the_audit_trail():
@@ -975,6 +988,19 @@ def fixed(*extra_events, reads=(), versions=None, bodies=None, ref="Patient/x"):
     events = [(_t(1), "C", frozenset({BOT})), (_t(3), "U", frozenset({BOT}))]
     events += list(extra_events)
     n = len(events) if versions is None else versions
+    bodies = [patient("x")] * n if bodies is None else bodies
+    # As ``_history`` returns them: each version has its own id and time.
+    bodies = [
+        {
+            **body,
+            "meta": {
+                **(body.get("meta") or {}),
+                "versionId": str(i + 1),
+                "lastUpdated": _iso(1 + 2 * i),
+            },
+        }
+        for i, body in enumerate(bodies)
+    ]
     return {
         ref: Change(
             ref=ref,
@@ -983,13 +1009,13 @@ def fixed(*extra_events, reads=(), versions=None, bodies=None, ref="Patient/x"):
             events=events,
             reads=list(reads),
             versions=n,
-            bodies=[patient("x")] * n if bodies is None else bodies,
+            bodies=bodies,
         )
     }
 
 
 def test_a_create_the_agent_corrected_is_verified_and_says_so():
-    x = patient("x")
+    x = fixed()["Patient/x"].bodies[-1]
     r = judge(cc(), PARAMS, base(), fixed(), {"x": x}, x)
     assert (r.outcome, r.record_id) == ("created_verified", "x")
     assert r.evidence["corrected"] is True and r.evidence["writes_to_record"] == 2
@@ -1048,7 +1074,7 @@ def test_a_read_logged_just_after_the_last_fix_still_counts():
 
 
 def test_the_agents_own_reads_dont_count():
-    x = patient("x")
+    x = fixed()["Patient/x"].bodies[-1]
     seen = [(_t(2), frozenset({BOT})), (_t(4), frozenset({BOT}))]
     r = judge(cc(), PARAMS, base(), fixed(reads=seen), {"x": x}, x)
     assert r.outcome == "created_verified"
@@ -1179,7 +1205,16 @@ class _Server:
 
     def __init__(self, *writes):
         self.events = [_stamped(a, "Patient/x", _iso(s)) for a, s in writes]
-        self.history = [versioned(patient("x"), BOT, _iso(s)) for _, s in writes]
+        self.history = [
+            {
+                **versioned(patient("x"), BOT, _iso(s)),
+                "meta": {
+                    "versionId": str(i + 1),
+                    **versioned({}, BOT, _iso(s))["meta"],
+                },
+            }
+            for i, (_, s) in enumerate(writes)
+        ]
         self.now = 12.0  # the verifier's reads land after the window
 
     def get(self, url, params):
@@ -1211,7 +1246,7 @@ class _Server:
                 _stamped("R", "Patient/x", _iso(self.now), "ClientApplication/verifier")
             )
             self.now += 0.1
-            return 200, {}, patient("x")
+            return 200, {}, self.history[-1]
         return 200, {}, bundle(patient("x"))
 
 
@@ -1253,8 +1288,8 @@ def test_a_correction_into_void_needs_review():
 
 
 def test_a_correction_beside_a_void_lookalike_is_verified():
-    x = vax("x")
-    changes = fixed(ref="Immunization/x", bodies=[x, x])
+    changes = fixed(ref="Immunization/x", bodies=[vax("x"), vax("x")])
+    x = changes["Immunization/x"].bodies[-1]
     r = judge(vax_contract(settle_s=1), VAX_PARAMS, base(), changes, {"x": x}, x)
     assert (r.outcome, r.record_id) == ("created_verified", "x")
     assert r.evidence["corrected"] is True
@@ -1333,3 +1368,283 @@ def test_review_c3_a_found_record_that_cant_be_read_by_id_needs_review():
         c, PARAMS, base(e), reader=FhirReader(c, get), sleep=lambda s: None
     )
     assert r.outcome == "needs_review" and r.evidence.get("unreadable")
+
+
+# -- the read-back is bound to the last version written (#1854) -------------------------
+
+
+def _bound(changes, created):
+    return judge(cc(), PARAMS, base(), changes, {"x": created}, created)
+
+
+def test_the_last_version_written_is_bound_and_its_authors_are_named():
+    changes = fixed()
+    r = _bound(changes, changes["Patient/x"].bodies[-1])
+    assert r.outcome == "created_verified", r.reasons
+    # Only ids and actors: no version body reaches the evidence.
+    # No meta.author (as on Medplum): the audit trail's n-th write names it.
+    assert r.evidence["versions"] == [
+        {"version": "1", "author": BOT},
+        {"version": "2", "author": BOT},
+    ]
+
+
+def test_a_version_author_is_never_guessed():
+    # meta.author, when the server gives it, names the version.
+    changes = fixed()
+    bodies = changes["Patient/x"].bodies
+    bodies[1] = versioned(bodies[1], OTHER, bodies[1]["meta"]["lastUpdated"])
+    bodies[1]["meta"]["versionId"] = "2"
+    from openadapt_flow.ensure_record import version_trail
+
+    assert [v["author"] for v in version_trail(changes["Patient/x"])] == [BOT, OTHER]
+    # One logged write for two versions: which wrote which is unknown.
+    changes = fixed()
+    changes["Patient/x"].events = changes["Patient/x"].events[:1]
+    assert [v["author"] for v in version_trail(changes["Patient/x"])] == [None, None]
+
+
+def test_a_stale_read_back_is_refused():
+    changes = fixed()
+    r = _bound(changes, changes["Patient/x"].bodies[0])
+    assert r.outcome == "needs_review"
+    assert "the read-back is not the last version written in the window" in r.reasons
+
+
+def test_a_version_written_after_the_window_is_refused():
+    # Someone saved the record again after the window closed: the read-back
+    # is a version the trail never covered, whoever wrote it.
+    changes = fixed()
+    later = {**changes["Patient/x"].bodies[-1]}
+    later["meta"] = {**later["meta"], "versionId": "3", "lastUpdated": LATER}
+    r = _bound(changes, later)
+    assert r.outcome == "needs_review"
+    assert "the read-back is not the last version written in the window" in r.reasons
+
+
+def test_a_read_back_without_a_version_id_is_refused():
+    changes = fixed()
+    bare = {k: v for k, v in changes["Patient/x"].bodies[-1].items() if k != "meta"}
+    r = _bound(changes, bare)
+    assert r.outcome == "needs_review"
+    assert "the read-back carries no versionId to bind to" in r.reasons
+
+
+def test_a_version_without_an_id_or_time_is_refused():
+    changes = fixed()
+    body = changes["Patient/x"].bodies[0]
+    changes["Patient/x"].bodies[0] = {**body, "meta": {"versionId": "1"}}
+    r = _bound(changes, changes["Patient/x"].bodies[-1])
+    assert r.outcome == "needs_review"
+    assert "a version in the window has no versionId or time to bind to" in r.reasons
+
+
+def test_two_versions_at_the_newest_time_are_refused():
+    changes = fixed()
+    first, second = changes["Patient/x"].bodies
+    tied = {
+        **first,
+        "meta": {**first["meta"], "lastUpdated": second["meta"]["lastUpdated"]},
+    }
+    changes["Patient/x"].bodies[0] = tied
+    r = _bound(changes, second)
+    assert r.outcome == "needs_review"
+    assert (
+        "two versions share the newest time, so the last write can't be told"
+        in r.reasons
+    )
+
+
+class _LateServer(_Server):
+    """Serves, on read-back, a version saved after the window by another user."""
+
+    def get(self, url, params):
+        status, headers, body = super().get(url, params)
+        if url.split("/fhir/R4/", 1)[-1] == "Patient/x":
+            meta = {"versionId": "9", "lastUpdated": _iso(11.5)}
+            body = {**body, "meta": {**meta, "author": {"reference": OTHER}}}
+        return status, headers, body
+
+
+@pytest.mark.parametrize(
+    "server,outcome", [(_Server, "created_verified"), (_LateServer, "needs_review")]
+)
+def test_the_reader_binds_the_read_back_to_history(server, outcome):
+    from openadapt_flow.ensure_record import verify_ensure
+
+    s = server(("C", 2), ("U", 3))
+    c = cc(change_feed={"audit": {"heartbeat": True}, "history_author": False})
+    r = verify_ensure(
+        c, PARAMS, base(), reader=FhirReader(c, s.get), sleep=lambda _: None
+    )
+    assert r.outcome == outcome, r.reasons
+    if outcome == "needs_review":
+        assert r.reasons == [
+            "the read-back is not the last version written in the window"
+        ]
+    authors = [v["author"] for v in r.evidence.get("versions", [])]
+    assert authors == [BOT, BOT]
+
+
+def test_version_trail_orders_mixed_offsets_by_instant():
+    # v1 at 12:00:01Z written as +01:00, v2 at 12:00:02Z: as text, v2 sorts
+    # first and the audit trail's n-th write would name the wrong version.
+    from openadapt_flow.ensure_record import version_trail
+
+    v1 = {
+        **patient("x"),
+        "meta": {"versionId": "1", "lastUpdated": "2026-10-28T13:00:01+01:00"},
+    }
+    v2 = {
+        **patient("x"),
+        "meta": {"versionId": "2", "lastUpdated": "2026-10-28T12:00:02Z"},
+    }
+    change = Change(
+        ref="Patient/x",
+        actions={"C", "U"},
+        authors={BOT, OTHER},
+        events=[
+            (T0 + timedelta(seconds=1), "C", frozenset({BOT})),
+            (T0 + timedelta(seconds=2), "U", frozenset({OTHER})),
+        ],
+        versions=2,
+        bodies=[v2, v1],
+    )
+    assert version_trail(change) == [
+        {"version": "1", "author": BOT},
+        {"version": "2", "author": OTHER},
+    ]
+
+
+def _trail_change(v_times, events):
+    bodies = [
+        {**patient("x"), "meta": {"versionId": str(i + 1), "lastUpdated": when}}
+        for i, when in enumerate(v_times)
+    ]
+    return Change(
+        ref="Patient/x",
+        actions={"C", "U"},
+        authors={BOT, OTHER},
+        events=events,
+        versions=len(bodies),
+        bodies=list(reversed(bodies)),
+    )
+
+
+def test_version_trail_leaves_authors_unknown_when_writes_share_a_time():
+    # Two writes logged in the same second, update returned before create:
+    # their order is the server's, not the writes', so no one is named.
+    from openadapt_flow.ensure_record import version_trail
+
+    change = _trail_change(
+        ["2026-10-28T12:00:01.100Z", "2026-10-28T12:00:01.200Z"],
+        [
+            (T0 + timedelta(seconds=1), "U", frozenset({BOT})),
+            (T0 + timedelta(seconds=1), "C", frozenset({OTHER})),
+        ],
+    )
+    assert version_trail(change) == [
+        {"version": "1", "author": None},
+        {"version": "2", "author": None},
+    ]
+
+
+def test_version_trail_leaves_authors_unknown_when_versions_share_a_time():
+    from openadapt_flow.ensure_record import version_trail
+
+    change = _trail_change(
+        ["2026-10-28T12:00:01Z", "2026-10-28T12:00:01Z"],
+        [
+            (T0 + timedelta(seconds=1), "C", frozenset({BOT})),
+            (T0 + timedelta(seconds=2), "U", frozenset({OTHER})),
+        ],
+    )
+    assert [v["author"] for v in version_trail(change)] == [None, None]
+
+
+def test_version_trail_leaves_authors_unknown_when_a_version_has_no_time():
+    from openadapt_flow.ensure_record import version_trail
+
+    change = _trail_change(
+        ["2026-10-28T12:00:01Z", None],
+        [
+            (T0 + timedelta(seconds=1), "C", frozenset({BOT})),
+            (T0 + timedelta(seconds=2), "U", frozenset({OTHER})),
+        ],
+    )
+    assert [v["author"] for v in version_trail(change)] == [None, None]
+
+
+def test_version_trail_names_authors_when_the_order_is_unambiguous():
+    # The control: distinct times on both sides still name each version.
+    from openadapt_flow.ensure_record import version_trail
+
+    change = _trail_change(
+        ["2026-10-28T12:00:01.100Z", "2026-10-28T12:00:01.200Z"],
+        [
+            (T0 + timedelta(seconds=2), "U", frozenset({OTHER})),
+            (T0 + timedelta(seconds=1), "C", frozenset({BOT})),
+        ],
+    )
+    assert [v["author"] for v in version_trail(change)] == [BOT, OTHER]
+
+
+def test_bundle_refuses_parameterized_non_searchset_bundle():
+    records = [patient("1"), patient("2")]
+    routes = {
+        "Patient": bundle(*records, kind="collection"),
+        "Patient?_count=1": bundle(*records, kind="collection"),
+    }
+    reader = reader_for(routes)
+
+    # Configured query params on non-searchset bundle are refused
+    with pytest.raises(
+        Unreadable, match="collection searches require an unrestricted empty query"
+    ):
+        reader.bundle("Patient", {"_count": "1"})
+
+    # Query in path/URL is refused
+    with pytest.raises(
+        Unreadable, match="collection searches require an unrestricted empty query"
+    ):
+        reader.bundle("Patient?_count=1")
+
+    # Query in self link is refused
+    collection_with_self_query = bundle(*records, kind="collection")
+    collection_with_self_query["link"] = [
+        {"relation": "self", "url": "http://fhir.test/Patient?_count=1"}
+    ]
+    reader_self = reader_for({"Patient": collection_with_self_query})
+    with pytest.raises(
+        Unreadable, match="collection searches require an unrestricted empty query"
+    ):
+        reader_self.bundle("Patient")
+
+    # Query in effective/served URL (Content-Location) is refused
+    def get_with_served(url, params):
+        return (
+            200,
+            {"content-location": "http://fhir.test/Patient?_count=1"},
+            bundle(*records, kind="collection"),
+        )
+
+    reader_served = FhirReader(
+        contract(change_feed={"audit": {}, "sweep_types": ["Observation"]}),
+        get_with_served,
+    )
+    with pytest.raises(
+        Unreadable, match="collection searches require an unrestricted empty query"
+    ):
+        reader_served.bundle("Patient")
+
+    # Unqueried collection bundle without next link is accepted as complete
+    unqueried = reader.bundle("Patient")
+    assert len(unqueried) == 2
+
+    # A searchset bundle with parameters retains normal searchset pagination/coverage
+    searchset_routes = {
+        "Patient": bundle(*records, total=2, kind="searchset"),
+    }
+    reader_searchset = reader_for(searchset_routes)
+    searchset_entries = reader_searchset.bundle("Patient", {"_count": "2"})
+    assert len(searchset_entries) == 2

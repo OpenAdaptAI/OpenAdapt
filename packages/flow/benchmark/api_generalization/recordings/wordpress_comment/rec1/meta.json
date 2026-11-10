@@ -1,0 +1,21 @@
+{
+  "id": "1ff3c06bcc6344ba96b9033551844d7f",
+  "created_at": "2026-10-19T18:18:25.297357+00:00",
+  "viewport": [
+    1280,
+    800
+  ],
+  "coordinate_space": "page",
+  "app_url": "http://127.0.0.1:9832/?p=1",
+  "params": {
+    "comment": "The parking map on page two helped a lot.",
+    "author": "Ada Park",
+    "email": "ada.park@example.invalid",
+    "url": "https://ada.example.invalid/"
+  },
+  "secret_params": [],
+  "network_capture": {
+    "file": "network.jsonl",
+    "exchanges": 3
+  }
+}

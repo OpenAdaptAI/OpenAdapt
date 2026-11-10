@@ -43,7 +43,7 @@ import os
 import re
 import secrets
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator, Literal, Optional
 
@@ -95,6 +95,51 @@ _CLOUD_RUN_UUID_RE = re.compile(
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _now_after(*stamps: str) -> str:
+    """The current time, strictly later than every given durable timestamp.
+
+    Resume orders the durable history by ``created_at``: every checkpoint
+    written before a pause must not be newer than it, and every checkpoint
+    written after it must be newer. The wall clock can step backward (an NTP
+    or WSL clock resync), which would make a correctly ordered history look
+    changed after the pause. Stamping a new record just after the records it
+    follows keeps the written order and the timestamp order the same.
+    Unreadable stamps are ignored here; resume still refuses them.
+    """
+
+    now = datetime.now(timezone.utc)
+    for stamp in stamps:
+        try:
+            prior = datetime.fromisoformat(stamp)
+        except (TypeError, ValueError):
+            continue
+        if prior.tzinfo is not None and prior >= now:
+            now = prior + timedelta(microseconds=1)
+    return now.isoformat()
+
+
+def _now_not_before(*stamps: str) -> str:
+    """The current time, or the latest given durable timestamp if the wall
+    clock reads earlier than it.
+
+    A pause must not be older than the checkpoints written before it, but it
+    need not be strictly newer: resume treats an equal checkpoint as written
+    before the pause. Not moving the pause past the clock keeps an approval
+    issued on a held clock from looking older than the pause it resolves.
+    """
+
+    now = datetime.now(timezone.utc)
+    latest = now
+    for stamp in stamps:
+        try:
+            prior = datetime.fromisoformat(stamp)
+        except (TypeError, ValueError):
+            continue
+        if prior.tzinfo is not None and prior > latest:
+            latest = prior
+    return latest.isoformat()
 
 
 class RunManifest(BaseModel):
@@ -516,7 +561,7 @@ class CheckpointStore:
             )
             return json.loads(decrypted)  # type: ignore[no-any-return]
         if path.is_file():
-            return json.loads(path.read_text())  # type: ignore[no-any-return]
+            return json.loads(path.read_text(encoding="utf-8"))  # type: ignore[no-any-return]
         return None
 
     def _attended_key(self) -> Optional[str]:
@@ -561,7 +606,7 @@ class CheckpointStore:
             pending_payload["status"] = "pending"
         claim_path = self.run_dir / CLAIM_FILENAME
         try:
-            claim = json.loads(claim_path.read_text())
+            claim = json.loads(claim_path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             claim = None
 
@@ -795,7 +840,7 @@ class CheckpointStore:
 
         claim_path = self.run_dir / CLAIM_FILENAME
         try:
-            raw = json.loads(claim_path.read_text())
+            raw = json.loads(claim_path.read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:
             from openadapt_flow.runtime.durable.approval import StateDiverged
 

@@ -183,7 +183,7 @@ def _state_path() -> Path:
 
 def _read_state() -> dict[str, Any]:
     try:
-        state = json.loads(_state_path().read_text())
+        state = json.loads(_state_path().read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {}
     return state if isinstance(state, dict) else {}
@@ -227,7 +227,9 @@ def record_serial(key: str, serial: int) -> None:
         path = _state_path()
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n")
+        tmp.write_text(
+            json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
         tmp.replace(path)
 
 
@@ -808,7 +810,9 @@ def cmd_pull(args: Any) -> int:
 
 
 def add_parser(sub: Any) -> None:
-    p = sub.add_parser("pull", help="Download a packaged workflow bundle by name")
+    p = sub.add_parser(
+        "pull", help="Download a packaged workflow bundle by name", allow_abbrev=False
+    )
     p.add_argument(
         "workflow", nargs="?", help="Workflow id, for example openemr/new-referral"
     )

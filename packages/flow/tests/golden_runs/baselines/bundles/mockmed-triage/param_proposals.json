@@ -1,0 +1,19 @@
+{
+  "note": "Flagged field-label parameter proposals -- NOT applied. Run the confirm pass (openadapt-flow compile, interactive or --accept-params/--params-from) to turn a proposal into a parameter; unconfirmed proposals remain demonstrated constants.",
+  "proposals": [
+    {
+      "step_id": "step_001",
+      "name": "username",
+      "field_label": "Username",
+      "masked_example": "nu******mo",
+      "secret": false
+    },
+    {
+      "step_id": "step_003",
+      "name": "password",
+      "field_label": "Password",
+      "masked_example": null,
+      "secret": true
+    }
+  ]
+}

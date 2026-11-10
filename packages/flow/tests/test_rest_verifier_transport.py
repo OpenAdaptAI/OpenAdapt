@@ -17,6 +17,7 @@ from typing import Any
 import pytest
 
 from openadapt_flow.runtime.effects.rest import RestRecordVerifier
+from tests._rest_read_contract_fixtures import mockmed_rest_read_kwargs
 
 
 def _hide(monkeypatch: pytest.MonkeyPatch, name: str) -> None:
@@ -65,7 +66,7 @@ def test_records_are_read_over_the_fallback_transport(
     try:
         db.add("p1", "Triage", "note", key="k1")
         state = RestRecordVerifier(
-            base_url, records_path="/api/db", records_key="records"
+            base_url, **mockmed_rest_read_kwargs()
         ).capture_pre_state()
         assert state.reachable is True
         assert [record["patient_id"] for record in state.records] == ["p1"]

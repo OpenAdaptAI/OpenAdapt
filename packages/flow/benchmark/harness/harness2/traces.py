@@ -47,6 +47,7 @@ from benchmark.harness.harness2.rollout import (
 from benchmark.harness.harness2.scorer import EpisodeScore
 from benchmark.harness.harness2.tasks import GuiTask
 from openadapt_flow import privacy
+from openadapt_flow.evidence_files import copy_evidence_tree
 
 SCHEMA = "openadapt.trace-export/v1"
 
@@ -364,7 +365,7 @@ def export(
         dest = out_dir / "candidates" / _safe(name) / "harness"
         if dest.exists():
             shutil.rmtree(dest)
-        shutil.copytree(src, dest)
+        copy_evidence_tree(src, dest)
     rows = []
     for trace in traces:
         d = out_dir / "traces" / _safe(trace.trace_id)

@@ -109,7 +109,9 @@ def _scripted_answer(run_dir: Path, asked: list[int]) -> Any:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("--program-run", required=True)
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--tag", required=True)

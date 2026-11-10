@@ -89,7 +89,7 @@ def verify(report: dict[str, Any]) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument("--source", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--verify", type=Path)

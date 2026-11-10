@@ -37,6 +37,7 @@ KINDS = (
     (r"not given by the task", "holds a value the agent didn't send"),
     (r"other resource|outside the declared write", "another record changed"),
     (r"after creating it", "changed after it was created"),
+    (r"between announced actions", "a write outside every announced action"),
 )
 
 
@@ -110,7 +111,8 @@ def summarize(shadow: Any) -> dict[str, Any]:
     return {
         "schema": SCHEMA,
         "mode": shadow.mode,
-        "upstream": f"{shadow.upstream.scheme}://{shadow.upstream.netloc}",
+        "upstream": shadow.target(),
+        "observer": "proxy" if shadow.proxy else "announced actions",
         "started": shadow.started,
         "first_write_after_s": None
         if first is None
@@ -286,12 +288,20 @@ def render_html(doc: dict[str, Any], setup: dict[str, Any] | None = None) -> str
         "<meta name=viewport content='width=device-width,initial-scale=1'>"
         f"<title>Shadow report</title><style>{CSS}</style></head><body>"
         "<h1>Shadow report</h1>"
-        f"<p class=mute>{doc['mode'].upper()} writes to {html.escape(doc['upstream'])}. "
-        "Each write was checked against the system of record. The shadow sent "
-        "each one on as the agent sent it and blocked none.</p>"
-        f"<p>{doc['writes_seen']} writes seen, in {doc['checks']} checks "
-        "(a record's create, retries and corrections are one check).</p>"
-        f"<div class=tiles>{tiles}</div>"
+        + (
+            f"<p class=mute>{doc['mode'].upper()} writes to {html.escape(doc['upstream'])}. "
+            "Each write was checked against the system of record. The shadow sent "
+            "each one on as the agent sent it and blocked none.</p>"
+            f"<p>{doc['writes_seen']} writes seen, in {doc['checks']} checks "
+            "(a record's create, retries and corrections are one check).</p>"
+            if doc.get("observer", "proxy") == "proxy"
+            else "<p class=mute>Actions the agent announced, checked in "
+            f"{html.escape(doc['upstream'])}. The database was also watched "
+            "between actions.</p>"
+            f"<p>{doc['writes_seen']} actions announced; {doc['checks']} checks, "
+            "changes between actions included.</p>"
+        )
+        + f"<div class=tiles>{tiles}</div>"
         + (
             f"<p>Rechecks of confirmed writes: {html.escape(recheck_note)}.</p>"
             if recheck_note
@@ -322,7 +332,9 @@ def write_report(
     out.mkdir(parents=True, exist_ok=True)
     if setup:
         doc = {**doc, "setup": setup}
-    (out / "report.json").write_text(json.dumps(doc, indent=2, default=str) + "\n")
+    (out / "report.json").write_text(
+        json.dumps(doc, indent=2, default=str) + "\n", encoding="utf-8"
+    )
     page = out / "report.html"
-    page.write_text(render_html(doc, setup))
+    page.write_text(render_html(doc, setup), encoding="utf-8")
     return page

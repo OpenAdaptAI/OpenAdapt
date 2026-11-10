@@ -12,7 +12,9 @@ The difference between the two reads becomes a proposed effect contract,
 
 * a record that appeared becomes a ``record_written`` effect whose ``match``
   holds the record's observed fields, with a recorded parameter in place of
-  the typed value wherever a field equals one;
+  the typed value wherever a field equals one; when the record has no single
+  ``key`` field, a ``composite_key`` is also proposed from parameter-bound
+  match fields plus any record-identity fields the person named;
 * a field that changed on a record that already existed becomes a
   ``field_equals`` effect on that record;
 * a record that disappeared, a nested field that changed, and a field that was
@@ -39,9 +41,10 @@ import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping, Optional, Sequence, Union
 
 from openadapt_flow.runtime.effects.effect import (
+    DEFAULT_IDEMPOTENCY_KEY_FIELD,
     Effect,
     EffectKind,
     EffectState,
@@ -123,10 +126,6 @@ def load_observer(
 
     import yaml
 
-    from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
-    from openadapt_flow.qualify.config import _expand
-    from openadapt_flow.verification import verifier_effect_tier
-
     source = Path(path)
     if not source.is_file():
         raise RecordSorError(f"{source} is not a file")
@@ -137,6 +136,23 @@ def load_observer(
     raw = data.get("verifier") if isinstance(data, dict) else None
     if not isinstance(raw, dict):
         raise RecordSorError(f"{source} has no verifier: section")
+    return observer_from_config(raw, for_run1=for_run1)
+
+
+def observer_from_config(
+    raw: Mapping[str, Any], *, for_run1: bool = False
+) -> tuple[SystemOfRecordObserver, dict[str, Any]]:
+    """Build the same SoR observer from a generated verifier declaration.
+
+    This does not compare snapshots, confirm effects or admit a compiled program.
+    Environment references stay unexpanded in the returned declaration.
+    """
+    from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
+    from openadapt_flow.qualify.config import _expand
+    from openadapt_flow.verification import verifier_effect_tier
+
+    if not isinstance(raw, Mapping):
+        raise RecordSorError("a verifier: mapping is required")
     missing: list[str] = []
     expanded = _expand({k: v for k, v in raw.items() if k != "session"}, missing)
     if missing:
@@ -376,13 +392,93 @@ def _describe(expr: ValueExpr) -> str:
     return f"parameter {expr.param!r}" if expr.param else repr(expr.literal)
 
 
+def _record_field_names(
+    record_fields: Optional[Union[Mapping[str, Any], Sequence[str]]],
+) -> frozenset[str]:
+    """Names that identify the written record for a person (``expect`` /
+    ``record_fields``). Used only when proposing a ``composite_key``."""
+
+    if not record_fields:
+        return frozenset()
+    if isinstance(record_fields, Mapping):
+        return frozenset(str(name) for name in record_fields)
+    return frozenset(str(name) for name in record_fields)
+
+
+def _proposed_duplicate_key(
+    record: Mapping[str, Any],
+    match: Mapping[str, ValueExpr],
+    record_field_names: frozenset[str],
+) -> tuple[Optional[ValueExpr], dict[str, ValueExpr], list[str]]:
+    """Idempotency key or composite key for a new ``record_written`` effect.
+
+    Prefer the app's single-field key when the read set carries it and it
+    is bound to a parameter (proposing the demonstration's literal key freezes
+    the key across runs, P0-3). Otherwise propose a ``composite_key`` from
+    parameter-bound match fields plus the record-identity fields a person
+    named. Never invent a key that was not observed or named; the effect stays
+    ``needs_operator_confirmation`` so a person must confirm before
+    clinical-write policy accepts it.
+    """
+
+    notes: list[str] = []
+    key_val = record.get(DEFAULT_IDEMPOTENCY_KEY_FIELD)
+    if key_val is not None and str(key_val).strip() != "":
+        # Prefer the match binding when bound to a run parameter.
+        key_expr = match.get(DEFAULT_IDEMPOTENCY_KEY_FIELD)
+        if key_expr is not None and key_expr.param is not None:
+            return key_expr, {}, notes
+        notes.append(
+            f"record carries literal {DEFAULT_IDEMPOTENCY_KEY_FIELD!r} "
+            "from demonstration; not proposing as idempotency_key to avoid "
+            "freezing key across runs (P0-3)"
+        )
+
+    composite: dict[str, ValueExpr] = {}
+    for name, expr in match.items():
+        if expr.param is not None or name in record_field_names:
+            composite[name] = expr
+    if composite:
+        notes.append(
+            (
+                f"no parameter-bound {DEFAULT_IDEMPOTENCY_KEY_FIELD!r} on the new record; "
+                if key_val is not None and str(key_val).strip() != ""
+                else f"no {DEFAULT_IDEMPOTENCY_KEY_FIELD!r} field on the new record; "
+            )
+            + "proposed composite_key from parameter-bound match fields"
+            + (" plus record identity fields" if record_field_names else "")
+            + " for a person to confirm"
+        )
+        return None, composite, notes
+
+    notes.append(
+        (
+            f"no parameter-bound {DEFAULT_IDEMPOTENCY_KEY_FIELD!r} on the new record"
+            if key_val is not None and str(key_val).strip() != ""
+            else f"no {DEFAULT_IDEMPOTENCY_KEY_FIELD!r} field on the new record"
+        )
+        + " and no parameter-bound or record-identity match fields to build a "
+        "composite_key from; clinical-write policy will refuse until a person "
+        "adds an idempotency or composite key by hand"
+    )
+    return None, {}, notes
+
+
 def propose_effects(
-    diff: SnapshotDiff, params: Optional[Mapping[str, str]] = None
+    diff: SnapshotDiff,
+    params: Optional[Mapping[str, str]] = None,
+    record_fields: Optional[Union[Mapping[str, Any], Sequence[str]]] = None,
 ) -> ContractProposal:
-    """Effects that would check the change ``diff`` shows, all unconfirmed."""
+    """Effects that would check the change ``diff`` shows, all unconfirmed.
+
+    ``record_fields`` are the identity fields a person named for the record
+    (teach ``expect``). When the read set has no single-field key they join
+    parameter-bound match fields in a proposed ``composite_key``.
+    """
 
     lookup, shared = _param_lookup(dict(params or {}))
     proposal = ContractProposal(not_proposed=list(shared))
+    identity_names = _record_field_names(record_fields)
 
     unbound: list[str] = []
     for record in diff.created:
@@ -405,6 +501,10 @@ def propose_effects(
                 "a record appeared with no scalar field to match it by"
             )
             continue
+        idem_key, composite, key_notes = _proposed_duplicate_key(
+            record, match, identity_names
+        )
+        proposal.not_proposed.extend(key_notes)
         proposal.effects.append(
             Effect(
                 kind=EffectKind.RECORD_WRITTEN,
@@ -412,6 +512,9 @@ def propose_effects(
                 expected_count=1,
                 count_new_only=True,
                 needs_operator_confirmation=True,
+                idempotency_key=idem_key,
+                key_field=DEFAULT_IDEMPOTENCY_KEY_FIELD,
+                composite_key=composite,
                 probe=(
                     "exactly one new record with "
                     + ", ".join(f"{k}={_describe(v)}" for k, v in match.items())

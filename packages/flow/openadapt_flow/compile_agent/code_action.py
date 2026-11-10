@@ -810,6 +810,8 @@ class ToolOutput:
     #: ``line`` (not run), ``control`` (what it may commit), ``rest`` (the
     #: lines from it on).
     pending: Optional[dict[str, Any]] = None
+    #: The harness the images came from: it labels the task's own values.
+    harness: Any = field(default=None, repr=False, compare=False)
 
     def blocks(self) -> list[dict[str, Any]]:
         from openadapt_flow.compile_agent.agents import _image
@@ -817,7 +819,7 @@ class ToolOutput:
         out: list[dict[str, Any]] = [
             {"type": "text", "text": self.text or "(no output)"}
         ]
-        out.extend(_image(png) for png in self.images)
+        out.extend(_image(png, self.harness) for png in self.images)
         return out
 
 
@@ -880,7 +882,9 @@ class CodeActionTool:
     # -- scrubbing ------------------------------------------------------------------
 
     def _out(self, text: str) -> str:
-        return _observe.scrub_lines(text, self.harness.keep)
+        return _observe.scrub_lines(
+            text, self.harness.keep, getattr(self.harness, "bindings", None)
+        )
 
     # -- one script --------------------------------------------------------------------
 
@@ -967,7 +971,9 @@ class CodeActionTool:
                         "run. Read the screen to check the result.)"
                     )
                 break
-        out = ToolOutput("\n".join(chunks), images, committed, pending)
+        out = ToolOutput(
+            "\n".join(chunks), images, committed, pending, harness=self.harness
+        )
         self.trace.log.append(
             {"script": str(script), "output": out.text[:3000], "images": len(images)}
         )
@@ -1429,7 +1435,7 @@ class CodeActionTool:
         if path is None:
             return None
         try:
-            lines = Path(path).read_text().splitlines()
+            lines = Path(path).read_text(encoding="utf-8").splitlines()
             return json.loads(lines[index]) if 0 <= index < len(lines) else None
         except (OSError, ValueError):
             return None
@@ -1675,7 +1681,7 @@ def distilled_events(recording_dir: Optional[Path]) -> dict[int, str]:
     if not path.is_file():
         return {}
     try:
-        report = json.loads(path.read_text())
+        report = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
     return {int(d["index"]): str(d["rule"]) for d in report.get("dropped") or []}

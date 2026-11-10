@@ -36,7 +36,6 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import common  # noqa: E402
-
 from openadapt_flow.teach_authorization_fixture import demo_authority
 
 PROMPT = (
@@ -106,7 +105,9 @@ def _admitter(work: Path) -> Any:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("--env-file", type=Path, required=True)
     parser.add_argument("--trials", type=int, default=3)
     parser.add_argument("--arms", default=",".join(ARMS))

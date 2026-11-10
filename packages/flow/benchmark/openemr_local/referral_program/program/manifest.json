@@ -1,0 +1,262 @@
+{
+  "schema_version": 2,
+  "content_digest": "ec096afa2b614326b00ec3155f256041c19d86f3998761ce9d772cfd911460b6",
+  "file_hashes": {
+    "templates/identifiers/step_016.png": "457eccee597076f6e0d2b6fdd6b1fdd148dfc0eb72501442413c2020efc4ce15",
+    "templates/layout_fingerprint.json": "d7727e415947aa17cb2fa007be88f5cd1e56b9e913a64354f61c62b580459e0a",
+    "templates/step_000.png": "d7a431d729f4d525993bf1eb95bb66ad63f8a486d858a2e44666301d70b93011",
+    "templates/step_000_expect.png": "054fe016774a313989c92f999615bbf1f9c0bf6cf105a4ef8e1446fa290015d9",
+    "templates/step_003.png": "dce5569d4b131c367fe623aa1d6ed9526c12c1dbf7cc221c8efa8f237ea95a9b",
+    "templates/step_003_expect.png": "087fbc35f6f04062e7f557deea1c840d80623ae56998cd5f58de6c4aedf3b70a",
+    "templates/step_006.png": "bd23dd90a29b84df5589a7476448966a7710bf47074b727f313491da7158c98d",
+    "templates/step_006_expect.png": "7cb7eeda6806270a30bfd093255fd401cc3b20935f2435b8543af2b961b747fc",
+    "templates/step_009.png": "517c77489043a2dd9ac5bb089144dff4b3a112a7e34037aad40d1f9751aee85e",
+    "templates/step_009_expect.png": "ec0b79d0367c4958939efeb76ca5f20c6493ae71b1cd3fb3ad4d36be07159adc",
+    "templates/step_012.png": "ac4efcf5feba028428c2b253a582edb0af6471791520169a0de9baa0070c025c",
+    "templates/step_012_expect.png": "df173d42b500650f81d0871716a9efd38214140c4888122d6c3f64b33f1d5c28",
+    "templates/step_016.png": "457eccee597076f6e0d2b6fdd6b1fdd148dfc0eb72501442413c2020efc4ce15",
+    "templates/step_016_expect.png": "ce1cea546632622f1619810362446214fec79590a4ee5553a26f4ec197627107",
+    "templates/step_018.png": "84a5d61734af83336cac971cca1adb5bd76c56faef578b352528b177eb6557b3",
+    "templates/step_018_expect.png": "b325a8bc335bded3f3cf7b47830e0a24ebbaf08062de554fb5d5da63a56db05f",
+    "templates/step_021.png": "e9607624e6649bdb1548772a3e9e4577f5112d99ac962e3f8c77b44b80a356ef",
+    "templates/step_021_expect.png": "372a6705999c77fb3ceb959c616f5a40536e485b73eacf1756426581ddce67b6",
+    "templates/step_024.png": "3b8449493928ef24a570e1d7ac65b5b25584c8b3cd68eba071af842bfbae9399",
+    "templates/step_024_expect.png": "278236d24d497fe78a87483c8d60bd3fe9c926bdfad310630b58cff790a7ae91",
+    "templates/step_027.png": "014571a3a093215ed0ec9b812b1eb66efc274116d2be529d736a37301b92a95f",
+    "templates/step_027_expect.png": "5f1ea1d1b03efa9d0812b6d21155117cbfb75b47f6b643815a7041759529b0f6",
+    "templates/step_030.png": "0e551c8fa8f8e2eb4cfef0ccef68c35862e8a3c1dd6e654ec0185edcab047b28",
+    "templates/step_030_expect.png": "1b71bfe520e1b6c8a1d41b990bca4f2f6dd5e15a4bf931595917894ad56d1c46",
+    "templates/step_033.png": "28ee56d03479ba76a938532854fbca55bab26ed8ba738b9a44185f4db04368aa",
+    "templates/step_033_expect.png": "298a1691c7832c2eeb29e00a15457b005b5222f304d6c41530cfc2dc91cbc36c",
+    "templates/step_036.png": "3e21d6500e80bd6ce8c56f1dfc23e6de983e48e4835f341d7a59149049771673",
+    "templates/step_036_expect.png": "221dc30b588ef26b60326197e8ec510a84dc007201d57103c0100d9f06e5d641",
+    "templates/step_039.png": "01bd72ded2316233b66af4e50b63bdf54c3f2ca12d5aac2a5462a88893f30b43",
+    "templates/step_039_expect.png": "8782f2d5377eec7fbddbd9b0657f283207254be7eaa415d3204f10cdb13fdcb4",
+    "templates/step_040.png": "22dd0ae0fba63fbcaf4222de690199ef88fa71a386a186db9c03b813f981aa87",
+    "templates/step_040_expect.png": "194dcc5ba50edcfb2d4a5fb8a6e9ca1d6669654147c9f990715572992ddf8a6c"
+  },
+  "provenance": {
+    "compiler_version": "2.2.0",
+    "source_recording_sha256": "243fb7853b228a2e0fd93c51c1d43e7b84fff567f1aac917bdcd91a54d044894",
+    "compiler_config_sha256": "a40fa088af6e27af7555bd066b216ac2b73da101e6e228470fb2dd994d754efd",
+    "created_at": "2026-10-20T02:34:27.692587+00:00",
+    "policy_name": "clinical-write",
+    "certified": true,
+    "certification_status": "certified",
+    "certified_at": "2026-10-20T02:56:35.080875+00:00",
+    "expires_at": null,
+    "certification_invalidated_at": null,
+    "certification_invalidation_reason": null,
+    "governed_authorization_template": {
+      "schema_version": "openadapt.governed-authorization-template/v1",
+      "bundle_content_digest": "ec096afa2b614326b00ec3155f256041c19d86f3998761ce9d772cfd911460b6",
+      "workflow_contract_sha256": "6e121e781ace28b143a50e20381f120e2e3da269b92ecc78fddf0679b9427f9f",
+      "qualification_project_id": "42abe878-ae09-4db1-84f1-0b487676098a",
+      "qualification_project_revision": 51,
+      "qualification_project_contract_sha256": "444b35017d26a85a86a35f05794756999b21f30cf44385c6d307edf778b3afa4",
+      "qualification_environment_contract_sha256": "66260fc857f5570d123ac120f0c03e9e7d7746d1d3348c780fde67193995d6d8",
+      "qualification_report_sha256": "679cb95559a88b86ec4541c2e0b826699da17d4e0774745c1e930562b7b96463",
+      "qualification_case_evidence_contract_sha256": "8343336b83784d2904667591334a239cb2cc5f9b1d0d6fcb4c8564f698a144db",
+      "policy_name": "clinical-write",
+      "policy_contract_sha256": "f35a6a94b3f2787165f071ce8571de07095169b9632d394e9df719b35da52c0f",
+      "execution_profile": "standard",
+      "minimum_effect_tier": 1,
+      "qualified_effect_requirements": [
+        {
+          "step_id": "step_040",
+          "actuation_path": "gui",
+          "effect_index": 0,
+          "effect_contract_hash": "sha256:f64985856097097954250be6523fa260daf9fc5db495671c2548ead9a388577b",
+          "minimum_tier": 1
+        },
+        {
+          "step_id": "step_040",
+          "actuation_path": "gui",
+          "effect_index": 1,
+          "effect_contract_hash": "sha256:206d1d6fc27df6f24c02bb6b6f4419e0612e7935ec7e744fc8cc446f54558385",
+          "minimum_tier": 1
+        },
+        {
+          "step_id": "step_040",
+          "actuation_path": "gui",
+          "effect_index": 2,
+          "effect_contract_hash": "sha256:8f295459bdd868daf117ca9f77dd948cdc2c8c034a65184cb5418ccfab7f60e7",
+          "minimum_tier": 1
+        },
+        {
+          "step_id": "step_040",
+          "actuation_path": "gui",
+          "effect_index": 3,
+          "effect_contract_hash": "sha256:52c6884d06d82c4ccc14600150f2890bcd25d92cb7eb26bc53ef54033075ba3c",
+          "minimum_tier": 1
+        },
+        {
+          "step_id": "step_040",
+          "actuation_path": "gui",
+          "effect_index": 4,
+          "effect_contract_hash": "sha256:7732675a6e6123c0c3f51512496f695fa4ce503ab989993c520fb8a469bbdc3d",
+          "minimum_tier": 1
+        },
+        {
+          "step_id": "step_040",
+          "actuation_path": "gui",
+          "effect_index": 5,
+          "effect_contract_hash": "sha256:598fb97e12d3c0b537f0453e7fdaad453b969e249e888424e67fcd85a06741f0",
+          "minimum_tier": 1
+        },
+        {
+          "step_id": "step_040",
+          "actuation_path": "gui",
+          "effect_index": 6,
+          "effect_contract_hash": "sha256:ba109cf90077d7b20a37c2848fa7bee8ea0039747a5ae47465617b2ea1039a2b",
+          "minimum_tier": 1
+        },
+        {
+          "step_id": "step_040",
+          "actuation_path": "gui",
+          "effect_index": 7,
+          "effect_contract_hash": "sha256:f508b7fd1536726db75a0814fc439c65dbd6c0b637a7b619855c73a571bcfca9",
+          "minimum_tier": 1
+        },
+        {
+          "step_id": "step_040",
+          "actuation_path": "gui",
+          "effect_index": 8,
+          "effect_contract_hash": "sha256:b311b51ece1670a60f793b29aa3d28d40da196ffbcd26f2fdd620e380dedf97a",
+          "minimum_tier": 1
+        },
+        {
+          "step_id": "step_040",
+          "actuation_path": "gui",
+          "effect_index": 9,
+          "effect_contract_hash": "sha256:a33cf54165b96ce6d48014e6e68bac94cdc8f9c9176bae6f5c955123d20683c2",
+          "minimum_tier": 1
+        },
+        {
+          "step_id": "step_040",
+          "actuation_path": "gui",
+          "effect_index": 10,
+          "effect_contract_hash": "sha256:d2516eb0f6aa365b812e84fd754127d053d8e0b1a4b349a0b8ce71936bcec199",
+          "minimum_tier": 1
+        }
+      ],
+      "required_identity_step_ids": [
+        "step_040"
+      ],
+      "identity_contract_sha256": "44f51284a45d149f9a7c9a034feab055eded47b89eb3910609c215005205f424",
+      "parameters": [
+        {
+          "name": "DOB",
+          "type": "string",
+          "required": true,
+          "secret": false,
+          "has_default": true,
+          "choices_count": 0,
+          "choices_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        {
+          "name": "city",
+          "type": "string",
+          "required": true,
+          "secret": false,
+          "has_default": true,
+          "choices_count": 0,
+          "choices_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        {
+          "name": "country_code",
+          "type": "string",
+          "required": true,
+          "secret": false,
+          "has_default": true,
+          "choices_count": 0,
+          "choices_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        {
+          "name": "email",
+          "type": "string",
+          "required": true,
+          "secret": false,
+          "has_default": true,
+          "choices_count": 0,
+          "choices_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        {
+          "name": "fname",
+          "type": "string",
+          "required": true,
+          "secret": false,
+          "has_default": true,
+          "choices_count": 0,
+          "choices_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        {
+          "name": "lname",
+          "type": "string",
+          "required": true,
+          "secret": false,
+          "has_default": true,
+          "choices_count": 0,
+          "choices_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        {
+          "name": "phone_home",
+          "type": "string",
+          "required": true,
+          "secret": false,
+          "has_default": true,
+          "choices_count": 0,
+          "choices_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        {
+          "name": "postal_code",
+          "type": "string",
+          "required": true,
+          "secret": false,
+          "has_default": true,
+          "choices_count": 0,
+          "choices_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        {
+          "name": "sex",
+          "type": "string",
+          "required": true,
+          "secret": false,
+          "has_default": true,
+          "choices_count": 0,
+          "choices_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        {
+          "name": "state_label",
+          "type": "string",
+          "required": true,
+          "secret": false,
+          "has_default": true,
+          "choices_count": 0,
+          "choices_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        {
+          "name": "street",
+          "type": "string",
+          "required": true,
+          "secret": false,
+          "has_default": true,
+          "choices_count": 0,
+          "choices_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": true,
+          "secret": false,
+          "has_default": true,
+          "choices_count": 0,
+          "choices_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        }
+      ],
+      "parameter_contract_sha256": "2a19e2c3ea6e0644cfe9a842aea8c53e036d18bed254b100cf23c88ea090d603",
+      "template_sha256": "074ac60fe06d201b0083c921b6c24b1d1b83b63b2b91cb140d55e319251d86cb"
+    }
+  },
+  "encrypted": false
+}

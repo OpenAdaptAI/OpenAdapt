@@ -1,0 +1,130 @@
+{
+ "id": "A11",
+ "class": "clean",
+ "type": "allergy",
+ "expect": "create",
+ "note": "A plain allergy record, without the sentence that says which elements to write.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/AllergyIntolerance returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/AllergyIntolerance returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 169.3,
+ "cost_usd": 0.384454,
+ "claim": {
+  "status": "done",
+  "id": "AllergyIntolerance/55995743-c845-4c4b-a8fa-7630f7fb54e0",
+  "note": "RESULT: DONE AllergyIntolerance/55995743-c845-4c4b-a8fa-7630f7fb54e0",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/AllergyIntolerance?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated",
+  "final_text": "The penicillin allergy was not recorded for Rosa Delgado (born 1979-06-14) before, so I created it. The AllergyIntolerance list was empty beforehand, and it now holds exactly this one record. Searching \"Delgado\" returned only one patient, so there was no similarly named patient to confuse her with.\n\nThe record uses SNOMED CT 91936005 (Allergy to penicillin), criticality high, clinical status active and verification status confirmed. It is linked to her Patient record, Patient/2be26afc-7739-4270-8438-ca4a196383f9.\n\nRESULT: DONE AllergyIntolerance/55995743-c845-4c4b-a8fa-7630f7fb54e0",
+  "model_calls": 32,
+  "actions": 959,
+  "tokens_in": 983964,
+  "tokens_out": 5992
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "AllergyIntolerance/55995743-c845-4c4b-a8fa-7630f7fb54e0"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "AllergyIntolerance/55995743-c845-4c4b-a8fa-7630f7fb54e0": "created"
+  }
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "AllergyIntolerance",
+   "write": 1,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 28.7,
+  "end": 39.9,
+  "waited_s": 450
+ }
+}

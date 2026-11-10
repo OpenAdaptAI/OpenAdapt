@@ -113,7 +113,11 @@ What each part does:
   `auth: {bearer_env: NAME}`, `{header: X-Api-Key, value_env: NAME}` or
   `{basic_env: NAME}`, with the secret in the named environment variable.
   `kind: sql`, `fhir` and `graphql` take the same keys as the effects section
-  of a deployment file ([EFFECT_KIT.md](EFFECT_KIT.md)). An on-screen check is
+  of a deployment file ([EFFECT_KIT.md](EFFECT_KIT.md)). For `kind: rest`,
+  `fhir` or `graphql`, `session: module:function` can name a hook that
+  returns an authenticated client instead. `qualify` calls it again for each
+  trial's read-back, so a token that expires during a long campaign is
+  renewed. An on-screen check is
   refused: it cannot tell a real write from a screen that only looks right.
 - **effects**: the save's checks as an effect contract list, the same
   entries an `effect_contract.yaml` holds:
@@ -167,7 +171,9 @@ What each part does:
   lists inputs to suffix per campaign, so reruns against a database that was
   not reset do not collide.
 - **campaign**: the id written into the report, trials per case, the cases
-  (all six by default) and the policy `--certify` uses when given no name.
+  (all six by default) and the policy `--certify` uses when given no name
+  (`clinical-write` by default; `record-write` is the same gate for a system
+  of record that is not clinical).
 - **business_rules** (optional): rules the application itself enforces, which
   the workflow must not click through. The six cases inject faults; a
   business-rule case injects nothing. After the reset, `seed` (one of

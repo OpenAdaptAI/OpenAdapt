@@ -35,6 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
         ),
         epilog=EPILOG,
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        allow_abbrev=False,
     )
     p.add_argument("--agent", required=True, help="The executor (see below)")
     p.add_argument(

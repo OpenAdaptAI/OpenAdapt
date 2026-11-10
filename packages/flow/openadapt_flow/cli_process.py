@@ -108,15 +108,15 @@ def cmd_process(args: argparse.Namespace) -> int:
         bundles[name] = Path(path)
     admissions: dict[str, Path] = {}
     for raw in admissions_raw:
-        name, path = parse_named_path(raw, flag="--admission")
+        name, path = parse_named_path(raw, flag="--permission")
         if name in admissions:
-            raise SystemExit(f"--admission name {name!r} given more than once")
+            raise SystemExit(f"--permission name {name!r} given more than once")
         admissions[name] = Path(path)
     missing = [name for name in bundles if name not in admissions]
     extra = [name for name in admissions if name not in bundles]
     if missing or extra:
         raise SystemExit(
-            "process requires --admission NAME=ENVELOPE for each --child. "
+            "process requires --permission NAME=ENVELOPE for each --child. "
             "A compiled recording (including a compose child under "
             "composition.json) is not an independently admitted capability. "
             f"Missing admission: {missing or 'none'}; extra: {extra or 'none'}."
@@ -151,7 +151,7 @@ def cmd_process(args: argparse.Namespace) -> int:
         f"{len(contract.children)} admitted child(ren), "
         f"{len(contract.handoffs)} handoff(s). "
         "certify/run this directory; replay refuses it. "
-        "Each child keeps its own QualificationAdmissionEnvelope."
+        "Each child keeps its own signed run permission."
     )
     return 0
 
@@ -190,7 +190,7 @@ def cmd_certify_process(args: argparse.Namespace) -> int:
             )
         except Exception as exc:
             print(
-                f"child {spec.name}: REFUSED (no valid QualificationAdmissionEnvelope: "
+                f"child {spec.name}: REFUSED (no valid signed run permission: "
                 f"{type(exc).__name__})"
             )
             child_results[spec.name] = False
@@ -273,7 +273,9 @@ def _governed_child_run(
         if report_path.is_file():
             from openadapt_flow.ir import RunReport
 
-            report = RunReport.model_validate_json(report_path.read_text())
+            report = RunReport.model_validate_json(
+                report_path.read_text(encoding="utf-8")
+            )
             outcome = report.execution_outcome or (
                 "VERIFIED" if report.success else "HALTED"
             )

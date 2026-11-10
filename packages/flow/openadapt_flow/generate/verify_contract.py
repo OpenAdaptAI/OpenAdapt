@@ -2639,6 +2639,8 @@ def variants(
         for n in range(1, len(changes) + 1):
             for combo in itertools.combinations(changes, n):
                 out.append(Variant(plan.kind, sorted(set(plan.identity) | set(combo))))
+                if len(out) == MAX_VARIANTS:
+                    return out
         return out[:MAX_VARIANTS]
     located = set(plan.locations)
     base_sets = []
@@ -4130,10 +4132,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "Guide: packages/flow/docs/GENERATE_CONTRACTS.md. For a FHIR ensure-record "
             "contract use openadapt_flow.generate.ensure_contract instead."
         ),
+        allow_abbrev=False,
     )
     sub = ap.add_subparsers(dest="command", required=True)
     s = sub.add_parser(
-        "schema", help="read the schema and check the account is read-only"
+        "schema",
+        help="read the schema and check the account is read-only",
+        allow_abbrev=False,
     )
     s.add_argument(
         "--read",
@@ -4143,7 +4148,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     s.add_argument("--out", type=Path, help="write schema.json here")
     s = sub.add_parser(
-        "snapshot", help="snapshot every table before a demonstration write"
+        "snapshot",
+        help="snapshot every table before a demonstration write",
+        allow_abbrev=False,
     )
     s.add_argument("--read", required=True, type=Path)
     s.add_argument(
@@ -4153,7 +4160,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         help="e.g. work/before.json (holds row values: keep it private)",
     )
     s = sub.add_parser(
-        "record", help="snapshot again after the write and save the demonstration"
+        "record",
+        help="snapshot again after the write and save the demonstration",
+        allow_abbrev=False,
     )
     s.add_argument("--read", required=True, type=Path)
     s.add_argument("--before", required=True, type=Path)
@@ -4167,7 +4176,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     s.add_argument(
         "--name", default="", help="file name stem (default: kind and a number)"
     )
-    s = sub.add_parser("propose", help="analyze the demonstrations and write contracts")
+    s = sub.add_parser(
+        "propose",
+        help="analyze the demonstrations and write contracts",
+        allow_abbrev=False,
+    )
     s.add_argument("--read", required=True, type=Path)
     s.add_argument(
         "--kinds",
@@ -4245,7 +4258,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             values = json.loads(values)
             before = store.load_snapshot(args.before)
             meta = args.before.with_suffix(".meta.json")
-            started = json.loads(meta.read_text())["taken_at"] if meta.exists() else ""
+            started = (
+                json.loads(meta.read_text(encoding="utf-8"))["taken_at"]
+                if meta.exists()
+                else ""
+            )
             after = store.snapshot(connect, schema)
             d = store.diff(before, after)
             args.demos.mkdir(parents=True, exist_ok=True)

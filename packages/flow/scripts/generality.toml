@@ -59,6 +59,7 @@ paths = ["app_profiles/"]
 # flags). They may name the demo app and its REST shape; nothing else may.
 [allow.terms_in]
 "mockmed/" = ["mockmed", "mockmed-records", "mockmed-write"]
+"taskgen/profiles/" = ["mockmed"]
 "tutorial.py" = ["mockmed", "mockmed-records", "mockmed-write"]
 "demo_proof.py" = ["mockmed", "mockmed-records", "mockmed-write"]
 "demo_driver.py" = ["mockmed", "mockmed-records", "mockmed-write"]

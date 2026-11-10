@@ -10,6 +10,11 @@
 # test_after_stop_mockmed, test_agent_guard, test_multi_surface_identity and
 # the files flow-critical names. tests/test_lanes.py checks every entry still
 # exists. Move a test here, or out, with its measured time.
+#
+# An entry that starts with `live ` drives a real browser or OS session whose
+# timing a busy shared runner cannot hold. It runs only in the nightly run
+# (OPENADAPT_TEST_LANE=full), not on main's push (`main`), so one slow runner
+# cannot turn main red for every open pull request.
 
 # Whole files: their module fixtures (a compiled bundle, a live backend)
 # cost the time, so leaving out one test only moves it to the next one.
@@ -18,8 +23,6 @@ tests/test_desktop_check_it_cli_mockmed.py  # 126s
 tests/test_effectbench_task_pack.py  # 34s
 tests/test_ap_invoice_benchmark.py  # 12s
 tests/test_o2c_recon_benchmark.py  # 9s
-tests/test_ui_readback_benchmark.py  # 24s
-tests/test_silent_wrong_action_benchmark.py  # 31s
 
 tests/test_agent_teach_branch.py::test_two_demonstrations_become_one_approved_branch  # 5s
 tests/test_agent_teach_repair.py::test_dismiss_without_a_dialog_box_stays_unarmed  # 8s
@@ -35,7 +38,7 @@ tests/test_auto_repair_cli.py::test_a_configured_agent_repairs_a_stop_without_be
 tests/test_auto_repair_cli.py::test_the_cli_repairs_without_a_shared_browser_from_its_caller  # 13s
 tests/test_behavioral_generalization.py::test_held_out_rows_on_an_in_memory_app  # 7s
 tests/test_browser_attach.py::test_launched_browser_refuses_static_unbound_closed_shadow_password  # 9s
-tests/test_browser_attach.py::test_live_cdp_attach_records_compiles_and_leaves_browser_running_three_trials  # 134s
+live tests/test_browser_attach.py::test_live_cdp_attach_records_compiles_and_leaves_browser_running_three_trials  # 134s
 tests/test_business_decision.py::test_signed_decision_selects_one_branch_then_normal_action_gates_run  # 6s
 tests/test_compatibility_matrix.py::test_pipelined_readback_where_the_matrix_says  # 13s
 tests/test_compatibility_matrix.py::test_workers_run_governed_durable_api_items  # 8s

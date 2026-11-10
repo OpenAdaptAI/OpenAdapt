@@ -1,0 +1,104 @@
+{
+ "id": "A12",
+ "class": "other_user",
+ "type": "allergy",
+ "expect": "create",
+ "note": "As the agent writes, another clinician updates the same patient's phone.",
+ "agent_s": 2463.9,
+ "cost_usd": 0.0,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "Use the search box to search for 'AllergyIntolerance' directly, which should locate any existing allergy record for this patient.",
+  "claim_line": false,
+  "stopped": "time cap: 2400 s",
+  "end_url": "http://localhost:9821/Patient/195853fc-ae88-4af7-97e8-49e4dc763470/details",
+  "final_text": "Use the search box to search for 'AllergyIntolerance' directly, which should locate any existing allergy record for this patient.",
+  "model_calls": 36,
+  "actions": 43,
+  "tokens_in": 278389,
+  "tokens_out": 1798
+ },
+ "verifier": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "no record is the person and the agent created none"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 0,
+   "agent_writes": 0,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [],
+   "window_until": "2026-11-05T14:12:53+00:00"
+  },
+  "unreadable": false
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "no record is the person and the agent created none"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 0,
+   "agent_writes": 0,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [],
+   "window_until": "2026-11-05T14:12:55+00:00"
+  },
+  "unreadable": false
+ },
+ "verify_s": 4.3,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "absent",
+  "reasons": [
+   "no AllergyIntolerance was written"
+  ],
+  "changes": {}
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": false,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 11.0,
+  "end": 3.8,
+  "waited_s": 0
+ }
+}

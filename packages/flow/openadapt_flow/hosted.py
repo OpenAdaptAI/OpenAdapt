@@ -174,7 +174,7 @@ def _load_toml_minimal(path: Path) -> dict[str, Any]:
     """
     data: dict[str, Any] = {}
     table: dict[str, Any] = data
-    for raw in path.read_text().splitlines():
+    for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.split("#", 1)[0].strip()
         if not line:
             continue
@@ -249,7 +249,7 @@ def _update_hosted_config(updates: dict[str, Any]) -> Path:
         hosted = {}
     hosted.update({k: v for k, v in updates.items() if v is not None})
     data["hosted"] = hosted
-    path.write_text(_dump_toml(data))
+    path.write_text(_dump_toml(data), encoding="utf-8")
     try:
         os.chmod(path, 0o600)
     except OSError:
@@ -265,7 +265,7 @@ def _remove_hosted_config_key(key: str) -> Path:
     if isinstance(section, dict):
         section.pop(key, None)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(_dump_toml(data))
+    path.write_text(_dump_toml(data), encoding="utf-8")
     try:
         os.chmod(path, 0o600)
     except OSError:
@@ -939,6 +939,7 @@ def _zip_dir(src: Path) -> Path:
     ``.zip`` and return its path. The caller is responsible for deleting it."""
     if not src.is_dir():
         raise HostedError(f"Not a directory: {src}")
+    _assert_upload_tree_safe(src)
     tmp = tempfile.mkdtemp(prefix="openadapt-flow-push-")
     base = Path(tmp) / src.name
     archive = shutil.make_archive(str(base), "zip", root_dir=str(src))
@@ -947,7 +948,13 @@ def _zip_dir(src: Path) -> Path:
 
 def _assert_upload_tree_safe(src: Path) -> None:
     """Refuse filesystem indirection that could escape an upload directory."""
+    from openadapt_flow.evidence_files import is_publication_input_path_excluded
+
     for path in sorted(src.rglob("*")):
+        if is_publication_input_path_excluded(path.relative_to(src)):
+            raise HostedError(
+                "Refusing to upload local key material or unclassified containers"
+            )
         if path.is_symlink():
             raise HostedError(
                 f"Refusing to upload {src}: symlink {path.relative_to(src)} "
@@ -977,6 +984,7 @@ def _scrub_recording_tree(src: Path) -> Path:
     """
     from openadapt_flow import privacy
 
+    _assert_upload_tree_safe(src)
     scrubber = privacy.get_scrubber()
     if scrubber is None:  # defensive; the caller gates on scrubbing_available()
         raise HostedError(

@@ -69,7 +69,9 @@ def _now() -> str:
 
 
 def _write_json(path: Path, value: Any, *, private: bool = False) -> None:
-    path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
+    path.write_text(
+        json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     if private:
         path.chmod(0o600)
 
@@ -172,7 +174,7 @@ def _ledger_path() -> Path:
 
 def _read_ledger() -> dict[str, Any]:
     try:
-        ledger = json.loads(_ledger_path().read_text())
+        ledger = json.loads(_ledger_path().read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {}
     return ledger if isinstance(ledger, dict) else {}
@@ -188,7 +190,9 @@ def _record_pull(workflow: Any, origin: Any) -> None:
     path = _ledger_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n")
+    tmp.write_text(
+        json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     tmp.replace(path)
 
 
@@ -755,7 +759,7 @@ def qualify_skill(
     else:
         contract_path = full_path or bundle_dir / lock["contract"]
         try:
-            data = yaml.safe_load(contract_path.read_text())
+            data = yaml.safe_load(contract_path.read_text(encoding="utf-8"))
         except yaml.YAMLError as exc:
             raise SkillError(f"the skill's record check is not YAML: {exc}") from exc
         kinds = {
@@ -875,10 +879,14 @@ def cmd_skill(args: Any) -> int:
 
 def add_parser(sub: Any) -> None:
     p = sub.add_parser(
-        "skill", help="Bind and qualify a skill pulled from the registry"
+        "skill",
+        help="Bind and qualify a skill pulled from the registry",
+        allow_abbrev=False,
     )
     ssub = p.add_subparsers(dest="skill_cmd", required=True)
-    b = ssub.add_parser("bind", help="Record your values for the skill's contract")
+    b = ssub.add_parser(
+        "bind", help="Record your values for the skill's contract", allow_abbrev=False
+    )
     b.add_argument("bundle")
     b.add_argument(
         "--set",
@@ -886,7 +894,9 @@ def add_parser(sub: Any) -> None:
         metavar="NAME=VALUE",
         help="A contract variable: a URL, an environment variable NAME, a path or a command",
     )
-    q = ssub.add_parser("qualify", help="Qualify the skill on your instance")
+    q = ssub.add_parser(
+        "qualify", help="Qualify the skill on your instance", allow_abbrev=False
+    )
     q.add_argument("bundle")
     q.add_argument("--certify", required=True, help="Policy to certify under")
     q.add_argument("--out", default=None)
@@ -901,7 +911,9 @@ def add_parser(sub: Any) -> None:
         action="store_true",
         help="Qualify with --verify even though the skill ships its own record check",
     )
-    s = ssub.add_parser("status", help="Whether the pulled skill may run")
+    s = ssub.add_parser(
+        "status", help="Whether the pulled skill may run", allow_abbrev=False
+    )
     s.add_argument("bundle")
     for parser in (b, q, s):
         parser.set_defaults(func=cmd_skill)

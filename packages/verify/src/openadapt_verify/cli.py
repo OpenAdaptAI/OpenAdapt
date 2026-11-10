@@ -120,17 +120,20 @@ def _verify(args: argparse.Namespace) -> int:
 
 def _recheck(args: argparse.Namespace) -> int:
     from openadapt_flow.verifier import RecheckNotDue, RecheckState
+    from openadapt_flow.write_ledger import default_ledger
 
     from openadapt_verify import Actor, Contract, recheck
 
     values = _params(args.params)
     state = RecheckState.load(args.recheck_state, params=values)
+    ledger = default_ledger()
     try:
         result = recheck(
             Contract.load(args.contract),
             state,
             params=values,
             actor=Actor("agent", args.agent_id),
+            ledger=ledger,
         )
     except RecheckNotDue as exc:
         print(
@@ -139,14 +142,40 @@ def _recheck(args: argparse.Namespace) -> int:
             )
         )
         return 5
+    write_id = str((state.payload.get("receipt") or {}).get("correlation_id") or "")
+    found = ledger.find_attempt(write_id) if write_id else None
+    attempt = found[1] if found is not None else None
+    resolution = attempt.resolved or {} if attempt is not None else {}
+    ledger_state = ledger.state(attempt) if attempt is not None else "missing"
+    ledger_outcome = resolution.get("outcome")
+    recorded = (
+        attempt is not None
+        and ledger_outcome == "CONFIRMED"
+        and resolution.get("receipt_sha256") == result.receipt_sha256
+        and attempt.rechecked is not None
+        and attempt.rechecked.get("receipt_sha256") == result.receipt_sha256
+        and not attempt.recheck_owed
+        and not attempt.review
+        and not attempt.released
+    )
+    reasons = list(result.reasons)
+    code = _outcome_exit(result.outcome)
+    if ledger_state == "held" or ledger_outcome == "REFUTED":
+        code = 4
+        reasons.append("the exact ledger attempt remains held for person review")
+    elif result.verified and not recorded:
+        code = 3
+        reasons.append("the exact ledger attempt has no recorded final confirmation")
     print(
         json.dumps(
             {
                 "due": True,
-                "verified": result.verified,
+                "verified": result.verified and recorded,
+                "ledger_state": ledger_state,
+                "ledger_outcome": ledger_outcome,
                 "outcome": result.outcome,
                 "frame": result.frame,
-                "reasons": result.reasons,
+                "reasons": reasons,
                 "receipt_sha256": result.receipt_sha256,
                 "post_save_read_at": result.post_save_read_at,
                 "recheck_due_at": result.due_at,
@@ -155,7 +184,7 @@ def _recheck(args: argparse.Namespace) -> int:
             sort_keys=True,
         )
     )
-    return _outcome_exit(result.outcome)
+    return code
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
