@@ -190,35 +190,39 @@ def test_pydantic_mcp_metadata_and_request_snapshot_do_not_alias_mutable_inputs(
     assert context.run_id == "run-5"
 
 
-@given(
-    names=st.lists(
-        st.sampled_from(
-            (
-                "MCPContext",
-                "request_context",
-                "parse_request_context",
-                "request_scope",
-                "request_meta",
-            )
-        ),
-        min_size=1,
-        max_size=5,
-        unique=True,
-    )
-)
-def test_emitted_context_symbols_never_add_or_replace_business_parameters(names):
+def test_emitted_context_symbols_never_add_or_replace_business_parameters():
     from pathlib import Path
     from tempfile import TemporaryDirectory
 
     from tests.test_mcp_sdk_compatibility import _emit, _load
 
-    with TemporaryDirectory() as directory:
-        path = _emit(Path(directory), "compiled", names)
-        _namespace, tool = _load(path)
-        properties = tool.parameters["properties"]
-        assert set(properties) == set(names)
-        assert set(tool.parameters["required"]) == set(names)
-        assert all(schema["type"] == "string" for schema in properties.values())
+    @given(data=st.data())
+    def check(data):
+        names = data.draw(
+            st.lists(
+                st.sampled_from(
+                    (
+                        "MCPContext",
+                        "request_context",
+                        "parse_request_context",
+                        "request_scope",
+                        "request_meta",
+                    )
+                ),
+                min_size=1,
+                max_size=5,
+                unique=True,
+            )
+        )
+        with TemporaryDirectory() as directory:
+            path = _emit(Path(directory), "compiled", names)
+            _namespace, tool = _load(path)
+            properties = tool.parameters["properties"]
+            assert set(properties) == set(names)
+            assert set(tool.parameters["required"]) == set(names)
+            assert all(schema["type"] == "string" for schema in properties.values())
+
+    check()
 
 
 _JSON_LEAF = st.one_of(
@@ -632,9 +636,11 @@ def test_context_and_mcp_metadata_use_exact_json_keys_without_key_equality_callb
 
 
 def _native_mcp_metadata(value):
-    from mcp.types import CallToolRequestParams
+    from tests._mcp_tools import sdk_modules
 
-    request = CallToolRequestParams.model_validate(
+    _server, _error, types = sdk_modules()
+
+    request = types.CallToolRequestParams.model_validate(
         {"name": "synthetic_context_binding", "arguments": {}, "_meta": value}
     )
     assert request.meta is not None
@@ -647,7 +653,7 @@ def _native_mcp_metadata(value):
     ids=("null", "empty-object", "array", "text", "boolean", "integer"),
 )
 def test_native_mcp_present_invalid_context_matches_exact_dict_refusal(value):
-    metadata = {"progressToken": None, MCP_META_KEY: value}
+    metadata = {"other/protocol": None, MCP_META_KEY: value}
     for representation in (metadata, _native_mcp_metadata(metadata)):
         with pytest.raises(BindingError):
             context_from_mcp(representation)
@@ -668,11 +674,85 @@ def test_native_mcp_absent_and_valid_context_parity_preserves_unrelated_nulls(
 ):
     context = RequestContext.from_record(reservation(index))
     for present in (False, True):
-        metadata = {"progressToken": None, "other/protocol": unrelated}
+        metadata = {"other/protocol": unrelated}
         if present:
             metadata[MCP_META_KEY] = context.to_dict()
         native = _native_mcp_metadata(metadata)
         expected = context if present else None
         assert context_from_mcp(metadata) == expected
         assert context_from_mcp(native) == expected
+    assert current_request_context() is None
+
+
+def test_native_mcp_reserved_progress_null_is_distinct_from_binding_metadata():
+    from pydantic import ValidationError
+
+    from tests._mcp_tools import sdk_modules
+
+    _server, _error, types = sdk_modules()
+    context = RequestContext.from_record(reservation(10))
+    metadata = {"progressToken": None, MCP_META_KEY: context.to_dict()}
+    assert context_from_mcp(metadata) == context
+    if types.__name__ == "mcp_types":
+        with pytest.raises(ValidationError):
+            _native_mcp_metadata(metadata)
+    else:
+        assert types.__name__ == "mcp.types"
+        assert context_from_mcp(_native_mcp_metadata(metadata)) == context
+    valid = {"progressToken": "synthetic-progress", MCP_META_KEY: context.to_dict()}
+    assert context_from_mcp(_native_mcp_metadata(valid)) == context
+    assert current_request_context() is None
+
+
+@pytest.mark.parametrize(
+    "value",
+    [None, {}, [], "context", True, 1],
+    ids=("null", "empty-object", "array", "text", "boolean", "integer"),
+)
+def test_mcp_scope_uses_the_same_strict_metadata_refusal(value):
+    from types import SimpleNamespace
+
+    from openadapt_flow.request_binding import mcp_request_scope
+
+    holder = SimpleNamespace(
+        request_context=SimpleNamespace(meta={MCP_META_KEY: value})
+    )
+    effects = []
+    with pytest.raises(BindingError):
+        with mcp_request_scope(holder):
+            effects.append("dispatched")
+    assert effects == []
+    assert current_request_context() is None
+
+
+def test_mcp_scope_preserves_primary_reset_and_owned_unbound_refusal():
+    from types import SimpleNamespace
+
+    from openadapt_flow.request_binding import mcp_request_scope
+
+    context = RequestContext.from_record(reservation(11))
+    holder = SimpleNamespace(
+        request_context=SimpleNamespace(meta={MCP_META_KEY: context.to_dict()})
+    )
+    primary = KeyboardInterrupt()
+    with pytest.raises(KeyboardInterrupt) as caught:
+        with mcp_request_scope(holder):
+            assert current_request_context() == context
+            raise primary
+    assert caught.value is primary
+    assert current_request_context() is None
+
+    class DirectCall:
+        @property
+        def request_context(self):
+            raise ValueError("no native request context")
+
+    for absent in (None, DirectCall()):
+        with mcp_request_scope(absent):
+            assert current_request_context() is None
+        with request_scope(context):
+            with pytest.raises(BindingError):
+                with mcp_request_scope(absent):
+                    raise AssertionError("owned context downgraded")
+            assert current_request_context() == context
     assert current_request_context() is None

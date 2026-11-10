@@ -449,27 +449,36 @@ class InnerMCPReceiptCache(ReceiptCache):
 
             metadata = request_meta()
             assert metadata is not None
+            replies = []
             async with create_client_server_memory_streams() as (client, transport):
                 async with anyio.create_task_group() as group:
-                    # The receiver starts without the caller's ambient scope:
-                    # only actual MCP _meta can carry the owned request join.
+                    # Neither endpoint starts in the caller's ambient scope.
+                    # SDK2 memory streams also copy the sender's ContextVars.
                     contextvars.Context().run(
                         group.start_soon,
                         lowlevel.run,
                         *transport,
                         lowlevel.create_initialization_options(),
                     )
-                    async with ClientSession(*client) as session:
-                        await session.initialize()
-                        tools = (await session.list_tools()).tools
-                        assert len(tools) == 1
-                        result = payload(
-                            await session.call_tool(
-                                tools[0].name, dict(params), meta=metadata
+
+                    async def client_request():
+                        assert current_request_context() is None
+                        async with ClientSession(*client) as session:
+                            await session.initialize()
+                            tools = (await session.list_tools()).tools
+                            assert len(tools) == 1
+                            result = payload(
+                                await session.call_tool(
+                                    tools[0].name, dict(params), meta=metadata
+                                )
                             )
-                        )
-                    group.cancel_scope.cancel()
-            return result
+                        assert current_request_context() is None
+                        replies.append(result)
+                        group.cancel_scope.cancel()
+
+                    contextvars.Context().run(group.start_soon, client_request)
+            assert len(replies) == 1
+            return replies[0]
 
         api.run_compiled_params = dispatch
         try:
@@ -604,9 +613,14 @@ def test_generated_mcp_rejects_invalid_present_namespace_before_dispatch(
     actual_errors = []
 
     def observe_payload(result):
-        # CallToolResult.isError is the actual pinned SDK transport result.
-        assert type(result.isError) is bool
-        actual_errors.append(result.isError)
+        from tests._mcp_tools import sdk_modules
+
+        _server, _error, types = sdk_modules()
+        assert types.__name__ in {"mcp.types", "mcp_types"}
+        # Read the native SDK field; an absent or non-boolean field must fail.
+        error = result.is_error if types.__name__ == "mcp_types" else result.isError
+        assert type(error) is bool
+        actual_errors.append(error)
         return original_payload(result)
 
     with monkeypatch.context() as patch:
@@ -662,8 +676,13 @@ def _memory_wire_namespace_fault(real_factory, namespace, invalid, observations)
     """Fault only an encoded tools/call request on genuine SDK memory streams."""
     from contextlib import asynccontextmanager
 
-    import mcp.types as types
     from mcp.shared.message import SessionMessage
+
+    from tests._mcp_tools import sdk_modules
+
+    _server, _error, types = sdk_modules()
+    assert types.__name__ in {"mcp.types", "mcp_types"}
+    modern = types.__name__ == "mcp_types"
 
     @asynccontextmanager
     async def streams():
@@ -673,12 +692,16 @@ def _memory_wire_namespace_fault(real_factory, namespace, invalid, observations)
 
                 async def relay():
                     async for message in transport[0]:
+                        request = None
+                        if isinstance(message, SessionMessage):
+                            request = (
+                                message.message if modern else message.message.root
+                            )
                         if (
                             isinstance(message, SessionMessage)
-                            and isinstance(message.message.root, types.JSONRPCRequest)
-                            and message.message.root.method == "tools/call"
+                            and isinstance(request, types.JSONRPCRequest)
+                            and request.method == "tools/call"
                         ):
-                            request = message.message.root
                             params = deepcopy(request.params)
                             assert (
                                 type(params) is dict
@@ -726,7 +749,9 @@ def _memory_wire_namespace_fault(real_factory, namespace, invalid, observations)
                                 if key != namespace
                             }
                             message = SessionMessage(
-                                message=types.JSONRPCMessage(changed),
+                                message=(
+                                    changed if modern else types.JSONRPCMessage(changed)
+                                ),
                                 metadata=message.metadata,
                             )
                             observations.append(True)

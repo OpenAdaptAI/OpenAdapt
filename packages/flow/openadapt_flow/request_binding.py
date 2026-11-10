@@ -154,6 +154,18 @@ def context_from_mcp(meta: object) -> RequestContext | None:
     return RequestContext.parse(document[MCP_META_KEY])
 
 
+@contextmanager
+def mcp_request_scope(context: Any) -> Iterator[None]:
+    """Use native transport metadata with the existing strict context model."""
+    try:
+        meta = context.request_context.meta if context is not None else None
+    except ValueError:
+        # Native direct calls have no incoming request context.
+        meta = None
+    with request_scope(context_from_mcp(meta)):
+        yield
+
+
 def _json_value(value: Any) -> Any:
     """Detach bounded exact JSON values without serialization coercions.
 
