@@ -102,6 +102,7 @@ from uuid import UUID
 if TYPE_CHECKING:  # pragma: no cover
     from openadapt_flow.backend import Backend
     from openadapt_flow.ir import ExecutionTargetKind, RunReport
+    from openadapt_flow.record_check_proof import Fixture
     from openadapt_flow.runtime.authorization import RuntimeParamScalar
     from openadapt_flow.tutorial import BreakItResult
 
@@ -1305,7 +1306,8 @@ def _finish_replay(
     )
     plain = plain_result(getattr(report, "transaction_outcome", None), outcome)
     print(f"Result: {plain.label}. {plain.meaning}")
-    print(f"Replay {outcome}: {report_md}")
+    print(f"Next: {plain.next_step}")
+    print(f"Report: {report_md}")
     if report.screenshots_may_leave_box:
         print(
             "NOTE: a model-grounding component was wired for this run — "
@@ -1587,6 +1589,8 @@ def _propose_lookup_check(args: argparse.Namespace, *, from_lookup: bool) -> Non
 
 
 def _cmd_record_capture(args: argparse.Namespace) -> int:
+    if getattr(args, "surface", None) or _records_automatically(args):
+        return _cmd_record_surfaces(args)
     # The interactive (web) recorder installs in-page DOM listeners against a
     # headed Playwright page. The DESKTOP recorder (--backend windows) captures
     # the operator's native OS input over the win_agent contract; both emit the
@@ -1809,6 +1813,212 @@ def _recording_privacy_notices(recording_dir: Path) -> list[str]:
             "actions."
         )
     return notices
+
+
+def _cmd_confirm_surfaces(args: argparse.Namespace) -> int:
+    from openadapt_flow.multi_surface_record import (
+        MultiSurfaceRecordError,
+        confirm_review,
+        review_lines,
+    )
+
+    recording = Path(args.recording)
+    try:
+        lines = review_lines(recording)
+    except (OSError, ValueError, KeyError) as exc:
+        raise SystemExit(f"confirm-surfaces: cannot read {recording}: {exc}") from exc
+    print("This recording used:")
+    for line in lines:
+        print(line)
+    if not args.yes:
+        if not sys.stdin.isatty():
+            print("Not confirmed: run it in a terminal, or pass --yes.")
+            return 2
+        if input("Confirm these surfaces? [y/N] ").strip().lower() not in ("y", "yes"):
+            print("Not confirmed.")
+            return 1
+    try:
+        confirm_review(recording)
+    except MultiSurfaceRecordError as exc:
+        raise SystemExit(f"confirm-surfaces: {exc}") from exc
+    print("Confirmed. The recording can be compiled.")
+    return 0
+
+
+def _cmd_browser_accessibility(args: argparse.Namespace) -> int:
+    from openadapt_flow import browser_accessibility as ba
+
+    if not sys.platform.startswith("linux"):
+        print(
+            "Nothing to do here: on Windows and macOS, record makes the "
+            "browser's page readable by itself while it records."
+        )
+        return 0
+    if args.enable:
+        lines = ba.enable_linux()
+        for line in lines or ["no Chromium-family browser launcher found"]:
+            print(line)
+        from openadapt_flow.cli_hints import command
+
+        print(
+            "Restart the browser for this to take effect. Undo with "
+            f"'{command('browser-accessibility')} --disable'."
+        )
+    elif args.disable:
+        for line in ba.disable_linux() or ["nothing to remove"]:
+            print(line)
+    else:
+        for line in ba.linux_status():
+            print(line)
+    return 0
+
+
+def _records_automatically(args: argparse.Namespace) -> bool:
+    """``record`` with no target: follow the person across windows."""
+
+    if getattr(args, "backend", None) or getattr(args, "url", None):
+        return False
+    if getattr(args, "profile", None) in ("standard", "regulated"):
+        return False  # a production posture names its surface
+    target_flags = (
+        "window",
+        "window_title",
+        "rdp_window",
+        "rdp_window_title",
+        "rdp_readiness_text",
+        "browser_cdp_endpoint",
+        "browser_page_url",
+        "capture_network",
+    ) + tuple(attr for attr, _ in _RECORD_TARGET_FLAGS)
+    return not any(getattr(args, attr, None) for attr in target_flags)
+
+
+def _cmd_record_surfaces(args: argparse.Namespace) -> int:
+    """``record`` across windows: found automatically, or ``--surface``."""
+
+    from openadapt_flow.multi_surface_record import (
+        MultiSurfaceRecordError,
+        host_surface_kind,
+        parse_record_surfaces,
+        record_multi_surface,
+        review_lines,
+    )
+
+    url = getattr(args, "url", None)
+    declared = [f for f in (getattr(args, "surface", None) or []) if f != "auto"]
+    try:
+        surfaces = (
+            parse_record_surfaces(declared, web_primary=bool(url)) if declared else []
+        )
+    except MultiSurfaceRecordError as exc:
+        raise SystemExit(f"record: {exc}. Nothing was recorded.") from exc
+    backend = getattr(args, "backend", None)
+    lead = "web" if url else (surfaces[0].kind if surfaces else host_surface_kind())
+    if backend is not None and backend != lead:
+        raise SystemExit(
+            f"record --surface: the recording starts on {lead} "
+            f"({'--url' if url else 'the first --surface'}), not --backend "
+            f"{backend}. Drop --backend. Nothing was recorded."
+        )
+    unsupported = [
+        flag
+        for attr, flag in (
+            ("window", "--window"),
+            ("window_title", "--window-title"),
+            ("rdp_window", "--rdp-window"),
+            ("rdp_window_title", "--rdp-window-title"),
+            ("rdp_readiness_text", "--rdp-readiness-text"),
+            ("browser_cdp_endpoint", "--browser-cdp-endpoint"),
+            ("browser_page_url", "--browser-page-url"),
+            ("capture_network", "--capture-network"),
+            ("identifier", "--identifier"),
+        )
+        if getattr(args, attr, None)
+    ]
+    if unsupported:
+        raise SystemExit(
+            f"record --surface: {', '.join(unsupported)} cannot be combined "
+            "with --surface (each declared window is found by its "
+            "--surface WINDOW). Nothing was recorded."
+        )
+    # A capture session runs for every cross-window recording, and Flow
+    # cannot encrypt it yet: the desktop recording policy applies.
+    _recording_encryption_key(
+        args, surfaces[0].kind if surfaces else host_surface_kind()
+    )
+    desktop_params: dict[str, str] = {}
+    web_params: list[str] = []
+    for entry in args.param or ():
+        if "=" in entry:
+            desktop_params.update(_parse_params([entry]))
+        elif url:
+            web_params.append(entry)
+        else:
+            raise SystemExit(
+                f"record --surface: --param {entry!r}: a desktop window has "
+                "no field names; use NAME=VALUE. Nothing was recorded."
+            )
+    if args.secret and not url:
+        raise SystemExit(
+            "record --surface: --secret names browser fields and needs --url. "
+            "Nothing was recorded."
+        )
+    try:
+        out = record_multi_surface(
+            Path(args.out),
+            surfaces=surfaces,
+            url=url,
+            params=desktop_params,
+            web_params=web_params,
+            web_secrets=tuple(args.secret or ()),
+            headless=bool(getattr(args, "headless", False)),
+            task_description=args.task or "openadapt-flow recording",
+            stop=_record_until_stop(args),
+        )
+    except MultiSurfaceRecordError as exc:
+        raise SystemExit(f"record: {exc}. Nothing was kept.") from exc
+    from openadapt_flow.cli_hints import command
+    from openadapt_flow.multi_surface_record import (
+        confirm_review,
+        write_unconfirmed_review,
+    )
+
+    print("This recording used:")
+    for line in review_lines(out):
+        print(line)
+    if getattr(args, "yes", False):
+        confirm_review(out)
+    elif sys.stdin.isatty():
+        answer = input("Keep it? [Y/n] ").strip().lower()
+        if answer in ("n", "no"):
+            import shutil
+
+            shutil.rmtree(out, ignore_errors=True)
+            print("Deleted. Nothing was kept.")
+            return 1
+        confirm_review(out)
+    else:
+        review = write_unconfirmed_review(out)
+        print(
+            f"No one confirmed these surfaces, so compile refuses the recording "
+            f"until a person runs '{command('confirm-surfaces')} {out}' "
+            f"(the list is in {review.name})."
+        )
+    print(f"Recording written to {out}")
+    import json as _json
+
+    listed = _json.loads((Path(out) / "meta.json").read_text())["surfaces"]
+    lead_flag = "--url <app>" if url else f"--backend {listed[0]['kind']} <target>"
+    binds = " ".join(
+        f"--surface {s['id']}={s['kind']}:<target>"
+        for s in listed[1:]
+        if s["kind"] != "web"
+    )
+    print(
+        f"Compile it:  {command('compile')} {out} --out <bundle> --name <workflow>\n"
+        f"Then replay: {command('replay')} <bundle> {lead_flag} {binds}"
+    )
+    return 0
 
 
 def _cmd_record_desktop(args: argparse.Namespace, backend: str) -> int:
@@ -2696,6 +2906,15 @@ def _attached_web_page(backend_cfg, *, url: Optional[str], workflow=None):
             )
         except BrowserAttachError as exc:
             raise SystemExit(f"REFUSED: {exc}. Nothing was executed.") from None
+        from openadapt_flow._browser_readiness import (
+            BrowserReadinessError,
+            require_rendering_ready,
+        )
+
+        try:
+            require_rendering_ready(browser, attached_page=page)
+        except BrowserReadinessError as exc:
+            raise SystemExit(f"REFUSED: {exc}. Nothing was executed.") from None
         from openadapt_flow.backends.playwright_backend import prepare_ws_guard
 
         # Documents the tab loads from now on are guarded from their start.
@@ -2865,6 +3084,16 @@ def _cmd_replay(args: argparse.Namespace) -> int:
     refuse_unadmitted_draft(bundle)
     run_dir = Path(args.run_dir) if args.run_dir else _default_run_dir()
     workflow = Workflow.load(bundle)
+    # Replay reloads the bundle: it must still be the intake-admitted bytes,
+    # and the authorization `run` built must name them (#1890).
+    refused_admission = _admitted_bundle_refusal(
+        args,
+        bundle,
+        workflow,
+        getattr(args, "_governed_run_authorization", None),
+    )
+    if refused_admission is not None:
+        return refused_admission
     # `undo run` only: the person-approved undo steps of this same bundle
     # (openadapt_flow.cli_undo), run through the normal replay path.
     workflow = getattr(args, "_undo_workflow", None) or workflow
@@ -2985,12 +3214,29 @@ def _cmd_replay(args: argparse.Namespace) -> int:
 
     headed = args.headed or cfg.backend.headed
     url = args.url or cfg.backend.url
-    refuse_unqualified_skill(bundle, target_url=url)
-    if url and args.drift:
+    demo_app = bool(getattr(args, "demo_app", False))
+    if demo_app and (
+        url or backend_cfg.browser_cdp_endpoint or backend_cfg.browser_page_url
+    ):
         raise SystemExit(
-            "--drift only applies to the bundled MockMed demo app; "
-            "omit --url to use it (drift your own app for real)."
+            "--demo-app serves its own app; drop --url, backend.url or the "
+            "attached browser."
         )
+    if args.drift and not demo_app:
+        raise SystemExit(
+            "--drift only applies to the bundled MockMed demo app (--demo-app); "
+            "drift your own app for real."
+        )
+    if (
+        url is None
+        and not demo_app
+        and not (backend_cfg.browser_cdp_endpoint or backend_cfg.browser_page_url)
+    ):
+        raise SystemExit(
+            "replay needs a target: pass --url, set backend.url in --config, or "
+            "pass --demo-app to replay against the bundled MockMed demo app."
+        )
+    refuse_unqualified_skill(bundle, target_url=url)
 
     held_backend: list = []
     hold_s = min(max(float(getattr(args, "hold_on_halt", 0.0) or 0.0), 0.0), 1800.0)
@@ -3076,13 +3322,13 @@ def _cmd_replay(args: argparse.Namespace) -> int:
         )
 
     stop = None
-    if url is None:
+    if url is None and demo_app:
         from openadapt_flow.mockmed.server import serve
 
         url, stop = serve(port=0)
         url = _with_drift(url, args.drift)
         drift_note = f" (drift: {args.drift})" if args.drift else ""
-        print(f"No --url given; replaying against bundled MockMed{drift_note}")
+        print(f"--demo-app: replaying against bundled MockMed{drift_note}")
 
     video_dir = getattr(args, "record_video", None)
     from playwright.sync_api import sync_playwright
@@ -3957,6 +4203,51 @@ def _cmd_verify_run(args: argparse.Namespace) -> int:
     return 0 if receipt["outcome"] == "verified" else 1
 
 
+def _admitted_bundle_refusal(
+    args: argparse.Namespace,
+    bundle: Path,
+    workflow: Any = None,
+    authorization: Any = None,
+) -> Optional[int]:
+    """Refuse unless the bundle is the exact one an intake grant admitted.
+
+    ``--admitted-bundle-sha256`` carries the intake grant's digest (#1890)
+    from the agent runner into this process. The digest is recomputed from
+    the files and, when given, from the in-memory workflow and compared with
+    the run authorization's bundle digest, so an edit after the intake gate
+    can neither be admitted nor authorized. Returns an exit code to stop
+    with, or None to continue.
+    """
+
+    admitted = getattr(args, "admitted_bundle_sha256", None)
+    if not admitted:
+        return None
+    from openadapt_flow.bundle_validation import (
+        compute_content_digest,
+        compute_file_hashes,
+    )
+    from openadapt_flow.intake.param_gate import bundle_sha256
+
+    try:
+        matches = bundle_sha256(bundle) == admitted
+        if matches and workflow is not None:
+            matches = (
+                compute_content_digest(workflow, compute_file_hashes(workflow, bundle))
+                == admitted
+            )
+    except Exception:  # noqa: BLE001 - unreadable bundle is not the admitted one
+        matches = False
+    if matches and authorization is not None:
+        matches = getattr(authorization, "bundle_content_digest", None) == admitted
+    if matches:
+        return None
+    print(
+        "run REFUSED: the workflow bundle is not the bundle the intake grant "
+        "admitted. Nothing was executed."
+    )
+    return 2
+
+
 def _cmd_run(args: argparse.Namespace) -> int:
     """Execute a bundle under a named deployment profile -- FAIL-CLOSED.
 
@@ -3999,18 +4290,28 @@ def _cmd_run(args: argparse.Namespace) -> int:
     from openadapt_flow.skills import refuse_unqualified_skill
 
     refuse_unqualified_skill(bundle)
+    from openadapt_flow.admitted_composition import is_process_contract_artifact
+    from openadapt_flow.variants import is_variant_set_artifact
+
+    if getattr(args, "admitted_bundle_sha256", None) and (
+        is_composition_artifact(bundle)
+        or is_process_contract_artifact(bundle)
+        or is_variant_set_artifact(bundle)
+    ):
+        # An intake grant admits one workflow bundle, never a parent artifact.
+        print(
+            "run REFUSED: the workflow bundle is not the bundle the intake "
+            "grant admitted. Nothing was executed."
+        )
+        return 2
     if is_composition_artifact(bundle):
         from openadapt_flow.cli_compose import cmd_run_composition
 
         return cmd_run_composition(args, run_child=_cmd_run)
-    from openadapt_flow.admitted_composition import is_process_contract_artifact
-
     if is_process_contract_artifact(bundle):
         from openadapt_flow.cli_process import cmd_run_process
 
         return cmd_run_process(args, run_child=_cmd_run)
-    from openadapt_flow.variants import is_variant_set_artifact
-
     if is_variant_set_artifact(bundle):
         from openadapt_flow.cli_variants import cmd_run_variants
 
@@ -4028,6 +4329,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
             f"{_SAFE_BUNDLE_LOAD_GUIDANCE} Nothing was executed."
         )
         return 2
+    refused_admission = _admitted_bundle_refusal(args, bundle, workflow)
+    if refused_admission is not None:
+        return refused_admission
 
     qualification_case = getattr(args, "_qualification_case_execution", None)
     gate_params = (
@@ -4153,6 +4457,16 @@ def _cmd_run(args: argparse.Namespace) -> int:
             if refused is not None:
                 return refused
     policy_source = args.policy or cfg.policy.policy
+    subroutine_library = None
+    library_path = getattr(args, "subroutine_library", None)
+    if library_path:
+        from openadapt_flow.subroutines import SubroutineError, load_library
+
+        try:
+            subroutine_library = load_library(library_path)
+        except SubroutineError as exc:
+            print(f"run REFUSED: {exc}. Nothing was executed.")
+            return 2
 
     report = evaluate_run_gate(
         workflow,
@@ -4173,6 +4487,10 @@ def _cmd_run(args: argparse.Namespace) -> int:
             effective_require_settled if profile is not None else None
         ),
         qualification_evidence_only=qualification_case is not None,
+        # Re-admit embedded subroutines against the CURRENT library: a
+        # certificate cannot know a newer version was published since.
+        subroutine_library=subroutine_library,
+        subroutine_workflow_id=getattr(args, "subroutine_workflow_id", None),
     )
     print(report.render())
 
@@ -4341,6 +4659,17 @@ def _cmd_run(args: argparse.Namespace) -> int:
         )
         args._delivery_authority_kind = "customer_local"
         args._remote_delivery_run_id = None
+
+    # The authorization this run hands to replay must name the admitted
+    # digest, and the bundle must still be those bytes (#1890).
+    refused_admission = _admitted_bundle_refusal(
+        args,
+        bundle,
+        workflow,
+        getattr(args, "_governed_run_authorization", None),
+    )
+    if refused_admission is not None:
+        return refused_admission
 
     refused = _bind_approval_mode(args)
     if refused is not None:
@@ -5784,7 +6113,9 @@ def _cmd_silent_saves(args: argparse.Namespace) -> int:
         module = importlib.util.module_from_spec(spec)
         sys.modules["silent_saves"] = module
         spec.loader.exec_module(module)
-    from silent_saves.cli import main as silent_saves_main  # type: ignore[import-not-found]
+    from silent_saves.cli import (  # type: ignore[import-not-found]
+        main as silent_saves_main,
+    )
 
     return int(silent_saves_main(list(args.silent_saves_argv)))
 
@@ -5903,14 +6234,42 @@ def _cmd_scaffold_verifier(args: argparse.Namespace) -> int:
         db=optional_path("db"),
         verifier=optional_path("verifier"),
         prove=getattr(args, "prove", None),
+        proof_source=getattr(args, "_record_check_proof_source", None),
         recording=optional_path("recording"),
         bundle=optional_path("bundle"),
         complete_read=bool(getattr(args, "complete_read", False)),
         fault_gate=bool(getattr(args, "fault_gate", False)),
+        probe_reads=bool(getattr(args, "probe_reads", False)),
+        probe_base=getattr(args, "probe_base", None),
     )
     if built is not None:
         print(built.summary)
         return 0 if built.working else 1
+    if getattr(args, "probe_reads", False):
+        import json as _json
+
+        from openadapt_flow import sealed_set as _sealed_set
+        from openadapt_flow.scaffold_verifier import READ_DISCOVERY_FILE
+
+        found = (out_dir or Path(args.source)) / READ_DISCOVERY_FILE
+        status, reason = "unavailable", ""
+        try:
+            data = _json.loads(_sealed_set.read_text(found))
+            status, reason = str(data.get("status")), str(data.get("reason") or "")
+        except (OSError, ValueError, _sealed_set.SealedSetError):
+            pass
+        if status == "refused":
+            print(
+                "Read discovery: REFUSED. A probed read confirmed the written "
+                f"values but can't see the whole save, so no check was written: "
+                f"{reason} ({found})."
+            )
+        else:
+            print(
+                "Read discovery: UNAVAILABLE. No probed read confirmed the "
+                "written values, so no read was proposed; a person must name "
+                f"one ({found})."
+            )
     out, count = write_draft(Path(args.source), out_dir)
     print(
         "No read in the recording returns the saved record (no network capture, "
@@ -7069,17 +7428,89 @@ def _cmd_qualify(args: argparse.Namespace) -> int:
 
     if verb == "certify":
         policy = _qualification_policy(args)
+        library_path = getattr(args, "subroutine_library", None)
+        library = _load_subroutine_library(library_path)
+        library_before = library.to_json() if library is not None else ""
         report = certify_project(
             workflow,
             policy=policy,
             evidence_root=args.evidence_root,
             execution_profile=args.profile,
+            subroutine_library=library,
+            subroutine_workflow_id=getattr(args, "subroutine_workflow_id", None),
+        )
+        from openadapt_flow.qualification import (
+            persist_registration_before_certificate,
+        )
+
+        # The registration is written before the certificate is saved: a
+        # library write failure leaves the bundle uncertified, not certified
+        # with no dependent recorded for a later subroutine version.
+        persist_registration_before_certificate(
+            workflow,
+            args.bundle,
+            lambda: _save_subroutine_library(library, library_path, library_before),
         )
         save_qualified_workflow(workflow, args.bundle)
         print(report.model_dump_json(indent=2) if args.json else report.render())
         return 0 if report.passed else 2
 
     raise SystemExit(f"unknown qualify command {verb!r}")
+
+
+def _load_subroutine_library(path: Optional[str]) -> Any:
+    """Load ``--subroutine-library`` (None when not given); refuse a bad file."""
+
+    if not path:
+        return None
+    from openadapt_flow.subroutines import SubroutineError, load_library
+
+    try:
+        return load_library(path)
+    except SubroutineError as exc:
+        raise SystemExit(f"subroutine library REFUSED: {exc}") from None
+
+
+def _save_subroutine_library(library: Any, path: Optional[str], before: str) -> None:
+    """Write back the library when certification registered a workflow in it."""
+
+    if library is None or not path or library.to_json() == before:
+        return
+    from openadapt_flow.subroutines import save_library
+
+    save_library(library, path)
+
+
+def _add_subroutine_library_flags(
+    parser: argparse.ArgumentParser, *, for_run: bool = False
+) -> None:
+    if for_run:
+        help_text = (
+            "Current subroutine library to re-admit embedded subroutines "
+            "against before this run. Required when the bundle embeds a "
+            "subroutine; a certification made before a newer version was "
+            "published does not let the old version run."
+        )
+    else:
+        help_text = (
+            "Subroutine library to admit embedded subroutines against. "
+            "Certifying registers this workflow in it, so a new version of a "
+            "subroutine it uses re-qualifies it. Required when the bundle "
+            "embeds a subroutine."
+        )
+    parser.add_argument(
+        "--subroutine-library", default=None, metavar="JSON", help=help_text
+    )
+    if for_run:
+        parser.add_argument(
+            "--subroutine-workflow-id",
+            default=None,
+            metavar="ID",
+            help=(
+                "Id this workflow was registered under when it was certified "
+                "(default: the workflow name)"
+            ),
+        )
 
 
 def _cmd_qualify_proposal(args: argparse.Namespace) -> int:
@@ -8957,6 +9388,15 @@ def _cmd_qualify_campaign(args: argparse.Namespace) -> int:
         else Path("runs")
         / f"qualify-{bundle.resolve().name}-{time.strftime('%Y%m%d-%H%M%S')}"
     )
+    library_path = getattr(args, "subroutine_library", None)
+    library = _load_subroutine_library(library_path)
+    library_state = {"before": library.to_json() if library is not None else ""}
+
+    def persist_library() -> None:
+        _save_subroutine_library(library, library_path, library_state["before"])
+        if library is not None:
+            library_state["before"] = library.to_json()
+
     try:
         result = qualify(
             bundle,
@@ -8967,13 +9407,17 @@ def _cmd_qualify_campaign(args: argparse.Namespace) -> int:
             certify=certify,
             run_params=run_params,
             campaign_id=args.campaign_id,
+            subroutine_library=library,
+            persist_subroutine_registration=persist_library,
         )
     except QualifyConfigError as exc:
         print(str(exc), file=sys.stderr)
         return 2
     except QualifyError as exc:
+        persist_library()
         print(f"qualify REFUSED: {exc}\nEvidence so far: {out}", file=sys.stderr)
         return 1
+    persist_library()
     if not result.passed and result.partial:
         print(
             f"\nqualify PARTIAL: {len(result.rows)} trial(s) behaved as required in "
@@ -9006,8 +9450,9 @@ def _cmd_qualify_campaign(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     """Build the top-level argument parser."""
     from openadapt_flow.cli_hints import command
+    from openadapt_flow.cli_tasks import TaskParser
 
-    parser = argparse.ArgumentParser(
+    parser = TaskParser(
         prog="openadapt-flow",
         description=(
             "Record a task and compile it into a program that runs on "
@@ -9021,13 +9466,16 @@ def build_parser() -> argparse.ArgumentParser:
             f"New here? Run '{command('demo')}' to see a checked run and a "
             "stopped run side by side on one page."
         ),
+        allow_abbrev=False,
     )
     parser.add_argument(
         "--version",
         action="version",
         version=f"%(prog)s {_package_version()}",
     )
-    sub = parser.add_subparsers(dest="command", required=True)
+    sub = parser.add_subparsers(
+        dest="command", required=True, parser_class=argparse.ArgumentParser
+    )
 
     p = sub.add_parser(
         "demo",
@@ -9045,6 +9493,7 @@ def build_parser() -> argparse.ArgumentParser:
             "the second stopped; 1 when the pair didn't show that; 2 when the "
             "demo refused to start or lacked evidence."
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "--out",
@@ -9073,12 +9522,41 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=_cmd_demo)
 
     p = sub.add_parser(
+        "confirm-surfaces",
+        help=(
+            "Review the windows a cross-window recording used, and confirm "
+            "them so the recording can be compiled"
+        ),
+        allow_abbrev=False,
+    )
+    p.add_argument("recording", help="Recording directory")
+    p.add_argument("--yes", action="store_true", help="Confirm without asking")
+    p.set_defaults(func=_cmd_confirm_surfaces)
+
+    p = sub.add_parser(
+        "browser-accessibility",
+        help=(
+            "Linux: start Chrome, Chromium, Edge and Brave with their page "
+            "readable to accessibility tools, so record can read clicks in "
+            "your everyday browser. Writes your own launcher entries only"
+        ),
+        allow_abbrev=False,
+    )
+    mode = p.add_mutually_exclusive_group()
+    mode.add_argument("--enable", action="store_true", help="Add the setting")
+    mode.add_argument(
+        "--disable", action="store_true", help="Remove what --enable added"
+    )
+    p.set_defaults(func=_cmd_browser_accessibility)
+
+    p = sub.add_parser(
         "record",
         help=(
             "Record YOUR workflow interactively: a headed browser "
             "(--backend web --url), or the operator's real local desktop input "
             "through openadapt-capture (--backend windows/macos/linux/rdp/citrix)"
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "--url",
@@ -9258,12 +9736,42 @@ def build_parser() -> argparse.ArgumentParser:
             "that look-up becomes the proposed check"
         ),
     )
+    p.add_argument(
+        "--surface",
+        action="append",
+        default=None,
+        metavar="NAME=KIND:WINDOW",
+        help=(
+            "With no --backend or --url, record follows you across windows "
+            "on its own. Use --surface to name the windows yourself instead, "
+            "or --surface auto with --url to add automatic windows to a "
+            "browser recording. Declare each desktop or remote window the "
+            "person works in (repeatable). "
+            "KIND is windows, macos, linux, rdp or citrix; WINDOW is part of "
+            "that window's title (on macOS, the app name). Repeat a NAME to "
+            "add another window to it, such as its dialog. With --url the "
+            "browser leads; otherwise the first --surface does. Each change "
+            "of window becomes a checked switch step. An action in a window "
+            "you did not declare stops the recording. See "
+            "docs/MULTI_SURFACE.md."
+        ),
+    )
+    p.add_argument(
+        "--yes",
+        action="store_true",
+        help=(
+            "Keep a cross-window recording's surfaces without asking. Without "
+            "a terminal and without --yes, the recording is kept unconfirmed "
+            "and compile refuses it until confirm-surfaces is run."
+        ),
+    )
     _add_backend_flags(p)
     p.set_defaults(func=_cmd_record)
 
     p = sub.add_parser(
         "demo-record",
         help="Serve MockMed and record the canonical triage demo",
+        allow_abbrev=False,
     )
     p.add_argument("--out", required=True, help="Recording output directory")
     p.add_argument(
@@ -9292,6 +9800,7 @@ def build_parser() -> argparse.ArgumentParser:
             "of record: record, compile, certify, govern, and VERIFY the write "
             "out of band, then write a shareable local receipt"
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "--out",
@@ -9353,7 +9862,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.set_defaults(func=_cmd_tutorial)
 
-    p = sub.add_parser("compile", help="Compile a recording into a workflow bundle")
+    p = sub.add_parser(
+        "compile", help="Compile a recording into a workflow bundle", allow_abbrev=False
+    )
     p.add_argument("recording", help="Recording directory")
     p.add_argument("--out", required=True, help="Output bundle directory")
     p.add_argument("--name", required=True, help="Workflow name")
@@ -9414,6 +9925,7 @@ def build_parser() -> argparse.ArgumentParser:
             "underdetermined, printing a record-next worklist of missing "
             "demonstrations"
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "recording",
@@ -9504,6 +10016,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Spoken narration for a recording: transcribe on this machine, "
             "scrub, line up with the steps (narration.json), or show it"
         ),
+        allow_abbrev=False,
     )
     nsub = p.add_subparsers(dest="narration_cmd", required=True)
     pa = nsub.add_parser(
@@ -9512,6 +10025,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Transcribe audio on this machine (or read a transcript), scrub it "
             "with openadapt-privacy, and line it up with the recording's steps"
         ),
+        allow_abbrev=False,
     )
     pa.add_argument("recording", help="Recording directory (events.jsonl)")
     src = pa.add_mutually_exclusive_group(required=True)
@@ -9533,7 +10047,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="On-device backend: auto | faster-whisper | openai-whisper",
     )
     pa.set_defaults(func=_cmd_narration_attach)
-    ps = nsub.add_parser("show", help="Print a recording's narration by step")
+    ps = nsub.add_parser(
+        "show", help="Print a recording's narration by step", allow_abbrev=False
+    )
     ps.add_argument("recording", help="Recording or bundle directory")
     ps.set_defaults(func=_cmd_narration_show)
 
@@ -9546,6 +10062,7 @@ def build_parser() -> argparse.ArgumentParser:
             "the workflow's parameters. Emits a program:true bundle the runtime "
             "executes bounded, $0, identity-gated and effect-verified per record"
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "bundle",
@@ -9603,6 +10120,7 @@ def build_parser() -> argparse.ArgumentParser:
             "a handoff contract. Each child stays bound to its recorded "
             "surface. certify/run the output directory."
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "--child",
@@ -9648,6 +10166,7 @@ def build_parser() -> argparse.ArgumentParser:
             "capabilities. Each --child needs a --admission envelope. "
             "certify/run the output directory; replay refuses it."
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "--child",
@@ -9665,12 +10184,14 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--permission",
         "--admission",
+        dest="admission",
         action="append",
-        metavar="NAME=ENVELOPE",
+        metavar="NAME=FILE",
         help=(
-            "QualificationAdmissionEnvelope for NAME. A compiled recording "
-            "without an envelope is not an admitted capability."
+            "Signed run permission for NAME. Each child needs its own permission. "
+            "--admission is deprecated; use --permission."
         ),
     )
     p.add_argument(
@@ -9715,9 +10236,12 @@ def build_parser() -> argparse.ArgumentParser:
             "Author or extend a variant set: separately admitted variants of one "
             "workflow, routed deterministically before the run"
         ),
+        allow_abbrev=False,
     )
     vsub = p.add_subparsers(dest="variants_command")
-    q = vsub.add_parser("author", help="Write variant-set.json from a JSON spec")
+    q = vsub.add_parser(
+        "author", help="Write variant-set.json from a JSON spec", allow_abbrev=False
+    )
     q.add_argument(
         "--spec",
         required=True,
@@ -9732,14 +10256,20 @@ def build_parser() -> argparse.ArgumentParser:
     q = vsub.add_parser(
         "add",
         help="Add one admitted variant, for example a repaired case promoted to a variant",
+        allow_abbrev=False,
     )
     q.add_argument("variant_set", help="Variant-set directory")
     q.add_argument("--variant", required=True, metavar="NAME=BUNDLE")
     q.add_argument(
+        "--permission",
         "--admission",
+        dest="admission",
         required=True,
-        metavar="ENVELOPE",
-        help="The bundle's own QualificationAdmissionEnvelope",
+        metavar="FILE",
+        help=(
+            "The bundle's own signed run permission. "
+            "--admission is deprecated; use --permission."
+        ),
     )
     q.add_argument(
         "--when-input",
@@ -9767,7 +10297,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Existing variant this repaired bundle was healed from",
     )
     q.set_defaults(func=_cmd_variants)
-    q = vsub.add_parser("show", help="Print a variant set")
+    q = vsub.add_parser("show", help="Print a variant set", allow_abbrev=False)
     q.add_argument("variant_set", help="Variant-set directory")
     q.set_defaults(func=_cmd_variants)
     p.set_defaults(func=_cmd_variants)
@@ -9778,6 +10308,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Show which admitted variant a variant set would run for one item "
             "(inputs + first screen). Executes nothing."
         ),
+        allow_abbrev=False,
     )
     p.add_argument("variant_set", help="Variant-set directory")
     p.add_argument("--param", action="append", metavar="K=V", help="Item input")
@@ -9795,22 +10326,31 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser(
         "replay",
         help=(
-            "Replay a bundle (serves the bundled MockMed demo app when "
-            "no --url is given)"
+            "Replay a bundle against --url, the config's backend.url, or "
+            "with --demo-app the bundled demo app"
         ),
+        allow_abbrev=False,
     )
     p.add_argument("bundle", help="Workflow bundle directory")
     p.add_argument(
         "--url",
         default=None,
-        help=("URL of the target app (default: serve the bundled MockMed demo app)"),
+        help="URL of the target app",
+    )
+    p.add_argument(
+        "--demo-app",
+        action="store_true",
+        help=(
+            "Serve the bundled MockMed demo app and replay against it (for a "
+            "bundle recorded on it, such as the tutorial's)"
+        ),
     )
     p.add_argument(
         "--drift",
         default=None,
         help=(
             "Comma-separated MockMed drift modes (theme,move,rename,modal) "
-            "to demonstrate bounded drift resolution; only valid without --url"
+            "to demonstrate bounded drift resolution; only with --demo-app"
         ),
     )
     p.add_argument(
@@ -9886,6 +10426,7 @@ def build_parser() -> argparse.ArgumentParser:
             "path wired for a real deployment (backend / effects / actuation / "
             "durable / policy) instead of the demo"
         ),
+        allow_abbrev=False,
     )
     p.add_argument("bundle", help="Workflow bundle directory")
     p.add_argument(
@@ -10029,15 +10570,22 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="VERSION",
         help="Refuse unless the bundle's compiler version equals this",
     )
+    # Set by the agent runner for an intake-granted run (#1890): the exact
+    # bundle digest the grant admitted. Not an operator knob.
+    p.add_argument("--admitted-bundle-sha256", default=None, help=argparse.SUPPRESS)
+    _add_subroutine_library_flags(p, for_run=True)
     p.add_argument("--managed-dispatch-file", default=None, help=argparse.SUPPRESS)
     p.add_argument(
+        "--permission-trust",
         "--qualification-trust",
+        dest="qualification_trust",
         default=None,
         metavar="PATH",
         help=(
-            "Qualification signer trust registry for a process-contract parent. "
+            "Trusted signers for process run permissions. "
             "Also OPENADAPT_QUALIFICATION_TRUST or qualification-trust.json "
-            "beside process-contract.json"
+            "beside process-contract.json. "
+            "--qualification-trust is deprecated; use --permission-trust."
         ),
     )
     p.add_argument(
@@ -10141,6 +10689,7 @@ def build_parser() -> argparse.ArgumentParser:
     sa = sub.add_parser(
         "attach-seal",
         help="Attach Cloud's signed Execute receipt (the Seal) to a VERIFIED run report",
+        allow_abbrev=False,
     )
     sa.add_argument("run_dir", help="Run directory holding a VERIFIED report.json")
     sa.add_argument("--execution-id", required=True, help="Cloud Execute execution id")
@@ -10175,6 +10724,7 @@ def build_parser() -> argparse.ArgumentParser:
             "openadapt.effect-receipt/v1. The executor's own record is "
             "hashed, never trusted"
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "--verify",
@@ -10284,6 +10834,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Resume a durably-paused run from its last verified checkpoint "
             "(never re-running an already-confirmed write)"
         ),
+        allow_abbrev=False,
     )
     p.add_argument("run_dir", help="The paused run directory (holds checkpoints)")
     p.add_argument("--managed-dispatch-file", default=None, help=argparse.SUPPRESS)
@@ -10371,6 +10922,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Record an authenticated approval (approver / resolution / bundle "
             "version) authorizing a durably-paused run to resume"
         ),
+        allow_abbrev=False,
     )
     p.add_argument("run_dir", help="The paused run directory (holds the escalation)")
     p.add_argument(
@@ -10406,9 +10958,12 @@ def build_parser() -> argparse.ArgumentParser:
             "List, approve or decline the per-item approval requests a run is "
             "waiting on (Desktop's Run it)"
         ),
+        allow_abbrev=False,
     )
     item_sub = p.add_subparsers(dest="item_approval_cmd", required=True)
-    q = item_sub.add_parser("show", help="Print the run's approval requests as JSON")
+    q = item_sub.add_parser(
+        "show", help="Print the run's approval requests as JSON", allow_abbrev=False
+    )
     q.add_argument("run_dir", help="The run directory")
     q.add_argument(
         "--all",
@@ -10420,7 +10975,7 @@ def build_parser() -> argparse.ArgumentParser:
         ("approve", "Approve one save a person checked in Desktop's Run it"),
         ("decline", "Don't save: decline one save with a closed reason"),
     ):
-        q = item_sub.add_parser(verb, help=verb_help)
+        q = item_sub.add_parser(verb, help=verb_help, allow_abbrev=False)
         q.add_argument("run_dir", help="The run directory")
         q.add_argument("--request-id", required=True)
         q.add_argument(
@@ -10515,15 +11070,20 @@ def build_parser() -> argparse.ArgumentParser:
             "Sign or check a grant that lets named agents or systems answer "
             "some saves. Only a registered person signs, at a terminal"
         ),
+        allow_abbrev=False,
     )
     grant_sub = p.add_subparsers(dest="approver_grant_cmd", required=True)
-    q = grant_sub.add_parser("sign", help="Sign a grant with your policy-signer key")
+    q = grant_sub.add_parser(
+        "sign", help="Sign a grant with your policy-signer key", allow_abbrev=False
+    )
     q.add_argument("grant", help="Unsigned openadapt-flow/approver-grant/v1 JSON")
     q.add_argument("--key", required=True, help="Your encrypted policy-signer key")
     q.add_argument("--out", required=True)
     q.add_argument("--key-dir", default=None)
     q.set_defaults(func=_cmd_approver_grant)
-    q = grant_sub.add_parser("verify", help="Check a signed grant against the registry")
+    q = grant_sub.add_parser(
+        "verify", help="Check a signed grant against the registry", allow_abbrev=False
+    )
     q.add_argument("grant", help="Signed grant JSON")
     q.add_argument("--key-dir", default=None)
     q.set_defaults(func=_cmd_approver_grant)
@@ -10534,9 +11094,12 @@ def build_parser() -> argparse.ArgumentParser:
             "Create, sign or check a teach authorization: what a teaching agent "
             "may do, signed by a person with their approver key"
         ),
+        allow_abbrev=False,
     )
     ta_sub = p.add_subparsers(dest="teach_auth_cmd", required=True)
-    q = ta_sub.add_parser("create", help="Write the unsigned statement for a spec")
+    q = ta_sub.add_parser(
+        "create", help="Write the unsigned statement for a spec", allow_abbrev=False
+    )
     q.add_argument(
         "spec", help="JSON: task, purposes, origins, inputs, writes, forbidden"
     )
@@ -10556,7 +11119,7 @@ def build_parser() -> argparse.ArgumentParser:
         ("sign", "Show what the statement allows, then sign it with your approver key"),
         ("verify", "Check a signed statement against the approver roster"),
     ):
-        q = ta_sub.add_parser(verb, help=text)
+        q = ta_sub.add_parser(verb, help=text, allow_abbrev=False)
         q.add_argument("statement", help="teach-authorization.json or its folder")
         q.add_argument("--key-dir", default=None, help="Holds the approver roster")
         q.add_argument(
@@ -10574,7 +11137,9 @@ def build_parser() -> argparse.ArgumentParser:
         q.set_defaults(func=_cmd_teach_authorization)
 
     p = sub.add_parser(
-        "bench", help="Replay a bundle N times against MockMed and aggregate"
+        "bench",
+        help="Replay a bundle N times against MockMed and aggregate",
+        allow_abbrev=False,
     )
     p.add_argument("bundle", help="Workflow bundle directory")
     p.add_argument("--n", type=int, default=3, help="Number of iterations")
@@ -10600,6 +11165,7 @@ def build_parser() -> argparse.ArgumentParser:
             "the MockMed triage task (agent arm needs an Anthropic API key "
             "and costs real money)"
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "--n-compiled",
@@ -10632,6 +11198,7 @@ def build_parser() -> argparse.ArgumentParser:
         ),
         add_help=False,
         prefix_chars="+",
+        allow_abbrev=False,
     )
     p.add_argument("silent_saves_argv", nargs="*")
     p.set_defaults(func=_cmd_silent_saves)
@@ -10656,6 +11223,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Report a bundle's coverage gaps (unarmed clicks, vacuous "
             "postconditions, under-classified risk); exits nonzero by severity"
         ),
+        allow_abbrev=False,
     )
     p.add_argument("bundle", help="Workflow bundle directory")
     p.add_argument(
@@ -10674,6 +11242,7 @@ def build_parser() -> argparse.ArgumentParser:
             "read, drafts effect_contract.yaml for a person to fill in. Never "
             "approves; refuses demonstrations with no consequential (write) step"
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "source",
@@ -10710,10 +11279,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--prove",
         default=None,
-        choices=("mockmed", "effect-e2e"),
+        metavar="FIXTURE",
         help=(
             "Also run the proposed check end to end against this "
-            "fault-injection fixture (the check must match its record service)"
+            "caller-supplied fault fixture (requires an injected proof source)"
         ),
     )
     p.add_argument(
@@ -10731,6 +11300,25 @@ def build_parser() -> argparse.ArgumentParser:
             "With --db: write each bad save to a copy of the database and let "
             "the check read it through its own read (the fault gate). A fault "
             "the read can't see keeps the check a draft"
+        ),
+    )
+    p.add_argument(
+        "--probe-reads",
+        action="store_true",
+        help=(
+            "When the recording never reads the saved record back, derive "
+            "reads from the captured write and probe them with GET on a local "
+            "copy of the app; use one only when it returns the written values. "
+            "Every probe is recorded in the proof"
+        ),
+    )
+    p.add_argument(
+        "--probe-base",
+        default=None,
+        metavar="URL",
+        help=(
+            "With --probe-reads: the local copy of the app to probe (default: "
+            "the recorded origin, which must be the local machine)"
         ),
     )
     p.add_argument(
@@ -10757,6 +11345,7 @@ def build_parser() -> argparse.ArgumentParser:
             "the outcome is the safe one, and the next suggested command "
             "(read-only)"
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "run_dir",
@@ -10772,6 +11361,7 @@ def build_parser() -> argparse.ArgumentParser:
             "DAG, effect-bound handoffs) as self-contained HTML, Mermaid, "
             "or the shared JSON graph spec"
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "bundle",
@@ -10821,6 +11411,7 @@ def build_parser() -> argparse.ArgumentParser:
             "OPENADAPT_BUNDLE_KEY, bind the whole file set to one sealed "
             "index, verify it, and publish it atomically at a new path"
         ),
+        allow_abbrev=False,
     )
     p.add_argument("source", help="Existing workflow bundle directory")
     p.add_argument(
@@ -10846,6 +11437,7 @@ def build_parser() -> argparse.ArgumentParser:
             "to a compiled program's save step, in a new bundle; reports which "
             "entered fields they compare"
         ),
+        allow_abbrev=False,
     )
     p.add_argument("bundle", help="Compiled workflow bundle directory (not modified)")
     p.add_argument(
@@ -10874,6 +11466,7 @@ def build_parser() -> argparse.ArgumentParser:
             "fails); passing means the bundle meets that policy's rules, "
             "not that it is safe to run"
         ),
+        allow_abbrev=False,
     )
     p.add_argument("bundle", help="Workflow bundle directory")
     p.add_argument(
@@ -10904,6 +11497,7 @@ def build_parser() -> argparse.ArgumentParser:
             "       %(prog)s <command> ..."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        allow_abbrev=False,
     )
     _definition_first(p)
     qsub = p.add_subparsers(dest="qualify_cmd", required=True)
@@ -10916,6 +11510,7 @@ def build_parser() -> argparse.ArgumentParser:
         ),
         description=QUALIFY_HELP,
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        allow_abbrev=False,
     )
     _definition_first(q)
     q.add_argument("bundle", help="Compiled workflow bundle directory")
@@ -10966,19 +11561,24 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Campaign id (default: verify.yaml or generated)",
     )
+    _add_subroutine_library_flags(q)
     q.set_defaults(func=_cmd_qualify_campaign)
 
-    q = qsub.add_parser("schema", help="Print the qualification-project JSON Schema")
+    q = qsub.add_parser(
+        "schema", help="Print the qualification-project JSON Schema", allow_abbrev=False
+    )
     q.set_defaults(func=_cmd_qualify)
 
     q = qsub.add_parser(
         "label",
         help="Optionally set, remove, or list presentation-only entity labels",
+        allow_abbrev=False,
     )
     label_sub = q.add_subparsers(dest="label_cmd", required=True)
     label = label_sub.add_parser(
         "set",
         help="Set an optional presentation label for one qualified step",
+        allow_abbrev=False,
     )
     label.add_argument("bundle", help="Workflow bundle directory")
     label.add_argument("--step", required=True, help="Exact qualified workflow step ID")
@@ -11000,15 +11600,21 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     label.set_defaults(func=_cmd_qualify)
-    label = label_sub.add_parser("remove", help="Remove a step entity label")
+    label = label_sub.add_parser(
+        "remove", help="Remove a step entity label", allow_abbrev=False
+    )
     label.add_argument("bundle", help="Workflow bundle directory")
     label.add_argument("--step", required=True, help="Exact qualified workflow step ID")
     label.set_defaults(func=_cmd_qualify)
-    label = label_sub.add_parser("list", help="List qualification-owned entity labels")
+    label = label_sub.add_parser(
+        "list", help="List qualification-owned entity labels", allow_abbrev=False
+    )
     label.add_argument("bundle", help="Workflow bundle directory")
     label.set_defaults(func=_cmd_qualify)
 
-    q = qsub.add_parser("init", help="Initialize a bundle's qualification project")
+    q = qsub.add_parser(
+        "init", help="Initialize a bundle's qualification project", allow_abbrev=False
+    )
     q.add_argument("bundle", help="Workflow bundle directory")
     q.add_argument(
         "--target",
@@ -11035,6 +11641,7 @@ def build_parser() -> argparse.ArgumentParser:
             "the compiled demo. Missing pins HALT; nothing is guessed. "
             "Runs the proposed oracle against a --break-it fault."
         ),
+        allow_abbrev=False,
     )
     q.add_argument("bundle", help="Compiled workflow bundle directory")
     q.add_argument(
@@ -11066,6 +11673,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Confirm every proposed pin in one command after the proposed "
             "oracle catches a --break-it fault. Refusing a pin HALTs."
         ),
+        allow_abbrev=False,
     )
     q.add_argument("bundle", help="Compiled workflow bundle directory")
     q.add_argument(
@@ -11092,6 +11700,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Sign a local-dev admission for an accepted proposal. "
             "The signer cannot enter a production trust map."
         ),
+        allow_abbrev=False,
     )
     q.add_argument("bundle", help="Compiled workflow bundle directory")
     q.add_argument(
@@ -11106,6 +11715,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Propose pins from the demo, accept them, and optionally sign a "
             "local-dev admission. After record and compile."
         ),
+        allow_abbrev=False,
     )
     q.add_argument("bundle", help="Compiled workflow bundle directory")
     q.add_argument(
@@ -11133,7 +11743,9 @@ def build_parser() -> argparse.ArgumentParser:
     q.set_defaults(func=_cmd_qualify)
 
     for verb in ("inspect", "explain", "report"):
-        q = qsub.add_parser(verb, help=f"{verb.title()} qualification coverage")
+        q = qsub.add_parser(
+            verb, help=f"{verb.title()} qualification coverage", allow_abbrev=False
+        )
         q.add_argument("bundle", help="Workflow bundle directory")
         q.add_argument("--policy", default=None)
         q.add_argument("--evidence-root", default=None)
@@ -11143,6 +11755,7 @@ def build_parser() -> argparse.ArgumentParser:
     q = qsub.add_parser(
         "set-identity",
         help="Set exact/normalized identity fields and their quorum",
+        allow_abbrev=False,
     )
     q.add_argument("bundle", help="Workflow bundle directory")
     q.add_argument("--step", required=True)
@@ -11192,6 +11805,7 @@ def build_parser() -> argparse.ArgumentParser:
     q = qsub.add_parser(
         "set-risk",
         help="Confirm an action's reviewed business-risk classification",
+        allow_abbrev=False,
     )
     q.add_argument("bundle", help="Workflow bundle directory")
     q.add_argument("--step", required=True)
@@ -11206,6 +11820,7 @@ def build_parser() -> argparse.ArgumentParser:
     q = qsub.add_parser(
         "trust-runner",
         help="Trust an Ed25519 qualification-runner public key",
+        allow_abbrev=False,
     )
     q.add_argument("bundle", help="Workflow bundle directory")
     q.add_argument("--key-id", required=True)
@@ -11215,6 +11830,7 @@ def build_parser() -> argparse.ArgumentParser:
     q = qsub.add_parser(
         "set-effect",
         help="Assign verification-strength tier to an existing effect",
+        allow_abbrev=False,
     )
     q.add_argument("bundle", help="Workflow bundle directory")
     q.add_argument("--step", required=True)
@@ -11234,6 +11850,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Add, update, or inspect one reviewed finite business decision "
             "without editing the workflow manifest"
         ),
+        allow_abbrev=False,
     )
     q.add_argument("bundle", help="Workflow bundle directory")
     q.add_argument(
@@ -11257,6 +11874,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Store or check reviewed local judgment cases; this command never "
             "synthesizes an executable rule from examples"
         ),
+        allow_abbrev=False,
     )
     q.add_argument("bundle", help="Workflow bundle directory")
     q.add_argument(
@@ -11271,7 +11889,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     q.set_defaults(func=_cmd_qualify)
 
-    q = qsub.add_parser("add-case", help="Add a representative or fault case")
+    q = qsub.add_parser(
+        "add-case", help="Add a representative or fault case", allow_abbrev=False
+    )
     q.add_argument("bundle", help="Workflow bundle directory")
     q.add_argument("--case-id", required=True)
     q.add_argument(
@@ -11308,6 +11928,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Import case results produced by the Desktop/local/customer-controlled "
             "qualification runner"
         ),
+        allow_abbrev=False,
     )
     q.add_argument("bundle", help="Workflow bundle directory")
     q.add_argument("--results", required=True, metavar="JSON")
@@ -11320,6 +11941,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Run one current qualification case (the practice item or a "
             "readiness drill) with Flow-owned Standard authorization"
         ),
+        allow_abbrev=False,
     )
     q.add_argument("bundle", help="Sealed workflow bundle directory")
     q.add_argument(
@@ -11367,6 +11989,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_browser_session_flags(q)
     _add_deployment_flags(q)
     _add_approval_flags(q)
+    _add_subroutine_library_flags(q, for_run=True)
     q.set_defaults(func=_cmd_qualify)
 
     q = qsub.add_parser(
@@ -11375,6 +11998,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Add the five readiness drills for the practice case's save and "
             "trust this computer's local drill key (a local campaign)"
         ),
+        allow_abbrev=False,
     )
     q.add_argument("bundle", help="Sealed workflow bundle directory")
     q.add_argument(
@@ -11393,6 +12017,7 @@ def build_parser() -> argparse.ArgumentParser:
     q = qsub.add_parser(
         "add-requalification",
         help="Add a condition that requires this workflow to be requalified",
+        allow_abbrev=False,
     )
     q.add_argument("bundle", help="Workflow bundle directory")
     q.add_argument(
@@ -11415,6 +12040,7 @@ def build_parser() -> argparse.ArgumentParser:
     q = qsub.add_parser(
         "certify",
         help="Persist a combined qualification and existing-policy decision",
+        allow_abbrev=False,
     )
     q.add_argument("bundle", help="Workflow bundle directory")
     q.add_argument("--policy", default="clinical-write")
@@ -11426,6 +12052,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     q.add_argument("--evidence-root", required=True)
     q.add_argument("--json", action="store_true")
+    _add_subroutine_library_flags(q)
+    q.add_argument(
+        "--subroutine-workflow-id",
+        default=None,
+        metavar="ID",
+        help="Id to register this workflow under (default: the workflow name)",
+    )
     q.set_defaults(func=_cmd_qualify)
 
     p = sub.add_parser(
@@ -11434,6 +12067,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Draft a production-shaped qualification contract from a compiled "
             "demo. Alias of `qualify propose`."
         ),
+        allow_abbrev=False,
     )
     p.add_argument("bundle", help="Compiled workflow bundle directory")
     p.add_argument(
@@ -11462,6 +12096,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Surface compile-time multiple-choice questions for an ambiguous "
             "demo and apply the answers as guards/params (ask, don't guess)"
         ),
+        allow_abbrev=False,
     )
     p.add_argument("bundle", help="Workflow bundle directory")
     p.add_argument(
@@ -11480,12 +12115,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.set_defaults(func=_cmd_disambiguate)
 
-    p = sub.add_parser("emit-skill", help="Emit an Agent Skills folder for a bundle")
+    p = sub.add_parser(
+        "emit-skill",
+        help="Emit an Agent Skills folder for a bundle",
+        allow_abbrev=False,
+    )
     p.add_argument("bundle", help="Workflow bundle directory")
     p.add_argument("--out", required=True, help="Parent directory for the skill folder")
     p.set_defaults(func=_cmd_emit_skill)
 
-    p = sub.add_parser("emit-mcp", help="Emit a standalone MCP server.py for a bundle")
+    p = sub.add_parser(
+        "emit-mcp",
+        help="Emit a standalone MCP server.py for a bundle",
+        allow_abbrev=False,
+    )
     p.add_argument("bundle", help="Workflow bundle directory")
     p.add_argument("--out", required=True, help="Path for the generated server.py")
     p.set_defaults(func=_cmd_emit_mcp)
@@ -11498,6 +12141,7 @@ def build_parser() -> argparse.ArgumentParser:
             "branch, gates + validates it, and writes an updated bundle ONLY "
             "if it passes (governed refusal otherwise; nonzero exit)"
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "run_dir",
@@ -11549,6 +12193,7 @@ def build_parser() -> argparse.ArgumentParser:
             "an enum parameter when normal runs show that text too) and is "
             "written as a repair candidate that needs approval"
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "--example",
@@ -11580,6 +12225,7 @@ def build_parser() -> argparse.ArgumentParser:
             "back. A proposed bundle NEVER becomes active without this "
             "lifecycle. See docs/REPAIR_LIFECYCLE.md"
         ),
+        allow_abbrev=False,
     )
     rsub = p.add_subparsers(dest="repair_cmd", required=True)
 
@@ -11600,6 +12246,7 @@ def build_parser() -> argparse.ArgumentParser:
             "refuses (fail closed) any contract weakening without a new "
             "qualification revision"
         ),
+        allow_abbrev=False,
     )
     r.add_argument("proposed", help="The proposed (healed / taught) bundle")
     r.add_argument(
@@ -11628,12 +12275,16 @@ def build_parser() -> argparse.ArgumentParser:
     _repair_store_flag(r)
     r.set_defaults(func=_cmd_repair)
 
-    r = rsub.add_parser("list", help="List candidates and their lifecycle states")
+    r = rsub.add_parser(
+        "list", help="List candidates and their lifecycle states", allow_abbrev=False
+    )
     _repair_store_flag(r)
     r.set_defaults(func=_cmd_repair)
 
     r = rsub.add_parser(
-        "show", help="Show a candidate's reviewable diff, campaigns, and state"
+        "show",
+        help="Show a candidate's reviewable diff, campaigns, and state",
+        allow_abbrev=False,
     )
     r.add_argument("candidate_id")
     r.add_argument(
@@ -11642,7 +12293,11 @@ def build_parser() -> argparse.ArgumentParser:
     _repair_store_flag(r)
     r.set_defaults(func=_cmd_repair)
 
-    r = rsub.add_parser("review", help="Record a human review of the candidate's diff")
+    r = rsub.add_parser(
+        "review",
+        help="Record a human review of the candidate's diff",
+        allow_abbrev=False,
+    )
     r.add_argument("candidate_id")
     r.add_argument(
         "--reviewed-by",
@@ -11660,6 +12315,7 @@ def build_parser() -> argparse.ArgumentParser:
             "wrong-entity / stale-target / dialog / verifier-failure frames "
             "must all be REFUSED)"
         ),
+        allow_abbrev=False,
     )
     r.add_argument("candidate_id")
     r.add_argument("--kind", choices=["replay", "fault"], required=True)
@@ -11672,6 +12328,7 @@ def build_parser() -> argparse.ArgumentParser:
             "HUMAN approval gating promotion; refuses unless the diff was "
             "reviewed and BOTH campaigns passed. Binds the exact bundle hashes"
         ),
+        allow_abbrev=False,
     )
     r.add_argument("candidate_id")
     r.add_argument(
@@ -11699,6 +12356,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Copy BOTH bundles into the store by content hash and re-verify "
             "them byte-exact (prior too, so rollback is always local)"
         ),
+        allow_abbrev=False,
     )
     r.add_argument("candidate_id")
     _repair_store_flag(r)
@@ -11710,6 +12368,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Atomically activate the staged bundle in CANARY mode: a bounded "
             "first-N-runs window with per-run verification before full active"
         ),
+        allow_abbrev=False,
     )
     r.add_argument("candidate_id")
     r.add_argument(
@@ -11728,6 +12387,7 @@ def build_parser() -> argparse.ArgumentParser:
             "silent-incorrect or verification regression auto-reverts to the "
             "prior bundle"
         ),
+        allow_abbrev=False,
     )
     r.add_argument("candidate_id")
     r.add_argument("--run-dir", required=True, help="The completed run directory")
@@ -11739,6 +12399,7 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "One-command rollback: restore the prior bundle hash as the active pointer"
         ),
+        allow_abbrev=False,
     )
     r.add_argument(
         "--candidate-id",
@@ -11754,7 +12415,9 @@ def build_parser() -> argparse.ArgumentParser:
     r.set_defaults(func=_cmd_repair)
 
     r = rsub.add_parser(
-        "status", help="Show the atomic active-bundle pointer and its lineage"
+        "status",
+        help="Show the atomic active-bundle pointer and its lineage",
+        allow_abbrev=False,
     )
     _repair_store_flag(r)
     r.set_defaults(func=_cmd_repair)
@@ -11765,6 +12428,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Undo a repair that applied without a person: the prior bundle is "
             "active again, and repairs of that step go to a person"
         ),
+        allow_abbrev=False,
     )
     r.add_argument("candidate_id", help="The automatic repair's candidate id")
     r.add_argument("--by", required=True, help="Your name, recorded on the revert")
@@ -11774,6 +12438,7 @@ def build_parser() -> argparse.ArgumentParser:
     r = rsub.add_parser(
         "standard-changes",
         help="List the repairs that applied without a person (the daily digest)",
+        allow_abbrev=False,
     )
     r.add_argument("--day", default=None, help="UTC day, YYYY-MM-DD (default: today)")
     r.add_argument("--json", action="store_true", help="Print the ledger rows as JSON")
@@ -11783,6 +12448,7 @@ def build_parser() -> argparse.ArgumentParser:
     r = rsub.add_parser(
         "clear-hold",
         help="Let repairs of a step apply without a person again after a revert",
+        allow_abbrev=False,
     )
     r.add_argument("--workflow", required=True)
     r.add_argument("--step", required=True)
@@ -11796,6 +12462,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Claim a one-time browser pairing and store the workspace credential "
             "in the OS keychain"
         ),
+        allow_abbrev=False,
     )
     pairing_source = p.add_mutually_exclusive_group(required=True)
     pairing_source.add_argument(
@@ -11838,6 +12505,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Validate an ingest token against the hosted control plane and "
             "store it in the OS keychain"
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "--token",
@@ -11883,6 +12551,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser(
         "sanitize",
         help="Create a verified PHI-scrubbed derivative without modifying the original",
+        allow_abbrev=False,
     )
     p.add_argument("path", help="Original recording or bundle directory")
     p.add_argument("--out", required=True, help="New sanitized derivative directory")
@@ -11904,6 +12573,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser(
         "review-sanitized",
         help="Review original vs sanitized content in a loopback-only local viewer",
+        allow_abbrev=False,
     )
     p.add_argument("path", help="Sanitized derivative directory")
     p.add_argument("--original", required=True, help="Original artifact directory")
@@ -11925,6 +12595,7 @@ def build_parser() -> argparse.ArgumentParser:
             "extracted bytes and then runs the unchanged approval gate. It "
             "approves nothing."
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "--archive", required=True, help="Approved immutable archive (.approved.zip)"
@@ -11954,6 +12625,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser(
         "approve-sanitized",
         help="Approve and freeze the exact reviewed derivative as an immutable archive",
+        allow_abbrev=False,
     )
     p.add_argument("path", help="Sanitized derivative directory")
     p.add_argument("--original", required=True, help="Original artifact directory")
@@ -11970,6 +12642,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Standard and Regulated activation also binds the sealed governed "
             "authorization template."
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "--recording",
@@ -12069,6 +12742,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Upload the exact approved sanitized archive to /api/ingest; "
             "raw input is sanitized locally and paused for review"
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "path",
@@ -12188,6 +12862,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Emit a PHI-free break diagnostic from a halted run's report.json "
             "to /api/runs/ingest-report (the recording stays local)"
         ),
+        allow_abbrev=False,
     )
     p.add_argument("run_dir", help="The halted run directory (holds report.json)")
     p.add_argument(
@@ -12246,6 +12921,7 @@ def build_parser() -> argparse.ArgumentParser:
             "report.json to /api/runs/ingest-report (bounded counts, duration, "
             "and exact pushed-bundle identity — the recording stays local)"
         ),
+        allow_abbrev=False,
     )
     p.add_argument("run_dir", help="The completed run directory (holds report.json)")
     p.add_argument(
@@ -12338,6 +13014,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Read-only unless --allow-actions; needs `pip install "
             "'openadapt-flow[console]'`"
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "--bundles",
@@ -12461,6 +13138,7 @@ def build_parser() -> argparse.ArgumentParser:
             "are self-signed with a local key. They are not OpenAdapt "
             "production Seals. Needs `pip install 'openadapt-flow[execute]'`"
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "--port",
@@ -12488,6 +13166,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Write the synthetic MockMed ok and banner-lie admissions",
     )
+    p.add_argument(
+        "--config",
+        default=None,
+        metavar="DEPLOY_YAML",
+        help=(
+            "Deployment file for bundles recorded off the web (Windows, "
+            "macOS, Linux, RDP, Citrix): they run through `openadapt-flow run "
+            "--config` on its backend. An admission's own `deployment` wins."
+        ),
+    )
     p.set_defaults(func=_cmd_serve_execute)
 
     p = sub.add_parser(
@@ -12497,6 +13185,7 @@ def build_parser() -> argparse.ArgumentParser:
             "an independent oracle. Receipts are self-signed reward receipts, "
             "not Execute Seals. Needs `pip install 'openadapt-flow[reward]'`"
         ),
+        allow_abbrev=False,
     )
     p.add_argument(
         "--contract",
@@ -12543,9 +13232,12 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser(
         "business-decisions",
         help="Customer-runner typed-decision relay; it never resumes or acts.",
+        allow_abbrev=False,
     )
     bdsub = p.add_subparsers(dest="business_decisions_cmd", required=True)
-    ps = bdsub.add_parser("serve", help="Serve the outbound-only non-actuating relay")
+    ps = bdsub.add_parser(
+        "serve", help="Serve the outbound-only non-actuating relay", allow_abbrev=False
+    )
     ps.add_argument("--runs", required=True, help="Customer-local durable run root")
     ps.add_argument(
         "--runner-config", default=None, help="Operator-authored runner.toml"
@@ -12576,12 +13268,14 @@ def build_parser() -> argparse.ArgumentParser:
             "governed jobs LOCALLY (customer owns the data boundary; PHI stays "
             "on this side)"
         ),
+        allow_abbrev=False,
     )
     csub = p.add_subparsers(dest="connector_cmd", required=True)
 
     pe = csub.add_parser(
         "enroll",
         help="Enroll against a mock/development control plane and persist its token",
+        allow_abbrev=False,
     )
     pe.add_argument(
         "--control-plane-url", help="Control plane base URL (or CONTROL_PLANE_URL)"
@@ -12607,6 +13301,7 @@ def build_parser() -> argparse.ArgumentParser:
     pr = csub.add_parser(
         "run",
         help="Poll the control plane and run governed jobs until interrupted",
+        allow_abbrev=False,
     )
     pr.add_argument(
         "--control-plane-url", help="Control plane base URL (or CONTROL_PLANE_URL)"
@@ -12670,6 +13365,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     _register_learn(sub)
 
+    from openadapt_flow.cli_reconcile import register as _register_reconcile
+
+    _register_reconcile(sub)
+
     from openadapt_flow.cli_cleanup import register as _register_cleanup
 
     _register_cleanup(sub)
@@ -12690,6 +13389,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     register_fleet_parser(sub)
 
+    parser.add_task_help()
     return parser
 
 
@@ -12886,6 +13586,7 @@ def _cmd_serve_execute(args: argparse.Namespace) -> int:
         data_dir,
         token=args.token,
         seed_mockmed=bool(args.seed_mockmed),
+        deployment=getattr(args, "config", None),
     )
     print("openadapt-flow reference Execute")
     print(f"  http://{args.host}:{args.port}")
@@ -13229,6 +13930,7 @@ _STRICT_SELF_SEALING: frozenset[str] = frozenset(
         "openadapt_flow.__main__:_cmd_resume",
         "openadapt_flow.__main__:_cmd_teach",
         "openadapt_flow.__main__:_cmd_push",
+        "openadapt_flow.__main__:_cmd_seal",
     }
 )
 
@@ -13236,8 +13938,8 @@ _STRICT_SELF_SEALING: frozenset[str] = frozenset(
 def _plaintext_directories_in(args: argparse.Namespace) -> list[Path]:
     """Existing directories among the arguments that are not inside a sealed
     set. Files a person passes (a config, a results JSON) are not artifacts
-    and are not checked."""
-    from openadapt_flow import sealed_set
+    and are not checked. A path the filesystem can't classify, a broken link
+    and a link to a file are returned too, so the caller refuses them."""
 
     found: list[Path] = []
     for name, value in vars(args).items():
@@ -13247,17 +13949,24 @@ def _plaintext_directories_in(args: argparse.Namespace) -> list[Path]:
             if not isinstance(item, (str, Path)) or not str(item):
                 continue
             text = str(item)
-            if "://" in text or "\n" in text or len(text) > 4096:
-                continue
+            # Every string is checked against the filesystem, whatever it
+            # looks like: a newline, "://" or any length can spell a local
+            # path. NAME=PATH arguments name a path after the first "=".
             candidates = [text]
             if isinstance(item, str) and "=" in text:
                 candidates.append(text.split("=", 1)[1])
             for candidate in candidates:
+                if not candidate:
+                    continue
                 path = Path(candidate)
-                if not path.is_dir():
+                kind = _local_path_kind(candidate)
+                if kind is None or kind == "other":
                     continue
-                if sealed_set.is_sealed(path) or sealed_set.sealed_root(path):
+                if kind == "directory" and _inside_sealed_set(path):
                     continue
+                # A plaintext directory, or a path that can't be checked: a
+                # broken or looping link, a link to a file (either could be
+                # pointed at plaintext after this check), or a stat error.
                 if path not in found:
                     found.append(path)
     return found
@@ -13275,6 +13984,153 @@ _SEALED_OUTPUT_FROM_SEALED_INPUT: dict[str, tuple[str, ...]] = {
 _SEALED_OUTPUT_IN_STRICT: frozenset[str] = frozenset(
     {"openadapt_flow.__main__:_cmd_teach", "openadapt_flow.__main__:_cmd_push"}
 )
+
+
+def _local_path_kind(text: str) -> Optional[str]:
+    """``directory``, ``other`` (an existing non-directory that is not a
+    link), ``unchecked`` (a link that isn't a directory, or a path the
+    filesystem can't classify), or None when no such path can exist."""
+
+    import errno
+    import os
+    import stat
+
+    no_such_path = (errno.ENOENT, errno.ENOTDIR, errno.ENAMETOOLONG)
+    # Windows rejects a name it cannot hold, such as "http:" with a colon
+    # (ERROR_INVALID_NAME, ERROR_BAD_PATHNAME): no such path can exist.
+    invalid_name = (123, 161)
+
+    def absent(exc: OSError) -> bool:
+        return (
+            exc.errno in no_such_path or getattr(exc, "winerror", None) in invalid_name
+        )
+
+    try:
+        link = os.lstat(text)
+    except ValueError:  # an embedded NUL: no such path
+        return None
+    except OSError as exc:
+        return None if absent(exc) else "unchecked"
+    try:
+        st = os.stat(text)
+    except (OSError, ValueError):
+        return "unchecked"  # a broken or looping link, or unreadable
+    if stat.S_ISDIR(st.st_mode):
+        return "directory"
+    return "unchecked" if stat.S_ISLNK(link.st_mode) else "other"
+
+
+#: A plaintext copy of one of these inside a sealed set's directory is a
+#: plaintext artifact placed there, not part of the set.
+_PLAINTEXT_ARTIFACT_MARKERS = ("workflow.json", "events.jsonl", "report.json")
+
+
+def _complete_inventory(top: Path) -> Optional[list[Path]]:
+    """Every regular file under ``top``, read from the filesystem now, or
+    None when any entry can't be inspected: a directory that can't be
+    listed, a symlink (it could point anywhere, now or later), or an entry
+    that is neither a regular file nor a directory."""
+    import os
+    import stat
+
+    files: list[Path] = []
+    pending = [top]
+    while pending:
+        current = pending.pop()
+        try:
+            with os.scandir(current) as entries:
+                listed = list(entries)
+        except OSError:
+            return None
+        for entry in listed:
+            try:
+                mode = entry.stat(follow_symlinks=False).st_mode
+            except OSError:
+                return None
+            if stat.S_ISDIR(mode):
+                pending.append(Path(entry.path))
+            elif stat.S_ISREG(mode):
+                files.append(Path(entry.path))
+            else:  # a symlink, socket, device or FIFO
+                return None
+    return files
+
+
+def _inside_sealed_set(path: Path) -> bool:
+    """Whether ``path`` really is, or is inside, a sealed set.
+
+    Symlinks are resolved first, so a link inside a set to a directory
+    elsewhere is judged by where it points. The set's header must read, and
+    every entry under the path must be inspected now: a directory that can't
+    be listed or a symlink below the path refuses. The path must be part of
+    the set: with a key, the set and every set nested under the path are
+    opened afresh (never from a cached open), and each authenticated index
+    refuses any file it doesn't list; without one, every file under the path
+    must be ciphertext or a structural file. A plaintext workflow, event log
+    or report inside a set's directory is plaintext.
+    """
+    import os
+
+    from openadapt_flow import crypto, sealed_set
+
+    real = Path(os.path.realpath(path))
+    root = real if sealed_set.is_sealed(real) else sealed_set.sealed_root(real)
+    if root is None:
+        return False
+    if any((real / name).exists() for name in _PLAINTEXT_ARTIFACT_MARKERS):
+        return False
+    inventory = _complete_inventory(real)
+    if inventory is None:
+        return False
+
+    def read_key(set_root: Path) -> tuple[Optional[str], bool]:
+        try:
+            kind = str(sealed_set.read_header(set_root)["kind"])
+        except (sealed_set.SealedSetError, KeyError):
+            return None, False
+        key = (
+            os.environ.get(sealed_set.RECORDING_ENV_KEY)
+            if kind == "recording"
+            else None
+        ) or crypto.resolve_read_key(None)
+        return key, True
+
+    key, readable = read_key(root)
+    if not readable:
+        return False
+    if key:
+
+        def opened_afresh(set_root: Path, set_key: str) -> Optional[list[str]]:
+            # Never open_set's cache: a cached open says what was on disk
+            # then, not what is there now.
+            try:
+                return sealed_set.SealedSet.open(set_root, set_key).files("")
+            except (sealed_set.SealedSetError, crypto.CryptoError):
+                return None
+
+        files = opened_afresh(root, key)
+        if files is None:
+            return False
+        nested = {f.parent for f in inventory if f.name == sealed_set.HEADER}
+        for set_root in sorted(nested - {root}):
+            set_key, readable = read_key(set_root)
+            if not readable or not set_key:
+                return False
+            if opened_afresh(set_root, set_key) is None:
+                return False
+        rel = Path(os.path.relpath(real, root)).as_posix()
+        return rel == "." or any(f == rel or f.startswith(rel + "/") for f in files)
+    for file in inventory:
+        name = file.name
+        if not (
+            name.endswith(sealed_set.SEALED_SUFFIX)
+            or name == sealed_set.HEADER
+            or name == "manifest.json"
+            or name.endswith(".lock")
+            or name.startswith(".")
+        ):
+            return False
+    return True
 
 
 def _unsealed_output_check(args: argparse.Namespace) -> None:
@@ -13525,10 +14381,17 @@ def _sealed_input_refusal(args: argparse.Namespace) -> Optional[str]:
     return None
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(
+    argv: Sequence[str] | None = None,
+    *,
+    record_check_proof_source: Optional[Fixture] = None,
+) -> int:
     """CLI entry point. Returns a process exit code."""
+    from openadapt_flow.cli_tasks import alias_notice, translate
+
     raw = list(sys.argv[1:] if argv is None else argv)
-    if raw[:1] in (["demo"], ["tutorial"]) and not _PREWARM_SKIP_FLAGS & set(raw):
+    routed = translate(raw)
+    if routed[:1] in (["demo"], ["tutorial"]) and not _PREWARM_SKIP_FLAGS & set(routed):
         # Building the parser imports for a second or two on a new install;
         # start loading OCR and checking the browser driver meanwhile.
         from openadapt_flow import _prewarm
@@ -13537,8 +14400,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     from openadapt_flow._browser_setup import BrowserSupportMissing
 
-    argv = list(sys.argv[1:] if argv is None else argv)
-    argv = _qualify_default_form(argv)
+    argv = _qualify_default_form(routed)
     from openadapt_flow.cli_admit import admit_default_form
 
     argv = admit_default_form(argv)
@@ -13549,7 +14411,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     from openadapt_flow import no_outbound
 
     no_outbound.enforce_from_env()
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    alias_notice(raw, getattr(parser, "task_names", {}), "openadapt-flow")
+    if record_check_proof_source is not None:
+        if getattr(args, "func", None) is not _cmd_scaffold_verifier:
+            print("REFUSED: proof source requires scaffold-verifier", file=sys.stderr)
+            return 2
     if getattr(args, "config_sha256", None):
         if not getattr(args, "config", None):
             print("REFUSED: --config-sha256 needs --config", file=sys.stderr)
@@ -13586,6 +14454,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"REFUSED: {safe_errors.message(exc)}", file=sys.stderr)
         return 2
     try:
+        # Inject only after the ordinary input/output argument guards. This
+        # object is not a CLI flag, path exemption or serialized capability.
+        if record_check_proof_source is not None:
+            args._record_check_proof_source = record_check_proof_source
         code = args.func(args)
         if getattr(args, "command", None) in ("run", "replay"):
             # Offline Seal by default (OPENADAPT_LOCAL_SEAL=off disables). It

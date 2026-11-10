@@ -1,4 +1,4 @@
-"""Prompt templates of Microsoft's Universal Verifier (UV), copied verbatim.
+"""Prompt templates adapted from Microsoft's Universal Verifier (UV).
 
 Source: https://github.com/microsoft/fara
   webeval/src/webeval/rubric_agent/prompts.py
@@ -6,10 +6,11 @@ Source: https://github.com/microsoft/fara
   webeval/src/webeval/rubric_agent/critical_point_types.yaml (one CP type, quoted below)
 Commit: a675d6d61c41c47ae87bacefeab22caad18e3e84
 
-Each template below is the exact source text of the module-level assignment
-in prompts.py at that commit (extracted with ``ast.get_source_segment`` and
-checked equal to ``ast.literal_eval`` of the original). Templates are filled
-with ``string.Template.substitute`` exactly as UV does.
+The original templates were extracted from module-level assignments at that
+commit. This adaptation removes the agent final-answer input and instructions
+that require it. Only task intent, structured actions, provenance-labelled
+observations and screenshots are supplied. Historical results used the original
+templates; they are not rescored by this change.
 
 The original license of microsoft/fara follows.
 
@@ -696,7 +697,7 @@ RUBRIC_DEPENDENCY_CHECKING_PROMPT = """Input Task: "$task_id"$init_url_context
 
 ACTION_ONLY_RUBRIC_SCORER_PROMPT = """
 Instructions: Help evaluate an Agent's Action History with respect to a give Rubric to grade how well an Agent completed a Task.
-The Action History is a log of all actions taken by the Agent while attempting to complete the Task. The Agent Output is the final result produced by the Agent after completing all actions, which may or may not be consistent with the Action History.
+The Action History contains structured actions and provenance-labelled observations. Agent final answers and intermediate narration are withheld. Evaluate the observed task effects; do not infer completion from an attempted action or an HTTP success status alone.
 
 Task: $task_definition$init_url_context
 
@@ -706,10 +707,6 @@ $rubric
 
 Action History: >>>
 $action_history
-<<<
-
-Agent Output: >>>
-$predicted_target
 <<<
 
 $critical_point_context
@@ -905,7 +902,7 @@ Example 2: Task: "Add flour to cart. Let me know if unavailable."
    b. If uncontrollable blocker prevented this criterion: Award full credit and explain why in justification
    c. If controllable error prevented this criterion: Award appropriate partial/zero credit and explain why
    d. If criterion was attempted: Score based on the quality of the attempt and outcome
-4. Trust the Action History over the Agent Output. Penalize hallucinations where the Output claims something not supported by the Action History.
+4. Evaluate the observed evidence. Do not infer a completed task from an action attempt or an HTTP success status alone.
 5. Be consistent: If you determine an uncontrollable blocker exists, apply "do not cascade penalties" to ALL downstream dependent criteria.
 
 **IMPORTANT**: Do NOT output "total_max_points" or "total_earned_points" fields. The totals will be computed programmatically. Only output the "items" list with each criterion scored.
@@ -919,9 +916,6 @@ MM_SCREENSHOT_EVIDENCE_ANALYSIS_PROMPT = """Task: $task_definition$init_url_cont
 **Action History:**
 $action_history
 
-**Agent's Predicted Output (Final Answer):**
-$agent_predicted_output
-
 **Criterion Being Evaluated:**
 $criterion_info
 
@@ -929,19 +923,15 @@ $criterion_info
 Analyze the provided screenshot to extract visual evidence relevant to evaluating this specific criterion.
 
 **CRITICAL — Ground Your Analysis in the ACTUAL Screenshot Pixels:**
-You MUST describe ONLY what is LITERALLY VISIBLE in this specific screenshot. Do NOT assume, infer, or fill in content based on the Action History or Predicted Output.
+You MUST describe ONLY what is LITERALLY VISIBLE in this specific screenshot. Do NOT assume, infer, or fill in content based on the Action History.
 - READ the actual text rendered in the screenshot: dropdown/filter labels, table headers, column values, date ranges, page titles.
 - If a dropdown says "Regular Season", do NOT describe it as "Postseason". If dates only go up to March, do NOT claim April dates are visible.
 - If the screenshot does not show information relevant to this criterion, say so explicitly — do NOT fabricate evidence to match the agent's claims.
-- The Action History and Predicted Output are provided for COMPARISON purposes only — to help you identify discrepancies between what the agent claimed and what the screenshot actually shows. They are NOT a description of the screenshot content.
+- The Action History provides context for comparison. It is NOT a description of the screenshot content; independently observed records and transport receipts retain their stated source.
 - **`run_command` actions**: Command Output in the Action History is ground truth from the system — it will NOT appear in screenshots. An unchanged desktop after `run_command` is expected, not evidence of failure. Note this in your analysis so the rescoring step treats Command Output as authoritative.
 
-**IMPORTANT — Criteria About the Agent's Output:**
-Some criteria evaluate the quality, correctness, or completeness of the agent's final output (e.g., "Provide a step-by-step summary," "Report the price," "List the results"). For these criteria:
-- The agent's output IS provided above in "Agent's Predicted Output." This is also typically the message associated with the agent's last action.
-- Use the screenshots to VERIFY whether the output is correct, accurate, and supported by what is visible on screen — NOT to determine whether an output exists.
-- If the criterion is about the agent's output, check whether the predicted output matches, contradicts, or is unsupported by the visual evidence in the screenshot.
-- Only penalize if the output is factually wrong, hallucinated, or contradicted by the screenshots — NOT because the output is "not visible in the screenshot" (outputs are delivered as text, not rendered on-screen).
+**Evidence Scope:**
+Agent replies and intermediate narration are withheld. Evaluate observed task effects. If a criterion requires an unavailable final reply, identify that evidence gap rather than inventing an answer. An action or HTTP status alone does not prove a durable record change.
 
 **Analysis Requirements:**
 
@@ -950,20 +940,13 @@ Some criteria evaluate the quality, correctness, or completeness of the agent's 
    - What state is the page/interface in? (What do the dropdowns, filters, tabs actually say?)
    - What data or information is displayed? (What are the actual date ranges, values, labels shown?)
 
-2. **criterion_analysis**: Based on the screenshot, the agent's intermediate thoughts/actions, and especially the agent's predicted output, analyze how the evidence indicates:
-   - Success: Does the screenshot confirm the criterion was fully satisfied? Does the agent's predicted output correctly reflect what is shown?
+2. **criterion_analysis**: Based on the screenshot and the structured actions and observations, analyze how the evidence indicates:
+   - Success: Does the screenshot confirm the criterion was fully satisfied?
    - Partial success: Does it show partial progress or partial satisfaction?
    - Failure: Does it show the criterion was not satisfied, or that the agent's output is incorrect/hallucinated?
    - Provide specific reasoning based on visible evidence
-   - **For output-quality criteria**: If the agent delivered a predicted output that addresses the criterion, evaluate whether that output is accurate and consistent with what the screenshots show. Do NOT give zero credit simply because the output text is not rendered on screen.
 
-3. **discrepancies**: Compare what the agent CLAIMED to do (from Action History and Predicted Output) versus what the screenshot ACTUALLY SHOWS. Identify any mismatches:
-   - Did the agent claim something that isn't visible in the screenshot?
-   - Did the agent miss information that IS visible in the screenshot?
-   - Does the agent's predicted output contain information that is contradicted by the screenshot?
-   - Does the agent's predicted output contain hallucinated information not supported by any screenshot?
-   - Example: Agent says "no videos over 20 mins found" but screenshot shows video thumbnails with "1:36:00" duration visible
-   - Example: Agent's predicted output lists steps from a guide, and the screenshot confirms those steps are on the page — this is CONSISTENT, not a discrepancy
+3. **discrepancies**: Compare the task, structured actions and provenance-labelled observations with what the screenshot ACTUALLY SHOWS. Identify mismatches and missing evidence without inventing an agent report.
 
 4. **environment_issues_confirmed**: Does the screenshot show environmental blockers that prevented task completion? Check for:
    - CAPTCHAs or bot detection pages
@@ -992,27 +975,20 @@ MM_SCREENSHOT_BATCHED_EVIDENCE_ANALYSIS_PROMPT = """Task: $task_definition$init_
 **Action History:**
 $action_history
 
-**Agent's Predicted Output (Final Answer):**
-$agent_predicted_output
-
 **You are given a SINGLE screenshot (the image attached to this message). You must analyze this ONE screenshot against MULTIPLE rubric criteria listed below. Produce one analysis entry per criterion, all based on the SAME screenshot image.**
 
 **Criteria to evaluate against this screenshot:**
 $criteria_info_block
 
 **CRITICAL — Ground Your Analysis in the ACTUAL Screenshot Pixels:**
-You MUST describe ONLY what is LITERALLY VISIBLE in the attached screenshot image. Do NOT assume, infer, or fill in content based on the Action History or Predicted Output.
+You MUST describe ONLY what is LITERALLY VISIBLE in the attached screenshot image. Do NOT assume, infer, or fill in content based on the Action History.
 - READ the actual text rendered in the screenshot: dropdown/filter labels, table headers, column values, date ranges, page titles.
 - If a dropdown says "Regular Season", do NOT describe it as "Postseason". If dates only go up to March, do NOT claim April dates are visible.
 - If the screenshot does not show information relevant to a criterion, say so explicitly — do NOT fabricate evidence to match the agent's claims.
-- The Action History and Predicted Output are provided for COMPARISON purposes only — to help you identify discrepancies between what the agent claimed and what the screenshot actually shows. They are NOT a description of the screenshot content.
+- The Action History provides context for comparison. It is NOT a description of the screenshot content; independently observed records and transport receipts retain their stated source.
 
-**IMPORTANT — Criteria About the Agent's Output:**
-Some criteria evaluate the quality, correctness, or completeness of the agent's final output (e.g., "Provide a step-by-step summary," "Report the price," "List the results"). For these criteria:
-- The agent's output IS provided above in "Agent's Predicted Output." This is also typically the message associated with the agent's last action.
-- Use the screenshots to VERIFY whether the output is correct, accurate, and supported by what is visible on screen — NOT to determine whether an output exists.
-- If the criterion is about the agent's output, check whether the predicted output matches, contradicts, or is unsupported by the visual evidence in the screenshot.
-- Only penalize if the output is factually wrong, hallucinated, or contradicted by the screenshots — NOT because the output is "not visible in the screenshot" (outputs are delivered as text, not rendered on-screen).
+**Evidence Scope:**
+Agent replies and intermediate narration are withheld. Evaluate observed task effects. If a criterion requires an unavailable final reply, identify that evidence gap rather than inventing an answer. An action or HTTP status alone does not prove a durable record change.
 
 **Analysis Requirements (produce these for EACH criterion listed above, all from the SAME attached screenshot):**
 
@@ -1021,20 +997,13 @@ Some criteria evaluate the quality, correctness, or completeness of the agent's 
    - What state is the page/interface in? (What do the dropdowns, filters, tabs actually say?)
    - What data or information is displayed? (What are the actual date ranges, values, labels shown?)
 
-2. **criterion_analysis**: Based on the screenshot, the agent's intermediate thoughts/actions, and especially the agent's predicted output, analyze how the evidence indicates:
-   - Success: Does the screenshot confirm the criterion was fully satisfied? Does the agent's predicted output correctly reflect what is shown?
+2. **criterion_analysis**: Based on the screenshot and the structured actions and observations, analyze how the evidence indicates:
+   - Success: Does the screenshot confirm the criterion was fully satisfied?
    - Partial success: Does it show partial progress or partial satisfaction?
    - Failure: Does it show the criterion was not satisfied, or that the agent's output is incorrect/hallucinated?
    - Provide specific reasoning based on visible evidence
-   - **For output-quality criteria**: If the agent delivered a predicted output that addresses the criterion, evaluate whether that output is accurate and consistent with what the screenshots show. Do NOT give zero credit simply because the output text is not rendered on screen.
 
-3. **discrepancies**: Compare what the agent CLAIMED to do (from Action History and Predicted Output) versus what the screenshot ACTUALLY SHOWS. Identify any mismatches:
-   - Did the agent claim something that isn't visible in the screenshot?
-   - Did the agent miss information that IS visible in the screenshot?
-   - Does the agent's predicted output contain information that is contradicted by the screenshot?
-   - Does the agent's predicted output contain hallucinated information not supported by any screenshot?
-   - Example: Agent says "no videos over 20 mins found" but screenshot shows video thumbnails with "1:36:00" duration visible
-   - Example: Agent's predicted output lists steps from a guide, and the screenshot confirms those steps are on the page — this is CONSISTENT, not a discrepancy
+3. **discrepancies**: Compare the task, structured actions and provenance-labelled observations with what the screenshot ACTUALLY SHOWS. Identify mismatches and missing evidence without inventing an agent report.
 
 4. **environment_issues_confirmed**: Does the screenshot show environmental blockers that prevented task completion? Check for:
    - CAPTCHAs or bot detection pages
@@ -1080,7 +1049,7 @@ Example — 3 criteria (0, 1, 2) evaluated against ONE screenshot:
     {{
       "criterion_idx": 1,
       "screenshot_evidence": "The same screenshot also shows a price label reading $$24.99...",
-      "criterion_analysis": "The price matches the agent's predicted output...",
+      "criterion_analysis": "The price shown matches the task constraint...",
       "discrepancies": "None.",
       "environment_issues_confirmed": false
     }},
@@ -1103,9 +1072,6 @@ MM_RUBRIC_RESCORING_PROMPT = """Task: $task_definition$init_url_context
 **Action History:**
 $action_history
 
-**Agent's Predicted Output (Final Answer):**
-$agent_predicted_output
-
 **Full Rubric with Baseline (Action-Only) Scores:**
 $full_rubric_with_baselines
 
@@ -1113,13 +1079,13 @@ $full_rubric_with_baselines
 $all_screenshot_evidence
 
 **Your Task:**
-You are rescoring the ENTIRE rubric in a single pass based on the screenshot evidence, the agent's action history, and the agent's predicted output. For each criterion, determine whether the baseline (action-only) score should be adjusted based on the visual evidence.
+You are rescoring the ENTIRE rubric in a single pass based on the screenshot evidence and the structured action/observation history. For each criterion, determine whether the baseline (action-only) score should be adjusted based on the visual evidence.
 
 **Reality Notes:**
 - Some criteria may include a "Reality Notes" annotation just below their Description. These notes were generated by comparing the rubric's original assumptions against what the screenshots actually show. They provide interpretive context — clarifying, nuancing, or correcting the Description's **factual claims** in light of reality. When Reality Notes are present, they take precedence over the Description **only for conflicting factual claims** (e.g., what products exist, what a website actually shows, what options are available). However, Reality Notes do NOT override the Core Evaluation Principles below (cascading dependencies, uncontrollable blockers, best-effort evaluation, etc.).
 - Reality Notes limitations: Reality Notes were generated from screenshot evidence ONLY — they did not have access to the Action History. For URL and navigation information, the **Action History is authoritative**.
 
-**Agent Output Format:** The agent's predicted output above may be a structured dictionary (e.g., `{"target_name": "...", "target_id": "...", "url": "..."}`) rather than free-text prose. This is a valid and complete answer format. Information present in these fields counts as the agent having identified and presented that information. Do NOT penalize the agent for using a structured output format instead of prose.
+**Evidence Scope:** Agent replies are withheld. A criterion requiring an unavailable reply has an evidence gap. Do not infer completion from an attempted action or HTTP success status alone.
 
 **Core Evaluation Principles:**
 
@@ -1322,16 +1288,7 @@ Screenshots are numbered in chronological order: Screenshot 1 is the earliest, a
 
 1. **Trust visual evidence over action history**: If screenshots contradict what the agent claimed, the visual evidence takes precedence. But remember: always use the LATEST screenshot when multiple screenshots show the same element in different states.
 
-2. **For criteria evaluating the agent's output**: The agent's predicted output is provided above. When a criterion asks whether the agent provided a summary, reported a finding, listed results, etc.:
-   - Check if the predicted output addresses the criterion's requirements
-   - Use screenshots to verify whether the output is accurate and consistent with what the agent actually found
-   - Do NOT give zero credit simply because the output text is not visible on screen — the output is delivered as text, not rendered in a browser
-   - The standard is simple: **either the agent's answer is consistent with the visual evidence, or it is not.** Do not invent subjective dimensions like "overconfidence" or "tone certainty" — these are not scoring criteria. Evaluate the agent's claims using these five categories:
-     * **Contradiction** (penalize): Screenshots show X, but the agent claims not-X. Example: screenshot shows a booking calendar exists, but the agent says "no booking system available." The visual evidence directly contradicts the claim.
-     * **Fabrication** (penalize): The agent claims X with zero evidentiary basis — nothing in the screenshots or action history supports the claim. Example: agent states a specific price that appears nowhere in any screenshot.
-     * **Omission** (penalize): The agent didn't view everything it needed to. Screenshots show no evidence of X, and the agent concludes X doesn't exist or ignores it — BUT X is commonly known to exist and the agent should have looked for it. Example: Task asks for "highest ranked NHL team in the Western Conference," but the agent only checked the Central Division and never viewed the Pacific Division. This is incomplete exploration, not a supported inference.
-     * **Supported inference from absence** (do NOT penalize): Screenshots consistently show NO evidence of X (e.g., no booking UI, no date picker, no ticket purchasing interface across all relevant pages visited), and the agent concludes "X does not exist," AND X is not commonly known to exist. This is a reasonable inference consistent with the visual evidence — not a hallucination. Only penalize if screenshots actually CONTRADICT the claim by showing X does exist. Absence of explicit textual confirmation (e.g., no banner saying "we don't offer online booking") is NOT the same as contradiction.
-     * **Visual confirmation without explicit statement** (do NOT penalize): If the agent's output omits an explicit justification for a claim but the screenshots visually confirm the correct result (e.g., the agent selected female cardiologists but didn't explicitly state "female" — yet their photos in the screenshots confirm they are female-presenting, or the agent chose a "flexible" course and the screenshot shows a "Flexible schedule" label), the visual evidence is sufficient and the agent should not be penalized for the omission.
+2. **For criteria evaluating the agent's output**: Agent final replies are withheld. Identify the evidence gap; do not invent an answer. Assess record changes using the available observations and their source.
 
 3. **Verify environment blockers**: If the agent claimed a blocker (CAPTCHA, out-of-stock, login wall), the screenshots must CONFIRM this blocker is actually visible. If not visible, penalize appropriately.
    - IMPORTANT — Reality-Notes-revealed platform limitations: When the Reality Notes for a criterion indicate that the criterion's assumed entity, interface, or feature DOES NOT EXIST on the site (e.g., "no admissions booking calendar/date-picker is visible," "no online ticketing UI exists"), this is an **uncontrollable platform limitation** — the agent cannot navigate to or interact with something that does not exist. In this case, the scorer MUST apply the criterion's own full-credit escape clause (most criteria include one, e.g., "OR clearly reports platform limitations such as site lacks date-based booking"). Check whether the agent's output reports this limitation; if so, award full credit per the criterion's own description. Do NOT score 0 for "did not navigate to X" when Reality Notes confirm X does not exist on the site.
@@ -1475,7 +1432,7 @@ DO NOT OUTPUT ANYTHING OTHER THAN JSON.
 """
 
 
-OUTCOME_VERIFICATION_PROMPT = """You are to evaluate the performance of a web navigation agent. The agent is designed to help a human user navigate a website to complete a task. You are given the user's task, the agent's action history, the agent's predicted output, a scored rubric with screenshot evidence grouped by criterion, and the rubric's scores from a separate scoring system.
+OUTCOME_VERIFICATION_PROMPT = """You are to evaluate the performance of a web navigation agent. The agent is designed to help a human user navigate a website to complete a task. You are given the user's task, structured action/observation history, a scored rubric with screenshot evidence grouped by criterion, and the rubric's scores from a separate scoring system.
 
 **Your role is to make an INDEPENDENT assessment.** The scored rubric is provided as reference context — it shows how a separate system scored individual criteria, and what screenshot evidence was gathered. However, you must form your OWN conclusion about whether the task was successfully completed. The rubric system can sometimes be too strict (penalizing nitpicks, over-reading requirements, cascading penalties) or too lenient (awarding credit for effort without results). Use the rubric's evidence and reasoning as input, but do NOT blindly adopt its verdict. A high rubric score does not guarantee success, and a low rubric score does not guarantee failure.
 
@@ -1695,10 +1652,6 @@ $evidence_summary
 
 Action History: >>>
 $action_history
-<<<
-
-Predicted Output: >>>
-$predicted_output
 <<<
 
 *IMPORTANT*

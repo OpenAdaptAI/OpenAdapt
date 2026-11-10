@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.10"
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'linux'",
@@ -5164,12 +5164,12 @@ wheels = [
 
 [[package]]
 name = "xcffib"
-version = "1.12.0"
+version = "1.13.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cffi", marker = "platform_python_implementation != 'PyPy'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/28/84/ca4a0d870178ad21dc5d6721c782d924b2aa8ced93bcf7fe715c1eae01fd/xcffib-1.12.0.tar.gz", hash = "sha256:43452de509c1264d5bcea4bc025ca1bf68272d240ef26d3340b46e11f63d3d4a", size = 131116, upload-time = "2025-12-14T17:38:01.296Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/3c/7b/2e2329633dfb89548eb6b61bac29c4b3cc08a468e583202c4dd4ae3e361d/xcffib-1.13.0.tar.gz", hash = "sha256:b1b5535aa284a0df3087c1a101bfda6ed9c50a59af4b91ba93d47a7b17ec0a65", size = 149280, upload-time = "2026-10-18T19:21:07.925Z" }
 
 [[package]]
 name = "zipp"

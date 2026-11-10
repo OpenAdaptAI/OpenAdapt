@@ -1,0 +1,4653 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      214,
+      297
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {
+     "coordinate": [
+      640,
+      500
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 5
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+l"
+    },
+    {
+     "text": "localhost:3000/AllergyIntolerance\n"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      200,
+      33
+     ]
+    },
+    {
+     "text": "penicillin"
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "Return"
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      290,
+      33
+     ]
+    },
+    {
+     "text": "BackSpace"
+    },
+    {
+     "coordinate": [
+      32,
+      31
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      124,
+      90
+     ]
+    },
+    {
+     "text": "AllergyIntolerance"
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "Escape"
+    },
+    {
+     "coordinate": [
+      30,
+      90
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      800,
+      700
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      124,
+      90
+     ]
+    },
+    {
+     "text": "AllergyInt"
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      83,
+      138
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 5
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1231,
+      167
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Use the JSON tab.",
+   "actions": [
+    {
+     "coordinate": [
+      349,
+      131
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      764,
+      430
+     ]
+    },
+    {
+     "text": "ctrl+a"
+    },
+    {
+     "text": "{\"resourceType\":\"AllergyIntolerance\",\"patient\":{\"reference\":\"Patient/de3f899f-0f1e-4131-9293-120d960ea1ee\"},\"code\":{\"coding\":[{\"system\":\"http://snomed.info/sct\",\"code\":\"91936005\"}]},\"criticality\":\"high\",\"clinicalStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical\",\"code\":\"active\"}]},\"verificationStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-verification\",\"code\":\"confirmed\"}]}}"
+    },
+    {
+     "coordinate": [
+      1182,
+      718
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      764,
+      500
+     ]
+    },
+    {
+     "text": "ctrl+a"
+    },
+    {
+     "text": "BackSpace"
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+End"
+    },
+    {
+     "text": "ctrl+shift+Home"
+    },
+    {
+     "text": "Delete"
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "start_coordinate": [
+      326,
+      213
+     ],
+     "coordinate": [
+      1190,
+      600
+     ]
+    },
+    {
+     "text": "BackSpace"
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "{\"resourceType\":\"AllergyIntolerance\",\"patient\":{\"reference\":\"Patient/de3f899f-0f1e-4131-9293-120d960ea1ee\"},\"code\":{\"coding\":[{\"system\":\"http://snomed.info/sct\",\"code\":\"91936005\"}]},\"criticality\":\"high\",\"clinicalStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical\",\"code\":\"active\"}]},\"verificationStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-verification\",\"code\":\"confirmed\"}]}}"
+    },
+    {
+     "duration": 1
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1182,
+      718
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Parsed. Scroll to find the submit button.",
+   "actions": [
+    {
+     "coordinate": [
+      764,
+      400
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 15
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      124,
+      90
+     ]
+    },
+    {
+     "text": "AllergyInt"
+    },
+    {
+     "duration": 2
+    },
+    {
+     "coordinate": [
+      83,
+      138
+     ]
+    },
+    {
+     "duration": 8
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      83,
+      138
+     ]
+    },
+    {
+     "duration": 10
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1231,
+      167
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "coordinate": [
+      349,
+      131
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "start_coordinate": [
+      326,
+      213
+     ],
+     "coordinate": [
+      1000,
+      500
+     ]
+    },
+    {
+     "text": "BackSpace"
+    },
+    {
+     "text": "{\"resourceType\":\"AllergyIntolerance\",\"patient\":{\"reference\":\"Patient/de3f899f-0f1e-4131-9293-120d960ea1ee\"},\"code\":{\"coding\":[{\"system\":\"http://snomed.info/sct\",\"code\":\"91936005\"}]},\"criticality\":\"high\",\"clinicalStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical\",\"code\":\"active\"}]},\"verificationStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-verification\",\"code\":\"confirmed\"}]}}"
+    },
+    {
+     "coordinate": [
+      1182,
+      718
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "coordinate": [
+      282,
+      131
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "coordinate": [
+      764,
+      500
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 60
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Let me verify the form retained the values before creating.",
+   "actions": [
+    {
+     "coordinate": [
+      764,
+      400
+     ],
+     "scroll_direction": "up",
+     "scroll_amount": 60
+    },
+    {
+     "coordinate": [
+      764,
+      400
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 5
+    },
+    {
+     "duration": 1
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      764,
+      400
+     ],
+     "scroll_direction": "up",
+     "scroll_amount": 60
+    },
+    {
+     "coordinate": [
+      349,
+      131
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "start_coordinate": [
+      326,
+      213
+     ],
+     "coordinate": [
+      1000,
+      500
+     ]
+    },
+    {
+     "text": "BackSpace"
+    },
+    {
+     "text": "{\"resourceType\":\"AllergyIntolerance\",\"patient\":{\"reference\":\"Patient/de3f899f-0f1e-4131-9293-120d960ea1ee\"},\"code\":{\"coding\":[{\"system\":\"http://snomed.info/sct\",\"code\":\"91936005\"}]},\"criticality\":\"high\",\"clinicalStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical\",\"code\":\"active\"}]},\"verificationStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-verification\",\"code\":\"confirmed\"}]}}"
+    },
+    {
+     "duration": 1
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1182,
+      718
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      282,
+      131
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "coordinate": [
+      764,
+      400
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 5
+    },
+    {
+     "duration": 1
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      764,
+      400
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 60
+    },
+    {
+     "coordinate": [
+      1169,
+      733
+     ]
+    },
+    {
+     "duration": 4
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      764,
+      400
+     ],
+     "scroll_direction": "up",
+     "scroll_amount": 60
+    },
+    {
+     "duration": 1
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1239,
+      693
+     ]
+    },
+    {
+     "coordinate": [
+      764,
+      543
+     ]
+    },
+    {
+     "text": "active"
+    },
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      400,
+      600
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "coordinate": [
+      700,
+      631
+     ]
+    },
+    {
+     "text": "confirmed"
+    },
+    {
+     "duration": 6
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "BackSpace",
+     "repeat": 15
+    },
+    {
+     "duration": 1
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      472,
+      542
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "text": "Escape"
+    },
+    {
+     "duration": 1
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Now verification status.",
+   "actions": [
+    {
+     "coordinate": [
+      700,
+      631
+     ]
+    },
+    {
+     "text": "confirmed"
+    },
+    {
+     "duration": 6
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 5
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      700,
+      470
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      367,
+      680
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "text": "Escape"
+    },
+    {
+     "coordinate": [
+      1240,
+      400
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      800,
+      631
+     ]
+    },
+    {
+     "text": "End"
+    },
+    {
+     "text": "BackSpace",
+     "repeat": 9
+    },
+    {
+     "text": "Escape"
+    },
+    {
+     "coordinate": [
+      764,
+      400
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 5
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      764,
+      400
+     ],
+     "scroll_direction": "up",
+     "scroll_amount": 4
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Criticality first.",
+   "actions": [
+    {
+     "coordinate": [
+      764,
+      177
+     ]
+    },
+    {
+     "text": "high"
+    },
+    {
+     "coordinate": [
+      1240,
+      300
+     ]
+    },
+    {
+     "duration": 8
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1245,
+      320
+     ]
+    },
+    {
+     "duration": 5
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      364,
+      226
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "text": "Escape"
+    },
+    {
+     "coordinate": [
+      1245,
+      330
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Now Code: search SNOMED.",
+   "actions": [
+    {
+     "coordinate": [
+      764,
+      366
+     ]
+    },
+    {
+     "text": "91936005"
+    },
+    {
+     "coordinate": [
+      1245,
+      300
+     ]
+    },
+    {
+     "duration": 10
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1250,
+      310
+     ]
+    },
+    {
+     "duration": 8
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+a"
+    },
+    {
+     "text": "penicillin"
+    },
+    {
+     "coordinate": [
+      1245,
+      300
+     ]
+    },
+    {
+     "duration": 10
+    },
+    {
+     "coordinate": [
+      1250,
+      320
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      600,
+      366
+     ]
+    },
+    {
+     "text": "BackSpace"
+    },
+    {
+     "text": "Escape"
+    },
+    {
+     "coordinate": [
+      764,
+      454
+     ]
+    },
+    {
+     "text": "Rosa"
+    },
+    {
+     "coordinate": [
+      1245,
+      300
+     ]
+    },
+    {
+     "duration": 8
+    },
+    {
+     "coordinate": [
+      1250,
+      320
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      431,
+      510
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "coordinate": [
+      764,
+      400
+     ],
+     "scroll_direction": "up",
+     "scroll_amount": 60
+    },
+    {
+     "duration": 1
+    },
+    {
+     "coordinate": [
+      349,
+      131
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "start_coordinate": [
+      326,
+      213
+     ],
+     "coordinate": [
+      1000,
+      500
+     ]
+    },
+    {
+     "text": "BackSpace"
+    },
+    {
+     "text": "{\"resourceType\":\"AllergyIntolerance\",\"patient\":{\"reference\":\"Patient/de3f899f-0f1e-4131-9293-120d960ea1ee\"},\"code\":{\"coding\":[{\"system\":\"http://snomed.info/sct\",\"code\":\"91936005\"}]},\"criticality\":\"high\",\"clinicalStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical\",\"code\":\"active\"}]},\"verificationStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-verification\",\"code\":\"confirmed\"}]}}"
+    },
+    {
+     "coordinate": [
+      1182,
+      718
+     ]
+    },
+    {
+     "coordinate": [
+      1000,
+      400
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "}": 0
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      124,
+      90
+     ]
+    },
+    {
+     "text": "AllergyInt"
+    },
+    {
+     "coordinate": [
+      600,
+      90
+     ]
+    },
+    {
+     "duration": 8
+    },
+    {
+     "coordinate": [
+      700,
+      95
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      83,
+      138
+     ]
+    },
+    {
+     "duration": 8
+    },
+    {
+     "coordinate": [
+      700,
+      500
+     ]
+    },
+    {
+     "duration": 5
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1231,
+      167
+     ]
+    },
+    {
+     "duration": 4
+    },
+    {
+     "coordinate": [
+      764,
+      543
+     ]
+    },
+    {
+     "text": "active"
+    },
+    {
+     "coordinate": [
+      1245,
+      300
+     ]
+    },
+    {
+     "duration": 8
+    },
+    {
+     "coordinate": [
+      1250,
+      320
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      353,
+      592
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "text": "Escape"
+    },
+    {
+     "coordinate": [
+      800,
+      631
+     ]
+    },
+    {
+     "text": "confirmed"
+    },
+    {
+     "coordinate": [
+      1245,
+      300
+     ]
+    },
+    {
+     "duration": 8
+    },
+    {
+     "coordinate": [
+      1250,
+      320
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      367,
+      680
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "text": "Escape"
+    },
+    {
+     "coordinate": [
+      764,
+      400
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 5
+    },
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      764,
+      319
+     ]
+    },
+    {
+     "text": "high"
+    },
+    {
+     "coordinate": [
+      1245,
+      200
+     ]
+    },
+    {
+     "duration": 8
+    },
+    {
+     "coordinate": [
+      1250,
+      220
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      364,
+      368
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "text": "Escape"
+    },
+    {
+     "coordinate": [
+      764,
+      596
+     ]
+    },
+    {
+     "text": "Rosa"
+    },
+    {
+     "coordinate": [
+      1245,
+      200
+     ]
+    },
+    {
+     "duration": 8
+    },
+    {
+     "coordinate": [
+      1250,
+      220
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      431,
+      652
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "coordinate": [
+      764,
+      508
+     ]
+    },
+    {
+     "text": "Allergy to penicillin"
+    },
+    {
+     "coordinate": [
+      1245,
+      200
+     ]
+    },
+    {
+     "duration": 10
+    },
+    {
+     "coordinate": [
+      1250,
+      220
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1245,
+      240
+     ]
+    },
+    {
+     "duration": 8
+    },
+    {
+     "coordinate": [
+      1250,
+      260
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "End"
+    },
+    {
+     "text": "BackSpace",
+     "repeat": 25
+    },
+    {
+     "text": "Escape"
+    },
+    {
+     "coordinate": [
+      764,
+      400
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 60
+    },
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1169,
+      733
+     ]
+    },
+    {
+     "duration": 8
+    },
+    {
+     "coordinate": [
+      1000,
+      300
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 5
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Created. Open the JSON tab.",
+   "actions": [
+    {
+     "coordinate": [
+      721,
+      137
+     ]
+    },
+    {
+     "duration": 8
+    },
+    {
+     "coordinate": [
+      1000,
+      500
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      800,
+      244
+     ]
+    },
+    {
+     "text": "End"
+    },
+    {
+     "text": "\"code\":{\"coding\":[{\"system\":\"http://snomed.info/sct\",\"code\":\"91936005\"}]},"
+    },
+    {
+     "coordinate": [
+      764,
+      500
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 15
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1182,
+      733
+     ]
+    },
+    {
+     "duration": 8
+    },
+    {
+     "coordinate": [
+      1000,
+      400
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      764,
+      300
+     ],
+     "scroll_direction": "up",
+     "scroll_amount": 30
+    },
+    {
+     "duration": 1
+    },
+    {
+     "coordinate": [
+      576,
+      142
+     ]
+    },
+    {
+     "duration": 8
+    },
+    {
+     "coordinate": [
+      1000,
+      500
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      440,
+      142
+     ]
+    },
+    {
+     "duration": 8
+    },
+    {
+     "coordinate": [
+      1000,
+      500
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 5
+    },
+    {
+     "coordinate": [
+      1000,
+      520
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      721,
+      142
+     ]
+    },
+    {
+     "duration": 10
+    },
+    {
+     "coordinate": [
+      1000,
+      500
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      800,
+      244
+     ]
+    },
+    {
+     "text": "End"
+    },
+    {
+     "text": "\"code\":{\"coding\":[{\"system\":\"http://snomed.info/sct\",\"code\":\"91936005\"}]},"
+    },
+    {
+     "coordinate": [
+      764,
+      500
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 15
+    },
+    {
+     "duration": 2
+    },
+    {
+     "coordinate": [
+      1182,
+      733
+     ]
+    },
+    {
+     "}": 0
+    },
+    {
+     "}": 0
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1245,
+      400
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 20
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1182,
+      733
+     ]
+    },
+    {
+     "}": 0
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 5
+    },
+    {
+     "coordinate": [
+      1245,
+      400
+     ],
+     "scroll_direction": "up",
+     "scroll_amount": 30
+    },
+    {
+     "duration": 1
+    },
+    {
+     "coordinate": [
+      576,
+      142
+     ]
+    },
+    {
+     "duration": 8
+    },
+    {
+     "coordinate": [
+      1000,
+      500
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      124,
+      90
+     ]
+    },
+    {
+     "text": "AllergyInt"
+    },
+    {
+     "coordinate": [
+      600,
+      90
+     ]
+    },
+    {
+     "duration": 8
+    },
+    {
+     "coordinate": [
+      700,
+      95
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "coordinate": [
+      83,
+      138
+     ]
+    },
+    {
+     "duration": 10
+    },
+    {
+     "coordinate": [
+      700,
+      500
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      83,
+      138
+     ]
+    },
+    {
+     "duration": 10
+    },
+    {
+     "coordinate": [
+      700,
+      520
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Rosa Delgado (born 1979-06-14) now has exactly one penicillin allergy record. She had none before I started, so I created it.\n\nThe AllergyIntolerance list was empty before I started. Only one Rosa Delgado showed up in Patient search, and her birth date matches.\n\nThe record has the fields you asked for:\n- **Patient:** Patient/de3f899f-0f1e-4131-9293-120d960ea1ee\n- **Code:** SNOMED CT 91936005 (system `http://snomed.info/sct`)\n- **Criticality:** high\n- **Clinical status:** active\n- **Verification status:** confirmed\n\nI saved it in two steps because the form had no way to pick the SNOMED code. The form created the record without a code. I then added the code on the record's JSON tab, so its history shows two versions. The list now shows 1 of 1 AllergyIntolerance, so no duplicate was made.\n\nTwo additions you didn't ask for: the saved record also carries a `display` label on the status codings and on the patient reference, which the form added automatically.\n\nRESULT: DONE AllergyIntolerance/0138f361-6b06-4fd3-b797-f249a1ad8080",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 214,
+   "y": 297,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 500,
+   "dx": 0,
+   "dy": 600
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "l"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "localhost:3000/AllergyIntolerance\n"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 200,
+   "y": 33,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "penicillin"
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Return"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 290,
+   "y": 33,
+   "button": "left",
+   "count": 3,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 32,
+   "y": 31,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 124,
+   "y": 90,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "AllergyIntolerance"
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Escape"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 30,
+   "y": 90,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 800,
+   "y": 700,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 124,
+   "y": 90,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "AllergyInt"
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 83,
+   "y": 138,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "click",
+   "x": 1231,
+   "y": 167,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 349,
+   "y": 131,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 764,
+   "y": 430,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "a"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "{\"resourceType\":\"AllergyIntolerance\",\"patient\":{\"reference\":\"Patient/de3f899f-0f1e-4131-9293-120d960ea1ee\"},\"code\":{\"coding\":[{\"system\":\"http://snomed.info/sct\",\"code\":\"91936005\"}]},\"criticality\":\"high\",\"clinicalStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical\",\"code\":\"active\"}]},\"verificationStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-verification\",\"code\":\"confirmed\"}]}}"
+  },
+  {
+   "a": "click",
+   "x": 1182,
+   "y": 718,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 764,
+   "y": 500,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "End"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "shift",
+    "Home"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "drag",
+   "path": [
+    [
+     326,
+     213
+    ],
+    [
+     1190,
+     600
+    ]
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "{\"resourceType\":\"AllergyIntolerance\",\"patient\":{\"reference\":\"Patient/de3f899f-0f1e-4131-9293-120d960ea1ee\"},\"code\":{\"coding\":[{\"system\":\"http://snomed.info/sct\",\"code\":\"91936005\"}]},\"criticality\":\"high\",\"clinicalStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical\",\"code\":\"active\"}]},\"verificationStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-verification\",\"code\":\"confirmed\"}]}}"
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 1182,
+   "y": 718,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "scroll",
+   "x": 764,
+   "y": 400,
+   "dx": 0,
+   "dy": 1800
+  },
+  {
+   "a": "click",
+   "x": 124,
+   "y": 90,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "AllergyInt"
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 83,
+   "y": 138,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 8.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 83,
+   "y": 138,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 10.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 1231,
+   "y": 167,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 349,
+   "y": 131,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "drag",
+   "path": [
+    [
+     326,
+     213
+    ],
+    [
+     1000,
+     500
+    ]
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "{\"resourceType\":\"AllergyIntolerance\",\"patient\":{\"reference\":\"Patient/de3f899f-0f1e-4131-9293-120d960ea1ee\"},\"code\":{\"coding\":[{\"system\":\"http://snomed.info/sct\",\"code\":\"91936005\"}]},\"criticality\":\"high\",\"clinicalStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical\",\"code\":\"active\"}]},\"verificationStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-verification\",\"code\":\"confirmed\"}]}}"
+  },
+  {
+   "a": "click",
+   "x": 1182,
+   "y": 718,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 282,
+   "y": 131,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "scroll",
+   "x": 764,
+   "y": 500,
+   "dx": 0,
+   "dy": 7200
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "scroll",
+   "x": 764,
+   "y": 400,
+   "dx": 0,
+   "dy": -7200
+  },
+  {
+   "a": "scroll",
+   "x": 764,
+   "y": 400,
+   "dx": 0,
+   "dy": 600
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "scroll",
+   "x": 764,
+   "y": 400,
+   "dx": 0,
+   "dy": -7200
+  },
+  {
+   "a": "click",
+   "x": 349,
+   "y": 131,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "drag",
+   "path": [
+    [
+     326,
+     213
+    ],
+    [
+     1000,
+     500
+    ]
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "{\"resourceType\":\"AllergyIntolerance\",\"patient\":{\"reference\":\"Patient/de3f899f-0f1e-4131-9293-120d960ea1ee\"},\"code\":{\"coding\":[{\"system\":\"http://snomed.info/sct\",\"code\":\"91936005\"}]},\"criticality\":\"high\",\"clinicalStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical\",\"code\":\"active\"}]},\"verificationStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-verification\",\"code\":\"confirmed\"}]}}"
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 1182,
+   "y": 718,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 282,
+   "y": 131,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "scroll",
+   "x": 764,
+   "y": 400,
+   "dx": 0,
+   "dy": 600
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "scroll",
+   "x": 764,
+   "y": 400,
+   "dx": 0,
+   "dy": 7200
+  },
+  {
+   "a": "click",
+   "x": 1169,
+   "y": 733,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 4.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "scroll",
+   "x": 764,
+   "y": 400,
+   "dx": 0,
+   "dy": -7200
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 1239,
+   "y": 693,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 764,
+   "y": 543,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "active"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 400,
+   "y": 600,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 631,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "confirmed"
+  },
+  {
+   "a": "wait",
+   "s": 6.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 472,
+   "y": 542,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Escape"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 631,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "confirmed"
+  },
+  {
+   "a": "wait",
+   "s": 6.0
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "move",
+   "x": 700,
+   "y": 470
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 367,
+   "y": 680,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Escape"
+   ]
+  },
+  {
+   "a": "move",
+   "x": 1240,
+   "y": 400
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 800,
+   "y": 631,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "End"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Escape"
+   ]
+  },
+  {
+   "a": "scroll",
+   "x": 764,
+   "y": 400,
+   "dx": 0,
+   "dy": 600
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "scroll",
+   "x": 764,
+   "y": 400,
+   "dx": 0,
+   "dy": -480
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 764,
+   "y": 177,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "high"
+  },
+  {
+   "a": "move",
+   "x": 1240,
+   "y": 300
+  },
+  {
+   "a": "wait",
+   "s": 8.0
+  },
+  {
+   "a": "move",
+   "x": 1245,
+   "y": 320
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "click",
+   "x": 364,
+   "y": 226,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Escape"
+   ]
+  },
+  {
+   "a": "move",
+   "x": 1245,
+   "y": 330
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 764,
+   "y": 366,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "91936005"
+  },
+  {
+   "a": "move",
+   "x": 1245,
+   "y": 300
+  },
+  {
+   "a": "wait",
+   "s": 10.0
+  },
+  {
+   "a": "move",
+   "x": 1250,
+   "y": 310
+  },
+  {
+   "a": "wait",
+   "s": 8.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "a"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "penicillin"
+  },
+  {
+   "a": "move",
+   "x": 1245,
+   "y": 300
+  },
+  {
+   "a": "wait",
+   "s": 10.0
+  },
+  {
+   "a": "move",
+   "x": 1250,
+   "y": 320
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 600,
+   "y": 366,
+   "button": "left",
+   "count": 3,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Escape"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 764,
+   "y": 454,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Rosa"
+  },
+  {
+   "a": "move",
+   "x": 1245,
+   "y": 300
+  },
+  {
+   "a": "wait",
+   "s": 8.0
+  },
+  {
+   "a": "move",
+   "x": 1250,
+   "y": 320
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 431,
+   "y": 510,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "scroll",
+   "x": 764,
+   "y": 400,
+   "dx": 0,
+   "dy": -7200
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 349,
+   "y": 131,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "drag",
+   "path": [
+    [
+     326,
+     213
+    ],
+    [
+     1000,
+     500
+    ]
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "{\"resourceType\":\"AllergyIntolerance\",\"patient\":{\"reference\":\"Patient/de3f899f-0f1e-4131-9293-120d960ea1ee\"},\"code\":{\"coding\":[{\"system\":\"http://snomed.info/sct\",\"code\":\"91936005\"}]},\"criticality\":\"high\",\"clinicalStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical\",\"code\":\"active\"}]},\"verificationStatus\":{\"coding\":[{\"system\":\"http://terminology.hl7.org/CodeSystem/allergyintolerance-verification\",\"code\":\"confirmed\"}]}}"
+  },
+  {
+   "a": "click",
+   "x": 1182,
+   "y": 718,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "move",
+   "x": 1000,
+   "y": 400
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 124,
+   "y": 90,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "AllergyInt"
+  },
+  {
+   "a": "move",
+   "x": 600,
+   "y": 90
+  },
+  {
+   "a": "wait",
+   "s": 8.0
+  },
+  {
+   "a": "move",
+   "x": 700,
+   "y": 95
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 83,
+   "y": 138,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 8.0
+  },
+  {
+   "a": "move",
+   "x": 700,
+   "y": 500
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "click",
+   "x": 1231,
+   "y": 167,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 4.0
+  },
+  {
+   "a": "click",
+   "x": 764,
+   "y": 543,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "active"
+  },
+  {
+   "a": "move",
+   "x": 1245,
+   "y": 300
+  },
+  {
+   "a": "wait",
+   "s": 8.0
+  },
+  {
+   "a": "move",
+   "x": 1250,
+   "y": 320
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 353,
+   "y": 592,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Escape"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 800,
+   "y": 631,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "confirmed"
+  },
+  {
+   "a": "move",
+   "x": 1245,
+   "y": 300
+  },
+  {
+   "a": "wait",
+   "s": 8.0
+  },
+  {
+   "a": "move",
+   "x": 1250,
+   "y": 320
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 367,
+   "y": 680,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Escape"
+   ]
+  },
+  {
+   "a": "scroll",
+   "x": 764,
+   "y": 400,
+   "dx": 0,
+   "dy": 600
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 764,
+   "y": 319,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "high"
+  },
+  {
+   "a": "move",
+   "x": 1245,
+   "y": 200
+  },
+  {
+   "a": "wait",
+   "s": 8.0
+  },
+  {
+   "a": "move",
+   "x": 1250,
+   "y": 220
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 364,
+   "y": 368,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Escape"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 764,
+   "y": 596,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Rosa"
+  },
+  {
+   "a": "move",
+   "x": 1245,
+   "y": 200
+  },
+  {
+   "a": "wait",
+   "s": 8.0
+  },
+  {
+   "a": "move",
+   "x": 1250,
+   "y": 220
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 431,
+   "y": 652,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 764,
+   "y": 508,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Allergy to penicillin"
+  },
+  {
+   "a": "move",
+   "x": 1245,
+   "y": 200
+  },
+  {
+   "a": "wait",
+   "s": 10.0
+  },
+  {
+   "a": "move",
+   "x": 1250,
+   "y": 220
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "move",
+   "x": 1245,
+   "y": 240
+  },
+  {
+   "a": "wait",
+   "s": 8.0
+  },
+  {
+   "a": "move",
+   "x": 1250,
+   "y": 260
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "End"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Escape"
+   ]
+  },
+  {
+   "a": "scroll",
+   "x": 764,
+   "y": 400,
+   "dx": 0,
+   "dy": 7200
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 1169,
+   "y": 733,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 8.0
+  },
+  {
+   "a": "move",
+   "x": 1000,
+   "y": 300
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "click",
+   "x": 721,
+   "y": 137,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 8.0
+  },
+  {
+   "a": "move",
+   "x": 1000,
+   "y": 500
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 800,
+   "y": 244,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "End"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "\"code\":{\"coding\":[{\"system\":\"http://snomed.info/sct\",\"code\":\"91936005\"}]},"
+  },
+  {
+   "a": "scroll",
+   "x": 764,
+   "y": 500,
+   "dx": 0,
+   "dy": 1800
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 1182,
+   "y": 733,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 8.0
+  },
+  {
+   "a": "move",
+   "x": 1000,
+   "y": 400
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "scroll",
+   "x": 764,
+   "y": 300,
+   "dx": 0,
+   "dy": -3600
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 576,
+   "y": 142,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 8.0
+  },
+  {
+   "a": "move",
+   "x": 1000,
+   "y": 500
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 440,
+   "y": 142,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 8.0
+  },
+  {
+   "a": "move",
+   "x": 1000,
+   "y": 500
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "move",
+   "x": 1000,
+   "y": 520
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 721,
+   "y": 142,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 10.0
+  },
+  {
+   "a": "move",
+   "x": 1000,
+   "y": 500
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 800,
+   "y": 244,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "End"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "\"code\":{\"coding\":[{\"system\":\"http://snomed.info/sct\",\"code\":\"91936005\"}]},"
+  },
+  {
+   "a": "scroll",
+   "x": 764,
+   "y": 500,
+   "dx": 0,
+   "dy": 1800
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 1182,
+   "y": 733,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 1245,
+   "y": 400,
+   "dx": 0,
+   "dy": 2400
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 1182,
+   "y": 733,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "scroll",
+   "x": 1245,
+   "y": 400,
+   "dx": 0,
+   "dy": -3600
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 576,
+   "y": 142,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 8.0
+  },
+  {
+   "a": "move",
+   "x": 1000,
+   "y": 500
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 124,
+   "y": 90,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "AllergyInt"
+  },
+  {
+   "a": "move",
+   "x": 600,
+   "y": 90
+  },
+  {
+   "a": "wait",
+   "s": 8.0
+  },
+  {
+   "a": "move",
+   "x": 700,
+   "y": 95
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 83,
+   "y": 138,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 10.0
+  },
+  {
+   "a": "move",
+   "x": 700,
+   "y": 500
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 83,
+   "y": 138,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 10.0
+  },
+  {
+   "a": "move",
+   "x": 700,
+   "y": 520
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6357,
+   "out": 59,
+   "usd": 0.016481,
+   "cached": 0
+  },
+  {
+   "in": 7789,
+   "out": 179,
+   "usd": 0.00665,
+   "cached": 6353
+  },
+  {
+   "in": 9366,
+   "out": 201,
+   "usd": 0.007514,
+   "cached": 7787
+  },
+  {
+   "in": 10965,
+   "out": 252,
+   "usd": 0.008394,
+   "cached": 9364
+  },
+  {
+   "in": 12616,
+   "out": 367,
+   "usd": 0.009994,
+   "cached": 10963
+  },
+  {
+   "in": 14384,
+   "out": 220,
+   "usd": 0.009147,
+   "cached": 12614
+  },
+  {
+   "in": 15992,
+   "out": 525,
+   "usd": 0.01215,
+   "cached": 14382
+  },
+  {
+   "in": 17932,
+   "out": 126,
+   "usd": 0.009312,
+   "cached": 15990
+  },
+  {
+   "in": 19467,
+   "out": 119,
+   "usd": 0.008618,
+   "cached": 17930
+  },
+  {
+   "in": 20971,
+   "out": 146,
+   "usd": 0.009117,
+   "cached": 19465
+  },
+  {
+   "in": 22526,
+   "out": 132,
+   "usd": 0.009405,
+   "cached": 20969
+  },
+  {
+   "in": 24056,
+   "out": 123,
+   "usd": 0.009564,
+   "cached": 22524
+  },
+  {
+   "in": 25588,
+   "out": 98,
+   "usd": 0.009625,
+   "cached": 24054
+  },
+  {
+   "in": 27084,
+   "out": 75,
+   "usd": 0.009611,
+   "cached": 25586
+  },
+  {
+   "in": 28544,
+   "out": 75,
+   "usd": 0.00982,
+   "cached": 27082
+  },
+  {
+   "in": 30004,
+   "out": 80,
+   "usd": 0.010162,
+   "cached": 28542
+  },
+  {
+   "in": 31469,
+   "out": 157,
+   "usd": 0.011237,
+   "cached": 30002
+  },
+  {
+   "in": 33024,
+   "out": 113,
+   "usd": 0.011315,
+   "cached": 31467
+  },
+  {
+   "in": 34535,
+   "out": 436,
+   "usd": 0.014746,
+   "cached": 33022
+  },
+  {
+   "in": 36404,
+   "out": 183,
+   "usd": 0.013413,
+   "cached": 34533
+  },
+  {
+   "in": 37995,
+   "out": 188,
+   "usd": 0.013142,
+   "cached": 36402
+  },
+  {
+   "in": 39589,
+   "out": 521,
+   "usd": 0.016798,
+   "cached": 37993
+  },
+  {
+   "in": 41510,
+   "out": 369,
+   "usd": 0.016414,
+   "cached": 39587
+  },
+  {
+   "in": 43275,
+   "out": 104,
+   "usd": 0.013758,
+   "cached": 41508
+  },
+  {
+   "in": 44777,
+   "out": 125,
+   "usd": 0.013664,
+   "cached": 43273
+  },
+  {
+   "in": 46288,
+   "out": 324,
+   "usd": 0.015977,
+   "cached": 44775
+  },
+  {
+   "in": 48046,
+   "out": 95,
+   "usd": 0.014606,
+   "cached": 46286
+  },
+  {
+   "in": 49526,
+   "out": 121,
+   "usd": 0.014523,
+   "cached": 48044
+  },
+  {
+   "in": 51045,
+   "out": 111,
+   "usd": 0.014816,
+   "cached": 49524
+  },
+  {
+   "in": 52541,
+   "out": 691,
+   "usd": 0.020863,
+   "cached": 51043
+  },
+  {
+   "in": 54768,
+   "out": 184,
+   "usd": 0.017919,
+   "cached": 52539
+  },
+  {
+   "in": 56363,
+   "out": 211,
+   "usd": 0.017055,
+   "cached": 54766
+  },
+  {
+   "in": 57985,
+   "out": 463,
+   "usd": 0.019961,
+   "cached": 56361
+  },
+  {
+   "in": 59871,
+   "out": 104,
+   "usd": 0.017356,
+   "cached": 57983
+  },
+  {
+   "in": 61373,
+   "out": 214,
+   "usd": 0.017873,
+   "cached": 59869
+  },
+  {
+   "in": 63010,
+   "out": 122,
+   "usd": 0.017591,
+   "cached": 61371
+  },
+  {
+   "in": 64517,
+   "out": 315,
+   "usd": 0.019523,
+   "cached": 63008
+  },
+  {
+   "in": 66243,
+   "out": 80,
+   "usd": 0.018022,
+   "cached": 64515
+  },
+  {
+   "in": 67708,
+   "out": 155,
+   "usd": 0.018465,
+   "cached": 66241
+  },
+  {
+   "in": 69261,
+   "out": 265,
+   "usd": 0.020078,
+   "cached": 67706
+  },
+  {
+   "in": 70948,
+   "out": 99,
+   "usd": 0.019063,
+   "cached": 69259
+  },
+  {
+   "in": 72432,
+   "out": 160,
+   "usd": 0.019503,
+   "cached": 70946
+  },
+  {
+   "in": 74026,
+   "out": 164,
+   "usd": 0.020115,
+   "cached": 72430
+  },
+  {
+   "in": 75586,
+   "out": 171,
+   "usd": 0.020419,
+   "cached": 74024
+  },
+  {
+   "in": 77178,
+   "out": 128,
+   "usd": 0.020381,
+   "cached": 75584
+  },
+  {
+   "in": 78715,
+   "out": 80,
+   "usd": 0.020082,
+   "cached": 77176
+  },
+  {
+   "in": 80180,
+   "out": 153,
+   "usd": 0.020939,
+   "cached": 78713
+  },
+  {
+   "in": 81733,
+   "out": 162,
+   "usd": 0.021542,
+   "cached": 80178
+  },
+  {
+   "in": 83331,
+   "out": 298,
+   "usd": 0.023325,
+   "cached": 81731
+  },
+  {
+   "in": 85073,
+   "out": 161,
+   "usd": 0.022635,
+   "cached": 83329
+  },
+  {
+   "in": 86632,
+   "out": 151,
+   "usd": 0.022426,
+   "cached": 85071
+  },
+  {
+   "in": 88207,
+   "out": 106,
+   "usd": 0.022328,
+   "cached": 86630
+  },
+  {
+   "in": 89713,
+   "out": 162,
+   "usd": 0.02303,
+   "cached": 88205
+  },
+  {
+   "in": 91311,
+   "out": 159,
+   "usd": 0.023531,
+   "cached": 89711
+  },
+  {
+   "in": 92894,
+   "out": 106,
+   "usd": 0.023283,
+   "cached": 91309
+  },
+  {
+   "in": 94400,
+   "out": 333,
+   "usd": 0.025677,
+   "cached": 92892
+  },
+  {
+   "in": 96182,
+   "out": 1456,
+   "usd": 0.037899,
+   "cached": 94398
+  },
+  {
+   "in": 99125,
+   "out": 235,
+   "usd": 0.028948,
+   "cached": 96180
+  },
+  {
+   "in": 100808,
+   "out": 917,
+   "usd": 0.033206,
+   "cached": 99123
+  },
+  {
+   "in": 104549,
+   "out": 172,
+   "usd": 0.031238,
+   "cached": 100806
+  },
+  {
+   "in": 106106,
+   "out": 212,
+   "usd": 0.026926,
+   "cached": 104547
+  },
+  {
+   "in": 107769,
+   "out": 144,
+   "usd": 0.026822,
+   "cached": 106104
+  },
+  {
+   "in": 109338,
+   "out": 940,
+   "usd": 0.03488,
+   "cached": 107767
+  },
+  {
+   "in": 111754,
+   "out": 245,
+   "usd": 0.030361,
+   "cached": 109336
+  },
+  {
+   "in": 113486,
+   "out": 180,
+   "usd": 0.028484,
+   "cached": 111752
+  },
+  {
+   "in": 115100,
+   "out": 211,
+   "usd": 0.028846,
+   "cached": 113484
+  },
+  {
+   "in": 116762,
+   "out": 245,
+   "usd": 0.029629,
+   "cached": 115098
+  },
+  {
+   "in": 118494,
+   "out": 296,
+   "usd": 0.030646,
+   "cached": 116760
+  },
+  {
+   "in": 120266,
+   "out": 164,
+   "usd": 0.029772,
+   "cached": 118492
+  },
+  {
+   "in": 121857,
+   "out": 297,
+   "usd": 0.031004,
+   "cached": 120264
+  },
+  {
+   "in": 123585,
+   "out": 200,
+   "usd": 0.030695,
+   "cached": 121855
+  },
+  {
+   "in": 125210,
+   "out": 80,
+   "usd": 0.029583,
+   "cached": 123583
+  },
+  {
+   "in": 126675,
+   "out": 153,
+   "usd": 0.030238,
+   "cached": 125208
+  },
+  {
+   "in": 128253,
+   "out": 315,
+   "usd": 0.032434,
+   "cached": 126673
+  },
+  {
+   "in": 130001,
+   "out": 141,
+   "usd": 0.031434,
+   "cached": 128251
+  },
+  {
+   "in": 131567,
+   "out": 311,
+   "usd": 0.033029,
+   "cached": 129999
+  },
+  {
+   "in": 133328,
+   "out": 231,
+   "usd": 0.03303,
+   "cached": 131565
+  },
+  {
+   "in": 134984,
+   "out": 122,
+   "usd": 0.032029,
+   "cached": 133326
+  },
+  {
+   "in": 136518,
+   "out": 895,
+   "usd": 0.039785,
+   "cached": 134982
+  },
+  {
+   "in": 138838,
+   "out": 717,
+   "usd": 0.040277,
+   "cached": 136516
+  },
+  {
+   "in": 143723,
+   "out": 220,
+   "usd": 0.042184,
+   "cached": 138836
+  },
+  {
+   "in": 145341,
+   "out": 178,
+   "usd": 0.034573,
+   "cached": 143721
+  },
+  {
+   "in": 148278,
+   "out": 256,
+   "usd": 0.038974,
+   "cached": 145339
+  },
+  {
+   "in": 149996,
+   "out": 385,
+   "usd": 0.037804,
+   "cached": 148276
+  },
+  {
+   "in": 151884,
+   "out": 199,
+   "usd": 0.036713,
+   "cached": 149994
+  },
+  {
+   "in": 153508,
+   "out": 391,
+   "usd": 0.03835,
+   "cached": 151882
+  }
+ ]
+}

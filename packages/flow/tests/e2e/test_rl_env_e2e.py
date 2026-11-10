@@ -9,6 +9,7 @@ the record the reward reads.
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -212,8 +213,20 @@ def test_a_stuck_step_that_wakes_later_cannot_touch_the_next_episode(
         env._step = stuck_then_late_write  # type: ignore[method-assign]
         obs = env.step(WebAction(kind="wait", seconds=1))
         assert (obs.done, obs.reward, obs.verdict) == (True, 0.0, "INDETERMINATE")
-        with pytest.raises(ProcessLookupError):
-            os.kill(driver, 0)  # the stuck browser's driver is gone
+        # The stuck browser's driver was killed and reaped before the episode
+        # ended: it is no longer an unreaped child of this process (a live or
+        # zombie child would be found by waitpid; a reused pid would not be
+        # our child at all), and the environment says how it was stopped.
+        # Only Linux, where a subreaper supervises the driver, can prove the
+        # whole browser tree gone; elsewhere the teardown says unproven.
+        linux = sys.platform.startswith("linux")
+        assert obs.metadata["teardown"] == {
+            "driver_pid": driver,
+            "driver": "killed",
+            "proven": linux,
+        }
+        with pytest.raises(ChildProcessError):
+            os.waitpid(driver, os.WNOHANG)
         del env._step
         monkeypatch.undo()  # the new episode runs under the normal watchdog
 
@@ -223,12 +236,17 @@ def test_a_stuck_step_that_wakes_later_cannot_touch_the_next_episode(
         assert httpx.get(env._app_url + "/api/db").json()["records"] == []
         for action in task.solution:
             obs = env.step(WebAction(**action))
-        assert (obs.verdict, obs.reward) == ("CONFIRMED", 1.0)
+        # The episode itself runs cleanly on a fresh app copy, but the
+        # abandoned worker taints this environment for good, proven teardown
+        # or not: no later episode is trusted.
+        assert (obs.verdict, obs.reward) == ("INDETERMINATE", 0.0)
+        assert "unproven" in obs.metadata["judgement"]["error"]
     finally:
         env.close()
 
 
 def test_trl_adapter_over_a_live_server_reads_the_record_reward() -> None:
+    from openadapt_flow.rl_env import lifecycle
     from openadapt_flow.rl_env.trainers import trl_environment, trl_reward
     from openadapt_flow.rl_env.validate import _free_port, start_server
 
@@ -249,5 +267,5 @@ def test_trl_adapter_over_a_live_server_reads_the_record_reward() -> None:
         assert trl_reward([env]) == [1.0] and env.outcome["completion"] is True
         env.session.close()
     finally:
-        server.terminate()
-        server.wait(timeout=30)
+        stopped = lifecycle.stop(server, term_timeout=30)
+    assert stopped.how in ("terminated", "killed") and server.poll() is not None

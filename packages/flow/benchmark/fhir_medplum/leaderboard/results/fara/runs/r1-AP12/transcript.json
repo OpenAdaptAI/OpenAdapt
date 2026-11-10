@@ -1,0 +1,831 @@
+{
+ "transcript": [
+  {
+   "reply": "We need to locate the patient's existing record first, so start a search using their name.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [204, 32], \"text\": \"Tomasz Wren\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the patient record to view details and later reference the ID.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [222, 302]}}\n</tool_call>"
+  },
+  {
+   "reply": "We will need the patient's record ID to reference the Appointment\u53c2\u4e0e\u8005\u65f6\uff0c\u6240\u4ee5\u5b58\u50a8\u4e0b\u6765\u4ee5\u4f9b\u540e\u7eed\u4f7f\u7528.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"pause_and_memorize_fact\", \"fact\": \"Patient record ID for Tomasz Wren: 29455f4e-75ea-4d0f-b790-d80924574ea7\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Need to locate Practitioner Dr Ama Osei, so perform a search using the global search bar.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [204, 32], \"text\": \"Dr Ama Osei\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Execute the search query for 'Dr Ama Osei' by clicking the search button.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [131, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "Execute the search query for 'Dr Ama Osei' by pressing Enter in the focused search bar.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"key\", \"keys\": [\"Enter\"]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the search button to execute the search query for 'Dr Ama Osei'.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [131, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search isn't affecting the page; to locate the practitioner record directly, navigate to the Practitioner search results URL.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/Practitioner?_count=20&_fields=id,_lastUpdated,name\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the practitioner record for Dr Ama Osei to capture its ID for later use in the Appointment participant field.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [222, 345]}}\n</tool_call>"
+  },
+  {
+   "reply": "We need the practitioner's record ID to use as the practitioner participant in the Appointment resource, so store it for later.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"pause_and_memorize_fact\", \"fact\": \"Practitioner record ID for Dr Ama Osei: 8bfb415b-f3af-4726-b2ef-6043f4fc1fb8\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the JSON view to inspect the practitioner's resource and verify if it already has an 'isBooked' extension.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [475, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Close JSON modal to return to Practitioner record page and proceed to create Appointment.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [1067, 746]}}\n</tool_call>"
+  },
+  {
+   "reply": "Dismiss the JSON modal by clicking the OK button so we can return to the Practitioner record page and proceed to create the Appointment.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [1067, 746]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'JSON' tab to open the JSON view, so we can inspect the practitioner resource for an 'isBooked' extension.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [475, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the JSON tab to open the JSON view so we can inspect the practitioner resource for an 'isBooked' extension.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [475, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Close the JSON modal to return to the Practitioner record page so we can proceed to create the Appointment resource.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [1067, 746]}}\n</tool_call>"
+  },
+  {
+   "reply": "Dismiss the JSON modal by clicking the OK button so we can return to the Practitioner record page and continue creating the Appointment.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [1067, 746]}}\n</tool_call>"
+  },
+  {
+   "reply": "The JSON modal is blocking; clicking the 'JSON' tab should toggle/close it so we can proceed to create Appointment.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [475, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "Close the JSON modal by clicking the OK button so we can return to the Practitioner record page and proceed to create the Appointment resource.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [1067, 746]}}\n</tool_call>"
+  },
+  {
+   "reply": "The JSON modal is blocking and clicking OK doesn't close it; pressing Escape often closes modal dialogs.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"key\", \"keys\": [\"Escape\"]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'JSON' tab again to close the modal so we can return to the Practitioner record and proceed to create the Appointment resource.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [475, 144]}}\n</tool_call>"
+  },
+  {
+   "reply": "The JSON modal is blocking and cannot be closed; instead, navigate directly to the FHIR Create Appointment endpoint so we can construct the Appointment resource with the correct participant list and booking status.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/Appointment?_create\"}}\n</tool_call>"
+  },
+  {
+   "reply": "The current URL with _create parameter is incorrect; we need to navigate to the Appointment resource create endpoint to construct the appointment JSON.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/Appointment\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the create form to input appointment details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [1236, 170]}}\n</tool_call>"
+  },
+  {
+   "reply": "Switch to JSON view to see the full resource fields including participants so we can set them correctly.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [100, 133]}}\n</tool_call>"
+  },
+  {
+   "reply": "Close the JSON modal to return to the Appointment form so we can fill in the participant details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [1067, 729]}}\n</tool_call>"
+  },
+  {
+   "reply": "Switch to the Form view to see the appointment fields such as start, end, and participants so we can fill them in.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [30, 133]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to reveal the participant fields (e.g., patient, practitioner) and other required appointment details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to reveal the Start and End date/time pickers so we can fill in the 2026-11-17T14:00:00Z \u2013 2026-11-17T14:30:00Z interval.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to reveal the participant fields (patient, practitioner) and other required details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to reveal the Start and End date/time pickers so we can fill in the appointment dates and times.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to reveal the participant fields (patient, practitioner) and other required details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to reveal the Start and End date/time pickers so we can fill in the appointment dates and times.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to reveal the participant fields (patient, practitioner) and other required details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to reveal the Start and End date/time pickers so we can fill in the appointment dates and times.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 808}}\n</tool_call>"
+  },
+  {
+   "reply": "Switch to JSON view to confirm the JSON schema and ensure required fields are correctly set before filling in the form again.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [100, 133]}}\n</tool_call>"
+  },
+  {
+   "reply": "Switch to the Form view so we can fill in the required fields (start, end, patient, practitioner) directly in the form.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [30, 133]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to reveal the participant fields (patient, practitioner) and other required details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to reveal the Start and End date/time pickers so we can fill in the appointment dates and times.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to reveal the participant fields (patient, practitioner) and other required details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to reveal the Start and End date/time pickers so we can fill in the appointment dates and times.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to reveal the participant fields (patient, practitioner) and other required details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to reveal the Start and End date/time pickers so we can fill in the appointment dates and times.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to reveal the participant fields (patient, practitioner) and other required details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to reveal the Start and End date/time pickers so we can fill in the appointment dates and times.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to reveal the participant fields (patient, practitioner) and other required details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to reveal the Start and End date/time pickers so we can fill in the appointment dates and times.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to reveal the participant fields (patient, practitioner) and other required details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to reveal the Start and End date/time pickers so we can fill in the appointment dates and times.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to reveal the participant fields (patient, practitioner) and other required details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to reveal the Start and End date/time pickers so we can fill in the appointment dates and times.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to reveal the participant fields (patient, practitioner) and other required details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 202.73291925465838,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Tomasz Wren"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 220.62111801242236,
+   "y": 297.5369458128079,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 202.73291925465838,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Dr Ama Osei"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 130.1863354037267,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 130.1863354037267,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/Practitioner?_count=20&_fields=id,_lastUpdated,name"
+  },
+  {
+   "a": "click",
+   "x": 220.62111801242236,
+   "y": 339.90147783251234,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 472.0496894409938,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1060.3726708074535,
+   "y": 734.9753694581281,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1060.3726708074535,
+   "y": 734.9753694581281,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 472.0496894409938,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 472.0496894409938,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1060.3726708074535,
+   "y": 734.9753694581281,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1060.3726708074535,
+   "y": 734.9753694581281,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 472.0496894409938,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1060.3726708074535,
+   "y": 734.9753694581281,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Escape"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 472.0496894409938,
+   "y": 141.87192118226602,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/Appointment?_create"
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/Appointment"
+  },
+  {
+   "a": "click",
+   "x": 1228.3229813664595,
+   "y": 167.48768472906403,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 99.37888198757764,
+   "y": 131.0344827586207,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1060.3726708074535,
+   "y": 718.2266009852217,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 29.81366459627329,
+   "y": 131.0344827586207,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -808.0
+  },
+  {
+   "a": "click",
+   "x": 99.37888198757764,
+   "y": 131.0344827586207,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 29.81366459627329,
+   "y": 131.0344827586207,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 3028,
+   "out": 74,
+   "usd": 0.0
+  },
+  {
+   "in": 4498,
+   "out": 48,
+   "usd": 0.0
+  },
+  {
+   "in": 5951,
+   "out": 95,
+   "usd": 0.0
+  },
+  {
+   "in": 6115,
+   "out": 76,
+   "usd": 0.0
+  },
+  {
+   "in": 6260,
+   "out": 52,
+   "usd": 0.0
+  },
+  {
+   "in": 6381,
+   "out": 48,
+   "usd": 0.0
+  },
+  {
+   "in": 6498,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 6618,
+   "out": 76,
+   "usd": 0.0
+  },
+  {
+   "in": 6751,
+   "out": 58,
+   "usd": 0.0
+  },
+  {
+   "in": 6877,
+   "out": 96,
+   "usd": 0.0
+  },
+  {
+   "in": 7041,
+   "out": 59,
+   "usd": 0.0
+  },
+  {
+   "in": 7169,
+   "out": 52,
+   "usd": 0.0
+  },
+  {
+   "in": 7290,
+   "out": 62,
+   "usd": 0.0
+  },
+  {
+   "in": 7421,
+   "out": 63,
+   "usd": 0.0
+  },
+  {
+   "in": 7553,
+   "out": 60,
+   "usd": 0.0
+  },
+  {
+   "in": 7682,
+   "out": 58,
+   "usd": 0.0
+  },
+  {
+   "in": 7809,
+   "out": 61,
+   "usd": 0.0
+  },
+  {
+   "in": 7939,
+   "out": 59,
+   "usd": 0.0
+  },
+  {
+   "in": 8067,
+   "out": 63,
+   "usd": 0.0
+  },
+  {
+   "in": 8199,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 8315,
+   "out": 63,
+   "usd": 0.0
+  },
+  {
+   "in": 8447,
+   "out": 76,
+   "usd": 0.0
+  },
+  {
+   "in": 8580,
+   "out": 62,
+   "usd": 0.0
+  },
+  {
+   "in": 8696,
+   "out": 45,
+   "usd": 0.0
+  },
+  {
+   "in": 8778,
+   "out": 54,
+   "usd": 0.0
+  },
+  {
+   "in": 8870,
+   "out": 55,
+   "usd": 0.0
+  },
+  {
+   "in": 8963,
+   "out": 59,
+   "usd": 0.0
+  },
+  {
+   "in": 9060,
+   "out": 49,
+   "usd": 0.0
+  },
+  {
+   "in": 9147,
+   "out": 91,
+   "usd": 0.0
+  },
+  {
+   "in": 9276,
+   "out": 45,
+   "usd": 0.0
+  },
+  {
+   "in": 9359,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 9448,
+   "out": 45,
+   "usd": 0.0
+  },
+  {
+   "in": 9531,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 9620,
+   "out": 45,
+   "usd": 0.0
+  },
+  {
+   "in": 9703,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 9792,
+   "out": 58,
+   "usd": 0.0
+  },
+  {
+   "in": 9888,
+   "out": 61,
+   "usd": 0.0
+  },
+  {
+   "in": 9987,
+   "out": 45,
+   "usd": 0.0
+  },
+  {
+   "in": 10070,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 10159,
+   "out": 45,
+   "usd": 0.0
+  },
+  {
+   "in": 10242,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 10331,
+   "out": 45,
+   "usd": 0.0
+  },
+  {
+   "in": 10414,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 10503,
+   "out": 45,
+   "usd": 0.0
+  },
+  {
+   "in": 10586,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 10675,
+   "out": 45,
+   "usd": 0.0
+  },
+  {
+   "in": 10758,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 10847,
+   "out": 45,
+   "usd": 0.0
+  },
+  {
+   "in": 10930,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 11019,
+   "out": 45,
+   "usd": 0.0
+  },
+  {
+   "in": 11102,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 11191,
+   "out": 45,
+   "usd": 0.0
+  }
+ ]
+}

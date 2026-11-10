@@ -51,7 +51,7 @@ A command picks the surface from, in order: the bundle's recorded surface, the
 | [Write verifier](#write-verifier) | QUALIFIED | TESTED | TESTED | | QUALIFIED | TESTED |
 | [Shadow mode](#shadow-mode) | QUALIFIED (HTTP writes) | QUALIFIED (HTTP writes) | QUALIFIED (HTTP writes) | QUALIFIED (HTTP writes) | QUALIFIED (HTTP writes) | QUALIFIED (HTTP writes) |
 | [Agent guard](#agent-guard) | TESTED (real browser) | TESTED (guarded save) | TESTED (guarded save) | TESTED (guarded save) | TESTED (guarded save) | TESTED (guarded save) |
-| [MCP and agent adapters](#mcp-and-agent-adapters) | TESTED (real browser) | TESTED | TESTED | TESTED | TESTED | TESTED |
+| [MCP and agent adapters](#mcp-and-agent-adapters) | TESTED (real browser) | TESTED | TESTED (real OS) | TESTED | TESTED | TESTED |
 
 The third-party apps behind the QUALIFIED cells are OpenEMR, Odoo, Frappe
 Lending, openIMIS and Medplum in a browser, and OpenEMR shown in Edge inside a
@@ -86,15 +86,24 @@ A recording made by a script through the real recorder counts here.
   11 VM (`tests/e2e/test_parallels_desktop_e2e.py`, opt-in). The post-merge
   `capture-windows` job (`.github/workflows/packages.yml`, `windows-latest`)
   runs the real UI Automation observer on a WinForms fixture
-  (`packages/capture/tests/test_windows_uia_live.py`). Recording driven by an
-  agent is tested with a fake backend
-  (`packages/agent/tests/test_authoring_native.py`).
+  (`packages/capture/tests/test_windows_uia_live.py`). An agent records by
+  control through `AuthoringSession` on the UIA authoring tree: on Windows 11
+  Pro x64, Patient Notes listed 11 controls whose identities all re-read
+  equal, the agent made five clicks by UIA locator (the confirm dialog
+  included), and SQLite read the note back
+  (`benchmark/native_authoring/results/windows-patient-notes-20261103.json`).
 - **macOS, TESTED.** `tests/test_desktop_record.py`,
-  `packages/agent/tests/test_authoring.py` (fake macOS backend).
+  `packages/agent/tests/test_authoring.py` (fake macOS backend). The AX
+  authoring tree of Calculator (SwiftUI) through live AX lists 20 controls,
+  each identity re-read equal (`benchmark/native_authoring/results/macos-calculator-20261103.json`).
 - **Linux, TESTED (real OS, Capture).** `.github/workflows/packages.yml`
   records a click and typed text in an Xvfb container, and
   `packages/capture/tests/test_linux_atspi_integration.py` reads one GTK
-  button over AT-SPI (the Python 3.10 leg, after merge to main).
+  button over AT-SPI (the Python 3.10 leg, after merge to main). An agent
+  records by control on the AT-SPI authoring tree of the GTK3 fixture in Xvfb
+  with a window manager: the effect file holds the typed value, and a click on
+  one of two identical buttons is refused
+  (`benchmark/native_authoring/results/linux-atspi-20261103.json`).
 - **RDP, QUALIFIED (narrow, scripted).** `benchmark/rdp_avc_real` recorded both
   apps through the scripted `Recorder` over a real AVC444 session.
 - **Citrix, TESTED.** `tests/test_citrix_workspace_backend.py`,
@@ -278,6 +287,22 @@ text and a screenshot from the agent and reads the record back with
   writes matching instructions (`emit/mcp_tool.py`, `emit/skill.py`;
   `tests/test_backend_parity_refusals.py`). `serve --teach` on RDP and Citrix
   records and passes its record check (`tests/test_mcp_teach_surfaces.py`).
+  `serve-execute --config DEPLOY_YAML` (or an admission's `deployment`) runs
+  a desktop bundle through `openadapt-flow run --config`, pinned to the
+  bundle's digest, under the admission's `qualification_authority_file`; an
+  admission without one is refused before any input (Windows 11,
+  `benchmark/native_authoring/results/windows-execute-refusal-20261103.json`). `compile-agent --config
+  DEPLOY_YAML` drives a desktop, RDP or Citrix app through `build_backend`
+  (`tests/test_compile_agent.py`).
+- **macOS, TESTED (real OS).** `serve --teach` on a native Cocoa app with
+  SQLite through `MacOSBackend`: run 1, the person's confirmation,
+  self-admission under a signed policy (canary `VERIFIED`) and a
+  `taught_<name>` call with a new value (`VERIFIED`, 0 model calls)
+  (`tests/e2e/test_mcp_teach_desktop_e2e.py`,
+  [benchmark/teach_desktop](../benchmark/teach_desktop/README.md)).
+- **Read-only teaching** (`serve --teach-browser`) is web only by design: it
+  needs a guard that stops writes before they leave, and only a browser has
+  one. A desktop or remote app is taught as saves, each read back.
 
 ## Commands that compile or check files
 

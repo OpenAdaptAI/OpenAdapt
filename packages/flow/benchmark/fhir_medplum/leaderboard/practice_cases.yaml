@@ -1,0 +1,137 @@
+# Practice cases for building and checking the leaderboard harness.
+#
+# Not part of the scored set: their people, values and times appear in no
+# scored case, and no fault is applied. The pre-registration (PROTOCOL.md)
+# lists every practice run made before the protocol was frozen.
+schema: openadapt.medplum-public-bench/v1
+practitioners:
+  dr_osei:
+    given: Ama
+    family: Osei
+  dr_lind:
+    given: Petra
+    family: Lind
+people:
+  rosa:
+    given: Rosa
+    family: Delgado
+    gender: female
+    birthDate: '1979-06-14'
+  rosa_lookalike:
+    given: Rosa
+    family: Delgado
+    gender: female
+    birthDate: '1980-06-14'
+  tomasz:
+    given: Tomasz
+    family: Wren
+    gender: male
+    birthDate: '1966-01-30'
+  imani:
+    given: Imani
+    family: Brooks
+    gender: female
+    birthDate: '1991-09-03'
+defaults:
+  patient:
+    given: Lena
+    family: Okafor
+    birthDate: '1988-04-22'
+    gender: female
+    line: 14 Birch Lane
+    city: Springfield
+    state: MA
+    postalCode: '01103'
+    phone: 413-555-0187
+    email: lena.okafor@example.org
+  allergy:
+    patient: rosa
+    code: '91936005'
+    display: Allergy to penicillin
+    criticality: high
+  appointment:
+    patient: tomasz
+    practitioner: dr_osei
+    start: '2026-11-17T14:00:00Z'
+    end: '2026-11-17T14:30:00Z'
+cases:
+- id: X01
+  type: patient
+  class: practice
+  note: Practice registration.
+  expect: create
+  task:
+    given: Noah
+    family: Feld
+    birthDate: '1972-02-09'
+    gender: male
+    line: 7 Quarry Road
+    city: Easthampton
+    state: MA
+    postalCode: '01027'
+    phone: 413-555-0142
+    email: noah.feld@example.org
+- id: X02
+  type: allergy
+  class: practice
+  note: Practice allergy.
+  expect: create
+  seed:
+  - patient:
+      as: tomasz
+      person: tomasz
+  task:
+    patient: tomasz
+    code: "91935009"
+    display: Allergy to peanut
+    criticality: low
+- id: X03
+  type: appointment
+  class: practice
+  note: Practice appointment.
+  expect: create
+  seed:
+  - patient:
+      as: tomasz
+      person: tomasz
+  task:
+    patient: tomasz
+    practitioner: dr_lind
+    start: '2026-12-03T16:00:00Z'
+    end: '2026-12-03T16:20:00Z'
+- id: X04
+  type: patient
+  class: practice
+  note: Practice fault, to check that a fault reaches a write made in the app.
+  expect: create
+  task:
+    given: Ines
+    family: Marlow
+    birthDate: '1995-07-30'
+    gender: female
+    line: 3 Orchard Way
+    city: Northampton
+    state: MA
+    postalCode: '01060'
+    phone: 413-555-0119
+    email: ines.marlow@example.org
+  faults:
+  - set: {birthDate: '1995-07-31'}
+- id: X05
+  type: patient
+  class: practice
+  note: Practice fault, a create sent twice.
+  expect: create
+  task:
+    given: Ines
+    family: Marlow
+    birthDate: '1995-07-30'
+    gender: female
+    line: 3 Orchard Way
+    city: Northampton
+    state: MA
+    postalCode: '01060'
+    phone: 413-555-0119
+    email: ines.marlow@example.org
+  faults:
+  - duplicate: true

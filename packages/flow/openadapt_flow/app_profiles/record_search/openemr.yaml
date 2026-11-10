@@ -1,0 +1,56 @@
+# How the duplicate check searches OpenEMR's patients through its own
+# interfaces. The engine's adapters (runtime/checks/app_sources.py) read this;
+# nothing about OpenEMR lives in code.
+name: openemr
+
+# A REST record check whose records path contains this names this app.
+rest_records_path_marker: /api/patient
+
+# OpenEMR serves FHIR R4 beside its REST API: the part of the records path
+# before the marker, then this suffix (.../apis/default/fhir).
+fhir_beside_rest: /fhir
+
+rest:
+  # OpenEMR answers with {"data": [...]} and a next-page link at links.next.
+  rows_key: data
+  next_link: [links, next]
+  page_size_param: _limit
+  error_keys: [validationErrors, internalErrors, errors, error]
+  # The query parameter for each search. OpenEMR matches lname exactly, so
+  # the check compares prefixes locally; a hyphenated or married name is
+  # still found through the date of birth.
+  params:
+    birthdate: DOB
+    family: lname
+    identifier: pubpid
+    given: fname
+    phone: phone_home
+    email: email
+  fields:
+    record_id: [uuid, pid, id]
+    fname: [fname]
+    mname: [mname]
+    lname: [lname]
+    dob: [DOB]
+    mrn: [pubpid]
+    phone: [phone_home]
+    street: [street]
+    email: [email]
+    birth_fname: [birth_fname, fname]
+    birth_lname: [birth_lname]
+
+# Fallback for a deployment with no FHIR or REST read: a SELECT-only query.
+sql:
+  table: patient_data
+  columns:
+    record_id: pid
+    fname: fname
+    mname: mname
+    lname: lname
+    dob: DOB
+    mrn: pubpid
+    phone: phone_home
+    street: street
+    email: email
+    birth_fname: birth_fname
+    birth_lname: birth_lname

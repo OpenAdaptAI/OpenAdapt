@@ -28,6 +28,7 @@ import pytest
 from openadapt_flow.compiler import compile_recording
 from openadapt_flow.interactive_recorder import record_interactive
 from openadapt_flow.ir import Workflow
+from tests._rest_read_contract_fixtures import mockmed_rest_read_kwargs
 
 sync_api = pytest.importorskip("playwright.sync_api")
 
@@ -68,6 +69,16 @@ document.getElementById('ticket').addEventListener('submit', (e) => {
       document.body.innerHTML = '<h1>Ticket created</h1>';
     });
 });""",
+    # Only the checked destination may receive the form, even when an action
+    # control masks the DOM property that a script might otherwise read.
+    "actiondrift": """
+document.getElementById('ticket').addEventListener('submit', (e) => {
+  e.target.setAttribute('action', '/another-ticket');
+}, true);""",
+    "origindrift": """
+document.getElementById('ticket').addEventListener('submit', (e) => {
+  e.target.setAttribute('action', 'http://localhost:' + location.port + '/ticket');
+}, true);""",
     # The click opens a popup whose page posts a write of its own.
     "popup": """
 document.getElementById('ticket').addEventListener('submit', () => {
@@ -112,17 +123,35 @@ def _page(variant: str) -> str:
     pid = (
         '<input type="hidden" name="pid" value="">' if variant.startswith("sub") else ""
     )
+    named_variant = (
+        "action_radio" if variant in {"actiondrift", "origindrift"} else variant
+    )
+    named = {
+        "action_hidden": '<input type="hidden" name="action" value="create">',
+        "action_radio": (
+            '<input type="radio" name="action" value="create" checked>'
+            '<input type="radio" name="action" value="assign">'
+        ),
+        "action_submitter": '<input type="hidden" name="action" value="create">',
+        "method_hidden": '<input type="hidden" name="method" value="new">',
+    }.get(named_variant, "")
+    action = "/unselected" if variant == "action_submitter" else "/ticket"
+    override = (
+        ' formaction="/ticket" formmethod="post"'
+        if variant == "action_submitter"
+        else ""
+    )
     scripts = _SCRIPTS.get(variant, "") + (
         _SUBMIT_COPIES if variant.startswith("sub") else ""
     )
     return f"""<!doctype html><html><head><meta charset="utf-8"><title>New ticket</title>
 </head><body style="font:16px Arial;margin:24px"><h1>New ticket</h1>
-<form id="ticket" method="post" action="/ticket">
-  {pid}
+<form id="ticket" method="post" action="{action}">
+  {pid}{named}
   <p><label>Summary <input name="field_summary" size="40"></label></p>
   <p><label>Description <textarea name="field_description" rows="3"
      cols="40"></textarea></label></p>
-  <p><input type="submit" name="submit" value="Create ticket"></p>
+  <p><input type="submit" name="submit" value="Create ticket"{override}></p>
 </form>
 <script>{scripts}</script>
 </body></html>"""
@@ -313,6 +342,41 @@ def test_the_checked_submission_goes_out_once(
     assert len(received) == 1
     assert received[0]["fields"]["field_summary"] == "Scanner offline on floor 3"
     assert "id" not in received[0]["fields"]
+
+
+@pytest.mark.parametrize(
+    "variant", ["action_hidden", "action_radio", "method_hidden", "action_submitter"]
+)
+def test_named_controls_preserve_the_native_form_destination(
+    server: _Server, tmp_path_factory: pytest.TempPathFactory, variant: str
+) -> None:
+    bundle = _bundle(server, variant, tmp_path_factory.mktemp("named-rec"))
+    report, received = _replay(
+        server, variant, bundle, tmp_path_factory.mktemp("named-run")
+    )
+    assert report.success, [(r.step_id, r.error) for r in report.results]
+    assert len(received) == 1
+    assert received[0]["path"] == "/ticket"
+    assert received[0]["fields"]["field_summary"] == "Scanner offline on floor 3"
+    if variant.startswith("action_"):
+        assert received[0]["fields"]["action"] == "create"
+    else:
+        assert received[0]["fields"]["method"] == "new"
+
+
+@pytest.mark.parametrize("variant", ["actiondrift", "origindrift"])
+def test_a_destination_changed_after_the_check_is_refused(
+    server: _Server, tmp_path_factory: pytest.TempPathFactory, variant: str
+) -> None:
+    bundle = _bundle(server, "action_radio", tmp_path_factory.mktemp("drift-rec"))
+    report, received = _replay(
+        server, variant, bundle, tmp_path_factory.mktemp("drift-run")
+    )
+    assert not report.success
+    assert received == []
+    assert any("different address" in (r.error or "") for r in report.results), [
+        (r.step_id, r.error) for r in report.results
+    ]
 
 
 @pytest.mark.parametrize(
@@ -1167,7 +1231,7 @@ def test_an_api_span_after_a_late_refusal_halts_before_sending(
                 backend,
                 web_form_actuator=actuator,
                 effect_verifier=RestRecordVerifier(
-                    sor_url.rstrip("/"), records_path="/api/db", records_key="records"
+                    sor_url.rstrip("/"), **mockmed_rest_read_kwargs()
                 ),
                 poll_interval_s=0.01,
             ).run(
@@ -1272,7 +1336,7 @@ def test_a_late_refusal_adds_to_an_earlier_halt_instead_of_replacing_it(
                 backend,
                 web_form_actuator=actuator,
                 effect_verifier=RestRecordVerifier(
-                    sor_url.rstrip("/"), records_path="/api/db", records_key="records"
+                    sor_url.rstrip("/"), **mockmed_rest_read_kwargs()
                 ),
                 poll_interval_s=0.01,
             )

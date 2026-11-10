@@ -1,0 +1,61 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I couldn't check for or book the appointment. Medplum is showing its sign-in page, not a signed-in session, even though I was told I was already signed in. I have no email or password for it, so I can't get into the patient or practitioner records. I reloaded the page once and it was still the sign-in screen. I didn't use the \"Register\" link, because making a new account isn't part of this task. Nothing in the system was changed.\n\nRESULT: NOT DONE Medplum is on the sign-in page and I have no login credentials, so I couldn't search for or create the appointment.",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6283,
+   "out": 93,
+   "usd": 0.002194,
+   "cached": 6279
+  },
+  {
+   "in": 7749,
+   "out": 164,
+   "usd": 0.003193,
+   "cached": 7747
+  },
+  {
+   "in": 9309,
+   "out": 179,
+   "usd": 0.007243,
+   "cached": 7747
+  }
+ ]
+}

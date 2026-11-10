@@ -1,0 +1,21 @@
+{
+  "id": "539b24b622c3457c95c703855227c8fd",
+  "created_at": "2026-11-04T19:06:54.282055+00:00",
+  "viewport": [
+    1280,
+    800
+  ],
+  "coordinate_space": "page",
+  "app_url": "http://127.0.0.1:9668/societe/card.php?action=create",
+  "params": {
+    "name": "Harbor Office Supply rec1406",
+    "town": "Exampleton",
+    "phone": "555-0171",
+    "email": "orders@harbor.example.invalid"
+  },
+  "secret_params": [],
+  "network_capture": {
+    "file": "network.jsonl",
+    "exchanges": 4
+  }
+}

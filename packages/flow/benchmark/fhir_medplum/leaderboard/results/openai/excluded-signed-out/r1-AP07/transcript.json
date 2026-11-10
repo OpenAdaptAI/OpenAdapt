@@ -1,0 +1,39 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0ffc16803e5ce645016ae95cc70c8487d295c74603022cf1dd",
+     "call_id": "call_7dk7FNxEVexlyRwpHBUZZFQf",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE Medplum shows the sign-in screen; I cannot find the patient or verify or book the appointment without access.",
+   "calls": []
+  }
+ ],
+ "actions": [],
+ "usage": [
+  {
+   "in": 2314,
+   "out": 20,
+   "usd": 0.000668,
+   "cached": 2311
+  },
+  {
+   "in": 3531,
+   "out": 53,
+   "usd": 0.001242,
+   "cached": 3528
+  }
+ ]
+}

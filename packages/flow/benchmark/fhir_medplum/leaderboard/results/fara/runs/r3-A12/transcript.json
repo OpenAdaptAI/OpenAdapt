@@ -1,0 +1,591 @@
+{
+ "transcript": [
+  {
+   "reply": "We need to locate the existing AllergyIntolerance record for this patient to check if the allergy is already present.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"https://fhirmedplum.open GetType().GetGuidId() + \"SNOMED CT\", \"system\": \"http://snomed.info/sct\", \"code\": \"91936005\", \"criticality\": \"http://terminology.hl7.org/CodeSystem/allergyintolerance-criticality#high\", \"clinicalStatus\": \"http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical#active\", \"verificationStatus\": \"http://terminology.hl7.org/CodeSystem/allergyintolerance-verification#confirmed\"}}\n</tool_call>",
+   "error": "unparsable: invalid syntax. Perhaps you forgot a comma? (<unknown>, line 1)"
+  },
+  {
+   "reply": "Open the patient detail page to access the allergies section and search for the existing AllergyIntolerance record.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [218, 300]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the patient details section where allergies are listed.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [124, 152]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to reveal the Allergies section within the patient details panel.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll further down to locate the Allergies section within the patient details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll further down to reveal the Allergies section within the patient details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Continue scrolling down to reveal the Allergies section within the patient details panel.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Continue scrolling down to locate the Allergies section within the patient details panel.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Continue scrolling down to reveal the Allergies section within the patient details panel.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Continue scrolling down to reveal the Allergies section within the patient details panel.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Continue scrolling down to reveal the Allergies section within the patient details panel.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Continue scrolling down to reveal the Allergies section within the patient details panel.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Continue scrolling down to reveal the Allergies section within the patient details panel.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Continue scrolling down to reveal the Allergies section within the patient details panel.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Continue scrolling down to reveal the Allergies section within the patient details panel.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Continue scrolling down to reveal the Allergies section within the patient details panel.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Continue scrolling down to reveal the Allergies section within the patient details panel.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Continue scrolling down to reveal the Allergies section within the patient details panel.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Continue scrolling down to reveal the Allergies section within the patient details panel.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Continue scrolling down to reveal the Allergies section within the patient details panel.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Continue scrolling down to reveal the Allergies section within the patient details panel.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Continue scrolling down to reveal the Allergies section within the patient details panel.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Continue scrolling down to reveal the Allergies section within the patient details panel.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Continue scrolling down to reveal the Allergies section within the patient details panel.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll further down within the details panel to reveal the Allergies section.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Continue scrolling down to reveal the Allergies section within the patient details panel.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Continue scrolling down to reveal the Allergies section within the patient details panel.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Continue scrolling down to reveal the Allergies section within the patient details panel.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Continue scrolling down to reveal the Allergies section within the patient details panel.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Continue scrolling down to reveal the Allergies section within the patient details panel.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Continue scrolling down to reveal the Allergies section within the patient details panel.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Continue scrolling down to reveal the Allergies section within the patient details panel.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Continue scrolling down to reveal the Allergies section within the patient details panel.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -800}}\n</tool_call>"
+  },
+  {
+   "reply": "Use the search box to directly search for the 'Allergies' section rather than scrolling.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [200, 34], \"text\": \"Allergies\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Press the Home key to quickly scroll to the top of the details panel, hoping the navigation tabs or the search box becomes visible for direct navigation to the Allergies section.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"key\", \"keys\": [\"Home\"]}}\n</tool_call>"
+  },
+  {
+   "reply": "Use the search box to search for 'AllergyIntolerance' directly, which should locate any existing allergy record for this patient.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [295, 34], \"text\": \"AllergyIntolerance\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 216.64596273291926,
+   "y": 295.5665024630542,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 123.22981366459628,
+   "y": 149.7536945812808,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 800.0
+  },
+  {
+   "a": "click",
+   "x": 198.75776397515529,
+   "y": 33.49753694581281,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Allergies"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Home"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 293.167701863354,
+   "y": 33.49753694581281,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "AllergyIntolerance"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  }
+ ],
+ "usage": [
+  {
+   "in": 3058,
+   "out": 167,
+   "usd": 0.0
+  },
+  {
+   "in": 4620,
+   "out": 56,
+   "usd": 0.0
+  },
+  {
+   "in": 6081,
+   "out": 45,
+   "usd": 0.0
+  },
+  {
+   "in": 6196,
+   "out": 43,
+   "usd": 0.0
+  },
+  {
+   "in": 6309,
+   "out": 43,
+   "usd": 0.0
+  },
+  {
+   "in": 6422,
+   "out": 43,
+   "usd": 0.0
+  },
+  {
+   "in": 6535,
+   "out": 44,
+   "usd": 0.0
+  },
+  {
+   "in": 6649,
+   "out": 44,
+   "usd": 0.0
+  },
+  {
+   "in": 6763,
+   "out": 44,
+   "usd": 0.0
+  },
+  {
+   "in": 6877,
+   "out": 44,
+   "usd": 0.0
+  },
+  {
+   "in": 6991,
+   "out": 44,
+   "usd": 0.0
+  },
+  {
+   "in": 7105,
+   "out": 44,
+   "usd": 0.0
+  },
+  {
+   "in": 7219,
+   "out": 44,
+   "usd": 0.0
+  },
+  {
+   "in": 7333,
+   "out": 44,
+   "usd": 0.0
+  },
+  {
+   "in": 7447,
+   "out": 44,
+   "usd": 0.0
+  },
+  {
+   "in": 7561,
+   "out": 44,
+   "usd": 0.0
+  },
+  {
+   "in": 7675,
+   "out": 44,
+   "usd": 0.0
+  },
+  {
+   "in": 7789,
+   "out": 44,
+   "usd": 0.0
+  },
+  {
+   "in": 7903,
+   "out": 44,
+   "usd": 0.0
+  },
+  {
+   "in": 8017,
+   "out": 44,
+   "usd": 0.0
+  },
+  {
+   "in": 8131,
+   "out": 44,
+   "usd": 0.0
+  },
+  {
+   "in": 8245,
+   "out": 44,
+   "usd": 0.0
+  },
+  {
+   "in": 8359,
+   "out": 44,
+   "usd": 0.0
+  },
+  {
+   "in": 8473,
+   "out": 44,
+   "usd": 0.0
+  },
+  {
+   "in": 8587,
+   "out": 43,
+   "usd": 0.0
+  },
+  {
+   "in": 8700,
+   "out": 44,
+   "usd": 0.0
+  },
+  {
+   "in": 8814,
+   "out": 44,
+   "usd": 0.0
+  },
+  {
+   "in": 8928,
+   "out": 44,
+   "usd": 0.0
+  },
+  {
+   "in": 9042,
+   "out": 44,
+   "usd": 0.0
+  },
+  {
+   "in": 9156,
+   "out": 44,
+   "usd": 0.0
+  },
+  {
+   "in": 9270,
+   "out": 44,
+   "usd": 0.0
+  },
+  {
+   "in": 9384,
+   "out": 44,
+   "usd": 0.0
+  },
+  {
+   "in": 9498,
+   "out": 44,
+   "usd": 0.0
+  },
+  {
+   "in": 9612,
+   "out": 72,
+   "usd": 0.0
+  },
+  {
+   "in": 9754,
+   "out": 62,
+   "usd": 0.0
+  },
+  {
+   "in": 9886,
+   "out": 80,
+   "usd": 0.0
+  }
+ ]
+}

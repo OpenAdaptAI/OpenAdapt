@@ -1,0 +1,32 @@
+WARNING: writing a compiled bundle in plaintext at /Users/abrichr/oa/scratch/api-generalization/netbox_ip/bundle: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+WARNING: openadapt-privacy is not installed, so reports and logs are not scrubbed of patient data (OPENADAPT_FLOW_SCRUB=auto). Install 'openadapt-flow[privacy]', or set OPENADAPT_FLOW_SCRUB=on to refuse instead.
+param-hygiene step_006: REGION_STABLE dropped — changed region (395, 284, 885, 487) renders a demonstrated parameter value (No****************************************************************************************************************************************************************************************************************************ed); freezing it would false-halt every run whose value differs. This step has no pixel-region invariant.
+{
+ "app": "netbox_ip",
+ "workflow": "add-ip-address",
+ "steps": 7,
+ "params": [
+  "address",
+  "description",
+  "dns_name"
+ ],
+ "optional_params": [
+  "description",
+  "dns_name"
+ ],
+ "compile_proposal": {
+  "proposed": false,
+  "step": null,
+  "reasons": [
+   "field 'comments' of the save is not a recorded value, a form default or a session value"
+  ]
+ },
+ "proposed": false,
+ "reasons": [
+  "field 'comments' of the save is not a recorded value, a form default or a session value"
+ ],
+ "compile_s": 157.8,
+ "frozen": "f761fff8e669c0d6e851ad8a27ed75d562003b96",
+ "head": "f761fff8e669c0d6e851ad8a27ed75d562003b96",
+ "engine_diff_vs_frozen": ""
+}
