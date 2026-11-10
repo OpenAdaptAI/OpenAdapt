@@ -111,7 +111,6 @@ def test_the_digit_contradiction_is_charged_not_the_run_cap() -> None:
     "recorded,observed",
     [
         (f"Smith John 25 47 {LABEL}", f"Smith John 25 47 {LABEL}"),
-        (f"{LABEL} Smith John 25 47", f"Smith John 25 47 {LABEL}"),
         (
             "Ashford Jane 02/23/1975 RC79284 Active",
             "Ashford Jane 02/23/1975 RC79284 Active",
@@ -222,3 +221,42 @@ def test_review_round_4_wrong_records_refuse(recorded: str, observed: str) -> No
     plain, hashed = _statuses(recorded, observed)
     assert plain != "verified", (recorded, observed)
     assert hashed != "verified", (recorded, observed)
+
+
+def _statuses_with_round_trip(recorded: str, observed: str) -> tuple[str, str, str]:
+    from openadapt_flow.ir import IdentityTemplate
+
+    plain, fresh = _statuses(recorded, observed)
+    template = build_identity_template(recorded, param_examples={})
+    assert template is not None
+    loaded = IdentityTemplate.model_validate(template.model_dump(mode="json"))
+    reread = verify_template_identity(loaded, observed, params={}, param_examples={})
+    return plain, fresh, reread.status
+
+
+def test_a_relocated_label_beside_the_id_abstains_without_span_evidence() -> None:
+    # A false halt is accepted until capture provides record-span authority.
+    recorded = f"{LABEL} Smith John 25 47"
+    observed = f"Smith John 25 47 {LABEL}"
+    assert _statuses_with_round_trip(recorded, observed) == (
+        "abstain",
+        "abstain",
+        "abstain",
+    )
+
+
+@pytest.mark.parametrize("heading", ["ID:", "Guidance:"])
+@pytest.mark.parametrize("prefix", ["rc.", "prefix."])
+@pytest.mark.parametrize("reverse", [False, True])
+def test_a_colon_heading_cannot_grant_identifier_prefix_relocation(
+    heading: str, prefix: str, reverse: bool
+) -> None:
+    recorded = f"{heading} {prefix} 79284 Smith John 47"
+    observed = f"79284 Smith John 47 {heading} {prefix}"
+    if reverse:
+        recorded, observed = observed, recorded
+    assert _statuses_with_round_trip(recorded, observed) == (
+        "abstain",
+        "abstain",
+        "abstain",
+    )

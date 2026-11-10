@@ -1,6 +1,6 @@
 """openadapt-flow: record, compile, replay deterministically, heal on drift."""
 
-__version__ = "2.6.0"
+__version__ = "2.7.1"
 
 # Strict no-outbound mode follows the package into child interpreters, so a
 # Python child that imports openadapt_flow is refused off-machine connections

@@ -1,0 +1,17 @@
+{
+ "recording": "/Users/abrichr/oa/scratch/api-generalization/medplum_patient/rec-969cb939",
+ "events": 11,
+ "exchanges": 7,
+ "judge": {
+  "new_records": 1,
+  "field_mismatches": [],
+  "collateral": {
+   "deleted": [],
+   "changed": []
+  },
+  "state_ok": true,
+  "new_ids": [
+   "4a582bd9-2973-4e9c-890a-b92c8f4b9e7d"
+  ]
+ }
+}

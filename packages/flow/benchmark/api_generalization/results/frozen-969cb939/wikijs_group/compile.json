@@ -1,0 +1,74 @@
+{
+ "app": "wikijs_group",
+ "workflow": "new-group",
+ "steps": 4,
+ "params": [
+  "name"
+ ],
+ "optional_params": [],
+ "compile_proposal": {
+  "proposed": true,
+  "step": "step_003",
+  "reasons": []
+ },
+ "proposed": true,
+ "reasons": [],
+ "compile_s": 9.1,
+ "frozen": "969cb939e7f246a55a7b49c319941a6aa3ff3d8c",
+ "head": "969cb939e7f246a55a7b49c319941a6aa3ff3d8c",
+ "engine_diff_vs_frozen": "",
+ "identity": {
+  "subject_name": "name"
+ },
+ "admitted": [
+  "step_003"
+ ],
+ "describe": "step_003: save with one request, POST /graphql, in place of 4 GUI steps (step_000 to step_003).\n  sign-in: the replaying browser's own session; form read again from /a/groups\n  fields: 1 param\n  run values: 0/variables/name={name}\n  accepted when: HTTP [200]\n  record check after: 1 effect(s) copied from the save step\n  right record (subject_name): the request sends {name} in 0/variables/name and the record check selects name = {name}\n  screen-only checks, not repeated: ['step_000: region_stable, text_present', 'step_001: region_stable']\n  if the form or a check differs at run time, the GUI steps run instead",
+ "binding": {
+  "form_path": "/a/groups",
+  "fields": [
+   {
+    "name": "0/variables/name",
+    "source": "param",
+    "param": "name",
+    "value": null
+   }
+  ],
+  "controls": [],
+  "encoding": "json",
+  "json_body": [
+   {
+    "operationName": null,
+    "variables": {
+     "name": ""
+    },
+    "extensions": {},
+    "query": "mutation ($name: String!) {\n  groups {\n    create(name: $name) {\n      responseResult {\n        succeeded\n        errorCode\n        slug\n        message\n        __typename\n      }\n      group {\n        id\n        name\n        createdAt\n        updatedAt\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}\n"
+   }
+  ],
+  "session_headers": [
+   "authorization"
+  ],
+  "graphql": true,
+  "client_rules": null,
+  "client_scripts": [],
+  "submitter": null,
+  "submitter_requests": [],
+  "confirm": null,
+  "prechecks": [],
+  "success_pattern": null,
+  "replaces_steps": [
+   "step_000",
+   "step_001",
+   "step_002",
+   "step_003"
+  ],
+  "other_writes_seen": [],
+  "writes": [],
+  "screen_only_checks": [
+   "step_000: region_stable, text_present",
+   "step_001: region_stable"
+  ],
+  "folded_checks_digest": "sha256:fec16be0460f4d654da4cb7111e2f3609b95503b9866ee5417abab86c80f79eb"
+ }
+}

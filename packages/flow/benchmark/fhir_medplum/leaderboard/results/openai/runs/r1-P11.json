@@ -1,0 +1,133 @@
+{
+ "id": "P11",
+ "class": "refused_write",
+ "type": "patient",
+ "expect": "create",
+ "note": "The server refuses the create (503) and nothing lands.",
+ "agent_s": 76.8,
+ "cost_usd": 0.103775,
+ "claim": {
+  "status": "done",
+  "id": "Patient/32993e1b-3026-49ab-8f10-c0e88d3d1f4f",
+  "note": "RESULT: DONE Patient/32993e1b-3026-49ab-8f10-c0e88d3d1f4f",
+  "claim_line": true,
+  "end_url": "http://localhost:9811/Patient/32993e1b-3026-49ab-8f10-c0e88d3d1f4f/json",
+  "final_text": "RESULT: DONE Patient/32993e1b-3026-49ab-8f10-c0e88d3d1f4f",
+  "model_calls": 19,
+  "actions": 21,
+  "tokens_in": 264359,
+  "tokens_out": 1139
+ },
+ "verifier": {
+  "outcome": "created_verified",
+  "id": "32993e1b-3026-49ab-8f10-c0e88d3d1f4f",
+  "reasons": [
+   "created once, every value read back"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 1,
+   "agent_writes": 1,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "Patient"
+   ]
+  },
+  "unreadable": false
+ },
+ "verifier_strict": {
+  "outcome": "created_verified",
+  "id": "32993e1b-3026-49ab-8f10-c0e88d3d1f4f",
+  "reasons": [
+   "created once, every value read back"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 1,
+   "agent_writes": 1,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "Patient"
+   ]
+  },
+  "unreadable": false
+ },
+ "verify_s": 5.0,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "Patient/32993e1b-3026-49ab-8f10-c0e88d3d1f4f"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "Patient/32993e1b-3026-49ab-8f10-c0e88d3d1f4f": "created"
+  }
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "Patient",
+   "write": 1,
+   "faulted": true
+  },
+  {
+   "fault": "refuse"
+  },
+  {
+   "method": "POST",
+   "type": "Patient",
+   "write": 2,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ServiceRequest",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 1,
+ "host_load": {
+  "start": 24.1,
+  "end": 18.5,
+  "waited_s": 0
+ }
+}

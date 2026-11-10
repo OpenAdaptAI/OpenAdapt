@@ -1,0 +1,1104 @@
+{
+ "transcript": [
+  {
+   "reply": "We need to search for an existing Patient resource with the given name to see if a record already exists.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [204, 32], \"text\": \"Lena Okafor\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the patient detail page to inspect the record and confirm whether it matches Lena Okafor or if another patient is present.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [218, 302]}}\n</tool_call>"
+  },
+  {
+   "reply": "We need to search for a Patient named 'Lena Okafor' to see if a record already exists.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [204, 32], \"text\": \"Lena Okafor\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the patient detail page to review the record and confirm whether it matches Lena Okafor or if another patient is present.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [124, 152]}}\n</tool_call>"
+  },
+  {
+   "reply": "We need to search for a Patient named 'Lena Okafor' to see if a record already exists.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [204, 32], \"text\": \"Lena Okafor\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "We need to search the FHIR server for a Patient resource with the given name to determine if a record for Lena Okafor already exists.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/Patient?name=Lena%20Okafor\"}}\n</tool_call>"
+  },
+  {
+   "reply": "We need to create a new Patient resource for Lena Okafor with the given details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/Patient\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the form to create a new Patient resource for Lena Okafor.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [1232, 170]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the Name field to input the patient's name.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [270, 630]}}\n</tool_call>"
+  },
+  {
+   "reply": "Enter the patient's family name into the Family field.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [791, 630], \"text\": \"Okafor\", \"press_enter\": false, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Enter the patient's given name into the Given field.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [624, 630], \"text\": \"Lena\", \"press_enter\": false, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to bring the birthDate, gender, address, phone, and email fields into view so they can be filled in.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Enter the patient's birth date as specified by the user.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [639, 168], \"text\": \"1988-04-22\", \"press_enter\": false, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Enter the correct birth date specified by the user.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [639, 168], \"text\": \"1988-04-22\", \"press_enter\": false, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Enter the patient's sex as female.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [624, 257], \"text\": \"Female\", \"press_enter\": false, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Enter the patient's home phone number as the telecom value.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [624, 257], \"text\": \"413-555-0187\", \"press_enter\": false, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Enter the patient's home phone number into the telecom field.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [624, 257], \"text\": \"413-555-0187\", \"press_enter\": false, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Enter the patient's home phone number into the telecom field so it can be saved.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [624, 257], \"text\": \"413-555-0187\", \"press_enter\": false, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the Birth Date field to correct the date to 1988-04-22.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [639, 168]}}\n</tool_call>"
+  },
+  {
+   "reply": "Enter the correct birth date specified by the user.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [639, 168], \"text\": \"1988-04-22\", \"press_enter\": false, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the Birth Date field to correct the date to 1988-04-22.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [639, 168]}}\n</tool_call>"
+  },
+  {
+   "reply": "Enter the correct birth date specified by the user.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [639, 168], \"text\": \"1988-04-22\", \"press_enter\": false, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the Birth Date field to correct the date to 1988-04-22.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [639, 168]}}\n</tool_call>"
+  },
+  {
+   "reply": "Enter the correct birth date specified by the user.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [639, 168], \"text\": \"1988-04-22\", \"press_enter\": false, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the Birth Date field to correct the date to 1988-04-22.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [639, 168]}}\n</tool_call>"
+  },
+  {
+   "reply": "Enter the correct birth date specified by the user.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [639, 168], \"text\": \"1988-04-22\", \"press_enter\": false, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the Birth Date field to correct the date to 1988-04-22.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [639, 168]}}\n</tool_call>"
+  },
+  {
+   "reply": "Enter the correct birth date specified by the user.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [639, 168], \"text\": \"1988-04-22\", \"press_enter\": false, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the Birth Date field to correct the date to 1988-04-22.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [639, 168]}}\n</tool_call>"
+  },
+  {
+   "reply": "Enter the correct birth date specified by the user.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [639, 168], \"text\": \"1988-04-22\", \"press_enter\": false, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the Birth Date field to correct the date to 1988-04-22.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [639, 168]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the date picker to correctly input the birth date.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [639, 168]}}\n</tool_call>"
+  },
+  {
+   "reply": "Enter the correct birth date specified by the user.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [639, 168], \"text\": \"1988-04-22\", \"press_enter\": false, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the date picker to correctly enter the birth date.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [639, 168]}}\n</tool_call>"
+  },
+  {
+   "reply": "Enter the correct birth date specified by the user.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [639, 168], \"text\": \"1988-04-22\", \"press_enter\": false, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the date picker to correctly enter the birth date.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [639, 168]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to bring the 'Communication' section fully into view so the email field can be accessed.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the Communication section to add the patient's email address.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [288, 350]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the 'Add Communication' form so we can input the patient's email address as the telecom contact.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [303, 534]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to reveal the newly added Communication form fields so we can input the email address.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to bring the Communication section and its Add Communication form into view so we can input the email address.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to bring the Communication section and its Add Communication form into view so we can input the email address.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 808}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the 'Add Telecom' form so we can input the patient's email address as a telecom contact.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [279, 740]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the 'Add Telecom' form so we can input the patient's email address as a telecom contact.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [279, 794]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the 'Add Telecom' form so we can input the patient's email address as a telecom contact.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [279, 794]}}\n</tool_call>"
+  },
+  {
+   "reply": "Enter the patient's email address into the Value field to set the telecom contact.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [910, 743], \"text\": \"lena.okafor@example.org\", \"press_enter\": false, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to bring the 'Communication' section header and its 'Add Communication' button into view so we can add the email telecom.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 808}}\n</tool_call>"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 202.73291925465838,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Lena Okafor"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 216.64596273291926,
+   "y": 297.5369458128079,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 202.73291925465838,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Lena Okafor"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 123.22981366459628,
+   "y": 149.7536945812808,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 202.73291925465838,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Lena Okafor"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/Patient?name=Lena%20Okafor"
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/Patient"
+  },
+  {
+   "a": "click",
+   "x": 1224.3478260869565,
+   "y": 167.48768472906403,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 268.3229813664596,
+   "y": 620.6896551724138,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 786.0869565217391,
+   "y": 620.6896551724138,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Okafor"
+  },
+  {
+   "a": "click",
+   "x": 620.1242236024844,
+   "y": 620.6896551724138,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Lena"
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "click",
+   "x": 635.0310559006211,
+   "y": 165.51724137931035,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "1988-04-22"
+  },
+  {
+   "a": "click",
+   "x": 635.0310559006211,
+   "y": 165.51724137931035,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "1988-04-22"
+  },
+  {
+   "a": "click",
+   "x": 620.1242236024844,
+   "y": 253.20197044334975,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Female"
+  },
+  {
+   "a": "click",
+   "x": 620.1242236024844,
+   "y": 253.20197044334975,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "413-555-0187"
+  },
+  {
+   "a": "click",
+   "x": 620.1242236024844,
+   "y": 253.20197044334975,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "413-555-0187"
+  },
+  {
+   "a": "click",
+   "x": 620.1242236024844,
+   "y": 253.20197044334975,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "413-555-0187"
+  },
+  {
+   "a": "click",
+   "x": 635.0310559006211,
+   "y": 165.51724137931035,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 635.0310559006211,
+   "y": 165.51724137931035,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "1988-04-22"
+  },
+  {
+   "a": "click",
+   "x": 635.0310559006211,
+   "y": 165.51724137931035,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 635.0310559006211,
+   "y": 165.51724137931035,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "1988-04-22"
+  },
+  {
+   "a": "click",
+   "x": 635.0310559006211,
+   "y": 165.51724137931035,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 635.0310559006211,
+   "y": 165.51724137931035,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "1988-04-22"
+  },
+  {
+   "a": "click",
+   "x": 635.0310559006211,
+   "y": 165.51724137931035,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 635.0310559006211,
+   "y": 165.51724137931035,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "1988-04-22"
+  },
+  {
+   "a": "click",
+   "x": 635.0310559006211,
+   "y": 165.51724137931035,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 635.0310559006211,
+   "y": 165.51724137931035,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "1988-04-22"
+  },
+  {
+   "a": "click",
+   "x": 635.0310559006211,
+   "y": 165.51724137931035,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 635.0310559006211,
+   "y": 165.51724137931035,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "1988-04-22"
+  },
+  {
+   "a": "click",
+   "x": 635.0310559006211,
+   "y": 165.51724137931035,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 635.0310559006211,
+   "y": 165.51724137931035,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 635.0310559006211,
+   "y": 165.51724137931035,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "1988-04-22"
+  },
+  {
+   "a": "click",
+   "x": 635.0310559006211,
+   "y": 165.51724137931035,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 635.0310559006211,
+   "y": 165.51724137931035,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "1988-04-22"
+  },
+  {
+   "a": "click",
+   "x": 635.0310559006211,
+   "y": 165.51724137931035,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "click",
+   "x": 286.2111801242236,
+   "y": 344.82758620689657,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 301.11801242236027,
+   "y": 526.1083743842364,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -808.0
+  },
+  {
+   "a": "click",
+   "x": 277.2670807453416,
+   "y": 729.064039408867,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 277.2670807453416,
+   "y": 782.2660098522167,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 277.2670807453416,
+   "y": 782.2660098522167,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 904.3478260869565,
+   "y": 732.0197044334975,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "lena.okafor@example.org"
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -808.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 3037,
+   "out": 76,
+   "usd": 0.0
+  },
+  {
+   "in": 4509,
+   "out": 60,
+   "usd": 0.0
+  },
+  {
+   "in": 5976,
+   "out": 78,
+   "usd": 0.0
+  },
+  {
+   "in": 6125,
+   "out": 60,
+   "usd": 0.0
+  },
+  {
+   "in": 6257,
+   "out": 78,
+   "usd": 0.0
+  },
+  {
+   "in": 6407,
+   "out": 75,
+   "usd": 0.0
+  },
+  {
+   "in": 6542,
+   "out": 54,
+   "usd": 0.0
+  },
+  {
+   "in": 6656,
+   "out": 51,
+   "usd": 0.0
+  },
+  {
+   "in": 6744,
+   "out": 46,
+   "usd": 0.0
+  },
+  {
+   "in": 6827,
+   "out": 65,
+   "usd": 0.0
+  },
+  {
+   "in": 6929,
+   "out": 64,
+   "usd": 0.0
+  },
+  {
+   "in": 7030,
+   "out": 54,
+   "usd": 0.0
+  },
+  {
+   "in": 7121,
+   "out": 73,
+   "usd": 0.0
+  },
+  {
+   "in": 7231,
+   "out": 71,
+   "usd": 0.0
+  },
+  {
+   "in": 7339,
+   "out": 60,
+   "usd": 0.0
+  },
+  {
+   "in": 7436,
+   "out": 75,
+   "usd": 0.0
+  },
+  {
+   "in": 7548,
+   "out": 75,
+   "usd": 0.0
+  },
+  {
+   "in": 7660,
+   "out": 80,
+   "usd": 0.0
+  },
+  {
+   "in": 7777,
+   "out": 57,
+   "usd": 0.0
+  },
+  {
+   "in": 7871,
+   "out": 71,
+   "usd": 0.0
+  },
+  {
+   "in": 7979,
+   "out": 57,
+   "usd": 0.0
+  },
+  {
+   "in": 8073,
+   "out": 71,
+   "usd": 0.0
+  },
+  {
+   "in": 8181,
+   "out": 57,
+   "usd": 0.0
+  },
+  {
+   "in": 8275,
+   "out": 71,
+   "usd": 0.0
+  },
+  {
+   "in": 8383,
+   "out": 57,
+   "usd": 0.0
+  },
+  {
+   "in": 8477,
+   "out": 71,
+   "usd": 0.0
+  },
+  {
+   "in": 8585,
+   "out": 57,
+   "usd": 0.0
+  },
+  {
+   "in": 8679,
+   "out": 71,
+   "usd": 0.0
+  },
+  {
+   "in": 8787,
+   "out": 57,
+   "usd": 0.0
+  },
+  {
+   "in": 8881,
+   "out": 71,
+   "usd": 0.0
+  },
+  {
+   "in": 8989,
+   "out": 57,
+   "usd": 0.0
+  },
+  {
+   "in": 9083,
+   "out": 46,
+   "usd": 0.0
+  },
+  {
+   "in": 9166,
+   "out": 71,
+   "usd": 0.0
+  },
+  {
+   "in": 9274,
+   "out": 46,
+   "usd": 0.0
+  },
+  {
+   "in": 9357,
+   "out": 71,
+   "usd": 0.0
+  },
+  {
+   "in": 9465,
+   "out": 46,
+   "usd": 0.0
+  },
+  {
+   "in": 9548,
+   "out": 48,
+   "usd": 0.0
+  },
+  {
+   "in": 9633,
+   "out": 47,
+   "usd": 0.0
+  },
+  {
+   "in": 9717,
+   "out": 56,
+   "usd": 0.0
+  },
+  {
+   "in": 9810,
+   "out": 46,
+   "usd": 0.0
+  },
+  {
+   "in": 9893,
+   "out": 50,
+   "usd": 0.0
+  },
+  {
+   "in": 9980,
+   "out": 50,
+   "usd": 0.0
+  },
+  {
+   "in": 10067,
+   "out": 56,
+   "usd": 0.0
+  },
+  {
+   "in": 10160,
+   "out": 56,
+   "usd": 0.0
+  },
+  {
+   "in": 10253,
+   "out": 56,
+   "usd": 0.0
+  },
+  {
+   "in": 10346,
+   "out": 73,
+   "usd": 0.0
+  },
+  {
+   "in": 10456,
+   "out": 55,
+   "usd": 0.0
+  }
+ ]
+}

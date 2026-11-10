@@ -56,6 +56,8 @@ def _clock_free(value: Any, window: tuple[datetime, datetime]) -> Any:
             stamp = datetime.fromisoformat(value)
         except ValueError:
             return value
+        if stamp.tzinfo is not None:  # the window is naive local time
+            stamp = stamp.astimezone().replace(tzinfo=None)
         if window[0] <= stamp <= window[1]:
             return "<run-clock>"
     return value
