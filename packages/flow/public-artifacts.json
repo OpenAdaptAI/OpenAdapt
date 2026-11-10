@@ -1117,6 +1117,8 @@
     "environments/openenv/_windows/results/windows11-x64-2026-11-04/win-claims-desk.json",
     "environments/openenv/_windows/results/windows11-x64-2026-11-04/win-patient-chart-rdp.json",
     "environments/openenv/_windows/results/windows11-x64-2026-11-04/win-patient-chart.json",
+    "environments/openenv/cloud/last-run.json",
+    "environments/openenv/cloud/last-run.meta.json",
     "environments/openenv/frappe_lending/env.yaml",
     "environments/openenv/frappe_lending/verify.yaml",
     "environments/openenv/mockloan/env.yaml",
