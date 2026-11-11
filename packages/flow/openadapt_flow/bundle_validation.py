@@ -89,17 +89,26 @@ def _sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
-def bundle_asset_path(bundle_dir: Path | str, rel: str) -> Path:
-    """Resolve a manifest asset only when it stays inside the bundle."""
+def bundle_asset_relative(rel: str) -> PurePosixPath:
+    """Validate the lexical bundle-relative asset name before filesystem access."""
+    if not isinstance(rel, str):
+        raise BundleIntegrityError("bundle asset path must be text")
     posix = PurePosixPath(rel)
     if (
         not rel
+        or "\x00" in rel
         or "\\" in rel
         or posix.is_absolute()
         or posix.as_posix() != rel
         or any(part in {"", ".", ".."} for part in posix.parts)
     ):
         raise BundleIntegrityError(f"unsafe bundle asset path {rel!r}")
+    return posix
+
+
+def bundle_asset_path(bundle_dir: Path | str, rel: str) -> Path:
+    """Resolve a manifest asset only when it stays inside the bundle."""
+    posix = bundle_asset_relative(rel)
     root = Path(bundle_dir).resolve()
     candidate = root.joinpath(*posix.parts)
     resolved = candidate.resolve()
@@ -563,9 +572,51 @@ def _grant_verified_load_capability(workflow: "Workflow") -> None:
 
 
 def transfer_verified_load_capability(source: "Workflow", target: "Workflow") -> None:
-    """Keep verified authority across an explicit in-memory model_copy only."""
-    if has_verified_load_capability(source):
+    """Preserve complete source context across an explicit verified derivation."""
+    if has_verified_load_capability(source) and not source._unverified_load:
+        target._loaded_seal = source._loaded_seal
+        target._decrypted_templates = dict(source._decrypted_templates)
+        target._pending_template_replacements = dict(source._pending_template_replacements)
+        target._pending_derived_assets = dict(source._pending_derived_assets)
+        target._unverified_load = False
         _grant_verified_load_capability(target)
+
+
+def derive_verified_workflow(
+    source: "Workflow", *, update: dict[str, Any]
+) -> "Workflow":
+    """Validate an intentional edit while retaining its verified source binding."""
+    if source._unverified_load or source.manifest is None or source._loaded_seal is None:
+        raise BundleIntegrityError("derivation requires a verified loaded source")
+    verify_loaded_source_integrity(
+        source,
+        source._loaded_seal.source_bundle_dir,
+        source.manifest,
+        decrypted_assets=source._decrypted_templates if source._loaded_seal.encrypted else None,
+    )
+    if type(update) is not dict or any(
+        type(name) is not str
+        or name not in type(source).model_fields
+        or name in {"manifest", "encrypted", "schema_version"}
+        for name in update
+    ):
+        raise BundleIntegrityError("derivation cannot replace source authority fields")
+    payload = source.model_dump(mode="python")
+    payload.update(update)
+    target = type(source).model_validate(payload)
+    transfer_verified_load_capability(source, target)
+    if target.model_dump(exclude={"manifest"}) != source.model_dump(exclude={"manifest"}):
+        invalidate_derivative_certification(target)
+    return target
+
+
+def invalidate_derivative_certification(workflow: "Workflow") -> None:
+    """Source integrity does not carry an old production decision to new content."""
+    from openadapt_flow.bundle_sealing import _invalidate_prior_certification
+
+    _invalidate_prior_certification(workflow, reason="an authored derivative changed the workflow contract")
+    if workflow.manifest is not None:
+        workflow.manifest.provenance.governed_authorization_template = None
 
 
 def authorize_sanitized_derivative(
@@ -755,18 +806,21 @@ def _referenced_asset_paths(workflow: "Workflow") -> set[str]:
     # Declared undo steps are not part of the run, but their crops are bundle
     # content a person may later approve running, so they are hashed too.
     undo_steps = [step for undo in workflow.undo_steps for step in undo.steps]
-    for step in [*iter_workflow_steps(workflow), *undo_steps]:
-        anchor = step.anchor
-        if anchor is not None:
-            if anchor.template:
-                refs.add(anchor.template)
-            if anchor.identifier_crop:
-                refs.add(anchor.identifier_crop)
-            for lm_anchor in _predicate_anchor_templates(step):
-                refs.add(lm_anchor)
+    cleanup_steps = workflow.halt_cleanup.steps if workflow.halt_cleanup is not None else []
+    for step in [*iter_workflow_steps(workflow), *undo_steps, *cleanup_steps]:
+        for anchor in (step.anchor, step.drag_end_anchor):
+            if anchor is not None:
+                if anchor.template:
+                    refs.add(anchor.template)
+                if anchor.identifier_crop:
+                    refs.add(anchor.identifier_crop)
+        for lm_anchor in _predicate_anchor_templates(step):
+            refs.add(lm_anchor)
         for pc in step.expect:
             if pc.template:
                 refs.add(pc.template)
+    if workflow.halt_cleanup is not None:
+        refs.update(_predicate_templates(workflow.halt_cleanup.start_state))
     refs.update(interstitial_asset_paths(workflow.interstitials))
     return refs
 
@@ -787,8 +841,11 @@ def _predicate_templates(*predicates: Optional[Predicate]) -> Iterator[str]:
     preds = [predicate for predicate in predicates if predicate is not None]
     while preds:
         p = preds.pop()
-        if p.anchor is not None and p.anchor.template:
-            yield p.anchor.template
+        if p.anchor is not None:
+            if p.anchor.template:
+                yield p.anchor.template
+            if p.anchor.identifier_crop:
+                yield p.anchor.identifier_crop
         preds.extend(p.operands)
 
 
@@ -805,8 +862,11 @@ def interstitial_asset_paths(interstitials: Iterable[Interstitial]) -> set[str]:
     refs: set[str] = set()
     for interstitial in interstitials:
         anchor = interstitial.dismiss_anchor
-        if anchor is not None and anchor.template.strip():
-            refs.add(anchor.template)
+        if anchor is not None:
+            if anchor.template.strip():
+                refs.add(anchor.template)
+            if anchor.identifier_crop:
+                refs.add(anchor.identifier_crop)
         refs.update(_predicate_templates(interstitial.detect, interstitial.clearance))
     return refs
 

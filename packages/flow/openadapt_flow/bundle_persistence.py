@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Literal, Optional
 
 if TYPE_CHECKING:
     from openadapt_flow.ir import Workflow
@@ -59,6 +60,234 @@ def stage_verified_template_replacement(
         **workflow._pending_template_replacements,
         rel: bytes(data),
     }
+    workflow._pending_derived_assets.pop(rel, None)
+
+
+def _verified_source_assets(workflow: Workflow) -> dict[str, bytes]:
+    from openadapt_flow import bundle_validation as _bv
+
+    source_assets: dict[str, bytes] = {}
+    if workflow._loaded_seal is not None:
+        if workflow.manifest is None:
+            raise _bv.BundleIntegrityError(
+                "loaded bundle lost its original integrity manifest"
+            )
+        source = workflow._loaded_seal.source_bundle_dir
+        _bv.verify_loaded_source_integrity(
+            workflow,
+            source,
+            workflow.manifest,
+            decrypted_assets=(
+                workflow._decrypted_templates if workflow.encrypted else None
+            ),
+        )
+        # Original verified bytes also belong to an in-place destination.
+        if not workflow._loaded_seal.encrypted:
+            for rel, expected in workflow._loaded_seal.file_hashes:
+                source_asset = _bv.bundle_asset_path(source, rel)
+                data = source_asset.read_bytes() if source_asset.is_file() else None
+                if data is None or _bv._sha256_bytes(data) != expected:
+                    raise _bv.BundleIntegrityError(
+                        f"verified source asset {rel!r} changed before save-as"
+                    )
+                source_assets[rel] = data
+
+    return source_assets
+
+
+def _check_destination_assets(
+    workflow: Workflow,
+    bundle: Path,
+    source_assets: dict[str, bytes],
+    template_replacements: dict[str, bytes],
+) -> None:
+    from openadapt_flow import bundle_validation as _bv
+
+    # A save-as destination may already contain assets. Never let a
+    # destination-owned file silently replace the verified source asset in
+    # the new manifest. Check every collision before creating directories,
+    # writing bundle files, or sealing the derivative.
+    accepted_asset_bytes: dict[str, set[bytes]] = {}
+    for asset_map in (
+        source_assets,
+        workflow._decrypted_templates,
+        template_replacements,
+    ):
+        for rel, data in asset_map.items():
+            accepted_asset_bytes.setdefault(rel, set()).add(data)
+
+    for rel, expected_bytes in accepted_asset_bytes.items():
+        target_asset = _bv.bundle_asset_path(bundle, rel)
+        if not target_asset.exists():
+            continue
+        try:
+            matches_source = (
+                target_asset.is_file() and target_asset.read_bytes() in expected_bytes
+            )
+        except OSError:
+            matches_source = False
+        if not matches_source:
+            raise _bv.BundleIntegrityError(
+                f"save-as destination asset {rel!r} conflicts with verified source"
+            )
+
+def _asset_authority(workflow: Workflow) -> None:
+    from openadapt_flow import bundle_validation as _bv
+
+    if workflow._unverified_load:
+        raise _bv.BundleIntegrityError("an unchecked load cannot stage derivative assets")
+    if workflow.manifest is None and workflow._loaded_seal is None:
+        return  # Fresh construction grants no verified-source authority.
+    if workflow.manifest is None or workflow._loaded_seal is None:
+        raise _bv.BundleIntegrityError("asset staging requires a verified source or fresh construction")
+    _bv.verify_loaded_source_integrity(
+        workflow,
+        workflow._loaded_seal.source_bundle_dir,
+        workflow.manifest,
+        decrypted_assets=workflow._decrypted_templates if workflow._loaded_seal.encrypted else None,
+    )
+
+
+def _checked_derived_assets(workflow: Workflow) -> dict[str, bytes]:
+    from openadapt_flow import bundle_validation as _bv
+
+    changes = dict(workflow._pending_derived_assets)
+    if not changes:
+        return {}
+    references = _bv._referenced_asset_paths(workflow)
+    original = workflow._loaded_seal
+    checked = {}
+    for rel, change in changes.items():
+        if (
+            not isinstance(rel, str)
+            or rel not in references
+            or type(change) is not tuple
+            or len(change) != 2
+            or type(change[0]) is not str
+            or change[0] not in {"add", "replace"}
+            or not isinstance(change[1], bytes)
+        ):
+            raise _bv.BundleIntegrityError("derived assets require canonical referenced paths and bytes")
+        _bv.bundle_asset_relative(rel)
+    _asset_authority(workflow)
+    for rel, (mode, data) in changes.items():
+        if original is None:
+            if mode != "add":
+                raise _bv.BundleIntegrityError("fresh construction cannot replace a verified source asset")
+        else:
+            in_source = rel in dict(original.file_hashes)
+            source = _bv.bundle_asset_path(original.source_bundle_dir, rel)
+            if (mode == "replace") != in_source:
+                raise _bv.BundleIntegrityError("derived asset mode does not match its verified source")
+            if mode == "add" and source.exists():
+                raise _bv.BundleIntegrityError("new asset already exists outside the verified source manifest")
+        checked[rel] = data
+    return checked
+
+
+def _ensure_output_layout(
+    workflow: Workflow, destination: Path, output: Literal["plain", "encrypted", "sealed"]
+) -> None:
+    from openadapt_flow import bundle_validation as _bv
+    from openadapt_flow import sealed_set as _sealed
+
+    if type(output) is not str or output not in {"plain", "encrypted", "sealed"}:
+        raise _bv.BundleIntegrityError("unknown derivative output layout")
+    if output != "plain" or _sealed.active_writer(destination) is not None or _sealed.is_sealed(destination):
+        assets = set(_bv._referenced_asset_paths(workflow))
+        if workflow._loaded_seal is not None:
+            assets.update(dict(workflow._loaded_seal.file_hashes))
+        if any(not rel.startswith("templates/") for rel in assets):
+            raise _bv.BundleIntegrityError("encrypted derivative assets must remain under templates/")
+
+
+def validate_derived_asset_paths(workflow: Workflow, names: Iterable[str]) -> Workflow:
+    """Validate edit names against the full derived shape before asset I/O.
+
+    This parsed model has no verified-load capability. Only preparation with
+    the original source object can transfer that context.
+    """
+    from openadapt_flow import bundle_validation as _bv
+
+    candidate = type(workflow).model_validate(workflow.model_dump(mode="python"))
+    references = _bv._referenced_asset_paths(candidate)
+    for rel in names:
+        _bv.bundle_asset_relative(rel)
+        if rel not in references:
+            raise _bv.BundleIntegrityError("derivative assets must reference validated workflow paths")
+    return candidate
+
+
+def prepare_derived_assets(
+    workflow: Workflow,
+    destination: Path | str,
+    changes: dict[str, bytes],
+    *,
+    output: Literal["plain", "encrypted", "sealed"] = "plain",
+) -> None:
+    """Stage declared asset edits atomically before any destination effects."""
+    from openadapt_flow import bundle_validation as _bv
+
+    if type(changes) is not dict:
+        raise _bv.BundleIntegrityError("derivative assets must be an explicit path-to-bytes map")
+    candidate = validate_derived_asset_paths(workflow, changes)
+    if any(not isinstance(data, bytes) for data in changes.values()):
+        raise _bv.BundleIntegrityError("derivative assets must contain bytes")
+    # Transfer authority only from the actual process-bound verified source.
+    # Fresh construction carries edit data, never a loaded-source capability.
+    if _bv.has_verified_load_capability(workflow):
+        _bv.transfer_verified_load_capability(workflow, candidate)
+    elif workflow.manifest is None and workflow._loaded_seal is None and not workflow._unverified_load:
+        candidate._pending_derived_assets = dict(workflow._pending_derived_assets)
+    else:
+        raise _bv.BundleIntegrityError("derivative assets require verified source authority or fresh construction")
+    _ensure_output_layout(candidate, Path(destination), output)
+    _asset_authority(candidate)
+    original_paths = dict(candidate._loaded_seal.file_hashes) if candidate._loaded_seal is not None else {}
+    for rel, data in changes.items():
+        candidate._pending_template_replacements.pop(rel, None)
+        candidate._pending_derived_assets = {
+            **candidate._pending_derived_assets,
+            rel: ("replace" if rel in original_paths else "add", data),
+        }
+    assets = {
+        **candidate._checked_template_replacements(),
+        **_checked_derived_assets(candidate),
+    }
+    source_assets = _verified_source_assets(candidate)
+    _check_destination_assets(candidate, Path(destination), source_assets, assets)
+    if changes:
+        _bv.invalidate_derivative_certification(candidate)
+    workflow.manifest = candidate.manifest
+    workflow.qualification = candidate.qualification
+    workflow._pending_template_replacements = dict(candidate._pending_template_replacements)
+    workflow._pending_derived_assets = dict(candidate._pending_derived_assets)
+
+
+def copy_genesis_template_inputs(
+    workflow: Workflow, source: Path | str, destination: Path | str
+) -> None:
+    """Copy explicit fresh-build inputs without claiming verified-source authority."""
+    from openadapt_flow import bundle_validation as _bv
+
+    _asset_authority(workflow)
+    if workflow._loaded_seal is not None:
+        return  # Verified saves carry only their hash-admitted original assets.
+    templates = Path(source) / "templates"
+    inputs = {}
+    if templates.is_dir():
+        for path in sorted(templates.rglob("*")):
+            if path.is_file():
+                rel = "templates/" + path.relative_to(templates).as_posix()
+                inputs[rel] = _bv.bundle_asset_path(source, rel).read_bytes()
+    _check_destination_assets(
+        workflow, Path(destination), inputs, _checked_derived_assets(workflow)
+    )
+    for rel, data in inputs.items():
+        target = _bv.bundle_asset_path(destination, rel)
+        if not target.exists():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
 
 
 def save_workflow(
@@ -106,7 +335,10 @@ def save_workflow(
     from openadapt_flow import ir as _ir
 
     _bv.bundle_schema_version({"schema_version": workflow.schema_version})
-    template_replacements = workflow._checked_template_replacements()
+    template_replacements = {
+        **_checked_derived_assets(workflow),
+        **workflow._checked_template_replacements(),
+    }
     if template_replacements and not seal_manifest:
         raise _bv.BundleIntegrityError(
             "template replacements require a newly sealed manifest"
@@ -132,61 +364,9 @@ def save_workflow(
     bundle = _ir.Path(bundle_dir)
     from openadapt_flow import sealed_set as _sealed
 
-    source_assets: dict[str, bytes] = {}
-    if workflow._loaded_seal is not None:
-        if workflow.manifest is None:
-            raise _bv.BundleIntegrityError(
-                "loaded bundle lost its original integrity manifest"
-            )
-        source = workflow._loaded_seal.source_bundle_dir
-        _bv.verify_loaded_source_integrity(
-            workflow,
-            source,
-            workflow.manifest,
-            decrypted_assets=(
-                workflow._decrypted_templates if workflow.encrypted else None
-            ),
-        )
-        # Original verified bytes also belong to an in-place destination.
-        if not workflow._loaded_seal.encrypted:
-            for rel, expected in workflow._loaded_seal.file_hashes:
-                source_asset = _bv.bundle_asset_path(source, rel)
-                if (
-                    not source_asset.is_file()
-                    or _bv._sha256_file(source_asset) != expected
-                ):
-                    raise _bv.BundleIntegrityError(
-                        f"verified source asset {rel!r} changed before save-as"
-                    )
-                source_assets[rel] = source_asset.read_bytes()
-
-    # A save-as destination may already contain assets. Never let a
-    # destination-owned file silently replace the verified source asset in
-    # the new manifest. Check every collision before creating directories,
-    # writing bundle files, or sealing the derivative.
-    accepted_asset_bytes: dict[str, set[bytes]] = {}
-    for asset_map in (
-        source_assets,
-        workflow._decrypted_templates,
-        template_replacements,
-    ):
-        for rel, data in asset_map.items():
-            accepted_asset_bytes.setdefault(rel, set()).add(data)
-
-    for rel, expected_bytes in accepted_asset_bytes.items():
-        target_asset = _bv.bundle_asset_path(bundle, rel)
-        if not target_asset.exists():
-            continue
-        try:
-            matches_source = (
-                target_asset.is_file() and target_asset.read_bytes() in expected_bytes
-            )
-        except OSError:
-            matches_source = False
-        if not matches_source:
-            raise _bv.BundleIntegrityError(
-                f"save-as destination asset {rel!r} conflicts with verified source"
-            )
+    _ensure_output_layout(workflow, bundle, "encrypted" if do_encrypt else "plain")
+    source_assets = _verified_source_assets(workflow)
+    _check_destination_assets(workflow, bundle, source_assets, template_replacements)
 
     if _sealed.active_writer(bundle) is not None or _sealed.is_sealed(bundle):
         # A sealed bundle stays sealed whatever ``encrypt`` says: many
@@ -200,6 +380,7 @@ def save_workflow(
             template_replacements=template_replacements,
         )
         workflow._pending_template_replacements = {}
+        workflow._pending_derived_assets = {}
         return path
     bundle.mkdir(parents=True, exist_ok=True)
     (bundle / "templates").mkdir(exist_ok=True)
@@ -270,6 +451,7 @@ def save_workflow(
             source_bundle_dir=bundle,
         )
     workflow._pending_template_replacements = {}
+    workflow._pending_derived_assets = {}
     return path
 
 
@@ -292,6 +474,7 @@ def save_sealed_set(
     from openadapt_flow import ir as _ir
     from openadapt_flow import sealed_set as _sealed
 
+    _ensure_output_layout(workflow, bundle, "sealed")
     writer = _sealed.active_writer(bundle)
     owned = writer is None
     if writer is None:

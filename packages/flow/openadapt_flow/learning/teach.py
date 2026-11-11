@@ -926,6 +926,18 @@ def _copy_carried(carried: dict[str, Path], out_bundle: Path) -> None:
         _write_crop(out_bundle / rel, artifacts.open_read(source))
 
 
+def _carried_asset_bytes(workflow: Workflow, carried: dict[str, Path]) -> dict[str, bytes]:
+    from openadapt_flow.bundle_persistence import validate_derived_asset_paths
+
+    validate_derived_asset_paths(workflow, carried)
+    changes = {}
+    for rel, source in carried.items():
+        if not artifacts.is_file(source):
+            raise TeachError(f"the fix recording's crop {source} is missing")
+        changes[rel] = artifacts.open_read(source)
+    return changes
+
+
 def _seal_outputs(*inputs: Path | str) -> bool:
     """Whether teach writes its library and bundle sealed: any input is sealed,
     or strict mode (docs/phi_at_rest.md)."""
@@ -985,12 +997,9 @@ def _write_taught_bundle(
     updated: Workflow,
     bundle: Path,
     out_bundle: Path,
-    carried: dict[str, Path],
     run_dir: Path | str,
 ) -> None:
-    # Crops go in first: saving seals a manifest over the files present.
-    _copy_templates(bundle, out_bundle)
-    _copy_carried(carried, out_bundle)
+    # Asset inputs were frozen and checked before any output writer was opened.
     updated.save(out_bundle)
     # Governed repair promotion (Section 9): the taught bundle is a lifecycle
     # CANDIDATE, never an implicitly active bundle. A detached
@@ -1126,6 +1135,19 @@ def teach(
         }
     )
     out_bundle = Path(out)
+    from openadapt_flow.bundle_persistence import prepare_derived_assets
+    from openadapt_flow.bundle_validation import derive_verified_workflow
+
+    updated = derive_verified_workflow(
+        base_workflow,
+        update=updated.model_dump(mode="python", exclude={"manifest", "encrypted", "schema_version"}),
+    )
+    prepare_derived_assets(
+        updated,
+        out_bundle,
+        _carried_asset_bytes(updated, carried),
+        output="sealed" if seal else "plain",
+    )
     if seal:
         # Every crop, the program and the candidate record are encrypted
         # before they reach the disk (the same key rules as compile).
@@ -1138,9 +1160,9 @@ def teach(
             passphrase,
             resume=sealed_set.is_sealed(out_bundle),
         ):
-            _write_taught_bundle(updated, Path(bundle), out_bundle, carried, run_dir)
+            _write_taught_bundle(updated, Path(bundle), out_bundle, run_dir)
     else:
-        _write_taught_bundle(updated, Path(bundle), out_bundle, carried, run_dir)
+        _write_taught_bundle(updated, Path(bundle), out_bundle, run_dir)
     return TeachResult(
         skill_id=sid,
         promoted=True,

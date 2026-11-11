@@ -593,10 +593,19 @@ def write_cleanup(
 
     bundle_dir = Path(bundle_dir)
     workflow = Workflow.load(bundle_dir)
-    for rel, source in (assets or {}).items():
-        (bundle_dir / rel).parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(source, bundle_dir / rel)
     workflow.halt_cleanup = cleanup
+    from openadapt_flow.bundle_persistence import (
+        prepare_derived_assets,
+        validate_derived_asset_paths,
+    )
+
+    validate_derived_asset_paths(workflow, assets or {})
+    prepare_derived_assets(
+        workflow,
+        bundle_dir,
+        {rel: Path(source).read_bytes() for rel, source in (assets or {}).items()},
+        output="encrypted" if workflow.encrypted else "plain",
+    )
     if workflow.manifest is not None:
         _invalidate_prior_certification(
             workflow, reason="a halt cleanup was added after certification"
