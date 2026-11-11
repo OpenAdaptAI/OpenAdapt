@@ -12,7 +12,7 @@ import argparse
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from openadapt_flow.reports.parse import ReportError, ReportFormat
 
@@ -115,9 +115,67 @@ def _format(
     return spec.report if spec is not None else None
 
 
+def _ui_final_from_config(path: Optional[str]) -> list[Any]:
+    """Every ``ui_readback`` section of the deployment that declares ``final``."""
+
+    if not path:
+        return []
+    from openadapt_flow.deployment import load_deployment
+
+    cfg = load_deployment(path)
+    return [
+        section.ui_readback
+        for section in [cfg.effects, *cfg.effects.candidates]
+        if section.ui_readback is not None and section.ui_readback.final is not None
+    ]
+
+
 def cmd_deferred_settle(args: argparse.Namespace) -> int:
     from openadapt_flow.runtime.effects.deferred_report import settle_report_file
 
+    try:
+        ui_specs = _ui_final_from_config(args.config)
+    except (OSError, ValueError) as exc:
+        print(f"deferred settle: {exc}", file=sys.stderr)
+        return 2
+    if ui_specs and not args.report:
+        # A UI read-back's final check: re-read every due record in one
+        # fresh session (``ui_readback.final``).
+        from openadapt_flow.runtime.effects.deferred_report import PendingLedger
+        from openadapt_flow.runtime.effects.ui_readback import settle_ui_readback
+
+        settled_ui = []
+        try:
+            for ui_spec in ui_specs:
+                settled_ui.extend(settle_ui_readback(ui_spec))
+        except (OSError, ValueError) as exc:
+            print(f"deferred settle: {exc}", file=sys.stderr)
+            return 2
+        for item in settled_ui:
+            # A UI read settles at screen grade, never as a record-store read.
+            word = (
+                "VERIFIED (screen_readback)"
+                if item.state == "verified"
+                else "RECONCILIATION_REQUIRED"
+            )
+            print(f"{item.id}: {word} ({item.reason}; code {item.code})")
+        waiting_count = sum(
+            1
+            for ui_spec in ui_specs
+            for e in PendingLedger(ui_spec.final.ledger).entries()
+            if e.state == "waiting"
+        )
+        for ui_spec in ui_specs:
+            hours = ui_spec.final.alert_hours
+            if hours is None:
+                continue
+            for entry in PendingLedger(ui_spec.final.ledger).overdue(hours):
+                print(
+                    f"{entry.id}: ALERT provisional for over {hours:g} h "
+                    f"(saved {entry.created_at}; deadline {entry.deadline})"
+                )
+        print(f"Settled {len(settled_ui)}; {waiting_count} still waiting.")
+        return 0
     try:
         spec = _from_config(args.config)
         ledger = _ledger(args, spec)
@@ -154,7 +212,7 @@ def cmd_deferred_status(args: argparse.Namespace) -> int:
         spec = _from_config(args.config)
         ledger = _ledger(args, spec)
         report = RunReport.model_validate_json(
-            (Path(args.run) / "report.json").read_text()
+            (Path(args.run) / "report.json").read_text(encoding="utf-8")
         )
     except (OSError, ValueError) as exc:
         print(f"deferred status: {exc}", file=sys.stderr)

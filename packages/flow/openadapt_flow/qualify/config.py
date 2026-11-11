@@ -608,12 +608,29 @@ class VerifyConfig(BaseModel):
             name not in record.fields for name in record.duplicate_key_fields
         ):
             raise ValueError("record.duplicate_key must name fields in record.fields")
+        if record.surface:
+            _, problems = record_reader(self.verifier.verifier, record.surface)
+            if problems:
+                raise ValueError("; ".join(problems))
         if isinstance(record.duplicate_key, list):
             problems = composite_key_read_problems(
                 record.duplicate_key, self.verifier.verifier, record.surface
             )
             if problems:
                 raise ValueError("; ".join(problems))
+        if self.effects:
+            from openadapt_flow.runtime.effects.surfaces import surface_of
+
+            for effect in self.effects:
+                if effect.composite_key:
+                    surface = surface_of(effect)
+                    problems = composite_key_read_problems(
+                        list(effect.composite_key.keys()),
+                        self.verifier.verifier,
+                        surface,
+                    )
+                    if problems:
+                        raise ValueError("; ".join(problems))
         return self
 
     @model_validator(mode="after")
@@ -716,7 +733,7 @@ def load_verify_config(
     if not path.is_file():
         raise QualifyConfigError(f"verify file not found: {path}")
     try:
-        data = yaml.safe_load(path.read_text())
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
     except yaml.YAMLError as exc:
         raise QualifyConfigError(f"could not parse {path}: {exc}") from exc
     return parse_verify_config(data, base_dir=path.resolve().parent, env=env)

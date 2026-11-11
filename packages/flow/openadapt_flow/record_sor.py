@@ -12,7 +12,9 @@ The difference between the two reads becomes a proposed effect contract,
 
 * a record that appeared becomes a ``record_written`` effect whose ``match``
   holds the record's observed fields, with a recorded parameter in place of
-  the typed value wherever a field equals one;
+  the typed value wherever a field equals one; when the record has no single
+  ``key`` field, a ``composite_key`` is also proposed from parameter-bound
+  match fields plus any record-identity fields the person named;
 * a field that changed on a record that already existed becomes a
   ``field_equals`` effect on that record;
 * a record that disappeared, a nested field that changed, and a field that was
@@ -39,9 +41,10 @@ import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping, Optional, Sequence, Union
 
 from openadapt_flow.runtime.effects.effect import (
+    DEFAULT_IDEMPOTENCY_KEY_FIELD,
     Effect,
     EffectKind,
     EffectState,
@@ -389,13 +392,210 @@ def _describe(expr: ValueExpr) -> str:
     return f"parameter {expr.param!r}" if expr.param else repr(expr.literal)
 
 
+def _record_field_names(
+    record_fields: Optional[Union[Mapping[str, Any], Sequence[str]]],
+) -> frozenset[str]:
+    """Names that identify the written record for a person (``expect`` /
+    ``record_fields``). Used only when proposing a ``composite_key``."""
+
+    if not record_fields:
+        return frozenset()
+    if isinstance(record_fields, Mapping):
+        return frozenset(str(name) for name in record_fields)
+    return frozenset(str(name) for name in record_fields)
+
+
+_FREE_TEXT_FIELDS = frozenset(
+    {
+        "body",
+        "comment",
+        "comments",
+        "content",
+        "description",
+        "detail",
+        "details",
+        "explanation",
+        "instructions",
+        "memo",
+        "message",
+        "narrative",
+        "note",
+        "notes",
+        "reason",
+        "remark",
+        "remarks",
+        "summary",
+        "text",
+    }
+)
+
+_IDENTITY_FIELD_NAMES = frozenset(
+    {
+        "id",
+        "uuid",
+        "guid",
+        "pk",
+        "key",
+        "code",
+        "number",
+        "num",
+        "no",
+        "mrn",
+        "ssn",
+        "ein",
+        "npi",
+        "email",
+        "username",
+        "login",
+        "phone",
+        "first_name",
+        "last_name",
+        "fname",
+        "lname",
+        "dob",
+        "birth_date",
+        "date_of_birth",
+    }
+)
+
+_IDENTITY_SUFFIXES = (
+    "_id",
+    "_uuid",
+    "_guid",
+    "_pk",
+    "_key",
+    "_code",
+    "_number",
+    "_num",
+    "_no",
+)
+
+
+def _is_free_text_field(name: str) -> bool:
+    cleaned = name.strip().lower()
+    if cleaned in _FREE_TEXT_FIELDS:
+        return True
+    return any(cleaned.endswith(f"_{ft}") for ft in _FREE_TEXT_FIELDS)
+
+
+def _is_identity_bearing_field(
+    name: str, record_field_names: frozenset[str] = frozenset()
+) -> bool:
+    if name in record_field_names:
+        return True
+    cleaned = name.strip().lower()
+    if cleaned in _IDENTITY_FIELD_NAMES:
+        return True
+    return any(cleaned.endswith(sfx) for sfx in _IDENTITY_SUFFIXES)
+
+
+def _proposed_duplicate_key(
+    record: Mapping[str, Any],
+    match: Mapping[str, ValueExpr],
+    record_field_names: frozenset[str],
+    *,
+    refuse_non_identity: bool = False,
+) -> tuple[Optional[ValueExpr], dict[str, ValueExpr], list[str]]:
+    """Idempotency key or composite key for a new ``record_written`` effect.
+
+    Prefer the app's single-field key when the read set carries it and it
+    is bound to a parameter (proposing the demonstration's literal key freezes
+    the key across runs, P0-3). Otherwise propose a ``composite_key`` from
+    parameter-bound match fields plus the record-identity fields a person
+    named. Never invent a key that was not observed or named; the effect stays
+    ``needs_operator_confirmation`` so a person must confirm before
+    clinical-write policy accepts it.
+    """
+
+    notes: list[str] = []
+    key_val = record.get(DEFAULT_IDEMPOTENCY_KEY_FIELD)
+    if key_val is not None and str(key_val).strip() != "":
+        # Prefer the match binding when bound to a run parameter.
+        key_expr = match.get(DEFAULT_IDEMPOTENCY_KEY_FIELD)
+        if key_expr is not None and key_expr.param is not None:
+            return key_expr, {}, notes
+        notes.append(
+            f"record carries literal {DEFAULT_IDEMPOTENCY_KEY_FIELD!r} "
+            "from demonstration; not proposing as idempotency_key to avoid "
+            "freezing key across runs (P0-3)"
+        )
+
+    composite: dict[str, ValueExpr] = {}
+    for name, expr in match.items():
+        if expr.param is not None or name in record_field_names:
+            composite[name] = expr
+    if composite:
+        has_identity = any(
+            _is_identity_bearing_field(f, record_field_names) for f in composite
+        )
+        if not has_identity and refuse_non_identity:
+            notes.append(
+                f"refusing to propose composite_key ({', '.join(sorted(composite))}): "
+                "key has no identity-bearing field and would refute legitimate repeats "
+                "of the same text; clinical-write policy will refuse until a person "
+                "adds an identity field or composite key by hand"
+            )
+            return None, {}, notes
+
+        notes.append(
+            (
+                f"no parameter-bound {DEFAULT_IDEMPOTENCY_KEY_FIELD!r} on the new record; "
+                if key_val is not None and str(key_val).strip() != ""
+                else f"no {DEFAULT_IDEMPOTENCY_KEY_FIELD!r} field on the new record; "
+            )
+            + "proposed composite_key from parameter-bound match fields"
+            + (" plus record identity fields" if record_field_names else "")
+            + " for a person to confirm"
+        )
+        if not has_identity:
+            if len(composite) == 1 and _is_free_text_field(next(iter(composite))):
+                field_name = next(iter(composite))
+                notes.append(
+                    f"warning: proposed composite_key is a single free-text parameter "
+                    f"{field_name!r} with no identity-bearing field; "
+                    "duplicate key check will refute legitimate records that repeat the same text"
+                )
+            else:
+                notes.append(
+                    f"warning: proposed composite_key ({', '.join(sorted(composite))}) has no "
+                    "identity-bearing field; a key without identity fields may refute "
+                    "legitimate records that repeat the same text"
+                )
+        return None, composite, notes
+
+    notes.append(
+        (
+            f"no parameter-bound {DEFAULT_IDEMPOTENCY_KEY_FIELD!r} on the new record"
+            if key_val is not None and str(key_val).strip() != ""
+            else f"no {DEFAULT_IDEMPOTENCY_KEY_FIELD!r} field on the new record"
+        )
+        + " and no parameter-bound or record-identity match fields to build a "
+        "composite_key from; clinical-write policy will refuse until a person "
+        "adds an idempotency or composite key by hand"
+    )
+    return None, {}, notes
+
+
 def propose_effects(
-    diff: SnapshotDiff, params: Optional[Mapping[str, str]] = None
+    diff: SnapshotDiff,
+    params: Optional[Mapping[str, str]] = None,
+    record_fields: Optional[Union[Mapping[str, Any], Sequence[str]]] = None,
+    *,
+    refuse_non_identity: bool = False,
 ) -> ContractProposal:
-    """Effects that would check the change ``diff`` shows, all unconfirmed."""
+    """Effects that would check the change ``diff`` shows, all unconfirmed.
+
+    ``record_fields`` are the identity fields a person named for the record
+    (teach ``expect``). When the read set has no single-field key they join
+    parameter-bound match fields in a proposed ``composite_key``. When the
+    composite key lacks an identity-bearing field (such as a single free-text
+    parameter), a warning is added to the proposal; when ``refuse_non_identity``
+    is True, proposing the key is refused.
+    """
 
     lookup, shared = _param_lookup(dict(params or {}))
     proposal = ContractProposal(not_proposed=list(shared))
+    identity_names = _record_field_names(record_fields)
 
     unbound: list[str] = []
     for record in diff.created:
@@ -418,6 +618,10 @@ def propose_effects(
                 "a record appeared with no scalar field to match it by"
             )
             continue
+        idem_key, composite, key_notes = _proposed_duplicate_key(
+            record, match, identity_names, refuse_non_identity=refuse_non_identity
+        )
+        proposal.not_proposed.extend(key_notes)
         proposal.effects.append(
             Effect(
                 kind=EffectKind.RECORD_WRITTEN,
@@ -425,6 +629,9 @@ def propose_effects(
                 expected_count=1,
                 count_new_only=True,
                 needs_operator_confirmation=True,
+                idempotency_key=idem_key,
+                key_field=DEFAULT_IDEMPOTENCY_KEY_FIELD,
+                composite_key=composite,
                 probe=(
                     "exactly one new record with "
                     + ", ".join(f"{k}={_describe(v)}" for k, v in match.items())

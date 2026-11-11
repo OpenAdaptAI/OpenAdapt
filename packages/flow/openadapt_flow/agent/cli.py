@@ -245,7 +245,11 @@ def build_parser() -> argparse.ArgumentParser:
             "Serve the read-only teach tools: the agent does a browser task "
             "once at a URL the person gives, the task ends in a download, and "
             "it becomes a taught_<name> tool that runs with no model calls. "
-            "The browser sends no POST, PUT, PATCH or DELETE."
+            "The browser sends no POST, PUT, PATCH or DELETE. Read-only "
+            "teaching needs that guard, so a --config naming a desktop, RDP or "
+            "Citrix app is refused; teach those apps with --teach VERIFY_YAML "
+            "--config, where every save is read back. A web --config is "
+            "refused too: --teach-browser takes its URL from the person."
         ),
     )
     p.add_argument(
@@ -776,9 +780,13 @@ def _legacy_runs_dir(args: argparse.Namespace) -> Optional[Path]:
 def _cmd_serve(args: argparse.Namespace) -> int:
     from openadapt_flow.agent.bridge import AgentBridge
     from openadapt_flow.agent.flow_service import open_attended_service
-    from openadapt_flow.agent.mcp import serve
     from openadapt_flow.agent.runner import default_flow_cli
     from openadapt_flow.agent.tutorial import TutorialError
+
+    def serve(*bridges: Any, **options: Any) -> None:
+        from openadapt_flow.agent.mcp import serve as serve_mcp
+
+        serve_mcp(*bridges, **options)
 
     if args.guard:
         return _serve_guard(args, serve)
@@ -1259,8 +1267,27 @@ def _serve_verify(args: argparse.Namespace, serve) -> int:
 
 def _serve_teach_browser(args: argparse.Namespace, serve) -> int:
     """Serve only the read-only browser teach tools over local stdio."""
-    from openadapt_flow.agent.browser_teach import BrowserTeachBridge
+    from openadapt_flow.agent.browser_teach import (
+        BrowserTeachBridge,
+        read_only_teach_refusal,
+    )
 
+    if args.config:
+        # A deployment names the app. Read-only teaching needs a guard that
+        # stops writes before they leave; a backend without one is refused
+        # here by name. A web deployment passes this check but is still
+        # refused below: --teach-browser never takes a --config.
+        from openadapt_flow.deployment import load_deployment
+
+        try:
+            kind = load_deployment(args.config, allow_unresolved=True).backend.kind
+        except Exception as exc:  # noqa: BLE001 - reported, nothing served
+            print(f"serve: could not read {args.config}: {exc}", file=sys.stderr)
+            return 2
+        refusal = read_only_teach_refusal(kind or "web")
+        if refusal is not None:
+            print(f"serve: {refusal}. Nothing was served.", file=sys.stderr)
+            return 2
     if (
         args.teach
         or args.authoring

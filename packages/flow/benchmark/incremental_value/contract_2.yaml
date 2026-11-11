@@ -62,6 +62,7 @@ frame:
     read:
       kind: sql
       sql_driver: incremental_value.exec_mariadb
+      sql_dialect: mysql
       sql_connect_args: {container: openadapt-openemr-iv2-db-1, user: oa_iv_reader, database: openemr}
       sql_password_env: INCREMENTAL_VALUE_READER_PASSWORD
       # The query lives in a view (audit_query.sql, created at seed time):

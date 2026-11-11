@@ -46,11 +46,39 @@ jobs:
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
 
-      - name: Install dependencies
-        run: uv sync --locked --extra dev
+      - name: Install locked dependencies
+        run: uv sync --locked --python ${{ matrix.python-version }} --extra dev --extra build
+
+      - name: Install the matching in-tree Flow and Types for unit tests
+        shell: bash
+        # The positive dry-run evidence test uses Flow's real closed model.
+        # The separate qualification job still tests the exact released pin.
+        run: |
+          unit_python=.venv/bin/python
+          if [ "$RUNNER_OS" = Windows ]; then unit_python=.venv/Scripts/python.exe; fi
+          "$unit_python" ../../scripts/ci/locked_install.py --lock 'packages/desktop[dev,build]' --editable packages/types --editable packages/flow
+          uv pip check --python "$unit_python"
+          "$unit_python" - <<'PY'
+          import hashlib
+          import importlib.metadata as metadata
+          from pathlib import Path
+          import openadapt_flow
+          import openadapt_types
+          from openadapt_flow.approval_mode import model
+
+          packages = Path.cwd().parent.resolve()
+          for module, directory in ((openadapt_flow, "flow"), (openadapt_types, "types")):
+              path = Path(module.__file__).resolve()
+              assert path.is_relative_to(packages / directory), path
+              print(module.__name__, path, hashlib.sha256(path.read_bytes()).hexdigest())
+          print("Flow", metadata.version("openadapt-flow"), "Types", metadata.version("openadapt-types"))
+          path = Path(model.__file__).resolve()
+          assert path.is_relative_to(packages / "flow"), path
+          print("approval_model", path, hashlib.sha256(path.read_bytes()).hexdigest())
+          PY
 
       - name: Lint
-        run: uv run --locked ruff check openadapt_desktop/ tests/ scripts/
+        run: uv run --no-sync ruff check openadapt_desktop/ tests/ scripts/
       - name: Syntax at the oldest supported Python (3.11)
         if: runner.os == 'Linux' && matrix.python-version == '3.12'
         # The PR lane runs Python 3.12 only, so syntax that needs a newer
@@ -61,14 +89,18 @@ jobs:
         env:
           PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache-oldest
         run: |
-          uv run --locked ruff check --isolated --select E9 --target-version py311 .
+          uv run --no-sync ruff check --isolated --select E9 --target-version py311 .
           uv run --no-project --python 3.11 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
 
       - name: Run tests
-        run: uv run --locked pytest tests/ -v
+        env:
+          OPENADAPT_DESKTOP_FLOW_CONTRACT: source
+        run: uv run --no-sync pytest tests/ -v
 
   qualification-contract:
     name: Qualification contract (bundled Flow)
+    env:
+      OPENADAPT_DESKTOP_FLOW_CONTRACT: bundled
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:

@@ -87,6 +87,7 @@ from urllib.parse import urlsplit
 
 from PIL import Image
 
+from openadapt_flow import recorder_document as _documents
 from openadapt_flow import sealed_set as _sealed
 from openadapt_flow.backends.playwright_backend import (
     GUARDED_ACTIONABLE_SELECTOR,
@@ -3526,6 +3527,9 @@ class InteractiveRecorder:
         self._track_secret_document(
             kind, event, raw_doc_id, holds_secret=doc_holds_secret
         )
+        # Keep the emitting closure's document identity for deferred actions.
+        # Do not substitute the current page's document after navigation.
+        event["_oaflow_producer_doc"] = raw_doc_id
         if not self._owns_browser:
             if not isinstance(raw_event_origin, str):
                 self._listener_error = BrowserAttachError(
@@ -3840,7 +3844,7 @@ class InteractiveRecorder:
         self._assert_no_new_pages()
         batch = self._pyq[:]
         del self._pyq[:]
-        self._validate_event_batch(batch)
+        self._validate_owned_event_batch(batch)
         rebased = False
         if not self._owns_browser and not self._active_page_closed():
             current_geometry = self._read_attached_geometry()
@@ -3871,7 +3875,7 @@ class InteractiveRecorder:
             # so a later click/key cannot share that frame and then appear as a
             # separate, falsely exact step. Same-field input and one scroll
             # batch remain safe to coalesce.
-            self._validate_event_batch([event, *self._pyq])
+            self._validate_owned_event_batch([event, *self._pyq])
             if (
                 not self._owns_browser
                 and not self._active_page_closed()
@@ -3885,49 +3889,27 @@ class InteractiveRecorder:
                     "action was being retained; recording stopped without "
                     "complete metadata"
                 )
-            self._validate_event_batch([event, *self._pyq])
+            self._validate_owned_event_batch([event, *self._pyq])
             self._assert_no_new_pages()
             self.events_kept += 1
         if self._listener_error is not None:
             raise self._listener_error
         return bool(batch) or rebased
 
+    def _validate_owned_event_batch(self, batch: list[dict[str, Any]]) -> None:
+        try:
+            self._validate_event_batch(batch)
+        except BrowserAttachError as error:
+            self._listener_error = error
+            self.done = True
+            raise
+
     @staticmethod
     def _validate_event_batch(batch: list[dict[str, Any]]) -> None:
-        """Refuse a batch that lacks an exact frame between logical actions."""
-
-        if len(batch) <= 1:
-            return
-        kinds = {event.get("kind") for event in batch}
-        if kinds == {"scroll"}:
-            return
-        if len(batch) == 2:
-            first, second = batch
-            # A double-click gesture delivers its first click and the
-            # double_click marker inside one gesture window with no
-            # intermediate settled frame; they merge into ONE step.
-            try:
-                same_point = (
-                    abs(int(first.get("x", 0)) - int(second.get("x", 0))) <= 5
-                    and abs(int(first.get("y", 0)) - int(second.get("y", 0))) <= 5
-                )
-            except (TypeError, ValueError):
-                same_point = False
-            if (
-                first.get("kind") == "click"
-                and second.get("kind") == "double_click"
-                and same_point
-            ):
-                return
-        if kinds == {"input"}:
-            sessions = {event.get("_oaflow_input_session") for event in batch}
-            fields = {event.get("field") for event in batch}
-            if len(sessions) == 1 and None not in sessions and len(fields) == 1:
-                return
-        raise BrowserAttachError(
-            "more than one logical browser action arrived before Flow could "
-            "retain an exact intermediate frame; recording was refused"
-        )
+        try:
+            _documents.validate_event_batch(batch)
+        except _documents.DocumentOwnershipError as cause:
+            raise BrowserAttachError(str(cause)) from cause
 
     # -- event pump ----------------------------------------------------------
 
@@ -4020,6 +4002,17 @@ class InteractiveRecorder:
         if pending is not None:
             self._record_pointer(pending)
 
+    def _same_deferred_document(
+        self, pending: Optional[dict[str, Any]], ev: dict[str, Any]
+    ) -> bool:
+        try:
+            return _documents.same_document(pending, ev)
+        except _documents.DocumentOwnershipError as cause:
+            error = BrowserAttachError(str(cause))
+            self._listener_error = error
+            self.done = True
+            raise error from cause
+
     def _absorb_pending_click(self, ev: dict[str, Any]) -> None:
         """Discard the held first click of this double-click gesture.
 
@@ -4027,10 +4020,11 @@ class InteractiveRecorder:
         its demonstrated order instead."""
 
         pending = self._pending_click
+        same_document = self._same_deferred_document(pending, ev)
         self._pending_click = None
         if pending is None:
             return
-        if (
+        if same_document and (
             abs(int(pending["x"]) - int(ev["x"])) <= 5
             and abs(int(pending["y"]) - int(ev["y"])) <= 5
         ):
@@ -4043,12 +4037,14 @@ class InteractiveRecorder:
         field = ev.get("field")
         input_session = ev.get("_oaflow_input_session")
         if self._pending_type is not None and (
-            self._pending_type.get("field") != field
+            not self._same_deferred_document(self._pending_type, ev)
+            or self._pending_type.get("field") != field
             or self._pending_type.get("input_session") != input_session
         ):
-            self._flush_type()  # focus moved to a different field
+            self._flush_type()  # a distinct input run or document
         if self._pending_type is None:
             self._pending_type = {
+                "_oaflow_producer_doc": ev.get("_oaflow_producer_doc"),
                 "field": field,
                 "input_session": input_session,
                 "label": ev.get("label"),
@@ -4142,8 +4138,11 @@ class InteractiveRecorder:
         self._set_last(after_png, structural_after)
 
     def _accumulate_scroll(self, ev: dict[str, Any]) -> None:
+        if not self._same_deferred_document(self._pending_scroll, ev):
+            self._flush_scroll()
         if self._pending_scroll is None:
             self._pending_scroll = {
+                "_oaflow_producer_doc": ev.get("_oaflow_producer_doc"),
                 "dx": 0,
                 "dy": 0,
                 "structural_before": dict(self._last_structural),

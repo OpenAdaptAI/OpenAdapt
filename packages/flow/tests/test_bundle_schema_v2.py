@@ -449,9 +449,8 @@ def test_fresh_workflow_defaults_to_v2():
     assert Workflow(name="x").schema_version == 2
 
 
-def test_v1_bundle_loads_and_migrates(tmp_path):
-    """A raw v1 workflow.json (schema_version 1, no manifest) loads, migrates to
-    v2 in memory, and gets a manifest computed on read -- without breaking."""
+def test_v1_bundle_without_a_seal_is_refused(tmp_path):
+    """Legacy bundles without a persisted seal are refused closed."""
     b = _write_bundle_dir(tmp_path)
     (b / "workflow.json").write_text(
         json.dumps(
@@ -473,12 +472,8 @@ def test_v1_bundle_loads_and_migrates(tmp_path):
             }
         )
     )
-    wf = Workflow.load(b)
-    assert wf.schema_version == 2  # migrated on read
-    assert wf.name == "legacy"
-    assert wf.manifest is not None  # computed because absent
-    assert wf.manifest.content_digest  # non-empty
-    assert "templates/btn.png" in wf.manifest.file_hashes
+    with pytest.raises(bv.BundleIntegrityError, match="no persisted integrity seal"):
+        Workflow.load(b)
 
 
 def test_migrate_bundle_dict_is_additive_noop_on_fields():

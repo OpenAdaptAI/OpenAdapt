@@ -51,6 +51,7 @@ import json
 import os
 import re
 import secrets
+import sqlite3
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -74,7 +75,12 @@ from openadapt_flow.fault_gate import (
     check_digest,
     load_coverage,
 )
+from openadapt_flow.owned_sqlite_insert import (
+    OwnedSqliteInsert,
+    OwnedSqliteInsertConfig,
+)
 from openadapt_flow.qualify.result import verify_config_sha256
+from openadapt_flow.request_binding import RequestContext
 from openadapt_flow.runtime.effects import late_write
 from openadapt_flow.runtime.effects.adapter import verifier_identity
 from openadapt_flow.runtime.effects.effect import (
@@ -115,6 +121,11 @@ BASELINE_KEYS: tuple[str, ...] = (
     "salt",
 )
 _BASELINE_BOUND_KEYS = BASELINE_KEYS[:5]
+_WRITE_ATTRIBUTION = "write_attribution"
+_SQLITE_RESERVATION = "owned_sqlite_reservation"
+_OWNED_DISPATCH_OWNER = "owned_dispatch_owner"
+OwnedBaselineReference = tuple[str, str, str]
+VerificationPurpose = Literal["observation", "owned_attempt"]
 
 ExecutorKind = Literal["flow_replay", "agent", "script", "human", "unknown"]
 EXECUTOR_KINDS: tuple[str, ...] = ("flow_replay", "agent", "script", "human", "unknown")
@@ -201,6 +212,8 @@ _SIGNATURE_FIELDS = frozenset(
 
 _RECEIPT_VALIDATION_REASONS = frozenset(
     {
+        "request_context",
+        "write_attribution",
         "schema_version",
         "unknown_field",
         "missing_field",
@@ -278,6 +291,7 @@ class VerifyConfig(BaseModel):
     verifier: EffectsConfig
     #: Same shape as ``effect_contract.yaml`` ``effects:``.
     effects: list[Effect] = Field(min_length=1)
+    owned_sqlite_insert: Optional[OwnedSqliteInsertConfig] = None
     #: What else in the read set must stay unchanged, and who may change it
     #: (``runtime/effects/frame.py``). Unset: the default frame (the whole
     #: read set, compared by ``id``, no attribution).
@@ -384,11 +398,25 @@ def parse_verify_config(data: Any, *, source: str = "verify config") -> VerifyCo
         cfg = VerifyConfig.model_validate(data)
     except Exception as exc:
         raise VerifyRunError(f"invalid {source}: {exc}") from exc
-    key = record.get("duplicate_key") if isinstance(record, dict) else None
+    surface = (
+        record.get("surface")
+        if isinstance(record, dict)
+        else getattr(record, "surface", None)
+    )
+    if surface:
+        from openadapt_flow.qualify.config import record_reader
+
+        _, problems = record_reader(cfg.verifier, surface)
+        if problems:
+            raise VerifyRunError(f"invalid {source}: " + "; ".join(problems))
+    key = (
+        record.get("duplicate_key")
+        if isinstance(record, dict)
+        else getattr(record, "duplicate_key", None)
+    )
     if isinstance(key, list):
         from openadapt_flow.qualify.config import composite_key_read_problems
 
-        surface = record.get("surface") if isinstance(record, dict) else None
         problems = composite_key_read_problems(key, cfg.verifier, surface)
         if problems:
             raise VerifyRunError(f"invalid {source}: " + "; ".join(problems))
@@ -2136,6 +2164,28 @@ def _tag_reads(verifier: Any, execution_id: str) -> None:
     }
 
 
+def _sqlite_insert(
+    cfg: VerifyConfig,
+    verifier: Any,
+    params: Mapping[str, object],
+    read_provider: Optional[CompleteReadProvider],
+) -> Optional[OwnedSqliteInsert]:
+    if cfg.owned_sqlite_insert is None or read_provider is not None:
+        return None
+    database = cfg.frame.database if cfg.frame is not None else None
+    if database is not None and (
+        database.dialect != "sqlite"
+        or database.read.get("sqlite_database") != cfg.verifier.sqlite_database
+    ):
+        return None
+    try:
+        return OwnedSqliteInsert.bind(
+            cfg.owned_sqlite_insert, cfg.verifier, verifier, cfg.effects, params
+        )
+    except (OSError, ValueError):
+        return None
+
+
 # -- baseline -----------------------------------------------------------------
 
 
@@ -2359,12 +2409,23 @@ def _frame_identity_indexes(
     return indexes
 
 
+def _require_verification_purpose(
+    cfg: VerifyConfig, purpose: VerificationPurpose
+) -> None:
+    if cfg.owned_sqlite_insert is not None and purpose != "owned_attempt":
+        raise VerifyRunError(
+            "the configured owned SQLite insert requires owned_attempt verification"
+        )
+
+
 def capture_baseline(
     cfg: VerifyConfig,
     params: Mapping[str, object],
     out: Path,
     *,
     read_provider: Optional[CompleteReadProvider] = None,
+    purpose: VerificationPurpose = "observation",
+    _owned_dispatch_owner: Optional[str] = None,
 ) -> dict[str, Any]:
     """Read the system of record before the executor starts.
 
@@ -2373,13 +2434,23 @@ def capture_baseline(
     records and the run salt, so it stays private on this machine: mode 0600,
     never inside a receipt. Only its salted digest is bound. It also starts
     the run: ``execution_id`` is generated here and the read step reuses it.
+    ``owned_attempt`` also reserves any configured native commit witness.
     """
 
+    purpose_fields: dict[str, str] = {"purpose": purpose}
+    if _owned_dispatch_owner is not None:
+        purpose_fields[_OWNED_DISPATCH_OWNER] = _owned_dispatch_owner
+    _require_verification_purpose(cfg, _baseline_purpose(purpose_fields))
     verifier = _build_verifier(cfg, params, read_provider)
     identity = verifier_identity(verifier)
     execution_id = _new_execution_id()
     _tag_reads(verifier, execution_id)
     salt = secrets.token_bytes(32)
+    insert = None
+    if purpose == "owned_attempt" and cfg.owned_sqlite_insert is not None:
+        insert = _sqlite_insert(cfg, verifier, params, read_provider)
+        if insert is None:
+            raise VerifyRunError("the configured owned SQLite insert is unsupported")
     history_before = None
     history_error = None
     if cfg.frame is not None and cfg.frame.history is not None:
@@ -2397,6 +2468,21 @@ def capture_baseline(
     state = verifier.capture_pre_state()
     if not isinstance(state, EffectState):
         raise VerifyRunError("verifier returned no readable baseline")
+    if insert is not None:
+        if (
+            not state.reachable
+            or state.readback_complete is not True
+            or verifier.source_relation != ("main", insert.table, 0)
+        ):
+            raise VerifyRunError(
+                "the owned SQLite reader did not observe the declared table"
+            )
+        try:
+            insert.check_baseline(state.records)
+        except (OSError, ValueError, sqlite3.Error) as exc:
+            raise VerifyRunError(
+                "the owned SQLite insert baseline could not be reserved"
+            ) from exc
     detail: dict[str, Any] = {}
     if cfg.frame is not None and cfg.frame.history is not None:
         from openadapt_flow.runtime.effects.history import DETAIL
@@ -2456,6 +2542,17 @@ def capture_baseline(
         "state": state.model_dump(mode="json"),
         "salt": salt.hex(),
     }
+    if purpose == "owned_attempt":
+        payload.update(purpose_fields)
+    if insert is not None:
+        if (
+            not state.reachable
+            or _sqlite_insert(cfg, verifier, params, read_provider) != insert
+        ):
+            raise VerifyRunError("the owned SQLite baseline could not be bound")
+        payload[_SQLITE_RESERVATION] = insert.reservation(
+            execution_id, salt, _owned_dispatch_owner
+        )
     _write_private(Path(out), payload)
     return payload
 
@@ -2532,32 +2629,76 @@ def _unseal_state(
     )
 
 
-def baseline_digest(baseline: Mapping[str, Any], salt: bytes) -> str:
-    """Salted digest (label ``baseline``) of the five bound baseline fields."""
+def _baseline_purpose(baseline: Mapping[str, Any]) -> VerificationPurpose:
+    purpose = baseline.get("purpose", "observation")
+    if type(purpose) is not str or purpose not in ("observation", "owned_attempt"):
+        raise VerifyRunError("invalid verification purpose")
+    if _OWNED_DISPATCH_OWNER in baseline:
+        owner = baseline[_OWNED_DISPATCH_OWNER]
+        if (
+            purpose != "owned_attempt"
+            or type(owner) is not str
+            or not _OPAQUE.fullmatch(owner)
+        ):
+            raise VerifyRunError("invalid owned dispatch owner")
+    if _SQLITE_RESERVATION in baseline:
+        reservation = baseline[_SQLITE_RESERVATION]
+        if (
+            purpose != "owned_attempt"
+            or type(reservation) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", reservation) is None
+        ):
+            raise VerifyRunError("invalid owned SQLite reservation")
+    return cast(VerificationPurpose, purpose)
 
-    return salted_digest(
-        salt, "baseline", {key: baseline[key] for key in _BASELINE_BOUND_KEYS}
+
+def _bound_baseline(baseline: Mapping[str, Any]) -> dict[str, Any]:
+    _baseline_purpose(baseline)
+    keys = _BASELINE_BOUND_KEYS + tuple(
+        name
+        for name in ("purpose", _SQLITE_RESERVATION, _OWNED_DISPATCH_OWNER)
+        if name in baseline
     )
+    return {key: baseline[key] for key in keys}
+
+
+def baseline_digest(baseline: Mapping[str, Any], salt: bytes) -> str:
+    """Salted digest of the baseline, including any recorded write purpose."""
+
+    return salted_digest(salt, "baseline", _bound_baseline(baseline))
 
 
 def _used_marker(path: Path) -> Path:
     return path.with_name(path.name + ".used")
 
 
-def _load_baseline(path: Path, identity: str) -> tuple[dict[str, Any], bytes]:
+def _check_baseline_verifier(baseline: Mapping[str, Any], identity: str) -> None:
+    if baseline["verifier_identity"] != identity:
+        raise VerifyRunError("baseline was captured by a different verifier")
+
+
+def _load_baseline(
+    path: Path, identity: Optional[str] = None
+) -> tuple[dict[str, Any], bytes]:
     try:
         raw = json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         raise VerifyRunError(f"cannot read baseline {path}: {exc}") from exc
     if not isinstance(raw, dict) or raw.get("schema_version") != BASELINE_SCHEMA:
         raise VerifyRunError(f"{path} is not an {BASELINE_SCHEMA} file")
-    if set(raw) != set(BASELINE_KEYS):
+    required = set(BASELINE_KEYS)
+    if (
+        not required
+        <= set(raw)
+        <= required | {"purpose", _SQLITE_RESERVATION, _OWNED_DISPATCH_OWNER}
+    ):
         # Every field must be one the digest names; nothing rides along unbound.
         raise VerifyRunError(
-            "baseline file must hold exactly " + ", ".join(BASELINE_KEYS)
+            "baseline file must hold exactly the required and supported fields"
         )
-    if raw["verifier_identity"] != identity:
-        raise VerifyRunError("baseline was captured by a different verifier")
+    _baseline_purpose(raw)
+    if identity is not None:
+        _check_baseline_verifier(raw, identity)
     execution_id = raw["execution_id"]
     if not isinstance(execution_id, str) or not _OPAQUE.match(execution_id):
         raise VerifyRunError("baseline execution_id is not an opaque id")
@@ -2585,6 +2726,136 @@ def _consume_baseline(path: Path, execution_id: str) -> None:
         ) from exc
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         fh.write(execution_id + "\n")
+
+
+def _owned_baseline_reference(
+    baseline: Mapping[str, Any], salt: bytes
+) -> Optional[OwnedBaselineReference]:
+    owner = baseline.get(_OWNED_DISPATCH_OWNER)
+    if owner is None:
+        return None
+    return owner, baseline["execution_id"], baseline_digest(baseline, salt)
+
+
+def _claim_owned_dispatch(path: Path) -> bool:
+    # One atomic claim closes this baseline to all later native dispatches.
+    # If the writer won, a concurrent read still cannot assert no dispatch.
+    original = path.resolve(strict=True)
+    claim = original.with_name(original.name + ".dispatched")
+    try:
+        fd = os.open(claim, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        return False
+    os.close(fd)
+    return True
+
+
+def commit_owned_sqlite_insert(
+    cfg: VerifyConfig, params: Mapping[str, object], baseline_path: Path
+) -> None:
+    """Actuate the exact insert reserved by an owned SQLite baseline.
+
+    The operator controls the writer and the private baseline. This helper
+    executes one native transaction. It accepts no SQL, row or attempt ID from
+    the actuator, and never records a witness for an already present row.
+    Ledger-owned baselines require the verifier's live pending-write route.
+    """
+
+    _commit_owned_sqlite_insert(cfg, params, baseline_path, None)
+
+
+def _commit_owned_sqlite_insert(
+    cfg: VerifyConfig,
+    params: Mapping[str, object],
+    baseline_path: Path,
+    owner: Optional[OwnedBaselineReference],
+) -> None:
+    verifier = _build_verifier(cfg, params)
+    path = Path(baseline_path)
+    baseline, salt = _load_baseline(path, verifier_identity(verifier))
+    if _owned_baseline_reference(baseline, salt) != owner:
+        raise VerifyRunError(
+            "the owned SQLite baseline does not belong to this dispatch"
+        )
+    insert = _reserved_sqlite_insert(cfg, verifier, params, None, baseline, salt)
+    reservation = baseline.get(_SQLITE_RESERVATION)
+    execution_id = baseline["execution_id"]
+    elapsed = (
+        _parse_time(_now()) - _parse_time(baseline["baseline_read_at"])
+    ).total_seconds()
+    if (
+        _baseline_purpose(baseline) != "owned_attempt"
+        or insert is None
+        or not isinstance(reservation, str)
+        or _used_marker(path).exists()
+        or not 0 <= elapsed <= cfg.max_execution_window_s
+    ):
+        raise VerifyRunError(
+            "the owned SQLite insert does not match an active reservation"
+        )
+    try:
+        claimed = _claim_owned_dispatch(path)
+    except OSError as exc:
+        raise VerifyRunError("the owned SQLite dispatch could not be claimed") from exc
+    if not claimed:
+        raise VerifyRunError("the owned SQLite insert was already claimed")
+    if _used_marker(path).exists():
+        raise VerifyRunError("the owned SQLite reservation was already checked")
+    try:
+        insert.commit(execution_id, reservation, salt)
+    except (OSError, ValueError, sqlite3.Error) as exc:
+        raise VerifyRunError("the owned SQLite insert could not be committed") from exc
+
+
+def _reserved_sqlite_insert(
+    cfg: VerifyConfig,
+    verifier: Any,
+    params: Mapping[str, object],
+    read_provider: Optional[CompleteReadProvider],
+    baseline: Mapping[str, Any],
+    salt: bytes,
+) -> Optional[OwnedSqliteInsert]:
+    insert = _sqlite_insert(cfg, verifier, params, read_provider)
+    reservation = baseline.get(_SQLITE_RESERVATION)
+    if (
+        insert is None
+        or not isinstance(reservation, str)
+        or not hmac.compare_digest(
+            reservation,
+            insert.reservation(
+                baseline["execution_id"], salt, baseline.get(_OWNED_DISPATCH_OWNER)
+            ),
+        )
+    ):
+        return None
+    return insert
+
+
+def _observed_owned_insert(
+    cfg: VerifyConfig,
+    params: Mapping[str, object],
+    baseline: Optional[Mapping[str, Any]],
+    salt: bytes,
+    verifier: Any,
+    read_provider: Optional[CompleteReadProvider],
+    verdicts: Sequence[EffectVerdict],
+) -> bool:
+    if baseline is None or _SQLITE_RESERVATION not in baseline:
+        return False
+    insert = _reserved_sqlite_insert(
+        cfg, verifier, params, read_provider, baseline, salt
+    )
+    if insert is None or len(verdicts) != 1:
+        return False
+    matches = verdicts[0].matched_records
+    reservation = baseline[_SQLITE_RESERVATION]
+    attempt = baseline["execution_id"]
+    if len(matches) != 1 or not insert.matches(matches[0]):
+        return False
+    try:
+        return insert.independently_observed(attempt, reservation, salt)
+    except (OSError, ValueError, sqlite3.Error):
+        return False
 
 
 # -- the run record and the approver -----------------------------------------
@@ -2717,6 +2988,9 @@ def verify_run(
     second_extractor: Optional[Any] = None,
     post_state_out: Optional[dict[str, Any]] = None,
     read_provider: Optional[CompleteReadProvider] = None,
+    request_context: Optional[RequestContext] = None,
+    purpose: Optional[VerificationPurpose] = None,
+    _owned_reference: Optional[OwnedBaselineReference] = None,
 ) -> dict[str, Any]:
     """Read the system of record and return ``{"receipt", "evidence"}``.
 
@@ -2725,6 +2999,10 @@ def verify_run(
     itself. No other field of it is read. ``verified`` requires every effect
     CONFIRMED by a system-of-record read at or above
     ``minimum_effect_strength``; anything weaker is never upgraded.
+
+    ``request_context`` is an explicit producer correlation context, separate
+    from ``execution_id``. It does not authenticate a caller. An ambient
+    wrapper scope alone does not bind direct verifier or canary receipts.
 
     With ``baseline_path`` the run continues the one the baseline started
     (its ``execution_id`` and salt) and the baseline is consumed. Without one,
@@ -2735,6 +3013,10 @@ def verify_run(
     guarded save sets it after its commit step). Then a store that shows
     nothing is ``reconciliation_required``, not ``halted_before_effect``: the
     write may still land, so it must not be retried.
+
+    ``purpose`` inherits the captured baseline's purpose when omitted.
+    Observation reports the state the reader saw. An owned attempt needs
+    independent commit evidence to credit that state to this attempt.
 
     With ``frame.database.recheck_after_s``, a verified run's evidence says a
     recheck is due (``evidence.frame.recheck``), and ``post_state_out`` (a
@@ -2752,6 +3034,17 @@ def verify_run(
 
     if not isinstance(run_record, Mapping):
         raise VerifyRunError("run record must be a JSON object")
+    if request_context is not None:
+        from openadapt_flow.request_binding import BindingError
+
+        try:
+            if type(request_context) is not RequestContext:
+                raise BindingError("request_context_type")
+            request_context = RequestContext.parse(request_context.to_dict())
+        except BindingError:
+            raise VerifyRunError(
+                "invalid request context", validation_reason="request_context"
+            ) from None
     if not isinstance(authorization_ref, str) or not authorization_ref:
         raise VerifyRunError("an authorization reference is required")
     remediates = _opaque_or_none("remediates", remediates)
@@ -2759,15 +3052,56 @@ def verify_run(
     approver_doc = _approver(approver)
     executor_kind, executor_ref, build_digest = _executor(run_record)
 
+    # Reject a downgrade before constructing a reader or consuming the baseline.
+    # A saved run can inherit its purpose only from the same decoded baseline
+    # whose identity and contents will be used for verification.
+    loaded = None
+    if cfg.owned_sqlite_insert is not None:
+        if purpose is not None or baseline_path is None:
+            requested = _baseline_purpose(
+                {"purpose": "observation" if purpose is None else purpose}
+            )
+            _require_verification_purpose(cfg, requested)
+        if baseline_path is not None:
+            loaded = _load_baseline(Path(baseline_path))
+            _require_verification_purpose(cfg, _baseline_purpose(loaded[0]))
+
     verifier = _build_verifier(cfg, params, read_provider)
     identity = verifier_identity(verifier)
 
     baseline: Optional[dict[str, Any]] = None
     if baseline_path is not None:
-        baseline, salt = _load_baseline(Path(baseline_path), identity)
+        if loaded is None:
+            baseline, salt = _load_baseline(Path(baseline_path), identity)
+        else:
+            baseline, salt = loaded
+            _check_baseline_verifier(baseline, identity)
+        recorded_purpose = _baseline_purpose(baseline)
+        if (
+            purpose is not None
+            and _baseline_purpose({"purpose": purpose}) != recorded_purpose
+        ):
+            raise VerifyRunError("verification purpose differs from the baseline")
+        purpose = recorded_purpose
+        if _owned_baseline_reference(baseline, salt) != _owned_reference:
+            raise VerifyRunError(
+                "the baseline does not match the original owned attempt"
+            )
         execution_id = str(baseline["execution_id"])
+        if purpose == "owned_attempt":
+            try:
+                _claim_owned_dispatch(Path(baseline_path))
+            except OSError as exc:
+                raise VerifyRunError(
+                    "the owned dispatch claim could not be checked"
+                ) from exc
         _consume_baseline(Path(baseline_path), execution_id)
     else:
+        if _owned_reference is not None:
+            raise VerifyRunError("an owned ledger reference requires its baseline")
+        purpose = _baseline_purpose(
+            {"purpose": "observation" if purpose is None else purpose}
+        )
         if private_dir is None:
             raise VerifyRunError(
                 "without a baseline, verify-run needs a private directory for "
@@ -2775,14 +3109,14 @@ def verify_run(
             )
         salt = secrets.token_bytes(32)
         execution_id = _new_execution_id()
-        _write_private(
-            Path(private_dir) / "effect-run.private.json",
-            {
-                "schema_version": RUN_FILE_SCHEMA,
-                "execution_id": execution_id,
-                "salt": salt.hex(),
-            },
-        )
+        run_file = {
+            "schema_version": RUN_FILE_SCHEMA,
+            "execution_id": execution_id,
+            "salt": salt.hex(),
+        }
+        if purpose == "owned_attempt":
+            run_file["purpose"] = purpose
+        _write_private(Path(private_dir) / "effect-run.private.json", run_file)
     _tag_reads(verifier, execution_id)
 
     history_checkpoint = None
@@ -3003,12 +3337,34 @@ def verify_run(
         self_approved = approver_ref == executor_ref
 
     delivery_uncertain = False
-    read_proves_write = (
+    read_proves_delta = (
         delta_verdict == "CONFIRMED"
         and verification_tier == "independent_readback"
         and strong_enough
         and oracle_tier in (2, 3)
     )
+    attributed = (
+        purpose == "owned_attempt"
+        and read_proves_delta
+        and _observed_owned_insert(
+            cfg, params, baseline, salt, verifier, read_provider, verdicts
+        )
+    )
+    status = "attributed" if attributed else "unattributed"
+    if purpose == "observation":
+        status = "observed"
+    write_attribution = {"purpose": purpose, "status": status}
+    read_proves_write = read_proves_delta and (purpose == "observation" or attributed)
+    if (
+        purpose == "owned_attempt"
+        and not attributed
+        and (
+            effect_verdict == "CONFIRMED"
+            or (observed_effect == "absent" and frame.status != "refuted")
+        )
+    ):
+        # An absent read cannot settle an owned attempt whose dispatch may land.
+        effect_verdict = "INDETERMINATE"
     # The source part: with provenance, the record as read back must match
     # the source document (a round trip). Without it the inputs are the
     # authorized instruction itself (``--params``).
@@ -3021,8 +3377,10 @@ def verify_run(
         # ``{param: ...}`` reference, which binding replaces with the value.
         list(cfg.effects),
         verdicts,
-        read_proves_write,
+        read_proves_delta,
     )
+    if purpose == "owned_attempt" and source_status == "refuted":
+        effect_verdict = "REFUTED"
     checked: dict[str, Any] = {
         "delta": _part(delta_verdict, read_proves_write),
         "frame": frame.status,
@@ -3067,6 +3425,7 @@ def verify_run(
         effect_verdict == "REFUTED"
         and observed_effect == "absent"
         and not write_attempted
+        and purpose == "observation"
         and frame.status != "refuted"
     ):
         # The store shows nothing landed, whatever the executor said.
@@ -3076,7 +3435,9 @@ def verify_run(
         outcome = ExecuteTerminalOutcomeV1.RECONCILIATION_REQUIRED
         delivery_uncertain = True
     verified = outcome is ExecuteTerminalOutcomeV1.VERIFIED
-    landed = read_proves_write
+    landed = read_proves_write and (
+        purpose == "observation" or effect_verdict != "REFUTED"
+    )
     frame_held = frame.held
 
     evidence = {
@@ -3124,6 +3485,7 @@ def verify_run(
             "model_calls": 0,
         },
         "effect_verdict": effect_verdict,
+        _WRITE_ATTRIBUTION: write_attribution,
     }
     database_spec = frame_spec.database
     recheck_after_s = (
@@ -3167,6 +3529,8 @@ def verify_run(
         model_used=executor_kind != "flow_replay",
         external_network_used=executor_kind != "flow_replay",
     )
+    if request_context is not None:
+        evidence["request_context"] = request_context.to_dict()
     contract_hex = contract_digest.split(":", 1)[1]
     issued_at = _now()
     v1 = ExecuteEvidenceReceiptV1(
@@ -3193,12 +3557,16 @@ def verify_run(
     receipt["verification_tier"] = verification_tier
     receipt["checked_how"] = checked_how
     receipt["checked"] = checked
+    if purpose == "owned_attempt":
+        receipt[_WRITE_ATTRIBUTION] = dict(write_attribution)
     if remediates is not None:
         receipt["remediates"] = remediates
     if correlation_id is not None:
         receipt["correlation_id"] = correlation_id
     if recheck_due_at is not None:
         receipt[RECHECK_RECEIPT_FIELD] = recheck_due_at
+    if request_context is not None:
+        receipt["request_context"] = request_context.to_dict()
     problem = receipt_problem(receipt) or evidence_problem(evidence, receipt)
     if problem is not None:  # pragma: no cover - a producer bug, never input
         raise VerifyRunError(
@@ -3237,11 +3605,24 @@ def recheck_state(
         "execution_id": str(baseline["execution_id"]),
         "salt": str(baseline["salt"]),
         "verifier_identity": str(baseline["verifier_identity"]),
-        "baseline": {k: baseline[k] for k in _BASELINE_BOUND_KEYS},
+        "baseline": _bound_baseline(baseline),
         "receipt": dict(result["receipt"]),
         "evidence": evidence,
         "post_state": dict(post_state),
     }
+
+
+def _require_recheck_purpose(cfg: VerifyConfig, receipt: Any) -> None:
+    attribution = (
+        receipt.get(_WRITE_ATTRIBUTION) if isinstance(receipt, Mapping) else None
+    )
+    purpose: VerificationPurpose = (
+        "owned_attempt"
+        if isinstance(attribution, Mapping)
+        and attribution.get("purpose") == "owned_attempt"
+        else "observation"
+    )
+    _require_verification_purpose(cfg, purpose)
 
 
 def recheck_problem(
@@ -3294,10 +3675,21 @@ def recheck_problem(
         return "the recheck state's salt is not the one its receipt commits to"
     readback = evidence.get("readback") or {}
     baseline = dict(state["baseline"])
-    if set(baseline) != set(_BASELINE_BOUND_KEYS) or readback.get(
-        "baseline_sha256"
-    ) != baseline_digest(baseline, salt):
+    try:
+        baseline_matches = set(baseline) == set(
+            _bound_baseline(baseline)
+        ) and readback.get("baseline_sha256") == baseline_digest(baseline, salt)
+        purpose_matches = _baseline_purpose(baseline) == (
+            receipt.get(_WRITE_ATTRIBUTION, {}).get("purpose", "observation")
+        )
+    except (KeyError, VerifyRunError):
+        baseline_matches = purpose_matches = False
+    if not baseline_matches or not purpose_matches:
         return "the recheck state's baseline is not the one its receipt names"
+    try:
+        _require_recheck_purpose(cfg, receipt)
+    except VerifyRunError as exc:
+        return str(exc)
     frame = evidence.get("frame") or {}
     schedule = frame.get(late_write.EVIDENCE_KEY)
     database = cfg.frame.database if cfg.frame is not None else None
@@ -3326,6 +3718,18 @@ def recheck_problem(
         executor_kind, executor_ref, _build = _executor(run_record)
     except (VerifyRunError, KeyError, ValueError) as exc:
         return f"the contract can't be bound for the recheck: {exc}"
+    attributed = receipt.get(_WRITE_ATTRIBUTION) == {
+        "purpose": "owned_attempt",
+        "status": "attributed",
+    }
+    if (
+        attributed
+        and _reserved_sqlite_insert(
+            cfg, verifier, params, read_provider, baseline, salt
+        )
+        is None
+    ):
+        return "the current store is not the one reserved for this owned write"
     if (
         identity != state["verifier_identity"]
         or identity != readback.get("verifier_identity")
@@ -3380,6 +3784,11 @@ def _later_window(state: Mapping[str, Any]) -> Optional[Any]:
     was reported and nothing there is excused."""
 
     evidence = state["evidence"]
+    if evidence.get(_WRITE_ATTRIBUTION) == {
+        "purpose": "owned_attempt",
+        "status": "unattributed",
+    }:
+        return None
     frame = (evidence.get("frame") or {}).get("status")
     if frame not in ("held", "refuted"):
         return None
@@ -3467,6 +3876,42 @@ def recheck_run(
     Raises :class:`VerifyRunError` for an excuse that doesn't qualify.
     """
 
+    baseline = state.get("baseline")
+    receipt = state.get("receipt")
+    _require_recheck_purpose(cfg, receipt)
+    attribution = (
+        receipt.get(_WRITE_ATTRIBUTION) if isinstance(receipt, Mapping) else None
+    )
+    owned = (
+        isinstance(baseline, Mapping) and baseline.get("purpose") == "owned_attempt"
+    ) or (
+        isinstance(attribution, Mapping)
+        and attribution.get("purpose") == "owned_attempt"
+    )
+    if owned:
+        problem = recheck_problem(
+            cfg,
+            state,
+            params=params,
+            run_record=run_record,
+            read_provider=read_provider,
+        )
+        if problem is not None:
+            raise VerifyRunError(problem)
+
+    def checked_result(verdict: FrameVerdict, read_at: str) -> tuple[FrameVerdict, str]:
+        if owned:
+            problem = recheck_problem(
+                cfg,
+                state,
+                params=params,
+                run_record=run_record,
+                read_provider=read_provider,
+            )
+            if problem is not None:
+                return FrameVerdict(status="not_checked", reason=problem), read_at
+        return verdict, read_at
+
     post = dict(state["post_state"])
     if cfg.frame is not None and cfg.frame.history is not None:
         from openadapt_flow.runtime.effects.history import instant, judge_history
@@ -3505,7 +3950,7 @@ def recheck_run(
             str(run_record.get("executor_id") or ""),
         )
         horizon = min(instant(feed["through"]) for feed in now["feeds"].values())
-        return verdict, late_write.format_time(horizon)
+        return checked_result(verdict, late_write.format_time(horizon))
     since = late_write.parse_time(str(post["read_at"]))
     windows: list[Any] = []
     unjudged = 0
@@ -3556,7 +4001,7 @@ def recheck_run(
         # A later write whose frame wasn't judged excuses nothing, so what
         # refuted this write may be that write's own change.
         verdict.excused_by.add(late_write.LATER_WRITE_UNJUDGED)
-    return verdict, read_started_at
+    return checked_result(verdict, read_started_at)
 
 
 def write_result(result: Mapping[str, Any], out_dir: Path) -> Path:
@@ -3583,12 +4028,25 @@ def receipt_problem(receipt: Mapping[str, Any]) -> Optional[str]:
         v1_names
         | set(_NEW_RECEIPT_FIELDS)
         | set(_OPTIONAL_RECEIPT_FIELDS)
-        | {"checked_how", "checked", RECHECK_RECEIPT_FIELD}
+        | {
+            "checked_how",
+            "checked",
+            RECHECK_RECEIPT_FIELD,
+            "request_context",
+            _WRITE_ATTRIBUTION,
+        }
     )
     if set(receipt) - allowed:
         return "unknown_field"
     if any(name not in receipt for name in _NEW_RECEIPT_FIELDS):
         return "missing_field"
+    if "request_context" in receipt:
+        from openadapt_flow.request_binding import BindingError, RequestContext
+
+        try:
+            RequestContext.parse(receipt["request_context"])
+        except BindingError:
+            return "request_context"
     v1 = {k: v for k, v in receipt.items() if k in v1_names and k != "seal_signature"}
     v1["schema_version"] = EXECUTE_EVIDENCE_RECEIPT_SCHEMA
     try:
@@ -3624,6 +4082,32 @@ def receipt_problem(receipt: Mapping[str, Any]) -> Optional[str]:
     ):
         return "checked_how"
     outcome = receipt.get("outcome")
+    if _WRITE_ATTRIBUTION in receipt:
+        attribution = receipt[_WRITE_ATTRIBUTION]
+        if not isinstance(attribution, Mapping) or set(attribution) != {
+            "purpose",
+            "status",
+        }:
+            return "write_attribution"
+        pair = (attribution["purpose"], attribution["status"])
+        if any(type(part) is not str for part in pair) or pair not in (
+            ("owned_attempt", "attributed"),
+            ("owned_attempt", "unattributed"),
+        ):
+            return "write_attribution"
+        attributed = pair[1] == "attributed"
+        contracts = receipt["contracts"]
+        landed = attributed and receipt["effect_verdict"] != "REFUTED"
+        if (
+            not isinstance(contracts, Mapping)
+            or contracts.get("effect_passed") is not landed
+        ):
+            return "write_attribution"
+        if not attributed and (
+            outcome in ("verified", "rolled_back_verified")
+            or receipt["effect_verdict"] == "CONFIRMED"
+        ):
+            return "write_attribution"
     # Optional: receipts issued before docs/VERIFICATION_COVERAGE.md lack it.
     if "checked" in receipt:
         parts = receipt["checked"]
@@ -3679,6 +4163,24 @@ def evidence_problem(
 
     if sha256_tagged(dict(evidence)) != receipt.get("evidence_digest"):
         return "evidence_mismatch"
+    if _WRITE_ATTRIBUTION in receipt:
+        if evidence.get(_WRITE_ATTRIBUTION) != receipt[_WRITE_ATTRIBUTION]:
+            return "write_attribution"
+    elif _WRITE_ATTRIBUTION in evidence and evidence[_WRITE_ATTRIBUTION] != {
+        "purpose": "observation",
+        "status": "observed",
+    }:
+        return "write_attribution"
+    if "request_context" in receipt or "request_context" in evidence:
+        from openadapt_flow.request_binding import BindingError, RequestContext
+
+        try:
+            if RequestContext.parse(
+                receipt.get("request_context")
+            ) != RequestContext.parse(evidence.get("request_context")):
+                return "request_context"
+        except BindingError:
+            return "request_context"
     executor = evidence.get("executor") or {}
     readback = evidence.get("readback") or {}
     authorization = evidence.get("authorization") or {}

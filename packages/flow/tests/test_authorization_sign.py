@@ -89,7 +89,10 @@ def _bundle(root: Path) -> Path:
         ),
     ]
     wf = Workflow(name="clinic-intake-referral", steps=steps)
-    (bundle / "workflow.json").write_text(wf.model_dump_json(), encoding="utf-8")
+    wf.save(bundle)
+    verified = Workflow.load(bundle)
+    assert verified._loaded_seal is not None
+    assert verified.manifest is not None and verified.manifest.content_digest
     (bundle.parent / "QUALIFICATION.md").write_text(QUALIFICATION, encoding="utf-8")
     return bundle
 
@@ -336,9 +339,9 @@ def test_ssh_keygen_gets_a_private_copy_after_double_dash(tmp_path):
 
 def test_control_characters_never_reach_the_terminal(tmp_path):
     bundle = _bundle(tmp_path)
-    wf = Workflow.model_validate_json((bundle / "workflow.json").read_text())
+    wf = Workflow.load(bundle)
     wf.steps[1].field_label = "First\x1b[2J\x1b]0;owned\x07Name\u202e"
-    (bundle / "workflow.json").write_text(wf.model_dump_json())
+    wf.save(bundle)
     (bundle.parent / "QUALIFICATION.md").write_text(
         QUALIFICATION.replace("clinical-write", "clinical\x1b[31m-write")
     )

@@ -16,13 +16,13 @@ import pytest
 from openadapt_flow.integrations.agents import WriteGuard
 from tests._orders_portal import Portal
 
-pytest_plugins = ("tests._orders_portal",)
-
 ORDER = {"customer": "Acme", "product": "Desk lamp", "units": "3"}
 
 
 def _guard(portal: Portal, tmp_path: Path, **options) -> WriteGuard:
-    return WriteGuard(portal.contract(), workdir=tmp_path, agent_id="bot-1", **options)
+    return WriteGuard(
+        portal.contract(), workdir=tmp_path, **({"agent_id": "bot-1"} | options)
+    )
 
 
 def _write(portal: Portal, args: dict):
@@ -287,3 +287,137 @@ def test_a_cancelled_dispatched_write_with_absent_readback_stays_held(
     assert retry["verdict"] == "RECONCILIATION_REQUIRED"
     assert retry["not_sent_again"] is True
     assert portal.posts == 1 and portal.orders() == []
+
+
+def test_new_process_retry_does_not_resend_cancelled_dispatched_write(
+    portal: Portal, tmp_path: Path
+) -> None:
+    guard1 = _guard(portal, tmp_path, agent_id="worker-1")
+
+    async def slow_write():
+        out = await asyncio.to_thread(portal.save_order, **ORDER)
+        await asyncio.sleep(5)
+        return out
+
+    async def timed_out():
+        with pytest.raises(TimeoutError):
+            async with asyncio.timeout(0.5):
+                await guard1.arun(ORDER, slow_write)
+
+    asyncio.run(timed_out())
+    assert portal.posts == 1 and len(portal.orders()) == 1
+
+    # A second WriteGuard on the same workdir (new process / restarted worker)
+    # has an empty in-memory _lost_replies cache and must rely on the ledger (AlreadyWritten).
+    guard2 = _guard(portal, tmp_path, agent_id="worker-2")
+    retry = guard2.run(ORDER, _write(portal, ORDER))
+    assert retry["verified"] is True and retry["not_sent_again"] is True
+    assert portal.posts == 1 and len(portal.orders()) == 1
+
+
+def test_new_process_retry_does_not_resend_held_cancelled_write(
+    portal: Portal, tmp_path: Path
+) -> None:
+    guard1 = _guard(portal, tmp_path, agent_id="worker-1")
+    portal.fault("no_persist")
+
+    async def cancelled_after_dispatch():
+        sent = asyncio.Event()
+        never_reply = asyncio.Event()
+
+        async def write():
+            output = await asyncio.to_thread(portal.save_order, **ORDER)
+            sent.set()
+            await never_reply.wait()
+            return output
+
+        task = asyncio.create_task(guard1.arun(ORDER, write))
+        try:
+            await asyncio.wait_for(sent.wait(), timeout=10)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        finally:
+            if not task.done():
+                task.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await task
+
+    asyncio.run(cancelled_after_dispatch())
+    assert portal.posts == 1 and portal.orders() == []
+    portal.fault("")
+
+    # A second WriteGuard on the same workdir (new process / restarted worker)
+    # retries. It must also not send again, relying on the held result in the ledger.
+    guard2 = _guard(portal, tmp_path, agent_id="worker-2")
+    retry = guard2.run(ORDER, _write(portal, ORDER))
+    assert retry["verified"] is False
+    assert retry["verdict"] in ("RECONCILIATION_REQUIRED", "NOT_WRITTEN")
+    assert retry.get("not_sent_again") is True or "held" in retry.get("reason", "")
+    assert portal.posts == 1 and portal.orders() == []
+
+
+def test_off_loop_does_not_rerun_cancelled_preflight_inline(monkeypatch) -> None:
+    """When a queued preflight is cancelled by the pool (e.g. on shutdown),
+    _off_loop with cancel_if_queued=True must raise CancelledError rather than
+    running fn inline (#2141).
+    """
+    import concurrent.futures
+    from types import SimpleNamespace
+
+    from openadapt_flow.integrations.agents import _Cancelled, _off_loop
+
+    class CancelledFuture(concurrent.futures.Future):
+        def cancel(self):
+            return False
+
+        def result(self, timeout=None):
+            raise concurrent.futures.CancelledError()
+
+    fake_pool = SimpleNamespace(submit=lambda fn, *args: CancelledFuture())
+    monkeypatch.setattr("openadapt_flow.integrations.agents._POOL", fake_pool)
+
+    called = []
+
+    def dummy_fn():
+        called.append(True)
+        return "result"
+
+    async def run_test():
+        # 1. With cancel_if_queued=True: raises CancelledError, dummy_fn is NOT run inline
+        caught1 = []
+
+        async def call1():
+            try:
+                await _off_loop(dummy_fn, cancel_if_queued=True)
+            except _Cancelled as exc:
+                caught1.append(type(exc))
+            except asyncio.CancelledError:
+                caught1.append("CancelledError")
+
+        task1 = asyncio.create_task(call1())
+        await asyncio.sleep(0)
+        task1.cancel()
+        await task1
+        assert caught1 == ["CancelledError"]
+        assert len(called) == 0
+
+        # 2. With cancel_if_queued=False (e.g. read-back/finish): dummy_fn runs inline and wraps in _Cancelled
+        caught2 = []
+
+        async def call2():
+            try:
+                await _off_loop(dummy_fn, cancel_if_queued=False)
+            except _Cancelled as exc:
+                caught2.append((type(exc).__name__, exc.value))
+            except asyncio.CancelledError:
+                caught2.append("CancelledError")
+
+        task2 = asyncio.create_task(call2())
+        await asyncio.sleep(0)
+        task2.cancel()
+        await task2
+        assert caught2 == [("_Cancelled", "result")]
+        assert len(called) == 1
+
+    asyncio.run(run_test())

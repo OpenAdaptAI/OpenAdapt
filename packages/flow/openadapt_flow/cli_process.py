@@ -273,7 +273,9 @@ def _governed_child_run(
         if report_path.is_file():
             from openadapt_flow.ir import RunReport
 
-            report = RunReport.model_validate_json(report_path.read_text())
+            report = RunReport.model_validate_json(
+                report_path.read_text(encoding="utf-8")
+            )
             outcome = report.execution_outcome or (
                 "VERIFIED" if report.success else "HALTED"
             )

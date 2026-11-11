@@ -77,8 +77,7 @@ from openadapt_flow.learning.loop import LearnOutcome, RegressionGate, learn_fro
 from openadapt_flow.learning.teach import (
     CorrectionSpec,
     TeachError,
-    _copy_carried,
-    _copy_templates,
+    _carried_asset_bytes,
     _halted_result,
     _load_fix,
     _norm,
@@ -761,8 +760,16 @@ def teach_branch(
                 }
             )
     out_bundle = Path(out)
-    _copy_templates(Path(bundle), out_bundle)
-    _copy_carried(carried, out_bundle)
+    from openadapt_flow.bundle_persistence import prepare_derived_assets
+    from openadapt_flow.bundle_validation import derive_verified_workflow
+
+    updated = derive_verified_workflow(
+        base,
+        update=updated.model_dump(
+            mode="python", exclude={"manifest", "encrypted", "schema_version"}
+        ),
+    )
+    prepare_derived_assets(updated, out_bundle, _carried_asset_bytes(updated, carried))
     evidence = {
         "kind": "taught_branch",
         "examples": len(loaded),
@@ -780,12 +787,11 @@ def teach_branch(
         ],
         "runtime_model_calls": 0,
     }
+    updated.save(out_bundle)
     (out_bundle / "repair").mkdir(parents=True, exist_ok=True)
     (out_bundle / "repair" / "branch_induction.json").write_text(
         json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
-    updated.save(out_bundle)
-
     from openadapt_flow.repair.registration import register_bundle_candidate
 
     register_bundle_candidate(

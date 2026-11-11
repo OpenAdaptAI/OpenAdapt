@@ -11,7 +11,6 @@ in-memory workflow, persisted under ``run_dir/heals/<step_id>/``, and — when
 from __future__ import annotations
 
 import io
-import shutil
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -344,27 +343,28 @@ def write_healed_bundle(
     src = Path(src_bundle_dir)
     dest = Path(dest_bundle_dir)
     from openadapt_flow import at_rest as _at_rest
+    from openadapt_flow.bundle_persistence import (
+        copy_genesis_template_inputs,
+        prepare_derived_assets,
+    )
+    from openadapt_flow.bundle_validation import BundleIntegrityError
 
-    _at_rest.unsealed_write("a healed bundle (--save-healed-to)", dest, refuse=False)
-    dest.mkdir(parents=True, exist_ok=True)
-    (dest / "templates").mkdir(parents=True, exist_ok=True)
-
-    src_templates = src / "templates"
-    if src_templates.is_dir():
-        for path in sorted(src_templates.rglob("*")):
-            if path.is_file():
-                target = dest / "templates" / path.relative_to(src_templates)
-                target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(path, target)
-
+    if (
+        workflow._loaded_seal is not None
+        and src.resolve() != workflow._loaded_seal.source_bundle_dir
+    ):
+        raise BundleIntegrityError(
+            "healed bundle source does not match the verified source"
+        )
     steps_by_id = {step.id: step for step in workflow.steps}
+    changes = {}
     for step_id, crop in new_crops.items():
         step = steps_by_id.get(step_id)
         if step is None or step.anchor is None:
             continue
-        target = dest / step.anchor.template
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(crop)
-
+        changes[step.anchor.template] = crop
+    prepare_derived_assets(workflow, dest, changes)
+    _at_rest.unsealed_write("a healed bundle (--save-healed-to)", dest, refuse=False)
+    copy_genesis_template_inputs(workflow, src, dest)
     workflow.save(dest)
     return dest

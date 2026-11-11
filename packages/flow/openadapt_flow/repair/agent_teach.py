@@ -123,7 +123,7 @@ def _finish_candidate(
     candidate.provenance = provenance
     path = detached_candidate_path(out)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(candidate.model_dump_json(indent=2))
+    path.write_text(candidate.model_dump_json(indent=2), encoding="utf-8")
     return candidate
 
 
@@ -193,7 +193,7 @@ def shared_dialog_band(
     clicks = []
     for rec in recordings:
         rec = Path(rec)
-        lines = (rec / "events.jsonl").read_text().splitlines()
+        lines = (rec / "events.jsonl").read_text(encoding="utf-8").splitlines()
         event = json.loads(next(line for line in lines if line.strip()))
         frame = (rec / "frames" / f"{int(event['i']):04d}_before.png").read_bytes()
         click = (int(event["x"]), int(event["y"]))

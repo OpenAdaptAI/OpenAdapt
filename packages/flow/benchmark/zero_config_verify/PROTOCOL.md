@@ -226,3 +226,54 @@ A read observed in the recording's own traffic (`Z-net-read`,
 check. It runs under this protocol once the flags are deleted. That case is
 left to a follow-up issue. The third run's numbers are unchanged by this
 note.
+
+### 2026-11-09, before the fourth run (look for a read that covers the save)
+
+The third run refused MockLoan's probed read (`/api/disbursements`) because a
+write outside it would pass. Issue #2131 changes `--probe-reads` to look for
+a read that covers the whole save before it refuses. The candidates are the
+sibling collections under the same prefix that the app itself read (from its
+own captured `GET` requests, path only) and the prefix root (`GET <prefix>`
+and `GET <prefix>/`). The probe rules are unchanged: `GET` only, the local
+machine only, no credentials, no redirects, and every probe recorded in
+`read_discovery.json` and the proof. The root replaces the collection read
+only when it holds the written record, holds every record the collection and
+each sibling returned, is one unpaged response, and every captured write went
+under the prefix. The check then reads every list the root returns, and the
+save may add exactly one row to it. A read that still leaves an open
+`collateral_unaudited` miss is refused, as before, and the reason now says
+what the search probed.
+
+The change is app-generic (`scripts/check_engine_generality.py` passes), was
+tested against separate local test apps, and adds no candidate names: the
+generator does not guess store-wide routes. A generation-only smoke run
+(writes nothing) on this commit found that MockLoan's app reads no other
+collection under `/api`, and that `GET /api` and `GET /api/` return 404. So
+the expected outcome is that `Z-net-probed` on MockLoan stays refused, with
+that reason recorded. MockMed is out of scope (no JSON read route) and its
+arm cannot change.
+
+The fourth run re-runs every arm on the same cases. The third run's data is
+kept as `results-run3.json`. The thresholds, the baselines, the ground truth
+and the trial cases are unchanged.
+
+### 2026-11-09, before the fourth run (review fix)
+
+Review of the change above found a false CONFIRMED: a root list that was empty
+when probed (`"fees": []`), or a collection the root left out while empty, got
+no read, so a stray row written there later passed. The fix, made before the
+fourth run: the check reads every top-level list the root returns, empty ones
+included; one more read takes every list under a key the probe did not see,
+and the save may add no row there; a reviewed list that disappears makes the
+read unreadable. The fault test injects a stray row into each of these. Nothing
+else in this protocol changes, and the expected MockLoan outcome (refused,
+`GET /api` returns 404) is the same.
+
+### 2026-11-09, before the fourth run (second review fix)
+
+The second review found two more shapes a root could hide records in: a
+collection nested in an object, and an id-keyed map. Ruling: fail closed on
+shape. The root is promoted only when every top-level value is a list of
+objects or a scalar; otherwise the reason is "root holds a non-list value that
+may contain records: <key>". At check time, an object value in the root makes
+the read unreadable. The fourth run uses this commit. Nothing else changes.

@@ -433,17 +433,56 @@ def admit_local_dev(
         raise QualificationProposalError(
             "initialize qualification before local-dev admission"
         )
+    if workflow._unverified_load:
+        raise QualificationProposalError(
+            "local-dev admission requires a verified persisted bundle seal"
+        )
+    stored_manifest = workflow.manifest
+    if stored_manifest is None:
+        raise QualificationProposalError(
+            "local-dev admission requires a persisted bundle integrity seal"
+        )
+    from openadapt_flow import sealed_set
     from openadapt_flow.bundle_validation import (
+        BundleIntegrityError,
         compute_content_digest,
         compute_file_hashes,
+        verify_loaded_source_integrity,
     )
 
     bundle = Path(bundle_dir)
+    try:
+        verify_loaded_source_integrity(
+            workflow,
+            bundle,
+            stored_manifest,
+            decrypted_assets=(
+                workflow.decrypted_templates()
+                if workflow.encrypted or sealed_set.is_sealed(bundle)
+                else None
+            ),
+        )
+    except BundleIntegrityError as exc:
+        raise QualificationProposalError(
+            "local-dev admission requires a verified persisted bundle seal"
+        ) from exc
     file_hashes = (
-        dict(workflow.manifest.file_hashes)
-        if workflow.manifest is not None and workflow.manifest.file_hashes
-        else compute_file_hashes(workflow, bundle)
+        dict(stored_manifest.file_hashes)
+        if stored_manifest.file_hashes
+        else compute_file_hashes(
+            workflow,
+            bundle,
+            assets=(
+                workflow.decrypted_templates()
+                if workflow.encrypted or sealed_set.is_sealed(bundle)
+                else None
+            ),
+        )
     )
+    # The accepted proposal has intentionally changed qualification fields in
+    # memory. Hash that proposed new content only after the original on-disk
+    # seal and its assets have been verified above; save_accepted_bundle then
+    # reseals the same content before it is used.
     digest = compute_content_digest(workflow, file_hashes)
     project = workflow.qualification
     identity_contract = hashlib.sha256(
