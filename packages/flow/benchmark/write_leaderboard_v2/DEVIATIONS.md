@@ -17,3 +17,5 @@ Not deviations, recorded here so nothing is missed:
   labelled as not pre-registered.
 - The four new apps' stacks were torn down when their runs ended, while
   Medplum's runs went on. No run was affected.
+- The held-out case IDs, fault families and per-run outcomes (no task values
+  or seeds) were briefly visible in the PR branch history.

@@ -351,6 +351,7 @@ exclude = [
     "/benchmark/**/_work",
     # Leaderboard evidence (screenshots, transcripts) is repository-only.
     "/benchmark/fhir_medplum/leaderboard/results",
+    "/benchmark/write_leaderboard_v2/results",
 
     # Verifier-baselines evidence (judge views, rubrics, scores) is repository-only.
     "/benchmark/verifier_baselines/results",
@@ -418,6 +419,7 @@ exclude = [
     "/benchmark/**/_work",
     # Leaderboard evidence (screenshots, transcripts) is repository-only.
     "/benchmark/fhir_medplum/leaderboard/results",
+    "/benchmark/write_leaderboard_v2/results",
 
     # Verifier-baselines evidence (judge views, rubrics, scores) is repository-only.
     "/benchmark/verifier_baselines/results",
