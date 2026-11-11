@@ -31,7 +31,6 @@ import getpass
 import hashlib
 import json
 import os
-import shutil
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -1279,20 +1278,28 @@ def declare_undo(
     ]
     if problems:
         raise ValueError(f"undo {undo.id!r} {problems[0]}")
+    from openadapt_flow.bundle_persistence import (
+        prepare_derived_assets,
+        validate_derived_asset_paths,
+    )
+    from openadapt_flow.bundle_validation import bundle_asset_path
+
+    validate_derived_asset_paths(candidate, assets or {})
     for rel in assets or {}:
-        if _sealed.exists(bundle_dir / rel):
+        if _sealed.exists(bundle_asset_path(bundle_dir, rel)):
             raise ValueError(f"the bundle already has {rel}")
-    for rel, source in (assets or {}).items():
-        if _sealed.is_sealed(bundle_dir):
-            # The crop joins the in-memory map; save() seals it below.
-            workflow._decrypted_templates[rel] = Path(source).read_bytes()
-            continue
-        (bundle_dir / rel).parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(source, bundle_dir / rel)
+    prepare_derived_assets(
+        candidate,
+        bundle_dir,
+        {rel: Path(source).read_bytes() for rel, source in (assets or {}).items()},
+        output="sealed"
+        if _sealed.is_sealed(bundle_dir)
+        else ("encrypted" if workflow.encrypted else "plain"),
+    )
     return save_undo_steps(
         bundle_dir,
-        workflow,
-        [*workflow.undo_steps, undo],
+        candidate,
+        list(candidate.undo_steps),
         reason="an undo step was declared after certification",
     )
 

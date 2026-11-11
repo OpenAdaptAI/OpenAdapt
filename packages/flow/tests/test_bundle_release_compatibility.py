@@ -57,6 +57,16 @@ def test_frozen_bundle_original_seal_loads_without_rewriting(frozen_bundle):
     assert hashes(bundle) == before
 
 
+def test_verified_historical_bundle_can_be_resaved(frozen_bundle):
+    bundle, _expected = frozen_bundle
+    workflow = Workflow.load(bundle)
+
+    workflow.save(bundle)
+
+    reloaded = Workflow.load(bundle)
+    bundles.verify_integrity(reloaded, bundle, reloaded.manifest)
+
+
 @pytest.mark.parametrize("attack", ["workflow", "version", "asset"])
 def test_frozen_bundle_tampering_refuses(frozen_bundle, attack):
     bundle, _ = frozen_bundle

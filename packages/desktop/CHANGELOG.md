@@ -1,6 +1,20 @@
 # CHANGELOG
 
 
+## v0.30.0 (2026-11-11)
+
+### Features
+
+- **desktop**: check a workflow without saving
+
+
+
+## Unreleased
+
+- Check prefilled workflows without delivering application input when the
+  selected engine supports that mode.
+
+
 ## v0.29.3 (2026-11-08)
 
 ### Bug Fixes

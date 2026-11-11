@@ -1,0 +1,4377 @@
+{
+  "apps": {
+    "mockloan": {
+      "arms": {
+        "D-net-read-complete": {
+          "class": "declared",
+          "generated_file": "generated/mockloan.D-net-read-complete.yaml",
+          "generator_misses": [],
+          "generator_output": "Record check: WORKING (not approved)\n  read api_db: GET /api/db (t=3.826) -> saved record\n  read api_db.content: GET /api/db (t=3.826), compared by content -> no record changed or removed\nFault test: 12 of 12 bad writes caught; clean save passed\nWrote <work>/out-D-net-read-complete/record_check.proposed.yaml and <work>/out-D-net-read-complete/record_check.proof.json\nNext: a person reviews it and deletes each `needs_operator_confirmation: true` line, then `openadapt-flow qualify <bundle> --verify record_check.proposed.yaml`.",
+          "generator_status": "working",
+          "inputs": [
+            "Z-net-read inputs",
+            "--complete-read (a person's statement)"
+          ],
+          "kill_check": {
+            "failed": [],
+            "ready": true
+          },
+          "parse_error": null,
+          "read_discovery": null,
+          "runnable": true,
+          "tally": {
+            "per_fault": {
+              "collateral": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "double": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "duplicate": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "idempotent": {
+                "runs": 3,
+                "true_accept": 3
+              },
+              "ok": {
+                "runs": 6,
+                "true_accept": 6
+              },
+              "optimistic": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "partial": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "session": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "stale": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "timeout": {
+                "runs": 3,
+                "true_accept": 3
+              }
+            },
+            "total": {
+              "correct_runs": 12,
+              "false_accept": 0,
+              "false_reject": 0,
+              "indeterminate": 0,
+              "runs": 33,
+              "true_accept": 12,
+              "true_reject": 21,
+              "wrong_runs": 21
+            }
+          }
+        },
+        "P-record-verify": {
+          "class": "read-path-given",
+          "generated_file": "generated/mockloan.P-record-verify.yaml",
+          "generator_misses": [],
+          "generator_output": "",
+          "generator_status": "proposed",
+          "inputs": [
+            "verifier: read path from the hand-written verify.yaml",
+            "before/after reads around the demonstration",
+            "meta.json params"
+          ],
+          "kill_check": {
+            "failed": [],
+            "ready": true
+          },
+          "parse_error": null,
+          "read_discovery": null,
+          "runnable": true,
+          "tally": {
+            "per_fault": {
+              "collateral": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "double": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "duplicate": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "idempotent": {
+                "runs": 3,
+                "true_accept": 3
+              },
+              "ok": {
+                "runs": 6,
+                "true_accept": 6
+              },
+              "optimistic": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "partial": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "session": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "stale": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "timeout": {
+                "runs": 3,
+                "true_accept": 3
+              }
+            },
+            "total": {
+              "correct_runs": 12,
+              "false_accept": 0,
+              "false_reject": 0,
+              "indeterminate": 0,
+              "runs": 33,
+              "true_accept": 12,
+              "true_reject": 21,
+              "wrong_runs": 21
+            }
+          }
+        },
+        "P-scaffold-verifier": {
+          "class": "read-path-given",
+          "generated_file": "generated/mockloan.P-scaffold-verifier.yaml",
+          "generator_misses": [
+            "collateral_unaudited: a stray row written to a table this check does not read (the check reads only rest_read; a write anywhere else passes it (give a database read path with --db, or more reads))"
+          ],
+          "generator_output": "Record check: DRAFT (not working)\n  read rest_read: the rest verifier section -> saved record\n  read rest_read.content: the rest verifier section, compared by content -> no record changed or removed\nFault test: 12 of 13 bad writes caught; clean save passed\n  MISS: collateral_unaudited: a stray row written to a table this check does not read (the check reads only rest_read; a write anywhere else passes it (give a database read path with --db, or more reads))\nWrote <work>/out-P-scaffold-verifier/record_check.proposed.yaml and <work>/out-P-scaffold-verifier/record_check.proof.json\nNext: fix the misses above, then run scaffold-verifier again.",
+          "generator_status": "draft",
+          "inputs": [
+            "verifier: read path from the hand-written verify.yaml",
+            "events.jsonl with sor_before/sor_after",
+            "sor_snapshots.json",
+            "meta.json params",
+            "network.jsonl"
+          ],
+          "kill_check": {
+            "failed": [],
+            "ready": true
+          },
+          "parse_error": null,
+          "read_discovery": null,
+          "runnable": true,
+          "tally": {
+            "per_fault": {
+              "collateral": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "double": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "duplicate": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "idempotent": {
+                "runs": 3,
+                "true_accept": 3
+              },
+              "ok": {
+                "runs": 6,
+                "true_accept": 6
+              },
+              "optimistic": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "partial": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "session": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "stale": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "timeout": {
+                "runs": 3,
+                "true_accept": 3
+              }
+            },
+            "total": {
+              "correct_runs": 12,
+              "false_accept": 0,
+              "false_reject": 0,
+              "indeterminate": 0,
+              "runs": 33,
+              "true_accept": 12,
+              "true_reject": 21,
+              "wrong_runs": 21
+            }
+          }
+        },
+        "Z-db": {
+          "class": "zero-config",
+          "generated_file": "generated/mockloan.Z-db.yaml",
+          "generator_misses": [],
+          "generator_output": "Record check: WORKING (not approved)\n  read metadata: table metadata -> no row added\n  read records: table records -> saved record\n  read records.content: table records, compared by content -> no record changed or removed\n  read records_all: table records, every row -> saved record\n  read records_all.content: table records, every row, compared by content -> no record changed or removed\nFault test: 27 of 27 bad writes caught; clean save passed\nWrote <work>/out-Z-db/record_check.proposed.yaml and <work>/out-Z-db/record_check.proof.json\nNext: a person reviews it and deletes each `needs_operator_confirmation: true` line, then `openadapt-flow qualify <bundle> --verify record_check.proposed.yaml`.",
+          "generator_status": "working",
+          "inputs": [
+            "events.jsonl",
+            "meta.json params",
+            "network.jsonl",
+            "--db <store file>"
+          ],
+          "kill_check": {
+            "failed": [],
+            "ready": true
+          },
+          "parse_error": null,
+          "read_discovery": null,
+          "runnable": true,
+          "tally": {
+            "per_fault": {
+              "collateral": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "double": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "duplicate": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "idempotent": {
+                "runs": 3,
+                "true_accept": 3
+              },
+              "ok": {
+                "runs": 6,
+                "true_accept": 6
+              },
+              "optimistic": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "partial": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "session": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "stale": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "timeout": {
+                "runs": 3,
+                "true_accept": 3
+              }
+            },
+            "total": {
+              "correct_runs": 12,
+              "false_accept": 0,
+              "false_reject": 0,
+              "indeterminate": 0,
+              "runs": 33,
+              "true_accept": 12,
+              "true_reject": 21,
+              "wrong_runs": 21
+            }
+          }
+        },
+        "Z-db-gate": {
+          "class": "zero-config",
+          "generated_file": "generated/mockloan.Z-db-gate.yaml",
+          "generator_misses": [
+            "fault gate unrelated_edit: another record in the slice edited (the copy holds no other record to edit) (untestable)",
+            "fault gate side_write: a row in another table added for the saved record (no subject_field: which column of the other tables names the saved record is unknown) (untestable)"
+          ],
+          "generator_output": "Record check: DRAFT (not working)\n  read metadata: table metadata -> no row added\n  read records: table records -> saved record\n  read records.content: table records, compared by content -> no record changed or removed\n  read records_all: table records, every row -> saved record\n  read records_all.content: table records, every row, compared by content -> no record changed or removed\nFault test: 27 of 27 bad writes caught; clean save passed\n  MISS: fault gate unrelated_edit: another record in the slice edited (the copy holds no other record to edit) (untestable)\n  MISS: fault gate side_write: a row in another table added for the saved record (no subject_field: which column of the other tables names the saved record is unknown) (untestable)\nWrote <work>/out-Z-db-gate/record_check.proposed.yaml and <work>/out-Z-db-gate/record_check.proof.json\nNext: fix the misses above, then run scaffold-verifier again.",
+          "generator_status": "draft",
+          "inputs": [
+            "events.jsonl",
+            "meta.json params",
+            "network.jsonl",
+            "--db <store file>",
+            "--fault-gate"
+          ],
+          "kill_check": {
+            "failed": [],
+            "ready": true
+          },
+          "parse_error": null,
+          "read_discovery": null,
+          "runnable": true,
+          "tally": {
+            "per_fault": {
+              "collateral": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "double": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "duplicate": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "idempotent": {
+                "runs": 3,
+                "true_accept": 3
+              },
+              "ok": {
+                "runs": 6,
+                "true_accept": 6
+              },
+              "optimistic": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "partial": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "session": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "stale": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "timeout": {
+                "runs": 3,
+                "true_accept": 3
+              }
+            },
+            "total": {
+              "correct_runs": 12,
+              "false_accept": 0,
+              "false_reject": 0,
+              "indeterminate": 0,
+              "runs": 33,
+              "true_accept": 12,
+              "true_reject": 21,
+              "wrong_runs": 21
+            }
+          }
+        },
+        "Z-net": {
+          "class": "zero-config",
+          "generated_file": "generated/mockloan.Z-net.yaml",
+          "generator_misses": [],
+          "generator_output": "No read in the recording returns the saved record (no network capture, --db or --verifier), so this is a TODO draft.\nDraft written to <work>/out-Z-net/effect_contract.yaml (1 write-shaped step(s))\n\nThis is a DRAFT oracle, not an approved contract: it verifies nothing until a\nperson resolves every TODO, wires the deployment section, and qualifies the\nbundle.\n\nNext commands:\n  1. edit <work>/out-Z-net/effect_contract.yaml\n  2. openadapt-flow lint <bundle-dir>\n  3. openadapt-flow certify <bundle-dir> --policy <policy>\n  4. openadapt-flow qualify init <bundle-dir> --target <surface> ...",
+          "generator_status": "todo-draft",
+          "inputs": [
+            "events.jsonl",
+            "meta.json params",
+            "network.jsonl (app's own traffic)"
+          ],
+          "kill_check": {
+            "failed": [
+              "no runnable verifier"
+            ],
+            "ready": false
+          },
+          "parse_error": "VerifyRunError: invalid effect_contract.yaml: 7 validation errors for VerifyConfig\nverifier\n  Field required [type=missing, input_value={'workflow': 'rec-plain',...cords_key': 'records'}}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/missing\nworkflow\n  Extra inputs are not permitted [type=extra_forbidden, input_value='rec-plain', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden\nsource\n  Extra inputs are not permitted [type=extra_forbidden, input_value='<work>', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden\nsource_kind\n  Extra inputs are not permitted [type=extra_forbidden, input_value='recording', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden\ndraft_status\n  Extra inputs are not permitted [type=extra_forbidden, input_value='requires-human-edit', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden\nsteps\n  Extra inputs are not permitted [type=extra_forbidden, input_value=[{'step_id': 'step_007', ...uthorize Disbursement'}], input_type=list]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden\ndeployment\n  Extra inputs are not permitted [type=extra_forbidden, input_value={'effects': {'kind': 'res...ecords_key': 'records'}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden",
+          "read_discovery": null,
+          "runnable": false
+        },
+        "Z-net-probed": {
+          "class": "zero-config",
+          "generated_file": "generated/mockloan.Z-net-probed.yaml",
+          "generator_misses": [],
+          "generator_output": "Read discovery: REFUSED. A probed read confirmed the written values but can't see the whole save, so no check was written: the probed read /api/disbursements covers only the written collection, and a write outside it would pass the check (collateral_unaudited: a stray row written to a table this check does not read). No runnable check was written; confirm the read covers everything the save can change (--complete-read), give --db, or name a fuller read (<work>/out-Z-net-probed/read_discovery.json).\nNo read in the recording returns the saved record (no network capture, --db or --verifier), so this is a TODO draft.\nDraft written to <work>/out-Z-net-probed/effect_contract.yaml (1 write-shaped step(s))\n\nThis is a DRAFT oracle, not an approved contract: it verifies nothing until a\nperson resolves every TODO, wires the deployment section, and qualifies the\nbundle.\n\nNext commands:\n  1. edit <work>/out-Z-net-probed/effect_contract.yaml\n  2. openadapt-flow lint <bundle-dir>\n  3. openadapt-flow certify <bundle-dir> --policy <policy>\n  4. openadapt-flow qualify init <bundle-dir> --target <surface> ...",
+          "generator_status": "todo-draft",
+          "inputs": [
+            "events.jsonl",
+            "meta.json params",
+            "network.jsonl (app's own traffic)",
+            "--probe-reads (GET probes on the local fixture after the save)"
+          ],
+          "kill_check": {
+            "failed": [
+              "no runnable verifier"
+            ],
+            "ready": false
+          },
+          "parse_error": "VerifyRunError: invalid effect_contract.yaml: 7 validation errors for VerifyConfig\nverifier\n  Field required [type=missing, input_value={'workflow': 'rec-plain',...cords_key': 'records'}}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/missing\nworkflow\n  Extra inputs are not permitted [type=extra_forbidden, input_value='rec-plain', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden\nsource\n  Extra inputs are not permitted [type=extra_forbidden, input_value='<work>', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden\nsource_kind\n  Extra inputs are not permitted [type=extra_forbidden, input_value='recording', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden\ndraft_status\n  Extra inputs are not permitted [type=extra_forbidden, input_value='requires-human-edit', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden\nsteps\n  Extra inputs are not permitted [type=extra_forbidden, input_value=[{'step_id': 'step_007', ...uthorize Disbursement'}], input_type=list]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden\ndeployment\n  Extra inputs are not permitted [type=extra_forbidden, input_value={'effects': {'kind': 'res...ecords_key': 'records'}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden",
+          "read_discovery": {
+            "method": "GET only, local machine only, after the save",
+            "needs_operator_confirmation": true,
+            "probes": [
+              {
+                "kind": "collection",
+                "method": "GET",
+                "outcome": "no read here",
+                "path": "/api/disbursement",
+                "status": 404
+              },
+              {
+                "confirmed_fields": [
+                  "amount",
+                  "loan_id",
+                  "memo",
+                  "product"
+                ],
+                "kind": "collection",
+                "method": "GET",
+                "outcome": "confirmed: holds a record with every written value",
+                "path": "/api/disbursements",
+                "status": 200
+              }
+            ],
+            "read": "/api/disbursements",
+            "reason": "the probed read /api/disbursements covers only the written collection, and a write outside it would pass the check (collateral_unaudited: a stray row written to a table this check does not read). No runnable check was written; confirm the read covers everything the save can change (--complete-read), give --db, or name a fuller read",
+            "schema": "openadapt.read-discovery/v1",
+            "status": "refused",
+            "surface": "api_disbursements"
+          },
+          "runnable": false
+        },
+        "Z-net-read": {
+          "class": "zero-config",
+          "generated_file": "generated/mockloan.Z-net-read.yaml",
+          "generator_misses": [
+            "collateral_unaudited: a stray row written to a table this check does not read (the check reads only api_db; a write anywhere else passes it (give a database read path with --db, or more reads))"
+          ],
+          "generator_output": "Record check: DRAFT (not working)\n  read api_db: GET /api/db (t=3.826) -> saved record\n  read api_db.content: GET /api/db (t=3.826), compared by content -> no record changed or removed\nFault test: 12 of 13 bad writes caught; clean save passed\n  MISS: collateral_unaudited: a stray row written to a table this check does not read (the check reads only api_db; a write anywhere else passes it (give a database read path with --db, or more reads))\nWrote <work>/out-Z-net-read/record_check.proposed.yaml and <work>/out-Z-net-read/record_check.proof.json\nNext: fix the misses above, then run scaffold-verifier again.",
+          "generator_status": "draft",
+          "inputs": [
+            "events.jsonl",
+            "meta.json params",
+            "network.jsonl (app traffic plus GET /api/db before and after the save)"
+          ],
+          "kill_check": {
+            "failed": [],
+            "ready": true
+          },
+          "parse_error": null,
+          "read_discovery": null,
+          "runnable": true,
+          "tally": {
+            "per_fault": {
+              "collateral": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "double": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "duplicate": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "idempotent": {
+                "runs": 3,
+                "true_accept": 3
+              },
+              "ok": {
+                "runs": 6,
+                "true_accept": 6
+              },
+              "optimistic": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "partial": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "session": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "stale": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "timeout": {
+                "runs": 3,
+                "true_accept": 3
+              }
+            },
+            "total": {
+              "correct_runs": 12,
+              "false_accept": 0,
+              "false_reject": 0,
+              "indeterminate": 0,
+              "runs": 33,
+              "true_accept": 12,
+              "true_reject": 21,
+              "wrong_runs": 21
+            }
+          }
+        }
+      },
+      "hand_written": {
+        "file": "environments/openenv/mockloan/verify.yaml",
+        "tally": {
+          "per_fault": {
+            "collateral": {
+              "indeterminate": 3,
+              "runs": 3,
+              "true_reject": 3
+            },
+            "double": {
+              "indeterminate": 3,
+              "runs": 3,
+              "true_reject": 3
+            },
+            "duplicate": {
+              "indeterminate": 3,
+              "runs": 3,
+              "true_reject": 3
+            },
+            "idempotent": {
+              "false_reject": 3,
+              "indeterminate": 3,
+              "runs": 3
+            },
+            "ok": {
+              "false_reject": 6,
+              "indeterminate": 6,
+              "runs": 6
+            },
+            "optimistic": {
+              "indeterminate": 3,
+              "runs": 3,
+              "true_reject": 3
+            },
+            "partial": {
+              "indeterminate": 3,
+              "runs": 3,
+              "true_reject": 3
+            },
+            "session": {
+              "indeterminate": 3,
+              "runs": 3,
+              "true_reject": 3
+            },
+            "stale": {
+              "indeterminate": 3,
+              "runs": 3,
+              "true_reject": 3
+            },
+            "timeout": {
+              "false_reject": 3,
+              "indeterminate": 3,
+              "runs": 3
+            }
+          },
+          "total": {
+            "correct_runs": 12,
+            "false_accept": 0,
+            "false_reject": 12,
+            "indeterminate": 33,
+            "runs": 33,
+            "true_accept": 0,
+            "true_reject": 21,
+            "wrong_runs": 21
+          }
+        }
+      },
+      "hand_written_complete": {
+        "file": "the same file plus records_complete: true",
+        "tally": {
+          "per_fault": {
+            "collateral": {
+              "runs": 3,
+              "true_reject": 3
+            },
+            "double": {
+              "runs": 3,
+              "true_reject": 3
+            },
+            "duplicate": {
+              "runs": 3,
+              "true_reject": 3
+            },
+            "idempotent": {
+              "runs": 3,
+              "true_accept": 3
+            },
+            "ok": {
+              "runs": 6,
+              "true_accept": 6
+            },
+            "optimistic": {
+              "runs": 3,
+              "true_reject": 3
+            },
+            "partial": {
+              "runs": 3,
+              "true_reject": 3
+            },
+            "session": {
+              "runs": 3,
+              "true_reject": 3
+            },
+            "stale": {
+              "runs": 3,
+              "true_reject": 3
+            },
+            "timeout": {
+              "runs": 3,
+              "true_accept": 3
+            }
+          },
+          "total": {
+            "correct_runs": 12,
+            "false_accept": 0,
+            "false_reject": 0,
+            "indeterminate": 0,
+            "runs": 33,
+            "true_accept": 12,
+            "true_reject": 21,
+            "wrong_runs": 21
+          }
+        }
+      },
+      "held_out": true,
+      "trials": [
+        {
+          "design_label_correct": true,
+          "fault": "ok",
+          "ground_truth_correct": true,
+          "ground_truth_reason": "exactly one new record with the task's values",
+          "label_agrees": true,
+          "params": {
+            "amount": "32000",
+            "loan_id": "L1002",
+            "memo": "Vehicle purchase, dealer invoice 4471",
+            "product": "Auto"
+          },
+          "seconds": 8.96,
+          "seed_concurrent": false,
+          "task": "mockloan-01",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-db": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-db-gate": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            }
+          }
+        },
+        {
+          "design_label_correct": true,
+          "fault": "ok",
+          "ground_truth_correct": true,
+          "ground_truth_reason": "exactly one new record with the task's values",
+          "label_agrees": true,
+          "params": {
+            "amount": "9500",
+            "loan_id": "L1003",
+            "memo": "Home repairs, roof contractor",
+            "product": "Personal"
+          },
+          "seconds": 9.0,
+          "seed_concurrent": false,
+          "task": "mockloan-02",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-db": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-db-gate": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            }
+          }
+        },
+        {
+          "design_label_correct": true,
+          "fault": "ok",
+          "ground_truth_correct": true,
+          "ground_truth_reason": "exactly one new record with the task's values",
+          "label_agrees": true,
+          "params": {
+            "amount": "18500",
+            "loan_id": "L1001",
+            "memo": "Second tranche, title received",
+            "product": "Auto"
+          },
+          "seconds": 8.97,
+          "seed_concurrent": false,
+          "task": "mockloan-03",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-db": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-db-gate": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            }
+          }
+        },
+        {
+          "design_label_correct": true,
+          "fault": "ok",
+          "ground_truth_correct": true,
+          "ground_truth_reason": "exactly one new record with the task's values",
+          "label_agrees": true,
+          "params": {
+            "amount": "32000",
+            "loan_id": "L1002",
+            "memo": "Debt consolidation, card payoff",
+            "product": "Personal"
+          },
+          "seconds": 8.97,
+          "seed_concurrent": true,
+          "task": "mockloan-04",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-db": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-db-gate": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            }
+          }
+        },
+        {
+          "design_label_correct": true,
+          "fault": "ok",
+          "ground_truth_correct": true,
+          "ground_truth_reason": "exactly one new record with the task's values",
+          "label_agrees": true,
+          "params": {
+            "amount": "9500",
+            "loan_id": "L1003",
+            "memo": "Used car, private sale",
+            "product": "Auto"
+          },
+          "seconds": 8.89,
+          "seed_concurrent": true,
+          "task": "mockloan-05",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-db": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-db-gate": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            }
+          }
+        },
+        {
+          "design_label_correct": true,
+          "fault": "ok",
+          "ground_truth_correct": true,
+          "ground_truth_reason": "exactly one new record with the task's values",
+          "label_agrees": true,
+          "params": {
+            "amount": "18500",
+            "loan_id": "L1001",
+            "memo": "Tuition payment, spring term",
+            "product": "Personal"
+          },
+          "seconds": 9.06,
+          "seed_concurrent": true,
+          "task": "mockloan-06",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-db": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-db-gate": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            }
+          }
+        },
+        {
+          "design_label_correct": true,
+          "fault": "idempotent",
+          "ground_truth_correct": true,
+          "ground_truth_reason": "exactly one new record with the task's values",
+          "label_agrees": true,
+          "params": {
+            "amount": "32000",
+            "loan_id": "L1002",
+            "memo": "Lease buyout, final payment",
+            "product": "Auto"
+          },
+          "seconds": 8.96,
+          "seed_concurrent": false,
+          "task": "mockloan-07",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-db": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-db-gate": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            }
+          }
+        },
+        {
+          "design_label_correct": true,
+          "fault": "idempotent",
+          "ground_truth_correct": true,
+          "ground_truth_reason": "exactly one new record with the task's values",
+          "label_agrees": true,
+          "params": {
+            "amount": "9500",
+            "loan_id": "L1003",
+            "memo": "Medical bills, clinic invoice",
+            "product": "Personal"
+          },
+          "seconds": 9.0,
+          "seed_concurrent": false,
+          "task": "mockloan-08",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-db": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-db-gate": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            }
+          }
+        },
+        {
+          "design_label_correct": true,
+          "fault": "idempotent",
+          "ground_truth_correct": true,
+          "ground_truth_reason": "exactly one new record with the task's values",
+          "label_agrees": true,
+          "params": {
+            "amount": "18500",
+            "loan_id": "L1001",
+            "memo": "Motorcycle purchase",
+            "product": "Auto"
+          },
+          "seconds": 8.96,
+          "seed_concurrent": true,
+          "task": "mockloan-09",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-db": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-db-gate": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            }
+          }
+        },
+        {
+          "design_label_correct": true,
+          "fault": "timeout",
+          "ground_truth_correct": true,
+          "ground_truth_reason": "exactly one new record with the task's values",
+          "label_agrees": true,
+          "params": {
+            "amount": "9500",
+            "loan_id": "L1003",
+            "memo": "Truck down payment",
+            "product": "Auto"
+          },
+          "seconds": 9.01,
+          "seed_concurrent": false,
+          "task": "mockloan-10",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-db": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-db-gate": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            }
+          }
+        },
+        {
+          "design_label_correct": true,
+          "fault": "timeout",
+          "ground_truth_correct": true,
+          "ground_truth_reason": "exactly one new record with the task's values",
+          "label_agrees": true,
+          "params": {
+            "amount": "18500",
+            "loan_id": "L1001",
+            "memo": "Wedding venue deposit",
+            "product": "Personal"
+          },
+          "seconds": 8.95,
+          "seed_concurrent": false,
+          "task": "mockloan-11",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-db": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-db-gate": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            }
+          }
+        },
+        {
+          "design_label_correct": true,
+          "fault": "timeout",
+          "ground_truth_correct": true,
+          "ground_truth_reason": "exactly one new record with the task's values",
+          "label_agrees": true,
+          "params": {
+            "amount": "32000",
+            "loan_id": "L1002",
+            "memo": "Moving costs, freight quote",
+            "product": "Personal"
+          },
+          "seconds": 8.99,
+          "seed_concurrent": true,
+          "task": "mockloan-12",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-db": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-db-gate": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "partial",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "new record's memo is not the task's value",
+          "label_agrees": true,
+          "params": {
+            "amount": "32000",
+            "loan_id": "L1002",
+            "memo": "Furniture order 2290",
+            "product": "Personal"
+          },
+          "seconds": 55.36,
+          "seed_concurrent": false,
+          "task": "mockloan-13",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db-gate": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "partial",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "new record's memo is not the task's value",
+          "label_agrees": true,
+          "params": {
+            "amount": "9500",
+            "loan_id": "L1003",
+            "memo": "Camper van purchase",
+            "product": "Auto"
+          },
+          "seconds": 54.99,
+          "seed_concurrent": false,
+          "task": "mockloan-14",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db-gate": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "partial",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "new record's memo is not the task's value",
+          "label_agrees": true,
+          "params": {
+            "amount": "18500",
+            "loan_id": "L1001",
+            "memo": "Fleet vehicle, unit 7",
+            "product": "Auto"
+          },
+          "seconds": 55.02,
+          "seed_concurrent": true,
+          "task": "mockloan-15",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db-gate": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "optimistic",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "0 new record(s)",
+          "label_agrees": true,
+          "params": {
+            "amount": "9500",
+            "loan_id": "L1003",
+            "memo": "Dental work, phase one",
+            "product": "Personal"
+          },
+          "seconds": 65.3,
+          "seed_concurrent": false,
+          "task": "mockloan-16",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db-gate": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "optimistic",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "0 new record(s)",
+          "label_agrees": true,
+          "params": {
+            "amount": "18500",
+            "loan_id": "L1001",
+            "memo": "Electric car, charger included",
+            "product": "Auto"
+          },
+          "seconds": 65.28,
+          "seed_concurrent": false,
+          "task": "mockloan-17",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db-gate": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "optimistic",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "0 new record(s)",
+          "label_agrees": true,
+          "params": {
+            "amount": "32000",
+            "loan_id": "L1002",
+            "memo": "Boat trailer purchase",
+            "product": "Auto"
+          },
+          "seconds": 65.18,
+          "seed_concurrent": true,
+          "task": "mockloan-18",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db-gate": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "session",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "0 new record(s)",
+          "label_agrees": true,
+          "params": {
+            "amount": "18500",
+            "loan_id": "L1001",
+            "memo": "Bridge loan, closing costs",
+            "product": "Personal"
+          },
+          "seconds": 55.01,
+          "seed_concurrent": false,
+          "task": "mockloan-19",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db-gate": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "session",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "0 new record(s)",
+          "label_agrees": true,
+          "params": {
+            "amount": "32000",
+            "loan_id": "L1002",
+            "memo": "Hybrid sedan purchase",
+            "product": "Auto"
+          },
+          "seconds": 54.8,
+          "seed_concurrent": false,
+          "task": "mockloan-20",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db-gate": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "session",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "0 new record(s)",
+          "label_agrees": true,
+          "params": {
+            "amount": "9500",
+            "loan_id": "L1003",
+            "memo": "Solar panels, installer deposit",
+            "product": "Personal"
+          },
+          "seconds": 54.6,
+          "seed_concurrent": true,
+          "task": "mockloan-21",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db-gate": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "duplicate",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "2 new record(s)",
+          "label_agrees": true,
+          "params": {
+            "amount": "9500",
+            "loan_id": "L1003",
+            "memo": "Delivery van, invoice 882",
+            "product": "Auto"
+          },
+          "seconds": 54.94,
+          "seed_concurrent": false,
+          "task": "mockloan-22",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db-gate": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "duplicate",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "2 new record(s)",
+          "label_agrees": true,
+          "params": {
+            "amount": "32000",
+            "loan_id": "L1002",
+            "memo": "Home office equipment",
+            "product": "Personal"
+          },
+          "seconds": 55.25,
+          "seed_concurrent": false,
+          "task": "mockloan-23",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db-gate": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "duplicate",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "2 new record(s)",
+          "label_agrees": true,
+          "params": {
+            "amount": "18500",
+            "loan_id": "L1001",
+            "memo": "Business licence fees",
+            "product": "Personal"
+          },
+          "seconds": 55.12,
+          "seed_concurrent": true,
+          "task": "mockloan-24",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db-gate": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "double",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "2 new record(s)",
+          "label_agrees": true,
+          "params": {
+            "amount": "32000",
+            "loan_id": "L1002",
+            "memo": "Pickup truck, trade-in applied",
+            "product": "Auto"
+          },
+          "seconds": 55.35,
+          "seed_concurrent": false,
+          "task": "mockloan-25",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db-gate": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "double",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "2 new record(s)",
+          "label_agrees": true,
+          "params": {
+            "amount": "9500",
+            "loan_id": "L1003",
+            "memo": "Vet bills, emergency visit",
+            "product": "Personal"
+          },
+          "seconds": 55.01,
+          "seed_concurrent": false,
+          "task": "mockloan-26",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db-gate": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "double",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "2 new record(s)",
+          "label_agrees": true,
+          "params": {
+            "amount": "18500",
+            "loan_id": "L1001",
+            "memo": "Compact car, cash balance",
+            "product": "Auto"
+          },
+          "seconds": 54.97,
+          "seed_concurrent": true,
+          "task": "mockloan-27",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db-gate": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "stale",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "1 existing record(s) lost or changed",
+          "label_agrees": true,
+          "params": {
+            "amount": "18500",
+            "loan_id": "L1001",
+            "memo": "Renovation draw two",
+            "product": "Personal"
+          },
+          "seconds": 49.97,
+          "seed_concurrent": true,
+          "task": "mockloan-28",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db-gate": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "stale",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "1 existing record(s) lost or changed",
+          "label_agrees": true,
+          "params": {
+            "amount": "18500",
+            "loan_id": "L1001",
+            "memo": "Replacement vehicle after accident",
+            "product": "Auto"
+          },
+          "seconds": 50.25,
+          "seed_concurrent": true,
+          "task": "mockloan-29",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db-gate": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "stale",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "1 existing record(s) lost or changed",
+          "label_agrees": true,
+          "params": {
+            "amount": "18500",
+            "loan_id": "L1001",
+            "memo": "Inventory purchase, spring stock",
+            "product": "Personal"
+          },
+          "seconds": 50.02,
+          "seed_concurrent": true,
+          "task": "mockloan-30",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db-gate": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "collateral",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "2 new record(s)",
+          "label_agrees": true,
+          "params": {
+            "amount": "32000",
+            "loan_id": "L1002",
+            "memo": "Course fees, evening classes",
+            "product": "Personal"
+          },
+          "seconds": 49.68,
+          "seed_concurrent": false,
+          "task": "mockloan-31",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db-gate": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "collateral",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "2 new record(s)",
+          "label_agrees": true,
+          "params": {
+            "amount": "9500",
+            "loan_id": "L1003",
+            "memo": "Classic car restoration",
+            "product": "Auto"
+          },
+          "seconds": 49.83,
+          "seed_concurrent": false,
+          "task": "mockloan-32",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db-gate": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "collateral",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "2 new record(s)",
+          "label_agrees": true,
+          "params": {
+            "amount": "18500",
+            "loan_id": "L1001",
+            "memo": "Kitchen appliances",
+            "product": "Personal"
+          },
+          "seconds": 50.01,
+          "seed_concurrent": true,
+          "task": "mockloan-33",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-db-gate": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        }
+      ]
+    },
+    "mockmed": {
+      "arms": {
+        "D-net-read-complete": {
+          "class": "declared",
+          "generated_file": "generated/mockmed.D-net-read-complete.yaml",
+          "generator_misses": [],
+          "generator_output": "Record check: WORKING (not approved)\n  read api_db: GET /api/db (t=3.769) -> saved record\n  read api_db.content: GET /api/db (t=3.769), compared by content -> no record changed or removed\nFault test: 10 of 10 bad writes caught; clean save passed\nWrote <work>/out-D-net-read-complete/record_check.proposed.yaml and <work>/out-D-net-read-complete/record_check.proof.json\nNext: a person reviews it and deletes each `needs_operator_confirmation: true` line, then `openadapt-flow qualify <bundle> --verify record_check.proposed.yaml`.",
+          "generator_status": "working",
+          "inputs": [
+            "Z-net-read inputs",
+            "--complete-read (a person's statement)"
+          ],
+          "kill_check": {
+            "failed": [],
+            "ready": true
+          },
+          "parse_error": null,
+          "read_discovery": null,
+          "runnable": true,
+          "tally": {
+            "per_fault": {
+              "double": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "duplicate": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "idempotent": {
+                "runs": 3,
+                "true_accept": 3
+              },
+              "no_persist": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "ok": {
+                "runs": 6,
+                "true_accept": 6
+              },
+              "optimistic": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "partial": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "session": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "stale": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "timeout": {
+                "runs": 3,
+                "true_accept": 3
+              },
+              "wrong_record": {
+                "runs": 3,
+                "true_reject": 3
+              }
+            },
+            "total": {
+              "correct_runs": 12,
+              "false_accept": 0,
+              "false_reject": 0,
+              "indeterminate": 0,
+              "runs": 36,
+              "true_accept": 12,
+              "true_reject": 24,
+              "wrong_runs": 24
+            }
+          }
+        },
+        "P-record-verify": {
+          "class": "read-path-given",
+          "generated_file": "generated/mockmed.P-record-verify.yaml",
+          "generator_misses": [],
+          "generator_output": "",
+          "generator_status": "proposed",
+          "inputs": [
+            "verifier: read path from the hand-written verify.yaml",
+            "before/after reads around the demonstration",
+            "meta.json params"
+          ],
+          "kill_check": {
+            "failed": [],
+            "ready": true
+          },
+          "parse_error": null,
+          "read_discovery": null,
+          "runnable": true,
+          "tally": {
+            "per_fault": {
+              "double": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "duplicate": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "idempotent": {
+                "runs": 3,
+                "true_accept": 3
+              },
+              "no_persist": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "ok": {
+                "runs": 6,
+                "true_accept": 6
+              },
+              "optimistic": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "partial": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "session": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "stale": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "timeout": {
+                "runs": 3,
+                "true_accept": 3
+              },
+              "wrong_record": {
+                "runs": 3,
+                "true_reject": 3
+              }
+            },
+            "total": {
+              "correct_runs": 12,
+              "false_accept": 0,
+              "false_reject": 0,
+              "indeterminate": 0,
+              "runs": 36,
+              "true_accept": 12,
+              "true_reject": 24,
+              "wrong_runs": 24
+            }
+          }
+        },
+        "P-scaffold-verifier": {
+          "class": "read-path-given",
+          "generated_file": "generated/mockmed.P-scaffold-verifier.yaml",
+          "generator_misses": [
+            "collateral_unaudited: a stray row written to a table this check does not read (the check reads only rest_read; a write anywhere else passes it (give a database read path with --db, or more reads))"
+          ],
+          "generator_output": "Record check: DRAFT (not working)\n  read rest_read: the rest verifier section -> saved record\n  read rest_read.content: the rest verifier section, compared by content -> no record changed or removed\nFault test: 10 of 11 bad writes caught; clean save passed\n  MISS: collateral_unaudited: a stray row written to a table this check does not read (the check reads only rest_read; a write anywhere else passes it (give a database read path with --db, or more reads))\nWrote <work>/out-P-scaffold-verifier/record_check.proposed.yaml and <work>/out-P-scaffold-verifier/record_check.proof.json\nNext: fix the misses above, then run scaffold-verifier again.",
+          "generator_status": "draft",
+          "inputs": [
+            "verifier: read path from the hand-written verify.yaml",
+            "events.jsonl with sor_before/sor_after",
+            "sor_snapshots.json",
+            "meta.json params",
+            "network.jsonl"
+          ],
+          "kill_check": {
+            "failed": [],
+            "ready": true
+          },
+          "parse_error": null,
+          "read_discovery": null,
+          "runnable": true,
+          "tally": {
+            "per_fault": {
+              "double": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "duplicate": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "idempotent": {
+                "runs": 3,
+                "true_accept": 3
+              },
+              "no_persist": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "ok": {
+                "runs": 6,
+                "true_accept": 6
+              },
+              "optimistic": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "partial": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "session": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "stale": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "timeout": {
+                "runs": 3,
+                "true_accept": 3
+              },
+              "wrong_record": {
+                "runs": 3,
+                "true_reject": 3
+              }
+            },
+            "total": {
+              "correct_runs": 12,
+              "false_accept": 0,
+              "false_reject": 0,
+              "indeterminate": 0,
+              "runs": 36,
+              "true_accept": 12,
+              "true_reject": 24,
+              "wrong_runs": 24
+            }
+          }
+        },
+        "Z-db": {
+          "class": "zero-config",
+          "generator_misses": [],
+          "generator_output": "the fault server keeps its store in memory: no database file",
+          "generator_status": "not-applicable",
+          "inputs": [
+            "events.jsonl",
+            "meta.json params",
+            "network.jsonl",
+            "--db <store file>"
+          ],
+          "kill_check": {
+            "failed": [
+              "no runnable verifier"
+            ],
+            "ready": false
+          },
+          "parse_error": null,
+          "read_discovery": null,
+          "runnable": false
+        },
+        "Z-db-gate": {
+          "class": "zero-config",
+          "generator_misses": [],
+          "generator_output": "the fault server keeps its store in memory: no database file",
+          "generator_status": "not-applicable",
+          "inputs": [
+            "events.jsonl",
+            "meta.json params",
+            "network.jsonl",
+            "--db <store file>",
+            "--fault-gate"
+          ],
+          "kill_check": {
+            "failed": [
+              "no runnable verifier"
+            ],
+            "ready": false
+          },
+          "parse_error": null,
+          "read_discovery": null,
+          "runnable": false
+        },
+        "Z-net": {
+          "class": "zero-config",
+          "generated_file": "generated/mockmed.Z-net.yaml",
+          "generator_misses": [],
+          "generator_output": "No read in the recording returns the saved record (no network capture, --db or --verifier), so this is a TODO draft.\nDraft written to <work>/out-Z-net/effect_contract.yaml (1 write-shaped step(s))\n\nThis is a DRAFT oracle, not an approved contract: it verifies nothing until a\nperson resolves every TODO, wires the deployment section, and qualifies the\nbundle.\n\nNext commands:\n  1. edit <work>/out-Z-net/effect_contract.yaml\n  2. openadapt-flow lint <bundle-dir>\n  3. openadapt-flow certify <bundle-dir> --policy <policy>\n  4. openadapt-flow qualify init <bundle-dir> --target <surface> ...",
+          "generator_status": "todo-draft",
+          "inputs": [
+            "events.jsonl",
+            "meta.json params",
+            "network.jsonl (app's own traffic)"
+          ],
+          "kill_check": {
+            "failed": [
+              "no runnable verifier"
+            ],
+            "ready": false
+          },
+          "parse_error": "VerifyRunError: invalid effect_contract.yaml: 7 validation errors for VerifyConfig\nverifier\n  Field required [type=missing, input_value={'workflow': 'rec-plain',...cords_key': 'records'}}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/missing\nworkflow\n  Extra inputs are not permitted [type=extra_forbidden, input_value='rec-plain', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden\nsource\n  Extra inputs are not permitted [type=extra_forbidden, input_value='<work>', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden\nsource_kind\n  Extra inputs are not permitted [type=extra_forbidden, input_value='recording', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden\ndraft_status\n  Extra inputs are not permitted [type=extra_forbidden, input_value='requires-human-edit', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden\nsteps\n  Extra inputs are not permitted [type=extra_forbidden, input_value=[{'step_id': 'step_007', ...ounter Save Encounter'}], input_type=list]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden\ndeployment\n  Extra inputs are not permitted [type=extra_forbidden, input_value={'effects': {'kind': 'res...ecords_key': 'records'}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden",
+          "read_discovery": null,
+          "runnable": false
+        },
+        "Z-net-probed": {
+          "class": "zero-config",
+          "generated_file": "generated/mockmed.Z-net-probed.yaml",
+          "generator_misses": [],
+          "generator_output": "Read discovery: UNAVAILABLE. No probed read confirmed the written values, so no read was proposed; a person must name one (<work>/out-Z-net-probed/read_discovery.json).\nNo read in the recording returns the saved record (no network capture, --db or --verifier), so this is a TODO draft.\nDraft written to <work>/out-Z-net-probed/effect_contract.yaml (1 write-shaped step(s))\n\nThis is a DRAFT oracle, not an approved contract: it verifies nothing until a\nperson resolves every TODO, wires the deployment section, and qualifies the\nbundle.\n\nNext commands:\n  1. edit <work>/out-Z-net-probed/effect_contract.yaml\n  2. openadapt-flow lint <bundle-dir>\n  3. openadapt-flow certify <bundle-dir> --policy <policy>\n  4. openadapt-flow qualify init <bundle-dir> --target <surface> ...",
+          "generator_status": "todo-draft",
+          "inputs": [
+            "events.jsonl",
+            "meta.json params",
+            "network.jsonl (app's own traffic)",
+            "--probe-reads (GET probes on the local fixture after the save)"
+          ],
+          "kill_check": {
+            "failed": [
+              "no runnable verifier"
+            ],
+            "ready": false
+          },
+          "parse_error": "VerifyRunError: invalid effect_contract.yaml: 7 validation errors for VerifyConfig\nverifier\n  Field required [type=missing, input_value={'workflow': 'rec-plain',...cords_key': 'records'}}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/missing\nworkflow\n  Extra inputs are not permitted [type=extra_forbidden, input_value='rec-plain', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden\nsource\n  Extra inputs are not permitted [type=extra_forbidden, input_value='<work>', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden\nsource_kind\n  Extra inputs are not permitted [type=extra_forbidden, input_value='recording', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden\ndraft_status\n  Extra inputs are not permitted [type=extra_forbidden, input_value='requires-human-edit', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden\nsteps\n  Extra inputs are not permitted [type=extra_forbidden, input_value=[{'step_id': 'step_007', ...ounter Save Encounter'}], input_type=list]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden\ndeployment\n  Extra inputs are not permitted [type=extra_forbidden, input_value={'effects': {'kind': 'res...ecords_key': 'records'}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden",
+          "read_discovery": {
+            "method": "GET only, local machine only, after the save",
+            "needs_operator_confirmation": true,
+            "probes": [
+              {
+                "kind": "collection",
+                "method": "GET",
+                "outcome": "no read here",
+                "path": "/api/encounter",
+                "status": 404
+              },
+              {
+                "kind": "collection",
+                "method": "GET",
+                "outcome": "no read here",
+                "path": "/api/encounters",
+                "status": 404
+              },
+              {
+                "kind": "item",
+                "method": "GET",
+                "outcome": "no read here",
+                "path": "/api/encounter/1",
+                "status": 404
+              },
+              {
+                "kind": "item",
+                "method": "GET",
+                "outcome": "no read here",
+                "path": "/api/encounters/1",
+                "status": 404
+              }
+            ],
+            "reason": "no probed collection read returned a record with every written value; a person must name the read",
+            "schema": "openadapt.read-discovery/v1",
+            "status": "unavailable"
+          },
+          "runnable": false
+        },
+        "Z-net-read": {
+          "class": "zero-config",
+          "generated_file": "generated/mockmed.Z-net-read.yaml",
+          "generator_misses": [
+            "collateral_unaudited: a stray row written to a table this check does not read (the check reads only api_db; a write anywhere else passes it (give a database read path with --db, or more reads))"
+          ],
+          "generator_output": "Record check: DRAFT (not working)\n  read api_db: GET /api/db (t=3.769) -> saved record\n  read api_db.content: GET /api/db (t=3.769), compared by content -> no record changed or removed\nFault test: 10 of 11 bad writes caught; clean save passed\n  MISS: collateral_unaudited: a stray row written to a table this check does not read (the check reads only api_db; a write anywhere else passes it (give a database read path with --db, or more reads))\nWrote <work>/out-Z-net-read/record_check.proposed.yaml and <work>/out-Z-net-read/record_check.proof.json\nNext: fix the misses above, then run scaffold-verifier again.",
+          "generator_status": "draft",
+          "inputs": [
+            "events.jsonl",
+            "meta.json params",
+            "network.jsonl (app traffic plus GET /api/db before and after the save)"
+          ],
+          "kill_check": {
+            "failed": [],
+            "ready": true
+          },
+          "parse_error": null,
+          "read_discovery": null,
+          "runnable": true,
+          "tally": {
+            "per_fault": {
+              "double": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "duplicate": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "idempotent": {
+                "runs": 3,
+                "true_accept": 3
+              },
+              "no_persist": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "ok": {
+                "runs": 6,
+                "true_accept": 6
+              },
+              "optimistic": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "partial": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "session": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "stale": {
+                "runs": 3,
+                "true_reject": 3
+              },
+              "timeout": {
+                "runs": 3,
+                "true_accept": 3
+              },
+              "wrong_record": {
+                "runs": 3,
+                "true_reject": 3
+              }
+            },
+            "total": {
+              "correct_runs": 12,
+              "false_accept": 0,
+              "false_reject": 0,
+              "indeterminate": 0,
+              "runs": 36,
+              "true_accept": 12,
+              "true_reject": 24,
+              "wrong_runs": 24
+            }
+          }
+        }
+      },
+      "hand_written": {
+        "file": "environments/openenv/mockmed/verify.yaml",
+        "tally": {
+          "per_fault": {
+            "double": {
+              "indeterminate": 3,
+              "runs": 3,
+              "true_reject": 3
+            },
+            "duplicate": {
+              "indeterminate": 3,
+              "runs": 3,
+              "true_reject": 3
+            },
+            "idempotent": {
+              "false_reject": 3,
+              "indeterminate": 3,
+              "runs": 3
+            },
+            "no_persist": {
+              "indeterminate": 3,
+              "runs": 3,
+              "true_reject": 3
+            },
+            "ok": {
+              "false_reject": 6,
+              "indeterminate": 6,
+              "runs": 6
+            },
+            "optimistic": {
+              "indeterminate": 3,
+              "runs": 3,
+              "true_reject": 3
+            },
+            "partial": {
+              "indeterminate": 3,
+              "runs": 3,
+              "true_reject": 3
+            },
+            "session": {
+              "indeterminate": 3,
+              "runs": 3,
+              "true_reject": 3
+            },
+            "stale": {
+              "indeterminate": 3,
+              "runs": 3,
+              "true_reject": 3
+            },
+            "timeout": {
+              "false_reject": 3,
+              "indeterminate": 3,
+              "runs": 3
+            },
+            "wrong_record": {
+              "indeterminate": 3,
+              "runs": 3,
+              "true_reject": 3
+            }
+          },
+          "total": {
+            "correct_runs": 12,
+            "false_accept": 0,
+            "false_reject": 12,
+            "indeterminate": 36,
+            "runs": 36,
+            "true_accept": 0,
+            "true_reject": 24,
+            "wrong_runs": 24
+          }
+        }
+      },
+      "hand_written_complete": {
+        "file": "the same file plus records_complete: true",
+        "tally": {
+          "per_fault": {
+            "double": {
+              "runs": 3,
+              "true_reject": 3
+            },
+            "duplicate": {
+              "runs": 3,
+              "true_reject": 3
+            },
+            "idempotent": {
+              "runs": 3,
+              "true_accept": 3
+            },
+            "no_persist": {
+              "runs": 3,
+              "true_reject": 3
+            },
+            "ok": {
+              "runs": 6,
+              "true_accept": 6
+            },
+            "optimistic": {
+              "runs": 3,
+              "true_reject": 3
+            },
+            "partial": {
+              "runs": 3,
+              "true_reject": 3
+            },
+            "session": {
+              "runs": 3,
+              "true_reject": 3
+            },
+            "stale": {
+              "runs": 3,
+              "true_reject": 3
+            },
+            "timeout": {
+              "runs": 3,
+              "true_accept": 3
+            },
+            "wrong_record": {
+              "runs": 3,
+              "true_reject": 3
+            }
+          },
+          "total": {
+            "correct_runs": 12,
+            "false_accept": 0,
+            "false_reject": 0,
+            "indeterminate": 0,
+            "runs": 36,
+            "true_accept": 12,
+            "true_reject": 24,
+            "wrong_runs": 24
+          }
+        }
+      },
+      "held_out": false,
+      "trials": [
+        {
+          "design_label_correct": true,
+          "fault": "ok",
+          "ground_truth_correct": true,
+          "ground_truth_reason": "exactly one new record with the task's values",
+          "label_agrees": true,
+          "params": {
+            "note": "Shoulder strain, physio twice weekly",
+            "patient_id": "p2",
+            "type": "Consult"
+          },
+          "seconds": 9.01,
+          "seed_concurrent": false,
+          "task": "mockmed-01",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            }
+          }
+        },
+        {
+          "design_label_correct": true,
+          "fault": "ok",
+          "ground_truth_correct": true,
+          "ground_truth_reason": "exactly one new record with the task's values",
+          "label_agrees": true,
+          "params": {
+            "note": "Mild fever overnight, recheck tomorrow",
+            "patient_id": "p3",
+            "type": "Triage"
+          },
+          "seconds": 8.95,
+          "seed_concurrent": false,
+          "task": "mockmed-02",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            }
+          }
+        },
+        {
+          "design_label_correct": true,
+          "fault": "ok",
+          "ground_truth_correct": true,
+          "ground_truth_reason": "exactly one new record with the task's values",
+          "label_agrees": true,
+          "params": {
+            "note": "Asthma review, inhaler technique checked",
+            "patient_id": "p1",
+            "type": "Consult"
+          },
+          "seconds": 8.96,
+          "seed_concurrent": false,
+          "task": "mockmed-03",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            }
+          }
+        },
+        {
+          "design_label_correct": true,
+          "fault": "ok",
+          "ground_truth_correct": true,
+          "ground_truth_reason": "exactly one new record with the task's values",
+          "label_agrees": true,
+          "params": {
+            "note": "Ankle sprain, compression and elevation",
+            "patient_id": "p2",
+            "type": "Triage"
+          },
+          "seconds": 8.93,
+          "seed_concurrent": true,
+          "task": "mockmed-04",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            }
+          }
+        },
+        {
+          "design_label_correct": true,
+          "fault": "ok",
+          "ground_truth_correct": true,
+          "ground_truth_reason": "exactly one new record with the task's values",
+          "label_agrees": true,
+          "params": {
+            "note": "Eczema flare, steroid cream for 5 days",
+            "patient_id": "p3",
+            "type": "Consult"
+          },
+          "seconds": 8.94,
+          "seed_concurrent": true,
+          "task": "mockmed-05",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            }
+          }
+        },
+        {
+          "design_label_correct": true,
+          "fault": "ok",
+          "ground_truth_correct": true,
+          "ground_truth_reason": "exactly one new record with the task's values",
+          "label_agrees": true,
+          "params": {
+            "note": "Headache resolved, no further action",
+            "patient_id": "p1",
+            "type": "Triage"
+          },
+          "seconds": 8.94,
+          "seed_concurrent": true,
+          "task": "mockmed-06",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            }
+          }
+        },
+        {
+          "design_label_correct": true,
+          "fault": "idempotent",
+          "ground_truth_correct": true,
+          "ground_truth_reason": "exactly one new record with the task's values",
+          "label_agrees": true,
+          "params": {
+            "note": "Blood pressure log reviewed, no change",
+            "patient_id": "p2",
+            "type": "Consult"
+          },
+          "seconds": 8.98,
+          "seed_concurrent": false,
+          "task": "mockmed-07",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            }
+          }
+        },
+        {
+          "design_label_correct": true,
+          "fault": "idempotent",
+          "ground_truth_correct": true,
+          "ground_truth_reason": "exactly one new record with the task's values",
+          "label_agrees": true,
+          "params": {
+            "note": "Insect bite, antihistamine advised",
+            "patient_id": "p3",
+            "type": "Triage"
+          },
+          "seconds": 8.96,
+          "seed_concurrent": false,
+          "task": "mockmed-08",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            }
+          }
+        },
+        {
+          "design_label_correct": true,
+          "fault": "idempotent",
+          "ground_truth_correct": true,
+          "ground_truth_reason": "exactly one new record with the task's values",
+          "label_agrees": true,
+          "params": {
+            "note": "Sleep diary reviewed, follow up in 4 weeks",
+            "patient_id": "p1",
+            "type": "Consult"
+          },
+          "seconds": 8.93,
+          "seed_concurrent": true,
+          "task": "mockmed-09",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            }
+          }
+        },
+        {
+          "design_label_correct": true,
+          "fault": "timeout",
+          "ground_truth_correct": true,
+          "ground_truth_reason": "exactly one new record with the task's values",
+          "label_agrees": true,
+          "params": {
+            "note": "Thyroid results normal, annual recheck",
+            "patient_id": "p3",
+            "type": "Consult"
+          },
+          "seconds": 9.02,
+          "seed_concurrent": false,
+          "task": "mockmed-10",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            }
+          }
+        },
+        {
+          "design_label_correct": true,
+          "fault": "timeout",
+          "ground_truth_correct": true,
+          "ground_truth_reason": "exactly one new record with the task's values",
+          "label_agrees": true,
+          "params": {
+            "note": "Wrist pain after fall, x-ray requested",
+            "patient_id": "p1",
+            "type": "Triage"
+          },
+          "seconds": 8.94,
+          "seed_concurrent": false,
+          "task": "mockmed-11",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            }
+          }
+        },
+        {
+          "design_label_correct": true,
+          "fault": "timeout",
+          "ground_truth_correct": true,
+          "ground_truth_reason": "exactly one new record with the task's values",
+          "label_agrees": true,
+          "params": {
+            "note": "Cough for 3 days, no red flags",
+            "patient_id": "p2",
+            "type": "Triage"
+          },
+          "seconds": 8.92,
+          "seed_concurrent": true,
+          "task": "mockmed-12",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "CONFIRMED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "partial",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "new record's note is not the task's value",
+          "label_agrees": true,
+          "params": {
+            "note": "Back pain, heat pack and gentle stretches",
+            "patient_id": "p2",
+            "type": "Triage"
+          },
+          "seconds": 34.86,
+          "seed_concurrent": false,
+          "task": "mockmed-13",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "partial",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "new record's note is not the task's value",
+          "label_agrees": true,
+          "params": {
+            "note": "Migraine plan updated, triptan as needed",
+            "patient_id": "p3",
+            "type": "Consult"
+          },
+          "seconds": 34.74,
+          "seed_concurrent": false,
+          "task": "mockmed-14",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "partial",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "new record's note is not the task's value",
+          "label_agrees": true,
+          "params": {
+            "note": "Hay fever, nasal spray daily",
+            "patient_id": "p1",
+            "type": "Consult"
+          },
+          "seconds": 34.79,
+          "seed_concurrent": true,
+          "task": "mockmed-15",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "optimistic",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "0 new record(s)",
+          "label_agrees": true,
+          "params": {
+            "note": "Nosebleed stopped with pressure",
+            "patient_id": "p3",
+            "type": "Triage"
+          },
+          "seconds": 34.86,
+          "seed_concurrent": false,
+          "task": "mockmed-16",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "optimistic",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "0 new record(s)",
+          "label_agrees": true,
+          "params": {
+            "note": "Vitamin D low, supplement started",
+            "patient_id": "p1",
+            "type": "Consult"
+          },
+          "seconds": 34.84,
+          "seed_concurrent": false,
+          "task": "mockmed-17",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "optimistic",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "0 new record(s)",
+          "label_agrees": true,
+          "params": {
+            "note": "Knee brace fitted, review in 6 weeks",
+            "patient_id": "p2",
+            "type": "Consult"
+          },
+          "seconds": 34.81,
+          "seed_concurrent": true,
+          "task": "mockmed-18",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "session",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "0 new record(s)",
+          "label_agrees": true,
+          "params": {
+            "note": "Earache, drops for one week",
+            "patient_id": "p1",
+            "type": "Triage"
+          },
+          "seconds": 34.3,
+          "seed_concurrent": false,
+          "task": "mockmed-19",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "session",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "0 new record(s)",
+          "label_agrees": true,
+          "params": {
+            "note": "Diet review, dietitian referral",
+            "patient_id": "p2",
+            "type": "Consult"
+          },
+          "seconds": 34.79,
+          "seed_concurrent": false,
+          "task": "mockmed-20",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "session",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "0 new record(s)",
+          "label_agrees": true,
+          "params": {
+            "note": "Minor burn dressed, keep dry",
+            "patient_id": "p3",
+            "type": "Triage"
+          },
+          "seconds": 34.76,
+          "seed_concurrent": true,
+          "task": "mockmed-21",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "duplicate",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "2 new record(s)",
+          "label_agrees": true,
+          "params": {
+            "note": "Anaemia follow-up, iron continued",
+            "patient_id": "p3",
+            "type": "Consult"
+          },
+          "seconds": 34.81,
+          "seed_concurrent": false,
+          "task": "mockmed-22",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "duplicate",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "2 new record(s)",
+          "label_agrees": true,
+          "params": {
+            "note": "Sinus pressure, saline rinse",
+            "patient_id": "p2",
+            "type": "Triage"
+          },
+          "seconds": 34.76,
+          "seed_concurrent": false,
+          "task": "mockmed-23",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "duplicate",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "2 new record(s)",
+          "label_agrees": true,
+          "params": {
+            "note": "Bruised rib, simple analgesia",
+            "patient_id": "p1",
+            "type": "Triage"
+          },
+          "seconds": 34.72,
+          "seed_concurrent": true,
+          "task": "mockmed-24",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "double",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "2 new record(s)",
+          "label_agrees": true,
+          "params": {
+            "note": "Cholesterol recheck in 3 months",
+            "patient_id": "p2",
+            "type": "Consult"
+          },
+          "seconds": 34.8,
+          "seed_concurrent": false,
+          "task": "mockmed-25",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "double",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "2 new record(s)",
+          "label_agrees": true,
+          "params": {
+            "note": "Splinter removed, wound clean",
+            "patient_id": "p3",
+            "type": "Triage"
+          },
+          "seconds": 34.77,
+          "seed_concurrent": false,
+          "task": "mockmed-26",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "double",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "2 new record(s)",
+          "label_agrees": true,
+          "params": {
+            "note": "Smoking cessation plan agreed",
+            "patient_id": "p1",
+            "type": "Consult"
+          },
+          "seconds": 34.76,
+          "seed_concurrent": true,
+          "task": "mockmed-27",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "stale",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "1 existing record(s) lost or changed",
+          "label_agrees": true,
+          "params": {
+            "note": "Repeat prescription for antihistamine",
+            "patient_id": "p1",
+            "type": "Triage"
+          },
+          "seconds": 50.31,
+          "seed_concurrent": true,
+          "task": "mockmed-28",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "stale",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "1 existing record(s) lost or changed",
+          "label_agrees": true,
+          "params": {
+            "note": "Physio progress good, continue exercises",
+            "patient_id": "p1",
+            "type": "Consult"
+          },
+          "seconds": 50.25,
+          "seed_concurrent": true,
+          "task": "mockmed-29",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "stale",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "1 existing record(s) lost or changed",
+          "label_agrees": true,
+          "params": {
+            "note": "Dizziness on standing, fluids advised",
+            "patient_id": "p1",
+            "type": "Triage"
+          },
+          "seconds": 50.22,
+          "seed_concurrent": true,
+          "task": "mockmed-30",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "no_persist",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "0 new record(s)",
+          "label_agrees": true,
+          "params": {
+            "note": "Sunburn, aloe and shade",
+            "patient_id": "p3",
+            "type": "Triage"
+          },
+          "seconds": 34.83,
+          "seed_concurrent": false,
+          "task": "mockmed-31",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "no_persist",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "0 new record(s)",
+          "label_agrees": true,
+          "params": {
+            "note": "Hearing test booked",
+            "patient_id": "p2",
+            "type": "Consult"
+          },
+          "seconds": 34.92,
+          "seed_concurrent": false,
+          "task": "mockmed-32",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "no_persist",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "0 new record(s)",
+          "label_agrees": true,
+          "params": {
+            "note": "Mouth ulcer, salt rinse",
+            "patient_id": "p1",
+            "type": "Triage"
+          },
+          "seconds": 34.74,
+          "seed_concurrent": true,
+          "task": "mockmed-33",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "wrong_record",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "new record's patient_id is not the task's value",
+          "label_agrees": true,
+          "params": {
+            "note": "Gout flare, colchicine short course",
+            "patient_id": "p1",
+            "type": "Consult"
+          },
+          "seconds": 34.75,
+          "seed_concurrent": false,
+          "task": "mockmed-34",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "wrong_record",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "new record's patient_id is not the task's value",
+          "label_agrees": true,
+          "params": {
+            "note": "Stye on left eyelid, warm compress",
+            "patient_id": "p3",
+            "type": "Triage"
+          },
+          "seconds": 34.71,
+          "seed_concurrent": false,
+          "task": "mockmed-35",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        },
+        {
+          "design_label_correct": false,
+          "fault": "wrong_record",
+          "ground_truth_correct": false,
+          "ground_truth_reason": "new record's patient_id is not the task's value",
+          "label_agrees": true,
+          "params": {
+            "note": "Hiccups resolved without treatment",
+            "patient_id": "p1",
+            "type": "Triage"
+          },
+          "seconds": 34.7,
+          "seed_concurrent": true,
+          "task": "mockmed-36",
+          "verdicts": {
+            "D-net-read-complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-record-verify": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "P-scaffold-verifier": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "Z-net-read": {
+              "error": null,
+              "verdict": "REFUTED"
+            },
+            "hand-written": {
+              "error": null,
+              "verdict": "INDETERMINATE"
+            },
+            "hand-written+complete": {
+              "error": null,
+              "verdict": "REFUTED"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "git_head": "cfa11472b7cb656764577b599ddf66874db446bc",
+  "platform": "macOS-15.7.3-arm64-arm-64bit",
+  "protocol": "PROTOCOL.md",
+  "python": "3.12.13",
+  "schema": "openadapt.zero-config-verify-results/v1",
+  "started": "2026-11-09T17:28:57Z",
+  "verdict": {
+    "zero_config_ready_arms": {
+      "mockloan": [
+        "Z-db",
+        "Z-db-gate",
+        "Z-net-read"
+      ],
+      "mockmed": [
+        "Z-net-read"
+      ]
+    },
+    "zero_config_ready_on_both_apps": true
+  }
+}

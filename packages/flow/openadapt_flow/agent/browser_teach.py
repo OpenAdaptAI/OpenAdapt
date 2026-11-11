@@ -59,7 +59,9 @@ __all__ = [
     "BROWSER_TEACH_TOOLS",
     "PROGRAM_SCHEMA",
     "BrowserTeachBridge",
+    "READ_ONLY_GUARDS",
     "default_files_dir",
+    "read_only_teach_refusal",
     "default_tools_dir",
 ]
 
@@ -70,6 +72,34 @@ TAUGHT_WRITE_REFUSED = (
     "person's signed teach authorization, and this lane can't bind one. Teach "
     "the write with openadapt-agent serve --teach --teach-authorization"
 )
+#: How each backend kind keeps a read-only teach from writing. Only a kind
+#: listed here can teach read-only: the guard must stop a write before it
+#: leaves, not notice it afterwards. A desktop app, or one seen over RDP or
+#: Citrix, writes to its own store over its own connection, which nothing
+#: here sits on, so those kinds refuse read-only teaching.
+READ_ONLY_GUARDS = {
+    "web": (
+        "the browser blocks every POST, PUT, PATCH and DELETE request, and "
+        "every WebSocket message, before it leaves"
+    ),
+}
+
+
+def read_only_teach_refusal(kind: str) -> Optional[str]:
+    """Why ``kind`` can't teach read-only, or None when it has a guard."""
+
+    kind = (kind or "web").strip().lower()
+    if kind in READ_ONLY_GUARDS:
+        return None
+    return (
+        f"read-only teaching is refused for a {kind} app: OpenAdapt can't stop "
+        "that app from saving while it is taught, so it won't claim the task "
+        "only reads. Teach it as a write checked in the system of record "
+        "instead: openadapt-agent serve --teach VERIFY.yaml --config "
+        "deploy.yaml (every save is read back, and a person approves each one)"
+    )
+
+
 PROGRAM_SCHEMA = "openadapt.browser-tool/v1"
 #: What a taught write's program signature covers (``signed_as``), so it
 #: can't stand for another record the same key signs.
@@ -1441,7 +1471,7 @@ class BrowserTeachBridge:
         self.programs: dict[str, dict[str, Any]] = {}
         for path in sorted(self.tools_dir.glob(f"*/{PROGRAM_FILE}")):
             try:
-                program = json.loads(path.read_text())
+                program = json.loads(path.read_text(encoding="utf-8"))
                 if program.get("schema") != PROGRAM_SCHEMA or not _NAME.fullmatch(
                     program.get("name", "")
                 ):
@@ -2522,7 +2552,9 @@ class BrowserTeachBridge:
         if run.authorization is None:  # never: _start refuses a write without one
             raise BridgeError("no teach authorization; no tool was added")
         program = self._seal_program(program, run.authorization, folder)
-        (folder / PROGRAM_FILE).write_text(json.dumps(program, indent=2) + "\n")
+        (folder / PROGRAM_FILE).write_text(
+            json.dumps(program, indent=2) + "\n", encoding="utf-8"
+        )
         tool = TAUGHT_PREFIX + run.name
         self.programs[tool] = program
         return {
@@ -2615,7 +2647,9 @@ class BrowserTeachBridge:
             }
         folder = self.tools_dir / run.name
         folder.mkdir(parents=True, exist_ok=True)
-        (folder / PROGRAM_FILE).write_text(json.dumps(program, indent=2) + "\n")
+        (folder / PROGRAM_FILE).write_text(
+            json.dumps(program, indent=2) + "\n", encoding="utf-8"
+        )
         tool = TAUGHT_PREFIX + run.name
         self.programs[tool] = program
         return {

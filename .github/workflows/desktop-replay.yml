@@ -1,12 +1,17 @@
 name: Desktop replay
 
-# Two live desktop jobs on GitHub-hosted runners, on pull requests that
-# touch the desktop path and on the nightly run. Neither is a required check.
+# Three live desktop jobs on GitHub-hosted runners, on pull requests that
+# touch the desktop path and on the nightly run. These are not required checks.
 #
 # - replay: records, compiles and replays the in-tree WinForms Patient Notes
 #   app through WindowsBackend and the real win_agent on Windows, and judges
 #   every replay from the app's SQLite record
-#   (packages/flow/tests/e2e/test_windows_hosted_replay.py).
+#   (packages/flow/tests/e2e/test_windows_hosted_replay.py). A governed run
+#   of the same workflow (Standard, an approval, a hold and a resume) follows
+#   as a continue-on-error step, so it reports but does not fail the job
+#   (packages/flow/tests/e2e/test_windows_hosted_governed.py). A gating
+#   step after it fails the job on any unsafe write the run made
+#   (scripts/ci/check_windows_governed_safety.py).
 # - freerdp: a FreeRDP transport round trip on Linux, not a replay. xfreerdp3
 #   connects over loopback to freerdp-shadow-cli3 serving an Xvfb display, and
 #   FreeRDPBackend looks up three accounts in a synthetic read-only ledger app
@@ -21,14 +26,22 @@ on:
       - packages/flow/scripts/desktop/pn_db.py
       - packages/flow/scripts/desktop/patient_notes.ps1
       - packages/flow/tests/e2e/test_windows_hosted_replay.py
+      - packages/flow/tests/e2e/test_windows_hosted_governed.py
+      - packages/flow/tests/_approver_keys.py
+      - packages/flow/tests/conftest.py
+      - packages/flow/tests/e2e/conftest.py
       - packages/flow/tests/test_xfreerdp.py
       - packages/flow/tests/test_windows_attempt_ledger.py
+      - packages/flow/tests/test_check_it_dry_run_apps.py
+      - packages/flow/tests/native_apps/check_it_gtk.py
+      - packages/flow/tests/test_approval_form_window.py
       - packages/flow/benchmark/rdp_pool/**
       - packages/flow/pyproject.toml
       - packages/flow/uv.lock
       - packages/types/**
       - .github/ci-tools/**
       - scripts/ci/locked_install.py
+      - scripts/ci/check_windows_governed_safety.py
       - .github/workflows/desktop-replay.yml
   workflow_call:
   workflow_dispatch:
@@ -69,13 +82,13 @@ jobs:
           python ../../scripts/ci/locked_install.py --lock .github/ci-tools:win-agent
           --lock 'packages/flow[dev]'
           --editable packages/types --editable packages/flow
-      - name: Windows file-system guards (the attempt ledger)
+      - name: Windows file-system guards (the attempt ledger, the approval window)
         # The default temp folder is in the user's profile, where the ledger
         # must live; the runner's temp drive is not.
         run: |
           mkdir -p runs
           pytest -v -rs -p no:cacheprovider tests/test_windows_attempt_ledger.py \
-            --junitxml=runs/windows-guards-junit.xml
+            tests/test_approval_form_window.py --junitxml=runs/windows-guards-junit.xml
       - name: Record, compile and replay, judged from the record
         env:
           OAFLOW_WINDOWS_HOSTED_E2E: "1"
@@ -98,6 +111,31 @@ jobs:
           if not cases or skipped:
               sys.exit(f"windows replay did not run: {len(cases)} cases, {len(skipped)} skipped")
           PY
+      - name: Governed run (Standard, an approval, a hold and a resume), judged from the record
+        id: governed
+        # Not gating: its resume can stop before the save on a false form
+        # change (#2189). A failure shows on the step and prints the run's
+        # halts and form_state_probe; the next step gates on safety.
+        continue-on-error: true
+        timeout-minutes: 10
+        env:
+          OAFLOW_WINDOWS_HOSTED_E2E: "1"
+          OAFLOW_WINDOWS_GOVERNED_EVIDENCE: ${{ runner.temp }}/windows-governed-evidence.json
+        run: |
+          pytest -v -rs -p no:cacheprovider --basetemp="$RUNNER_TEMP/wg" \
+            tests/e2e/test_windows_hosted_governed.py --junitxml=runs/windows-governed-junit.xml
+      - name: The governed run wrote nothing unsafe (gating)
+        # Fails the job on a sibling or wrong-record write, a held run that
+        # wrote, or a target write without an approved VERIFIED report, read
+        # from the SQLite rows the test records. Only a halt before the
+        # effect with nothing written passes when the governed step failed.
+        if: always()
+        env:
+          GOVERNED_OUTCOME: ${{ steps.governed.outcome }}
+        run: |
+          echo "governed step outcome: $GOVERNED_OUTCOME"
+          python ../../scripts/ci/check_windows_governed_safety.py \
+            "$RUNNER_TEMP/windows-governed-evidence.json"
       - name: Keep the evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -105,6 +143,10 @@ jobs:
           name: windows-replay-evidence
           path: |
             ${{ runner.temp }}/windows-replay-evidence.json
+            ${{ runner.temp }}/windows-governed-evidence.json
+            ${{ runner.temp }}/wg/**/report.json
+            ${{ runner.temp }}/wg/**/agent.log
+            ${{ runner.temp }}/wg/**/item-approval/*
             ${{ runner.temp }}/wr/**/*.png
             ${{ runner.temp }}/wr/**/agent.log
             ${{ runner.temp }}/wr/**/report.json
@@ -157,3 +199,162 @@ jobs:
           if len(cases) != 1 or skipped:
               sys.exit(f"freerdp round trip did not run: {len(cases)} cases, {len(skipped)} skipped")
           PY
+
+  check-it-gtk:
+    name: Check without saving (GTK, ten cases, no skips)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: packages/flow
+    env:
+      EXPECTED_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      OPENADAPT_TEST_LANE: full
+      XDG_SESSION_TYPE: x11
+      GDK_BACKEND: x11
+      NO_AT_BRIDGE: "0"
+      GTK_MODULES: atk-bridge
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Record and require the exact source head
+        run: |
+          set -euo pipefail
+          export EVIDENCE_DIR="$RUNNER_TEMP/check-it-gtk"
+          printf 'EVIDENCE_DIR=%s\n' "$EVIDENCE_DIR" >> "$GITHUB_ENV"
+          mkdir -p "$EVIDENCE_DIR"
+          {
+            git rev-parse HEAD
+            git rev-parse HEAD^{tree}
+            printf 'expected=%s run=%s attempt=%s\n' "$EXPECTED_SOURCE_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
+            cat /etc/os-release
+            uname -a
+          } | tee "$EVIDENCE_DIR/source.log"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: true
+          cache-dependency-glob: packages/flow/uv.lock
+          cache-suffix: check-it-gtk
+      - name: Install X11, D-Bus, GTK3 and AT-SPI
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            at-spi2-core dbus-x11 gir1.2-atspi-2.0 gir1.2-gtk-3.0 libatk-adaptor \
+            libcairo2-dev libgirepository-2.0-dev openbox pkg-config xauth xvfb
+          dpkg-query -W at-spi2-core dbus-x11 gir1.2-atspi-2.0 gir1.2-gtk-3.0 openbox xvfb \
+            | tee "$EVIDENCE_DIR/system-packages.log"
+      - name: Install the locked native Flow environment
+        run: |
+          set -euo pipefail
+          python ../../scripts/ci/locked_install.py --lock 'packages/flow[dev,linux]' \
+            --editable packages/types --editable packages/flow \
+            2>&1 | tee "$EVIDENCE_DIR/install.log"
+      - name: Execute every GTK Check-it case on an owned display
+        run: |
+          set -euo pipefail
+          cases=(prefilled read_only_prefix type click navigation wrong_identity guard interstitial api normal_save)
+          nodes=()
+          for case in "${cases[@]}"; do
+            nodes+=("tests/test_check_it_dry_run_apps.py::test_no_input_check_against_real_application[${case}-gtk]")
+          done
+          xvfb-run -a -s "-screen 0 1280x800x24" dbus-run-session -- bash -c '
+            set -euo pipefail
+            openbox > "$EVIDENCE_DIR/openbox.log" 2>&1 &
+            wm_pid=$!
+            cleanup() { kill "$wm_pid" 2>/dev/null || true; wait "$wm_pid" 2>/dev/null || true; }
+            trap cleanup EXIT
+            sleep 1
+            python - <<'"'"'PY'"'"'
+          import importlib.metadata as metadata
+          import json
+          import os
+          import sys
+          import gi
+          gi.require_version("Gtk", "3.0")
+          gi.require_version("Atspi", "2.0")
+          from gi.repository import Atspi, Gtk
+          assert os.environ.get("DISPLAY")
+          assert os.environ.get("DBUS_SESSION_BUS_ADDRESS")
+          assert os.environ.get("GDK_BACKEND") == "x11"
+          print(json.dumps({"python": sys.version, "pygobject": metadata.version("PyGObject"), "gtk": [Gtk.get_major_version(), Gtk.get_minor_version(), Gtk.get_micro_version()], "atspi": Atspi.__name__, "display": os.environ["DISPLAY"], "session_type": os.environ["XDG_SESSION_TYPE"], "gdk_backend": os.environ["GDK_BACKEND"]}), flush=True)
+          PY
+            "$@"
+          ' bash python -m pytest -v -rs -p no:cacheprovider \
+            --basetemp="$EVIDENCE_DIR/cases" --junitxml="$EVIDENCE_DIR/gtk.xml" "${nodes[@]}" \
+            2>&1 | tee "$EVIDENCE_DIR/pytest.log"
+      - name: Require all ten passes, independent oracles and terminated processes
+        if: ${{ !cancelled() }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import sqlite3
+          import xml.etree.ElementTree as ET
+
+          evidence = Path(os.environ["EVIDENCE_DIR"])
+          expected = {"prefilled", "read_only_prefix", "type", "click", "navigation", "wrong_identity", "guard", "interstitial", "api", "normal_save"}
+          names = {f"test_no_input_check_against_real_application[{case}-gtk]" for case in expected}
+          cases = list(ET.parse(evidence / "gtk.xml").getroot().iter("testcase"))
+          assert len(cases) == 10 and {case.get("name") for case in cases} == names
+          assert all(case.get("classname") == "tests.test_check_it_dry_run_apps" for case in cases)
+          assert not any(case.find(tag) is not None for case in cases for tag in ("skipped", "failure", "error"))
+          # pytest also creates a current-directory symlink to its last case.
+          # Count physical case directories once and never follow that alias.
+          base = evidence / "cases"
+          folders = sorted(path for path in base.iterdir() if not path.is_symlink() and path.is_dir())
+          assert len(folders) == 10, f"expected ten physical case directories, got {len(folders)}"
+          assert all(path.resolve().parent == base.resolve() for path in folders)
+          receipts = [path / "oracle.json" for path in folders]
+          assert all(path.is_file() for path in receipts)
+          observed = []
+          for path in receipts:
+              oracle = json.loads(path.read_text())
+              assert oracle["surface"] == "gtk" and oracle["case"] in expected
+              assert oracle["before"] == []
+              database = path.parent / "effects.sqlite3"
+              with sqlite3.connect(f"file:{database}?mode=ro", uri=True) as connection:
+                  rows = connection.execute("SELECT id, operation, record_id, value FROM effects ORDER BY id").fetchall()
+              assert [list(row) for row in rows] == oracle["after"]
+              assert len(rows) == (1 if oracle["case"] == "normal_save" else 0)
+              process = json.loads((path.parent / "process.json").read_text())
+              assert process["terminated"] is True and process["returncode"] is not None
+              assert type(process["pid"]) is int and process["pid"] > 1
+              try:
+                  os.kill(process["pid"], 0)
+              except ProcessLookupError:
+                  pass
+              else:
+                  raise AssertionError("GTK fixture process still exists")
+              assert (path.parent / "gtk-initial.png").is_file()
+              assert (path.parent / "gtk.log").is_file()
+              observed.append(oracle["case"])
+          assert len(set(observed)) == 10 and set(observed) == expected
+          summary = {"expected": 10, "passed": 10, "skipped": 0, "dry_zero_write_cases": 9, "normal_save_rows": 1, "terminated_processes": 10}
+          (evidence / "completion.json").write_text(json.dumps(summary, indent=2) + "\n")
+          print(json.dumps(summary))
+          PY
+      - name: Keep GTK raw evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: check-it-gtk-evidence
+          path: |
+            ${{ runner.temp }}/check-it-gtk/*.log
+            ${{ runner.temp }}/check-it-gtk/*.json
+            ${{ runner.temp }}/check-it-gtk/*.xml
+            ${{ runner.temp }}/check-it-gtk/cases/**/oracle.json
+            ${{ runner.temp }}/check-it-gtk/cases/**/process.json
+            ${{ runner.temp }}/check-it-gtk/cases/**/gtk.log
+            ${{ runner.temp }}/check-it-gtk/cases/**/gtk-initial.png
+            ${{ runner.temp }}/check-it-gtk/cases/**/effects.sqlite3
+            ${{ runner.temp }}/check-it-gtk/cases/**/run/report.json
+          if-no-files-found: error
+          retention-days: 14

@@ -634,14 +634,13 @@ def test_identity_coverage_before_and_after(tmp_path):
 
 
 def test_identity_not_proposed_where_the_runtime_cannot_check_it(tmp_path):
+    from openadapt_flow.bundle_validation import derive_verified_workflow
     from openadapt_flow.ir import Workflow
     from openadapt_flow.record_check_identity import identity_coverage
 
     bundle, rec = _identity_bundle(tmp_path)
     workflow = Workflow.load(bundle)
-    Workflow.model_validate(workflow.model_dump(mode="json") | {"surface": "rdp"}).save(
-        bundle
-    )
+    derive_verified_workflow(workflow, update={"surface": "rdp"}).save(bundle)
     report, proposals = identity_coverage(bundle, rec, {"lname": "Quill"})
     assert proposals == []
     assert report["armed_after"] == report["armed_before"] == 1

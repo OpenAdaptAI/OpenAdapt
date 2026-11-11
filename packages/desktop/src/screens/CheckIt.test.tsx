@@ -663,3 +663,55 @@ it("says when the person's agent answered, and leaves approval to the person", a
   const approve = screen.getByRole("button", { name: "Approve this workflow" });
   expect((approve as HTMLButtonElement).disabled).toBe(true);
 });
+
+
+it("runs an explicit no-input check separately from real-save qualification", async () => {
+  engine(project());
+  const base = vi.mocked(engineInvoke).getMockImplementation()!;
+  vi.mocked(engineInvoke).mockImplementation(async (command, params) => {
+    if (command === CMD.DRY_RUN_WORKFLOW) return {
+      ok: false, outcome: "HALTED", transaction_outcome: "HALTED_BEFORE_EFFECT",
+      dry_run: { reached_boundary: true, checks: [
+        { code: "right_record", passed: true, detail: "ok" },
+        { code: "dry_run", passed: true, detail: "guard_passed" },
+      ] },
+    };
+    return base(command, params);
+  });
+  render(<CheckIt workflowId="wf-1" onExactChecks={() => {}} onRun={() => {}} />);
+  const button = await screen.findByRole("button", { name: "Check without saving" });
+  await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(button);
+  expect(await screen.findByText(/Stopped at the declared save boundary before any input/)).toBeTruthy();
+  expect(screen.getByText("Right-record identity passed.")).toBeTruthy();
+  expect(screen.getByText("The declared guard passed.")).toBeTruthy();
+  expect(engineInvoke).toHaveBeenCalledWith(CMD.DRY_RUN_WORKFLOW, expect.objectContaining({ workflow_id: "wf-1" }));
+  expect(vi.mocked(engineInvoke).mock.calls.some(([command]) => command === CMD.RUN_QUALIFICATION_CASE)).toBe(false);
+  fireEvent.click(screen.getByText("Change the test values or where it runs"));
+  fireEvent.change(screen.getByLabelText("Note"), { target: { value: "Changed after checking" } });
+  expect(screen.queryByText("Right-record identity passed.")).toBeNull();
+  expect(screen.queryByText(/Stopped at the declared save boundary before any input/)).toBeNull();
+});
+
+
+it("does not show an earlier no-input result for another workflow", async () => {
+  engine(project());
+  const base = vi.mocked(engineInvoke).getMockImplementation()!;
+  vi.mocked(engineInvoke).mockImplementation(async (command, params) => {
+    if (command === CMD.DRY_RUN_WORKFLOW) return {
+      ok: false, outcome: "HALTED", transaction_outcome: "HALTED_BEFORE_EFFECT",
+      dry_run: { reached_boundary: true, checks: [
+        { code: "right_record", passed: true, detail: "ok" },
+      ] },
+    };
+    return base(command, params);
+  });
+  const { rerender } = render(<CheckIt workflowId="wf-1" onExactChecks={() => {}} onRun={() => {}} />);
+  const button = await screen.findByRole("button", { name: "Check without saving" });
+  await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(button);
+  expect(await screen.findByText("Right-record identity passed.")).toBeTruthy();
+  rerender(<CheckIt workflowId="wf-2" onExactChecks={() => {}} onRun={() => {}} />);
+  expect(screen.queryByText("Right-record identity passed.")).toBeNull();
+  expect(screen.queryByText(/Stopped at the declared save boundary before any input/)).toBeNull();
+});

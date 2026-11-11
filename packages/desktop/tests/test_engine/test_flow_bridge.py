@@ -1028,3 +1028,22 @@ def test_recording_refuses_an_unpinned_flow(
             ready_path=tmp_path / ".ready",
         )
     assert calls == []
+
+
+def test_dry_replay_requires_explicit_engine_support(tmp_path, monkeypatch):
+    _fake_pinned_flow(monkeypatch)
+    calls = []
+
+    def runner(command, **kwargs):
+        calls.append(command)
+        return FakeProc(stdout="--stop-before-effect" if "--help" in command else "")
+
+    bridge = FlowBridge(runner=runner)
+    bridge.replay(tmp_path, stop_before_effect=True)
+    assert any("--stop-before-effect" in command and "--help" not in command for command in calls)
+    calls.clear()
+    bridge.replay(tmp_path)
+    assert all("--stop-before-effect" not in command for command in calls)
+    old = FlowBridge(runner=lambda *args, **kwargs: FakeProc(stdout="old replay"))
+    with pytest.raises(FlowNotAvailableError):
+        old.replay(tmp_path, stop_before_effect=True)

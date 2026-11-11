@@ -1435,7 +1435,7 @@ class CodeActionTool:
         if path is None:
             return None
         try:
-            lines = Path(path).read_text().splitlines()
+            lines = Path(path).read_text(encoding="utf-8").splitlines()
             return json.loads(lines[index]) if 0 <= index < len(lines) else None
         except (OSError, ValueError):
             return None
@@ -1681,7 +1681,7 @@ def distilled_events(recording_dir: Optional[Path]) -> dict[int, str]:
     if not path.is_file():
         return {}
     try:
-        report = json.loads(path.read_text())
+        report = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
     return {int(d["index"]): str(d["rule"]) for d in report.get("dropped") or []}

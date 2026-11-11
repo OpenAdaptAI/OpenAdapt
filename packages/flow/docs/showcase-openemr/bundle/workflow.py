@@ -55,7 +55,7 @@ def run(flow, params=PARAMS):
     # step_005: click 'Searchbyanydemogre' [reversible]
     # landmark: 'Week' (below, 172px)
     # landmark: 'Billy Smith' (left_of, 353px)
-    # identity: armed via PHI-free salted-hash template (2 band tokens); no patient identifier stored
+    # identity: armed via PHI-free salted-hash template (5 band tokens); no patient identifier stored
     flow.click(
         template="templates/step_005.png",
         click_point=(1121, 31),
@@ -99,7 +99,7 @@ def run(flow, params=PARAMS):
     # step_012: scroll by (0, 400) [reversible]
     flow.scroll(0, 400)
 
-    # step_013: click at (815, 369) [reversible]
+    # step_013: click recorded visual target [reversible]
     # landmark: 'None' (right_of, 123px)
     # landmark: 'Immunizations' (above, 180px)
     flow.click(
@@ -110,7 +110,7 @@ def run(flow, params=PARAMS):
     # expect region_stable region=(0, 176, 691, 174) phash='c3da3fb5b7408590' (tol 16)
     # expect text_present text='PatientMessagesforBelford,Phil'
 
-    # step_014: click '+Add <B' [irreversible]
+    # step_014: click '+ Add' [irreversible]
     # landmark: 'Show All' (below, 98px)
     # landmark: 'alendarx' (above, 102px)
     # identity: armed via PHI-free salted-hash template (4 band tokens); no patient identifier stored
@@ -118,12 +118,12 @@ def run(flow, params=PARAMS):
         template="templates/step_014.png",
         click_point=(90, 281),
         region=(10, 249, 160, 64),
-        ocr_text="+Add <B",
+        ocr_text="+ Add",
     )
     # expect region_stable region=(0, 0, 1280, 800) phash='c6e62f272d9090ed' (tol 16)
     # expect text_present text='Calendar Finder Flow Recalls Messa'
 
-    # step_015: click at (639, 357) [reversible]
+    # step_015: click recorded visual target [reversible]
     # landmark: 'Save as new message' (left_of, 169px)
     # landmark: 'Smith, Billy' (left_of, 216px)
     flow.click(
@@ -136,14 +136,14 @@ def run(flow, params=PARAMS):
     # step_016: type <note> [reversible]
     flow.type_text(params["note"])
 
-    # step_017: click 'Save as new messag' [irreversible]
+    # step_017: click 'Save as new message' [irreversible]
     # landmark: 'Smith, Billy' (above, 191px)
     # landmark: 'Active' (left_of, 234px)
     flow.click(
         template="templates/step_017.png",
         click_point=(489, 452),
         region=(409, 420, 160, 64),
-        ocr_text="Save as new messag",
+        ocr_text="Save as new message",
     )
     # expect region_stable region=(0, 0, 1280, 800) phash='c0d91b9db162c6a7' (tol 16)
     # expect text_present text='CalendarFinderFlowRecallsMessagesPatientFeesModulesInventoryProceduresAdminReportsMiscellaneousPopups'

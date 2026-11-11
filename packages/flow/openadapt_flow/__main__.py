@@ -347,7 +347,7 @@ def _load_worklist_file(path: Path) -> list[dict[str, str]]:
         raise SystemExit(f"--worklist file not found: {path}")
     suffix = path.suffix.lower()
     if suffix == ".json":
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
         if isinstance(data, dict):
             data = [data]
         if not isinstance(data, list) or not all(isinstance(r, dict) for r in data):
@@ -440,48 +440,10 @@ def _deployment_runtime(
     args: argparse.Namespace,
     params: Mapping[str, "RuntimeParamScalar"] | None = None,
 ):
-    """Resolve the deployment wiring for a replay/run from ``--config`` + flags.
+    """Resolve deployment wiring through the same config and factory seams."""
+    from openadapt_flow.cli_replay_setup import deployment_runtime
 
-    Returns ``(cfg, effect_verifier, api_actuator, durable, allow_egress)``.
-    A ``--config`` deployment YAML supplies the full surface (records paths,
-    FHIR search params, ...); direct flags override the common fields. With
-    neither, everything is default: no verifier, no actuator, non-durable, and
-    egress only if ``--allow-model-grounding`` was passed (fully back-compatible).
-
-    ``params`` (the governed ``--params-file`` / ``--param`` values) binds an
-    effect-verifier config's explicit ``{param: ...}`` references
-    (``effects.path_params`` / ``search_param_exprs`` / ``sql_query_params``)
-    at construction — see ``docs/EFFECT_KIT.md``. A config with no references
-    ignores it.
-    """
-    from openadapt_flow.deployment import build_api_actuator, build_effect_verifier
-    from openadapt_flow.runtime.authorization import runtime_params_for_gui
-
-    cfg, effects, actuation = _deployment_sections(args)
-    try:
-        effect_verifier = build_effect_verifier(
-            effects,
-            params=runtime_params_for_gui(params or {}),
-        )
-        api_actuator = build_api_actuator(actuation)
-    except ValueError as e:
-        raise SystemExit(str(e))
-
-    durable = bool(cfg.runtime.durable or getattr(args, "durable", False))
-    selected_profile = getattr(args, "_execution_profile", None)
-    if selected_profile is not None:
-        from openadapt_flow.execution_profiles import execution_profile_contract
-
-        durable = bool(
-            durable or execution_profile_contract(selected_profile).require_durable
-        )
-    allow_egress = bool(
-        cfg.runtime.allow_model_grounding
-        or getattr(args, "allow_model_grounding", False)
-    )
-    if getattr(args, "local_grounding", False):
-        cfg.runtime = cfg.runtime.model_copy(update={"local_grounding": True})
-    return cfg, effect_verifier, api_actuator, durable, allow_egress
+    return deployment_runtime(args, params, sections=lambda: _deployment_sections)
 
 
 def _resolve_backend_config(args: argparse.Namespace, cfg, workflow=None):
@@ -1576,7 +1538,7 @@ def _propose_lookup_check(args: argparse.Namespace, *, from_lookup: bool) -> Non
 
             target = recording / PROPOSED_CONTRACT_NAME
             try:
-                _write_private(target, readback.read_text())
+                _write_private(target, readback.read_text(encoding="utf-8"))
             except OSError as exc:
                 print(f"record --verify: could not write {target.name} ({exc})")
             else:
@@ -2443,7 +2405,7 @@ def _cmd_compile(args: argparse.Namespace) -> int:
         return 0
     decisions: list[pc.ParamDecision] = []
     if args.params_from:
-        decisions_json = json.loads(Path(args.params_from).read_text())
+        decisions_json = json.loads(Path(args.params_from).read_text(encoding="utf-8"))
         if not isinstance(decisions_json, dict):
             raise SystemExit("--params-from: file must be a JSON object")
         decisions = pc.decisions_from_file(proposals, decisions_json)
@@ -2533,7 +2495,7 @@ def _cmd_induce(args: argparse.Namespace) -> int:
     if args.report:
         report_path = Path(args.report)
         report_path.parent.mkdir(parents=True, exist_ok=True)
-        report_path.write_text(result.model_dump_json(indent=2) + "\n")
+        report_path.write_bytes(result.model_dump_json(indent=2).encode() + b"\n")
         print(f"Induction report written to {report_path}")
 
     if args.held_out and len(traces) >= 2:
@@ -3146,6 +3108,22 @@ def _cmd_replay(args: argparse.Namespace) -> int:
         cfg, backend_cfg, operation=operation, surfaces=surface_cfgs
     ):
         return 2
+    if getattr(args, "stop_before_effect", False):
+        from openadapt_flow.cli_replay_setup import dry_run_replay_refusal
+
+        refusal = dry_run_replay_refusal(
+            args,
+            cfg,
+            backend_cfg,
+            workflow,
+            durable,
+            qualification_case,
+            worklists,
+            surface_cfgs,
+            _normalize_kind,
+        )
+        if refusal is not None:
+            return refusal
     # Opt-in attest pre-state snapshot: the earliest point where the run is
     # ADMITTED (every gate above passed) and the run directory is final, but
     # NO actuation has begun on either the desktop or the web path below.
@@ -3991,6 +3969,10 @@ def _approval_gate_for_run(
 ):
     """Build the run's approval gate from the mode ``run`` resolved, if any."""
 
+    if getattr(args, "stop_before_effect", False):
+        from openadapt_flow.approval_mode.dry_run import DryRunGate
+
+        return DryRunGate()
     mode = getattr(args, "_approval_mode", None)
     if mode is None:
         if _run_is_config_pinned(args):
@@ -5318,6 +5300,9 @@ def _cmd_resume_roll_back(
     the sealed state (docs/ROLLBACK.md, Durable runs). Afterwards the run is
     never resumed."""
     from openadapt_flow.rollback_durable import SealedRollback, SealedStateError
+    from openadapt_flow.runtime.durable.first_local_delivery import (
+        FirstLocalDeliveryHeld,
+    )
 
     if ckpt_key is None:
         print(
@@ -5327,9 +5312,10 @@ def _cmd_resume_roll_back(
         return 3
     sealed = SealedRollback(run_dir, ckpt_key)
     try:
+        store.require_first_local_rollback_idle()
         with sealed.lock():
             return _roll_back_sealed(args, run_dir, store, ckpt_key, sealed)
-    except SealedStateError as exc:
+    except (SealedStateError, FirstLocalDeliveryHeld) as exc:
         print(f"Roll back REFUSED: {exc}. Nothing ran.")
         return 3
 
@@ -7656,7 +7642,7 @@ def _cmd_disambiguate(args: argparse.Namespace) -> int:
 
     answers: dict[str, str] = {}
     if args.answers:
-        answers = json.loads(Path(args.answers).read_text())
+        answers = json.loads(Path(args.answers).read_text(encoding="utf-8"))
     elif args.interactive:
         # Thin interactive wrapper -- prompts a human, then calls the same API
         # the tests drive directly. The core stays non-interactive.
@@ -9358,7 +9344,7 @@ def _cmd_qualify_campaign(args: argparse.Namespace) -> int:
     )
     run_params = None
     if args.run_params:
-        run_params = json.loads(Path(args.run_params).read_text())
+        run_params = json.loads(Path(args.run_params).read_text(encoding="utf-8"))
         if not isinstance(run_params, dict):
             print("--run-params must hold a JSON object", file=sys.stderr)
             return 2
@@ -10313,6 +10299,15 @@ def build_parser() -> argparse.ArgumentParser:
         allow_abbrev=False,
     )
     p.add_argument("bundle", help="Workflow bundle directory")
+    p.add_argument(
+        "--stop-before-effect",
+        action="store_true",
+        help=(
+            "Check it without application input: observe a prefilled screen, "
+            "then stop before the first input. Unproved prefixes refuse; "
+            "web requires an attached, already-open page."
+        ),
+    )
     p.add_argument(
         "--url",
         default=None,

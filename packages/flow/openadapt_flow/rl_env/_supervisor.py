@@ -62,7 +62,7 @@ def start_identity(pid: int) -> Optional[str]:
     the id."""
     if sys.platform.startswith("linux"):
         try:
-            with open(f"/proc/{pid}/stat") as handle:
+            with open(f"/proc/{pid}/stat", encoding="utf-8") as handle:
                 fields = handle.read().rsplit(")", 1)[1].split()
             return f"linux:{fields[19]}"  # field 22, starttime
         except (OSError, IndexError):
@@ -130,7 +130,7 @@ def _own_children() -> list[int]:
         if not name.isdigit():
             continue
         try:
-            with open(f"/proc/{name}/stat") as handle:
+            with open(f"/proc/{name}/stat", encoding="utf-8") as handle:
                 fields = handle.read().rsplit(")", 1)[1].split()
         except (OSError, IndexError):
             continue
@@ -235,7 +235,7 @@ def main(argv: list[str]) -> int:
     if child.returncode is None:
         child.returncode = -9  # reaped by the teardown; keep Popen from waiting
     path = os.path.join(report_dir, f"{nonce}.json")
-    with open(path + ".tmp", "w") as handle:
+    with open(path + ".tmp", "w", encoding="utf-8") as handle:
         json.dump(
             {
                 "nonce": nonce,

@@ -58,6 +58,7 @@ from pydantic import (
 )
 
 from openadapt_flow.fhir_read import (
+    check_collection_url,
     check_search_coverage,
     check_search_outcome,
     fhir_read_headers,
@@ -1117,7 +1118,8 @@ class FhirReader:
     ) -> list[dict[str, Any]]:
         """Every entry of a search or history Bundle, across all pages."""
 
-        url: Optional[str] = f"{self.base_url}/{path}"
+        initial_url = f"{self.base_url}/{path}"
+        url: Optional[str] = initial_url
         query: Optional[Mapping[str, Any]] = params
         entries: list[dict[str, Any]] = []
         total: Optional[int] = None
@@ -1125,7 +1127,7 @@ class FhirReader:
         match_identities: set[tuple[str, str]] = set()
         for _ in range(MAX_PAGES):
             assert url is not None
-            _, body = self.fetch(url, query)
+            headers, body = self.fetch(url, query)
             if not isinstance(body, dict) or body.get("resourceType") != "Bundle":
                 raise Unreadable(f"{path}: the reply is not a Bundle")
             if self.snapshot_path is not None:
@@ -1212,6 +1214,30 @@ class FhirReader:
             except ValueError as exc:
                 raise Unreadable(f"{path}: {exc}") from exc
             if not nxt:
+                if body.get("type") != "searchset" and body.get("type") != "history":
+                    try:
+                        if params:
+                            raise ValueError(
+                                "collection searches require an unrestricted empty query"
+                            )
+                        check_collection_url(initial_url)
+                        served = headers.get("content-location") or headers.get(
+                            "location"
+                        )
+                        if served:
+                            check_collection_url(served)
+                        links = body.get("link")
+                        if isinstance(links, list):
+                            for link in links:
+                                if (
+                                    isinstance(link, dict)
+                                    and link.get("relation") == "self"
+                                ):
+                                    self_url = link.get("url")
+                                    if isinstance(self_url, str):
+                                        check_collection_url(self_url)
+                    except ValueError as exc:
+                        raise Unreadable(f"{path}: {exc}") from exc
                 return entries
             if _origin(nxt) != _origin(self.base_url):
                 raise Unreadable(f"{path}: next page on another origin")

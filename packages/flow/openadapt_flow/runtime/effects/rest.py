@@ -122,6 +122,15 @@ class RestRecordVerifier(VerifierAdapterBase):
             that one response contains the complete matching record set. This
             is for validated, unpaged endpoints; it is never inferred from
             response length.
+        list_keys: The top-level keys whose value is a list in a whole-store
+            read that holds one list per collection, as the read was reviewed.
+            Set, a body that is not a JSON object, lacks a list under one of
+            these keys, or holds an object value (which may contain records no
+            reviewed read sees), reads as unreadable.
+        other_lists: With ``list_keys`` (and ``records_key=None``): the read
+            returns the records of every list under a key NOT in
+            ``list_keys``. A collection that appears after review is read
+            here, so a row written to it is seen instead of passing unread.
         snapshot_path: Dotted body path to the immutable view identifier in a
             reviewed endpoint contract. Multi-page reads require the same
             exact token on every page; its observed stability alone does not
@@ -151,8 +160,14 @@ class RestRecordVerifier(VerifierAdapterBase):
         snapshot_path: Optional[str] = None,
         consistency: Optional[str] = None,
         quiescence: Any = None,
+        list_keys: Optional[tuple[str, ...]] = None,
+        other_lists: bool = False,
     ) -> None:
         self.base_url = base_url.rstrip("/")
+        self.list_keys = None if list_keys is None else frozenset(list_keys)
+        self.other_lists = bool(other_lists)
+        if self.other_lists and (self.list_keys is None or records_key is not None):
+            raise ValueError("other_lists needs list_keys and no records_key")
         self.next_path = next_path
         self.total_path = total_path
         self.records_complete = records_complete
@@ -237,6 +252,15 @@ class RestRecordVerifier(VerifierAdapterBase):
             return _UNREADABLE
 
     def _records_of(self, body: Any) -> Optional[list[Any]]:
+        if self.other_lists:
+            if not isinstance(body, dict):
+                return None
+            return [
+                item
+                for key in sorted(body, key=str)
+                if key not in (self.list_keys or ()) and isinstance(body[key], list)
+                for item in body[key]
+            ]
         if self.records_key is None:
             records = body
         elif isinstance(body, dict):
@@ -321,6 +345,30 @@ class RestRecordVerifier(VerifierAdapterBase):
                     self.readback_complete = False
                     return None
                 snapshot = current_snapshot
+            if self.list_keys is not None:
+                missing = (
+                    sorted(
+                        k for k in self.list_keys if not isinstance(body.get(k), list)
+                    )
+                    if isinstance(body, dict)
+                    else ["(the body is not an object)"]
+                )
+                if missing:
+                    self.read_problem = (
+                        f"GET {url}: the reviewed lists are missing: "
+                        + ", ".join(missing)
+                    )
+                    self.readback_complete = False
+                    return None
+                nested = sorted(str(k) for k, v in body.items() if isinstance(v, dict))
+                if nested:
+                    # An object may hold records no reviewed read sees.
+                    self.read_problem = (
+                        f"GET {url}: the body holds an object that may contain "
+                        "records: " + ", ".join(nested)
+                    )
+                    self.readback_complete = False
+                    return None
             records = self._records_of(body)
             if records is None:
                 self.read_problem = f"GET {url}: no records list in the body"

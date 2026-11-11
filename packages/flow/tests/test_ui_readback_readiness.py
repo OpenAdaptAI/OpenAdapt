@@ -16,6 +16,8 @@ from openadapt_flow.runtime.effects.ui_readback import (
     resolve_spec,
 )
 
+SIGN_IN_URL = "https://reader.synthetic.invalid/sign-in"
+
 
 class Cancelled(BaseException):
     pass
@@ -27,6 +29,19 @@ class Handle:
 
     def dispose(self) -> None:
         self.disposed = True
+
+
+class Submitter:
+    """The sign-in button of a native form that POSTs to the declared URL."""
+
+    def element_handle(self) -> "Submitter":
+        return self
+
+    def evaluate(self, *args: Any) -> dict[str, str]:
+        return {"method": "post", "target": "", "action": SIGN_IN_URL}
+
+    def owner_frame(self) -> object:
+        return self
 
 
 class Page:
@@ -61,6 +76,9 @@ class Page:
 
     def fill(self, *args: Any) -> None:
         self.context.browser.events.append("fill")
+
+    def locator(self, *args: Any) -> Submitter:
+        return Submitter()
 
     def click(self, *args: Any) -> None:
         self.context.browser.events.append("click")
@@ -124,7 +142,8 @@ def spec(browser: str) -> UiReadbackSpec:
             "headless": True,
             "record_url": "https://reader.synthetic.invalid/record/r1",
             "sign_in": {
-                "url": "https://reader.synthetic.invalid/sign-in",
+                "url": SIGN_IN_URL,
+                "post_url": SIGN_IN_URL,
                 "username_selector": "#user",
                 "password_selector": "#password",
                 "submit_selector": "#submit",

@@ -15,6 +15,15 @@
 
 <!-- version list -->
 
+## Unreleased
+
+- SQL effect readback now requires opaque SQLite and PostgreSQL adapters to
+  declare `sql_dialect`. Native drivers are still recognized automatically.
+
+- Keep deferred typing, scrolling and click gestures tied to their emitting
+  document. A known document change preserves both actions; uncertain ownership
+  or a mixed-document batch refuses publication.
+
 ## v2.7.1 (2026-11-09)
 
 Flow 2.7.1 fixes loading of programs certified before Nov 8. Two optional
@@ -32,10 +41,17 @@ ledger settlement atomic and extends zero-config verifier generation.
 
 - Programs certified before the `Anchor.form_identity` and `TokenTemplate.bearing` fields were added load again. When the current workflow-contract digest does not match, the loader tries the older form, leaving out only fields on the reviewed sealed-omission list for the bundle's format version that are unset and `None`, and accepts it only if it reproduces the bound digest exactly. A program whose content changed is still refused.
 - Ledger settlements record the journal revision they observed, so a stale or concurrent observation cannot release a hold, grant a retry, complete a recheck or hand back an older result. Rechecks are bound to the original receipt and the exact set of validated later receipts.
+- A person's approval of a desktop save is no longer voided by text that changes by itself outside the app, such as the taskbar clock ticking over a minute while the run waits. Off the browser, the approval's "form unchanged" check read every word on the screen. On Windows it now reads the app window the item's verified steps were in, in reading order, with the window's frame in the digest, so any change inside that window, or a moved window, still stops the save. When a window of the app reaches outside that frame, the whole screen is read. A resumed run names the window under the earlier steps' recorded points, so an approval given during a hold still holds when the form is unchanged. Elsewhere the whole screen is read as before ([#1697](https://github.com/OpenAdaptAI/OpenAdapt/issues/1697)).
+
+### Features
+
+- A separate-session UI read-back (`effects.kind: ui_readback`) is now held to independence rules. It confirms a save only from a fresh session (no client-side store), a re-query, and a view the save didn't leave on screen, and records each rule in the effect evidence (`read_evidence`). It stays a second read at `screen_readback` grade: no policy pack admits it as the record check under `regulated`. New optional `history` (an audit or activity view read before and after the save: collateral changes are refuted), `final` (a provisional read now, settled later by `deferred settle`, one session for a batch, printed as `VERIFIED (screen_readback)`; a re-run of a waiting item is refused) and `index_lag_s` (a lagging view is polled with backoff; unset, a final read never settles `VERIFIED`). The browser read-back's sign-in needs `sign_in.post_url`. Measured on OpenEMR and Dolibarr, direct and behind a chaos proxy (`benchmark/ui_second_read/RESULTS.md`).
+- Interruption classes: a run clears a known interruption, such as a session warning, a banner or a tour, by itself, but only when the dismissal is provably read-only. The class must match by its text and control, the control's label must be in a closed non-committing set and be the live label of the control that is clicked, held for the whole click by a page-side click guard, and no write watcher may see a write. On the web the watcher is the browser write fence; on any backend, including desktop and RDP, it is the system-of-record read-back. Afterwards the step's normal identity check must pass. Classes are per-app data (`runtime.interruptions_path`) or learned from a halt (`learn_interruption`). Each dismissal is in the run report. See `docs/INTERRUPTION_RECOVERY.md`.
 
 ### Changed
 
 - `scaffold-verifier` closes three gaps the zero-config benchmark found. A generated REST read now carries `records_complete: true` when `--complete-read` declares it or one unpaged response was seen to hold the whole collection; otherwise it stays incomplete and `verify-run` returns INDETERMINATE. A step counts as a write when the capture shows the page sending a POST, PUT, PATCH or DELETE to its own origin, or its store snapshots differ, not only when its label looks like Save. `--probe-reads` (with optional `--probe-base`) finds a read for an app that never reads the saved record back: it probes the collection and item reads the write implies with GET on the local machine, uses one only when it returns the written values and nothing outside it could change unseen (otherwise it refuses and writes the TODO draft), and records every probe (`read_discovery` in the proof, or `read_discovery.json` when none confirms).
+- `scaffold-verifier --probe-reads` now looks for a read that covers the whole save before it refuses a probed collection read. It probes the sibling collections under the same prefix that the app itself read (path only, from its captured GETs) and the prefix root. It uses the root instead of the collection only when the root holds the written record and every record the collection and siblings returned, in one unpaged response, every captured write went under the prefix, and every top-level value is a list of objects or a scalar (an object, such as a nested collection or an id-keyed map, refuses the root). The check reads every list the root returns, an empty one included, and the save may add exactly one row to the list holding the written record. It also reads any list that appears later (`records_other_lists`), where the save may add no row; a list it was built on that disappears makes the read unreadable (`records_list_keys`). Otherwise the refusal stands, and its reason lists what was probed. Probes still send only GET, only to the local machine, with no credentials, proxy or redirects. `read_discovery.json` is now also written when a probed read is used.
 
 ### Fixes
 

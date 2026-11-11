@@ -301,6 +301,27 @@ def test_qualification_authoring_adds_one_typed_decision_and_advances_revision()
     assert authored.qualification.last_certification is None
 
 
+def test_business_decision_authoring_preserves_verified_source_for_save(tmp_path):
+    workflow = _authoring_workflow()
+    init_project(workflow, environment=_qualification_environment())
+    bundle = tmp_path / "bundle"
+    workflow.save(bundle)
+    verified = Workflow.load(bundle)
+
+    authored = set_business_decision(
+        verified,
+        graph_id="__program__",
+        state_id="review",
+        decision=_authoring_spec(),
+        insert_before_state_id="accept",
+    )
+    authored.save(bundle)
+
+    reloaded = Workflow.load(bundle)
+    assert reloaded.program is not None
+    assert "review" in reloaded.program.states
+
+
 def test_qualification_cli_authors_and_inspects_one_exact_decision(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

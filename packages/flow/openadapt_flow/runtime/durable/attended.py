@@ -2442,7 +2442,7 @@ def execute_attended_action(
     if manifest is None:
         raise AttendedActionRefused("the run is not durably paused")
     try:
-        checkpoints._validate_local_namespace(manifest)  # noqa: SLF001
+        checkpoints.validate_attended_namespace(manifest, AttendedActionRefused)
     except StateDiverged as exc:
         raise AttendedActionRefused(
             "the durable run identity or canonical path changed"

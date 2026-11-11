@@ -1844,7 +1844,7 @@ def set_business_decision(
     several paths that happen to converge on the same state.
     """
 
-    from openadapt_flow.bundle_validation import validate_workflow
+    from openadapt_flow import bundle_validation as _bv
     from openadapt_flow.ir import (
         BusinessDecisionSpec,
         ParamKind,
@@ -2033,22 +2033,9 @@ def set_business_decision(
     previous = project.revision_digest()
     _touch(project, previous)
     _invalidate_certification(candidate)
-    try:
-        validated = Workflow.model_validate(candidate.model_dump(mode="python"))
-    except ValueError as exc:
-        raise QualificationError(
-            f"the authored business decision makes the workflow invalid: {exc}"
-        ) from exc
-    validation = validate_workflow(validated)
-    if not validation.structural_ok:
-        details = "; ".join(
-            issue.render() for issue in validation.by_category("structure")
-        )
-        raise QualificationError(
-            "the authored business decision makes the workflow structurally "
-            f"invalid: {details}"
-        )
-    return validated
+    return _bv.validate_verified_derivative(
+        candidate, Workflow, QualificationError, "the authored business decision"
+    )
 
 
 def list_entity_labels(workflow: "Workflow") -> list[QualifiedEntityLabel]:

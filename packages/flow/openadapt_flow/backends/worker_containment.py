@@ -39,7 +39,7 @@ from typing import Any, Callable, Optional
 #: Target types that run script outside a document.
 WORKER_TARGET_TYPES = frozenset({"worker", "shared_worker", "service_worker"})
 
-_INIT_JS = """(() => {
+_INIT_JS = """((reportWindowOpen) => {
   const report = globalThis.__openadaptWorkerViolation;
   addEventListener('securitypolicyviolation', (event) => {
     if (event.isTrusted && event.effectiveDirective === 'worker-src') {
@@ -61,13 +61,17 @@ _INIT_JS = """(() => {
   } catch (e) {}
   try {
     Object.defineProperty(window, 'open', {
-      value: function open() { return null; },
+      value: function open() {
+        if (typeof reportWindowOpen === 'function') reportWindowOpen().catch(() => {});
+        return null;
+      },
       writable: false, configurable: false, enumerable: true,
     });
   } catch (e) {}
-})();"""
+})"""
 
 NEW_WINDOW = "the page opened a new window or tab, and it was stopped"
+WINDOW_OPEN_REFUSED = "the page tried to open a window, and it was blocked"
 WORKER_STARTED = "a worker started on the page, and its requests can't be checked"
 WORKER_REFUSED = "the page tried to start a worker, and the browser refused it"
 
@@ -96,7 +100,10 @@ class WorkerContainment:
 
 
 def contain_workers(
-    page: Any, on_violation: Optional[Callable[[str], None]] = None
+    page: Any,
+    on_violation: Optional[Callable[[str], None]] = None,
+    *,
+    report_window_open: bool = False,
 ) -> WorkerContainment:
     """Install worker and new-window containment on ``page``'s context.
 
@@ -104,7 +111,8 @@ def contain_workers(
     has no worker policy. Register it after the caller's own
     ``context.route`` handlers, because routes run newest first: this one
     aborts requests from any other page and hands the guarded page's
-    requests on with ``route.fallback()``.
+    requests on with ``route.fallback()``. With ``report_window_open``, a
+    call blocked by the shared ``window.open`` stub is also a violation.
     """
 
     state = WorkerContainment(_report=on_violation)
@@ -166,7 +174,17 @@ def contain_workers(
             "__openadaptWorkerViolation",
             lambda _source: state.violate(WORKER_REFUSED),
         )
-        context.add_init_script(_INIT_JS)
+        if report_window_open:
+            context.expose_binding(
+                "__openadaptWindowOpenViolation",
+                lambda _source: state.violate(WINDOW_OPEN_REFUSED),
+            )
+        window_report = (
+            "globalThis.__openadaptWindowOpenViolation"
+            if report_window_open
+            else "undefined"
+        )
+        context.add_init_script(f"{_INIT_JS}({window_report});")
         context.route("**/*", route)
         context.on("page", on_page)
     except Exception:  # noqa: BLE001

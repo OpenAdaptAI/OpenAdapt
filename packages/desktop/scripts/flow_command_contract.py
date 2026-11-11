@@ -28,8 +28,14 @@ BRIDGE = ROOT / "openadapt_desktop" / "flow_bridge.py"
 NOT_FLOW_FLAGS = {
     # Desktop's own recorder entry point (flow_record_entry), not Flow.
     "--watch-parent-stdin": "Desktop's record entry point",
-    # Sent only when ``run --help`` lists it (run_supports_authorization).
-    "--authorization-file": "probed before use",
+}
+
+#: Optional Flow flags, each gated by the named real CLI help probe. These are
+#: checked separately against the installed CLI; unconditional flags are not
+#: exempted merely because an older bundled runtime does not understand them.
+CAPABILITY_PROBED_FLAGS = {
+    "--authorization-file": ("run_supports_authorization", ("run", "--help")),
+    "--stop-before-effect": ("supports_dry_run", ("replay", "--help")),
 }
 
 _REQUEST_ID = "0" * 32
@@ -189,9 +195,8 @@ def bridge_flag_literals(path: Path = BRIDGE) -> set[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"))
     redaction: set[int] = set()
     for node in ast.walk(tree):
-        if (
-            isinstance(node, ast.Assign)
-            and any(isinstance(t, ast.Name) and t.id == "redacted_after" for t in node.targets)
+        if isinstance(node, ast.Assign) and any(
+            isinstance(t, ast.Name) and t.id == "redacted_after" for t in node.targets
         ):
             redaction.update(id(child) for child in ast.walk(node.value))
     found = {
@@ -204,7 +209,7 @@ def bridge_flag_literals(path: Path = BRIDGE) -> set[str]:
         and len(node.value) > 2
         and " " not in node.value
     }
-    return found - set(NOT_FLOW_FLAGS)
+    return found - set(NOT_FLOW_FLAGS) - set(CAPABILITY_PROBED_FLAGS)
 
 
 def parser_option_strings(parser) -> set[str]:

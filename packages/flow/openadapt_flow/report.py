@@ -681,7 +681,7 @@ def render_bench_report(bench_json_path: Path | str, out_path: Path | str) -> Pa
     Returns:
         Path to the written Markdown file.
     """
-    bench = json.loads(Path(bench_json_path).read_text())
+    bench = json.loads(Path(bench_json_path).read_text(encoding="utf-8"))
     out = Path(out_path)
 
     n = bench.get("n", 0)

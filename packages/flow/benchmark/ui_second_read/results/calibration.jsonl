@@ -1,0 +1,2 @@
+{"app": "dolibarr", "network": "vpn-bad+replica-lag", "lags_s": [2.01, 0.77, 1.67], "index_lag_s": 4}
+{"app": "openemr", "network": "vpn-bad+replica-lag", "lags_s": [3.54, 2.44, 2.29], "index_lag_s": 6}

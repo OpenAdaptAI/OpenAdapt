@@ -69,7 +69,9 @@ def _now() -> str:
 
 
 def _write_json(path: Path, value: Any, *, private: bool = False) -> None:
-    path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
+    path.write_text(
+        json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     if private:
         path.chmod(0o600)
 
@@ -172,7 +174,7 @@ def _ledger_path() -> Path:
 
 def _read_ledger() -> dict[str, Any]:
     try:
-        ledger = json.loads(_ledger_path().read_text())
+        ledger = json.loads(_ledger_path().read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {}
     return ledger if isinstance(ledger, dict) else {}
@@ -188,7 +190,9 @@ def _record_pull(workflow: Any, origin: Any) -> None:
     path = _ledger_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n")
+    tmp.write_text(
+        json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     tmp.replace(path)
 
 
@@ -755,7 +759,7 @@ def qualify_skill(
     else:
         contract_path = full_path or bundle_dir / lock["contract"]
         try:
-            data = yaml.safe_load(contract_path.read_text())
+            data = yaml.safe_load(contract_path.read_text(encoding="utf-8"))
         except yaml.YAMLError as exc:
             raise SkillError(f"the skill's record check is not YAML: {exc}") from exc
         kinds = {
