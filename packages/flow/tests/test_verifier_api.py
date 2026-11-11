@@ -156,12 +156,16 @@ def test_task_record_digest_only_annotates_the_original_begin(
     assert all("task_record_sha256" not in event for event in events[1:])
 
 
-@pytest.mark.parametrize("digest", ["", "a" * 63, "A" * 64, "g" * 64, "a" * 64 + "\n", 42])
+@pytest.mark.parametrize(
+    "digest", ["", "a" * 63, "A" * 64, "g" * 64, "a" * 64 + "\n", 42]
+)
 def test_invalid_task_record_digest_fails_before_ledger_or_baseline(
     tmp_path: Path, digest: Any
 ) -> None:
     contract = _contract(tmp_path / "unreadable.sqlite")
-    with pytest.raises(VerifierError, match="task_record_sha256 must be 64 lowercase hex"):
+    with pytest.raises(
+        VerifierError, match="task_record_sha256 must be 64 lowercase hex"
+    ):
         begin_write(contract, PARAMS, actor=BOT, task_record_sha256=digest)
     assert not (tmp_path / "ledger").exists()
 
@@ -170,7 +174,9 @@ def test_task_record_digest_cannot_be_silently_discarded_without_a_ledger(
     tmp_path: Path,
 ) -> None:
     contract = _contract(tmp_path / "unreadable.sqlite")
-    with pytest.raises(VerifierError, match="task_record_sha256 requires a write ledger"):
+    with pytest.raises(
+        VerifierError, match="task_record_sha256 requires a write ledger"
+    ):
         begin_write(
             contract,
             PARAMS,
