@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+import fcntl
+import hashlib
+import multiprocessing
 import os
+import signal
 import sqlite3
+from multiprocessing.connection import Connection
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
+from openadapt_flow import write_journal_authority
 from openadapt_flow.write_ledger import (
     FileLedger,
     Ledger,
@@ -320,6 +327,316 @@ def test_interrupted_protected_append_stays_pending_and_preserves_cleanup(
             operation()
         assert held.value.code == INTERRUPTED
     assert retained.read_text() == "synthetic baseline"
+
+
+_PROCESS_TIMEOUT = 20
+
+
+@pytest.fixture
+def protected_workers():
+    context = multiprocessing.get_context("spawn")
+    workers = []
+
+    def start(target, *args):
+        receive, send = context.Pipe(duplex=False)
+        worker = context.Process(target=target, args=(*args, send))
+        try:
+            worker.start()
+        except BaseException:
+            receive.close()
+            worker.close()
+            raise
+        finally:
+            send.close()
+        workers.append((worker, receive))
+        return worker, receive
+
+    try:
+        yield context.Event(), start
+    finally:
+        for worker, _ in workers:
+            if worker.is_alive():
+                worker.kill()
+        for worker, receive in workers:
+            receive.close()
+            worker.join(timeout=_PROCESS_TIMEOUT)
+        survivors = [worker for worker, _ in workers if worker.is_alive()]
+        for worker, _ in workers:
+            if worker not in survivors:
+                worker.close()
+        assert not survivors
+
+
+def _message(receive: Connection):
+    assert receive.poll(_PROCESS_TIMEOUT), "ledger worker did not reach its boundary"
+    return receive.recv()
+
+
+def _join_worker(worker, expected=0):
+    worker.join(timeout=_PROCESS_TIMEOUT)
+    assert worker.exitcode == expected
+
+
+def _pause_after_prepare(
+    root: Path,
+    path: Path,
+    key: str,
+    cleanup: Path | None,
+    proceed,
+    output: Connection,
+) -> None:
+    authority = _authority(path, root)
+    ledger = Ledger(FileLedger(root, authority=authority))
+    prepare = authority.prepare
+
+    def prepared(expected):
+        token = prepare(expected)
+        output.send("prepared")
+        assert proceed.wait(timeout=2 * _PROCESS_TIMEOUT)
+        return token
+
+    with patch.object(authority, "prepare", prepared):
+        result = ledger.resolved(key, ATTEMPT, outcome="CONFIRMED", cleanup=cleanup)
+    output.send(("resolved", result.state))
+
+
+def _contend_for_authority(
+    root: Path, path: Path, operation: str, key: str, task: str, output: Connection
+) -> None:
+    authority = _authority(path, root)
+    backend = FileLedger(root, authority=authority)
+    ledger = Ledger(backend)
+    lock = path.with_name(path.name + ".lock").stat()
+    flock = fcntl.flock
+    signaled = False
+
+    def observe_lock(fd, mode):
+        nonlocal signaled
+        try:
+            return flock(fd, mode)
+        except BlockingIOError:
+            if not signaled and mode == (fcntl.LOCK_EX | fcntl.LOCK_NB):
+                info = os.fstat(fd)
+                if (info.st_dev, info.st_ino) == (lock.st_dev, lock.st_ino):
+                    signaled = True
+                    output.send("contended")
+            raise
+
+    with patch.object(fcntl, "flock", observe_lock):
+        try:
+            if operation == "lookup":
+                result = _key(ledger, task)
+            elif operation == "lease":
+                lease = backend.lease(key)
+                assert lease is not None
+                lease.release()
+                result = key
+            else:
+                assert operation == "append"
+                ledger.begun(key, task)
+                result = key
+        except LedgerIntegrityHeld as held:
+            output.send(("held", held.code))
+        else:
+            output.send((operation, result))
+
+
+def _contend_with_short_deadline(
+    root: Path, path: Path, operation: str, key: str, task: str, output: Connection
+) -> None:
+    # Keep the real clock, retry loop and native flock. Shorten only this
+    # process's budget, while the owner stays gated by the test event.
+    with patch.object(write_journal_authority, "_AUTHORITY_LOCK_WAIT_S", 0.15):
+        _contend_for_authority(root, path, operation, key, task, output)
+
+
+def _read_interrupted_authority(
+    root: Path, path: Path, key: str, cleanup: Path, output: Connection
+) -> None:
+    authority = _authority(path, root)
+    backend = FileLedger(root, authority=authority)
+    ledger = Ledger(backend)
+    refusals = []
+    for operation in (
+        authority.snapshot,
+        lambda: _key(ledger),
+        backend.keys,
+        lambda: ledger.latest(key),
+        lambda: backend.lease(key),
+        lambda: ledger.release(key, by=PERSON, reason=REASON, found="absent"),
+        lambda: ledger.resolved(key, ATTEMPT, outcome="CONFIRMED", cleanup=cleanup),
+    ):
+        with pytest.raises(LedgerIntegrityHeld) as held:
+            operation()
+        refusals.append(held.value.code)
+    output.send(tuple(refusals))
+
+
+def test_live_prepared_appender_serializes_protected_readers_and_writers(
+    protected, protected_workers
+) -> None:
+    backend, ledger, authority = protected
+    proceed, start = protected_workers
+    key = _key(ledger)
+    tasks = [f"synthetic-task-{i}" for i in range(3)]
+    append_keys = {_key(ledger, task): task for task in tasks}
+    assert len({key, *append_keys}) == 4
+    ledger.begun(key, ATTEMPT)
+    initial = authority.snapshot()
+    prefix = backend.events(key)
+
+    owner, prepared = start(
+        _pause_after_prepare, backend.root, authority.path, key, None, proceed
+    )
+    assert _message(prepared) == "prepared"
+    operations = [
+        ("lookup", key, "synthetic-task"),
+        ("lease", key, "synthetic-task"),
+        *(("append", child_key, task) for child_key, task in append_keys.items()),
+    ]
+    contenders = []
+    for operation, child_key, task in operations:
+        worker, receive = start(
+            _contend_for_authority,
+            backend.root,
+            authority.path,
+            operation,
+            child_key,
+            task,
+        )
+        contenders.append((operation, child_key, worker, receive))
+    try:
+        for _, _, _, receive in contenders:
+            assert _message(receive) == "contended"
+    finally:
+        proceed.set()
+
+    assert _message(prepared) == ("resolved", "undelivered")
+    _join_worker(owner)
+    for operation, child_key, worker, receive in contenders:
+        assert _message(receive) == (operation, child_key)
+        _join_worker(worker)
+
+    restarted, reopened = _reopen(backend, authority)
+    expected_attempts = {key: ATTEMPT, **append_keys}
+    current = authority.snapshot()
+    assert current.revision == initial.revision + 4 and not current.legacy_keys
+    assert set(restarted.keys()) == set(current.heads) == set(expected_attempts)
+    for child_key, attempt_id in expected_attempts.items():
+        attempt = reopened.latest(child_key)
+        revisions = [1, 2] if child_key == key else [1]
+        assert attempt is not None and attempt.attempt_id == attempt_id
+        assert [event["revision"] for event in attempt.events] == revisions
+        assert all(event["applied"] is True for event in attempt.events)
+        assert current.heads[child_key].revision == attempt.revision == revisions[-1]
+        wire = (backend.root / "entries" / f"{child_key}.jsonl").read_bytes()
+        assert current.heads[child_key].digest == hashlib.sha256(wire).hexdigest()
+        if child_key == key:
+            assert attempt.events[:1] == prefix
+            assert attempt.resolved is not None
+            assert attempt.resolved["outcome"] == "CONFIRMED"
+        else:
+            assert attempt.state == "open"
+
+
+def test_live_prepared_appender_times_out_without_mutation_then_recovers(
+    protected, protected_workers
+) -> None:
+    backend, ledger, authority = protected
+    proceed, start = protected_workers
+    key = _key(ledger)
+    contender_task = "synthetic-timeout-contender"
+    contender_key = _key(ledger, contender_task)
+    assert contender_key != key
+    folder = backend.attempt_dir(ATTEMPT)
+    baseline = folder / "baseline.json"
+    baseline.write_text("synthetic baseline")
+    inputs = folder / "attempt.json"
+    inputs.write_text("synthetic input")
+    ledger.begun(key, ATTEMPT, folder=str(folder))
+    initial = authority.snapshot()
+    entries = backend.root / "entries"
+    entry = entries / f"{key}.jsonl"
+    prefix = entry.read_bytes()
+
+    owner, prepared = start(
+        _pause_after_prepare, backend.root, authority.path, key, folder, proceed
+    )
+    assert _message(prepared) == "prepared"
+    try:
+        operations = (
+            ("lookup", key, "synthetic-task"),
+            ("lease", key, "synthetic-task"),
+            ("append", contender_key, contender_task),
+        )
+        for operation, operation_key, task in operations:
+            contender, result = start(
+                _contend_with_short_deadline,
+                backend.root,
+                authority.path,
+                operation,
+                operation_key,
+                task,
+            )
+            assert _message(result) == "contended"
+            assert _message(result) == ("held", "ledger_authority_lock_timeout")
+            _join_worker(contender)
+            assert owner.is_alive() and not proceed.is_set()
+        assert sorted(entries.iterdir()) == [entry]
+        assert entry.read_bytes() == prefix
+        assert baseline.read_text() == "synthetic baseline"
+        assert inputs.read_text() == "synthetic input"
+    finally:
+        proceed.set()
+
+    assert _message(prepared) == ("resolved", "undelivered")
+    _join_worker(owner)
+    restarted, reopened = _reopen(backend, authority)
+    current = authority.snapshot()
+    assert current.revision == initial.revision + 1
+    assert restarted.keys() == [key] and set(current.heads) == {key}
+    attempt = reopened.latest(key)
+    assert attempt is not None and attempt.attempt_id == ATTEMPT
+    assert attempt.state == "undelivered" and attempt.revision == 2
+    assert current.heads[key].digest == hashlib.sha256(entry.read_bytes()).hexdigest()
+    assert _key(reopened) == key
+    lease = restarted.lease(key)
+    assert lease is not None
+    lease.release()
+    assert not baseline.exists() and not inputs.exists()
+
+
+def test_killed_prepared_appender_holds_protected_journal_without_cleanup(
+    protected, protected_workers
+) -> None:
+    backend, ledger, authority = protected
+    proceed, start = protected_workers
+    key = _key(ledger)
+    folder = backend.attempt_dir(ATTEMPT)
+    retained = folder / "baseline.json"
+    retained.write_text("synthetic baseline")
+    retained_input = folder / "attempt.json"
+    retained_input.write_text("synthetic input")
+    ledger.begun(key, ATTEMPT, folder=str(folder))
+    entry = backend.root / "entries" / f"{key}.jsonl"
+    prefix = entry.read_bytes()
+
+    owner, prepared = start(
+        _pause_after_prepare, backend.root, authority.path, key, folder, proceed
+    )
+    assert _message(prepared) == "prepared"
+    assert owner.is_alive()
+    owner.kill()
+    _join_worker(owner, -signal.SIGKILL)
+
+    reader, result = start(
+        _read_interrupted_authority, backend.root, authority.path, key, folder
+    )
+    assert _message(result) == (INTERRUPTED,) * 7
+    _join_worker(reader)
+    assert entry.read_bytes() == prefix
+    assert retained.read_text() == "synthetic baseline"
+    assert retained_input.read_text() == "synthetic input"
 
 
 def test_legacy_enrollment_needs_quiescence_and_keeps_history_inspection_only(

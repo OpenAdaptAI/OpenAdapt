@@ -390,8 +390,7 @@ class FileLedger:
     def keys(self) -> list[str]:
         authority = self._authority
         if authority is not None:
-            with authority.serialized():
-                current = authority.snapshot()
+            with authority.committed_snapshot() as current:
                 self._verify_inventory(current)
                 return sorted(current.heads)
         return sorted(p.stem for p in self._entries.glob("*.jsonl"))
@@ -471,8 +470,7 @@ class FileLedger:
     def _protected_transaction(self, key: str) -> Iterator[Journal]:
         authority = self._authority
         assert authority is not None
-        with authority.serialized():
-            current = authority.snapshot()
+        with authority.committed_snapshot() as current:
             events, wire = self._verify_inventory(current, key)
             if key in current.legacy_keys:
                 raise LedgerIntegrityHeld("ledger_legacy_unauthenticated")
