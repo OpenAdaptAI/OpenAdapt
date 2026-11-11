@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "description": "Paths whose accidental changes require exact-head review and per-commit evidence.",
+  "areas": [
+    {
+      "id": "verification-authority",
+      "rationale": "These components choose the independent read-back result and expose verification to the agent boundary.",
+      "paths": [
+        "packages/flow/openadapt_flow/verifier.py",
+        "packages/flow/openadapt_flow/verify_run.py",
+        "packages/flow/openadapt_flow/verify.py",
+        "packages/flow/openadapt_flow/runner/verify.py",
+        "packages/flow/openadapt_flow/agent/verify_tools.py",
+        "packages/flow/openadapt_flow/runtime/identity*.py",
+        "packages/flow/openadapt_flow/identity_signals.py",
+        "packages/flow/openadapt_flow/ir.py",
+        "packages/flow/openadapt_flow/runtime/replayer.py",
+        "packages/flow/openadapt_flow/runtime/effects/**",
+        "packages/flow/tests/test_verify_run.py",
+        "packages/flow/tests/test_verify_tools.py"
+      ]
+    },
+    {
+      "id": "fail-closed-policy-and-approval",
+      "rationale": "These files decide whether policy, approval, and signed authorization are sufficient or must refuse.",
+      "paths": [
+        "packages/flow/openadapt_flow/policy.py",
+        "packages/flow/openadapt_flow/approval_mode/**",
+        "packages/flow/openadapt_flow/agent/contract.py",
+        "packages/flow/tests/test_policy.py",
+        "packages/flow/tests/test_approval_mode_switch_policy.py",
+        "packages/flow/tests/test_approval_mode_item_approval.py"
+      ]
+    },
+    {
+      "id": "receipts-and-signing",
+      "rationale": "These modules construct, sign, or validate durable effect receipts and seals.",
+      "paths": [
+        "packages/flow/openadapt_flow/receipt.py",
+        "packages/flow/openadapt_flow/write_receipt.py",
+        "packages/flow/openadapt_flow/offline_seal.py",
+        "packages/flow/openadapt_flow/cloud_seal.py",
+        "packages/flow/openadapt_flow/seal_keys.py",
+        "packages/types/openadapt_types/seal.py",
+        "packages/flow/tests/test_write_receipt.py",
+        "packages/flow/tests/test_offline_seal.py",
+        "packages/flow/tests/test_cloud_seal.py",
+        "packages/types/tests/test_seal.py"
+      ]
+    },
+    {
+      "id": "refusal-and-ledger",
+      "rationale": "These paths record held writes, unresolved outcomes, and explicit refusals at runtime.",
+      "paths": [
+        "packages/flow/openadapt_flow/write_ledger.py",
+        "packages/flow/openadapt_flow/agent/ledger.py",
+        "packages/agent/tests/test_ledger.py",
+        "packages/flow/tests/test_windows_attempt_ledger.py",
+        "packages/flow/tests/test_write_ledger.py"
+      ]
+    },
+    {
+      "id": "frozen-study-guard",
+      "rationale": "The deterministic hardening study and its frozen corpus are guarded by this test and corpus implementation.",
+      "paths": [
+        "packages/flow/tests/test_hardening_flywheel.py",
+        "packages/flow/openadapt_flow/validation/hardening/**"
+      ]
+    },
+    {
+      "id": "safety-gate-itself",
+      "rationale": "Changes to the manifest, trusted-base workflow, verifier, evidence parser, contract documentation, or tests also require explicit coordinator approval.",
+      "paths": [
+        ".github/agent-safety-manifest.json",
+        ".github/workflows/protected-safety-review.yml",
+        "scripts/ci/protected_safety_review.py",
+        "scripts/ci/attestation.py",
+        "scripts/__init__.py",
+        "scripts/ci/__init__.py",
+        "docs/agent-safety-evidence-v1.md",
+        "tests/test_precommit_attestation.py",
+        "tests/test_protected_safety_review.py"
+      ]
+    }
+  ]
+}

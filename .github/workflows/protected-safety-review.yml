@@ -1,0 +1,49 @@
+name: Protected safety review
+
+# This is deliberately pull_request_target: verifier code and the manifest come
+# from the trusted base. The job reads PR metadata/comments over the API and
+# never checks out or executes pull-request-head code.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+  issue_comment:
+    types: [created, edited, deleted]
+  merge_group:
+    types: [checks_requested]
+    branches: [main]
+
+concurrency:
+  group: protected-safety-review-${{ github.event.issue.number || github.event.pull_request.number || github.event.merge_group.head_sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+  checks: write
+
+jobs:
+  evaluate:
+    name: Evaluate protected-path evidence
+    if: github.event_name == 'pull_request_target' || github.event_name == 'merge_group' || github.event.issue.pull_request != null
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out trusted PR base or default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha || 'refs/heads/main' }}
+          persist-credentials: false
+      - name: Record the checked-out trusted commit
+        id: trusted_base
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Evaluate current PR metadata and publish exact-head status
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TRUSTED_BASE_SHA: ${{ steps.trusted_base.outputs.sha }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python3 -m scripts.ci.protected_safety_review
