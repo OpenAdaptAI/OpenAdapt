@@ -284,6 +284,9 @@ def _review_and_attestation_errors(
         if not isinstance(sha, str) or not SHA.fullmatch(sha):
             errors.append("GitHub returned malformed commit metadata")
             continue
+        # Python 3.10's fromisoformat rejects the "Z" suffix GitHub uses.
+        if isinstance(date_value, str) and date_value.endswith("Z"):
+            date_value = date_value[:-1] + "+00:00"
         try:
             commit_time = datetime.fromisoformat(date_value)
         except (TypeError, ValueError):
