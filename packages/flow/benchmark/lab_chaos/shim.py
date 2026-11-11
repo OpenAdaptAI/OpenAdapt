@@ -137,7 +137,7 @@ def make_handler(args: argparse.Namespace) -> type[BaseHTTPRequestHandler]:
 
 
 def main() -> None:
-    p = argparse.ArgumentParser()
+    p = argparse.ArgumentParser(allow_abbrev=False)
     p.add_argument("--listen", type=int, required=True)
     p.add_argument("--upstream", required=True, help="host:port (Toxiproxy)")
     p.add_argument("--public", required=True, help="host:port clients use")

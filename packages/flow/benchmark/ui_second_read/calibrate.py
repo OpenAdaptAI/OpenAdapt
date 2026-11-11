@@ -29,7 +29,7 @@ def _reader(app_mod, browser):
 
 
 def main() -> None:
-    p = argparse.ArgumentParser()
+    p = argparse.ArgumentParser(allow_abbrev=False)
     p.add_argument("--app", choices=["openemr", "dolibarr"], required=True)
     args = p.parse_args()
     if args.app == "openemr":

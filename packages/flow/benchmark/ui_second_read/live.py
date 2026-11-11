@@ -25,7 +25,7 @@ from benchmark.ui_second_read.common import NoApiDriver, profile
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument("--app", choices=["openemr", "dolibarr"], required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--only", nargs="*")
