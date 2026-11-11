@@ -93,6 +93,7 @@ from openadapt_flow.verify_run import (
     VerifyRunError,
     _commit_owned_sqlite_insert,
     _owned_baseline_reference,
+    _require_recheck_purpose,
     _require_verification_purpose,
     _write_private,
     capture_baseline,
@@ -3159,13 +3160,28 @@ def _judge_recheck(
         else "the write's result was downgraded from CONFIRMED to UNCERTAIN"
         if _recheck_withdrawn(state.payload)
         else None
-    ) or recheck_problem(
-        cfg,
-        state.payload,
-        params=params,
-        run_record=run_record,
-        read_provider=read_provider,
     )
+    if problem is None:
+        try:
+            _require_recheck_purpose(cfg, receipt)
+        except VerifyRunError as exc:
+            # A call under the wrong purpose cannot settle the original write.
+            return (
+                _replace(
+                    base,
+                    reasons=[_recheck_refusal(str(exc))],
+                    recheck_owed=True,
+                ),
+                False,
+                None,
+            )
+        problem = recheck_problem(
+            cfg,
+            state.payload,
+            params=params,
+            run_record=run_record,
+            read_provider=read_provider,
+        )
     if problem is not None:
         return (
             _replace(base, reasons=[_recheck_refusal(problem)]),

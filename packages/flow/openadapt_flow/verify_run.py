@@ -3612,6 +3612,19 @@ def recheck_state(
     }
 
 
+def _require_recheck_purpose(cfg: VerifyConfig, receipt: Any) -> None:
+    attribution = (
+        receipt.get(_WRITE_ATTRIBUTION) if isinstance(receipt, Mapping) else None
+    )
+    purpose: VerificationPurpose = (
+        "owned_attempt"
+        if isinstance(attribution, Mapping)
+        and attribution.get("purpose") == "owned_attempt"
+        else "observation"
+    )
+    _require_verification_purpose(cfg, purpose)
+
+
 def recheck_problem(
     cfg: VerifyConfig,
     state: Any,
@@ -3673,6 +3686,10 @@ def recheck_problem(
         baseline_matches = purpose_matches = False
     if not baseline_matches or not purpose_matches:
         return "the recheck state's baseline is not the one its receipt names"
+    try:
+        _require_recheck_purpose(cfg, receipt)
+    except VerifyRunError as exc:
+        return str(exc)
     frame = evidence.get("frame") or {}
     schedule = frame.get(late_write.EVIDENCE_KEY)
     database = cfg.frame.database if cfg.frame is not None else None
@@ -3861,6 +3878,7 @@ def recheck_run(
 
     baseline = state.get("baseline")
     receipt = state.get("receipt")
+    _require_recheck_purpose(cfg, receipt)
     attribution = (
         receipt.get(_WRITE_ATTRIBUTION) if isinstance(receipt, Mapping) else None
     )
