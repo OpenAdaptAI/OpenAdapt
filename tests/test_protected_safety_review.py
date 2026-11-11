@@ -1564,3 +1564,99 @@ def test_clean_exact_head_coordinator_note_is_ignored() -> None:
         )
         == []
     )
+
+
+BLOCK_HEADING = "## Independent adversarial review: BLOCK"
+APPROVE_HEADING = "## Independent adversarial review: APPROVE"
+
+
+@pytest.mark.parametrize(
+    "heading_line",
+    [
+        f"<!-- x --> {BLOCK_HEADING}",
+        f"<!-- x -->{BLOCK_HEADING}",
+        f"<!-- x --> <!-- y --> {BLOCK_HEADING.lower()}",
+    ],
+    ids=["space-after-comment", "no-space", "two-comments-lowercase"],
+)
+def test_rule1_veto_after_balanced_inline_comment_refuses(heading_line: str) -> None:
+    block = _comment(
+        f"From: Claude\nReviewed-Head: {HEAD}\n\n{heading_line}\n",
+        "reviewer-login",
+        3,
+    )
+    errors = _evaluate(comments=_comments() + [block])
+    assert any("returned BLOCK" in error for error in errors), errors
+
+
+def test_rule1_heading_after_inline_comment_is_not_a_declaration() -> None:
+    body = f"From: Codex\nReviewed-Head: {HEAD}\n<!-- x --> # Problems\n"
+    errors = _evaluate(comments=_comments() + [_comment(body, "author-login", 3)])
+    assert any("invalid independent review or author declaration" in e for e in errors)
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        APPROVE_HEADING.lower(),
+        "## Independent adversarial review: APPROVE with notes",
+        APPROVE_HEADING,
+        f"<!--\n{APPROVE_HEADING}\n-->",
+    ],
+    ids=["second-lowercase", "second-variant", "duplicate", "hidden-second"],
+)
+def test_rule2_approval_needs_exactly_one_visible_approve_heading(extra: str) -> None:
+    body = _review() + extra + "\n"
+    errors = _evaluate(comments=[_comment(body, "reviewer-login", 2)])
+    assert "expected exactly one current exact-head independent review" in errors
+    assert any("invalid independent review" in error for error in errors)
+
+
+def test_rule2_approval_visible_only_after_inline_comment_is_invalid() -> None:
+    body = f"From: Claude\nReviewed-Head: {HEAD}\n<!-- x --> {APPROVE_HEADING}\n"
+    errors = _evaluate(comments=[_comment(body, "reviewer-login", 2)])
+    assert any("invalid independent review" in error for error in errors)
+
+
+@pytest.mark.parametrize(
+    ("body", "fails"),
+    [
+        # Binding only in a comment, and prose names the current head: fails.
+        (
+            f"From: Claude\n<!--\nReviewed-Head: {PARENT}\n-->\n"
+            f"{BLOCK_HEADING}\nNow on {HEAD[:8]}.\n",
+            True,
+        ),
+        # Binding only in a comment and no current-head reference: ignored.
+        (f"From: Claude\n<!--\nReviewed-Head: {PARENT}\n-->\n{BLOCK_HEADING}\n", False),
+        # A visible stale binding next to a hidden current one is not stale.
+        (
+            f"From: Claude\nReviewed-Head: {PARENT}\n"
+            f"<!-- Reviewed-Head: {HEAD} -->\n{BLOCK_HEADING}\n",
+            True,
+        ),
+        (
+            f"From: Claude\nReviewed-Head: {PARENT}\n<!--\n"
+            f"Reviewed-Head: {HEAD}\n-->\n{BLOCK_HEADING}\n",
+            True,
+        ),
+        # One visible exact stale binding is proven stale.
+        (f"From: Claude\nReviewed-Head: {PARENT}\n{BLOCK_HEADING}\n", False),
+    ],
+    ids=[
+        "hidden-stale-names-current",
+        "hidden-stale-only",
+        "visible-stale-inline-hidden-current",
+        "visible-stale-block-hidden-current",
+        "visible-stale",
+    ],
+)
+def test_rule3_staleness_needs_a_visible_exact_binding(body: str, fails: bool) -> None:
+    errors = _evaluate(comments=_comments() + [_comment(body, "reviewer-login", 3)])
+    assert bool(errors) is fails, errors
+
+
+def test_rule3_hidden_binding_never_approves() -> None:
+    body = f"From: Claude\n<!--\nReviewed-Head: {HEAD}\n-->\n{APPROVE_HEADING}\n"
+    errors = _evaluate(comments=[_comment(body, "reviewer-login", 2)])
+    assert "expected exactly one current exact-head independent review" in errors

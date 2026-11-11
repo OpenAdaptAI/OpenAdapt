@@ -25,6 +25,7 @@ from typing import Any
 
 from scripts.ci.attestation import (
     EvidenceError,
+    declaration_text,
     head_reference_lines,
     is_hidden_approval_example,
     is_legacy_coordinator_note,
@@ -33,6 +34,7 @@ from scripts.ci.attestation import (
     review_headings,
     vendor_family,
     veto_text,
+    visible_head_reference_lines,
 )
 
 REPOSITORY = "OpenAdaptAI/OpenAdapt"
@@ -154,29 +156,49 @@ def _current_comment(body: str, head: str) -> bool:
     Selection keeps ambiguous or malformed reviews, including ones whose heading
     is unrecognizable, so only the strict parser decides whether they are valid.
     """
-    mentions = re.findall(
-        r"(?m)^ {0,3}Reviewed-Head[ \t]*:[ \t]*(.*)$", veto_text(body)
-    )
+    mentions = [
+        value
+        for text in (veto_text(body), declaration_text(body))
+        for value in re.findall(r"(?m)^ {0,3}Reviewed-Head[ \t]*:[ \t]*(.*)$", text)
+    ]
     return any(
         re.search(rf"(?i)(?<![0-9a-f]){re.escape(head)}(?![0-9a-f])", value)
         for value in mentions
     )
 
 
+def _mentions_head(body: str, head: str) -> bool:
+    for text in (veto_text(body), declaration_text(body)):
+        normalized = unicodedata.normalize("NFKC", text).casefold()
+        for value in re.findall(r"[0-9a-f]{8,}", normalized):
+            if head.startswith(value) or value.startswith(head):
+                return True
+    return False
+
+
 def _review_needs_validation(body: str, head: str) -> bool:
-    """Ignore only a proven stale review, not an unknown declaration shape."""
-    heads = _headers(body, "Reviewed-Head")
+    """Ignore only a proven stale review, not an unknown declaration shape.
+
+    A review is proven stale only by one visible exact ``Reviewed-Head`` line
+    naming an older SHA, with no other binding in either view. A binding seen
+    only inside an HTML comment proves nothing: the review is validated (and
+    fails) if it names or might name the current head, and otherwise ignored.
+    """
+    visible = re.findall(r"(?m)^Reviewed-Head: (.*)$", declaration_text(body))
+    hidden = _headers(body, "Reviewed-Head")
+    raw_references = head_reference_lines(body)
+    visible_references = visible_head_reference_lines(body)
     if (
-        len(heads) != 1
-        or len(head_reference_lines(body)) != 1
-        or not SHA.fullmatch(heads[0].strip())
+        len(visible) == 1
+        and hidden == visible
+        and len(raw_references) == 1
+        and len(visible_references) == 1
+        and SHA.fullmatch(visible[0].strip())
     ):
-        return True
-    if heads[0].strip() == head:
-        return True
-    visible = unicodedata.normalize("NFKC", veto_text(body)).casefold()
-    references = re.findall(r"[0-9a-f]{8,}", visible)
-    return any(head.startswith(value) or value.startswith(head) for value in references)
+        return visible[0].strip() == head or _mentions_head(body, head)
+    if not visible and not visible_references and (hidden or raw_references):
+        return _mentions_head(body, head)
+    return True
 
 
 TRUSTED_ASSOCIATIONS = {"OWNER", "MEMBER", "COLLABORATOR"}

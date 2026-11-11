@@ -78,7 +78,13 @@ or a BLOCK. HTML comments (`<!-- -->`) can only remove approval: an APPROVE
 inside one never counts, but a BLOCK heading inside one still blocks. A review
 whose body has an ambiguous or unclosed HTML comment, including one closed by
 `--!>`, never approves. A fence-like line inside an HTML comment does not open
-a fence.
+a fence. Vetoes are looked for both with HTML comments kept and
+with them removed, so a BLOCK heading that follows an inline comment on the
+same line still blocks. An approval needs exactly one visible review heading,
+the APPROVE heading, and no other heading in either view. A review is ignored
+as stale only when it has one visible exact `Reviewed-Head` line naming an
+older head and no other binding; a binding that appears only inside an HTML
+comment never makes a review stale.
 
 ## How the check runs
 

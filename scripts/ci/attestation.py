@@ -151,8 +151,13 @@ def _headings(text: str) -> list[str]:
 
 
 def review_headings(body: str) -> list[str]:
-    """Find review headings for validation, including inside HTML comments."""
-    return _headings(veto_text(body))
+    """Find review headings in either view, for validation and vetoes.
+
+    The raw view keeps HTML comments, so a hidden heading is found. The
+    stripped view finds a heading that only starts a line once a balanced
+    inline comment before it is removed.
+    """
+    return _headings(veto_text(body)) + _headings(declaration_text(body))
 
 
 def visible_review_headings(body: str) -> list[str]:
@@ -166,12 +171,13 @@ def is_hidden_approval_example(body: str) -> bool:
     Such a comment grants nothing and is ignored. A comment with any
     BLOCK-like text is never ignored.
     """
-    raw = veto_text(body)
+    hidden = _headings(veto_text(body))
     return (
-        bool(review_headings(body))
+        bool(hidden)
         and not visible_review_headings(body)
-        and all(line == _REVIEW_HEADING for line in review_headings(body))
-        and not re.search(r"(?i)\bblock", raw)
+        and all(line == _REVIEW_HEADING for line in hidden)
+        and not re.search(r"(?i)\bblock", veto_text(body))
+        and not re.search(r"(?i)\bblock", declaration_text(body))
     )
 
 
@@ -180,9 +186,18 @@ def head_reference_lines(body: str) -> list[str]:
 
     HTML comments are not stripped, so a hidden binding still counts here.
     """
+    return _head_references(veto_text(body))
+
+
+def visible_head_reference_lines(body: str) -> list[str]:
+    """Head-like bindings outside fences and HTML comments."""
+    return _head_references(declaration_text(body))
+
+
+def _head_references(text: str) -> list[str]:
     return [
         line
-        for line in veto_text(body).splitlines()
+        for line in text.splitlines()
         if re.match(
             r"^(?! {4}) {0,3}(?:\d+[.)][ \t]+)?[^a-z0-9>\s]*[ \t]*"
             r"reviewed[^a-z0-9]*head(?![a-z0-9])",
@@ -193,7 +208,11 @@ def head_reference_lines(body: str) -> list[str]:
 
 def _one_header(body: str, name: str) -> str:
     values = re.findall(rf"(?m)^{re.escape(name)}: (.*)$", declaration_text(body))
-    if name == "Reviewed-Head" and len(head_reference_lines(body)) != len(values):
+    if name == "Reviewed-Head" and not (
+        len(head_reference_lines(body))
+        == len(visible_head_reference_lines(body))
+        == len(values)
+    ):
         raise EvidenceError(
             "head-like bindings must use the exact Reviewed-Head header"
         )
@@ -216,10 +235,17 @@ def parse_review_report(body: str, expected_head: str) -> tuple[str, str]:
     """
     if not _SHA.fullmatch(expected_head):
         raise EvidenceError("expected_head must be a full lowercase commit SHA")
-    headings = review_headings(body)
-    if any(line == _BLOCK_HEADING for line in headings):
+    # Rule 1: a BLOCK-like heading in either view refuses.
+    hidden = _headings(veto_text(body))
+    visible = visible_review_headings(body)
+    if any(
+        "block" in unicodedata.normalize("NFKC", line).casefold()
+        for line in hidden + visible
+    ):
         raise EvidenceError("independent reviewer returned BLOCK")
-    if len(headings) != 1 or headings[0] != _REVIEW_HEADING:
+    # Rule 2: approval is exactly one visible APPROVE heading, and the raw
+    # view holds no other heading.
+    if visible != [_REVIEW_HEADING] or hidden != [_REVIEW_HEADING]:
         raise EvidenceError(
             "expected exactly one existing review heading: APPROVE or BLOCK"
         )
@@ -258,9 +284,10 @@ def is_legacy_coordinator_note(body: str, expected_head: str) -> bool:
     visible = re.findall(r"(?m)^Coordinator-Approval: (.*)$", declaration_text(body))
     if len(approvals) != 1 or approvals[0] != "APPROVE" or visible != approvals:
         return False
-    rest = re.sub(r"(?m)^Coordinator-Approval: APPROVE$", "", text)
-    if _VERDICT_LIKE.search(rest) or re.search(r"(?i)coordinator-approval", rest):
-        return False
+    for view in (text, declaration_text(body)):
+        rest = re.sub(r"(?m)^Coordinator-Approval: APPROVE$", "", view)
+        if _VERDICT_LIKE.search(rest) or re.search(r"(?i)coordinator-approval", rest):
+            return False
     try:
         return (
             _one_header(body, "From") == "Coordinator"
@@ -278,7 +305,11 @@ def parse_author_declaration(body: str, expected_head: str) -> str:
     """
     if not _SHA.fullmatch(expected_head):
         raise EvidenceError("expected_head must be a full lowercase commit SHA")
-    if review_headings(body) or _VERDICT_LIKE.search(veto_text(body)):
+    if (
+        review_headings(body)
+        or _VERDICT_LIKE.search(veto_text(body))
+        or _VERDICT_LIKE.search(declaration_text(body))
+    ):
         raise EvidenceError("author declaration must not contain a heading or verdict")
     match = _VENDOR.fullmatch(_one_header(body, "From"))
     family = vendor_family(match[1]) if match else None
