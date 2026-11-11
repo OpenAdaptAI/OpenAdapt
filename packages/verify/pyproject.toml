@@ -7,11 +7,12 @@ name = "openadapt-verify"
 version = "0.1.0"
 description = "Verify an agent's writes through an independent system-of-record read path"
 readme = "README.md"
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.11,<3.13"
 license = "MIT"
 dependencies = [
     "openadapt-flow[receipts]>=2.6.0,<3",
     "cryptography>=50.0.0",
+    "pillow>=13.0.0",
 ]
 
 [project.optional-dependencies]
@@ -56,7 +57,7 @@ ignore_missing_imports = true
 
 [tool.uv]
 required-environments = [
-    "python_version == '3.10' and sys_platform == 'linux'",
-    "python_version == '3.10' and sys_platform == 'darwin'",
-    "python_version == '3.10' and sys_platform == 'win32'",
+    "python_version == '3.11' and sys_platform == 'linux'",
+    "python_version == '3.11' and sys_platform == 'darwin'",
+    "python_version == '3.11' and sys_platform == 'win32'",
 ]

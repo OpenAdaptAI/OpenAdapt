@@ -9,8 +9,9 @@ the writer's response is never evidence that its write persisted.
 pip install openadapt-verify
 ```
 
-This is a small facade over `openadapt-flow[receipts]`. Its installation includes
-Flow's dependencies, including its vision stack.
+Requires Python 3.11 or 3.12. This facade requires Pillow 13 or newer and is a
+small wrapper over `openadapt-flow[receipts]`. Its installation includes Flow's
+dependencies, including its vision stack.
 
 ## Wrap a write
 
@@ -137,7 +138,8 @@ separately before deciding what happened.
 At or after `recheck_due_at`, `recheck` reads the store using the canonical
 verifier and the private state saved by `run`. Supply the original contract,
 params and `--agent-id`, and retain the same verifier authority and ledger
-directories. Before the due time it exits 5 without ending the window.
+directories. The ledger directory must not be writable by the checked agent.
+Before the due time it exits 5 without ending the window.
 A confirmed recheck exits 0, an uncertain one 3 and a refuted one 4. It reports
 the current result and read window as unsigned JSON; the earlier signed
 receipt remains provisional. A write after the recheck read is outside its

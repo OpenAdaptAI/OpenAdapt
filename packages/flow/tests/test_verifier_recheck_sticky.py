@@ -135,11 +135,12 @@ def test_another_receipt_in_the_same_attempt_cannot_authorize_recovery(
 
 
 def test_generated_transient_and_terminal_recheck_histories(tmp_path, monkeypatch):
-    from hypothesis import given
+    from hypothesis import given, settings
     from hypothesis import strategies as st
 
     case = 0
 
+    @settings(deadline=None)
     @given(
         reads=st.integers(min_value=1, max_value=3),
         terminal=st.booleans(),

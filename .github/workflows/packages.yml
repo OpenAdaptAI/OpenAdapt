@@ -343,7 +343,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.10", "3.12"]') }}
+        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.11", "3.12"]') }}
     defaults:
       run:
         working-directory: packages/verify
@@ -362,11 +362,12 @@ jobs:
             packages/flow/uv.lock
           cache-suffix: verify-py${{ matrix.python-version }}
       - name: Install the facade against the in-tree core and SDK callbacks
-        # The broader core/dev lock wins shared dependency versions.
+        # Install the core's development tooling first; the facade lock wins
+        # shared versions so its patched Pillow lower bound survives pip check.
         run: >-
           python ../../scripts/ci/locked_install.py
-          --lock 'packages/verify[dev,openai,claude,mcp]'
           --lock 'packages/flow[dev,agent,openai-agents,claude-agent-sdk]'
+          --lock 'packages/verify[dev,openai,claude,mcp]'
           --editable packages/types --editable packages/flow --editable packages/verify
       - name: Lint, format and types
         run: |

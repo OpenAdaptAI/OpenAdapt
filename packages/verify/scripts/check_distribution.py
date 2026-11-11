@@ -62,6 +62,9 @@ def check(dist: Path, root: Path) -> dict:
         metadata = BytesParser().parsebytes(archive.read(metadata_name))
         assert metadata["Name"] == config["project"]["name"]
         assert metadata["Version"] == config["project"]["version"]
+        assert SpecifierSet(metadata["Requires-Python"]) == SpecifierSet(
+            config["project"]["requires-python"]
+        )
         assert metadata["License-Expression"] == "MIT"
         required = [
             Requirement(value) for value in metadata.get_all("Requires-Dist", [])
@@ -74,6 +77,7 @@ def check(dist: Path, root: Path) -> dict:
         assert base["openadapt-flow"].extras == {"receipts"}
         assert base["openadapt-flow"].specifier == SpecifierSet(">=2.6.0,<3")
         assert base["cryptography"].specifier == SpecifierSet(">=50.0.0")
+        assert base["pillow"].specifier == SpecifierSet(">=13.0.0")
         entries = configparser.ConfigParser()
         entry_name = next(
             name for name in names if name.endswith(".dist-info/entry_points.txt")
