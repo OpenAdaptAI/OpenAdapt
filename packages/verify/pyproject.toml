@@ -56,6 +56,8 @@ files = ["src/openadapt_verify"]
 ignore_missing_imports = true
 
 [tool.uv]
+# Verify is installed after Flow, whose locked SciPy 1.15.3 requires NumPy <2.5.
+constraint-dependencies = ["numpy<2.5"]
 required-environments = [
     "python_version == '3.11' and sys_platform == 'linux'",
     "python_version == '3.11' and sys_platform == 'darwin'",
