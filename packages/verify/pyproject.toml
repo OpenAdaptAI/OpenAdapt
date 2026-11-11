@@ -70,8 +70,15 @@ ignore_missing_imports = true
 # replaces every requirement on the package, extras included, so it names
 # every Flow extra this package uses. Delete it when relocking after the
 # Flow 3.0.0 release.
+# Flow 2.x's base install carried the vision stack, which Flow 3 and this
+# package never use, so the overrides also keep it out of the lock (a marker
+# no environment matches).
 override-dependencies = [
     "openadapt-flow[receipts,agent,openai-agents,claude-agent-sdk]>=2.6.0,<4",
+    "numpy; python_version < '3'",
+    "opencv-python; python_version < '3'",
+    "pillow; python_version < '3'",
+    "rapidocr-onnxruntime; python_version < '3'",
 ]
 required-environments = [
     "python_version == '3.10' and sys_platform == 'linux'",

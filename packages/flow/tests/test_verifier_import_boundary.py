@@ -114,3 +114,31 @@ def test_base_install_declares_no_vision_distribution() -> None:
 
     assert not names(project["dependencies"]) & VISION_DISTRIBUTIONS
     assert names(project["optional-dependencies"]["vision"]) == VISION_DISTRIBUTIONS
+
+
+def test_cli_names_the_vision_extra_when_it_is_missing(tmp_path: Path) -> None:
+    script = textwrap.dedent(
+        """
+        import sys
+
+        class Refuse:
+            def find_spec(self, name, path=None, target=None):
+                if name.partition(".")[0] in {"numpy", "cv2", "PIL"}:
+                    raise ModuleNotFoundError(name=name.partition(".")[0])
+                return None
+
+        sys.meta_path.insert(0, Refuse())
+        from openadapt_flow.__main__ import main
+
+        sys.exit(main(["--help"]))
+        """
+    )
+    run = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        timeout=600,
+    )
+    assert run.returncode == 2, run.stderr[-2000:]
+    assert "pip install 'openadapt-flow[vision]'" in run.stderr
