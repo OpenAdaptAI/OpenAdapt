@@ -37,7 +37,7 @@ The Connector ships with the engine (`openadapt-flow`), so a dispatched run is
 the *same* fail-closed `openadapt-flow run` you would run locally.
 
 ```bash
-pip install openadapt-flow
+pip install 'openadapt-flow[vision]'
 
 # 1. In app.openadapt.ai, open Dashboard → Settings →
 #    Customer-controlled connector, create a connector, and copy its token once

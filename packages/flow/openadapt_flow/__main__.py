@@ -14376,12 +14376,36 @@ def _sealed_input_refusal(args: argparse.Namespace) -> Optional[str]:
     return None
 
 
+# Top-level modules of the `vision` extra. A slim install (openadapt-verify's
+# dependency profile) has none of them.
+_VISION_MODULES = frozenset({"cv2", "numpy", "PIL", "rapidocr_onnxruntime"})
+
+
 def main(
     argv: Sequence[str] | None = None,
     *,
     record_check_proof_source: Optional[Fixture] = None,
 ) -> int:
     """CLI entry point. Returns a process exit code."""
+    try:
+        return _main(argv, record_check_proof_source=record_check_proof_source)
+    except ModuleNotFoundError as exc:
+        if (exc.name or "").split(".")[0] not in _VISION_MODULES:
+            raise
+        print(
+            "This command needs Flow's vision stack, which is not installed "
+            f"(missing {exc.name}).\n"
+            "Install it with: pip install 'openadapt-flow[vision]'",
+            file=sys.stderr,
+        )
+        return 2
+
+
+def _main(
+    argv: Sequence[str] | None = None,
+    *,
+    record_check_proof_source: Optional[Fixture] = None,
+) -> int:
     from openadapt_flow.cli_tasks import alias_notice, translate
 
     raw = list(sys.argv[1:] if argv is None else argv)

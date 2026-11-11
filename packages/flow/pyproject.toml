@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openadapt-flow"
-version = "2.7.1"
+version = "3.0.0"
 description = "Compile demonstrated GUI workflows into deterministic local replay with governed repair and refusal"
 readme = "README.md"
 license = { text = "MIT" }
@@ -33,16 +33,12 @@ classifiers = [
 ]
 dependencies = [
     "pydantic>=2.5",
-    "numpy>=1.26",
-    # rapidocr-onnxruntime requires opencv-python by distribution name. Python
-    # packaging has no provider/alias mechanism through which the headless
-    # distribution can satisfy that requirement. Declaring both installs two
-    # distributions that own the same cv2 package. Use the one provider that
-    # RapidOCR's published metadata requires, and enforce this in the clean
-    # wheel lifecycle on every supported OS.
-    "opencv-python>=4.9",
-    "pillow>=10.0",
-    "rapidocr-onnxruntime>=1.3",
+    # The vision stack (NumPy, OpenCV, Pillow, RapidOCR) is the `vision` extra
+    # since 3.0.0. Recording, compiling and replaying a GUI workflow need it;
+    # the record-check verifier (openadapt_flow.verifier and its SQL, REST and
+    # FHIR read paths, write ledger, journal and receipts) never imports it, so
+    # openadapt-verify installs without it. tests/test_verifier_import_boundary.py
+    # enforces that boundary.
     # GPU-less runners call the on-prem VLM appliance over HTTP
     # (runtime.remote_vlm). Lightweight; core so the fail-safe client is
     # always importable on a runner.
@@ -69,7 +65,25 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Screen recording, compiling and replay: OCR, image matching and frame
+# handling. `pip install 'openadapt-flow[vision]'` restores the 2.x base
+# install. Every recording or replay surface extra below (browser, capture,
+# windows, macos, linux, rdp, native-ocr, local-grounding, openenv) includes
+# it, so `pip install 'openadapt-flow[browser]'` installs what it did in 2.x.
+vision = [
+    "numpy>=1.26",
+    # rapidocr-onnxruntime requires opencv-python by distribution name. Python
+    # packaging has no provider/alias mechanism through which the headless
+    # distribution can satisfy that requirement. Declaring both installs two
+    # distributions that own the same cv2 package. Use the one provider that
+    # RapidOCR's published metadata requires, and enforce this in the clean
+    # wheel lifecycle on every supported OS.
+    "opencv-python>=4.9",
+    "pillow>=10.0",
+    "rapidocr-onnxruntime>=1.3",
+]
 native-ocr = [
+    "openadapt-flow[vision]",
     # The operating system's own OCR (OPENADAPT_FLOW_OCR=native): Apple Vision
     # through PyObjC on macOS, Windows.Media.Ocr through the winrt projections
     # on Windows. With it, the record, compile, and replay path loads neither
@@ -86,12 +100,18 @@ native-ocr = [
     "winrt-Windows.Foundation.Collections>=2.0; sys_platform == 'win32'",
 ]
 browser = [
+    "openadapt-flow[vision]",
     # Browser recording/replay is an explicit substrate capability. Native
     # desktop, RDP, and Citrix users do not need this ~34-47 MB driver wheel or
     # its separately downloaded Chromium runtime.
     "playwright>=1.44",
 ]
 dev = [
+    # The test suite exercises record, compile and replay.
+    "numpy>=1.26",
+    "opencv-python>=4.9",
+    "pillow>=10.0",
+    "rapidocr-onnxruntime>=1.3",
     "pytest>=8",
     "pytest-timeout>=2.2",
     # CI runs the unit shards with `pytest -n auto --dist loadfile`.
@@ -149,7 +169,7 @@ grounding = ["openadapt-grounding>=0.1.0"]
 # distribution and the install-weight budget is unchanged. The 24 MB weights
 # are not in the wheel; they are fetched once from a pinned revision and
 # SHA-256 checked (or placed under OPENADAPT_FLOW_MODEL_DIR for offline sites).
-local-grounding = ["onnxruntime>=1.17"]
+local-grounding = ["onnxruntime>=1.17", "openadapt-flow[vision]"]
 # Operator console: `openadapt-flow console` serves a localhost-only web UI
 # over compiled bundles / run reports / skill libraries (openadapt_flow.console).
 # FastAPI app + uvicorn server; the API client side (httpx) is already core.
@@ -189,7 +209,11 @@ execute = [
     "uvicorn>=0.29",
 ]
 # WindowsBackend: HTTP client for the WAA (Windows Agent Arena) server.
-windows = ["requests>=2.31", "pywin32>=312; platform_system == 'Windows'"]
+windows = [
+    "openadapt-flow[vision]",
+    "requests>=2.31",
+    "pywin32>=312; platform_system == 'Windows'",
+]
 # Reference reward worker: `openadapt-flow serve-reward`. Reads the system of
 # record after a training episode and signs a reward receipt with a local key.
 # A reward receipt is not an Execute Seal; the worker never imports Cloud.
@@ -202,6 +226,7 @@ reward = [
 # See environments/openenv/README.md. Python 3.11+: on 3.10 the OpenEnv stack
 # resolves to a dnspython release with a known advisory (GHSA-45c3-73f7-pv4m).
 openenv = [
+    "openadapt-flow[vision]",
     "openenv>=0.11,<0.12; python_version >= '3.11'",
     "playwright>=1.44; python_version >= '3.11'",
     "fastapi>=0.110; python_version >= '3.11'",
@@ -210,6 +235,7 @@ openenv = [
 # Native macOS window capture/input. Imported lazily; other platforms never
 # install or import these framework bindings.
 macos = [
+    "openadapt-flow[vision]",
     "pyobjc-framework-applicationservices>=10.3; sys_platform == 'darwin'",
     "pyobjc-framework-cocoa>=10.3; sys_platform == 'darwin'",
     "pyobjc-framework-quartz>=10.3; sys_platform == 'darwin'",
@@ -218,12 +244,13 @@ macos = [
 # also provide the AT-SPI typelib/runtime (for example gir1.2-atspi-2.0 on
 # Debian/Ubuntu) and an interactive X11 session.
 linux = [
+    "openadapt-flow[vision]",
     "PyGObject>=3.46; sys_platform == 'linux'",
 ]
 # FreeRDPBackend: pure-Python async RDP client for the pixel-only RDP path
 # (legacy EMR over RDP). Lazily imported by AardwolfTransport — never
 # needed for the mock-tested adapter, only for the real/live transport.
-rdp = ["aardwolf==0.2.14"]
+rdp = ["aardwolf==0.2.14", "openadapt-flow[vision]"]
 # `pull` from the skills registry: verifies the release workflow's Sigstore
 # attestation of the index (openadapt_flow.registry_attest), offline against
 # the pinned trusted root. Only `pull` of a remote index needs it.
@@ -263,7 +290,7 @@ service-mlx = [
 # Floor 1.2.0 retains window-scoped/UIA evidence and preserves keyboard
 # shortcuts as first-class typed actions. The `test` job installs this extra
 # so Flow validates against the released producer contract in headless CI.
-capture = ["openadapt-capture>=1.2.0"]
+capture = ["openadapt-capture>=1.2.0", "openadapt-flow[vision]"]
 # Canonical action-vocabulary interop (openadapt_flow.interop.types). The
 # contracts (openadapt-types) are a base dependency, so the extra is empty and
 # kept only so `openadapt-flow[interop]` still resolves.

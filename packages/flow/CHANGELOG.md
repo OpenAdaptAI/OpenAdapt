@@ -17,6 +17,28 @@
 
 ## Unreleased
 
+### Breaking: the vision stack is the `vision` extra (3.0.0)
+
+- `pip install openadapt-flow` no longer installs NumPy, OpenCV, Pillow or
+  RapidOCR. They are the new `vision` extra. The base install is the
+  record-check verifier, write ledger, protected journal, SQL, REST and FHIR
+  read paths and receipt signing: 17 distributions and 40 MB of site-packages
+  instead of 29 and 301 MB (uv install, Python 3.12, macOS arm64).
+  openadapt-verify depends on this base install.
+- The recording and replay extras (`browser`, `capture`, `windows`, `macos`,
+  `linux`, `rdp`, `native-ocr`, `local-grounding`, `openenv`) include
+  `vision`, so `pip install 'openadapt-flow[browser]'` installs what it did in
+  2.x. To record, compile or replay with none of those, install
+  `openadapt-flow[vision]`. Without it, `openadapt-flow` prints that install
+  command and exits 2.
+- The on-prem release installs `openadapt-flow[privacy,vision]`.
+- `RemoteFrameContract` imports Pillow only when it hashes a frame, so loading
+  a deployment config no longer needs it.
+  `tests/test_verifier_import_boundary.py` refuses the vision modules and
+  checks that the verifier path imports and signs a receipt without them.
+- No verifier, ledger, journal or guard code changed. Fail-closed behavior is
+  unchanged.
+
 - SQL effect readback now requires opaque SQLite and PostgreSQL adapters to
   declare `sql_dialect`. Native drivers are still recognized automatically.
 
