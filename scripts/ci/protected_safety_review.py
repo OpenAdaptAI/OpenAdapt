@@ -227,6 +227,7 @@ def _review_errors(
     errors: list[str] = []
     reviewers: list[str] = []
     declared: list[str] = []
+    mentioned: list[str] = []
     for comment in comments:
         body = comment.get("body")
         if not _trusted_comment(comment) or not isinstance(body, str):
@@ -246,7 +247,7 @@ def _review_errors(
             except EvidenceError as exc:
                 errors.append(f"invalid independent review: {exc}")
             continue
-        if not _current_comment(body, head) or is_legacy_coordinator_note(body):
+        if not _current_comment(body, head) or is_legacy_coordinator_note(body, head):
             continue
         # A current-head comment without a review heading must be a valid
         # author declaration. Anything else, such as a mistyped BLOCK, fails.
@@ -263,8 +264,12 @@ def _review_errors(
             errors.append(
                 "author declaration must be posted by the pull request author"
             )
-        elif unedited:
-            declared.append(family)
+        else:
+            # An edited declaration never grants anything, but it still
+            # counts as a statement of the author vendor for conflicts.
+            mentioned.append(family)
+            if unedited:
+                declared.append(family)
 
     author_family = branch_family
     if branch_family is None:
@@ -275,7 +280,9 @@ def _review_errors(
             )
         else:
             author_family = declared[0]
-    elif any(family != branch_family for family in declared):
+            if any(family != author_family for family in mentioned):
+                errors.append("author declarations name different vendors")
+    elif any(family != branch_family for family in mentioned):
         errors.append("author declaration conflicts with the branch vendor prefix")
 
     if len(reviewers) != 1:

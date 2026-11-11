@@ -149,23 +149,30 @@ def parse_review_report(body: str, expected_head: str) -> tuple[str, str]:
 _VERDICT_LIKE = re.compile(r"(?im)^ {0,3}#|\bblock|\bapprove")
 
 
-def is_legacy_coordinator_note(body: str) -> bool:
-    """Return True for an old ``From: Coordinator`` approval note.
+def is_legacy_coordinator_note(body: str, expected_head: str) -> bool:
+    """Return True only for a clean old exact-head coordinator approval note.
 
-    Coordinator approval is no longer required. Old notes grant nothing and are
-    ignored so they do not fail open pull requests.
+    Coordinator approval is no longer required. A note with exactly one
+    ``From: Coordinator``, one exact ``Reviewed-Head`` for this head, one
+    ``Coordinator-Approval: APPROVE`` and nothing verdict-like besides is
+    ignored. Any other shape returns False so the caller fails closed.
     """
-    if review_headings(body):
+    if not _SHA.fullmatch(expected_head) or review_headings(body):
         return False
     text = declaration_text(body)
-    froms = re.findall(r"(?m)^From: (.*)$", text)
     approvals = re.findall(r"(?m)^Coordinator-Approval: (.*)$", text)
-    return (
-        len(froms) == 1
-        and froms[0].strip() == "Coordinator"
-        and len(approvals) == 1
-        and approvals[0].strip() == "APPROVE"
-    )
+    if len(approvals) != 1 or approvals[0] != "APPROVE":
+        return False
+    rest = re.sub(r"(?m)^Coordinator-Approval: APPROVE$", "", text)
+    if _VERDICT_LIKE.search(rest) or re.search(r"(?i)coordinator-approval", rest):
+        return False
+    try:
+        return (
+            _one_header(body, "From") == "Coordinator"
+            and _one_header(body, "Reviewed-Head") == expected_head
+        )
+    except EvidenceError:
+        return False
 
 
 def parse_author_declaration(body: str, expected_head: str) -> str:

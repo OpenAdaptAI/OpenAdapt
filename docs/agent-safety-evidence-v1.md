@@ -51,9 +51,13 @@ Reviewed-Head: <40-character lowercase PR head SHA>
 ```
 
 A declaration has no heading and no verdict word, and it never counts as a
-review. On a vendor-named branch no declaration is needed; one that names a
-different vendor family than the branch fails. Old
-`From: Coordinator` / `Coordinator-Approval: APPROVE` notes are ignored.
+review. On a vendor-named branch no declaration is needed. An edited
+declaration never grants anything, but any current-head declaration from the
+pull request author, edited or not, that names a different vendor family than
+the branch (or than the valid declaration) fails. An old coordinator note is
+ignored only when it has exactly one `From: Coordinator`, one exact
+`Reviewed-Head` for the current head, one `Coordinator-Approval: APPROVE` and
+no other heading or verdict word; any other shape fails.
 
 ## What fails
 

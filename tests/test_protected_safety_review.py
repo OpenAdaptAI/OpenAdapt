@@ -1422,3 +1422,105 @@ def test_comment_job_still_fails_on_internal_publication_error(
     output = capsys.readouterr()
     assert canary not in output.out + output.err
     assert output.err == "unable to publish protected safety review\n"
+
+
+@pytest.mark.parametrize(
+    ("vendor", "reviewer", "expected"),
+    [
+        (
+            "Claude",
+            "Claude",
+            ["author declaration conflicts with the branch vendor prefix"],
+        ),
+        ("Codex", "Claude", []),
+        ("Codex", "Codex", ["author and reviewer must be from different vendors"]),
+    ],
+    ids=["edited-conflicting", "edited-matching", "edited-matching-same-vendor"],
+)
+def test_edited_declaration_on_prefixed_branch(
+    vendor: str, reviewer: str, expected: list[str]
+) -> None:
+    declaration = _comment(_declaration(vendor), "author-login", 1)
+    declaration["updated_at"] = "2026-11-05T18:01:00Z"
+    comments = [declaration] + _comments(reviewer=reviewer)
+    assert _evaluate(comments=comments) == expected
+
+
+def test_edited_declaration_never_grants_on_legacy_branch() -> None:
+    declaration = _comment(_declaration("Codex"), "author-login", 1)
+    declaration["updated_at"] = "2026-11-05T18:01:00Z"
+    errors = _evaluate(
+        pull_request=_pull_request("agent/1"), comments=[declaration] + _comments()
+    )
+    assert errors == [
+        "branch has no vendor prefix; expected exactly one current exact-head "
+        "author declaration"
+    ]
+
+
+def test_edited_conflicting_declaration_fails_on_legacy_branch() -> None:
+    edited = _comment(_declaration("Claude"), "author-login", 1)
+    edited["updated_at"] = "2026-11-05T18:01:00Z"
+    comments = [edited, _comment(_declaration("Codex"), "author-login", 3)]
+    errors = _evaluate(
+        pull_request=_pull_request("agent/1"), comments=comments + _comments()
+    )
+    assert errors == ["author declarations name different vendors"]
+
+
+def _note(lines: str) -> dict[str, Any]:
+    return _comment(lines, "author-login", 1)
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        f"From: Coordinator\nReviewed-Head: {HEAD}\nReviewed-Head: {HEAD}\n"
+        "Coordinator-Approval: APPROVE\n",
+        f"From: Coordinator\nReviewed-Head: {HEAD}\nReviewed-Head: {PARENT}\n"
+        "Coordinator-Approval: APPROVE\n",
+        f"From: Coordinator\nReviewed-Head: {HEAD}\n- Reviewed-Head: {HEAD}\n"
+        "Coordinator-Approval: APPROVE\n",
+        f"From: Coordinator\nReviewed-Head: {HEAD} {PARENT}\n"
+        "Coordinator-Approval: APPROVE\n",
+        f"From: Coordinator\nReviewed-Head: {HEAD}\n"
+        "Coordinator-Approval: APPROVE\n\nBLOCK: found a bug\n",
+        f"From: Coordinator\nReviewed-Head: {HEAD}\n"
+        "Coordinator-Approval: APPROVE\n# Problems\n",
+        f"From: Coordinator\nReviewed-Head: {HEAD}\n"
+        "Coordinator-Approval: APPROVE\nCoordinator-Approval: APPROVE\n",
+        f"From: Coordinator\nFrom: Codex\nReviewed-Head: {HEAD}\n"
+        "Coordinator-Approval: APPROVE\n",
+    ],
+    ids=[
+        "duplicate-head",
+        "current-and-stale-head",
+        "decorated-extra-head",
+        "two-heads-one-line",
+        "headingless-block",
+        "extra-heading",
+        "duplicate-approval",
+        "duplicate-from",
+    ],
+)
+def test_ambiguous_or_verdict_carrying_coordinator_note_fails_closed(
+    body: str,
+) -> None:
+    errors = _evaluate(comments=[_note(body)] + _comments(), files=GATE_FILE)
+    assert any(
+        "invalid independent review or author declaration" in error for error in errors
+    )
+
+
+def test_clean_exact_head_coordinator_note_is_ignored() -> None:
+    note = _note(
+        f"From: Coordinator\nReviewed-Head: {HEAD}\nCoordinator-Approval: APPROVE\n"
+    )
+    assert _evaluate(comments=[note] + _comments(), files=GATE_FILE) == []
+    assert (
+        _evaluate(
+            pull_request=_pull_request("agent/1"),
+            comments=[note, _comment(_declaration(), "author-login", 3)] + _comments(),
+        )
+        == []
+    )
