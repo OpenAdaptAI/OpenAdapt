@@ -1,6 +1,10 @@
 """Associate a normal transport reservation with verifier receipt bytes.
 
 These local bindings do not authenticate a caller, issuer or signing key.
+A direct caller of a compiled server can send ai.openadapt/request-context
+for any request whose run ID it knows; the stored digest prevents post-facto
+tampering or substitution.
+
 Execution verification and request/receipt association are separate results.
 """
 
@@ -249,9 +253,13 @@ def _read_receipt_impl(path: object, under: Path) -> tuple[bytes, dict[str, Any]
 
     Every component, including the supplied root's ancestors, must be a real
     directory. Relative names are resolved from retained parent descriptors,
-    never from a later pathname resolution. The chain and leaf must still name
-    the opened inodes after reading. This is not an atomic filesystem snapshot
-    or a lock against another writer with access to those same inodes.
+    never from a later pathname resolution. Because the no-follow walk begins
+    at '/', any ancestor component that is a symlink (such as macOS '/tmp' or
+    '/var', or a symlinked home) will cause the read to refuse; caller-supplied
+    receipt roots should be resolved with realpath at configuration time.
+    The chain and leaf must still name the opened inodes after reading. This is
+    not an atomic filesystem snapshot or a lock against another writer with
+    access to those same inodes.
     """
     if type(path) is not str:
         raise BindingError("receipt_path")
