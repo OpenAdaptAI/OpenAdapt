@@ -16,8 +16,10 @@ def same_document(pending: dict[str, Any] | None, event: dict[str, Any]) -> bool
     previous = pending.get("_oaflow_producer_doc")
     current = event.get("_oaflow_producer_doc")
     if (
-        not isinstance(previous, str) or not previous.strip()
-        or not isinstance(current, str) or not current.strip()
+        not isinstance(previous, str)
+        or not previous.strip()
+        or not isinstance(current, str)
+        or not current.strip()
     ):
         raise DocumentOwnershipError(
             "a deferred browser action lost its producer ownership; "
@@ -32,9 +34,10 @@ def validate_event_batch(batch: list[dict[str, Any]]) -> None:
     if len(batch) <= 1:
         return
     documents = [event.get("_oaflow_producer_doc") for event in batch]
-    if any(
-        not isinstance(owner, str) or not owner.strip() for owner in documents
-    ) or len(set(documents)) != 1:
+    if (
+        any(not isinstance(owner, str) or not owner.strip() for owner in documents)
+        or len(set(documents)) != 1
+    ):
         raise DocumentOwnershipError(
             "more than one logical action cannot be excluded because producer "
             "ownership is missing or differs; recording was refused"
@@ -69,4 +72,3 @@ def validate_event_batch(batch: list[dict[str, Any]]) -> None:
         "more than one logical browser action arrived before Flow could "
         "retain an exact intermediate frame; recording was refused"
     )
-

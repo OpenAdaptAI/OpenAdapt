@@ -264,7 +264,9 @@ def test_known_navigation_keeps_first_action_and_later_document_action(
     document_browser, tmp_path, monkeypatch, kind
 ):
     url, endpoint, process = document_browser
-    session = InteractiveRecorder(url, tmp_path / "preserved-recording", cdp_endpoint=endpoint)
+    session = InteractiveRecorder(
+        url, tmp_path / "preserved-recording", cdp_endpoint=endpoint
+    )
     session.start()
     try:
         owners = []
@@ -276,7 +278,11 @@ def test_known_navigation_keeps_first_action_and_later_document_action(
 
         monkeypatch.setattr(session, "_process", observe_owner)
         _perform(session, kind, "alpha")
-        attribute = {"input": "_pending_type", "scroll": "_pending_scroll", "click": "_pending_click"}[kind]
+        attribute = {
+            "input": "_pending_type",
+            "scroll": "_pending_scroll",
+            "click": "_pending_click",
+        }[kind]
         first = getattr(session, attribute)
         assert first is not None
         first_owner = first["_oaflow_producer_doc"]
@@ -288,10 +294,19 @@ def test_known_navigation_keeps_first_action_and_later_document_action(
         assert len(owners) == 2
         assert owners[0] == first_owner and owners[1] != first_owner
         result = session.finish()
-        events = [json.loads(row) for row in (result / "events.jsonl").read_text().splitlines()]
+        events = [
+            json.loads(row)
+            for row in (result / "events.jsonl").read_text().splitlines()
+        ]
         assert len(events) == 2
-        assert events[0]["kind"] == {"input": "type", "scroll": "scroll", "click": "click"}[kind]
-        assert events[1]["kind"] == {"input": "type", "scroll": "scroll", "click": "double_click"}[kind]
+        assert (
+            events[0]["kind"]
+            == {"input": "type", "scroll": "scroll", "click": "click"}[kind]
+        )
+        assert (
+            events[1]["kind"]
+            == {"input": "type", "scroll": "scroll", "click": "double_click"}[kind]
+        )
         if kind == "input":
             assert [event["text"] for event in events] == ["alpha", "beta"]
         assert session._listener_error is None

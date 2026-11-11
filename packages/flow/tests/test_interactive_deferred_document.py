@@ -155,10 +155,18 @@ def test_same_document_acquired_batches_still_coalesce(
 
 def _commit_observer(recorded):
     def capture(event, before_png, after_png, structural_before, **evidence):
-        recorded.append((event, {
-            "before_png": before_png, "after_png": after_png,
-            "structural_before": structural_before, **evidence,
-        }))
+        recorded.append(
+            (
+                event,
+                {
+                    "before_png": before_png,
+                    "after_png": after_png,
+                    "structural_before": structural_before,
+                    **evidence,
+                },
+            )
+        )
+
     return capture
 
 
@@ -206,7 +214,9 @@ def _queued_model():
 
     def emit(kind, **values):
         detail = {
-            "kind": kind, "field": "shared", **values,
+            "kind": kind,
+            "field": "shared",
+            **values,
             "__oaflow_session": session._session_id,
             "__oaflow_doc": frame.doc,
             "__oaflow_origin": "http://127.0.0.1:34567",
