@@ -87,8 +87,14 @@ from openadapt_flow.runtime.effects.late_write import (
 from openadapt_flow.verify_run import (
     FRAME_DB_DETAIL,
     FRAME_DB_ERROR,
+    OwnedBaselineReference,
+    VerificationPurpose,
     VerifyConfig,
     VerifyRunError,
+    _commit_owned_sqlite_insert,
+    _owned_baseline_reference,
+    _require_recheck_purpose,
+    _require_verification_purpose,
     _write_private,
     capture_baseline,
     parse_verify_config,
@@ -298,6 +304,8 @@ class Contract:
         """SHA-256 of the contract as parsed: part of a write's identity."""
 
         config = self.config.model_dump(mode="json")
+        if config.get("owned_sqlite_insert") is None:
+            config.pop("owned_sqlite_insert", None)
         config["verifier"] = self._verifier_dump()
         body = json.dumps(
             {
@@ -855,6 +863,11 @@ class PendingWrite:
     used: bool = False
     _lease: Any = field(default=None, repr=False)
     _read_provider: Optional[CompleteReadProvider] = field(default=None, repr=False)
+    purpose: VerificationPurpose = "observation"
+    _owned_reference: Optional[OwnedBaselineReference] = field(default=None, repr=False)
+    _dispatch_lock: Any = field(
+        default_factory=threading.Lock, repr=False, compare=False
+    )
 
     @property
     def baseline_path(self) -> Path:
@@ -865,9 +878,51 @@ class PendingWrite:
         running but abandons the write). The attempt stays open, so the next
         caller reconciles it before any resend."""
 
-        lease, self._lease = self._lease, None
-        if lease is not None:
-            lease.release()
+        with self._dispatch_lock:
+            lease, self._lease = self._lease, None
+            if lease is not None:
+                lease.release()
+
+
+def _attempt_reference(attempt: Attempt) -> Optional[OwnedBaselineReference]:
+    if attempt.begun.get("purpose") != "owned_attempt":
+        return None
+    execution_id = attempt.begun.get("owned_baseline_execution_id")
+    digest = attempt.begun.get("owned_baseline_sha256")
+    if (
+        not isinstance(execution_id, str)
+        or not _OPAQUE.fullmatch(execution_id)
+        or not isinstance(digest, str)
+        or not re.fullmatch(r"hmac-sha256:[0-9a-f]{64}", digest)
+    ):
+        return None
+    return attempt.attempt_id, execution_id, digest
+
+
+def commit_pending_sqlite_insert(pending: PendingWrite) -> None:
+    """Commit the declared SQLite insert while this attempt owns its ledger lease."""
+    with pending._dispatch_lock:
+        if (
+            pending.used
+            or pending.purpose != "owned_attempt"
+            or pending.ledger is None
+            or pending._lease is None
+            or pending._owned_reference is None
+        ):
+            raise VerifyRunError("the pending write has no live owned dispatch lease")
+        attempt = pending.ledger.latest(pending.write_key)
+        if (
+            attempt is None
+            or attempt.state != "open"
+            or _attempt_reference(attempt) != pending._owned_reference
+        ):
+            raise VerifyRunError("the journal does not own this dispatch reservation")
+        _commit_owned_sqlite_insert(
+            pending.contract.config,
+            pending.params,
+            pending.baseline_path,
+            pending._owned_reference,
+        )
 
 
 def _resolve_ledger(ledger: Any) -> Optional[Ledger]:
@@ -891,7 +946,7 @@ def begin_write(
     read_provider: Optional[CompleteReadProvider] = None,
     task_record_sha256: Optional[str] = None,
 ) -> PendingWrite:
-    """Consult the ledger, then read the system of record before the write.
+    """Consult the ledger, then capture an observation baseline before the write.
 
     Args:
         contract: What the write must do (and, with a frame, must not do).
@@ -927,6 +982,68 @@ def begin_write(
     ``params`` lacks, or that is ``None`` where a null can't be bound
     (:meth:`Contract.null_unsafe_params`).
     """
+
+    return _begin_write(
+        contract,
+        params,
+        actor=actor,
+        ledger=ledger,
+        write_key=write_key,
+        authorization_ref=authorization_ref,
+        workdir=workdir,
+        declared_by=declared_by,
+        read_provider=read_provider,
+        task_record_sha256=task_record_sha256,
+        purpose="observation",
+    )
+
+
+def begin_owned_write(
+    contract: Contract,
+    params: Mapping[str, Any],
+    *,
+    actor: Actor,
+    ledger: Any = _NO_LEDGER,
+    write_key: Optional[str] = None,
+    authorization_ref: str = "",
+    workdir: Union[str, Path, None] = None,
+    declared_by: DeclaredBy = "agent",
+    read_provider: Optional[CompleteReadProvider] = None,
+    task_record_sha256: Optional[str] = None,
+) -> PendingWrite:
+    """Reserve an owned attempt whose confirmation requires commit evidence."""
+
+    return _begin_write(
+        contract,
+        params,
+        actor=actor,
+        ledger=ledger,
+        write_key=write_key,
+        authorization_ref=authorization_ref,
+        workdir=workdir,
+        declared_by=declared_by,
+        read_provider=read_provider,
+        task_record_sha256=task_record_sha256,
+        purpose="owned_attempt",
+    )
+
+
+def _begin_write(
+    contract: Contract,
+    params: Mapping[str, Any],
+    *,
+    actor: Actor,
+    ledger: Any,
+    write_key: Optional[str],
+    authorization_ref: str,
+    workdir: Union[str, Path, None],
+    declared_by: DeclaredBy,
+    read_provider: Optional[CompleteReadProvider],
+    task_record_sha256: Optional[str],
+    purpose: VerificationPurpose,
+) -> PendingWrite:
+    if contract.config.owned_sqlite_insert and purpose != "owned_attempt":
+        raise VerifierError("the configured SQLite writer requires begin_owned_write")
 
     if task_record_sha256 is not None and (
         not isinstance(task_record_sha256, str)
@@ -984,6 +1101,7 @@ def begin_write(
             authorization_ref,
             declared_by,
             read_provider=read_provider,
+            purpose=purpose,
         )
     try:
         key = led.key_for(contract.identity, values, write_key)
@@ -998,7 +1116,15 @@ def begin_write(
             key=key,
         )
     try:
-        _settle(led, key, contract, params, actor, read_provider=read_provider)
+        _settle(
+            led,
+            key,
+            contract,
+            params,
+            actor,
+            read_provider=read_provider,
+            purpose=purpose,
+        )
         _hold_elsewhere(led, key, shape_key)
         if any(v is None for v in values.values()):
             _hold_legacy_null(led, contract, values, write_key)
@@ -1017,12 +1143,22 @@ def begin_write(
             authorization_ref,
             declared_by,
             read_provider=read_provider,
+            purpose=purpose,
+            ledger_owned=True,
         )
         pending.started = started
         _write_private(
             folder / "attempt.json",
             {"values": values, "authorization_ref": pending.authorization_ref},
         )
+        owned_fields = {}
+        if pending._owned_reference is not None:
+            _, execution_id, digest = pending._owned_reference
+            owned_fields = {
+                "purpose": pending.purpose,
+                "owned_baseline_execution_id": execution_id,
+                "owned_baseline_sha256": digest,
+            }
         led.begun(
             key,
             write_id,
@@ -1045,6 +1181,7 @@ def begin_write(
                 if task_record_sha256 is not None
                 else {}
             ),
+            **owned_fields,
         )
     except LedgerError as exc:
         lease.release()
@@ -1077,6 +1214,8 @@ def _capture(
     declared_by: DeclaredBy,
     *,
     read_provider: Optional[CompleteReadProvider] = None,
+    purpose: VerificationPurpose,
+    ledger_owned: bool = False,
 ) -> PendingWrite:
     pending = PendingWrite(
         contract=contract,
@@ -1088,6 +1227,7 @@ def _capture(
         authorized=bool(authorization_ref),
         declared_by=declared_by,
         _read_provider=read_provider,
+        purpose=purpose,
     )
     try:
         payload = capture_baseline(
@@ -1095,6 +1235,13 @@ def _capture(
             pending.params,
             pending.baseline_path,
             read_provider=read_provider,
+            purpose=pending.purpose,
+            _owned_dispatch_owner=write_id
+            if ledger_owned and purpose == "owned_attempt"
+            else None,
+        )
+        pending._owned_reference = _owned_baseline_reference(
+            payload, bytes.fromhex(payload["salt"])
         )
     except Exception as exc:  # a store that can't be reached, a bad binding
         raise BaselineUnreadable(
@@ -1150,10 +1297,20 @@ def _settle(
     actor: Actor,
     *,
     read_provider: Optional[CompleteReadProvider] = None,
+    purpose: VerificationPurpose,
 ) -> None:
     """With the lease held: resolve the key's earlier attempt, or raise."""
 
     attempt = led.latest(key)
+    if (
+        attempt is not None
+        and led.state(attempt) != "free"
+        and attempt.begun.get("purpose", "observation") != purpose
+    ):
+        raise WriteHeld(
+            "the earlier attempt was recorded for a different verification purpose",
+            key=key,
+        )
     if attempt is not None and attempt.state in ("open", "uncertain"):
         # Open with a free lease: its owner died between the send and the
         # read-back. Read back before anything is sent.
@@ -1314,6 +1471,18 @@ def _reconcile(
         payload = json.loads(baseline.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return  # nothing to judge with: stays as it is, for a person
+    purpose = attempt.begun.get("purpose", "observation")
+    if (
+        not isinstance(payload, dict)
+        or purpose not in ("observation", "owned_attempt")
+        or (payload.get("purpose", "observation") != purpose)
+    ):
+        return  # do not reinterpret another attempt or promote an unbound read
+    if contract.config.owned_sqlite_insert and purpose != "owned_attempt":
+        return  # a historical observational attempt cannot acquire native authority
+    reference = _attempt_reference(attempt)
+    if purpose == "owned_attempt" and reference is None:
+        return  # the original owned baseline is not bound in the journal
     workdir = folder
     if baseline.with_name(baseline.name + ".used").exists():
         workdir = folder / f"reconcile-{secrets.token_hex(6)}"
@@ -1334,6 +1503,8 @@ def _reconcile(
         declared_by=attempt.begun.get("declared_by") or "agent",
         write_key=key,
         _read_provider=read_provider,
+        purpose=purpose,
+        _owned_reference=reference,
     )
     result = _judge(
         pending,
@@ -1407,7 +1578,7 @@ def verify_write(
     baseline :func:`begin_write` took. Never resends the write.
 
     Args:
-        pending: From :func:`begin_write`. Single use.
+        pending: From :func:`begin_write` or :func:`begin_owned_write`. Single use.
         write_attempted: False records the caller's claim that the write
             was never sent (a stop before the save). It does not establish
             retry safety: the attempt stays held without complete dispatch
@@ -1456,9 +1627,30 @@ def verify_write(
     try:
         before_judge = (
             pending.ledger.latest(pending.write_key)
-            if holds_lease and pending.ledger is not None
+            if pending.ledger is not None
             else None
         )
+        same_attempt = (
+            before_judge is not None and before_judge.attempt_id == pending.write_id
+        )
+        purpose_changed = same_attempt and (
+            before_judge is not None
+            and before_judge.begun.get("purpose", "observation") != pending.purpose
+        )
+        if purpose_changed or (
+            pending.ledger is not None
+            and pending.purpose == "owned_attempt"
+            and (
+                not same_attempt
+                or before_judge is None
+                or pending._owned_reference is None
+                or _attempt_reference(before_judge) != pending._owned_reference
+            )
+        ):
+            raise WriteHeld(
+                "the write attempt or its verification purpose changed",
+                key=pending.write_key,
+            )
         result = _judge(
             pending, write_attempted=write_attempted, source=source, seal=seal
         )
@@ -1703,7 +1895,12 @@ def _check_overlap(
                 "which one landed",
             )
         return result
-    if result.outcome is not Outcome.REFUTED or result.checked.get("delta") != "held":
+    if (
+        result.outcome is not Outcome.REFUTED
+        or result.checked.get("delta") != "held"
+        or (result.evidence.get("write_attribution") or {}).get("purpose")
+        == "owned_attempt"
+    ):
         return result
     if result.checked.get("source") == "refuted":
         return result
@@ -1764,6 +1961,8 @@ def _judge(
             documents=None if source is None else source.documents,
             post_state_out=post_state,
             read_provider=pending._read_provider,
+            purpose=pending.purpose,
+            _owned_reference=pending._owned_reference,
         )
         path: Optional[str] = str(write_result(doc, pending.workdir))
     except Exception as exc:  # noqa: BLE001 - unreadable store, timeout, used baseline
@@ -2005,6 +2204,8 @@ def _reasons(evidence: Mapping[str, Any], receipt_outcome: str) -> list[str]:
         out.append(f"the saved record differs from its source in {fields}")
     if receipt_outcome == "rejected_policy":
         out.append("the write's approver is its own executor")
+    if (evidence.get("write_attribution") or {}).get("status") == "unattributed":
+        out.append("the store did not bind a committed write to this attempt")
     if not out and receipt_outcome not in ("verified", ""):
         out.append(
             "the read was too weak to certify the write "
@@ -2220,13 +2421,14 @@ def capture(contract: Contract, params: Mapping[str, object]) -> Snapshot:
         stacklevel=2,
     )
 
-    with tempfile.TemporaryDirectory(prefix="openadapt-verify-") as tmp:
-        try:
+    try:
+        _require_verification_purpose(contract.config, "observation")
+        with tempfile.TemporaryDirectory(prefix="openadapt-verify-") as tmp:
             payload = capture_baseline(
                 contract.config, params, Path(tmp) / "baseline.json"
             )
-        except VerifyRunError as exc:
-            raise BaselineUnreadable(str(exc)) from exc
+    except VerifyRunError as exc:
+        raise BaselineUnreadable(str(exc)) from exc
     state = payload.get("state") or {}
     if not state.get("reachable"):
         raise BaselineUnreadable("the system of record could not be read")
@@ -2248,6 +2450,10 @@ def _verify_snapshot(
     authorization_ref: str,
     write_attempted: bool,
 ) -> WriteResult:
+    try:
+        _require_verification_purpose(contract.config, "observation")
+    except VerifyRunError as exc:
+        raise VerifierError(str(exc)) from exc
     run_record = actor.run_record()
     if before.used:
         raise VerifierError("this snapshot was already used; capture again")
@@ -2264,6 +2470,7 @@ def _verify_snapshot(
                 write_attempted=write_attempted,
                 authorization_ref=authorization_ref,
                 baseline_path=before.save(Path(tmp) / "baseline.json"),
+                purpose="observation",
                 provenance=None if source is None else source.provenance,
                 documents=None if source is None else source.documents,
                 post_state_out=post_state,
@@ -2424,7 +2631,7 @@ def recheck(
         ledger=ledger,
         read_provider=read_provider,
     )
-    if late.recheck_owed:
+    if late.recheck_owed or (late.outcome == "REFUTED" and not trusted):
         return late
     if late.outcome != "CONFIRMED":
         late = _hold_after_recheck(
@@ -2437,7 +2644,9 @@ def recheck(
     return late
 
 
-def _recheck_revision(ledger: Any, write: WriteResult | RecheckState) -> Optional[int]:
+def _recheck_journal(
+    ledger: Any, write: WriteResult | RecheckState
+) -> tuple[Optional[int], Optional[Attempt]]:
     """Snapshot a validated write's journal before its native read.
 
     Failure is a deliberately unmatchable revision, never a fresh basis.
@@ -2453,19 +2662,17 @@ def _recheck_revision(ledger: Any, write: WriteResult | RecheckState) -> Optiona
             write_id, key = str(receipt.get("correlation_id") or ""), ""
         led = _resolve_ledger(ledger)
         if led is None:
-            return None
+            return None, None
         if key:
             attempt = led.latest(key)
         else:
             found = led.find_attempt(write_id)
             attempt = found[1] if found is not None else None
-        return (
-            attempt.revision
-            if attempt is not None and attempt.attempt_id == write_id
-            else -1
-        )
+        if attempt is not None and attempt.attempt_id == write_id:
+            return attempt.revision, attempt
     except Exception:  # noqa: BLE001 - no read can grant permission on failure
-        return -1
+        pass
+    return -1, None
 
 
 def _mark_rechecked(
@@ -2522,6 +2729,8 @@ def _mark_rechecked(
                 ],
             )
         prior = (attempt.resolved or {}).get("outcome")
+        if prior == "REFUTED" and attempt.begun.get("purpose") == "owned_attempt":
+            return _owned_refutation(late)
         if prior == "UNCERTAIN":
             recovered = _recover_recheck(led, key, attempt, late, expected_revision)
             if recovered is not None:
@@ -2809,6 +3018,11 @@ def _hold_after_recheck(
         if attempt.attempt_id != write_id:
             return unheld("a newer attempt of this write is in the ledger")
         prior = attempt.resolved or {}
+        if (
+            prior.get("outcome") == "REFUTED"
+            and attempt.begun.get("purpose") == "owned_attempt"
+        ):
+            return _owned_refutation(late)
         reason = "; ".join(late.reasons) or "the recheck did not confirm the write"
         recorded = led.resolved(
             key,
@@ -2892,6 +3106,17 @@ def _recheck_refusal(problem: str) -> str:
     return f"{problem}, so the write can't be rechecked"
 
 
+def _owned_refutation(late: RecheckResult) -> RecheckResult:
+    return _replace(
+        late,
+        outcome="REFUTED",
+        reasons=[
+            *late.reasons,
+            "the ledger already holds this owned attempt as REFUTED",
+        ],
+    )
+
+
 def _judge_recheck(
     contract: Contract,
     write: WriteResult | RecheckState,
@@ -2935,13 +3160,28 @@ def _judge_recheck(
         else "the write's result was downgraded from CONFIRMED to UNCERTAIN"
         if _recheck_withdrawn(state.payload)
         else None
-    ) or recheck_problem(
-        cfg,
-        state.payload,
-        params=params,
-        run_record=run_record,
-        read_provider=read_provider,
     )
+    if problem is None:
+        try:
+            _require_recheck_purpose(cfg, receipt)
+        except VerifyRunError as exc:
+            # A call under the wrong purpose cannot settle the original write.
+            return (
+                _replace(
+                    base,
+                    reasons=[_recheck_refusal(str(exc))],
+                    recheck_owed=True,
+                ),
+                False,
+                None,
+            )
+        problem = recheck_problem(
+            cfg,
+            state.payload,
+            params=params,
+            run_record=run_record,
+            read_provider=read_provider,
+        )
     if problem is not None:
         return (
             _replace(base, reasons=[_recheck_refusal(problem)]),
@@ -2972,7 +3212,28 @@ def _judge_recheck(
                 "(path, params=...)"
             )
         excused.append((later.payload, later.params))
-    revision = _recheck_revision(ledger, write)
+    revision, attempt = _recheck_journal(ledger, write)
+    if (receipt.get("write_attribution") or {}).get("purpose") == "owned_attempt":
+        reference = _owned_baseline_reference(
+            state.payload["baseline"], bytes.fromhex(state.payload["salt"])
+        )
+        if (
+            attempt is None
+            or reference is None
+            or _attempt_reference(attempt) != reference
+            or (attempt.resolved or {}).get("receipt_sha256") != base.receipt_sha256
+        ):
+            return (
+                _replace(
+                    base,
+                    recheck_owed=True,
+                    reasons=["the original owned journal claim could not be matched"],
+                ),
+                False,
+                None,
+            )
+        if (attempt.resolved or {}).get("outcome") == "REFUTED":
+            return _owned_refutation(base), False, None
     try:
         verdict, read_at = recheck_run(
             cfg,
