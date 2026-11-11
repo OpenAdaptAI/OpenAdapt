@@ -3824,8 +3824,12 @@ class Workflow(BaseModel):
         from openadapt_flow import bundle_persistence as _persistence
 
         return _persistence.save_sealed_set(
-            self, bundle, key, seal_manifest=seal_manifest,
-            source_assets=source_assets, template_replacements=template_replacements,
+            self,
+            bundle,
+            key,
+            seal_manifest=seal_manifest,
+            source_assets=source_assets,
+            template_replacements=template_replacements,
         )
 
     @classmethod

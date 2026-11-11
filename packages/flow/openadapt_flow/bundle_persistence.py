@@ -9,7 +9,9 @@ if TYPE_CHECKING:
     from openadapt_flow.ir import Workflow
 
 
-def stage_verified_template_replacement(workflow: Workflow, rel: str, data: bytes) -> None:
+def stage_verified_template_replacement(
+    workflow: Workflow, rel: str, data: bytes
+) -> None:
     """Stage bytes for an existing template on a verified loaded bundle.
 
     The original bundle and its in-memory decrypted asset cache are never
@@ -177,8 +179,7 @@ def save_workflow(
             continue
         try:
             matches_source = (
-                target_asset.is_file()
-                and target_asset.read_bytes() in expected_bytes
+                target_asset.is_file() and target_asset.read_bytes() in expected_bytes
             )
         except OSError:
             matches_source = False
