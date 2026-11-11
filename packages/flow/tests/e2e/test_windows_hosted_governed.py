@@ -528,8 +528,33 @@ def _governed(host, tmp_path, evidence: dict[str, Any]) -> None:
         "answers": person.answers,
         "errors": person.errors,
     }
+    if done.returncode != 0:
+        # Diagnostics only: why the approved run stopped, and which read
+        # reproduces the request's digest from the save's own frame.
+        try:
+            evidence["approved"]["halts"] = [
+                {
+                    "step": r.step_id,
+                    "category": getattr(r, "failure_category", None),
+                    "error": str(getattr(r, "error", "") or "")[:400],
+                }
+                for r in _report(run_dir).results
+                if r.error or r.failure_category
+            ]
+        except Exception as exc:  # noqa: BLE001 - diagnostics never fail the test
+            evidence["approved"]["halts"] = {"report_error": repr(exc)}
+        try:
+            evidence["approved"]["form_state_probe"] = _form_state_probe(
+                backend, run_dir, _save_frame(run_dir)
+            )
+        except Exception as exc:  # noqa: BLE001 - diagnostics never fail the test
+            evidence["approved"]["form_state_probe"] = {"probe_error": repr(exc)}
     assert person.errors == [], evidence["approved"]
-    assert done.returncode == 0, evidence["approved"]
+    assert done.returncode == 0, (
+        evidence["approved"].get("halts"),
+        evidence["approved"].get("form_state_probe"),
+        evidence["approved"],
+    )
     report = _report(run_dir)
     evidence["approved"]["outcome"] = report.transaction_outcome
     assert report.transaction_outcome == "VERIFIED", evidence["approved"]
