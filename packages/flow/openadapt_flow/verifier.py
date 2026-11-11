@@ -938,9 +938,8 @@ def begin_write(
     declared_by: DeclaredBy = "agent",
     read_provider: Optional[CompleteReadProvider] = None,
     task_record_sha256: Optional[str] = None,
-    purpose: Optional[VerificationPurpose] = None,
 ) -> PendingWrite:
-    """Consult the ledger, then read the system of record before the write.
+    """Consult the ledger, then capture an observation baseline before the write.
 
     Args:
         contract: What the write must do (and, with a frame, must not do).
@@ -951,9 +950,6 @@ def begin_write(
             Baseline and post-write checks use the same reader. Its ordinary
             completeness checks still apply; pending audit completion cannot
             authorize the baseline. Keep its session open through verification.
-        purpose: Opt in to causal confirmation for this owned attempt. The
-            controlled SQLite insert policy always requires it. Without
-            either opt-in, this legacy route verifies the observed state.
         ledger: The uncertain-write ledger: a :class:`Ledger`, a
             :class:`LedgerBackend`, or None to turn it off (only for a
             sandbox that resets between runs). Default: :class:`FileLedger`
@@ -980,12 +976,67 @@ def begin_write(
     (:meth:`Contract.null_unsafe_params`).
     """
 
-    if purpose is None:
-        purpose = "owned_attempt" if contract.config.owned_sqlite_insert else "observation"
-    if type(purpose) is not str or purpose not in ("observation", "owned_attempt"):
-        raise VerifierError("invalid verification purpose")
+    return _begin_write(
+        contract,
+        params,
+        actor=actor,
+        ledger=ledger,
+        write_key=write_key,
+        authorization_ref=authorization_ref,
+        workdir=workdir,
+        declared_by=declared_by,
+        read_provider=read_provider,
+        task_record_sha256=task_record_sha256,
+        purpose="observation",
+    )
+
+
+def begin_owned_write(
+    contract: Contract,
+    params: Mapping[str, Any],
+    *,
+    actor: Actor,
+    ledger: Any = _NO_LEDGER,
+    write_key: Optional[str] = None,
+    authorization_ref: str = "",
+    workdir: Union[str, Path, None] = None,
+    declared_by: DeclaredBy = "agent",
+    read_provider: Optional[CompleteReadProvider] = None,
+    task_record_sha256: Optional[str] = None,
+) -> PendingWrite:
+    """Reserve an owned attempt whose confirmation requires commit evidence."""
+
+    return _begin_write(
+        contract,
+        params,
+        actor=actor,
+        ledger=ledger,
+        write_key=write_key,
+        authorization_ref=authorization_ref,
+        workdir=workdir,
+        declared_by=declared_by,
+        read_provider=read_provider,
+        task_record_sha256=task_record_sha256,
+        purpose="owned_attempt",
+    )
+
+
+def _begin_write(
+    contract: Contract,
+    params: Mapping[str, Any],
+    *,
+    actor: Actor,
+    ledger: Any,
+    write_key: Optional[str],
+    authorization_ref: str,
+    workdir: Union[str, Path, None],
+    declared_by: DeclaredBy,
+    read_provider: Optional[CompleteReadProvider],
+    task_record_sha256: Optional[str],
+    purpose: VerificationPurpose,
+) -> PendingWrite:
     if contract.config.owned_sqlite_insert and purpose != "owned_attempt":
-        raise VerifierError("the configured SQLite writer requires owned-attempt verification")
+        raise VerifierError("the configured SQLite writer requires begin_owned_write")
 
     if task_record_sha256 is not None and (
         not isinstance(task_record_sha256, str)
@@ -1505,7 +1556,7 @@ def verify_write(
     baseline :func:`begin_write` took. Never resends the write.
 
     Args:
-        pending: From :func:`begin_write`. Single use.
+        pending: From :func:`begin_write` or :func:`begin_owned_write`. Single use.
         write_attempted: False records the caller's claim that the write
             was never sent (a stop before the save). It does not establish
             retry safety: the attempt stays held without complete dispatch

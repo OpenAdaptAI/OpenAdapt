@@ -30,6 +30,7 @@ from openadapt_flow.verifier import (
     VerifierError,
     WriteHeld,
     WriteResult,
+    begin_owned_write,
     begin_write,
     commit_pending_sqlite_insert,
     recheck,
@@ -296,14 +297,13 @@ def test_explicit_purpose_cannot_relabel_a_baseline(
 
 
 def _begin(store: Store, contract: Contract) -> PendingWrite:
-    pending = begin_write(
+    pending = begin_owned_write(
         contract,
         VALUES,
         actor=ACTOR,
         ledger=store.ledger,
         write_key="synthetic-owned-attempt",
         authorization_ref=AUTHORIZATION,
-        purpose="owned_attempt",
     )
     active = store.ledger.latest(pending.write_key)
     assert active is not None and active.attempt_id == pending.write_id
@@ -506,7 +506,6 @@ def test_owned_contract_cannot_be_opened_for_observation(store: Store) -> None:
             ledger=store.ledger,
             write_key="synthetic-downgrade",
             authorization_ref=AUTHORIZATION,
-            purpose="observation",
         )
     assert store.read_frame() == StoreFrame(0, PROTECTED)
     assert store.event_attempts() == () and store.ledger.attempts() == []
@@ -755,14 +754,13 @@ def test_crossed_genuine_owned_baselines_cannot_cross_ledger_attempts(
     contract = store.contract()
     first = _begin(store, contract)
     try:
-        second = begin_write(
+        second = begin_owned_write(
             contract,
             VALUES,
             actor=ACTOR,
             ledger=store.ledger,
             write_key="synthetic-other-owned-attempt",
             authorization_ref=AUTHORIZATION,
-            purpose="owned_attempt",
         )
         try:
             first_doc = json.loads(first.baseline_path.read_bytes())

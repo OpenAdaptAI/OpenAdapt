@@ -354,8 +354,8 @@ modified-by field attributes to a named actor other than the bot.
 
 ### Owned write attempts
 
-`begin_write(..., purpose="owned_attempt")` asks the verifier to confirm
-that this attempt committed the change. The baseline and ledger record the
+Import `begin_owned_write` explicitly from `openadapt_flow.verifier` to
+ask the verifier to confirm that this attempt committed the change. The baseline and ledger record the
 purpose before dispatch. A matching read without independent commit evidence
 leaves the write uncertain and held for reconciliation. An earlier write by
 the same actor, a fast read, and a transport acknowledgment cannot establish
@@ -390,9 +390,10 @@ supported proof before they can confirm an owned attempt.
 
 Standalone verification and the legacy snapshot API retain observation
 semantics. The evidence identifies that purpose, and the receipt binds the
-evidence digest using its existing fields. Existing ledger entry points
-without either opt-in also retain observation semantics. An owned baseline
-cannot be verified or rechecked under observation purpose.
+evidence digest using its existing fields. `begin_write` and `verified_write`
+retain observation semantics for legacy contracts and refuse a contract that
+requires the controlled SQLite writer. Use `begin_owned_write` for that
+contract. An owned baseline cannot be verified or rechecked as an observation.
 
 ## Measurement
 
