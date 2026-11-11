@@ -18,6 +18,8 @@ are made up.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from inspect import getclosurevars
+from threading import Timer
 
 import pytest
 
@@ -65,7 +67,24 @@ def _run_and_settle(run: Run, pipeline: ReadbackPipeline):
 def crash(monkeypatch):
     """The process dies once the check is handed off: it never settles."""
 
-    monkeypatch.setattr(ReadbackPipeline, "hand_off", lambda self, entry, settle: None)
+    timers: list[Timer] = []
+
+    def drop_handoff(self, entry, settle):
+        # Without settlement, no one cancels this handoff's native expiry timer.
+        timer = getclosurevars(settle).nonlocals["timer"]
+        if timer is not None:
+            assert isinstance(timer, Timer)
+            timers.append(timer)
+
+    monkeypatch.setattr(ReadbackPipeline, "hand_off", drop_handoff)
+    try:
+        yield
+    finally:
+        for timer in timers:
+            timer.cancel()
+        for timer in timers:
+            timer.join(timeout=10)
+        assert not any(timer.is_alive() for timer in timers)
 
 
 @pytest.mark.parametrize("profile", ["durable", "governed", "qualified"])
