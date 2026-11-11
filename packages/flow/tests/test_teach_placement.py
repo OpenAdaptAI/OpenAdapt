@@ -386,6 +386,14 @@ def test_the_spliced_step_carries_the_recorded_target(tmp_path):
     assert anchor.template in manifest["file_hashes"]
     assert "templates/open.png" in manifest["file_hashes"]
 
+    # The retry reuses the base step, not the recording's repeated Open crop.
+    recorded_retry = Workflow.load(fix / "_teach_compiled").steps[-1].anchor
+    assert recorded_retry is not None
+    assert (fix / "_teach_compiled" / recorded_retry.template).is_file()
+    unused = f"templates/teach-rec-fix-001/{Path(recorded_retry.template).name}"
+    assert unused not in manifest["file_hashes"]
+    assert not (out / unused).exists()
+
 
 def test_teach_refuses_to_retry_a_delivered_step_that_can_write(tmp_path):
     bundle = _bundle(tmp_path, open_risk="irreversible")

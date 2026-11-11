@@ -929,11 +929,21 @@ def _copy_carried(carried: dict[str, Path], out_bundle: Path) -> None:
 def _carried_asset_bytes(
     workflow: Workflow, carried: dict[str, Path]
 ) -> dict[str, bytes]:
+    """Read the compiled crops selected by the final taught graph."""
     from openadapt_flow.bundle_persistence import validate_derived_asset_paths
+    from openadapt_flow.bundle_validation import (
+        _referenced_asset_paths,
+        bundle_asset_relative,
+    )
 
-    validate_derived_asset_paths(workflow, carried)
+    for rel in carried:
+        bundle_asset_relative(rel)
+    candidate = validate_derived_asset_paths(workflow, ())
+    references = _referenced_asset_paths(candidate)
     changes = {}
     for rel, source in carried.items():
+        if rel not in references:
+            continue
         if not artifacts.is_file(source):
             raise TeachError(f"the fix recording's crop {source} is missing")
         changes[rel] = artifacts.open_read(source)
