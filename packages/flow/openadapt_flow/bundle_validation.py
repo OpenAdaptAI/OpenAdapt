@@ -1746,3 +1746,30 @@ def validate_workflow(workflow: "Workflow") -> ValidationReport:
             )
 
     return ValidationReport(workflow_name=workflow.name, issues=issues)
+
+
+def validate_verified_derivative(
+    workflow: Workflow,
+    workflow_type: type[Workflow],
+    error_type: type[ValueError],
+    authoring_context: str,
+) -> Workflow:
+    """Validate an authored derivative, then preserve its verified source authority."""
+    try:
+        validated = workflow_type.model_validate(workflow.model_dump(mode="python"))
+    except ValueError as exc:
+        raise error_type(
+            f"{authoring_context} makes the workflow invalid: {exc}"
+        ) from exc
+    # Arbitrary model_validate(model_dump()) callers remain unverified. Only the
+    # deliberate authoring path transfers the process-local source capability.
+    transfer_verified_load_capability(workflow, validated)
+    validation = validate_workflow(validated)
+    if not validation.structural_ok:
+        details = "; ".join(
+            issue.render() for issue in validation.by_category("structure")
+        )
+        raise error_type(
+            f"{authoring_context} makes the workflow structurally invalid: {details}"
+        )
+    return validated
