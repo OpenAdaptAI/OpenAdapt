@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import concurrent.futures
+import multiprocessing
 import os
 import sqlite3
 from pathlib import Path
@@ -367,3 +369,86 @@ def test_legacy_enrollment_needs_quiescence_and_keeps_history_inspection_only(
             operation()
         assert refusal.value.code == UNAUTHENTICATED
     assert protected_backend.inspect_legacy(key) == inspection
+
+
+def _concurrent_appender_worker(
+    root: Path, authority_path: Path, worker_id: int, appends_per_worker: int
+) -> int:
+    authority = _authority(authority_path, root)
+    backend = FileLedger(root, authority=authority)
+    ledger = Ledger(backend)
+    for i in range(appends_per_worker):
+        key = _key(ledger, f"worker-task-{worker_id}-{i}")
+        attempt = f"attempt-{worker_id}-{i}"
+        ledger.begun(key, attempt)
+        ledger.resolved(key, attempt, outcome="CONFIRMED")
+    return appends_per_worker
+
+
+def _killed_appender_worker(root: Path, authority_path: Path) -> None:
+    authority = _authority(authority_path, root)
+    current = authority.snapshot()
+    authority.prepare(current)
+    os._exit(42)
+
+
+def test_concurrent_protected_appenders_never_raise_false_interrupted_holds(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "journal"
+    directory = tmp_path / "authority"
+    directory.mkdir()
+    authority = _authority(directory / "ledger.sqlite", root)
+    FileLedger(root).enroll(authority, authorized=True)
+
+    workers = 6
+    appends_per_worker = 5
+    ctx = multiprocessing.get_context("spawn")
+    with concurrent.futures.ProcessPoolExecutor(
+        max_workers=workers, mp_context=ctx
+    ) as pool:
+        futures = [
+            pool.submit(
+                _concurrent_appender_worker,
+                root,
+                authority.path,
+                worker_id,
+                appends_per_worker,
+            )
+            for worker_id in range(workers)
+        ]
+        results = [f.result(timeout=60) for f in futures]
+
+    assert results == [appends_per_worker] * workers
+    final_authority = _authority(authority.path, root)
+    snapshot = final_authority.snapshot()
+    total_appends = workers * appends_per_worker
+    assert snapshot.revision == total_appends * 2
+    assert len(snapshot.heads) == total_appends
+
+
+def test_killed_appender_leaves_interrupted_hold(tmp_path: Path) -> None:
+    root = tmp_path / "journal"
+    directory = tmp_path / "authority"
+    directory.mkdir()
+    authority = _authority(directory / "ledger.sqlite", root)
+    FileLedger(root).enroll(authority, authorized=True)
+
+    ctx = multiprocessing.get_context("spawn")
+    proc = ctx.Process(
+        target=_killed_appender_worker,
+        args=(root, authority.path),
+    )
+    proc.start()
+    proc.join(timeout=10)
+    assert proc.exitcode == 42
+
+    backend = FileLedger(root, authority=authority)
+    with pytest.raises(LedgerIntegrityHeld) as held:
+        authority.snapshot()
+    assert held.value.code == INTERRUPTED
+
+    ledger = Ledger(backend)
+    with pytest.raises(LedgerIntegrityHeld) as held_ledger:
+        ledger.begun(_key(ledger), "subsequent-attempt")
+    assert held_ledger.value.code == INTERRUPTED

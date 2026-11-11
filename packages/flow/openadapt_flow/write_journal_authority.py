@@ -15,11 +15,12 @@ import re
 import secrets
 import sqlite3
 import stat
+import threading
 from collections.abc import Iterator, Mapping
 from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 
 class LedgerError(RuntimeError):
@@ -66,6 +67,60 @@ class JournalCommit:
     revision: int
     heads: Mapping[str, JournalHead]
     legacy_keys: frozenset[str]
+
+
+class _ReentrantFileLock:
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        self._thread_lock = threading.RLock()
+        self._depth = 0
+        self._handle: Any = None
+
+    def acquire(self) -> None:
+        self._thread_lock.acquire()
+        if self._depth == 0:
+            try:
+                fd = os.open(
+                    self.path,
+                    os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW,
+                    0o600,
+                )
+                handle = os.fdopen(fd, "rb+")
+                try:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+                except BaseException:
+                    handle.close()
+                    raise
+                self._handle = handle
+            except BaseException:
+                self._thread_lock.release()
+                raise
+        self._depth += 1
+
+    def release(self) -> None:
+        self._depth -= 1
+        if self._depth == 0:
+            handle = self._handle
+            self._handle = None
+            try:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            finally:
+                handle.close()
+        self._thread_lock.release()
+
+
+_LOCKS: dict[Path, _ReentrantFileLock] = {}
+_LOCKS_MUTEX = threading.Lock()
+
+
+def _get_reentrant_file_lock(lock_path: Path) -> _ReentrantFileLock:
+    resolved = lock_path.resolve()
+    with _LOCKS_MUTEX:
+        lock = _LOCKS.get(resolved)
+        if lock is None:
+            lock = _ReentrantFileLock(resolved)
+            _LOCKS[resolved] = lock
+        return lock
 
 
 class SQLiteJournalAuthority:
@@ -118,15 +173,13 @@ class SQLiteJournalAuthority:
     def serialized(self) -> Iterator[None]:
         """Serialize protected file reads, append phases and applied cleanup."""
         self._require_file()
+        lock = _get_reentrant_file_lock(self.path.with_name(self.path.name + ".lock"))
         try:
-            fd = os.open(
-                self.path.with_name(self.path.name + ".lock"),
-                os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW,
-                0o600,
-            )
-            with os.fdopen(fd, "rb+") as lock:
-                fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            lock.acquire()
+            try:
                 yield
+            finally:
+                lock.release()
         except OSError as exc:
             raise LedgerIntegrityHeld("ledger_authority_unavailable") from exc
 
@@ -218,17 +271,17 @@ class SQLiteJournalAuthority:
 
     def snapshot(self) -> JournalCommit:
         try:
-            with closing(self._connect()) as db:
+            with self.serialized(), closing(self._connect()) as db:
                 current, pending = self._read(db)
-            if pending is not None:
-                raise LedgerIntegrityHeld("ledger_authority_interrupted")
-            return current
+                if pending is not None:
+                    raise LedgerIntegrityHeld("ledger_authority_interrupted")
+                return current
         except sqlite3.Error as exc:
             raise LedgerIntegrityHeld("ledger_authority_unavailable") from exc
 
     def lookup_key(self) -> bytes:
         try:
-            with closing(self._connect()) as db, db:
+            with self.serialized(), closing(self._connect()) as db, db:
                 db.execute("BEGIN")
                 _, pending = self._read(db)
                 if pending is not None:
