@@ -9,7 +9,9 @@ name: Desktop replay
 #   (packages/flow/tests/e2e/test_windows_hosted_replay.py). A governed run
 #   of the same workflow (Standard, an approval, a hold and a resume) follows
 #   as a continue-on-error step, so it reports but does not fail the job
-#   (packages/flow/tests/e2e/test_windows_hosted_governed.py).
+#   (packages/flow/tests/e2e/test_windows_hosted_governed.py). A gating
+#   step after it fails the job on any unsafe write the run made
+#   (scripts/ci/check_windows_governed_safety.py).
 # - freerdp: a FreeRDP transport round trip on Linux, not a replay. xfreerdp3
 #   connects over loopback to freerdp-shadow-cli3 serving an Xvfb display, and
 #   FreeRDPBackend looks up three accounts in a synthetic read-only ledger app
@@ -39,6 +41,7 @@ on:
       - packages/types/**
       - .github/ci-tools/**
       - scripts/ci/locked_install.py
+      - scripts/ci/check_windows_governed_safety.py
       - .github/workflows/desktop-replay.yml
   workflow_call:
   workflow_dispatch:
@@ -109,9 +112,10 @@ jobs:
               sys.exit(f"windows replay did not run: {len(cases)} cases, {len(skipped)} skipped")
           PY
       - name: Governed run (Standard, an approval, a hold and a resume), judged from the record
-        # Not gating yet: it stopped once before the save with no halt reason
-        # captured. A failure shows on the step and prints the run's halts and
-        # form_state_probe, but leaves the job green.
+        id: governed
+        # Not gating: its resume can stop before the save on a false form
+        # change (#2189). A failure shows on the step and prints the run's
+        # halts and form_state_probe; the next step gates on safety.
         continue-on-error: true
         timeout-minutes: 10
         env:
@@ -120,6 +124,18 @@ jobs:
         run: |
           pytest -v -rs -p no:cacheprovider --basetemp="$RUNNER_TEMP/wg" \
             tests/e2e/test_windows_hosted_governed.py --junitxml=runs/windows-governed-junit.xml
+      - name: The governed run wrote nothing unsafe (gating)
+        # Fails the job on a sibling or wrong-record write, a held run that
+        # wrote, or a target write without an approved VERIFIED report, read
+        # from the SQLite rows the test records. Only a halt before the
+        # effect with nothing written passes when the governed step failed.
+        if: always()
+        env:
+          GOVERNED_OUTCOME: ${{ steps.governed.outcome }}
+        run: |
+          echo "governed step outcome: $GOVERNED_OUTCOME"
+          python ../../scripts/ci/check_windows_governed_safety.py \
+            "$RUNNER_TEMP/windows-governed-evidence.json"
       - name: Keep the evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

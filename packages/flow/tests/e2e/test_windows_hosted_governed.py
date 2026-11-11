@@ -410,12 +410,51 @@ def _save_frame(run_dir: Path) -> bytes:
     return sealed_set.read_bytes(run_dir / last.before_png)
 
 
+def _rows(rows: Any) -> list[dict[str, Any]]:
+    """The id and note of each record row, for the gating safety check."""
+
+    values = rows.values() if isinstance(rows, dict) else rows
+    return [{"id": r["id"], "note": r["note"]} for r in values]
+
+
+def _outcome(run_dir: Path) -> dict[str, Any]:
+    """The run's transaction outcome and approval decision, as recorded."""
+
+    try:
+        report = _report(run_dir)
+    except Exception as exc:  # noqa: BLE001 - the safety check reads a missing report
+        return {"outcome": None, "approval_decision": None, "report_error": repr(exc)}
+    approval = report.approval
+    return {
+        "outcome": report.transaction_outcome,
+        "approval_decision": (
+            approval.decision.value if approval is not None else None
+        ),
+    }
+
+
 def test_standard_run_with_approval_hold_and_resume(host, tmp_path) -> None:
-    evidence: dict[str, Any] = {}
+    # The evidence file is the input of scripts/ci/check_windows_governed_safety.py,
+    # the gating step after this non-gating one: every phase that started
+    # records the record rows it left behind, read from the database.
+    evidence: dict[str, Any] = {
+        "target_id": TARGET_ID,
+        "expected_note": DEMO_NOTE,
+        "phases": [],
+    }
     try:
         _governed(host, tmp_path, evidence)
     finally:
         shutil.rmtree(_state_root(tmp_path), ignore_errors=True)
+        # A phase that stopped before its rows were read (a timeout, a crash)
+        # still records them; the database is reseeded only between phases.
+        if evidence["phases"]:
+            last = evidence.setdefault(evidence["phases"][-1], {})
+            if "rows" not in last:
+                try:
+                    last["rows"] = _rows(host.rows())
+                except Exception as exc:  # noqa: BLE001 - the check fails closed
+                    last["rows_error"] = repr(exc)
         if os.environ.get(EVIDENCE_ENV):
             Path(os.environ[EVIDENCE_ENV]).write_text(
                 json.dumps(evidence, indent=2, default=str)
@@ -541,6 +580,7 @@ def _governed(host, tmp_path, evidence: dict[str, Any]) -> None:
         backend.qualification_environment_identity() or ()
     )
     run_dir, argv = run_case("practice-1", 300)
+    evidence["phases"].append("approved")
     with _Person(run_dir, person_env, approver_key) as person:
         done = _flow(*argv, env=env)
     rows = {r["id"]: r for r in host.rows()}
@@ -552,6 +592,8 @@ def _governed(host, tmp_path, evidence: dict[str, Any]) -> None:
         "tail": (done.stdout + done.stderr)[-3000:],
         "answers": person.answers,
         "errors": person.errors,
+        "rows": _rows(rows),
+        **_outcome(run_dir),
     }
     if done.returncode != 0:
         # Diagnostics only: why the approved run stopped, and which read
@@ -586,11 +628,14 @@ def _governed(host, tmp_path, evidence: dict[str, Any]) -> None:
     host.launch_app()
     _focus_app(backend, _points(backend))
     run_dir, argv = run_case("practice-2", 5)
+    evidence["phases"].append("held")
     held = _flow(*argv, env=env)
     rows = {r["id"]: r for r in host.rows()}
     evidence["held"] = {
         "exit": held.returncode,
         "tail": (held.stdout + held.stderr)[-3000:],
+        "rows": _rows(rows),
+        **_outcome(run_dir),
     }
     assert held.returncode != 0, evidence["held"]
     assert all(r["note"] == "" for r in rows.values()), "a held run wrote"
@@ -614,11 +659,14 @@ def _governed(host, tmp_path, evidence: dict[str, Any]) -> None:
         )
     except Exception as exc:  # noqa: BLE001 - diagnostics never fail the test
         evidence["held"]["form_state_probe"] = {"probe_error": repr(exc)}
+    evidence["phases"].append("resumed")
     resumed = _flow("resume", str(run_dir), "--config", str(config), env=env)
     rows = {r["id"]: r for r in host.rows()}
     evidence["resumed"] = {
         "exit": resumed.returncode,
         "tail": (resumed.stdout + resumed.stderr)[-3000:],
+        "rows": _rows(rows),
+        **_outcome(run_dir),
     }
     if resumed.returncode != 0:
         evidence["resumed"]["halts"] = _halts(run_dir)
