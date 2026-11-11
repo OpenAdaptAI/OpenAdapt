@@ -285,9 +285,7 @@ def test_durable_resume_cannot_reenter_uncertain_step_without_explicit_retry(
         require_settled=True,
     ).run(workflow, bundle_dir=bundle, run_dir=run_dir)
     assert stopped.execution_outcome == ExecutionOutcome.HALTED.value
-    assert "synthetic operator stop before input" in (
-        stopped.results[-1].error or ""
-    )
+    assert "synthetic operator stop before input" in (stopped.results[-1].error or "")
     assert stopped_backend.actions == []
     assert stopped_backend.actuation_count == first_verifier.verify_calls == 0
     assert first_store == []
