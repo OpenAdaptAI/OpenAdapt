@@ -319,8 +319,8 @@ def _resume_after_proven_no_input(
     )
 
 
-def _run_to_halt(tmp_path):
-    """Create a post-delivery halt on the authenticated resumed leg."""
+def _run_to_halt(tmp_path, *, first_leg=False):
+    """Create the refuted halt on the requested first or resumed leg."""
     verifier = FakeSoRVerifier()
     verifier.refute.add((("step", "s2"),))  # the third step's effect refutes
     backend = FakeBackend()
@@ -328,6 +328,15 @@ def _run_to_halt(tmp_path):
     bundle, run_dir = _dirs(tmp_path)
     workflow.save(bundle)
 
+    if first_leg:
+        report = Replayer(
+            backend,
+            vision=_vision_ok(),
+            effect_verifier=verifier,
+            durable=True,
+            poll_interval_s=0.01,
+        ).run(workflow, params={"who": "alice"}, bundle_dir=bundle, run_dir=run_dir)
+        return report, run_dir, bundle, backend, verifier
     report = _resume_after_proven_no_input(
         workflow, bundle, run_dir, backend, verifier, params={"who": "alice"}
     )
@@ -840,7 +849,7 @@ def test_indeterminate_durable_state_fails_closed_without_ledger_projection(
 
 
 def test_resume_requires_the_active_pause_and_exact_inputs(tmp_path):
-    _report, run_dir, bundle, _backend, verifier = _run_to_halt(tmp_path)
+    _report, run_dir, bundle, _backend, verifier = _run_to_halt(tmp_path, first_leg=True)
     replayer = Replayer(FakeBackend(), vision=_vision_ok(), effect_verifier=verifier)
 
     with pytest.raises(StateDiverged, match="parameters differ"):
@@ -1073,7 +1082,7 @@ def test_resume_admission_rejects_invalid_retained_action_evidence(field, value)
 
 
 def test_resume_refuses_a_checkpoint_added_after_the_pause(tmp_path):
-    _report, run_dir, bundle, _backend, verifier = _run_to_halt(tmp_path)
+    _report, run_dir, bundle, _backend, verifier = _run_to_halt(tmp_path, first_leg=True)
     store = CheckpointStore(run_dir)
     pending = store.read_pending()
     assert pending is not None
@@ -1102,7 +1111,7 @@ def test_resume_refuses_a_checkpoint_added_after_the_pause(tmp_path):
 
 
 def test_attended_checkpoint_must_follow_the_active_pause(tmp_path):
-    _report, run_dir, bundle, _backend, verifier = _run_to_halt(tmp_path)
+    _report, run_dir, bundle, _backend, verifier = _run_to_halt(tmp_path, first_leg=True)
     store = CheckpointStore(run_dir)
     pending = store.read_pending()
     assert pending is not None

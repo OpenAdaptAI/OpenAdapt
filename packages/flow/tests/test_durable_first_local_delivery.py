@@ -24,6 +24,7 @@ from openadapt_flow.runtime.durable.continuation import ContinuationBusy
 from openadapt_flow.runtime.durable.controller import DurableRun
 from openadapt_flow.runtime.durable.first_local_delivery import FirstLocalDeliveryHeld
 from openadapt_flow.runtime.effects import Effect, EffectKind, SqlRecordVerifier
+from openadapt_flow.runtime.readback_pipeline import ReadbackPipeline
 from openadapt_flow.runtime.replayer import Replayer
 from tests.test_durable_runtime import _approval, _key_step, _vision_ok
 from tests.test_governed_authorization import _authorization
@@ -397,3 +398,91 @@ def test_invalid_selected_effect_contract_refuses_before_input(
         assert "requires an effect contract for the selected actuation path" in (
             pending.reason
         )
+
+
+@pytest.mark.parametrize("actuation", ["gui", "api"])
+def test_marked_deferred_readback_resumes_without_redelivery(
+    tmp_path, monkeypatch, actuation
+):
+    api = actuation == "api"
+    local = LocalRun(tmp_path, api=api)
+    key = "synthetic-first-local-checkpoint-key"
+    local.store = CheckpointStore(local.run_dir, key=key)
+    initial_markers = []
+    requests = []
+
+    def before_write():
+        pending = local.armed(native=not api)
+        initial_markers.append(pending.delivery_uncertainty)
+        assert local.rows() == []
+
+    def request(method, url, **kwargs):
+        requests.append((method, url, kwargs["json"]))
+        before_write()
+        local.write()
+        return SimpleNamespace(status_code=201)
+
+    url = "https://fixture.invalid"
+    actuator = (
+        ApiActuator(url, session=SimpleNamespace(request=request)) if api else None
+    )
+    backend = WritingBackend(local, before_write=before_write)
+    pipeline = ReadbackPipeline()
+    handoffs = []
+
+    def leave_unsettled(entry, settle):
+        handoffs.append(entry)
+
+    # Keep real pre-state capture, delivery and readback. Interrupt only the
+    # handoff that would publish the deferred result and consume the pause.
+    monkeypatch.setattr(pipeline, "hand_off", leave_unsettled)
+    first = local.replayer(backend, actuator=actuator)
+    first.checkpoint_key = key
+    first.readback_pipeline = pipeline
+    try:
+        held = first.run(
+            local.workflow, bundle_dir=local.bundle, run_dir=local.run_dir
+        )
+    finally:
+        pipeline.close()
+
+    assert not held.success and not held.execution_completed
+    assert len(handoffs) == 1 and handoffs[0].step_id == "write"
+    assert backend.actions == ([] if api else [("press", "A")])
+    expected_requests = [("POST", f"{url}/records", {"step": "write"})] if api else []
+    assert requests == expected_requests and local.rows() == [("write",)]
+    assert local.store.checkpoints() == []
+    pending = local.store.read_pending()
+    assert pending is not None and pending.category == "readback_pending"
+    assert pending.delivery_uncertainty == initial_markers[0]
+    assert pending.deferred_readback is not None
+    assert pending.deferred_readback.actuation == actuation
+    assert pending.deferred_readback.result.effect_verified is None
+    digest = approval_pause_digest(pending)
+
+    resume_reads = []
+
+    def connect_read_only():
+        resume_reads.append(True)
+        return sqlite3.connect(local.database.as_uri() + "?mode=ro", uri=True)
+
+    contender = WritingBackend(local)
+    second = local.replayer(contender, actuator=actuator)
+    second.effect_verifier = SqlRecordVerifier(
+        connect_read_only, "SELECT id, step FROM records"
+    )
+    resumed = resume(
+        local.run_dir,
+        second,
+        approval=_approval(local.bundle, local.run_dir, checkpoint_key=key),
+        key=key,
+    )
+
+    assert resumed.success is True and resumed.execution_completed is True
+    assert resume_reads
+    assert contender.actions == [] and requests == expected_requests
+    assert local.rows() == [("write",)]
+    [checkpoint] = local.store.checkpoints()
+    assert checkpoint.step_id == "write" and checkpoint.effect_verified is True
+    assert checkpoint.first_local_pause_sha256 == digest
+    assert checkpoint.next_step_index == 1 and local.store.read_pending() is None
