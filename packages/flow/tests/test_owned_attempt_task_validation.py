@@ -44,7 +44,9 @@ def _episode(
     cfg = setup_store(path)
     episode = SyntheticEpisode(path, label)
     with monkeypatch.context() as scope:
-        receipts = observe_receipts(scope, verifier_module, verifier_module, owned=owned)
+        receipts = observe_receipts(
+            scope, verifier_module, verifier_module, owned=owned
+        )
         result = validate.judge_episode(
             episode,
             episode,

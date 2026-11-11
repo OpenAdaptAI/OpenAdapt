@@ -53,8 +53,12 @@ def _quote(name: str) -> str:
 
 
 def _mac(salt: bytes, domain: str, value: object) -> str:
-    payload = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
-    return hmac.new(salt, (domain + "\0" + payload).encode(), hashlib.sha256).hexdigest()
+    payload = json.dumps(
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    )
+    return hmac.new(
+        salt, (domain + "\0" + payload).encode(), hashlib.sha256
+    ).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -116,21 +120,28 @@ class OwnedSqliteInsert:
             raise ValueError("owned SQLite needs an integer primary key")
         database = Path(config.sqlite_database)
         return cls(
-            database, _file_identity(database), spec.table, spec.identity_field,
+            database,
+            _file_identity(database),
+            spec.table,
+            spec.identity_field,
             tuple(sorted(cells.items())),
         )
 
     def reservation(self, execution_id: str, salt: bytes, owner: str | None) -> str:
-        return _mac(salt, "openadapt-owned-sqlite-insert-reservation/v1", {
-            "attempt": execution_id,
-            "owner": owner,
-            "database": str(self.database),
-            "file_identity": self.file_identity,
-            "operation": "insert",
-            "table": self.table,
-            "identity_field": self.identity_field,
-            "cells": self.cells,
-        })
+        return _mac(
+            salt,
+            "openadapt-owned-sqlite-insert-reservation/v1",
+            {
+                "attempt": execution_id,
+                "owner": owner,
+                "database": str(self.database),
+                "file_identity": self.file_identity,
+                "operation": "insert",
+                "table": self.table,
+                "identity_field": self.identity_field,
+                "cells": self.cells,
+            },
+        )
 
     def _witness(self, reservation: str, salt: bytes) -> str:
         return _mac(salt, "openadapt-owned-sqlite-insert-commit/v1", reservation)
@@ -149,8 +160,12 @@ class OwnedSqliteInsert:
             for name in (self.table, EVENT_TABLE)
         ):
             raise ValueError("owned SQLite needs ordinary target and event tables")
-        target = connection.execute(f"PRAGMA main.table_xinfo({_quote(self.table)})").fetchall()
-        events = connection.execute(f"PRAGMA main.table_xinfo({_quote(EVENT_TABLE)})").fetchall()
+        target = connection.execute(
+            f"PRAGMA main.table_xinfo({_quote(self.table)})"
+        ).fetchall()
+        events = connection.execute(
+            f"PRAGMA main.table_xinfo({_quote(EVENT_TABLE)})"
+        ).fetchall()
         if tables[EVENT_TABLE][5] != 1 or events != [
             (0, "attempt", "TEXT", 1, None, 1, 0),
             (1, "witness", "TEXT", 1, None, 0, 0),
@@ -163,12 +178,15 @@ class OwnedSqliteInsert:
         if (
             len(target) != len(types)
             or {row[1]: row[2].upper() for row in target} != types
-            or [(row[1], row[5]) for row in target if row[5]] != [(self.identity_field, 1)]
+            or [(row[1], row[5]) for row in target if row[5]]
+            != [(self.identity_field, 1)]
             or any(row[6] for row in target)
             or connection.execute(
                 "SELECT 1 FROM main.sqlite_schema WHERE type='trigger' "
-                "AND tbl_name IN (?, ?) LIMIT 1", (self.table, EVENT_TABLE)
-            ).fetchone() is not None
+                "AND tbl_name IN (?, ?) LIMIT 1",
+                (self.table, EVENT_TABLE),
+            ).fetchone()
+            is not None
         ):
             raise ValueError("owned SQLite target schema does not match")
 
@@ -177,12 +195,14 @@ class OwnedSqliteInsert:
         key = dict(self.cells)[self.identity_field]
         return connection.execute(
             f"SELECT {columns} FROM main.{_quote(self.table)} "
-            f"WHERE {_quote(self.identity_field)} = ? LIMIT 2", (key,)
+            f"WHERE {_quote(self.identity_field)} = ? LIMIT 2",
+            (key,),
         ).fetchall()
 
     def matches(self, row: Mapping[str, object]) -> bool:
         return set(row) == {name for name, _ in self.cells} and all(
-            type(row[name]) is type(value) and row[name] == value for name, value in self.cells
+            type(row[name]) is type(value) and row[name] == value
+            for name, value in self.cells
         )
 
     def _matches_store(self, connection: sqlite3.Connection) -> bool:
@@ -196,9 +216,14 @@ class OwnedSqliteInsert:
         for row in rows:
             observed = row.get(self.identity_field)
             if type(observed) is not int or observed == key:
-                raise ValueError("the owned SQLite baseline does not establish an absent key")
+                raise ValueError(
+                    "the owned SQLite baseline does not establish an absent key"
+                )
         uri = self.database.as_uri() + "?mode=ro"
-        with closing(sqlite3.connect(uri, uri=True, timeout=2.0)) as connection, connection:
+        with (
+            closing(sqlite3.connect(uri, uri=True, timeout=2.0)) as connection,
+            connection,
+        ):
             connection.execute("PRAGMA query_only = ON")
             connection.execute("BEGIN")
             self._assert_database(connection)
@@ -207,7 +232,10 @@ class OwnedSqliteInsert:
 
     def commit(self, execution_id: str, reservation: str, salt: bytes) -> None:
         uri = self.database.as_uri() + "?mode=rw"
-        with closing(sqlite3.connect(uri, uri=True, timeout=2.0)) as connection, connection:
+        with (
+            closing(sqlite3.connect(uri, uri=True, timeout=2.0)) as connection,
+            connection,
+        ):
             connection.execute("PRAGMA foreign_keys = ON")
             connection.execute("BEGIN IMMEDIATE")
             self._assert_database(connection)
@@ -234,7 +262,10 @@ class OwnedSqliteInsert:
         self, execution_id: str, reservation: str, salt: bytes
     ) -> bool:
         uri = self.database.as_uri() + "?mode=ro"
-        with closing(sqlite3.connect(uri, uri=True, timeout=2.0)) as connection, connection:
+        with (
+            closing(sqlite3.connect(uri, uri=True, timeout=2.0)) as connection,
+            connection,
+        ):
             connection.execute("PRAGMA query_only = ON")
             connection.execute("BEGIN")
             self._assert_database(connection)
@@ -245,7 +276,9 @@ class OwnedSqliteInsert:
                 (execution_id,),
             ).fetchall()
             observed = (
-                len(events) == 1 and type(events[0][0]) is str and events[0][0].isascii()
+                len(events) == 1
+                and type(events[0][0]) is str
+                and events[0][0].isascii()
                 and hmac.compare_digest(events[0][0], self._witness(reservation, salt))
                 and self._matches_store(connection)
             )

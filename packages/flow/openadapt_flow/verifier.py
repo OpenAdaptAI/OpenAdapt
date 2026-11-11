@@ -863,7 +863,9 @@ class PendingWrite:
     _read_provider: Optional[CompleteReadProvider] = field(default=None, repr=False)
     purpose: VerificationPurpose = "observation"
     _owned_reference: Optional[OwnedBaselineReference] = field(default=None, repr=False)
-    _dispatch_lock: Any = field(default_factory=threading.Lock, repr=False, compare=False)
+    _dispatch_lock: Any = field(
+        default_factory=threading.Lock, repr=False, compare=False
+    )
 
     @property
     def baseline_path(self) -> Path:
@@ -914,7 +916,10 @@ def commit_pending_sqlite_insert(pending: PendingWrite) -> None:
         ):
             raise VerifyRunError("the journal does not own this dispatch reservation")
         _commit_owned_sqlite_insert(
-            pending.contract.config, pending.params, pending.baseline_path, pending._owned_reference
+            pending.contract.config,
+            pending.params,
+            pending.baseline_path,
+            pending._owned_reference,
         )
 
 
@@ -1110,7 +1115,13 @@ def _begin_write(
         )
     try:
         _settle(
-            led, key, contract, params, actor, read_provider=read_provider, purpose=purpose
+            led,
+            key,
+            contract,
+            params,
+            actor,
+            read_provider=read_provider,
+            purpose=purpose,
         )
         _hold_elsewhere(led, key, shape_key)
         if any(v is None for v in values.values()):
@@ -1223,9 +1234,13 @@ def _capture(
             pending.baseline_path,
             read_provider=read_provider,
             purpose=pending.purpose,
-            _owned_dispatch_owner=write_id if ledger_owned and purpose == "owned_attempt" else None,
+            _owned_dispatch_owner=write_id
+            if ledger_owned and purpose == "owned_attempt"
+            else None,
         )
-        pending._owned_reference = _owned_baseline_reference(payload, bytes.fromhex(payload["salt"]))
+        pending._owned_reference = _owned_baseline_reference(
+            payload, bytes.fromhex(payload["salt"])
+        )
     except Exception as exc:  # a store that can't be reached, a bad binding
         raise BaselineUnreadable(
             "the system of record could not be read before the write "
@@ -1290,7 +1305,10 @@ def _settle(
         and led.state(attempt) != "free"
         and attempt.begun.get("purpose", "observation") != purpose
     ):
-        raise WriteHeld("the earlier attempt was recorded for a different verification purpose", key=key)
+        raise WriteHeld(
+            "the earlier attempt was recorded for a different verification purpose",
+            key=key,
+        )
     if attempt is not None and attempt.state in ("open", "uncertain"):
         # Open with a free lease: its owner died between the send and the
         # read-back. Read back before anything is sent.
@@ -1452,8 +1470,10 @@ def _reconcile(
     except (OSError, ValueError):
         return  # nothing to judge with: stays as it is, for a person
     purpose = attempt.begun.get("purpose", "observation")
-    if not isinstance(payload, dict) or purpose not in ("observation", "owned_attempt") or (
-        payload.get("purpose", "observation") != purpose
+    if (
+        not isinstance(payload, dict)
+        or purpose not in ("observation", "owned_attempt")
+        or (payload.get("purpose", "observation") != purpose)
     ):
         return  # do not reinterpret another attempt or promote an unbound read
     if contract.config.owned_sqlite_insert and purpose != "owned_attempt":
@@ -1604,9 +1624,13 @@ def verify_write(
     holds_lease = pending.ledger is not None and pending._lease is not None
     try:
         before_judge = (
-            pending.ledger.latest(pending.write_key) if pending.ledger is not None else None
+            pending.ledger.latest(pending.write_key)
+            if pending.ledger is not None
+            else None
         )
-        same_attempt = before_judge is not None and before_judge.attempt_id == pending.write_id
+        same_attempt = (
+            before_judge is not None and before_judge.attempt_id == pending.write_id
+        )
         purpose_changed = same_attempt and (
             before_judge is not None
             and before_judge.begun.get("purpose", "observation") != pending.purpose
@@ -1622,7 +1646,8 @@ def verify_write(
             )
         ):
             raise WriteHeld(
-                "the write attempt or its verification purpose changed", key=pending.write_key
+                "the write attempt or its verification purpose changed",
+                key=pending.write_key,
             )
         result = _judge(
             pending, write_attempted=write_attempted, source=source, seal=seal
@@ -1871,7 +1896,8 @@ def _check_overlap(
     if (
         result.outcome is not Outcome.REFUTED
         or result.checked.get("delta") != "held"
-        or (result.evidence.get("write_attribution") or {}).get("purpose") == "owned_attempt"
+        or (result.evidence.get("write_attribution") or {}).get("purpose")
+        == "owned_attempt"
     ):
         return result
     if result.checked.get("source") == "refuted":
@@ -2985,7 +3011,10 @@ def _hold_after_recheck(
         if attempt.attempt_id != write_id:
             return unheld("a newer attempt of this write is in the ledger")
         prior = attempt.resolved or {}
-        if prior.get("outcome") == "REFUTED" and attempt.begun.get("purpose") == "owned_attempt":
+        if (
+            prior.get("outcome") == "REFUTED"
+            and attempt.begun.get("purpose") == "owned_attempt"
+        ):
             return _owned_refutation(late)
         reason = "; ".join(late.reasons) or "the recheck did not confirm the write"
         recorded = led.resolved(
@@ -3074,7 +3103,10 @@ def _owned_refutation(late: RecheckResult) -> RecheckResult:
     return _replace(
         late,
         outcome="REFUTED",
-        reasons=[*late.reasons, "the ledger already holds this owned attempt as REFUTED"],
+        reasons=[
+            *late.reasons,
+            "the ledger already holds this owned attempt as REFUTED",
+        ],
     )
 
 
@@ -3170,7 +3202,11 @@ def _judge_recheck(
             or (attempt.resolved or {}).get("receipt_sha256") != base.receipt_sha256
         ):
             return (
-                _replace(base, recheck_owed=True, reasons=["the original owned journal claim could not be matched"]),
+                _replace(
+                    base,
+                    recheck_owed=True,
+                    reasons=["the original owned journal claim could not be matched"],
+                ),
                 False,
                 None,
             )
