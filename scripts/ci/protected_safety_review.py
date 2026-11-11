@@ -15,7 +15,6 @@ import os
 import re
 import sys
 import unicodedata
-import urllib.error
 import urllib.request
 from datetime import datetime
 from pathlib import Path
@@ -447,8 +446,8 @@ class GitHubApi:
         try:
             with urllib.request.urlopen(request, timeout=20) as response:
                 return json.loads(response.read())
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
-            raise RuntimeError(f"GitHub API request failed for {path}: {exc}") from exc
+        except Exception:  # noqa: BLE001 - transport errors can contain credentials
+            raise RuntimeError("GitHub API request failed") from None
 
     def graphql(self, query: str, variables: dict[str, Any]) -> Any:
         payload = json.dumps({"query": query, "variables": variables}).encode()
@@ -466,8 +465,8 @@ class GitHubApi:
         try:
             with urllib.request.urlopen(request, timeout=20) as response:
                 result = json.loads(response.read())
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
-            raise RuntimeError(f"GitHub GraphQL request failed: {exc}") from exc
+        except Exception:  # noqa: BLE001 - transport errors can contain credentials
+            raise RuntimeError("GitHub GraphQL request failed") from None
         if not isinstance(result, dict) or result.get("errors"):
             raise RuntimeError("GitHub GraphQL returned errors")
         return result.get("data")
@@ -1008,8 +1007,8 @@ def run(
                 for entry in group_entries
             ]:
                 errors.append("merge-group queue mapping changed before publication")
-    except Exception as exc:  # noqa: BLE001 - fail closed on any unavailable metadata
-        errors.append(f"safety review could not verify GitHub metadata: {exc}")
+    except Exception:  # noqa: BLE001 - metadata errors can contain response values
+        errors.append("safety review could not verify GitHub metadata")
     if head_sha is None:
         raise EvidenceError("cannot publish failure: event contains no known check SHA")
     return _publish_check(
@@ -1055,8 +1054,8 @@ def main() -> int:
             workflow_attempt=workflow_attempt,
             workflow_sha=workflow_sha,
         )
-    except Exception as exc:  # noqa: BLE001 - malformed inputs must exit nonzero
-        print(f"unable to publish protected safety review: {exc}", file=sys.stderr)
+    except Exception:  # noqa: BLE001 - never print transport or input exception values
+        print("unable to publish protected safety review", file=sys.stderr)
         return 2
     print("protected-safety-review: " + conclusion)
     for error in errors:

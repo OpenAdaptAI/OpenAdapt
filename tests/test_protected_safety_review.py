@@ -644,7 +644,7 @@ def test_first_api_failure_publishes_failure_for_known_pr_head() -> None:
         workflow_sha=BASE,
     )
     assert conclusion == "failure"
-    assert any("fixed synthetic API failure" in error for error in errors)
+    assert errors == ["safety review could not verify GitHub metadata"]
     assert api.check_run is not None
     assert api.check_run["head_sha"] == HEAD
 
@@ -1041,3 +1041,176 @@ def test_ordinary_prose_and_quoted_example_do_not_create_extra_bindings(
     comments = _comments()
     comments[1]["body"] += "\n" + explanation
     assert _evaluate(comments=comments) == []
+
+
+@pytest.mark.parametrize("method", ["request", "graphql"])
+def test_api_sanitizes_genuine_malformed_authorization_before_connection(
+    method: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import http.client
+
+    from scripts.ci import protected_safety_review as safety
+
+    canary = "synthetic-header-canary-not-a-credential"
+    connected = []
+    rejected = []
+
+    def connect_forbidden(_connection):
+        connected.append(True)
+        raise AssertionError("this control must not connect")
+
+    def validate_header(request, **_kwargs):
+        connection = http.client.HTTPConnection("127.0.0.1", 1)
+        connection.putrequest("GET", "/")
+        try:
+            connection.putheader("Authorization", request.get_header("Authorization"))
+        except ValueError as error:
+            # The genuine stdlib header validator includes the rejected value.
+            rejected.append(canary in str(error))
+            raise
+        raise AssertionError("the malformed header was not rejected")
+
+    monkeypatch.setattr(http.client.HTTPConnection, "connect", connect_forbidden)
+    monkeypatch.setattr(safety.urllib.request, "urlopen", validate_header)
+    api = safety.GitHubApi(canary + "\ninvalid-header-continuation")
+    with pytest.raises(RuntimeError) as failure:
+        if method == "request":
+            api.request("/fixed")
+        else:
+            api.graphql("query { viewer { login } }", {})
+    assert rejected == [True]
+    assert connected == []
+    assert str(failure.value) == (
+        "GitHub API request failed"
+        if method == "request"
+        else "GitHub GraphQL request failed"
+    )
+    assert canary not in str(failure.value)
+    assert failure.value.__suppress_context__ is True
+
+
+@pytest.mark.parametrize("method", ["request", "graphql"])
+@pytest.mark.parametrize("kind", ["url", "timeout", "decode", "other"])
+def test_api_transport_exception_values_never_become_diagnostics(
+    method: str, kind: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import urllib.error
+
+    from scripts.ci import protected_safety_review as safety
+
+    canary = "synthetic-response-canary-not-a-credential"
+    errors = {
+        "url": urllib.error.URLError(canary),
+        "timeout": TimeoutError(canary),
+        "decode": UnicodeDecodeError("utf-8", b"\xff", 0, 1, canary),
+        "other": ValueError(canary),
+    }
+    observed = []
+
+    def fail_transport(_request, **_kwargs):
+        observed.append(kind)
+        raise errors[kind]
+
+    monkeypatch.setattr(safety.urllib.request, "urlopen", fail_transport)
+    api = safety.GitHubApi("synthetic-not-a-credential")
+    with pytest.raises(RuntimeError) as failure:
+        if method == "request":
+            api.request("/" + canary)
+        else:
+            api.graphql("query { viewer { login } }", {})
+    assert observed == [kind]
+    assert str(failure.value) == (
+        "GitHub API request failed"
+        if method == "request"
+        else "GitHub GraphQL request failed"
+    )
+    assert canary not in str(failure.value)
+    assert failure.value.__suppress_context__ is True
+
+
+def test_metadata_exception_cannot_enter_errors_or_published_check() -> None:
+    canary = "synthetic-metadata-canary-not-a-credential"
+
+    class FailedMetadataApi(FakeApi):
+        def request(self, path: str, *, method: str = "GET", data: Any = None) -> Any:
+            if method == "GET":
+                raise ValueError(canary)
+            return super().request(path, method=method, data=data)
+
+    api = FailedMetadataApi()
+    event = {"pull_request": {"number": 42, "head": {"sha": HEAD}}}
+    conclusion, errors = run(event, BASE, api, event_name="pull_request_target")
+    assert conclusion == "failure"
+    assert errors == ["safety review could not verify GitHub metadata"]
+    assert api.check_run is not None
+    assert api.check_run["conclusion"] == "failure"
+    assert api.check_run["head_sha"] == HEAD
+    assert canary not in json.dumps(api.check_run)
+    assert canary not in json.dumps(errors)
+
+
+@pytest.mark.parametrize("stage", ["metadata", "publication", "event"])
+def test_main_never_prints_exception_values(
+    stage: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from scripts.ci import protected_safety_review as safety
+
+    canary = "synthetic-main-canary-not-a-credential"
+    event_file = tmp_path / "event.json"
+    event_file.write_text(
+        json.dumps({"pull_request": {"number": 42, "head": {"sha": HEAD}}}),
+        encoding="utf-8",
+    )
+
+    class FailedApi(FakeApi):
+        def request(self, path: str, *, method: str = "GET", data: Any = None) -> Any:
+            if (stage == "metadata" and method == "GET") or (
+                stage == "publication" and method == "POST"
+            ):
+                raise ValueError(canary)
+            return super().request(path, method=method, data=data)
+
+    api = FailedApi()
+    monkeypatch.setattr(safety, "GitHubApi", lambda _token: api)
+    for name, value in {
+        "GITHUB_EVENT_PATH": str(event_file),
+        "GITHUB_TOKEN": "synthetic-not-a-credential",
+        "TRUSTED_BASE_SHA": BASE,
+        "GITHUB_EVENT_NAME": "pull_request_target",
+        "GITHUB_RUN_ID": "77",
+        "GITHUB_RUN_ATTEMPT": "1",
+        "GITHUB_SHA": BASE,
+    }.items():
+        monkeypatch.setenv(name, value)
+    if stage == "event":
+        original = Path.read_text
+
+        def fail_event(path, *args, **kwargs):
+            if path == event_file:
+                raise ValueError(canary)
+            return original(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", fail_event)
+    status = safety.main()
+    output = capsys.readouterr()
+    assert canary not in output.out
+    assert canary not in output.err
+    if stage == "metadata":
+        assert status == 1
+        assert api.check_run is not None
+        assert api.check_run["head_sha"] == HEAD
+        assert api.check_run["conclusion"] == "failure"
+        assert canary not in json.dumps(api.check_run)
+        assert output.out == (
+            "protected-safety-review: failure\n"
+            "- safety review could not verify GitHub metadata\n"
+        )
+        assert output.err == ""
+    else:
+        assert status == 2
+        assert api.check_run is None
+        assert output.out == ""
+        assert output.err == "unable to publish protected safety review\n"
