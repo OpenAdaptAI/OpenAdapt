@@ -17,6 +17,9 @@
 
 ## Unreleased
 
+- SQL effect readback now requires opaque SQLite and PostgreSQL adapters to
+  declare `sql_dialect`. Native drivers are still recognized automatically.
+
 - Keep deferred typing, scrolling and click gestures tied to their emitting
   document. A known document change preserves both actions; uncertain ownership
   or a mixed-document batch refuses publication.
