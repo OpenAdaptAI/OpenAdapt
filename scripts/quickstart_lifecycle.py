@@ -108,11 +108,13 @@ def _browser_present(
     cwd: Path,
     env: dict[str, str],
     log: Path,
+    only_shell: bool = True,
 ) -> bool:
-    """Inspect Flow's headless Chromium shell without launching it.
+    """Inspect Flow's bundled Chromium without launching it.
 
     The headless quickstart downloads only Playwright's headless shell, so that
-    is the build to probe, not the full Chromium.
+    is the build to probe by default. ``only_shell=False`` probes the full
+    Chromium build instead.
     """
     result = _run(
         [
@@ -120,7 +122,7 @@ def _browser_present(
             "-c",
             (
                 "from openadapt_flow._browser_setup import _bundled_present; "
-                "print('present' if _bundled_present(only_shell=True) "
+                f"print('present' if _bundled_present(only_shell={only_shell}) "
                 "else 'absent')"
             ),
         ],
@@ -260,6 +262,7 @@ def run_lifecycle(
     flow_wheel: Path | None,
     browser_system_deps: bool,
     source_revision: str | None,
+    require_installed_browser: bool = False,
 ) -> dict[str, object]:
     if work_dir.exists():
         raise FileExistsError(f"work directory already exists: {work_dir}")
@@ -420,6 +423,11 @@ def run_lifecycle(
             env=auto_env,
             log=logs / "10b-browser-channel.log",
         )
+        if channel is None and require_installed_browser:
+            raise AssertionError(
+                "no installed Chrome or Edge found, but --require-installed-browser "
+                "is set; the default browser path cannot be checked"
+            )
         auto_quickstart = artifacts / "openadapt-quickstart-auto"
         auto_result = _run(
             [str(console), "quickstart", "--out", str(auto_quickstart)],
@@ -427,12 +435,20 @@ def run_lifecycle(
             env=auto_env,
             log=logs / "10c-quickstart-auto.log",
         )
+        # _inspect_quickstart raises unless every run is VERIFIED.
         auto_outcome = _inspect_quickstart(auto_quickstart)
         bundled_after_auto = _browser_present(
             python,
             cwd=artifacts,
             env=auto_env,
             log=logs / "10d-browser-after-auto.log",
+        )
+        full_after_auto = _browser_present(
+            python,
+            cwd=artifacts,
+            env=auto_env,
+            log=logs / "10e-full-browser-after-auto.log",
+            only_shell=False,
         )
         auto_notice_seen = any(
             notice in auto_result.stdout
@@ -444,6 +460,7 @@ def run_lifecycle(
             "outcome": auto_outcome["outcome"],
             "download_notice_seen": auto_notice_seen,
             "bundled_present_after_quickstart": bundled_after_auto,
+            "full_chromium_present_after_quickstart": full_after_auto,
             "no_download_checked": channel is not None,
         }
         summary["auto_browser_pass"] = auto_pass
@@ -459,7 +476,7 @@ def run_lifecycle(
                     f"quickstart printed a browser download notice although "
                     f"{channel} is installed"
                 )
-            if bundled_after_auto:
+            if bundled_after_auto or full_after_auto:
                 raise AssertionError(
                     f"quickstart downloaded Playwright's Chromium although "
                     f"{channel} is installed"
@@ -517,6 +534,14 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Install Linux browser system packages without downloading Chromium",
     )
+    parser.add_argument(
+        "--require-installed-browser",
+        action="store_true",
+        help=(
+            "Fail instead of skipping the no-download check when no installed "
+            "Chrome or Edge is found"
+        ),
+    )
     parser.add_argument("--source-revision", default=None)
     return parser
 
@@ -531,6 +556,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         flow_wheel=flow_wheel,
         browser_system_deps=args.browser_system_deps,
         source_revision=args.source_revision,
+        require_installed_browser=args.require_installed_browser,
     )
     return 0
 

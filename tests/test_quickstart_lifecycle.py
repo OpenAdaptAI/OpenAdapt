@@ -170,6 +170,8 @@ def _fake_lifecycle(
     channel="chrome",
     auto_output="",
     bundled_after_auto=False,
+    full_after_auto=False,
+    require_installed_browser=False,
 ):
     lifecycle = _module()
     launcher_wheel = tmp_path / "openadapt.whl"
@@ -199,7 +201,7 @@ def _fake_lifecycle(
         return subprocess.CompletedProcess(command, 0, stdout=output)
 
     monkeypatch.setattr(lifecycle, "_run", successful_run)
-    browser_states = iter([False, True, bundled_after_auto])
+    browser_states = iter([False, True, bundled_after_auto, full_after_auto])
     monkeypatch.setattr(
         lifecycle, "_browser_present", lambda *_a, **_k: next(browser_states)
     )
@@ -219,6 +221,7 @@ def _fake_lifecycle(
             flow_wheel=None,
             browser_system_deps=True,
             source_revision="abc123",
+            require_installed_browser=require_installed_browser,
         )
 
     return lifecycle, run, calls, work_dir
@@ -243,6 +246,7 @@ def test_lifecycle_summary_proves_preflight_and_lazy_install(tmp_path, monkeypat
         "outcome": "VERIFIED",
         "download_notice_seen": False,
         "bundled_present_after_quickstart": False,
+        "full_chromium_present_after_quickstart": False,
         "no_download_checked": True,
     }
     written = json.loads((work_dir / "summary.json").read_text(encoding="utf-8"))
@@ -270,14 +274,15 @@ def test_lazy_install_notice_matches_the_headless_shell_download():
 
 
 @pytest.mark.parametrize(
-    ("auto_output", "bundled_after_auto", "message"),
+    ("auto_output", "bundled_after_auto", "full_after_auto", "message"),
     [
-        ("LAZY", False, "download notice"),
-        ("", True, "downloaded Playwright's Chromium"),
+        ("LAZY", False, False, "download notice"),
+        ("", True, False, "downloaded Playwright's Chromium"),
+        ("", False, True, "downloaded Playwright's Chromium"),
     ],
 )
 def test_auto_pass_fails_when_it_downloads_despite_installed_chrome(
-    tmp_path, monkeypatch, auto_output, bundled_after_auto, message
+    tmp_path, monkeypatch, auto_output, bundled_after_auto, full_after_auto, message
 ):
     lifecycle = _module()
     output = lifecycle._LAZY_BROWSER_INSTALL_NOTICE if auto_output else ""
@@ -286,6 +291,7 @@ def test_auto_pass_fails_when_it_downloads_despite_installed_chrome(
         monkeypatch,
         auto_output=output,
         bundled_after_auto=bundled_after_auto,
+        full_after_auto=full_after_auto,
     )
 
     with pytest.raises(AssertionError, match=message):
@@ -331,3 +337,34 @@ def test_workflow_pins_actions_to_full_commit_shas():
 
     assert action_refs
     assert all(re.fullmatch(r"[0-9a-f]{40}", ref) for ref in action_refs)
+
+
+def test_auto_pass_fails_without_chrome_when_an_installed_browser_is_required(
+    tmp_path, monkeypatch
+):
+    _lifecycle, run, _calls, _work_dir = _fake_lifecycle(
+        tmp_path,
+        monkeypatch,
+        channel=None,
+        require_installed_browser=True,
+    )
+
+    with pytest.raises(AssertionError, match="--require-installed-browser"):
+        run()
+
+
+def test_workflow_requires_the_installed_browser_on_ubuntu():
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    assert "--require-installed-browser" in workflow
+
+
+def test_parser_defaults_to_skipping_without_an_installed_browser():
+    lifecycle = _module()
+    base = ["--launcher-wheel", "x.whl", "--work-dir", "w"]
+
+    assert lifecycle.build_parser().parse_args(base).require_installed_browser is False
+    flagged = lifecycle.build_parser().parse_args(
+        [*base, "--require-installed-browser"]
+    )
+    assert flagged.require_installed_browser is True
