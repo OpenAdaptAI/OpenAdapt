@@ -160,6 +160,8 @@ def _recheck(args: argparse.Namespace) -> int:
     )
     reasons = list(result.reasons)
     code = _outcome_exit(result.outcome)
+    # Older supported Flow releases have no canonical hold details.
+    hold_reason = getattr(result, "hold_reason", None)
     if ledger_state == "held" or ledger_outcome == "REFUTED":
         code = 4
         reasons.append("the exact ledger attempt remains held for person review")
@@ -171,6 +173,14 @@ def _recheck(args: argparse.Namespace) -> int:
             {
                 "due": True,
                 "verified": result.verified and recorded,
+                **(
+                    {
+                        "hold_reason": hold_reason,
+                        "current_observation": result.current_observation,
+                    }
+                    if hold_reason is not None
+                    else {}
+                ),
                 "ledger_state": ledger_state,
                 "ledger_outcome": ledger_outcome,
                 "outcome": result.outcome,

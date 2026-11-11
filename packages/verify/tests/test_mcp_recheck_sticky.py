@@ -88,9 +88,16 @@ def test_mcp_restored_rows_never_clear_refutation(store, tmp_path, first_refuter
                     else:
                         reply = json.loads(retried.content[0].text)
                         assert (
-                            reply["outcome"] == "UNCERTAIN"
-                            and reply["verified"] is False
+                            reply["outcome"] == "REFUTED" and reply["verified"] is False
                         )
+                        assert reply["hold_reason"] == "prior_refutation"
+                        assert reply["current_observation"] == {
+                            "status": "CONFIRMED",
+                            "read_window": {
+                                "post_save_read_at": late.post_save_read_at,
+                                "read_at": reply["read_at"],
+                            },
+                        }
                     found = default_ledger().find_attempt(write_id)
                     assert found is not None and found[1].state == "held"
                     assert found[1].resolved["outcome"] == "REFUTED"

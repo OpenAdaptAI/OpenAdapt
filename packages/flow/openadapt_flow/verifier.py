@@ -807,6 +807,18 @@ class RecheckResult:
     recheck_owed: bool = False
 
     @property
+    def hold_reason(self) -> Optional[str]:
+        """The ledger reason for an existing terminal hold, if any."""
+
+        return None
+
+    @property
+    def current_observation(self) -> Optional[dict[str, Any]]:
+        """The bounded fresh read for a terminally held attempt, if any."""
+
+        return None
+
+    @property
     def verified(self) -> bool:
         """True only when this receipt-bound recheck claim still stands."""
 
@@ -835,6 +847,37 @@ class RecheckResult:
         return {"CONFIRMED": "verified", "REFUTED": "refuted"}.get(
             self.outcome, "unconfirmed"
         )
+
+
+@dataclass(frozen=True, kw_only=True)
+class _HeldRecheckResult(RecheckResult):
+    _hold_reason: str
+    _observed_status: LateOutcome
+
+    @property
+    def final(self) -> bool:
+        return self._observed_status != "UNCERTAIN" and super().final
+
+    @property
+    def hold_reason(self) -> str:
+        return self._hold_reason
+
+    @property
+    def current_observation(self) -> dict[str, Any]:
+        def timestamp(value: str) -> Optional[str]:
+            try:
+                parse_time(value)
+            except ValueError:
+                return None
+            return value
+
+        return {
+            "status": self._observed_status,
+            "read_window": {
+                "post_save_read_at": timestamp(self.post_save_read_at),
+                "read_at": timestamp(self.read_at),
+            },
+        }
 
 
 _NO_LEDGER: Any = object()  # sentinel: the caller passed no ``ledger``
@@ -2631,7 +2674,18 @@ def recheck(
         ledger=ledger,
         read_provider=read_provider,
     )
-    if late.recheck_owed or (late.outcome == "REFUTED" and not trusted):
+    if late.outcome == "REFUTED" and not trusted:
+        return late
+    if late.recheck_owed:
+        if trusted:
+            try:
+                _, _, _, attempt = _recheck_attempt(ledger, write)
+                if attempt is not None:
+                    held = _terminal_recheck(attempt, late)
+                    if held is not None:
+                        return held
+            except Exception:  # noqa: BLE001 - the read remains owed
+                pass
         return late
     if late.outcome != "CONFIRMED":
         late = _hold_after_recheck(
@@ -2644,6 +2698,77 @@ def recheck(
     return late
 
 
+def _recheck_attempt(
+    ledger: Any, write: WriteResult | RecheckState
+) -> tuple[Optional[Ledger], str, str, Optional[Attempt]]:
+    """Resolve only the current attempt with the write's exact journal id."""
+
+    if isinstance(write, WriteResult):
+        write_id, key = write.write_id, write.write_key
+        if ledger is _NO_LEDGER and write.ledger is not None:
+            ledger = write.ledger
+    else:
+        receipt = write.payload.get("receipt") or {}
+        write_id, key = str(receipt.get("correlation_id") or ""), ""
+    led = _resolve_ledger(ledger)
+    if led is None or not write_id:
+        return led, key, write_id, None
+    if key:
+        attempt = led.latest(key)
+        if attempt is None or attempt.attempt_id != write_id:
+            attempt = None
+    else:
+        found = led.find_attempt(write_id)
+        key, attempt = found if found is not None else ("", None)
+    return led, key, write_id, attempt
+
+
+def _recheck_hold_receipt_matches(attempt: Attempt, digest: str) -> bool:
+    return bool(digest) and any(
+        event.get("event") == "resolved"
+        and event.get("outcome") in ("CONFIRMED", "REFUTED")
+        and event.get("applied") is not False
+        and event.get("receipt_sha256") == digest
+        for event in attempt.events
+    )
+
+
+def _terminal_recheck(attempt: Attempt, late: RecheckResult) -> Optional[RecheckResult]:
+    reason = attempt.recheck_hold()
+    if reason is None:
+        return None
+    if not _recheck_hold_receipt_matches(attempt, late.receipt_sha256):
+        return _replace(
+            late,
+            outcome="UNCERTAIN",
+            reasons=[
+                *late.reasons,
+                "the ledger hold could not be bound to this receipt",
+            ],
+        )
+    message = {
+        "prior_refutation": "the ledger already holds this write as REFUTED",
+        "person_decision": "a person already settled this attempt; it remains REFUTED for recheck",
+        "released_attempt": "a person already released this attempt; it remains REFUTED for recheck",
+    }[reason]
+    return _HeldRecheckResult(
+        outcome="REFUTED",
+        frame=late.frame,
+        reasons=[*late.reasons, message],
+        receipt_sha256=late.receipt_sha256,
+        post_save_read_at=late.post_save_read_at,
+        due_at=late.due_at,
+        read_at=late.read_at,
+        excused=late.excused,
+        evidence=late.evidence,
+        recheck_claim_sha256=late.recheck_claim_sha256,
+        excuse_receipt_sha256s=late.excuse_receipt_sha256s,
+        recheck_owed=False,
+        _hold_reason=reason,
+        _observed_status=late.outcome,
+    )
+
+
 def _recheck_journal(
     ledger: Any, write: WriteResult | RecheckState
 ) -> tuple[Optional[int], Optional[Attempt]]:
@@ -2653,22 +2778,10 @@ def _recheck_journal(
     This is only called after saved-state validation, not for its claims.
     """
     try:
-        if isinstance(write, WriteResult):
-            write_id, key = write.write_id, write.write_key
-            if ledger is _NO_LEDGER and write.ledger is not None:
-                ledger = write.ledger
-        else:
-            receipt = write.payload.get("receipt") or {}
-            write_id, key = str(receipt.get("correlation_id") or ""), ""
-        led = _resolve_ledger(ledger)
+        led, _, _, attempt = _recheck_attempt(ledger, write)
         if led is None:
             return None, None
-        if key:
-            attempt = led.latest(key)
-        else:
-            found = led.find_attempt(write_id)
-            attempt = found[1] if found is not None else None
-        if attempt is not None and attempt.attempt_id == write_id:
+        if attempt is not None:
             return attempt.revision, attempt
     except Exception:  # noqa: BLE001 - no read can grant permission on failure
         pass
@@ -2688,21 +2801,15 @@ def _mark_rechecked(
     retry is handed a result that is no longer provisional.
 
     A journal change can invalidate this positive observation. If the
-    revision changed or recording fails, return UNCERTAIN. A prior REFUTED settlement is never upgraded by a fresh positive read.
-    A transient UNCERTAIN recheck may recover only the same originally
+    revision changed or recording fails, return UNCERTAIN unless the same
+    attempt has a bound terminal hold. A transient UNCERTAIN recheck may
+    recover only the same originally
     confirmed receipt under the unchanged pre-read journal revision.
     The read facts stay intact when recording refuses.
     """
 
     try:
-        if isinstance(write, WriteResult):
-            write_id, key = write.write_id, write.write_key
-            if ledger is _NO_LEDGER and write.ledger is not None:
-                ledger = write.ledger
-        else:
-            receipt = write.payload.get("receipt") or {}
-            write_id, key = str(receipt.get("correlation_id") or ""), ""
-        led = _resolve_ledger(ledger)
+        led, key, write_id, attempt = _recheck_attempt(ledger, write)
         if led is None:
             return late
         if not write_id:
@@ -2714,12 +2821,7 @@ def _mark_rechecked(
                     "the write has no ledger attempt identity; hold this write by hand",
                 ],
             )
-        if key:
-            attempt = led.latest(key)
-        else:
-            found = led.find_attempt(write_id)
-            key, attempt = found if found is not None else ("", None)
-        if attempt is None or attempt.attempt_id != write_id:
+        if attempt is None:
             return _replace(
                 late,
                 outcome="UNCERTAIN",
@@ -2728,13 +2830,17 @@ def _mark_rechecked(
                     "the ledger no longer has this attempt as its current write",
                 ],
             )
+        held = _terminal_recheck(attempt, late)
+        if held is not None:
+            return held
         prior = (attempt.resolved or {}).get("outcome")
-        if prior == "REFUTED" and attempt.begun.get("purpose") == "owned_attempt":
-            return _owned_refutation(late)
         if prior == "UNCERTAIN":
             recovered = _recover_recheck(led, key, attempt, late, expected_revision)
             if recovered is not None:
                 attempt = recovered
+                held = _terminal_recheck(attempt, late)
+                if held is not None:
+                    return held
                 expected_revision = attempt.revision
                 prior = (attempt.resolved or {}).get("outcome")
         if prior != "CONFIRMED":
@@ -2774,6 +2880,10 @@ def _mark_rechecked(
             expected_revision=expected_revision,
             **({"history_coverage": coverage} if coverage is not None else {}),
         )
+        if recorded.attempt_id == write_id:
+            held = _terminal_recheck(recorded, late)
+            if held is not None:
+                return held
         if (
             recorded.attempt_id != write_id
             or not recorded.events
@@ -2863,6 +2973,11 @@ def _recover_recheck(
         result=dict(original["result"]),
         expected_revision=expected_revision,
     )
+    if (
+        recorded.attempt_id == attempt.attempt_id
+        and recorded.recheck_hold() is not None
+    ):
+        return recorded
     if (
         recorded.attempt_id != attempt.attempt_id
         or not recorded.events
@@ -3017,12 +3132,11 @@ def _hold_after_recheck(
             return unheld("this ledger has no attempt with the write's id")
         if attempt.attempt_id != write_id:
             return unheld("a newer attempt of this write is in the ledger")
+        if trusted:
+            held = _terminal_recheck(attempt, late)
+            if held is not None:
+                return held
         prior = attempt.resolved or {}
-        if (
-            prior.get("outcome") == "REFUTED"
-            and attempt.begun.get("purpose") == "owned_attempt"
-        ):
-            return _owned_refutation(late)
         reason = "; ".join(late.reasons) or "the recheck did not confirm the write"
         recorded = led.resolved(
             key,
@@ -3054,17 +3168,10 @@ def _hold_after_recheck(
             or not recorded.events
             or recorded.events[-1].get("applied") is False
         ):
-            if (
-                recorded.attempt_id == write_id
-                and (recorded.resolved or {}).get("outcome") == "REFUTED"
-            ):
-                return _replace(
-                    late,
-                    reasons=[
-                        *late.reasons,
-                        "the ledger already holds this write as REFUTED; the new observation was retained without changing the hold",
-                    ],
-                )
+            if trusted and recorded.attempt_id == write_id:
+                held = _terminal_recheck(recorded, late)
+                if held is not None:
+                    return held
             return unheld(
                 "a concurrent settlement kept the existing hold or changed the attempt"
             )
@@ -3104,17 +3211,6 @@ def _recheck_refusal(problem: str) -> str:
             "about the write itself"
         )
     return f"{problem}, so the write can't be rechecked"
-
-
-def _owned_refutation(late: RecheckResult) -> RecheckResult:
-    return _replace(
-        late,
-        outcome="REFUTED",
-        reasons=[
-            *late.reasons,
-            "the ledger already holds this owned attempt as REFUTED",
-        ],
-    )
 
 
 def _judge_recheck(
@@ -3217,11 +3313,18 @@ def _judge_recheck(
         reference = _owned_baseline_reference(
             state.payload["baseline"], bytes.fromhex(state.payload["salt"])
         )
+        # A person settlement can omit a digest. Only a terminal hold may
+        # use the original applied receipt binding from this same attempt.
+        receipt_matches = attempt is not None and (
+            _recheck_hold_receipt_matches(attempt, base.receipt_sha256)
+            if attempt.recheck_hold() is not None
+            else (attempt.resolved or {}).get("receipt_sha256") == base.receipt_sha256
+        )
         if (
             attempt is None
             or reference is None
             or _attempt_reference(attempt) != reference
-            or (attempt.resolved or {}).get("receipt_sha256") != base.receipt_sha256
+            or not receipt_matches
         ):
             return (
                 _replace(
@@ -3232,8 +3335,6 @@ def _judge_recheck(
                 False,
                 None,
             )
-        if (attempt.resolved or {}).get("outcome") == "REFUTED":
-            return _owned_refutation(base), False, None
     try:
         verdict, read_at = recheck_run(
             cfg,

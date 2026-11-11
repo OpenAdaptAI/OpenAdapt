@@ -459,6 +459,14 @@ class VerifyBridge:
             "due": True,
             "write_id": write_id,
             "verified": late.verified,
+            **(
+                {
+                    "hold_reason": late.hold_reason,
+                    "current_observation": late.current_observation,
+                }
+                if late.hold_reason is not None
+                else {}
+            ),
             "outcome": late.outcome,
             "late": late.late,
             "final": late.final,
