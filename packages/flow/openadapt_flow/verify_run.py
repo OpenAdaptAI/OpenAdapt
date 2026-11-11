@@ -2409,6 +2409,15 @@ def _frame_identity_indexes(
     return indexes
 
 
+def _require_verification_purpose(
+    cfg: VerifyConfig, purpose: VerificationPurpose
+) -> None:
+    if cfg.owned_sqlite_insert is not None and purpose != "owned_attempt":
+        raise VerifyRunError(
+            "the configured owned SQLite insert requires owned_attempt verification"
+        )
+
+
 def capture_baseline(
     cfg: VerifyConfig,
     params: Mapping[str, object],
@@ -2431,7 +2440,7 @@ def capture_baseline(
     purpose_fields: dict[str, str] = {"purpose": purpose}
     if _owned_dispatch_owner is not None:
         purpose_fields[_OWNED_DISPATCH_OWNER] = _owned_dispatch_owner
-    _baseline_purpose(purpose_fields)
+    _require_verification_purpose(cfg, _baseline_purpose(purpose_fields))
     verifier = _build_verifier(cfg, params, read_provider)
     identity = verifier_identity(verifier)
     execution_id = _new_execution_id()
@@ -2663,7 +2672,14 @@ def _used_marker(path: Path) -> Path:
     return path.with_name(path.name + ".used")
 
 
-def _load_baseline(path: Path, identity: str) -> tuple[dict[str, Any], bytes]:
+def _check_baseline_verifier(baseline: Mapping[str, Any], identity: str) -> None:
+    if baseline["verifier_identity"] != identity:
+        raise VerifyRunError("baseline was captured by a different verifier")
+
+
+def _load_baseline(
+    path: Path, identity: Optional[str] = None
+) -> tuple[dict[str, Any], bytes]:
     try:
         raw = json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
@@ -2681,8 +2697,8 @@ def _load_baseline(path: Path, identity: str) -> tuple[dict[str, Any], bytes]:
             "baseline file must hold exactly the required and supported fields"
         )
     _baseline_purpose(raw)
-    if raw["verifier_identity"] != identity:
-        raise VerifyRunError("baseline was captured by a different verifier")
+    if identity is not None:
+        _check_baseline_verifier(raw, identity)
     execution_id = raw["execution_id"]
     if not isinstance(execution_id, str) or not _OPAQUE.match(execution_id):
         raise VerifyRunError("baseline execution_id is not an opaque id")
@@ -3036,12 +3052,30 @@ def verify_run(
     approver_doc = _approver(approver)
     executor_kind, executor_ref, build_digest = _executor(run_record)
 
+    # Reject a downgrade before constructing a reader or consuming the baseline.
+    # A saved run can inherit its purpose only from the same decoded baseline
+    # whose identity and contents will be used for verification.
+    loaded = None
+    if cfg.owned_sqlite_insert is not None:
+        if purpose is not None or baseline_path is None:
+            requested = _baseline_purpose(
+                {"purpose": "observation" if purpose is None else purpose}
+            )
+            _require_verification_purpose(cfg, requested)
+        if baseline_path is not None:
+            loaded = _load_baseline(Path(baseline_path))
+            _require_verification_purpose(cfg, _baseline_purpose(loaded[0]))
+
     verifier = _build_verifier(cfg, params, read_provider)
     identity = verifier_identity(verifier)
 
     baseline: Optional[dict[str, Any]] = None
     if baseline_path is not None:
-        baseline, salt = _load_baseline(Path(baseline_path), identity)
+        if loaded is None:
+            baseline, salt = _load_baseline(Path(baseline_path), identity)
+        else:
+            baseline, salt = loaded
+            _check_baseline_verifier(baseline, identity)
         recorded_purpose = _baseline_purpose(baseline)
         if (
             purpose is not None

@@ -93,6 +93,7 @@ from openadapt_flow.verify_run import (
     VerifyRunError,
     _commit_owned_sqlite_insert,
     _owned_baseline_reference,
+    _require_verification_purpose,
     _write_private,
     capture_baseline,
     parse_verify_config,
@@ -2419,13 +2420,14 @@ def capture(contract: Contract, params: Mapping[str, object]) -> Snapshot:
         stacklevel=2,
     )
 
-    with tempfile.TemporaryDirectory(prefix="openadapt-verify-") as tmp:
-        try:
+    try:
+        _require_verification_purpose(contract.config, "observation")
+        with tempfile.TemporaryDirectory(prefix="openadapt-verify-") as tmp:
             payload = capture_baseline(
                 contract.config, params, Path(tmp) / "baseline.json"
             )
-        except VerifyRunError as exc:
-            raise BaselineUnreadable(str(exc)) from exc
+    except VerifyRunError as exc:
+        raise BaselineUnreadable(str(exc)) from exc
     state = payload.get("state") or {}
     if not state.get("reachable"):
         raise BaselineUnreadable("the system of record could not be read")
@@ -2447,6 +2449,10 @@ def _verify_snapshot(
     authorization_ref: str,
     write_attempted: bool,
 ) -> WriteResult:
+    try:
+        _require_verification_purpose(contract.config, "observation")
+    except VerifyRunError as exc:
+        raise VerifierError(str(exc)) from exc
     run_record = actor.run_record()
     if before.used:
         raise VerifierError("this snapshot was already used; capture again")
