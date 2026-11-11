@@ -1448,6 +1448,7 @@ class _FakeDesktop:
         self.foreground_window = self.PINNED
         self.roots: dict[int, int] = {}  # child hwnd -> top-level
         self.paint_border: dict[int, int] = {}  # self-drawn frame, in px
+        self.origin: tuple[int, int] = (0, 0)  # virtual-desktop top-left
 
     def add(
         self,
@@ -1465,6 +1466,9 @@ class _FakeDesktop:
 
     def top_level_windows(self):
         return list(self.stack)
+
+    def virtual_origin(self):
+        return self.origin
 
     def is_window(self, hwnd):
         return hwnd in self.windows
@@ -1834,6 +1838,27 @@ def test_window_bounds_reports_the_visible_frame(monkeypatch) -> None:
     assert _perform_uia("window-bounds", {"hwnd": 0x200, "pid": 10})["window"] is None
     with pytest.raises(AgentRequestError):
         _perform_uia("window-bounds", {"hwnd": True, "pid": 10})
+
+
+@pytest.mark.parametrize(
+    "origin", [(-1920, 0), (0, -1080), (-1280, -200), None], ids=str
+)
+def test_window_bounds_refuses_a_virtual_desktop_not_at_zero(
+    monkeypatch, origin
+) -> None:
+    """A monitor left of or above the primary gives the screenshot a negative
+    origin, so a crop at the window's bounds would be offset: no frame."""
+    import openadapt_flow.backends.win_agent.server as agent_server
+
+    desktop = _FakeDesktop()
+    if origin is None:
+        desktop.virtual_origin = lambda: 1 / 0  # the origin can't be read
+    else:
+        desktop.origin = origin
+    monkeypatch.setattr(agent_server.os, "name", "nt")
+    monkeypatch.setattr(agent_server, "_user32_factory", lambda: desktop)
+    payload = {"hwnd": _FakeDesktop.PINNED, "pid": 10}
+    assert _perform_uia("window-bounds", payload)["window"] is None
 
 
 @pytest.mark.parametrize(

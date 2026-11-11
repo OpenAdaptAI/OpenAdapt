@@ -1765,6 +1765,7 @@ class _User32:
                 [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int],
                 ctypes.c_int,
             ),
+            ("GetSystemMetrics", [ctypes.c_int], ctypes.c_int),
         ):
             fn = getattr(dll, name)
             fn.argtypes = args
@@ -1875,6 +1876,15 @@ class _User32:
         buffer = self._ctypes.create_unicode_buffer(512)
         self._dll.GetWindowTextW(hwnd, buffer, 512)
         return buffer.value
+
+    def virtual_origin(self) -> tuple[int, int]:
+        """Top-left of the virtual desktop (SM_XVIRTUALSCREEN and
+        SM_YVIRTUALSCREEN): negative when a monitor sits left of or above
+        the primary. The screenshot (mss ``monitors[0]``) starts there."""
+        return (
+            int(self._dll.GetSystemMetrics(76)),
+            int(self._dll.GetSystemMetrics(77)),
+        )
 
     def is_cloaked(self, hwnd: int) -> Optional[bool]:
         """A cloaked window (another virtual desktop, a suspended UWP app) is
@@ -2108,6 +2118,17 @@ def _window_operation(
             return {"status": "ok", "window": None}
         rect = user32.rect(hwnd)
         if rect is None or rect[2] <= rect[0] or rect[3] <= rect[1]:
+            return {"status": "ok", "window": None}
+        # The caller crops the screenshot at these bounds as pixels. That
+        # holds only when the virtual desktop starts at (0, 0); with a monitor
+        # left of or above the primary the crop would be offset, so answer
+        # None (and the caller reads the whole screen). Unknown is None too.
+        origin = getattr(user32, "virtual_origin", None)
+        try:
+            at_zero = callable(origin) and tuple(origin()) == (0, 0)
+        except Exception:  # noqa: BLE001 - unknown origin is no frame
+            at_zero = False
+        if not at_zero:
             return {"status": "ok", "window": None}
         # The frame bounds the whole form only if every window the app shows
         # sits inside it: a dialog or second window of the app that reaches
