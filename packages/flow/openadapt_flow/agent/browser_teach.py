@@ -40,6 +40,7 @@ import re
 import sys
 import threading
 import time
+from contextlib import ExitStack, suppress
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -864,73 +865,78 @@ class _Browser:
         self.writes_sent = self.wire.sent
         self.write_shapes = self.wire.shapes
         self.dialogs: list[str] = []
+        self._resources = ExitStack()
         self._pw = sync_playwright().start()
+        self._resources.callback(self._pw.stop)
         try:
-            from openadapt_flow._browser_readiness import launch_rendering_ready
+            from openadapt_flow._browser_readiness import (
+                BrowserReadinessError,
+                launch_rendering_ready,
+            )
 
-            self._browser = launch_rendering_ready(self._pw.chromium, headless=headless)
-        except Exception as exc:
-            self._pw.stop()
-            from openadapt_flow._browser_readiness import BrowserReadinessError
-
-            if isinstance(exc, BrowserReadinessError):
-                raise BridgeError(str(exc)) from None
-            raise BridgeError(
-                "could not start Chromium; run `python -m playwright install "
-                f"chromium` and try again ({type(exc).__name__})"
-            ) from None
+            try:
+                self._browser = launch_rendering_ready(
+                    self._pw.chromium, headless=headless
+                )
+            except Exception as exc:
+                if isinstance(exc, BrowserReadinessError):
+                    raise BridgeError(str(exc)) from None
+                raise BridgeError(
+                    "could not start Chromium; run `python -m playwright install "
+                    f"chromium` and try again ({type(exc).__name__})"
+                ) from None
+            self._resources.callback(self._browser.close)
+            self._configure_context(downloads_dir, scope)
         except BaseException:
-            self._pw.stop()
+            with suppress(BaseException):
+                self.close()
             raise
+
+    def _configure_context(self, downloads_dir: Path, scope: Any) -> None:
         # No service workers: their requests would skip the wire check.
         self.context = self._browser.new_context(
             accept_downloads=True, service_workers="block"
         )
+        self._resources.callback(self.context.close)
         self.context.route("**/*", self._guard)
         self.page = self.context.new_page()
         self.page.set_default_timeout(_STEP_TIMEOUT_MS)
         self.page.on("download", lambda d: self.downloads.append(d))
         #: Writes run 1's write adapter attributed (record writes).
         self.claimed = 0
-        try:
-            # Request routes never see WebSockets, including on later calls.
-            # No browser-teach context connects one to a server.
-            if not hasattr(self.context, "route_web_socket"):
-                raise BridgeError(
-                    "this Playwright can't stop WebSockets (1.48 or newer is "
-                    "needed), so a browser teach run can't be held"
-                )
-
-            def _refuse_socket(ws: Any) -> None:
-                self.blocked.append(f"a WebSocket to {_origin(ws.url)}")
-                # Playwright's sync callback is on its async dispatcher.
-                # Closing here reenters that dispatcher and can deadlock. A
-                # routed socket has no server connection unless explicitly
-                # connected; keep it mocked and close from the outer check.
-                self._pending_sockets.append(ws)
-
-            self.context.route_web_socket("**/*", _refuse_socket)
-            from openadapt_flow.backends.worker_containment import contain_workers
-
-            # Newest route first: containment hands only this page's requests
-            # to the wire guard installed above. Install before any navigation.
-            self.containment = contain_workers(self.page, self.blocked.append)
-            if not self.containment.ok:
-                raise BridgeError(
-                    self.containment.problem or self.containment.violations[0]
-                )
-            from openadapt_flow.backends.redirect_guard import guard_redirects
-
-            self.redirects = guard_redirects(
-                self.page, self._guard, self.blocked.append
+        # Request routes never see WebSockets, including on later calls.
+        # No browser-teach context connects one to a server.
+        if not hasattr(self.context, "route_web_socket"):
+            raise BridgeError(
+                "this Playwright can't stop WebSockets (1.48 or newer is "
+                "needed), so a browser teach run can't be held"
             )
-            if not self.redirects.ok:
-                raise BridgeError(
-                    self.redirects.problem or self.redirects.violations[0]
-                )
-        except Exception:
-            self.close()
-            raise
+
+        def _refuse_socket(ws: Any) -> None:
+            self.blocked.append(f"a WebSocket to {_origin(ws.url)}")
+            # Playwright's sync callback is on its async dispatcher.
+            # Closing here reenters that dispatcher and can deadlock. A
+            # routed socket has no server connection unless explicitly
+            # connected; keep it mocked and close from the outer check.
+            self._pending_sockets.append(ws)
+
+        self.context.route_web_socket("**/*", _refuse_socket)
+        from openadapt_flow.backends.worker_containment import contain_workers
+
+        # Newest route first: containment hands only this page's requests
+        # to the wire guard installed above. Install before any navigation.
+        self.containment = contain_workers(self.page, self.blocked.append)
+        if not self.containment.ok:
+            raise BridgeError(
+                self.containment.problem or self.containment.violations[0]
+            )
+        from openadapt_flow.backends.redirect_guard import guard_redirects
+
+        self.redirects = guard_redirects(self.page, self._guard, self.blocked.append)
+        if not self.redirects.ok:
+            raise BridgeError(
+                self.redirects.problem or self.redirects.violations[0]
+            )
         if scope is not None:
             forbidden = scope.forbidden_actions
             if "new_window" in forbidden:
@@ -1080,13 +1086,12 @@ class _Browser:
         self.check_guards()
 
     def close(self) -> None:
-        for closer in (self.context.close, self._browser.close, self._pw.stop):
-            try:
-                closer()
-            except Exception:  # noqa: BLE001 - closing is best effort
-                pass
-        self._closed = True
-        self._pending_sockets.clear()
+        try:
+            with suppress(Exception):
+                self._resources.close()
+        finally:
+            self._closed = True
+            self._pending_sockets.clear()
 
 
 # -- the downloaded file and its checks --------------------------------------------------
