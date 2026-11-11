@@ -7,6 +7,7 @@ trusted configuration. This module does not provision that trust boundary.
 
 from __future__ import annotations
 
+import errno
 import fcntl
 import hashlib
 import json
@@ -15,6 +16,7 @@ import re
 import secrets
 import sqlite3
 import stat
+import time
 from collections.abc import Iterator, Mapping
 from contextlib import closing, contextmanager
 from dataclasses import dataclass
@@ -29,6 +31,7 @@ class LedgerError(RuntimeError):
 HoldCode = Literal[
     "ledger_authority_absent",
     "ledger_authority_unavailable",
+    "ledger_authority_lock_timeout",
     "ledger_authority_wrong_scope",
     "ledger_authority_stale",
     "ledger_authority_interrupted",
@@ -46,6 +49,8 @@ class LedgerIntegrityHeld(LedgerError):
 
 
 _HEX = re.compile(r"[0-9a-f]{64}")
+_AUTHORITY_LOCK_WAIT_S = 10.0
+_AUTHORITY_LOCK_POLL_S = 0.05
 
 
 def _unique_heads(pairs: list[tuple[str, object]]) -> dict[str, object]:
@@ -116,10 +121,10 @@ class SQLiteJournalAuthority:
 
     @contextmanager
     def serialized(self) -> Iterator[None]:
-        """Serialize protected file reads, append phases and applied cleanup.
+        """Bound the wait to serialize protected reads, appends and cleanup.
 
-        Callers that need the committed inventory while holding this lock use
-        committed_snapshot() instead of nesting the lock.
+        Use committed_snapshot() when the critical section needs the committed
+        inventory. A lock timeout leaves the journal and authority unchanged.
         """
         self._require_file()
         try:
@@ -129,7 +134,20 @@ class SQLiteJournalAuthority:
                 0o600,
             )
             with os.fdopen(fd, "rb+") as lock:
-                fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+                deadline = time.monotonic() + _AUTHORITY_LOCK_WAIT_S
+                while time.monotonic() < deadline:
+                    try:
+                        fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    except BlockingIOError as exc:
+                        if exc.errno not in (errno.EAGAIN, errno.EWOULDBLOCK):
+                            raise
+                        remaining = deadline - time.monotonic()
+                        if remaining > 0:
+                            time.sleep(min(_AUTHORITY_LOCK_POLL_S, remaining))
+                    else:
+                        break
+                else:
+                    raise LedgerIntegrityHeld("ledger_authority_lock_timeout")
                 yield
         except OSError as exc:
             raise LedgerIntegrityHeld("ledger_authority_unavailable") from exc

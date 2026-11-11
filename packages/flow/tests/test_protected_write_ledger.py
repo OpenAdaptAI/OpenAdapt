@@ -14,6 +14,7 @@ from unittest.mock import patch
 
 import pytest
 
+from openadapt_flow import write_journal_authority
 from openadapt_flow.write_ledger import (
     FileLedger,
     Ledger,
@@ -411,15 +412,15 @@ def _contend_for_authority(
 
     def observe_lock(fd, mode):
         nonlocal signaled
-        if not signaled and mode == fcntl.LOCK_EX:
-            info = os.fstat(fd)
-            if (info.st_dev, info.st_ino) == (lock.st_dev, lock.st_ino):
-                # The real nonblocking probe must find the owner's flock held.
-                with pytest.raises(BlockingIOError):
-                    flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                signaled = True
-                output.send("contended")
-        return flock(fd, mode)
+        try:
+            return flock(fd, mode)
+        except BlockingIOError:
+            if not signaled and mode == (fcntl.LOCK_EX | fcntl.LOCK_NB):
+                info = os.fstat(fd)
+                if (info.st_dev, info.st_ino) == (lock.st_dev, lock.st_ino):
+                    signaled = True
+                    output.send("contended")
+            raise
 
     with patch.object(fcntl, "flock", observe_lock):
         try:
@@ -438,6 +439,15 @@ def _contend_for_authority(
             output.send(("held", held.code))
         else:
             output.send((operation, result))
+
+
+def _contend_with_short_deadline(
+    root: Path, path: Path, operation: str, key: str, task: str, output: Connection
+) -> None:
+    # Keep the real clock, retry loop and native flock. Shorten only this
+    # process's budget, while the owner stays gated by the test event.
+    with patch.object(write_journal_authority, "_AUTHORITY_LOCK_WAIT_S", 0.15):
+        _contend_for_authority(root, path, operation, key, task, output)
 
 
 def _read_interrupted_authority(
@@ -527,6 +537,73 @@ def test_live_prepared_appender_serializes_protected_readers_and_writers(
             assert attempt.resolved["outcome"] == "CONFIRMED"
         else:
             assert attempt.state == "open"
+
+
+def test_live_prepared_appender_times_out_without_mutation_then_recovers(
+    protected, protected_workers
+) -> None:
+    backend, ledger, authority = protected
+    proceed, start = protected_workers
+    key = _key(ledger)
+    contender_task = "synthetic-timeout-contender"
+    contender_key = _key(ledger, contender_task)
+    assert contender_key != key
+    folder = backend.attempt_dir(ATTEMPT)
+    baseline = folder / "baseline.json"
+    baseline.write_text("synthetic baseline")
+    inputs = folder / "attempt.json"
+    inputs.write_text("synthetic input")
+    ledger.begun(key, ATTEMPT, folder=str(folder))
+    initial = authority.snapshot()
+    entries = backend.root / "entries"
+    entry = entries / f"{key}.jsonl"
+    prefix = entry.read_bytes()
+
+    owner, prepared = start(
+        _pause_after_prepare, backend.root, authority.path, key, folder, proceed
+    )
+    assert _message(prepared) == "prepared"
+    try:
+        operations = (
+            ("lookup", key, "synthetic-task"),
+            ("lease", key, "synthetic-task"),
+            ("append", contender_key, contender_task),
+        )
+        for operation, operation_key, task in operations:
+            contender, result = start(
+                _contend_with_short_deadline,
+                backend.root,
+                authority.path,
+                operation,
+                operation_key,
+                task,
+            )
+            assert _message(result) == "contended"
+            assert _message(result) == ("held", "ledger_authority_lock_timeout")
+            _join_worker(contender)
+            assert owner.is_alive() and not proceed.is_set()
+        assert sorted(entries.iterdir()) == [entry]
+        assert entry.read_bytes() == prefix
+        assert baseline.read_text() == "synthetic baseline"
+        assert inputs.read_text() == "synthetic input"
+    finally:
+        proceed.set()
+
+    assert _message(prepared) == ("resolved", "undelivered")
+    _join_worker(owner)
+    restarted, reopened = _reopen(backend, authority)
+    current = authority.snapshot()
+    assert current.revision == initial.revision + 1
+    assert restarted.keys() == [key] and set(current.heads) == {key}
+    attempt = reopened.latest(key)
+    assert attempt is not None and attempt.attempt_id == ATTEMPT
+    assert attempt.state == "undelivered" and attempt.revision == 2
+    assert current.heads[key].digest == hashlib.sha256(entry.read_bytes()).hexdigest()
+    assert _key(reopened) == key
+    lease = restarted.lease(key)
+    assert lease is not None
+    lease.release()
+    assert not baseline.exists() and not inputs.exists()
 
 
 def test_killed_prepared_appender_holds_protected_journal_without_cleanup(
