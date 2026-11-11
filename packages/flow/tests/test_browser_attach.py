@@ -899,10 +899,10 @@ def test_browser_event_batch_refuses_multiple_logical_actions(
     "batch",
     [
         [
-            {"kind": "input", "field": "note", "_oaflow_input_session": "a"},
-            {"kind": "input", "field": "note", "_oaflow_input_session": "a"},
+            {"kind": "input", "field": "note", "_oaflow_input_session": "a", "_oaflow_producer_doc": "known-document"},
+            {"kind": "input", "field": "note", "_oaflow_input_session": "a", "_oaflow_producer_doc": "known-document"},
         ],
-        [{"kind": "scroll", "dy": 10}, {"kind": "scroll", "dy": 20}],
+        [{"kind": "scroll", "dy": 10, "_oaflow_producer_doc": "known-document"}, {"kind": "scroll", "dy": 20, "_oaflow_producer_doc": "known-document"}],
     ],
 )
 def test_browser_event_batch_preserves_one_coalescible_action(

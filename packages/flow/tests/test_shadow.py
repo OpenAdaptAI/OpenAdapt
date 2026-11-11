@@ -123,6 +123,121 @@ def _contract(db: Path) -> Contract:
 BODY = {"first": "Ada", "last": "Quill", "email": "ada@example.test"}
 
 
+@pytest.mark.parametrize("candidate_mode", ("success", "unavailable", "error"))
+def test_effect_candidate_leaves_canonical_receipt_and_state_unchanged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, candidate_mode: str
+) -> None:
+    from openadapt_flow import transforms
+    from openadapt_flow.runtime.effects.effect import Verdict
+    from tests.test_effect_model_integration import candidate_fixture
+
+    db = _db(tmp_path)
+    app = App(db)
+    sh = _shadow(tmp_path, app, db, receipts=True)
+    try:
+        assert _post(sh.url, BODY)[0] == 201
+    finally:
+        sh.stop()
+        app.server.shutdown()
+        app.server.server_close()
+    canonical = json.dumps(sh.results(), sort_keys=True)
+    assert sh.results()["counts"]["CONFIRMED"] == 1
+    receipts = tuple((tmp_path / "out" / "receipts").glob("*.cbor"))
+    assert receipts, sh.episodes[0].receipt_note
+    saved_receipts = {path: path.read_bytes() for path in receipts}
+    ledger = tmp_path / "ledger"
+    saved_ledger = {
+        path: path.read_bytes() for path in ledger.rglob("*") if path.is_file()
+    }
+    model, obs, required, identity = candidate_fixture()
+    if candidate_mode == "unavailable":
+        obs = obs.model_copy(update={"fresh": False})
+    elif candidate_mode == "error":
+
+        def broken(*args, **kwargs):
+            raise RuntimeError("candidate-only failure")
+
+        monkeypatch.setattr(transforms, "evaluate_effect_predicates", broken)
+    result = shadow_mod.evaluate_effect_candidate(model, obs, required, identity)
+    assert result.verdict == Verdict.INDETERMINATE and not result.judged
+    if candidate_mode == "success":
+        assert result.predicate_outcomes == ("true", "true")
+        assert result.reason == "model_unqualified"
+    assert json.dumps(sh.results(), sort_keys=True) == canonical
+    assert {path: path.read_bytes() for path in receipts} == saved_receipts
+    assert {
+        path: path.read_bytes() for path in ledger.rglob("*") if path.is_file()
+    } == saved_ledger
+
+
+@pytest.mark.parametrize(
+    "fault,expected",
+    (
+        ("", "CONFIRMED"),
+        ("wrong_value", "REFUTED"),
+        ("duplicate", "REFUTED"),
+        ("side_write", "REFUTED"),
+    ),
+)
+def test_independent_canonical_reader_decides_despite_true_model_prediction(
+    tmp_path: Path,
+    fault: str,
+    expected: str,
+) -> None:
+    from openadapt_flow.runtime.effects.effect import Verdict
+    from tests.test_effect_model_integration import candidate_fixture
+
+    db = _db(tmp_path)
+
+    def rows() -> list[dict[str, Any]]:
+        with sqlite3.connect(db) as connection:
+            connection.row_factory = sqlite3.Row
+            return [
+                dict(row)
+                for row in connection.execute("SELECT * FROM patient ORDER BY id")
+            ]
+
+    before = rows()
+    app = App(db)
+    app.fault = fault
+    sh = _shadow(tmp_path, app, db)
+    try:
+        assert _post(sh.url, BODY)[0] == 201
+    finally:
+        sh.stop()
+        app.server.shutdown()
+        app.server.server_close()
+    after = rows()
+    canonical = json.dumps(sh.results(), sort_keys=True)
+    assert sh.results()["counts"][expected] == 1
+    assert sh.results()["writes_seen"] == 1 and len(app.received) == 1
+    assert after[-1]["fname"] == ("Eda" if fault == "wrong_value" else BODY["first"])
+    model, observations, required, identity = candidate_fixture()
+    model = model.model_copy(
+        update={
+            "bindings": model.bindings[:2],
+            "obligations": ("new == new", "old == old"),
+        }
+    )
+    identity = identity.model_copy(update={"model_sha256": model.content_sha256()})
+    observations = observations.model_copy(
+        update={
+            "task": dict(BODY),
+            "before": {"rows": before},
+            "after": {"rows": after},
+        }
+    )
+    prediction = shadow_mod.evaluate_effect_candidate(
+        model, observations, required, identity
+    )
+    assert prediction.predicate_outcomes == ("true", "true")
+    assert prediction.verdict == Verdict.INDETERMINATE and not prediction.judged
+    assert prediction.prediction_scope == "unqualified_model_prediction"
+    # The existing SQL/frame reader confirmed the actual good write, and
+    # refuted all three actual faulty stores. Model truth did neither.
+    assert json.dumps(sh.results(), sort_keys=True) == canonical
+
+
 def _shadow(tmp_path: Path, app: App, db: Path, **kw: Any) -> Shadow:
     route = Route(
         __import__("re").compile(r"POST /api/patients"),

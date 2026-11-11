@@ -1,0 +1,1206 @@
+{
+ "source": "UTM lab recording rdp-pn-f1944963c (synthetic Patient Notes app, fictional patients); the exact OCR lines and arguments compile_recording passed for the Search and Save steps",
+ "search_step": {
+  "click": [
+   560,
+   56
+  ],
+  "before": [
+   {
+    "text": "\u54c1",
+    "region": [
+     4,
+     5,
+     15,
+     13
+    ],
+    "confidence": 0.991
+   },
+   {
+    "text": "Patient Notes - Benchmark Harness",
+    "region": [
+     12,
+     3,
+     201,
+     18
+    ],
+    "confidence": 0.987
+   },
+   {
+    "text": "\u53e3",
+    "region": [
+     1205,
+     6,
+     9,
+     10
+    ],
+    "confidence": 0.572
+   },
+   {
+    "text": "Neil",
+    "region": [
+     19,
+     44,
+     30,
+     20
+    ],
+    "confidence": 0.925
+   },
+   {
+    "text": "Search",
+    "region": [
+     538,
+     46,
+     44,
+     21
+    ],
+    "confidence": 0.999
+   },
+   {
+    "text": "first",
+    "region": [
+     26,
+     97,
+     29,
+     18
+    ],
+    "confidence": 0.941
+   },
+   {
+    "text": "last",
+    "region": [
+     216,
+     96,
+     26,
+     19
+    ],
+    "confidence": 0.996
+   },
+   {
+    "text": "qop",
+    "region": [
+     407,
+     96,
+     27,
+     19
+    ],
+    "confidence": 0.991
+   },
+   {
+    "text": "James",
+    "region": [
+     24,
+     140,
+     36,
+     15
+    ],
+    "confidence": 0.994
+   },
+   {
+    "text": "Alvarez",
+    "region": [
+     211,
+     137,
+     46,
+     20
+    ],
+    "confidence": 0.996
+   },
+   {
+    "text": "1981-05-21",
+    "region": [
+     405,
+     138,
+     60,
+     17
+    ],
+    "confidence": 1.0
+   },
+   {
+    "text": "Maria",
+    "region": [
+     22,
+     182,
+     37,
+     18
+    ],
+    "confidence": 0.999
+   },
+   {
+    "text": "Alvarez",
+    "region": [
+     211,
+     181,
+     46,
+     20
+    ],
+    "confidence": 0.989
+   },
+   {
+    "text": "1979-11-02",
+    "region": [
+     403,
+     182,
+     64,
+     17
+    ],
+    "confidence": 0.999
+   },
+   {
+    "text": "Oskar",
+    "region": [
+     22,
+     224,
+     37,
+     21
+    ],
+    "confidence": 0.998
+   },
+   {
+    "text": "Bakke",
+    "region": [
+     212,
+     225,
+     38,
+     19
+    ],
+    "confidence": 0.999
+   },
+   {
+    "text": "1992-06-18",
+    "region": [
+     402,
+     224,
+     66,
+     20
+    ],
+    "confidence": 0.999
+   },
+   {
+    "text": "Priya",
+    "region": [
+     21,
+     269,
+     34,
+     21
+    ],
+    "confidence": 0.973
+   },
+   {
+    "text": "Chandra",
+    "region": [
+     213,
+     270,
+     50,
+     18
+    ],
+    "confidence": 1.0
+   },
+   {
+    "text": "1990-02-14",
+    "region": [
+     404,
+     270,
+     63,
+     17
+    ],
+    "confidence": 0.999
+   },
+   {
+    "text": "Clinical note:",
+    "region": [
+     20,
+     318,
+     73,
+     17
+    ],
+    "confidence": 0.97
+   },
+   {
+    "text": "Patient: Jarmes Alvarez (1981-05-21)",
+    "region": [
+     231,
+     319,
+     188,
+     17
+    ],
+    "confidence": 0.98
+   },
+   {
+    "text": "Loaded 10 patients",
+    "region": [
+     18,
+     479,
+     107,
+     22
+    ],
+    "confidence": 0.988
+   },
+   {
+    "text": "Save Note",
+    "region": [
+     532,
+     481,
+     58,
+     18
+    ],
+    "confidence": 0.985
+   },
+   {
+    "text": "14\u00b0\u2103",
+    "region": [
+     47,
+     758,
+     32,
+     20
+    ],
+    "confidence": 0.883
+   },
+   {
+    "text": "Q",
+    "region": [
+     411,
+     768,
+     17,
+     17
+    ],
+    "confidence": 0.92
+   },
+   {
+    "text": "Search",
+    "region": [
+     431,
+     768,
+     50,
+     18
+    ],
+    "confidence": 0.999
+   },
+   {
+    "text": "6:10 PM",
+    "region": [
+     1215,
+     761,
+     50,
+     17
+    ],
+    "confidence": 0.996
+   },
+   {
+    "text": "Cloudy",
+    "region": [
+     47,
+     775,
+     44,
+     20
+    ],
+    "confidence": 0.993
+   },
+   {
+    "text": "11/2/2026",
+    "region": [
+     1202,
+     775,
+     63,
+     20
+    ],
+    "confidence": 1.0
+   }
+  ],
+  "after": [
+   {
+    "text": "\u54c1",
+    "region": [
+     4,
+     5,
+     15,
+     13
+    ],
+    "confidence": 0.991
+   },
+   {
+    "text": "Patient Notes - Benchmark Harness",
+    "region": [
+     12,
+     2,
+     201,
+     20
+    ],
+    "confidence": 0.991
+   },
+   {
+    "text": "\u53e3",
+    "region": [
+     1205,
+     6,
+     9,
+     10
+    ],
+    "confidence": 0.572
+   },
+   {
+    "text": "Neil",
+    "region": [
+     19,
+     45,
+     30,
+     19
+    ],
+    "confidence": 0.994
+   },
+   {
+    "text": "Search",
+    "region": [
+     538,
+     46,
+     44,
+     21
+    ],
+    "confidence": 0.999
+   },
+   {
+    "text": "first",
+    "region": [
+     26,
+     97,
+     29,
+     18
+    ],
+    "confidence": 0.941
+   },
+   {
+    "text": "last",
+    "region": [
+     224,
+     97,
+     24,
+     18
+    ],
+    "confidence": 0.996
+   },
+   {
+    "text": "qop",
+    "region": [
+     417,
+     95,
+     28,
+     20
+    ],
+    "confidence": 0.947
+   },
+   {
+    "text": "Neil",
+    "region": [
+     23,
+     138,
+     26,
+     16
+    ],
+    "confidence": 0.991
+   },
+   {
+    "text": "Sorenson",
+    "region": [
+     219,
+     138,
+     54,
+     19
+    ],
+    "confidence": 0.995
+   },
+   {
+    "text": "1984-03-12",
+    "region": [
+     414,
+     136,
+     64,
+     20
+    ],
+    "confidence": 0.996
+   },
+   {
+    "text": "Clinical note:",
+    "region": [
+     19,
+     318,
+     75,
+     20
+    ],
+    "confidence": 0.994
+   },
+   {
+    "text": "Patient: Neil Sorenson (1984-03-12)",
+    "region": [
+     230,
+     319,
+     189,
+     17
+    ],
+    "confidence": 0.981
+   },
+   {
+    "text": "Loaded 1 patients",
+    "region": [
+     18,
+     480,
+     101,
+     21
+    ],
+    "confidence": 0.987
+   },
+   {
+    "text": "Save Note",
+    "region": [
+     532,
+     481,
+     58,
+     18
+    ],
+    "confidence": 0.985
+   },
+   {
+    "text": "14\u00b0\u2103",
+    "region": [
+     47,
+     758,
+     32,
+     20
+    ],
+    "confidence": 0.883
+   },
+   {
+    "text": "Q",
+    "region": [
+     411,
+     768,
+     17,
+     17
+    ],
+    "confidence": 0.92
+   },
+   {
+    "text": "Search",
+    "region": [
+     431,
+     768,
+     50,
+     18
+    ],
+    "confidence": 0.999
+   },
+   {
+    "text": "6:10 PM",
+    "region": [
+     1215,
+     761,
+     50,
+     17
+    ],
+    "confidence": 0.996
+   },
+   {
+    "text": "Cloudy",
+    "region": [
+     47,
+     775,
+     44,
+     20
+    ],
+    "confidence": 0.993
+   },
+   {
+    "text": "11/2/2026",
+    "region": [
+     1202,
+     775,
+     63,
+     20
+    ],
+    "confidence": 1.0
+   }
+  ],
+  "next": [
+   {
+    "text": "\u54c1",
+    "region": [
+     4,
+     5,
+     15,
+     13
+    ],
+    "confidence": 0.991
+   },
+   {
+    "text": "Patient Notes - Benchmark Harness",
+    "region": [
+     12,
+     2,
+     201,
+     20
+    ],
+    "confidence": 0.991
+   },
+   {
+    "text": "\u53e3",
+    "region": [
+     1205,
+     6,
+     9,
+     10
+    ],
+    "confidence": 0.572
+   },
+   {
+    "text": "Neil",
+    "region": [
+     19,
+     45,
+     30,
+     19
+    ],
+    "confidence": 0.994
+   },
+   {
+    "text": "Search",
+    "region": [
+     538,
+     46,
+     44,
+     21
+    ],
+    "confidence": 0.999
+   },
+   {
+    "text": "first",
+    "region": [
+     26,
+     97,
+     29,
+     18
+    ],
+    "confidence": 0.941
+   },
+   {
+    "text": "last",
+    "region": [
+     224,
+     97,
+     24,
+     18
+    ],
+    "confidence": 0.996
+   },
+   {
+    "text": "qop",
+    "region": [
+     417,
+     95,
+     28,
+     20
+    ],
+    "confidence": 0.947
+   },
+   {
+    "text": "Neil",
+    "region": [
+     23,
+     138,
+     26,
+     16
+    ],
+    "confidence": 0.991
+   },
+   {
+    "text": "Sorenson",
+    "region": [
+     219,
+     138,
+     54,
+     19
+    ],
+    "confidence": 0.995
+   },
+   {
+    "text": "1984-03-12",
+    "region": [
+     414,
+     136,
+     64,
+     20
+    ],
+    "confidence": 0.996
+   },
+   {
+    "text": "Clinical note:",
+    "region": [
+     19,
+     318,
+     75,
+     20
+    ],
+    "confidence": 0.994
+   },
+   {
+    "text": "Patient: Neil Sorenson (1984-03-12)",
+    "region": [
+     230,
+     319,
+     189,
+     17
+    ],
+    "confidence": 0.981
+   },
+   {
+    "text": "Loaded 1 patients",
+    "region": [
+     18,
+     480,
+     101,
+     21
+    ],
+    "confidence": 0.987
+   },
+   {
+    "text": "Save Note",
+    "region": [
+     532,
+     481,
+     58,
+     18
+    ],
+    "confidence": 0.985
+   },
+   {
+    "text": "14\u00b0\u2103",
+    "region": [
+     47,
+     758,
+     32,
+     20
+    ],
+    "confidence": 0.883
+   },
+   {
+    "text": "Q",
+    "region": [
+     411,
+     768,
+     17,
+     17
+    ],
+    "confidence": 0.92
+   },
+   {
+    "text": "Search",
+    "region": [
+     431,
+     768,
+     50,
+     18
+    ],
+    "confidence": 0.999
+   },
+   {
+    "text": "6:10 PM",
+    "region": [
+     1215,
+     761,
+     50,
+     17
+    ],
+    "confidence": 0.996
+   },
+   {
+    "text": "Cloudy",
+    "region": [
+     47,
+     775,
+     44,
+     20
+    ],
+    "confidence": 0.993
+   },
+   {
+    "text": "11/2/2026",
+    "region": [
+     1202,
+     775,
+     63,
+     20
+    ],
+    "confidence": 1.0
+   }
+  ],
+  "exclude_texts": [
+   "recorded demonstration note"
+  ],
+  "avoid_labels": [
+   "Search",
+   "Neil",
+   "Save Note"
+  ],
+  "reference_date": "2026-11-03",
+  "main_picked": "Patient: Neil Sorenson (1984-03-12)"
+ },
+ "save_step": {
+  "click": [
+   560,
+   490
+  ],
+  "before": [
+   {
+    "text": "\u54c1",
+    "region": [
+     4,
+     5,
+     15,
+     13
+    ],
+    "confidence": 0.991
+   },
+   {
+    "text": "Patient Notes - Benchmark Harness",
+    "region": [
+     12,
+     2,
+     201,
+     20
+    ],
+    "confidence": 0.991
+   },
+   {
+    "text": "\u53e3",
+    "region": [
+     1205,
+     6,
+     9,
+     10
+    ],
+    "confidence": 0.572
+   },
+   {
+    "text": "Neil",
+    "region": [
+     19,
+     45,
+     30,
+     19
+    ],
+    "confidence": 0.994
+   },
+   {
+    "text": "Search",
+    "region": [
+     538,
+     46,
+     44,
+     21
+    ],
+    "confidence": 0.999
+   },
+   {
+    "text": "first",
+    "region": [
+     26,
+     96,
+     29,
+     19
+    ],
+    "confidence": 0.999
+   },
+   {
+    "text": "last",
+    "region": [
+     224,
+     97,
+     24,
+     18
+    ],
+    "confidence": 0.996
+   },
+   {
+    "text": "qop",
+    "region": [
+     417,
+     95,
+     28,
+     20
+    ],
+    "confidence": 0.947
+   },
+   {
+    "text": "Neil",
+    "region": [
+     23,
+     138,
+     26,
+     16
+    ],
+    "confidence": 0.991
+   },
+   {
+    "text": "Sorenson",
+    "region": [
+     219,
+     138,
+     54,
+     19
+    ],
+    "confidence": 0.995
+   },
+   {
+    "text": "1984-03-12",
+    "region": [
+     414,
+     136,
+     64,
+     20
+    ],
+    "confidence": 0.996
+   },
+   {
+    "text": "Clinical note:",
+    "region": [
+     20,
+     319,
+     74,
+     17
+    ],
+    "confidence": 0.99
+   },
+   {
+    "text": "Patient: Neil Sorenson (1984-03-12)",
+    "region": [
+     230,
+     319,
+     189,
+     17
+    ],
+    "confidence": 0.981
+   },
+   {
+    "text": "recorded demonstration notel",
+    "region": [
+     24,
+     346,
+     161,
+     17
+    ],
+    "confidence": 0.967
+   },
+   {
+    "text": "Loaded 1 patients",
+    "region": [
+     18,
+     479,
+     101,
+     22
+    ],
+    "confidence": 0.984
+   },
+   {
+    "text": "Save Note",
+    "region": [
+     532,
+     481,
+     58,
+     18
+    ],
+    "confidence": 0.985
+   },
+   {
+    "text": "14\u00b0\u2103",
+    "region": [
+     46,
+     758,
+     34,
+     20
+    ],
+    "confidence": 0.865
+   },
+   {
+    "text": "Q",
+    "region": [
+     411,
+     768,
+     17,
+     17
+    ],
+    "confidence": 0.92
+   },
+   {
+    "text": "Search",
+    "region": [
+     431,
+     768,
+     50,
+     18
+    ],
+    "confidence": 0.999
+   },
+   {
+    "text": "6:10 PM",
+    "region": [
+     1215,
+     761,
+     50,
+     17
+    ],
+    "confidence": 0.996
+   },
+   {
+    "text": "Cloudy",
+    "region": [
+     47,
+     775,
+     44,
+     20
+    ],
+    "confidence": 0.993
+   },
+   {
+    "text": "11/2/2026",
+    "region": [
+     1202,
+     775,
+     63,
+     20
+    ],
+    "confidence": 1.0
+   }
+  ],
+  "after": [
+   {
+    "text": "\u54c1",
+    "region": [
+     4,
+     5,
+     15,
+     13
+    ],
+    "confidence": 0.991
+   },
+   {
+    "text": "Patient Notes - Benchmark Harness",
+    "region": [
+     12,
+     2,
+     201,
+     20
+    ],
+    "confidence": 0.991
+   },
+   {
+    "text": "\u53e3",
+    "region": [
+     1205,
+     6,
+     9,
+     10
+    ],
+    "confidence": 0.572
+   },
+   {
+    "text": "Neil",
+    "region": [
+     19,
+     45,
+     30,
+     19
+    ],
+    "confidence": 0.994
+   },
+   {
+    "text": "Search",
+    "region": [
+     538,
+     46,
+     44,
+     21
+    ],
+    "confidence": 0.999
+   },
+   {
+    "text": "first",
+    "region": [
+     26,
+     96,
+     29,
+     19
+    ],
+    "confidence": 0.999
+   },
+   {
+    "text": "last",
+    "region": [
+     224,
+     97,
+     24,
+     18
+    ],
+    "confidence": 0.996
+   },
+   {
+    "text": "qop",
+    "region": [
+     417,
+     95,
+     28,
+     20
+    ],
+    "confidence": 0.947
+   },
+   {
+    "text": "Neil",
+    "region": [
+     23,
+     138,
+     26,
+     16
+    ],
+    "confidence": 0.991
+   },
+   {
+    "text": "Sorenson",
+    "region": [
+     219,
+     138,
+     54,
+     19
+    ],
+    "confidence": 0.995
+   },
+   {
+    "text": "1984-03-12",
+    "region": [
+     414,
+     136,
+     64,
+     20
+    ],
+    "confidence": 0.996
+   },
+   {
+    "text": "Clinical note:",
+    "region": [
+     20,
+     318,
+     73,
+     17
+    ],
+    "confidence": 0.97
+   },
+   {
+    "text": "Patient: Neil Sorenson (1984-03-12)",
+    "region": [
+     230,
+     319,
+     189,
+     17
+    ],
+    "confidence": 0.981
+   },
+   {
+    "text": "recorded demonstration note",
+    "region": [
+     24,
+     347,
+     160,
+     16
+    ],
+    "confidence": 0.993
+   },
+   {
+    "text": "Saved note for patient 1",
+    "region": [
+     20,
+     482,
+     128,
+     17
+    ],
+    "confidence": 0.991
+   },
+   {
+    "text": "Save Note",
+    "region": [
+     530,
+     478,
+     60,
+     23
+    ],
+    "confidence": 0.989
+   },
+   {
+    "text": "14\u00b0\u2103",
+    "region": [
+     47,
+     758,
+     32,
+     20
+    ],
+    "confidence": 0.883
+   },
+   {
+    "text": "Q",
+    "region": [
+     411,
+     768,
+     17,
+     17
+    ],
+    "confidence": 0.92
+   },
+   {
+    "text": "Search",
+    "region": [
+     431,
+     768,
+     50,
+     18
+    ],
+    "confidence": 0.999
+   },
+   {
+    "text": "6:10 PM",
+    "region": [
+     1215,
+     761,
+     50,
+     17
+    ],
+    "confidence": 0.996
+   },
+   {
+    "text": "Cloudy",
+    "region": [
+     47,
+     775,
+     44,
+     20
+    ],
+    "confidence": 0.993
+   },
+   {
+    "text": "11/2/2026",
+    "region": [
+     1202,
+     775,
+     63,
+     20
+    ],
+    "confidence": 1.0
+   }
+  ],
+  "next": null,
+  "exclude_texts": [
+   "recorded demonstration note"
+  ],
+  "avoid_labels": [
+   "Search",
+   "Neil",
+   "Save Note"
+  ],
+  "reference_date": "2026-11-03",
+  "main_picked": "Saved note for patient 1"
+ }
+}

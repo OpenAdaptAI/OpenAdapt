@@ -133,7 +133,7 @@ def emit_l1_artifact(
     }
 
     provenance_path = dest.with_suffix(dest.suffix + ".provenance.json")
-    provenance_path.write_text(json.dumps(row, indent=2))
+    provenance_path.write_text(json.dumps(row, indent=2), encoding="utf-8")
 
     manifest_path = out_root / MANIFEST_NAME
     write_header = not manifest_path.exists()

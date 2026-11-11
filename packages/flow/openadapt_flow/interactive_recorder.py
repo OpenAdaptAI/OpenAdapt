@@ -81,13 +81,13 @@ import sys
 import tempfile
 import time
 import uuid
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Optional, cast
 from urllib.parse import urlsplit
 
 from PIL import Image
 
+from openadapt_flow import recorder_document as _documents
 from openadapt_flow import sealed_set as _sealed
 from openadapt_flow.backends.playwright_backend import (
     GUARDED_ACTIONABLE_SELECTOR,
@@ -562,7 +562,6 @@ _INIT_JS = r"""
   // exactly why a second scan into the same field must not displace the first
   // value while the first is still on show.
   const lastSecretValues = new WeakMap();
-  let eventOrdinal = 0;
   let eventsStopped = false;
   let cleaned = false;
 
@@ -615,11 +614,6 @@ _INIT_JS = r"""
                            error: privacyBoundaryError}),
     registerExistingClosedShadowHost,
     structuralState: (secretSeenEarlier) => safePageState(secretSeenEarlier),
-    captureStamp: () => ({
-      doc: DOC_ID, ordinal: eventOrdinal,
-      width: window.innerWidth, height: window.innerHeight,
-      dpr: window.devicePixelRatio || 1,
-    }),
   };
   window[CLEANUP_KEY] = {sessionId: SESSION_ID, stopEvents, cleanup};
 
@@ -1832,10 +1826,6 @@ _INIT_JS = r"""
       o.__oaflow_viewport = [Math.round(vp.innerWidth),
                              Math.round(vp.innerHeight)];
       o.__oaflow_dpr = Number(vp.devicePixelRatio || 1);
-      if (['click', 'double_click', 'right_click', 'drag', 'input',
-           'key', 'hotkey', 'scroll'].indexOf(o.kind) >= 0) {
-        o.__oaflow_ordinal = ++eventOrdinal;
-      }
       const binding = window[BINDING_NAME];
       if (typeof binding === 'function') binding(o);
     } catch (e) {}
@@ -2229,15 +2219,6 @@ _INIT_JS = (
 )
 
 
-@dataclass(frozen=True)
-class _CapturedBoundary:
-    """An acquired pair; never a page-supplied assertion of frame authority."""
-
-    png: bytes
-    structural: dict[str, Any]
-    producer: tuple[tuple[Any, str, int, int, int, float], ...]
-
-
 class InteractiveRecorder:
     """Drives a live headed browser and records what the user does.
 
@@ -2269,8 +2250,12 @@ class InteractiveRecorder:
         surface: str = "web",
         capture_network: bool = False,
         encryption_key: Optional[str] = None,
+        event_clock: Optional[list[float]] = None,
     ) -> None:
         self._url = url
+        # record --surface: the wall-clock time each event was observed, so
+        # the desktop capture's actions can be ordered around it.
+        self._event_clock = event_clock
         self._surface = surface
         # Encrypted recording: with a key the recorder writes ciphertext only
         # (openadapt_flow.sealed_set), and the published directory is a
@@ -2318,8 +2303,6 @@ class InteractiveRecorder:
             settle_interval_s=settle_interval_s,
         )
         self._pyq: list[dict[str, Any]] = []
-        self._producer_ordinals: dict[str, int] = {}
-        self._captured_boundary: Optional[_CapturedBoundary] = None
         #: Browser events whose after-frame this recording has kept. An action
         #: that arrives before its predecessor is kept refuses the recording,
         #: so a harness driving the browser can wait for this to catch up.
@@ -2427,6 +2410,9 @@ class InteractiveRecorder:
                     app_url=self._url,
                     page_url=self._browser_page_url,
                 )
+                from openadapt_flow._browser_readiness import require_rendering_ready
+
+                require_rendering_ready(self._browser, attached_page=self.page)
 
             self._context = self.page.context
             if self._capture_network:
@@ -2540,6 +2526,7 @@ class InteractiveRecorder:
                 page_backend_factory=self._surface_page_backend,
                 encryption_key=self._encryption_key,
                 finalize_on_finish=False,
+                event_clock=self._event_clock,
                 **self._settle,
             )
             if self._owns_browser:
@@ -2547,7 +2534,7 @@ class InteractiveRecorder:
                 self._last_structural = self._structural_state()
             else:
                 self._rebaseline_attached_viewport()
-        except Exception:
+        except BaseException:
             self.abort()
             raise
 
@@ -3418,9 +3405,9 @@ class InteractiveRecorder:
         event = dict(detail)
         if event.pop("__oaflow_session", None) != self._session_id:
             return
+        event["_oaflow_observed_at"] = time.time()
         raw_event_origin = event.pop("__oaflow_origin", None)
         raw_doc_id = event.pop("__oaflow_doc", None)
-        raw_ordinal = event.pop("__oaflow_ordinal", None)
         doc_holds_secret = event.pop("__oaflow_doc_holds_secret", None) is True
         kind = event.get("kind")
         if kind == "privacy_refusal":
@@ -3540,6 +3527,9 @@ class InteractiveRecorder:
         self._track_secret_document(
             kind, event, raw_doc_id, holds_secret=doc_holds_secret
         )
+        # Keep the emitting closure's document identity for deferred actions.
+        # Do not substitute the current page's document after navigation.
+        event["_oaflow_producer_doc"] = raw_doc_id
         if not self._owns_browser:
             if not isinstance(raw_event_origin, str):
                 self._listener_error = BrowserAttachError(
@@ -3618,28 +3608,6 @@ class InteractiveRecorder:
         if source_page is not None:
             # Which page the user acted in; _follow_event_page reads it.
             event["_oaflow_page"] = source_page
-        # The renderer counter detects events emitted before a capture even
-        # when their binding callback has not reached Python yet. Older/manual
-        # payloads can be queued for validation, but cannot seal a live frame.
-        if raw_ordinal is not None:
-            if (
-                not isinstance(raw_doc_id, str)
-                or not raw_doc_id.startswith(f"{self._session_id}:doc:")
-                or type(raw_ordinal) is not int
-                or raw_ordinal != self._producer_ordinals.get(raw_doc_id, 0) + 1
-            ):
-                self._listener_error = BrowserAttachError(
-                    "browser action producer order was incomplete or uncertain; "
-                    "recording stopped without an exact frame boundary"
-                )
-                self.done = True
-                return
-            self._producer_ordinals[raw_doc_id] = raw_ordinal
-            event["_oaflow_producer_doc"] = raw_doc_id
-            event["_oaflow_producer_ordinal"] = raw_ordinal
-        else:
-            event.pop("_oaflow_producer_doc", None)
-            event.pop("_oaflow_producer_ordinal", None)
         self._pyq.append(event)
 
     def _origin_only_url(self) -> str:
@@ -3869,36 +3837,14 @@ class InteractiveRecorder:
                 self._context = None
 
     def _drain_event_queue(self) -> bool:
-        """Process a cohort, retaining every interrupted/refused lifecycle."""
-
-        try:
-            return self._drain_action_cohort()
-        except BaseException as error:
-            # Even a caught refusal or operator cancel cannot turn finish()
-            # into a complete recording that silently omits dequeued actions.
-            if self._listener_error is None:
-                self._listener_error = (
-                    error
-                    if isinstance(error, BrowserAttachError)
-                    else BrowserAttachError(
-                        "browser frame acquisition or retention was interrupted; "
-                        "recording cannot be completed"
-                    )
-                )
-            self.done = True
-            raise
-        finally:
-            self._captured_boundary = None
-
-    def _drain_action_cohort(self) -> bool:
-        """Acquire before persistence; queue evidence alone is insufficient."""
+        """Process all events already delivered by the page binding."""
 
         if self._listener_error is not None:
             raise self._listener_error
         self._assert_no_new_pages()
         batch = self._pyq[:]
         del self._pyq[:]
-        self._validate_event_batch(batch)
+        self._validate_owned_event_batch(batch)
         rebased = False
         if not self._owns_browser and not self._active_page_closed():
             current_geometry = self._read_attached_geometry()
@@ -3911,202 +3857,59 @@ class InteractiveRecorder:
                     )
                 self._rebaseline_attached_viewport()
                 rebased = True
-        try:
-            if batch:
-                self._follow_event_page(batch[0])
-                self._captured_boundary = self._acquire_action_boundary(batch)
-            for event in batch:
-                self._persist_acquired_event(event)
-        finally:
-            self._captured_boundary = None
+        for event in batch:
+            # A switch to another followed page comes first: the event's
+            # geometry belongs to the page it came from.
+            self._follow_event_page(event)
+            if not self._owns_browser:
+                event_geometry = event.pop("_oaflow_geometry", None)
+                if event_geometry != self._attached_geometry:
+                    raise BrowserAttachError(
+                        "an action overlapped a browser resize or monitor-scale "
+                        "change; recording stopped because no exact pre-action "
+                        "frame exists in the new coordinate space"
+                    )
+            self._process(event)
+            # A binding callback can arrive while Playwright captures this
+            # action's after-frame. Revalidate it against the action in flight
+            # so a later click/key cannot share that frame and then appear as a
+            # separate, falsely exact step. Same-field input and one scroll
+            # batch remain safe to coalesce.
+            self._validate_owned_event_batch([event, *self._pyq])
+            if (
+                not self._owns_browser
+                and not self._active_page_closed()
+                and (
+                    self._viewport_dirty
+                    or self._read_attached_geometry() != self._attached_geometry
+                )
+            ):
+                raise BrowserAttachError(
+                    "the browser resized or changed monitor scale while an "
+                    "action was being retained; recording stopped without "
+                    "complete metadata"
+                )
+            self._validate_owned_event_batch([event, *self._pyq])
+            self._assert_no_new_pages()
+            self.events_kept += 1
         if self._listener_error is not None:
             raise self._listener_error
         return bool(batch) or rebased
 
-    def _persist_acquired_event(self, event: dict[str, Any]) -> None:
-        # A switch to another followed page comes first: the event's
-        # geometry belongs to the page it came from.
-        self._follow_event_page(event)
-        if not self._owns_browser:
-            event_geometry = event.pop("_oaflow_geometry", None)
-            if event_geometry != self._attached_geometry:
-                raise BrowserAttachError(
-                    "an action overlapped a browser resize or monitor-scale "
-                    "change; recording stopped because no exact pre-action "
-                    "frame exists in the new coordinate space"
-                )
-        self._process(event)
-        # Acquisition already sealed this cohort's exact pair. Events
-        # arriving during persistence need their OWN next boundary; two
-        # distinct future actions without one still refuse.
-        self._validate_event_batch(self._pyq)
-        if (
-            not self._owns_browser
-            and not self._active_page_closed()
-            and (
-                self._viewport_dirty
-                or self._read_attached_geometry() != self._attached_geometry
-            )
-        ):
-            raise BrowserAttachError(
-                "the browser resized or changed monitor scale while an "
-                "action was being retained; recording stopped without "
-                "complete metadata"
-            )
-        self._validate_event_batch(self._pyq)
-        self._assert_no_new_pages()
-        self.events_kept += 1
-
-    def _capture_stamp(self) -> tuple[tuple[Any, str, int, int, int, float], ...]:
-        """Observe producer identity/order and geometry without page text."""
-
-        assert self.page is not None
-        frames = tuple(self.page.frames)
-        stamp = []
-        for frame in frames:
-            try:
-                raw = frame.evaluate(
-                    """session => {
-                      const r = window.__oaflowRecorder;
-                      return r && r.sessionId === session
-                        && typeof r.captureStamp === 'function'
-                        ? r.captureStamp() : null;
-                    }""",
-                    self._session_id,
-                )
-            except Exception as exc:
-                raise BrowserAttachError(
-                    "the browser frame producer could not be observed"
-                ) from exc
-            if not isinstance(raw, dict):
-                raise BrowserAttachError("the browser frame producer was unavailable")
-            doc, ordinal = raw.get("doc"), raw.get("ordinal")
-            width, height, dpr = raw.get("width"), raw.get("height"), raw.get("dpr")
-            if (
-                not isinstance(doc, str)
-                or not doc.startswith(f"{self._session_id}:doc:")
-                or type(ordinal) is not int
-                or ordinal != self._producer_ordinals.get(doc, 0)
-                or type(width) is not int
-                or type(height) is not int
-                or width <= 0
-                or height <= 0
-                or not isinstance(dpr, (float, int))
-                or isinstance(dpr, bool)
-                or not 0.1 <= dpr <= 16
-            ):
-                raise BrowserAttachError(
-                    "browser action order or frame geometry was uncertain"
-                )
-            stamp.append((frame, doc, ordinal, width, height, round(float(dpr), 6)))
-        if not frames or tuple(self.page.frames) != frames:
-            raise BrowserAttachError(
-                "the browser frame tree changed during acquisition"
-            )
-        return tuple(stamp)
-
-    def _acquire_action_boundary(
-        self, batch: list[dict[str, Any]]
-    ) -> _CapturedBoundary:
-        """Acquire once for one existing logical cohort, before persistence.
-
-        A screenshot that straddles a distinct action is discarded. A changed
-        document or coalescible input can be observed again within the existing
-        settle bound; neither an old PNG nor a queued event proves a boundary.
-        """
-
-        assert self.backend is not None and self.recorder is not None
-        deadline = time.monotonic() + self._settle["settle_timeout_s"]
-        while True:
-            if self._listener_error is not None:
-                raise self._listener_error
-            self._validate_event_batch([*batch, *self._pyq])
-            batch.extend(self._pyq)
-            self._pyq.clear()
-            if any(
-                not isinstance(event.get("_oaflow_producer_doc"), str)
-                or type(event.get("_oaflow_producer_ordinal")) is not int
-                for event in batch
-            ):
-                raise BrowserAttachError(
-                    "the action has no bound browser producer ordinal"
-                )
-            before = self._capture_stamp()
-            # Sampling the renderer itself pumps binding callbacks. A distinct
-            # event delivered by that sample is still BEFORE acquisition and
-            # must not be mistaken for a later, independently framed action.
-            self._validate_event_batch([*batch, *self._pyq])
-            batch.extend(self._pyq)
-            self._pyq.clear()
-            if batch[0].get("kind") in {"input", "scroll"}:
-                png = self.backend.screenshot()
-            else:
-                png = self.recorder._wait_settled()
-                if self._wait_for_writes():
-                    png = self.recorder._wait_settled()
-            structural = self._structural_state()
-            self._assert_no_new_pages()
-            after = self._capture_stamp()
-            if self._listener_error is not None:
-                raise self._listener_error
-            if before == after:
-                # No browser call follows this sample before sealing. A later
-                # event is for a later acquisition, never appended to a pair
-                # that precedes its producer ordinal.
-                return _CapturedBoundary(png, structural, after)
-            self._validate_event_batch([*batch, *self._pyq])
-            if any(a[3:] != b[3:] for a, b in zip(before, after)):
-                raise BrowserAttachError(
-                    "browser frame geometry changed during action acquisition"
-                )
-            if time.monotonic() >= deadline:
-                raise BrowserAttachError(
-                    "no exact intermediate frame was retained within the "
-                    "existing capture bound"
-                )
+    def _validate_owned_event_batch(self, batch: list[dict[str, Any]]) -> None:
+        try:
+            self._validate_event_batch(batch)
+        except BrowserAttachError as error:
+            self._listener_error = error
+            self.done = True
+            raise
 
     @staticmethod
     def _validate_event_batch(batch: list[dict[str, Any]]) -> None:
-        """Refuse a batch that lacks an exact frame between logical actions."""
-
-        if len(batch) <= 1:
-            return
-        documents = {event.get("_oaflow_producer_doc") for event in batch}
-        if len(documents) > 1:
-            raise BrowserAttachError(
-                "more than one logical browser action crossed document "
-                "boundaries before an exact intermediate frame was retained"
-            )
-        kinds = {event.get("kind") for event in batch}
-        if kinds == {"scroll"}:
-            return
-        if len(batch) == 2:
-            first, second = batch
-            # A double-click gesture delivers its first click and the
-            # double_click marker inside one gesture window with no
-            # intermediate settled frame; they merge into ONE step.
-            try:
-                same_point = (
-                    abs(int(first.get("x", 0)) - int(second.get("x", 0))) <= 5
-                    and abs(int(first.get("y", 0)) - int(second.get("y", 0))) <= 5
-                )
-            except (TypeError, ValueError):
-                same_point = False
-            if (
-                first.get("kind") == "click"
-                and second.get("kind") == "double_click"
-                and same_point
-            ):
-                return
-        if kinds == {"input"}:
-            sessions = {event.get("_oaflow_input_session") for event in batch}
-            fields = {event.get("field") for event in batch}
-            if len(sessions) == 1 and None not in sessions and len(fields) == 1:
-                return
-        raise BrowserAttachError(
-            "more than one logical browser action arrived before Flow could "
-            "retain an exact intermediate frame; recording was refused"
-        )
+        try:
+            _documents.validate_event_batch(batch)
+        except _documents.DocumentOwnershipError as cause:
+            raise BrowserAttachError(str(cause)) from cause
 
     # -- event pump ----------------------------------------------------------
 
@@ -4169,11 +3972,10 @@ class InteractiveRecorder:
             # holding it), and would otherwise settle on the old screen.
             # Settle first: the screenshots deliver the save's request event.
             # If a write was in flight, settle again once it has landed.
-            boundary = self._captured_boundary
-            if boundary is None:
-                raise BrowserAttachError("the browser action has no acquired boundary")
-            ev["_oaflow_after_frame"] = boundary.png
-            ev["_oaflow_structural_after"] = boundary.structural
+            ev["_oaflow_after_frame"] = self.recorder._wait_settled()
+            if self._wait_for_writes():
+                ev["_oaflow_after_frame"] = self.recorder._wait_settled()
+            ev["_oaflow_structural_after"] = self._structural_state()
             self._pending_click = ev
             self._pending_click_pumps = max(
                 1, -(-_DOUBLE_CLICK_WINDOW_MS // max(1, self._poll_ms))
@@ -4200,22 +4002,16 @@ class InteractiveRecorder:
         if pending is not None:
             self._record_pointer(pending)
 
-    @staticmethod
-    def _require_deferred_document(
-        pending: Optional[dict[str, Any]], ev: dict[str, Any]
-    ) -> None:
-        """A retained action can merge only with its known producer document."""
-
-        if pending is None:
-            return
-        previous = pending.get("_oaflow_producer_doc")
-        current = ev.get("_oaflow_producer_doc")
-        if not isinstance(previous, str) or not previous or previous != current:
-            raise BrowserAttachError(
-                "a deferred browser action crossed document boundaries or "
-                "lost its producer ownership; recording stopped without "
-                "complete metadata"
-            )
+    def _same_deferred_document(
+        self, pending: Optional[dict[str, Any]], ev: dict[str, Any]
+    ) -> bool:
+        try:
+            return _documents.same_document(pending, ev)
+        except _documents.DocumentOwnershipError as cause:
+            error = BrowserAttachError(str(cause))
+            self._listener_error = error
+            self.done = True
+            raise error from cause
 
     def _absorb_pending_click(self, ev: dict[str, Any]) -> None:
         """Discard the held first click of this double-click gesture.
@@ -4224,11 +4020,11 @@ class InteractiveRecorder:
         its demonstrated order instead."""
 
         pending = self._pending_click
-        self._require_deferred_document(pending, ev)
+        same_document = self._same_deferred_document(pending, ev)
         self._pending_click = None
         if pending is None:
             return
-        if (
+        if same_document and (
             abs(int(pending["x"]) - int(ev["x"])) <= 5
             and abs(int(pending["y"]) - int(ev["y"])) <= 5
         ):
@@ -4238,14 +4034,14 @@ class InteractiveRecorder:
     # -- accumulation / flush ------------------------------------------------
 
     def _accumulate_input(self, ev: dict[str, Any]) -> None:
-        self._require_deferred_document(self._pending_type, ev)
         field = ev.get("field")
         input_session = ev.get("_oaflow_input_session")
         if self._pending_type is not None and (
-            self._pending_type.get("field") != field
+            not self._same_deferred_document(self._pending_type, ev)
+            or self._pending_type.get("field") != field
             or self._pending_type.get("input_session") != input_session
         ):
-            self._flush_type()  # focus moved to a different field
+            self._flush_type()  # a distinct input run or document
         if self._pending_type is None:
             self._pending_type = {
                 "_oaflow_producer_doc": ev.get("_oaflow_producer_doc"),
@@ -4255,6 +4051,7 @@ class InteractiveRecorder:
                 "secret": bool(ev.get("secret")),
                 "value": "",
                 "rect": ev.get("rect"),
+                "observed_at": ev.get("_oaflow_observed_at"),
             }
         pt = self._pending_type
         pt["secret"] = pt["secret"] or bool(ev.get("secret"))
@@ -4272,11 +4069,8 @@ class InteractiveRecorder:
         # keystroke and the next click, so this frame is the settled field —
         # not a screen the next click has already navigated to.
         assert self.backend is not None
-        boundary = self._captured_boundary
-        if boundary is None:
-            raise BrowserAttachError("the browser input has no acquired boundary")
-        pt["after_frame"] = boundary.png
-        pt["structural_after"] = boundary.structural
+        pt["after_frame"] = self.backend.screenshot()
+        pt["structural_after"] = self._structural_state()
 
     def _flush_type(self) -> None:
         pt = self._pending_type
@@ -4307,6 +4101,7 @@ class InteractiveRecorder:
                 redact_region=redact,
                 after_png=after_png,
                 structural_after=structural_after,
+                observed_at=pt.get("observed_at"),
             )
         elif field and field in self._param_fields:
             # The rect also tells the compiler where this value shows: a
@@ -4322,6 +4117,7 @@ class InteractiveRecorder:
                 param=field,
                 after_png=after_png,
                 structural_after=structural_after,
+                observed_at=pt.get("observed_at"),
             )
         else:
             # Non-secret, unparameterized: recorded as a literal (replayed
@@ -4337,28 +4133,28 @@ class InteractiveRecorder:
                 structural_before=structural_before,
                 after_png=after_png,
                 structural_after=structural_after,
+                observed_at=pt.get("observed_at"),
             )
         self._set_last(after_png, structural_after)
 
     def _accumulate_scroll(self, ev: dict[str, Any]) -> None:
-        self._require_deferred_document(self._pending_scroll, ev)
+        if not self._same_deferred_document(self._pending_scroll, ev):
+            self._flush_scroll()
         if self._pending_scroll is None:
             self._pending_scroll = {
                 "_oaflow_producer_doc": ev.get("_oaflow_producer_doc"),
                 "dx": 0,
                 "dy": 0,
                 "structural_before": dict(self._last_structural),
+                "observed_at": ev.get("_oaflow_observed_at"),
             }
         ps = self._pending_scroll
         ps["dx"] += int(ev.get("dx", 0))
         ps["dy"] += int(ev.get("dy", 0))
         # Post-scroll after-state, captured now (before any following action).
         assert self.backend is not None
-        boundary = self._captured_boundary
-        if boundary is None:
-            raise BrowserAttachError("the browser scroll has no acquired boundary")
-        ps["after_frame"] = boundary.png
-        ps["structural_after"] = boundary.structural
+        ps["after_frame"] = self.backend.screenshot()
+        ps["structural_after"] = self._structural_state()
 
     def _flush_scroll(self) -> None:
         ps = self._pending_scroll
@@ -4374,6 +4170,7 @@ class InteractiveRecorder:
             structural_before=ps.get("structural_before", self._last_structural),
             after_png=after_png,
             structural_after=structural_after,
+            observed_at=ps.get("observed_at"),
         )
         self._set_last(after_png, structural_after)
 
@@ -4421,12 +4218,8 @@ class InteractiveRecorder:
         idr = ev.get("idr")
         if idr:
             event["identifier_region"] = [int(v) for v in idr]
-        boundary = self._captured_boundary
         after_png = ev.pop("_oaflow_after_frame", None)
         structural_after = ev.pop("_oaflow_structural_after", None)
-        if after_png is None and boundary is not None:
-            after_png = boundary.png
-            structural_after = boundary.structural
         self.recorder.record_observed(
             event,
             before_png=self._last_frame,
@@ -4434,6 +4227,7 @@ class InteractiveRecorder:
             structured_identity=ev.get("sid"),
             after_png=after_png,
             structural_after=structural_after,
+            observed_at=ev.get("_oaflow_observed_at"),
         )
         if after_png is not None:
             self._set_last(after_png, structural_after)
@@ -4445,17 +4239,13 @@ class InteractiveRecorder:
         event: dict[str, Any] = {"kind": ev["kind"], "key": ev["key"]}
         if ev["kind"] == "hotkey":
             event["modifiers"] = [str(value) for value in ev.get("modifiers", [])]
-        boundary = self._captured_boundary
-        if boundary is None:
-            raise BrowserAttachError("the browser key has no acquired boundary")
         self.recorder.record_observed(
             event,
             before_png=self._last_frame,
             structural_before=self._last_structural,
-            after_png=boundary.png,
-            structural_after=boundary.structural,
+            observed_at=ev.get("_oaflow_observed_at"),
         )
-        self._set_last(boundary.png, boundary.structural)
+        self._advance()
 
     # -- internals -----------------------------------------------------------
 

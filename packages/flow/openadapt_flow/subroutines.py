@@ -3,8 +3,10 @@
 Compiled programs repeat the same low-level steps across workflows (search
 for a record, pick a date). A **subroutine** is one such sequence lifted out
 of the workflows that share it, with a typed signature, so it is verified
-once and reused. This module is the first slice of that idea. It makes the
-unit and its admission real; it does not change the runtime.
+once and reused. This module makes the unit and its admission real. The
+interpreter is unchanged; the run gate (:func:`admit_for_run`, used by
+:func:`openadapt_flow.run_gate.evaluate_run_gate`) re-admits every embedded
+subroutine against the current library before each run.
 
 The unit
     :class:`Subroutine` is a typed signature (:class:`SubroutineSignature`)
@@ -954,6 +956,24 @@ def uses_subroutines(workflow: Workflow) -> bool:
     return any(key.startswith(SUBFLOW_PREFIX) for key in workflow.subflows)
 
 
+def _library_missing(workflow: Workflow, wid: str) -> SubroutineAdmission:
+    return SubroutineAdmission(
+        workflow_id=wid,
+        refusals=tuple(
+            SubroutineRefusal(
+                code="library_missing",
+                subflow=key[:96],
+                message=(
+                    "workflow embeds a subroutine but no subroutine library "
+                    "was supplied to check it against"
+                ),
+            )
+            for key in sorted(workflow.subflows)
+            if key.startswith(SUBFLOW_PREFIX)
+        ),
+    )
+
+
 def certify_subroutine_uses(
     workflow: Workflow,
     library: Optional[SubroutineLibrary],
@@ -979,27 +999,56 @@ def certify_subroutine_uses(
     if not uses_subroutines(workflow):
         return SubroutineAdmission(workflow_id=wid)
     if library is None:
-        return SubroutineAdmission(
-            workflow_id=wid,
-            refusals=tuple(
-                SubroutineRefusal(
-                    code="library_missing",
-                    subflow=key[:96],
-                    message=(
-                        "workflow embeds a subroutine but no subroutine library "
-                        "was supplied to check it against"
-                    ),
-                )
-                for key in sorted(workflow.subflows)
-                if key.startswith(SUBFLOW_PREFIX)
-            ),
-        )
+        return _library_missing(workflow, wid)
     try:
         library.register(wid, workflow)
     except SubroutineError:
         # A malformed key cannot be pinned; admission refuses it below.
         pass
     return admit_workflow(workflow, library, workflow_id=wid)
+
+
+def admit_for_run(
+    workflow: Workflow,
+    library: Optional[SubroutineLibrary],
+    *,
+    workflow_id: Optional[str] = None,
+    qualification_evidence: bool = False,
+) -> SubroutineAdmission:
+    """The subroutine gate a run applies (``flow run``), read-only.
+
+    A certificate records what was admitted when it was made; it cannot know
+    that a newer version of a subroutine was published since. So every run
+    of a workflow that embeds a subroutine re-runs :func:`admit_workflow`
+    against the current ``library``: a superseded, unqualified, unknown,
+    edited or unregistered embedded version refuses the run with the same
+    codes certification uses. ``library`` is never changed.
+
+    ``qualification_evidence`` is for the case runs of a qualification
+    campaign, which happen before certification registers the workflow:
+    there ``unregistered_use`` is not required yet (certification still
+    requires it). Every other refusal applies.
+
+    Fail-closed: a workflow that embeds a subroutine is refused with
+    ``library_missing`` when no library is supplied. A workflow that embeds
+    none is admitted with no uses and ``library`` is not read.
+    """
+
+    wid = workflow_id or workflow.name
+    if not uses_subroutines(workflow):
+        return SubroutineAdmission(workflow_id=wid)
+    if library is None:
+        return _library_missing(workflow, wid)
+    admission = admit_workflow(workflow, library, workflow_id=wid)
+    if not qualification_evidence:
+        return admission
+    return admission.model_copy(
+        update={
+            "refusals": tuple(
+                r for r in admission.refusals if r.code != "unregistered_use"
+            )
+        }
+    )
 
 
 def load_library(path: Path | str) -> SubroutineLibrary:

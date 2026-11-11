@@ -419,7 +419,9 @@ def health(
     blocked = 0
     if p["blocked_log"].is_file():
         blocked = sum(
-            1 for line in p["blocked_log"].read_text().splitlines() if line.strip()
+            1
+            for line in p["blocked_log"].read_text(encoding="utf-8").splitlines()
+            if line.strip()
         )
     checks.append(
         Check(
@@ -624,7 +626,9 @@ def egress_audit(
     blocked = 0
     if p["blocked_log"].is_file():
         blocked = sum(
-            1 for line in p["blocked_log"].read_text().splitlines() if line.strip()
+            1
+            for line in p["blocked_log"].read_text(encoding="utf-8").splitlines()
+            if line.strip()
         )
     report.update(
         {

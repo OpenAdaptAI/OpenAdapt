@@ -1,0 +1,1 @@
+{"mode": "pass", "path_regex": "^/wp-admin/admin-ajax\\.php$", "body_exclude": "", "body_require": "(^|&)action=add-tag(&|$)"}

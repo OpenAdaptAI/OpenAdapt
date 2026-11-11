@@ -1,0 +1,116 @@
+{
+ "id": "AP02",
+ "class": "clean",
+ "type": "appointment",
+ "expect": "found",
+ "note": "The appointment is already booked; nothing should be written.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9810/fhir/R4/Appointment returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9810/fhir/R4/Appointment returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 49.0,
+ "cost_usd": 0.086951,
+ "claim": {
+  "status": "done",
+  "id": "Appointment/5a76505b-9548-4f10-a5a0-47b7d45875d2",
+  "note": "RESULT: DONE Appointment/5a76505b-9548-4f10-a5a0-47b7d45875d2",
+  "claim_line": true,
+  "end_url": "http://localhost:9811/Appointment/5a76505b-9548-4f10-a5a0-47b7d45875d2/json",
+  "final_text": "RESULT: DONE Appointment/5a76505b-9548-4f10-a5a0-47b7d45875d2",
+  "model_calls": 17,
+  "actions": 14,
+  "tokens_in": 209130,
+  "tokens_out": 494
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "Appointment/5a76505b-9548-4f10-a5a0-47b7d45875d2"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {}
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Practitioner",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Appointment",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 2,
+ "host_load": {
+  "start": 19.3,
+  "end": 97.9,
+  "waited_s": 0
+ }
+}

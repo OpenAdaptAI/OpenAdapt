@@ -1,0 +1,51 @@
+{
+ "schema": "openadapt.api-footprint/v1",
+ "equivalent": false,
+ "differences": [
+  "pair 1: action_history_record added 2 row(s) through the GUI and 1 through the API step",
+  "pair 2: action_history_record added 2 row(s) through the GUI and 1 through the API step",
+  "pair 3: action_history_record added 2 row(s) through the GUI and 1 through the API step"
+ ],
+ "server_owned": [
+  "account.created_at",
+  "account.id",
+  "account.modified_at",
+  "action_history_record.auth_log_record_id",
+  "action_history_record.auth_token_id",
+  "action_history_record.created_at",
+  "action_history_record.id",
+  "action_history_record.number",
+  "action_history_record.target_id",
+  "auth_token.last_access",
+  "auth_token.modified_at",
+  "note.created_at",
+  "note.id",
+  "note.modified_at",
+  "note.number",
+  "note.parent_id"
+ ],
+ "tables": {
+  "account": {
+   "gui_added": 3,
+   "api_added": 3
+  },
+  "action_history_record": {
+   "gui_added": 6,
+   "api_added": 3
+  },
+  "auth_token": {
+   "gui_changed": 3,
+   "api_changed": 3
+  },
+  "note": {
+   "gui_added": 3,
+   "api_added": 3
+  }
+ },
+ "pairs": 3,
+ "gate": "stays on the GUI: the API step's side effects differ from the GUI save's, so it stays on the GUI (pair 1: action_history_record added 2 row(s) through the GUI and 1 through the API step; pair 2: action_history_record added 2 row(s) through the GUI and 1 through the API step; pair 3: action_history_record added 2 row(s) through the GUI and 1 through the API step)",
+ "verdict_sha256": "sha256:c3f2187482d8b808f708e63be6777b9408dde04814d0bfaf208adc66073495d7",
+ "frozen": "4d977a4e87a42973d4e72339f16d7eb2817a096b",
+ "head": "4d977a4e87a42973d4e72339f16d7eb2817a096b",
+ "engine_diff_vs_frozen": ""
+}

@@ -1,0 +1,61 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I couldn't record the allergy. The browser is showing the Medplum sign-in page instead of the signed-in app, even though the task said I'd already be signed in. Reloading the page didn't change that.\n\nI have no login credentials, and registering a new account isn't something I should do. I haven't looked for Rosa Delgado or checked for an existing penicillin allergy, and I've changed nothing.\n\nRESULT: NOT DONE <Medplum shows the sign-in page, I'm not signed in, and I have no credentials>",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6357,
+   "out": 100,
+   "usd": 0.002279,
+   "cached": 6353
+  },
+  {
+   "in": 7830,
+   "out": 162,
+   "usd": 0.006582,
+   "cached": 6353
+  },
+  {
+   "in": 9393,
+   "out": 169,
+   "usd": 0.007167,
+   "cached": 7828
+  }
+ ]
+}

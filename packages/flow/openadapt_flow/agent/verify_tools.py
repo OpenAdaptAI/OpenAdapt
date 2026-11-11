@@ -461,10 +461,15 @@ class VerifyBridge:
             "verified": late.verified,
             "outcome": late.outcome,
             "late": late.late,
+            "final": late.final,
             "reasons": list(late.reasons),
             "recheck_due_at": late.due_at,
             "read_at": late.read_at,
             "receipt_sha256": late.receipt_sha256,
+            "recheck_claim_sha256": late.recheck_claim_sha256 or None,
+            "excuse_receipt_sha256s": list(late.excuse_receipt_sha256s)
+            if late.excuse_receipt_sha256s is not None
+            else None,
             "recheck_owed": late.recheck_owed,
             "next": nxt,
         }

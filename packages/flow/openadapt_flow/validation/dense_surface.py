@@ -496,7 +496,9 @@ def render_frame(
     )
     dsf = cond.device_scale_factor
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=True)
+        from openadapt_flow._browser_readiness import launch_rendering_ready
+
+        browser = launch_rendering_ready(pw.chromium, headless=True)
         # Tall viewport so the whole dense table is on one screenshot (no
         # scroll) — every target/sibling row is present and readable.
         page = browser.new_page(
@@ -862,7 +864,9 @@ def _needs_fresh_read(obs: ReplayObservation) -> bool:
 # Trial runner
 # ---------------------------------------------------------------------------
 
-from openadapt_flow.runtime.identity import longest_run, squash  # noqa: E402
+from openadapt_flow.runtime.identity import comparison_squash, longest_run  # noqa: E402
+
+squash = comparison_squash
 
 
 def _nearest_row_index(region: Region, points: dict) -> int:
@@ -1578,9 +1582,12 @@ def main(argv: Optional[list[str]] = None) -> int:
         json.dumps(
             {"meta": result["meta"], "aggregate": agg, "trials": result["trials"]},
             indent=2,
-        )
+        ),
+        encoding="utf-8",
     )
-    (out / "DENSE_SURFACE.md").write_text(render_markdown(result, agg))
+    (out / "DENSE_SURFACE.md").write_text(
+        render_markdown(result, agg), encoding="utf-8"
+    )
 
     if args.save_frames:
         seed = args.seeds[0]

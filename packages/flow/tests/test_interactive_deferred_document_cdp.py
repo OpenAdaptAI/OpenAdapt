@@ -107,7 +107,7 @@ def document_browser(tmp_path):
         worker.join(timeout=1)
 
 
-def _perform(session, kind, value):
+def _perform(session, kind, value, *, pump=True):
     assert session.page is not None
     if kind == "input":
         session.page.fill("#shared", value)
@@ -126,7 +126,8 @@ def _perform(session, kind, value):
         click_count = 2 if value == "beta" else 1
         session.page.mouse.down(click_count=click_count)
         session.page.mouse.up(click_count=click_count)
-    assert session.pump()
+    if pump:
+        assert session.pump()
 
 
 @pytest.mark.timeout(90)
@@ -151,21 +152,30 @@ def test_cross_document_deferred_action_refuses_complete_publication(
         pending = getattr(session, attribute)
         assert pending is not None
         original = dict(pending)
-        assert len(session._producer_ordinals) == 1
-        first_owner = next(iter(session._producer_ordinals))
+        assert session.events_kept == 1
+        first_owner = pending["_oaflow_producer_doc"]
         if kind == "input":
             assert pending["value"] == "alpha"
         assert session.page is not None
+        # Keep another old-document action and the later document's action in
+        # one undrained native batch. No intermediate screenshot can separate
+        # them; the original already-retained pending action must survive.
+        _perform(session, kind, "queued-alpha", pump=False)
+        session.page.wait_for_timeout(0)
+        assert len(session._pyq) == 1
+        assert session._pyq[0]["_oaflow_producer_doc"] == first_owner
+        observed = []
+        original_enqueue = session._enqueue_browser_event
+
+        def observe(detail, *, source=None):
+            before = len(session._pyq)
+            result = original_enqueue(detail, source=source)
+            observed.extend(dict(event) for event in session._pyq[before:])
+            return result
+
+        monkeypatch.setattr(session, "_enqueue_browser_event", observe)
         session.page.goto(url + "second")
         session.page.wait_for_selector("#shared")
-        observed = []
-        original_persist = session._persist_acquired_event
-
-        def observe(event):
-            observed.append(dict(event))
-            original_persist(event)
-
-        monkeypatch.setattr(session, "_persist_acquired_event", observe)
         refusal = None
         try:
             _perform(session, kind, "beta")
@@ -244,5 +254,76 @@ def test_first_action_in_a_new_document_needs_no_prior_owner(
         assert len(events) == 1
         assert events[0]["kind"] == "type"
         assert events[0]["text"] == "beta"
+    finally:
+        session.abort()
+
+
+@pytest.mark.timeout(90)
+@pytest.mark.parametrize("kind", ["input", "scroll", "click"])
+def test_known_navigation_keeps_first_action_and_later_document_action(
+    document_browser, tmp_path, monkeypatch, kind
+):
+    url, endpoint, process = document_browser
+    session = InteractiveRecorder(url, tmp_path / "preserved-recording", cdp_endpoint=endpoint)
+    session.start()
+    try:
+        owners = []
+        process_event = session._process
+
+        def observe_owner(event):
+            owners.append(event["_oaflow_producer_doc"])
+            return process_event(event)
+
+        monkeypatch.setattr(session, "_process", observe_owner)
+        _perform(session, kind, "alpha")
+        attribute = {"input": "_pending_type", "scroll": "_pending_scroll", "click": "_pending_click"}[kind]
+        first = getattr(session, attribute)
+        assert first is not None
+        first_owner = first["_oaflow_producer_doc"]
+        assert isinstance(first_owner, str) and first_owner
+        assert session.page is not None
+        session.page.goto(url + "second")
+        session.page.wait_for_selector("#shared")
+        _perform(session, kind, "beta")
+        assert len(owners) == 2
+        assert owners[0] == first_owner and owners[1] != first_owner
+        result = session.finish()
+        events = [json.loads(row) for row in (result / "events.jsonl").read_text().splitlines()]
+        assert len(events) == 2
+        assert events[0]["kind"] == {"input": "type", "scroll": "scroll", "click": "click"}[kind]
+        assert events[1]["kind"] == {"input": "type", "scroll": "scroll", "click": "double_click"}[kind]
+        if kind == "input":
+            assert [event["text"] for event in events] == ["alpha", "beta"]
+        assert session._listener_error is None
+        assert process.poll() is None
+    finally:
+        session.abort()
+
+
+@pytest.mark.timeout(90)
+@pytest.mark.parametrize("kind", ["input", "scroll", "click"])
+def test_unflushable_native_document_batch_refuses_complete_publication(
+    document_browser, tmp_path, kind
+):
+    url, endpoint, process = document_browser
+    out = tmp_path / "mixed-document-recording"
+    session = InteractiveRecorder(url, out, cdp_endpoint=endpoint)
+    session.start()
+    try:
+        _perform(session, kind, "alpha", pump=False)
+        assert session.page is not None
+        session.page.goto(url + "second")
+        session.page.wait_for_selector("#shared")
+        _perform(session, kind, "beta", pump=False)
+        owners = {event["_oaflow_producer_doc"] for event in session._pyq}
+        assert len(owners) == 2
+        with pytest.raises(BrowserAttachError, match="producer ownership") as caught:
+            session.pump()
+        assert session._listener_error is caught.value
+        assert session.done
+        with pytest.raises(BrowserAttachError):
+            session.finish()
+        assert not out.exists()
+        assert process.poll() is None
     finally:
         session.abort()

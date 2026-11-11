@@ -119,7 +119,7 @@ def schedule(
 
     read_at = str(post_state["read_at"])
     return {
-        "compares": COMPARES,
+        "compares": "history_since_checkpoint" if "history" in post_state else COMPARES,
         "after_s": after_s,
         "post_save_read_at": read_at,
         "due_at": due_at(read_at, after_s) if due else None,
@@ -146,6 +146,16 @@ def state_problem(payload: Any) -> Optional[str]:
         if not isinstance(payload[name], Mapping):
             return f"the recheck state's {name} is not an object"
     post = payload["post_state"]
+    if "history" in post:
+        from openadapt_flow.runtime.effects.history import checkpoint_problem
+
+        try:
+            parse_time(str(post.get("read_at")))
+        except ValueError:
+            return "the recheck history time is malformed"
+        if set(post) != {"read_at", "history"}:
+            return "the history post-state has unknown fields"
+        return checkpoint_problem(post["history"])
     if not isinstance(post.get("snapshot"), Mapping):
         return "the recheck state holds no post-save snapshot"
     try:

@@ -936,7 +936,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = ap.parse_args(argv)
     gen = generate(load_teach(args.teach, args.confirm))
     if args.report:
-        Path(args.report).write_text(json.dumps(gen.as_dict(), indent=2) + "\n")
+        Path(args.report).write_text(
+            json.dumps(gen.as_dict(), indent=2) + "\n", encoding="utf-8"
+        )
     for line in gen.refusals:
         print(f"refused: {line}", file=sys.stderr)
     for line in gen.to_confirm:
@@ -944,7 +946,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if not gen.admitted:
         return 2
     if args.out:
-        Path(args.out).write_text(render_yaml(gen, generator=args.generator))
+        Path(args.out).write_text(
+            render_yaml(gen, generator=args.generator), encoding="utf-8"
+        )
     print("admitted: " + "; ".join(gen.checks))
     return 0
 

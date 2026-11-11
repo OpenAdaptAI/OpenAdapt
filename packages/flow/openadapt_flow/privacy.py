@@ -44,12 +44,15 @@ import os
 from typing import TYPE_CHECKING, Optional, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
+    import re
+    from collections.abc import Mapping, Sequence
     from pathlib import Path
 
 __all__ = [
     "PrivacyNotAvailable",
     "scrub_mode",
     "text_scrubbing_enabled",
+    "text_scrubbing_works",
     "image_redaction_enabled",
     "scrub_text",
     "scrub_params",
@@ -69,6 +72,13 @@ __all__ = [
     "opt_out_ledger_path",
     "prepare_outbound",
     "prepare_outbound_image",
+    "PLACEHOLDER_HELP",
+    "placeholder",
+    "task_bindings",
+    "bind_text",
+    "bound_pattern",
+    "listing_bindings",
+    "label_regions",
 ]
 
 
@@ -188,6 +198,20 @@ def text_scrubbing_enabled() -> bool:
     if scrub_mode() == "off":
         return False
     return get_text_scrubber() is not None
+
+
+def text_scrubbing_works() -> bool:
+    """True when text scrubbing is enabled and the provider actually scrubs.
+
+    An installed provider can still be unusable (its NLP model is missing);
+    under ``auto`` the first failed scrub disables it for the process. This
+    probes once, so a caller that must decide before scrubbing anything (the
+    task placeholders, :func:`bind_text`) decides the same way the scrub will.
+    """
+    if not text_scrubbing_enabled():
+        return False
+    scrub_text("probe")
+    return text_scrubbing_enabled()
 
 
 def get_scrubber() -> Optional[Scrubber]:
@@ -468,11 +492,155 @@ def prepare_outbound(value: object, purpose: str) -> object:
     return scrub_outbound_tree(value, require_outbound_scrubber(purpose))
 
 
-def prepare_outbound_image(png: bytes, purpose: str) -> bytes:
-    """Return a PNG ready to leave the machine: redacted, or opted out."""
+def prepare_outbound_image(
+    png: bytes,
+    purpose: str,
+    labels: "Sequence[tuple[tuple[int, int, int, int], str]]" = (),
+) -> bytes:
+    """Return a PNG ready to leave the machine: redacted, or opted out.
+
+    ``labels`` are ``((x, y, width, height), placeholder)`` regions, in image
+    pixels, where the screen shows a value bound to the task (see
+    :func:`task_bindings`). After redaction each region is covered and the
+    placeholder is written on it, so the model can see that the screen shows
+    the task's own value without seeing the value.
+    """
     if outbound_opt_out(purpose) is not None:
         return png
-    return scrub_outbound_image(png, require_outbound_scrubber(purpose))
+    redacted = scrub_outbound_image(png, require_outbound_scrubber(purpose))
+    return label_regions(redacted, labels) if labels else redacted
+
+
+# -- task-bound placeholders ---------------------------------------------------
+#
+# A task names its own values: the inputs a caller supplies and the record
+# identity the operator declared (``on_screen``). The agent has to see that a
+# row or a field shows exactly those values, and the scrubber hides them. So a
+# value bound to the task is sent as a typed placeholder, ``⟦task.NAME⟧``:
+# never the value, and never a generic redaction label. OpenAdapt still checks
+# the real value locally (the save gate and the read-back). Values that are not
+# bound to the task are scrubbed as usual.
+
+#: The shortest value replaced on page text (listings, screenshots). A shorter
+#: one would turn ordinary words into placeholders; it is scrubbed like any
+#: other text there. The task text binds every value.
+MIN_BOUND_LENGTH = 3
+
+PLACEHOLDER_HELP = (
+    "Personal data is removed from what you see. A value of this task is "
+    "shown as a typed placeholder instead: \u27e6task.identity_N\u27e7 is "
+    "the Nth record identity the task names (a name, a record number), and "
+    "\u27e6task.<input>\u27e7 is the value of that task input. A row, field "
+    "or screenshot box that shows a placeholder shows exactly that value of "
+    "this task, so a row showing the task's identity placeholders is the "
+    "task's record; OpenAdapt checks the real values locally before any save. "
+    "To type a value you know only as a placeholder, type the placeholder; "
+    "the harness types the value. Other personal data appears as <TYPE> in "
+    "text and as dark boxes in screenshots; it is not the task's value."
+)
+
+
+def placeholder(name: str) -> str:
+    """The placeholder for task value ``name``: ``⟦task.name⟧``."""
+    return f"\u27e6task.{name}\u27e7"
+
+
+def task_bindings(
+    *,
+    identity: "Sequence[str]" = (),
+    params: "Optional[Mapping[str, object]]" = None,
+) -> dict[str, str]:
+    """Map placeholder to value for a task's identity strings and inputs.
+
+    Identity strings are named ``identity_1``, ``identity_2``... in the order
+    the task declares them; inputs keep their own names. Every non-empty value
+    is bound, so none reaches the model in the task text. Listings and
+    screenshots use only :func:`listing_bindings`. When two names hold the
+    same value, the first one wins.
+    """
+    out: dict[str, str] = {}
+    seen: set[str] = set()
+    named: list[tuple[str, object]] = [
+        (f"identity_{i}", v) for i, v in enumerate(identity, start=1)
+    ]
+    named += [(str(k), v) for k, v in (params or {}).items()]
+    for name, value in named:
+        text = " ".join(str(value or "").split())
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        out[placeholder(name)] = text
+    return out
+
+
+def listing_bindings(bindings: "Mapping[str, str]") -> dict[str, str]:
+    """The bindings used on page text: values of at least
+    :data:`MIN_BOUND_LENGTH` characters. A shorter value would turn ordinary
+    words on the page into placeholders; it is scrubbed like other text."""
+    return {k: v for k, v in bindings.items() if len(v) >= MIN_BOUND_LENGTH}
+
+
+def bound_pattern(value: str) -> "re.Pattern[str]":
+    import re
+
+    words = [re.escape(w) for w in value.split()]
+    return re.compile(r"(?<!\w)" + r"\s+".join(words) + r"(?!\w)")
+
+
+def bind_text(text: Optional[str], bindings: "Mapping[str, str]") -> Optional[str]:
+    """Replace every whole-word occurrence of a bound value with its placeholder.
+
+    Longer values are replaced first, so "Jane Sample" is not split by a
+    bound "Jane". The text is otherwise unchanged (nothing is scrubbed).
+    """
+    if not text or not bindings:
+        return text
+    for name, value in sorted(bindings.items(), key=lambda kv: -len(kv[1])):
+        text = bound_pattern(value).sub(name.replace("\\", "\\\\"), text)
+    return text
+
+
+def label_regions(
+    png: bytes, labels: "Sequence[tuple[tuple[int, int, int, int], str]]"
+) -> bytes:
+    """Cover each region and write its placeholder on it. Returns a PNG."""
+    if not png or not labels:
+        return png
+    from PIL import Image, ImageDraw, ImageFont
+
+    image = Image.open(io.BytesIO(png)).convert("RGB")
+    draw = ImageDraw.Draw(image)
+    for (x, y, w, h), text in labels:
+        if w <= 0 or h <= 0:
+            continue
+        size = max(9, min(int(h * 0.75), 28))
+        try:
+            font = ImageFont.load_default(size=size)
+        except TypeError:  # Pillow < 10.1 has one fixed-size default font
+            font = ImageFont.load_default()
+        # The default font has no white square brackets, so they are drawn.
+        inner = text.strip("\u27e6\u27e7")
+        left, top, right, bottom = draw.textbbox((0, 0), inner, font=font)
+        gap = max(4, size // 3)
+        width = max(w, right - left + 2 * gap + 6)
+        height = max(h, bottom - top + 6)
+        draw.rectangle([x, y, x + width, y + height], fill=(32, 32, 48))
+        white = (255, 255, 255)
+        y0, y1 = y + 2, y + height - 2
+        for bx, inward in ((x + 2, 1), (x + width - 2, -1)):
+            for dx in (0, 2 * inward):
+                draw.line([bx + dx, y0, bx + dx, y1], fill=white)
+            draw.line([bx, y0, bx + 3 * inward, y0], fill=white)
+            draw.line([bx, y1, bx + 3 * inward, y1], fill=white)
+        draw.text(
+            (x + gap + 3 - left, y + (height - (bottom - top)) / 2 - top),
+            inner,
+            fill=white,
+            font=font,
+        )
+    out = io.BytesIO()
+    image.save(out, format="PNG")
+    return out.getvalue()
 
 
 # -- test / embedding hooks --------------------------------------------------

@@ -1,0 +1,139 @@
+{
+ "id": "P04",
+ "class": "wrong_value",
+ "type": "patient",
+ "expect": "create",
+ "note": "The write path swaps the birth date's month and day.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 190.7,
+ "cost_usd": 0.38466,
+ "claim": {
+  "status": "done",
+  "id": "Patient/c632664d-0fd2-4a04-9d76-69aefcaca822",
+  "note": "RESULT: DONE Patient/c632664d-0fd2-4a04-9d76-69aefcaca822",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/Patient?_count=20&_fields=id,_lastUpdated,name,birthDate,gender&_sort=-_lastUpdated",
+  "final_text": "I created Lena Okafor's Patient record. It is the only Patient on the server, so she now has exactly one.\n\nWhen I searched the Patient list before creating, it showed no results. I didn't create a duplicate. After the record was saved, the list showed one patient, the one I made.\n\nThe first save came out wrong, with no name and a birth date of 1988-02-04. I corrected that same record, so no second record was made. It now holds only the values you gave:\n- **Name:** Lena Okafor\n- **Date of birth:** 1988-04-22\n- **Sex:** female\n- **Address:** 14 Birch Lane, Springfield, MA 01103\n- **Home phone:** 413-555-0187\n- **Email:** lena.okafor@example.org\n\nRESULT: DONE Patient/c632664d-0fd2-4a04-9d76-69aefcaca822",
+  "model_calls": 32,
+  "actions": 703,
+  "tokens_in": 999953,
+  "tokens_out": 6961
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "Patient/c632664d-0fd2-4a04-9d76-69aefcaca822"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "Patient/c632664d-0fd2-4a04-9d76-69aefcaca822": "created"
+  }
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "Patient",
+   "write": 1,
+   "faulted": true
+  },
+  {
+   "fault": "mutate"
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ServiceRequest",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "PUT",
+   "type": "Patient",
+   "write": 2,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 6.8,
+  "end": 8.2,
+  "waited_s": 0
+ }
+}

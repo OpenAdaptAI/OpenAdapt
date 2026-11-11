@@ -1,0 +1,61 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I couldn't check for or book the appointment. Medplum is showing its sign-in page instead of the signed-in app, even though I was told I was already signed in. I reloaded the page and it still asks for an email. I have no credentials, and I shouldn't register a new account, so I stopped there. No records were read or changed.\n\nRESULT: NOT DONE Medplum is on the sign-in page, not signed in, and I have no credentials to log in.",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6283,
+   "out": 93,
+   "usd": 0.002194,
+   "cached": 6279
+  },
+  {
+   "in": 7749,
+   "out": 153,
+   "usd": 0.003083,
+   "cached": 7747
+  },
+  {
+   "in": 9298,
+   "out": 142,
+   "usd": 0.006846,
+   "cached": 7747
+  }
+ ]
+}
