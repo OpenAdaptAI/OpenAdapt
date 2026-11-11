@@ -1359,30 +1359,9 @@ class EngineDispatcher:
         This is separate from the real-save qualification practice case. No
         qualification case, approval, or production authorization is created.
         """
-        from openadapt_desktop.work_items import WorkItemError, validate_inputs
+        from openadapt_desktop.dry_run import check_prefilled_workflow
 
-        workflow_id = str(params.get("workflow_id") or "")
-        if self._bundle_dir(workflow_id) is None:
-            return self._pre_action_refusal("Unknown workflow")
-        try:
-            raw = params.get("inputs", {})
-            if isinstance(raw, dict):
-                raw = {**self._fixed_values(workflow_id), **raw}
-            values = validate_inputs(raw, self._task_inputs(workflow_id))
-        except WorkItemError as exc:
-            return self._pre_action_refusal(str(exc))
-        except Exception:
-            return self._pre_action_refusal("Desktop could not read the task inputs")
-        return self._replay_or_run(
-            {
-                "workflow_id": workflow_id,
-                "target": params.get("target"),
-                "deployment_config": params.get("deployment_config"),
-                "_item_inputs": values,
-            },
-            run=False,
-            stop_before_effect=True,
-        )
+        return check_prefilled_workflow(self, params)
 
     def _replay_or_run(
         self,

@@ -6,7 +6,10 @@ is derived in memory from the ordinary report and never upgrades its outcome.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from openadapt_desktop.dispatch import EngineDispatcher
 
 
 def dry_run_evidence(report: dict[str, Any]) -> dict[str, Any]:
@@ -52,3 +55,33 @@ def dry_run_evidence(report: dict[str, Any]) -> dict[str, Any]:
         and all(check.get("step_id") == block.gated_step_id for check in checks)
     )
     return {"reached_boundary": reached, "checks": checks}
+
+
+def check_prefilled_workflow(
+    dispatcher: EngineDispatcher, params: dict[str, Any]
+) -> dict[str, Any]:
+    """Check a prefilled item through the no-input replay path."""
+    from openadapt_desktop.work_items import WorkItemError, validate_inputs
+
+    workflow_id = str(params.get("workflow_id") or "")
+    if dispatcher._bundle_dir(workflow_id) is None:
+        return dispatcher._pre_action_refusal("Unknown workflow")
+    try:
+        raw = params.get("inputs", {})
+        if isinstance(raw, dict):
+            raw = {**dispatcher._fixed_values(workflow_id), **raw}
+        values = validate_inputs(raw, dispatcher._task_inputs(workflow_id))
+    except WorkItemError as exc:
+        return dispatcher._pre_action_refusal(str(exc))
+    except Exception:
+        return dispatcher._pre_action_refusal("Desktop could not read the task inputs")
+    return dispatcher._replay_or_run(
+        {
+            "workflow_id": workflow_id,
+            "target": params.get("target"),
+            "deployment_config": params.get("deployment_config"),
+            "_item_inputs": values,
+        },
+        run=False,
+        stop_before_effect=True,
+    )
