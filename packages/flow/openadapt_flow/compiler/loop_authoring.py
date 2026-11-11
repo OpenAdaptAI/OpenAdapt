@@ -263,6 +263,8 @@ def author_data_driven_loop(
         },
     )
 
+    # Keep the verified source manifest until Workflow.save verifies the
+    # original bundle, then reseals the authored derivative.
     return body.model_copy(
         deep=True,
         update={
@@ -279,8 +281,5 @@ def author_data_driven_loop(
                     ),
                 ),
             },
-            # Drop the source bundle's sealed manifest -- ``save`` reseals a
-            # fresh integrity/provenance manifest over the looped bundle.
-            "manifest": None,
         },
     )

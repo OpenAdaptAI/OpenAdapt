@@ -243,29 +243,46 @@ def _stage_bundle(
     """Copy recording ``t``'s bundle to ``dest`` and bring in the files an
     inserted step's anchor needs from the recording it came from."""
 
+    from openadapt_flow import sealed_set as _sealed
+    from openadapt_flow.bundle_persistence import (
+        copy_genesis_template_inputs,
+        prepare_derived_assets,
+        validate_derived_asset_paths,
+    )
+    from openadapt_flow.bundle_validation import bundle_asset_path
+
+    candidate = workflow.model_copy(deep=True)
+    src = traces[t].bundle_dir
+    asset_paths = {}
+    if inserted is not None:
+        origin = traces[point.source_trace].bundle_dir
+        step = candidate.steps[inserted]
+        prefix = f"probe-from-{point.source_trace}"
+        for anchor in (step.anchor, getattr(step, "drag_end_anchor", None)):
+            if anchor is None or not anchor.template:
+                continue
+            source = bundle_asset_path(origin, anchor.template)
+            if not source.is_file():
+                continue
+            rel = f"{prefix}/{anchor.template}"
+            asset_paths[rel] = source
+            anchor.template = rel
+    validate_derived_asset_paths(candidate, asset_paths)
+    prepare_derived_assets(
+        candidate,
+        dest,
+        {rel: source.read_bytes() for rel, source in asset_paths.items()},
+        output="sealed"
+        if _sealed.is_sealed(src)
+        else ("encrypted" if candidate.encrypted else "plain"),
+    )
     if dest.exists():
         shutil.rmtree(dest)
-    src = traces[t].bundle_dir
     if src.is_dir():
-        shutil.copytree(src, dest)
-    else:
-        dest.mkdir(parents=True)
-    if inserted is None:
-        return workflow
-    origin = traces[point.source_trace].bundle_dir
-    step = workflow.steps[inserted]
-    prefix = f"probe-from-{point.source_trace}"
-    for anchor in (step.anchor, getattr(step, "drag_end_anchor", None)):
-        if anchor is None or not anchor.template:
-            continue
-        source = origin / anchor.template
-        if not source.is_file():
-            continue
-        target = dest / prefix / anchor.template
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, target)
-        anchor.template = f"{prefix}/{anchor.template}"
-    return workflow
+        shutil.copytree(src, dest, ignore=shutil.ignore_patterns("templates"))
+    copy_genesis_template_inputs(candidate, src, dest)
+    candidate.save(dest, encrypt=candidate.encrypted)
+    return candidate
 
 
 # ---------------------------------------------------------------------------

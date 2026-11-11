@@ -349,6 +349,7 @@ def test_phi_bearing_canonical_bundle_is_scrubbed_resealed_and_loadable(tmp_path
     )
     workflow.save(bundle)
     (bundle / "workflow.py").write_text(render_workflow_py(workflow), encoding="utf-8")
+    source_digest = Workflow.load(bundle).manifest.content_digest
 
     destination = tmp_path / "sanitized"
     manifest = sanitize_artifact(bundle, destination, kind="bundle")
@@ -362,6 +363,10 @@ def test_phi_bearing_canonical_bundle_is_scrubbed_resealed_and_loadable(tmp_path
     assert b"Jane Doe" not in text_bytes
     assert b"MRN-123" not in text_bytes
     assert Workflow.load(destination).steps[0].anchor is not None
+    assert (
+        Workflow.load(destination).manifest.provenance.sanitized_from_digest
+        == source_digest
+    )
     sanitized_hints = Workflow.load(destination).backend_hints
     assert sanitized_hints is not None
     assert sanitized_hints.rdp_window_title == "[PERSON] - Appointments"

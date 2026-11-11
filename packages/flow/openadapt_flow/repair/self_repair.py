@@ -1295,18 +1295,19 @@ class SelfRepair:
                 int(point[0]), int(point[1]), double=op.kind == "double_click"
             )
             after = self._settled(session)
-            # What the click changed on screen is the new step's postcondition,
-            # derived the way the compiler derives a recorded step's.
-            staging = evidence_dir / "expect"
-            (staging / "templates").mkdir(parents=True, exist_ok=True)
-            new_step.expect = _postconditions(
-                screen,
-                after,
-                exclude_texts=tuple(params.values()),
-                bundle=staging,
-                step_id=new_id,
-                click_point=point,
-            )
+            # The final after-bridge step inherits the halted step's original
+            # postconditions. Only generate crops for checks that survive.
+            if mode != "after" or index + 1 < len(ops):
+                staging = evidence_dir / "expect"
+                (staging / "templates").mkdir(parents=True, exist_ok=True)
+                new_step.expect = _postconditions(
+                    screen,
+                    after,
+                    exclude_texts=tuple(params.values()),
+                    bundle=staging,
+                    step_id=new_id,
+                    click_point=point,
+                )
             new_steps.append(new_step)
             screen = after
 
@@ -1356,28 +1357,43 @@ class SelfRepair:
             )
         patched.steps = steps
         bundle_out = attempt_dir / "bundle"
+        from openadapt_flow.bundle_persistence import (
+            copy_genesis_template_inputs,
+            prepare_derived_assets,
+            validate_derived_asset_paths,
+        )
+
+        changes = {}
+        staged = evidence_dir / "expect" / "templates"
+        staged_paths = (
+            {f"templates/{path.name}": path for path in staged.iterdir()}
+            if staged.is_dir()
+            else {}
+        )
+        for step_id, crop in crops.items():
+            target = next(s for s in steps if s.id == step_id)
+            assert target.anchor is not None
+            changes[target.anchor.template] = crop
+        changes.update(extra_files)
+        _uncertify_patch(patched)
+        validate_derived_asset_paths(patched, {*staged_paths, *changes})
+        prepare_derived_assets(
+            patched,
+            bundle_out,
+            {
+                **{rel: path.read_bytes() for rel, path in staged_paths.items()},
+                **changes,
+            },
+            output="encrypted" if workflow.encrypted else "plain",
+        )
         if bundle_out.exists():
             shutil.rmtree(bundle_out)
         shutil.copytree(
             bundle_dir,
             bundle_out,
-            ignore=shutil.ignore_patterns("repair", "manifest.json"),
+            ignore=shutil.ignore_patterns("repair", "manifest.json", "templates"),
         )
-        staged = evidence_dir / "expect" / "templates"
-        if staged.is_dir():
-            for path in staged.iterdir():
-                shutil.copy2(path, bundle_out / "templates" / path.name)
-        for step_id, crop in crops.items():
-            target = next(s for s in steps if s.id == step_id)
-            assert target.anchor is not None
-            path = bundle_out / target.anchor.template
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(crop)
-        for rel, data in extra_files.items():
-            path = bundle_out / rel
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(data)
-        _uncertify_patch(patched)
+        copy_genesis_template_inputs(patched, bundle_dir, bundle_out)
         patched.save(bundle_out, encrypt=bool(workflow.encrypted))
         run_dir = attempt_dir.parent.parent
         halted_report = run_dir / "report.json"
