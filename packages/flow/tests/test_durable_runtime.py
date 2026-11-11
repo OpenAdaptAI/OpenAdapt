@@ -860,7 +860,9 @@ def test_indeterminate_durable_state_fails_closed_without_ledger_projection(
 
 
 def test_resume_requires_the_active_pause_and_exact_inputs(tmp_path):
-    _report, run_dir, bundle, _backend, verifier = _run_to_halt(tmp_path, first_leg=True)
+    _report, run_dir, bundle, _backend, verifier = _run_to_halt(
+        tmp_path, first_leg=True
+    )
     replayer = Replayer(FakeBackend(), vision=_vision_ok(), effect_verifier=verifier)
 
     with pytest.raises(StateDiverged, match="parameters differ"):
@@ -1093,7 +1095,9 @@ def test_resume_admission_rejects_invalid_retained_action_evidence(field, value)
 
 
 def test_resume_refuses_a_checkpoint_added_after_the_pause(tmp_path):
-    _report, run_dir, bundle, _backend, verifier = _run_to_halt(tmp_path, first_leg=True)
+    _report, run_dir, bundle, _backend, verifier = _run_to_halt(
+        tmp_path, first_leg=True
+    )
     store = CheckpointStore(run_dir)
     pending = store.read_pending()
     assert pending is not None
@@ -1122,7 +1126,9 @@ def test_resume_refuses_a_checkpoint_added_after_the_pause(tmp_path):
 
 
 def test_attended_checkpoint_must_follow_the_active_pause(tmp_path):
-    _report, run_dir, bundle, _backend, verifier = _run_to_halt(tmp_path, first_leg=True)
+    _report, run_dir, bundle, _backend, verifier = _run_to_halt(
+        tmp_path, first_leg=True
+    )
     store = CheckpointStore(run_dir)
     pending = store.read_pending()
     assert pending is not None

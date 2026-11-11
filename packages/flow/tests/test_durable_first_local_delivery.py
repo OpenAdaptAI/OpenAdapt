@@ -440,9 +440,7 @@ def test_marked_deferred_readback_resumes_without_redelivery(
     first.checkpoint_key = key
     first.readback_pipeline = pipeline
     try:
-        held = first.run(
-            local.workflow, bundle_dir=local.bundle, run_dir=local.run_dir
-        )
+        held = first.run(local.workflow, bundle_dir=local.bundle, run_dir=local.run_dir)
     finally:
         pipeline.close()
 
