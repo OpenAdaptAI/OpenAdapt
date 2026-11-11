@@ -355,3 +355,69 @@ def test_new_process_retry_does_not_resend_held_cancelled_write(
     assert retry["verdict"] in ("RECONCILIATION_REQUIRED", "NOT_WRITTEN")
     assert retry.get("not_sent_again") is True or "held" in retry.get("reason", "")
     assert portal.posts == 1 and portal.orders() == []
+
+
+def test_off_loop_does_not_rerun_cancelled_preflight_inline(monkeypatch) -> None:
+    """When a queued preflight is cancelled by the pool (e.g. on shutdown),
+    _off_loop with cancel_if_queued=True must raise CancelledError rather than
+    running fn inline (#2141).
+    """
+    import concurrent.futures
+    from types import SimpleNamespace
+
+    from openadapt_flow.integrations.agents import _Cancelled, _off_loop
+
+    class CancelledFuture(concurrent.futures.Future):
+        def cancel(self):
+            return False
+
+        def result(self, timeout=None):
+            raise concurrent.futures.CancelledError()
+
+    fake_pool = SimpleNamespace(submit=lambda fn, *args: CancelledFuture())
+    monkeypatch.setattr("openadapt_flow.integrations.agents._POOL", fake_pool)
+
+    called = []
+
+    def dummy_fn():
+        called.append(True)
+        return "result"
+
+    async def run_test():
+        # 1. With cancel_if_queued=True: raises CancelledError, dummy_fn is NOT run inline
+        caught1 = []
+
+        async def call1():
+            try:
+                await _off_loop(dummy_fn, cancel_if_queued=True)
+            except _Cancelled as exc:
+                caught1.append(type(exc))
+            except asyncio.CancelledError:
+                caught1.append("CancelledError")
+
+        task1 = asyncio.create_task(call1())
+        await asyncio.sleep(0)
+        task1.cancel()
+        await task1
+        assert caught1 == ["CancelledError"]
+        assert len(called) == 0
+
+        # 2. With cancel_if_queued=False (e.g. read-back/finish): dummy_fn runs inline and wraps in _Cancelled
+        caught2 = []
+
+        async def call2():
+            try:
+                await _off_loop(dummy_fn, cancel_if_queued=False)
+            except _Cancelled as exc:
+                caught2.append((type(exc).__name__, exc.value))
+            except asyncio.CancelledError:
+                caught2.append("CancelledError")
+
+        task2 = asyncio.create_task(call2())
+        await asyncio.sleep(0)
+        task2.cancel()
+        await task2
+        assert caught2 == [("_Cancelled", "result")]
+        assert len(called) == 1
+
+    asyncio.run(run_test())
