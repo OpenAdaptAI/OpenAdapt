@@ -168,7 +168,9 @@ jobs:
           set -euo pipefail
           sudo sed -i -E "s|^URIs:.*|URIs: ${UNREACHABLE}|" /etc/apt/sources.list.d/ubuntu.sources
           if [ "$MODE" = "DNS down" ]; then
-            # A resolver address that refuses every query.
+            # A resolver address that refuses every query. The runner itself
+            # needs DNS to report back, so the next steps put it back.
+            sudo cp -P /etc/resolv.conf "$RUNNER_TEMP/resolv.conf.orig"
             sudo rm -f /etc/resolv.conf
             echo "nameserver 127.0.0.9" | sudo tee /etc/resolv.conf
           else
@@ -182,6 +184,12 @@ jobs:
         with:
           packages: cowsay
           use-cache: "false"
+      - name: Restore DNS for the runner
+        if: always() && matrix.mode == 'DNS down'
+        run: |
+          sudo rm -f /etc/resolv.conf
+          sudo cp -P "$RUNNER_TEMP/resolv.conf.orig" /etc/resolv.conf
+          getent hosts github.com
       - name: It failed and named the cause
         env:
           OUTCOME: ${{ steps.apt.outcome }}
