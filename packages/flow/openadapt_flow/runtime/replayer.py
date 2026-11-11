@@ -1680,7 +1680,6 @@ class Replayer:
         No plaintext of the bundle or of the live screen reaches the disk.
         """
         from openadapt_flow import at_rest
-
         from openadapt_flow.runtime.preparation import validate_dry_run_entry
 
         validate_dry_run_entry(
