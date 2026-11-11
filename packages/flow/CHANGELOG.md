@@ -15,6 +15,12 @@
 
 <!-- version list -->
 
+## Unreleased
+
+- Keep deferred typing, scrolling and click gestures tied to their emitting
+  document. A known document change preserves both actions; uncertain ownership
+  or a mixed-document batch refuses publication.
+
 ## v2.7.1 (2026-11-09)
 
 Flow 2.7.1 fixes loading of programs certified before Nov 8. Two optional
