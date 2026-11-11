@@ -7,11 +7,13 @@ No timer, screenshot or page value can substitute for advancing RAF timestamps.
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 from typing import Any
 
 READINESS_TIMEOUT_MS = 1000
 READINESS_CLEANUP_TIMEOUT_MS = 250
 _OWNED_BROWSER = object()
+_CHROMIUM_KEYCHAIN_ARGS = ("--use-mock-keychain", "--password-store=basic")
 
 _START = """() => {
     const state = {frames: 0, first: -1, last: -1, raf: 0,
@@ -44,9 +46,17 @@ class BrowserReadinessError(RuntimeError):
     """A fixed, value-free reason for refusing browser startup."""
 
 
-def launch_rendering_ready(chromium: Any, **options: Any) -> Any:
-    """Retain a caller's exact launch options and check its owned browser."""
-    browser = chromium.launch(**options)
+def chromium_launch_args(args: Sequence[str] | None = None) -> list[str]:
+    """Keep Chromium from prompting for the host keychain."""
+    other = [arg for arg in args or () if arg not in _CHROMIUM_KEYCHAIN_ARGS]
+    return [*other, *_CHROMIUM_KEYCHAIN_ARGS]
+
+
+def launch_rendering_ready(browser_type: Any, **options: Any) -> Any:
+    """Launch an owned browser and check that it renders before returning it."""
+    if getattr(browser_type, "name", None) == "chromium":
+        options["args"] = chromium_launch_args(options.get("args"))
+    browser = browser_type.launch(**options)
     require_rendering_ready(browser)
     return browser
 
