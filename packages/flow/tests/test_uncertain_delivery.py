@@ -257,13 +257,76 @@ def test_effect_verification_still_runs_when_post_delivery_observation_raises(
 def test_durable_resume_cannot_reenter_uncertain_step_without_explicit_retry(
     tmp_path,
 ) -> None:
-    report, first_backend, _verifier, workflow, bundle = _run(
-        tmp_path, Verdict.INDETERMINATE
+    from tests.test_durable_runtime import _StopBeforeInput
+
+    workflow, bundle = _sealed(tmp_path, _click_workflow(), encrypted=False)
+    first_store: list[dict[str, str]] = []
+    first_verifier = _StoreVerifier(first_store, Verdict.INDETERMINATE)
+    gate = _gate(
+        workflow,
+        bundle,
+        ExecutionProfile.STANDARD,
+        verifier=first_verifier,
+        durable=True,
+    )
+    assert gate.passed, gate.render()
+    authorization = build_runtime_authorization(workflow, gate)
+    vision = _ReadyVision()
+    vision.text_results["Saved"] = object()
+    run_dir = tmp_path / "run"
+
+    stopped_backend = _UncertainAfterWriteBackend(first_store)
+    stopped = _StopBeforeInput(
+        stopped_backend,
+        vision=vision,
+        effect_verifier=first_verifier,
+        governed_authorization=authorization,
+        durable=True,
+        require_settled=True,
+    ).run(workflow, bundle_dir=bundle, run_dir=run_dir)
+    assert stopped.execution_outcome == ExecutionOutcome.HALTED.value
+    assert "synthetic operator stop before the first input" in (
+        stopped.results[-1].error or ""
+    )
+    assert stopped_backend.actions == []
+    assert stopped_backend.actuation_count == first_verifier.verify_calls == 0
+    assert first_store == []
+
+    durable_store = CheckpointStore(run_dir)
+    manifest = durable_store.read_manifest()
+    pending = durable_store.read_pending()
+    assert manifest is not None and pending is not None
+    assert manifest.governed_authorization == authorization
+    assert pending.step_index == 0 and pending.delivery_uncertainty is None
+    assert durable_store.checkpoints() == []
+    before_input_approval = issue_resume_approval(
+        pending,
+        approver="operator@example.com",
+        resolution="confirmed no input; approve continuation",
+        bundle_version=bundle_version(bundle),
+        run_id=manifest.run_id,
+        workflow_name=manifest.workflow_name,
+        run_dir=run_dir,
+    )
+    assert before_input_approval.authorize_uncertain_retry is False
+    first_backend = _UncertainAfterWriteBackend(first_store)
+    report = resume(
+        run_dir,
+        Replayer(
+            first_backend,
+            vision=vision,
+            effect_verifier=first_verifier,
+            governed_authorization=authorization,
+            durable=True,
+            require_settled=True,
+        ),
+        approval=before_input_approval,
     )
     assert report.execution_outcome == ExecutionOutcome.HALTED.value
     assert first_backend.actuation_count == 1
+    assert first_store == [{"record_id": "synthetic-1"}]
+    assert first_verifier.verify_calls == 1
 
-    run_dir = tmp_path / "run"
     second_store: list[dict[str, str]] = []
     second_backend = _UncertainAfterWriteBackend(second_store)
     second_verifier = _StoreVerifier(second_store, Verdict.CONFIRMED)
@@ -271,23 +334,15 @@ def test_durable_resume_cannot_reenter_uncertain_step_without_explicit_retry(
         second_backend,
         vision=_ReadyVision(),
         effect_verifier=second_verifier,
-        governed_authorization=build_runtime_authorization(
-            workflow,
-            _gate(
-                workflow,
-                bundle,
-                ExecutionProfile.STANDARD,
-                verifier=second_verifier,
-                durable=True,
-            ),
-        ),
+        governed_authorization=authorization,
         durable=True,
         require_settled=True,
     )
-    durable_store = CheckpointStore(run_dir)
     manifest = durable_store.read_manifest()
     pending = durable_store.read_pending()
     assert manifest is not None and pending is not None
+    assert pending.delivery_uncertainty is not None
+    assert pending.delivery_uncertainty.cause_type == "ConnectionResetError"
     ordinary_approval = issue_resume_approval(
         pending,
         approver="operator@example.com",

@@ -16,18 +16,25 @@ from __future__ import annotations
 
 import pytest
 
-from openadapt_flow.runtime.durable import ApprovalRequired, CheckpointStore, resume
+from openadapt_flow.runtime.durable import (
+    ApprovalRequired,
+    CheckpointStore,
+    StateDiverged,
+    resume,
+)
 from openadapt_flow.runtime.durable.attended import (
     AttendedActionRequest,
     AttendedActionStore,
     BoundAttendedExecutor,
     execute_attended_action,
 )
+from openadapt_flow.runtime.durable.first_local_delivery import is_first_local_delivery
 from openadapt_flow.runtime.effects import Effect, EffectState, EffectVerdict, Verdict
 from openadapt_flow.runtime.replayer import Replayer
 from tests.test_durable_runtime import (
     _approval,
     _dirs,
+    _resume_after_proven_no_input,
     _three_step_workflow,
     _vision_ok,
 )
@@ -93,7 +100,9 @@ class _SlowReadback:
         )
 
 
-def _halt_after_a_landed_save(tmp_path, *, absolute_check: bool = False):
+def _halt_after_a_landed_save(
+    tmp_path, *, absolute_check: bool = False, first_leg: bool = False
+):
     store = _Store()
     workflow = _three_step_workflow(with_effects=True)
     if absolute_check:
@@ -117,13 +126,21 @@ def _halt_after_a_landed_save(tmp_path, *, absolute_check: bool = False):
     bundle, run_dir = _dirs(tmp_path)
     workflow.save(bundle)
     verifier = _SlowReadback(store)
-    first = Replayer(
-        _WritingBackend(store),
-        vision=_vision_ok(),
-        effect_verifier=verifier,
-        durable=True,
-        poll_interval_s=0.01,
-    ).run(workflow, params={"who": "alice"}, bundle_dir=bundle, run_dir=run_dir)
+    backend = _WritingBackend(store)
+    if first_leg:
+        first = Replayer(
+            backend,
+            vision=_vision_ok(),
+            effect_verifier=verifier,
+            durable=True,
+            poll_interval_s=0.01,
+        ).run(workflow, params={"who": "alice"}, bundle_dir=bundle, run_dir=run_dir)
+    else:
+        # These controls require an ordinary post-delivery pause on an
+        # authenticated resumed leg. The preliminary pause sent no input.
+        first = _resume_after_proven_no_input(
+            workflow, bundle, run_dir, backend, verifier, params={"who": "alice"}
+        )
     assert first.success is False
     assert store.rows.count("C") == 1  # the save landed before the timeout
     return store, verifier, bundle, run_dir
@@ -175,3 +192,25 @@ def test_reconcile_finds_the_saved_record_and_finishes_without_saving_again(
     assert decision.status == "completed", decision.message
     assert decision.report_success is True
     assert store.rows.count("C") == 1, store.rows
+
+
+def test_first_local_holds_a_landed_save_after_readback_timeout(tmp_path) -> None:
+    store, verifier, bundle, run_dir = _halt_after_a_landed_save(
+        tmp_path, first_leg=True
+    )
+    checkpoint_store = CheckpointStore(run_dir)
+    checkpoints = checkpoint_store.checkpoints()
+    assert [checkpoint.step_id for checkpoint in checkpoints] == ["s0", "s1"]
+    assert all(checkpoint.effect_verified is True for checkpoint in checkpoints)
+    assert store.rows == ["A", "B", "C"] and verifier.timeouts["s2"] == 0
+    pending = checkpoint_store.read_pending()
+    assert pending is not None and pending.step_id == "s2"
+    assert pending.category == "delivery_uncertain" and pending.resume_from_index == 2
+    assert is_first_local_delivery(pending.delivery_uncertainty)
+
+    contender = _replayer(store, verifier)
+    with pytest.raises(StateDiverged, match="first_local_delivery_held"):
+        resume(run_dir, contender, approval=_approval(bundle))
+    assert contender.backend.actions == [] and store.rows == ["A", "B", "C"]
+    assert checkpoint_store.read_pending() == pending
+    assert checkpoint_store.checkpoints() == checkpoints
