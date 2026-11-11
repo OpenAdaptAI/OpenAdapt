@@ -375,11 +375,14 @@ CREATE TABLE openadapt_owned_insert_events (
 ) STRICT;
 ```
 
-The native writer reads the reserved attempt from the private baseline and
-claims it once before dispatch. It commits the declared insert and its
-witness together. A separate read-only connection checks the witness and
-exact row. The normal read-back, frame,
-source, and approval checks still apply. A whole-database frame must account
+For a ledger-backed attempt, call `commit_pending_sqlite_insert(pending)`.
+It holds the attempt's existing lease through the native commit. The
+lower-level writer accepts a private standalone baseline only. The writer
+claims one dispatch and commits the declared insert and its witness together.
+Verification can close that claim before dispatch. If the writer has already
+claimed it, an absent read stays uncertain because the commit may still land.
+A separate read-only connection checks the witness and exact row. The normal
+read-back, frame, source, and approval checks still apply. A whole-database frame must account
 for the bookkeeping table in its existing declared scope. Keep the database
 and private baseline under operator control. This proof covers one controlled
 insert. Update, delete, external writers, and other providers need their own

@@ -120,6 +120,8 @@ BASELINE_KEYS: tuple[str, ...] = (
 _BASELINE_BOUND_KEYS = BASELINE_KEYS[:5]
 _WRITE_ATTRIBUTION = "write_attribution"
 _SQLITE_RESERVATION = "owned_sqlite_reservation"
+_OWNED_DISPATCH_OWNER = "owned_dispatch_owner"
+OwnedBaselineReference = tuple[str, str, str]
 VerificationPurpose = Literal["observation", "owned_attempt"]
 
 ExecutorKind = Literal["flow_replay", "agent", "script", "human", "unknown"]
@@ -2167,6 +2169,12 @@ def _sqlite_insert(
 ) -> Optional[OwnedSqliteInsert]:
     if cfg.owned_sqlite_insert is None or read_provider is not None:
         return None
+    database = cfg.frame.database if cfg.frame is not None else None
+    if database is not None and (
+        database.dialect != "sqlite"
+        or database.read.get("sqlite_database") != cfg.verifier.sqlite_database
+    ):
+        return None
     try:
         return OwnedSqliteInsert.bind(
             cfg.owned_sqlite_insert, cfg.verifier, verifier, cfg.effects, params
@@ -2405,6 +2413,7 @@ def capture_baseline(
     *,
     read_provider: Optional[CompleteReadProvider] = None,
     purpose: VerificationPurpose = "observation",
+    _owned_dispatch_owner: Optional[str] = None,
 ) -> dict[str, Any]:
     """Read the system of record before the executor starts.
 
@@ -2416,7 +2425,10 @@ def capture_baseline(
     ``owned_attempt`` also reserves any configured native commit witness.
     """
 
-    _baseline_purpose({"purpose": purpose})
+    purpose_fields: dict[str, str] = {"purpose": purpose}
+    if _owned_dispatch_owner is not None:
+        purpose_fields[_OWNED_DISPATCH_OWNER] = _owned_dispatch_owner
+    _baseline_purpose(purpose_fields)
     verifier = _build_verifier(cfg, params, read_provider)
     identity = verifier_identity(verifier)
     execution_id = _new_execution_id()
@@ -2515,11 +2527,13 @@ def capture_baseline(
         "salt": salt.hex(),
     }
     if purpose == "owned_attempt":
-        payload["purpose"] = purpose
+        payload.update(purpose_fields)
     if insert is not None:
         if not state.reachable or _sqlite_insert(cfg, verifier, params, read_provider) != insert:
             raise VerifyRunError("the owned SQLite baseline could not be bound")
-        payload[_SQLITE_RESERVATION] = insert.reservation(execution_id, salt)
+        payload[_SQLITE_RESERVATION] = insert.reservation(
+            execution_id, salt, _owned_dispatch_owner
+        )
     _write_private(Path(out), payload)
     return payload
 
@@ -2600,6 +2614,10 @@ def _baseline_purpose(baseline: Mapping[str, Any]) -> VerificationPurpose:
     purpose = baseline.get("purpose", "observation")
     if type(purpose) is not str or purpose not in ("observation", "owned_attempt"):
         raise VerifyRunError("invalid verification purpose")
+    if _OWNED_DISPATCH_OWNER in baseline:
+        owner = baseline[_OWNED_DISPATCH_OWNER]
+        if purpose != "owned_attempt" or type(owner) is not str or not _OPAQUE.fullmatch(owner):
+            raise VerifyRunError("invalid owned dispatch owner")
     if _SQLITE_RESERVATION in baseline:
         reservation = baseline[_SQLITE_RESERVATION]
         if (
@@ -2614,7 +2632,8 @@ def _baseline_purpose(baseline: Mapping[str, Any]) -> VerificationPurpose:
 def _bound_baseline(baseline: Mapping[str, Any]) -> dict[str, Any]:
     _baseline_purpose(baseline)
     keys = _BASELINE_BOUND_KEYS + tuple(
-        name for name in ("purpose", _SQLITE_RESERVATION) if name in baseline
+        name for name in ("purpose", _SQLITE_RESERVATION, _OWNED_DISPATCH_OWNER)
+        if name in baseline
     )
     return {key: baseline[key] for key in keys}
 
@@ -2637,7 +2656,9 @@ def _load_baseline(path: Path, identity: str) -> tuple[dict[str, Any], bytes]:
     if not isinstance(raw, dict) or raw.get("schema_version") != BASELINE_SCHEMA:
         raise VerifyRunError(f"{path} is not an {BASELINE_SCHEMA} file")
     required = set(BASELINE_KEYS)
-    if not required <= set(raw) <= required | {"purpose", _SQLITE_RESERVATION}:
+    if not required <= set(raw) <= required | {
+        "purpose", _SQLITE_RESERVATION, _OWNED_DISPATCH_OWNER
+    }:
         # Every field must be one the digest names; nothing rides along unbound.
         raise VerifyRunError("baseline file has missing or unknown fields")
     _baseline_purpose(raw)
@@ -2672,6 +2693,28 @@ def _consume_baseline(path: Path, execution_id: str) -> None:
         fh.write(execution_id + "\n")
 
 
+def _owned_baseline_reference(
+    baseline: Mapping[str, Any], salt: bytes
+) -> Optional[OwnedBaselineReference]:
+    owner = baseline.get(_OWNED_DISPATCH_OWNER)
+    if owner is None:
+        return None
+    return owner, baseline["execution_id"], baseline_digest(baseline, salt)
+
+
+def _claim_owned_dispatch(path: Path) -> bool:
+    # One atomic claim closes this baseline to all later native dispatches.
+    # If the writer won, a concurrent read still cannot assert no dispatch.
+    original = path.resolve(strict=True)
+    claim = original.with_name(original.name + ".dispatched")
+    try:
+        fd = os.open(claim, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        return False
+    os.close(fd)
+    return True
+
+
 def commit_owned_sqlite_insert(
     cfg: VerifyConfig, params: Mapping[str, object], baseline_path: Path
 ) -> None:
@@ -2680,12 +2723,24 @@ def commit_owned_sqlite_insert(
     The operator controls the writer and the private baseline. This helper
     executes one native transaction. It accepts no SQL, row or attempt ID from
     the actuator, and never records a witness for an already present row.
+    Ledger-owned baselines require the verifier's live pending-write route.
     """
 
+    _commit_owned_sqlite_insert(cfg, params, baseline_path, None)
+
+
+def _commit_owned_sqlite_insert(
+    cfg: VerifyConfig,
+    params: Mapping[str, object],
+    baseline_path: Path,
+    owner: Optional[OwnedBaselineReference],
+) -> None:
     verifier = _build_verifier(cfg, params)
     path = Path(baseline_path)
     baseline, salt = _load_baseline(path, verifier_identity(verifier))
-    insert = _sqlite_insert(cfg, verifier, params, None)
+    if _owned_baseline_reference(baseline, salt) != owner:
+        raise VerifyRunError("the owned SQLite baseline does not belong to this dispatch")
+    insert = _reserved_sqlite_insert(cfg, verifier, params, None, baseline, salt)
     reservation = baseline.get(_SQLITE_RESERVATION)
     execution_id = baseline["execution_id"]
     elapsed = (_parse_time(_now()) - _parse_time(baseline["baseline_read_at"])).total_seconds()
@@ -2693,24 +2748,36 @@ def commit_owned_sqlite_insert(
         _baseline_purpose(baseline) != "owned_attempt"
         or insert is None
         or not isinstance(reservation, str)
-        or not hmac.compare_digest(reservation, insert.reservation(execution_id, salt))
         or _used_marker(path).exists()
         or not 0 <= elapsed <= cfg.max_execution_window_s
     ):
         raise VerifyRunError("the owned SQLite insert does not match an active reservation")
     try:
-        # The claim precedes the mutation and survives a refusal or a crash.
-        # SQLite uniqueness alone cannot prevent a resend after row deletion.
-        dispatch = path.with_name(path.name + ".dispatched")
-        fd = os.open(dispatch, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        os.close(fd)
+        if not _claim_owned_dispatch(path):
+            raise VerifyRunError("the owned SQLite insert was already claimed")
         if _used_marker(path).exists():
             raise VerifyRunError("the owned SQLite reservation was already checked")
         insert.commit(execution_id, reservation, salt)
-    except FileExistsError as exc:
-        raise VerifyRunError("the owned SQLite insert was already dispatched") from exc
     except (OSError, ValueError, sqlite3.Error) as exc:
         raise VerifyRunError("the owned SQLite insert could not be committed") from exc
+
+
+def _reserved_sqlite_insert(
+    cfg: VerifyConfig,
+    verifier: Any,
+    params: Mapping[str, object],
+    read_provider: Optional[CompleteReadProvider],
+    baseline: Mapping[str, Any],
+    salt: bytes,
+) -> Optional[OwnedSqliteInsert]:
+    insert = _sqlite_insert(cfg, verifier, params, read_provider)
+    reservation = baseline.get(_SQLITE_RESERVATION)
+    if insert is None or not isinstance(reservation, str) or not hmac.compare_digest(
+        reservation,
+        insert.reservation(baseline["execution_id"], salt, baseline.get(_OWNED_DISPATCH_OWNER)),
+    ):
+        return None
+    return insert
 
 
 def _observed_owned_insert(
@@ -2724,17 +2791,13 @@ def _observed_owned_insert(
 ) -> bool:
     if baseline is None or _SQLITE_RESERVATION not in baseline:
         return False
-    insert = _sqlite_insert(cfg, verifier, params, read_provider)
+    insert = _reserved_sqlite_insert(cfg, verifier, params, read_provider, baseline, salt)
     if insert is None or len(verdicts) != 1:
         return False
     matches = verdicts[0].matched_records
     reservation = baseline[_SQLITE_RESERVATION]
     attempt = baseline["execution_id"]
-    if (
-        len(matches) != 1
-        or not insert.matches(matches[0])
-        or not hmac.compare_digest(reservation, insert.reservation(attempt, salt))
-    ):
+    if len(matches) != 1 or not insert.matches(matches[0]):
         return False
     try:
         return insert.independently_observed(attempt, reservation, salt)
@@ -2874,6 +2937,7 @@ def verify_run(
     read_provider: Optional[CompleteReadProvider] = None,
     request_context: Optional[RequestContext] = None,
     purpose: Optional[VerificationPurpose] = None,
+    _owned_reference: Optional[OwnedBaselineReference] = None,
 ) -> dict[str, Any]:
     """Read the system of record and return ``{"receipt", "evidence"}``.
 
@@ -2945,9 +3009,18 @@ def verify_run(
         if purpose is not None and _baseline_purpose({"purpose": purpose}) != recorded_purpose:
             raise VerifyRunError("verification purpose differs from the baseline")
         purpose = recorded_purpose
+        if _owned_baseline_reference(baseline, salt) != _owned_reference:
+            raise VerifyRunError("the baseline does not match the original owned attempt")
         execution_id = str(baseline["execution_id"])
+        if purpose == "owned_attempt":
+            try:
+                _claim_owned_dispatch(Path(baseline_path))
+            except OSError as exc:
+                raise VerifyRunError("the owned dispatch claim could not be checked") from exc
         _consume_baseline(Path(baseline_path), execution_id)
     else:
+        if _owned_reference is not None:
+            raise VerifyRunError("an owned ledger reference requires its baseline")
         purpose = _baseline_purpose({"purpose": "observation" if purpose is None else purpose})
         if private_dir is None:
             raise VerifyRunError(
@@ -3200,7 +3273,11 @@ def verify_run(
         status = "observed"
     write_attribution = {"purpose": purpose, "status": status}
     read_proves_write = read_proves_delta and (purpose == "observation" or attributed)
-    if purpose == "owned_attempt" and not attributed and effect_verdict == "CONFIRMED":
+    if purpose == "owned_attempt" and not attributed and (
+        effect_verdict == "CONFIRMED"
+        or (observed_effect == "absent" and frame.status != "refuted")
+    ):
+        # An absent read cannot settle an owned attempt whose dispatch may land.
         effect_verdict = "INDETERMINATE"
     # The source part: with provenance, the record as read back must match
     # the source document (a round trip). Without it the inputs are the
@@ -3262,6 +3339,7 @@ def verify_run(
         effect_verdict == "REFUTED"
         and observed_effect == "absent"
         and not write_attempted
+        and purpose == "observation"
         and frame.status != "refuted"
     ):
         # The store shows nothing landed, whatever the executor said.
@@ -3535,6 +3613,13 @@ def recheck_problem(
         executor_kind, executor_ref, _build = _executor(run_record)
     except (VerifyRunError, KeyError, ValueError) as exc:
         return f"the contract can't be bound for the recheck: {exc}"
+    attributed = receipt.get(_WRITE_ATTRIBUTION) == {
+        "purpose": "owned_attempt", "status": "attributed"
+    }
+    if attributed and _reserved_sqlite_insert(
+        cfg, verifier, params, read_provider, baseline, salt
+    ) is None:
+        return "the current store is not the one reserved for this owned write"
     if (
         identity != state["verifier_identity"]
         or identity != readback.get("verifier_identity")
@@ -3681,16 +3766,26 @@ def recheck_run(
     baseline = state.get("baseline")
     receipt = state.get("receipt")
     attribution = receipt.get(_WRITE_ATTRIBUTION) if isinstance(receipt, Mapping) else None
-    if (
+    owned = (
         isinstance(baseline, Mapping) and baseline.get("purpose") == "owned_attempt"
     ) or (
         isinstance(attribution, Mapping) and attribution.get("purpose") == "owned_attempt"
-    ):
+    )
+    if owned:
         problem = recheck_problem(
             cfg, state, params=params, run_record=run_record, read_provider=read_provider
         )
         if problem is not None:
             raise VerifyRunError(problem)
+    def checked_result(verdict: FrameVerdict, read_at: str) -> tuple[FrameVerdict, str]:
+        if owned:
+            problem = recheck_problem(
+                cfg, state, params=params, run_record=run_record, read_provider=read_provider
+            )
+            if problem is not None:
+                return FrameVerdict(status="not_checked", reason=problem), read_at
+        return verdict, read_at
+
     post = dict(state["post_state"])
     if cfg.frame is not None and cfg.frame.history is not None:
         from openadapt_flow.runtime.effects.history import instant, judge_history
@@ -3729,7 +3824,7 @@ def recheck_run(
             str(run_record.get("executor_id") or ""),
         )
         horizon = min(instant(feed["through"]) for feed in now["feeds"].values())
-        return verdict, late_write.format_time(horizon)
+        return checked_result(verdict, late_write.format_time(horizon))
     since = late_write.parse_time(str(post["read_at"]))
     windows: list[Any] = []
     unjudged = 0
@@ -3780,7 +3875,7 @@ def recheck_run(
         # A later write whose frame wasn't judged excuses nothing, so what
         # refuted this write may be that write's own change.
         verdict.excused_by.add(late_write.LATER_WRITE_UNJUDGED)
-    return verdict, read_started_at
+    return checked_result(verdict, read_started_at)
 
 
 def write_result(result: Mapping[str, Any], out_dir: Path) -> Path:

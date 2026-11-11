@@ -120,9 +120,10 @@ class OwnedSqliteInsert:
             tuple(sorted(cells.items())),
         )
 
-    def reservation(self, execution_id: str, salt: bytes) -> str:
+    def reservation(self, execution_id: str, salt: bytes, owner: str | None) -> str:
         return _mac(salt, "openadapt-owned-sqlite-insert-reservation/v1", {
             "attempt": execution_id,
+            "owner": owner,
             "database": str(self.database),
             "file_identity": self.file_identity,
             "operation": "insert",
@@ -216,13 +217,13 @@ class OwnedSqliteInsert:
             columns = ", ".join(_quote(name) for name, _ in self.cells)
             placeholders = ", ".join("?" for _ in self.cells)
             cursor = connection.execute(
-                f"INSERT INTO main.{_quote(self.table)} ({columns}) VALUES ({placeholders})",
+                f"INSERT OR ABORT INTO main.{_quote(self.table)} ({columns}) VALUES ({placeholders})",
                 tuple(value for _, value in self.cells),
             )
             if cursor.rowcount != 1 or not self._matches_store(connection):
                 raise ValueError("owned SQLite did not insert the exact target")
             event = connection.execute(
-                f"INSERT INTO main.{_quote(EVENT_TABLE)} (attempt, witness) VALUES (?, ?)",
+                f"INSERT OR ABORT INTO main.{_quote(EVENT_TABLE)} (attempt, witness) VALUES (?, ?)",
                 (execution_id, self._witness(reservation, salt)),
             )
             if event.rowcount != 1:
