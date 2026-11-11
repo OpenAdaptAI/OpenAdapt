@@ -197,7 +197,13 @@ jobs:
 
       - name: Install Linux Chromium runtime libraries
         if: runner.os == 'Linux'
-        run: uv run --locked python -m playwright install-deps chromium
+        uses: ./.github/actions/apt-install
+        with:
+          # The pinned Playwright's own list, installed through the cache and
+          # mirror fallback instead of `playwright install-deps`.
+          playwright-deps: chromium
+          playwright-python: uv run --locked python
+          working-directory: packages/desktop
 
       - name: Alias lowercase X11 names for Flow 1.34.0
         if: runner.os == 'Linux'
@@ -239,37 +245,15 @@ jobs:
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
         timeout-minutes: 10
-        run: |
-          set -uo pipefail
-          # The hosted runner resolves its Ubuntu mirror through
-          # /etc/apt/apt-mirrors.txt, which points at azure.archive.ubuntu.com.
-          # That mirror fails intermittently, and each failure costs minutes of
-          # apt retries. Prefer the canonical archive. Best-effort: an absent or
-          # already-canonical file changes nothing.
-          sudo sed -i \
-            's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
-            /etc/apt/apt-mirrors.txt 2>/dev/null || true
-          update_ok=""
-          for attempt in 1 2 3; do
-            if sudo apt-get update; then
-              update_ok=1
-              break
-            fi
-            echo "::warning::apt-get update failed (attempt ${attempt}/3); retrying"
-            sleep $((attempt * 10))
-          done
-          if [ -z "$update_ok" ]; then
-            echo "::error::apt-get update failed three times; the Ubuntu mirror is unreachable"
-            exit 1
-          fi
-          set -e
-          sudo apt-get install -y --no-install-recommends \
-            libayatana-appindicator3-dev \
-            patchelf \
-            librsvg2-dev \
-            xdg-utils \
-            libwebkit2gtk-4.1-dev \
-            dbus \
+        uses: ./.github/actions/apt-install
+        with:
+          packages: >-
+            libayatana-appindicator3-dev
+            patchelf
+            librsvg2-dev
+            xdg-utils
+            libwebkit2gtk-4.1-dev
+            dbus
             xvfb
 
       - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable

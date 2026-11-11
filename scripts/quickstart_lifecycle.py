@@ -220,6 +220,7 @@ def run_lifecycle(
     flow_wheel: Path | None,
     browser_system_deps: bool,
     source_revision: str | None,
+    browser_system_deps_preinstalled: bool = False,
 ) -> dict[str, object]:
     if work_dir.exists():
         raise FileExistsError(f"work directory already exists: {work_dir}")
@@ -308,6 +309,11 @@ def run_lifecycle(
                 log=logs / "05-browser-host-deps.log",
             )
             browser_preflight["system_dependencies"] = "installed-via-playwright"
+        elif browser_system_deps_preinstalled:
+            # The CI host installed Playwright's own package list before this
+            # script ran (from a .deb cache, so a mirror outage cannot fail the
+            # lifecycle). Chromium itself is still left for the public command.
+            browser_preflight["system_dependencies"] = "preinstalled-by-host"
 
         chromium_before = _browser_present(
             python,
@@ -415,6 +421,14 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Install Linux browser system packages without downloading Chromium",
     )
+    parser.add_argument(
+        "--browser-system-deps-preinstalled",
+        action="store_true",
+        help=(
+            "The host already installed Playwright's Linux packages; record that "
+            "and skip `playwright install-deps`"
+        ),
+    )
     parser.add_argument("--source-revision", default=None)
     return parser
 
@@ -429,6 +443,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         flow_wheel=flow_wheel,
         browser_system_deps=args.browser_system_deps,
         source_revision=args.source_revision,
+        browser_system_deps_preinstalled=args.browser_system_deps_preinstalled,
     )
     return 0
 

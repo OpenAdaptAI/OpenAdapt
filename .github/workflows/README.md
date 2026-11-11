@@ -124,9 +124,18 @@ App 15368 is GitHub Actions, the app the current checks are pinned to.
 | desktop-dependency-audit.yml | `python`, `npm`, `rust` | when Desktop changes | no | when Desktop changes, and weekly |
 | desktop-dependency-audit.yml | `python-macos-intel` | no | no | when Desktop changes, and weekly |
 | desktop-replay.yml | `replay` (Patient Notes through WindowsBackend, judged from SQLite), `freerdp` (FreeRDP transport round trip over a loopback RDP session) | when the Windows path changes; not required | no | nightly |
+| apt-install-selftest.yml | `fallback`, `warm-cache`, `playwright-deps`, `total-outage` | when `.github/actions/apt-install` changes; not required | no | no |
+| apt-cache-seed.yml | `seed` (one per cached Ubuntu package set) | no | no | daily, and when the action changes |
 | codeql.yml | `Analyze` (Python, JavaScript/TypeScript, Rust) | per changed language | per changed language | all languages on main and weekly |
 | secret-scan.yml, dependency-review.yml, platform-manifest.yml | all | yes | yes | yes |
 | docs.yml, link-check.yml (internal), production-lifecycle.yml, release-health.yml (self-test) | all | yes | no | main only |
+
+Ubuntu packages install through `.github/actions/apt-install`. It installs
+cached `.deb` files with no `apt-get update` and no network, and goes to a
+mirror only for packages the cache lacks, falling back from the runner's
+default mirror to archive.ubuntu.com and then mirrors.ubuntu.com. The daily
+`apt-cache-seed.yml` keeps the caches warm from main, which every pull request
+can read. Release workflows turn the cache off.
 
 packages.yml jobs run only for the packages a change touches. The `scope` job
 decides from the PR diff, the queue group's diff against its base commit, or

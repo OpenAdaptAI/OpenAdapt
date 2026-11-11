@@ -217,7 +217,7 @@ def test_root_ci_runs_the_linux_atspi_qualification() -> None:
         step_end = job.find("\n      - ", step_start + 1)
         step = job[step_start : step_end if step_end != -1 else len(job)]
         assert f"timeout-minutes: {timeout_minutes}" in step, step_name
-    assert job.index("sudo apt-get update") < job.index(
+    assert job.index("uses: ./.github/actions/apt-install") < job.index(
         "scripts/qualify_linux_atspi.py"
     )
     assert "xvfb-run -a" in job and "dbus-run-session --" in job
