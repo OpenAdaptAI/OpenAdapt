@@ -750,9 +750,7 @@ class EngineDispatcher:
             stage="record",
             capture_id=capture_id,
             target=(
-                target.model_dump(mode="json", exclude_none=True)
-                if target is not None
-                else None
+                target.model_dump(mode="json", exclude_none=True) if target is not None else None
             ),
             task=task,
         )
@@ -964,9 +962,7 @@ class EngineDispatcher:
                 # A first run that started and hasn't been checked keeps its
                 # lock. Recording another task would replace this record and
                 # drop the lock that stops the run from repeating.
-                raise ValueError(
-                    "Check the target of the last run before you record another task."
-                )
+                raise ValueError("Check the target of the last run before you record another task.")
             self.services.db.set_first_workflow_state(stage="record")
             return {"ok": True, "state": self.services.db.get_first_workflow_state()}
 
@@ -1072,9 +1068,7 @@ class EngineDispatcher:
             )
         ]
         capture = (
-            self.services.db.get_capture(str(b.get("capture_id")))
-            if b.get("capture_id")
-            else None
+            self.services.db.get_capture(str(b.get("capture_id"))) if b.get("capture_id") else None
         )
         task = str((capture or {}).get("task_description") or "")
         # The bundle status is set by the readiness-test commands: "certified"
@@ -1082,9 +1076,7 @@ class EngineDispatcher:
         # also refuses a plaintext bundle, so a certified version is ready to
         # run only once it is sealed (encrypted at rest).
         bundle_path = Path(str(b.get("bundle_path") or ""))
-        encrypted = bool(b.get("bundle_path")) and (
-            bundle_path / "workflow.json.enc"
-        ).is_file()
+        encrypted = bool(b.get("bundle_path")) and (bundle_path / "workflow.json.enc").is_file()
         status = str(b.get("status") or "")
         if status == "certified":
             readiness = "ready" if encrypted else "checking"
@@ -1474,9 +1466,7 @@ class EngineDispatcher:
                     bundle,
                     workflow_id=str(workflow_id),
                     expected_project_revision=admission.get("project_revision"),
-                    expected_bundle_content_digest=admission.get(
-                        "bundle_content_digest"
-                    ),
+                    expected_bundle_content_digest=admission.get("bundle_content_digest"),
                     expected_environment_digest=self._canonical_target_digest(target),
                     bundle_key=self._qualification_bundle_key(str(workflow_id)),
                 )
@@ -1660,9 +1650,7 @@ class EngineDispatcher:
                 )
                 if first_supervised:
                     try:
-                        self._mark_first_workflow_execution_started(
-                            str(workflow_id)
-                        )
+                        self._mark_first_workflow_execution_started(str(workflow_id))
                     except Exception:
                         return self._pre_action_refusal(
                             "Desktop could not save the supervised run state."
@@ -2573,7 +2561,9 @@ class EngineDispatcher:
         examples = [
             row
             for row in self._load_branch_examples(workflow_id)
-            if step_key and step_key != "unknown" and row.get("step_key") == step_key
+            if step_key
+            and step_key != "unknown"
+            and row.get("step_key") == step_key
             and Path(row.get("run_path", "")).exists()
             and Path(row.get("fix_path", "")).exists()
         ]
@@ -2834,18 +2824,13 @@ class EngineDispatcher:
             if not recording_dir:
                 row = self.services.db.get_bundle(workflow_id)
                 capture_id = row.get("capture_id") if row else None
-                capture = (
-                    self.services.db.get_capture(str(capture_id))
-                    if capture_id
-                    else None
-                )
+                capture = self.services.db.get_capture(str(capture_id)) if capture_id else None
                 recording_dir = capture and (
                     capture.get("capture_path") or capture.get("capture_dir")
                 )
             if not recording_dir:
                 raise ValueError(
-                    "recording_dir is required when this bundle has no "
-                    "retained capture"
+                    "recording_dir is required when this bundle has no retained capture"
                 )
             return propose_qualification_from_demo(
                 self._qualification_bundle_dir(workflow_id),
@@ -2893,10 +2878,7 @@ class EngineDispatcher:
                     first_state
                     and first_state.get("stage")
                     in {"result", "qualification_after_result", "complete"}
-                    and (
-                        first_state.get("workflow_id") == workflow_id
-                        or same_completed_capture
-                    )
+                    and (first_state.get("workflow_id") == workflow_id or same_completed_capture)
                 ):
                     raise ValueError(
                         "Save the first supervised run before setting the "
@@ -3346,17 +3328,13 @@ class EngineDispatcher:
                 # A drill needs this computer's local drill campaign (B276).
                 # Flow sets it up from the practice case's inputs and save,
                 # and refuses until the practice item has been set up.
-                supports_drills = getattr(
-                    self.services.flow_bridge, "supports_local_drills", None
-                )
+                supports_drills = getattr(self.services.flow_bridge, "supports_local_drills", None)
                 if supports_drills is None or not supports_drills():
                     raise ValueError(
                         "This version of the OpenAdapt engine can't run the safety "
                         "drills on this computer. Update OpenAdapt, then try again."
                     )
-                drills = self.services.flow_bridge.qualify_drills(
-                    bundle, env_overrides=bundle_env
-                )
+                drills = self.services.flow_bridge.qualify_drills(bundle, env_overrides=bundle_env)
                 if not drills.get("ok"):
                     raise ValueError(
                         "OpenAdapt couldn't set up the safety drills: "
@@ -3435,9 +3413,7 @@ class EngineDispatcher:
             if not is_drill:
                 # Set up the drills from this practice case now: it changes
                 # the project, and a change after a result would undo it.
-                supports_drills = getattr(
-                    self.services.flow_bridge, "supports_local_drills", None
-                )
+                supports_drills = getattr(self.services.flow_bridge, "supports_local_drills", None)
                 if supports_drills is not None and supports_drills():
                     drill_setup = self.services.flow_bridge.qualify_drills(
                         bundle, env_overrides=bundle_env
@@ -3445,15 +3421,10 @@ class EngineDispatcher:
                     if drill_setup.get("ok"):
                         drill_setup = {
                             "ok": True,
-                            "drills": len(
-                                (drill_setup.get("campaign") or {}).get("drills") or []
-                            ),
+                            "drills": len((drill_setup.get("campaign") or {}).get("drills") or []),
                             "skipped": [
                                 str(item.get("kind"))
-                                for item in (drill_setup.get("campaign") or {}).get(
-                                    "skipped"
-                                )
-                                or []
+                                for item in (drill_setup.get("campaign") or {}).get("skipped") or []
                                 if isinstance(item, dict)
                             ],
                         }
@@ -3755,9 +3726,7 @@ class EngineDispatcher:
             bundle = self._qualification_bundle_dir(workflow_id)
             bundle_key = self._qualification_bundle_key(workflow_id)
             if first_replay_review_is_draft(bundle, bundle_key=bundle_key):
-                raise ValueError(
-                    "Set the exact qualification environment before certification."
-                )
+                raise ValueError("Set the exact qualification environment before certification.")
             result = certify_bundle(
                 bundle,
                 workflow_id=workflow_id,
@@ -4160,12 +4129,10 @@ class EngineDispatcher:
                 status=OPEN,
                 execution_outcome="unknown",
                 halt_reason=(
-                    "OpenAdapt stopped while this item was running. "
-                    "The save may have gone through."
+                    "OpenAdapt stopped while this item was running. The save may have gone through."
                 ),
                 finished_at=now,
             )
-
 
     def _task_inputs(self, workflow_id: str) -> list[dict]:
         from openadapt_desktop.qualification import task_parameters
@@ -4519,8 +4486,7 @@ class EngineDispatcher:
             return {
                 "ok": False,
                 "error": (
-                    "The run had already stopped waiting, so nothing was saved. "
-                    "Run the item again."
+                    "The run had already stopped waiting, so nothing was saved. Run the item again."
                 ),
             }
         return {
@@ -5013,9 +4979,7 @@ class EngineDispatcher:
             }
 
         def sign(payload: bytes) -> str:
-            return keychain.sign(
-                payload, reason='turn "only ask about problems" back on'
-            )[1]
+            return keychain.sign(payload, reason='turn "only ask about problems" back on')[1]
 
         try:
             outcome = approval_mode.rearm(
@@ -5206,9 +5170,7 @@ class EngineDispatcher:
             declared = self._task_inputs(workflow_id)
         except Exception:
             logger.exception("Could not read task inputs")
-            return self._pre_action_refusal(
-                "Desktop couldn't read the inputs this task needs."
-            )
+            return self._pre_action_refusal("Desktop couldn't read the inputs this task needs.")
         raw_inputs = params.get("inputs")
         fixed = self._fixed_values(workflow_id)
         if fixed and isinstance(raw_inputs, dict):
@@ -5256,8 +5218,7 @@ class EngineDispatcher:
             ):
                 if row.get("inputs_digest") in done_digests:
                     return self._pre_action_refusal(
-                        "This item is already done, so OpenAdapt didn't enter "
-                        "it again."
+                        "This item is already done, so OpenAdapt didn't enter it again."
                     )
 
         batch_id = str(params.get("batch_id") or new_id("batch"))
@@ -5671,9 +5632,9 @@ class EngineDispatcher:
             self.config.data_dir,
             workflow_id,
             bundle_dir=self._bundle_dir(workflow_id),
-            runner_id=self._runner_id() if store_dir(
-                self.config.data_dir, workflow_id
-            ).exists() else None,
+            runner_id=self._runner_id()
+            if store_dir(self.config.data_dir, workflow_id).exists()
+            else None,
             item_running=self._item_running(workflow_id),
         )
         if view["state"] == "none":
@@ -5713,7 +5674,8 @@ class EngineDispatcher:
             "blockers": found,
             "can_turn_off": view["state"] in {"on", "waiting_for_cloud"},
             "cloud_url": (
-                f"{host}/dashboard/workflows/{cloud_id}" if host and cloud_id
+                f"{host}/dashboard/workflows/{cloud_id}"
+                if host and cloud_id
                 else (f"{host}/dashboard/workflows" if host else None)
             ),
         }
@@ -5955,9 +5917,7 @@ class EngineDispatcher:
         from openadapt_desktop import auth
 
         try:
-            host = _canonical_hosted_origin(
-                params.get("host") or self.config.hosted_host
-            )
+            host = _canonical_hosted_origin(params.get("host") or self.config.hosted_host)
             cred = auth.login(host=host, prefer="browser_pkce")
             if _canonical_hosted_origin(cred.get("host")) != host:
                 raise ValueError("Authenticated host did not match the requested host")
@@ -5974,9 +5934,7 @@ class EngineDispatcher:
 
         token = params.get("token")
         try:
-            host = _canonical_hosted_origin(
-                params.get("host") or self.config.hosted_host
-            )
+            host = _canonical_hosted_origin(params.get("host") or self.config.hosted_host)
             cred = PasteTokenProvider(host=host).login(token=token)
             if _canonical_hosted_origin(cred.get("host")) != host:
                 raise ValueError("Authenticated host did not match the requested host")
@@ -6426,9 +6384,7 @@ class EngineDispatcher:
             from openadapt_desktop.portal.service import PortalService
             from openadapt_desktop.portal.stops import DispatcherStopQueue
 
-            self.services.portal = PortalService(
-                self.config, stops=DispatcherStopQueue(self)
-            )
+            self.services.portal = PortalService(self.config, stops=DispatcherStopQueue(self))
         return self.services.portal
 
     def portal_status(self, **params: Any) -> dict:

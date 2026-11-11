@@ -195,9 +195,8 @@ def bridge_flag_literals(path: Path = BRIDGE) -> set[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"))
     redaction: set[int] = set()
     for node in ast.walk(tree):
-        if (
-            isinstance(node, ast.Assign)
-            and any(isinstance(t, ast.Name) and t.id == "redacted_after" for t in node.targets)
+        if isinstance(node, ast.Assign) and any(
+            isinstance(t, ast.Name) and t.id == "redacted_after" for t in node.targets
         ):
             redaction.update(id(child) for child in ast.walk(node.value))
     found = {

@@ -161,9 +161,7 @@ def _sign_refusal(code: str, message: str) -> dict:
     return {"schema": _SIGN_RESPONSE_SCHEMA, "refused": code, "message": message}
 
 
-def _is_this_answer(
-    message: bytes, *, decision: str, request_id: str, request_sha256: str
-) -> bool:
+def _is_this_answer(message: bytes, *, decision: str, request_id: str, request_sha256: str) -> bool:
     """Whether ``message`` is exactly a person's answer to this request.
 
     Flow signs the answer domain, then the answer as canonical JSON. Desktop
@@ -191,7 +189,6 @@ def _is_this_answer(
         and payload.get("decided_by") == "human"
         and payload.get("route") == ITEM_APPROVAL_ROUTE
     )
-
 
 
 def _contract_counts(value: object) -> dict[str, int] | None:
@@ -848,10 +845,7 @@ class FlowBridge:
                 raise FlowNotAvailableError(
                     "openadapt-flow is not importable by the Desktop runtime"
                 )
-            if (
-                _flow_override() is None
-                and _installed_flow_version() != REQUIRED_FLOW_VERSION
-            ):
+            if _flow_override() is None and _installed_flow_version() != REQUIRED_FLOW_VERSION:
                 raise FlowNotAvailableError(f"openadapt-flow isn't available: {flow_problem()}")
             command = [
                 sys.executable,
@@ -1461,9 +1455,7 @@ class FlowBridge:
         if self._attached_browser_support is None:
             try:
                 result = self._run(["run", "--help"])
-                self._attached_browser_support = "--browser-cdp-endpoint" in (
-                    result.stdout or ""
-                )
+                self._attached_browser_support = "--browser-cdp-endpoint" in (result.stdout or "")
             except Exception:
                 self._attached_browser_support = False
         return self._attached_browser_support

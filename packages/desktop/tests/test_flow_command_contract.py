@@ -74,12 +74,8 @@ def test_every_flag_in_the_bridge_is_a_flow_flag(flow_parser) -> None:
     assert not unknown, f"flow_bridge.py sends flags the bundled Flow doesn't have: {unknown}"
 
 
-@pytest.mark.parametrize(
-    "flag,probe", sorted(contract.CAPABILITY_PROBED_FLAGS.items())
-)
-def test_optional_flag_probe_matches_the_actual_installed_cli(
-    flow_parser, flag, probe
-) -> None:
+@pytest.mark.parametrize("flag,probe", sorted(contract.CAPABILITY_PROBED_FLAGS.items()))
+def test_optional_flag_probe_matches_the_actual_installed_cli(flow_parser, flag, probe) -> None:
     from openadapt_desktop.flow_bridge import FlowBridge
 
     executable = Path(sysconfig.get_path("scripts")) / (
@@ -101,9 +97,7 @@ def test_optional_flag_probe_matches_the_actual_installed_cli(
     assert len(calls) == 1
 
 
-def test_missing_no_input_capability_refuses_before_any_replay(
-    flow_parser, tmp_path
-) -> None:
+def test_missing_no_input_capability_refuses_before_any_replay(flow_parser, tmp_path) -> None:
     from openadapt_desktop.flow_bridge import FlowBridge, FlowNotAvailableError
 
     executable = Path(sysconfig.get_path("scripts")) / (
