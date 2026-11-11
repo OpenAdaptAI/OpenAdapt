@@ -1328,11 +1328,13 @@ class SelfRepair:
             # The halted step's expected screen now comes after the bridge.
             # The halted step now leads to the new screen it reached; that
             # screen is its postcondition, derived like a recorded step's.
+            staging = evidence_dir / "expect"
+            (staging / "templates").mkdir(parents=True, exist_ok=True)
             leads_to = _postconditions(
                 halted_before,
                 live_png,
                 exclude_texts=tuple(params.values()),
-                bundle=evidence_dir / "expect",
+                bundle=staging,
                 step_id=step.id + "_now",
                 click_point=step.anchor.click_point,
             )
