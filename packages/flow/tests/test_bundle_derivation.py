@@ -284,3 +284,37 @@ def test_verified_asset_cache_requires_manifest_membership(tmp_path, monkeypatch
     assert not destination.exists()
     assert loaded.decrypted_templates() == original_cache
     assert controls._bundle_files(source) == original_files
+
+
+
+@pytest.mark.parametrize("output", ("encrypted", "sealed"))
+@pytest.mark.parametrize("exists", (False, True))
+def test_crypto_layout_checks_bytes_not_dangling_references(tmp_path, output, exists):
+    workflow = Workflow(name="synthetic layout")
+    _add_reference(workflow, OUTSIDE)
+    destination = tmp_path / "destination"
+    referenced_file = destination / OUTSIDE
+    if exists:
+        referenced_file.parent.mkdir(parents=True)
+        referenced_file.write_bytes(b"synthetic referenced bytes")
+        original = controls._bundle_files(destination)
+        with pytest.raises(bundles.BundleIntegrityError, match="under templates/"):
+            if output == "encrypted":
+                workflow.save(destination, encrypt=True, key=KEY)
+            else:
+                prepare_derived_assets(workflow, destination, {}, output=output)
+        assert controls._bundle_files(destination) == original
+        assert workflow.manifest is None
+        return
+    prepare_derived_assets(workflow, destination, {}, output=output)
+    assert not destination.exists()
+    if output == "encrypted":
+        workflow.save(destination, encrypt=True, key=KEY)
+    else:
+        with sealed_set.writing(destination, "bundle", KEY):
+            workflow.save(destination)
+    reopened = Workflow.load(destination, key=KEY)
+    assert reopened.manifest is not None
+    assert reopened.manifest.file_hashes == {}
+    assert reopened.steps[0].anchor.template == OUTSIDE
+    assert not referenced_file.exists()
