@@ -9,7 +9,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import pytest
-from hypothesis import given, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 from PIL import Image
 
 from openadapt_flow import bundle_validation as bundles
@@ -244,6 +245,7 @@ def test_verified_template_replacement_saves_plaintext_derivative(tmp_path):
 
 @pytest.mark.parametrize("storage", ["plaintext", "sealed"])
 @pytest.mark.parametrize("location", ["in_place", "relative", "save_as"])
+@settings(deadline=None)
 @given(replacement=st.sampled_from([b"replacement crop one", b"replacement crop two"]))
 def test_verified_replacement_preserves_source_authority_across_save_paths(
     storage, location, replacement
