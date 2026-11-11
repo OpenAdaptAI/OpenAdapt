@@ -7,6 +7,7 @@ import queue
 import re
 import subprocess
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
@@ -315,6 +316,25 @@ def test_known_navigation_keeps_first_action_and_later_document_action(
         session.abort()
 
 
+def _wait_for_queued_action(session, kind, *, after, previous_owner=None):
+    """Wait for the recorder binding without draining its pending batch."""
+    deadline = time.monotonic() + 5
+    while True:
+        if session._listener_error is not None:
+            raise session._listener_error
+        for event in session._pyq[after:]:
+            owner = event["_oaflow_producer_doc"]
+            if event["kind"] == kind and owner is not None and owner != previous_owner:
+                return owner
+        remaining_ms = (deadline - time.monotonic()) * 1000
+        if remaining_ms <= 0:
+            pytest.fail(
+                f"the recorder binding did not queue the expected {kind} action"
+            )
+        # The sync Playwright driver dispatches callbacks during this wait.
+        session.page.wait_for_timeout(min(20, remaining_ms))
+
+
 @pytest.mark.timeout(90)
 @pytest.mark.parametrize("kind", ["input", "scroll", "click"])
 def test_unflushable_native_document_batch_refuses_complete_publication(
@@ -325,11 +345,18 @@ def test_unflushable_native_document_batch_refuses_complete_publication(
     session = InteractiveRecorder(url, out, cdp_endpoint=endpoint)
     session.start()
     try:
+        before_first = len(session._pyq)
         _perform(session, kind, "alpha", pump=False)
         assert session.page is not None
+        first_owner = _wait_for_queued_action(session, kind, after=before_first)
         session.page.goto(url + "second")
         session.page.wait_for_selector("#shared")
+        before_second = len(session._pyq)
         _perform(session, kind, "beta", pump=False)
+        second_kind = "double_click" if kind == "click" else kind
+        _wait_for_queued_action(
+            session, second_kind, after=before_second, previous_owner=first_owner
+        )
         owners = {event["_oaflow_producer_doc"] for event in session._pyq}
         assert len(owners) == 2
         with pytest.raises(BrowserAttachError, match="producer ownership") as caught:
