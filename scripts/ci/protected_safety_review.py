@@ -180,9 +180,8 @@ def _review_needs_validation(body: str, head: str) -> bool:
     """Ignore only a proven stale review, not an unknown declaration shape.
 
     A review is proven stale only by one visible exact ``Reviewed-Head`` line
-    naming an older SHA, with no other binding in either view. A binding seen
-    only inside an HTML comment proves nothing: the review is validated (and
-    fails) if it names or might name the current head, and otherwise ignored.
+    naming an older SHA, with no other binding in either view. Every other
+    case, including a binding seen only inside an HTML comment, is validated.
     """
     visible = re.findall(r"(?m)^Reviewed-Head: (.*)$", declaration_text(body))
     hidden = _headers(body, "Reviewed-Head")
@@ -196,8 +195,6 @@ def _review_needs_validation(body: str, head: str) -> bool:
         and SHA.fullmatch(visible[0].strip())
     ):
         return visible[0].strip() == head or _mentions_head(body, head)
-    if not visible and not visible_references and (hidden or raw_references):
-        return _mentions_head(body, head)
     return True
 
 

@@ -1627,8 +1627,9 @@ def test_rule2_approval_visible_only_after_inline_comment_is_invalid() -> None:
             f"{BLOCK_HEADING}\nNow on {HEAD[:8]}.\n",
             True,
         ),
-        # Binding only in a comment and no current-head reference: ignored.
-        (f"From: Claude\n<!--\nReviewed-Head: {PARENT}\n-->\n{BLOCK_HEADING}\n", False),
+        # Binding only in a comment and no current-head reference: still no
+        # visible proof of staleness, so the visible BLOCK fails.
+        (f"From: Claude\n<!--\nReviewed-Head: {PARENT}\n-->\n{BLOCK_HEADING}\n", True),
         # A visible stale binding next to a hidden current one is not stale.
         (
             f"From: Claude\nReviewed-Head: {PARENT}\n"
@@ -1660,3 +1661,9 @@ def test_rule3_hidden_binding_never_approves() -> None:
     body = f"From: Claude\n<!--\nReviewed-Head: {HEAD}\n-->\n{APPROVE_HEADING}\n"
     errors = _evaluate(comments=[_comment(body, "reviewer-login", 2)])
     assert "expected exactly one current exact-head independent review" in errors
+
+
+def test_rule3_visible_block_with_only_hidden_older_binding_fails() -> None:
+    body = f"From: Claude\n<!-- Reviewed-Head: {PARENT} -->\n{BLOCK_HEADING}\n"
+    errors = _evaluate(comments=_comments() + [_comment(body, "reviewer-login", 3)])
+    assert any("returned BLOCK" in error for error in errors), errors
