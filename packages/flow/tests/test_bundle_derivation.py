@@ -11,7 +11,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from openadapt_flow import bundle_validation as bundles
-from openadapt_flow import crypto, sealed_set
+from openadapt_flow import crypto, ir, sealed_set
 from openadapt_flow.bundle_persistence import prepare_derived_assets
 from openadapt_flow.bundle_sealing import seal_bundle
 from openadapt_flow.ir import ActionKind, Anchor, Step, Workflow
@@ -247,3 +247,40 @@ def test_verified_source_context_does_not_carry_a_stale_certification_flag(tmp_p
     candidate.save(destination)
     reopened = Workflow.load(destination)
     assert reopened.manifest is not None and not reopened.manifest.provenance.certified
+
+
+@pytest.mark.parametrize("storage", ("encrypted", "sealed"))
+def test_verified_asset_cache_requires_manifest_membership(tmp_path, monkeypatch, storage):
+    monkeypatch.setenv(crypto.ENV_KEY, KEY)
+    plain = controls.saved_bundle(tmp_path / "original")
+    source = tmp_path / "protected"
+    if storage == "encrypted":
+        Workflow.load(plain).save(source, encrypt=True, key=KEY)
+    else:
+        seal_bundle(plain, source)
+    loaded = Workflow.load(source, key=KEY)
+    manifest = loaded.manifest
+    assert manifest is not None
+    original_cache = loaded.decrypted_templates()
+    assert set(original_cache) == set(manifest.file_hashes)
+    assert manifest.file_hashes[ORIGINAL] == _digest(original_cache[ORIGINAL])
+    original_files = controls._bundle_files(source)
+
+    positive = tmp_path / "positive"
+    loaded.model_copy(deep=True).save(positive)
+    assert (positive / ORIGINAL).read_bytes() == original_cache[ORIGINAL]
+
+    # Model an extra cached name without changing either native storage format.
+    extra = "templates/unlisted.png"
+    assert extra not in manifest.file_hashes
+    bad_cache = {**original_cache, extra: b"synthetic extra asset"}
+    with pytest.raises(bundles.BundleIntegrityError, match="outside the verified manifest"):
+        ir._verify_sealed_template_integrity(loaded, source, manifest, bad_cache)
+    candidate = loaded.model_copy(deep=True)
+    candidate._decrypted_templates = bad_cache
+    destination = tmp_path / "refused"
+    with pytest.raises(bundles.BundleIntegrityError, match="outside the verified manifest"):
+        candidate.save(destination)
+    assert not destination.exists()
+    assert loaded.decrypted_templates() == original_cache
+    assert controls._bundle_files(source) == original_files

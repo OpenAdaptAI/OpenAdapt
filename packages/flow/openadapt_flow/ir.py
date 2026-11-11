@@ -3450,6 +3450,7 @@ def _verify_sealed_template_integrity(
             raise _bv.BundleIntegrityError(
                 f"sealed asset {rel!r} plaintext hash mismatch (tampered or corrupted)"
             )
+    _bv._verify_decrypted_asset_membership(stored, decrypted)
 
 
 class Workflow(BaseModel):

@@ -742,6 +742,10 @@ def verify_loaded_source_integrity(
     _verify_asset_hashes(
         loaded.source_bundle_dir, stored, decrypted_assets=decrypted_assets
     )
+    cached_names = set(workflow._decrypted_templates)
+    if decrypted_assets is not None:
+        cached_names.update(decrypted_assets)
+    _verify_decrypted_asset_membership(stored, cached_names)
 
 
 def omit_unset_sealed_defaults(
@@ -1114,6 +1118,14 @@ class BundleIntegrityError(Exception):
     """A bundle's recomputed digest does not match its sealed manifest -- the
     ``workflow.json`` or a template asset was altered after the manifest was
     written."""
+
+
+def _verify_decrypted_asset_membership(
+    stored: BundleManifest, names: Iterable[str]
+) -> None:
+    """Encryption authenticates bytes, not membership in the workflow seal."""
+    if any(rel not in stored.file_hashes for rel in names):
+        raise BundleIntegrityError("decrypted asset is outside the verified manifest")
 
 
 def _verify_asset_hashes(
