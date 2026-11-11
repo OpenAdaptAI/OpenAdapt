@@ -175,3 +175,26 @@ def test_generated_transient_and_terminal_recheck_histories(tmp_path, monkeypatc
                 assert _attempt(first).rechecked["receipt_sha256"] == first.receipt_sha256
 
     history()
+
+
+@pytest.mark.parametrize("receipt_sha256", ["b" * 64, ""], ids=["different", "missing"])
+def test_confirmed_settlement_rejects_a_different_or_missing_receipt(receipt_sha256):
+    ledger, key = controls._settled_ledger("CONFIRMED")
+    before = ledger.latest(key)
+    assert before is not None
+    state = RecheckState(payload={"receipt": {"correlation_id": "first"}})
+    late = verifier.RecheckResult(
+        outcome="CONFIRMED", frame="held", receipt_sha256=receipt_sha256
+    )
+    reply = verifier._mark_rechecked(
+        ledger,
+        state,
+        late,
+        controls._NoFrameContract(),
+        expected_revision=before.revision,
+    )
+    assert reply.outcome == "UNCERTAIN" and not reply.verified
+    after = ledger.latest(key)
+    assert after is not None
+    assert after.resolved == before.resolved
+    assert after.revision == before.revision and after.rechecked is None

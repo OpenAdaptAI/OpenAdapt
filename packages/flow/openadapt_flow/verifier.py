@@ -2524,6 +2524,12 @@ def _mark_rechecked(
                     "a later positive read does not change that settlement",
                 ],
             )
+        if (attempt.resolved or {}).get("receipt_sha256") != late.receipt_sha256:
+            return _replace(
+                late,
+                outcome="UNCERTAIN",
+                reasons=[*late.reasons, "the ledger confirmation names another receipt"],
+            )
         # Only reached after this contract's authenticated checkpoint and
         # actual recheck confirmed.
         coverage = _sql_history_coverage(contract)
