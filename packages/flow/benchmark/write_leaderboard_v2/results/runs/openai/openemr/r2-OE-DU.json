@@ -1,0 +1,101 @@
+{
+ "id": "OE-DU",
+ "app": "openemr",
+ "class": "duplicate",
+ "note": "The save is delivered twice.",
+ "agent_s": 64.2,
+ "cost_usd": 0.12196,
+ "claim": {
+  "status": "not_done",
+  "id": "Birth Sex is required to save, but the task requires leaving that field unchanged.",
+  "note": "RESULT: NOT DONE Birth Sex is required to save, but the task requires leaving that field unchanged.",
+  "claim_line": true,
+  "final_text": "RESULT: NOT DONE Birth Sex is required to save, but the task requires leaving that field unchanged.",
+  "model_calls": 21,
+  "actions": 38,
+  "tokens_in": 314461,
+  "tokens_out": 913,
+  "end_url": "http://127.0.0.1:9866/interface/main/tabs/main.php?token_main=s60f6nhCLU5bnzxLkKIMZk9lr7bTQaukt1cLoJkN"
+ },
+ "oracle": {
+  "verdict": "missing",
+  "reasons": [
+   "no new record"
+  ],
+  "new": [],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": true
+ },
+ "proxy": [
+  {
+   "t": 1794428333.52,
+   "method": "POST",
+   "path": "/interface/main/main_screen.php",
+   "save": false,
+   "status": 302,
+   "ms": 238
+  },
+  {
+   "t": 1794428333.981,
+   "method": "POST",
+   "path": "/library/ajax/dated_reminders_counter.php",
+   "save": false,
+   "status": 200,
+   "ms": 21
+  },
+  {
+   "t": 1794428334.067,
+   "method": "POST",
+   "path": "/interface/main/dated_reminders/dated_reminders.php",
+   "save": false,
+   "status": 200,
+   "ms": 19
+  },
+  {
+   "t": 1794428344.023,
+   "method": "POST",
+   "path": "/library/ajax/execute_background_services.php",
+   "save": false,
+   "status": 200,
+   "ms": 24
+  },
+  {
+   "t": 1794428347.546,
+   "method": "POST",
+   "path": "/interface/main/calendar/index.php",
+   "save": false,
+   "status": 200,
+   "ms": 80
+  },
+  {
+   "t": 1794428395.263,
+   "method": "POST",
+   "path": "/interface/main/dated_reminders/dated_reminders.php",
+   "save": false,
+   "status": 200,
+   "ms": 22
+  },
+  {
+   "t": 1794428395.262,
+   "method": "POST",
+   "path": "/library/ajax/dated_reminders_counter.php",
+   "save": false,
+   "status": 200,
+   "ms": 24
+  }
+ ],
+ "saves_seen": 0,
+ "fault_delivered": false,
+ "attempts": 1,
+ "set": "public",
+ "rep": 2,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 9.3,
+  "end": 8.3,
+  "waited_s": 0
+ }
+}

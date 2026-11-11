@@ -1,0 +1,349 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      23,
+      95
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      52,
+      121
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      243,
+      177
+     ]
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The layout shifted; the dropdown didn't open. Click again.",
+   "actions": [
+    {
+     "coordinate": [
+      243,
+      183
+     ]
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "Support"
+    },
+    {
+     "text": "Return"
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      700,
+      217
+     ]
+    },
+    {
+     "text": "New starter needs a laptop"
+    },
+    {
+     "coordinate": [
+      700,
+      350
+     ]
+    },
+    {
+     "text": "Starts on the first of the month."
+    },
+    {
+     "coordinate": [
+      845,
+      522
+     ]
+    },
+    {
+     "text": "12012026"
+    },
+    {
+     "coordinate": [
+      855,
+      555
+     ]
+    },
+    {
+     "text": "1.5"
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      841,
+      522
+     ]
+    },
+    {
+     "text": "20261201"
+    },
+    {
+     "region": [
+      640,
+      500,
+      1000,
+      570
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Due date is 2026-12-01. Create.",
+   "actions": [
+    {
+     "coordinate": [
+      44,
+      722
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I created issue #36 in the Synthetic Helpdesk project with tracker Support and subject \"New starter needs a laptop\". Its description is \"Starts on the first of the month.\", priority Normal, due date 2026-12-01 and estimated time 1.5 hours (shown as 1:30 h). I left every other field at its default; the start date shows 2026-11-11, which the form pre-filled.\n\nRESULT: DONE #36",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 23,
+   "y": 95,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 52,
+   "y": 121,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 243,
+   "y": 177,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 243,
+   "y": 183,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Support"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Return"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 217,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "New starter needs a laptop"
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 350,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Starts on the first of the month."
+  },
+  {
+   "a": "click",
+   "x": 845,
+   "y": 522,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "12012026"
+  },
+  {
+   "a": "click",
+   "x": 855,
+   "y": 555,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "1.5"
+  },
+  {
+   "a": "click",
+   "x": 841,
+   "y": 522,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "20261201"
+  },
+  {
+   "a": "click",
+   "x": 44,
+   "y": 722,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6159,
+   "out": 92,
+   "usd": 0.016316,
+   "cached": 0
+  },
+  {
+   "in": 7655,
+   "out": 98,
+   "usd": 0.00596,
+   "cached": 6155
+  },
+  {
+   "in": 9151,
+   "out": 117,
+   "usd": 0.006445,
+   "cached": 7653
+  },
+  {
+   "in": 10646,
+   "out": 112,
+   "usd": 0.006691,
+   "cached": 9149
+  },
+  {
+   "in": 12136,
+   "out": 150,
+   "usd": 0.007358,
+   "cached": 10644
+  },
+  {
+   "in": 13685,
+   "out": 231,
+   "usd": 0.008613,
+   "cached": 12134
+  },
+  {
+   "in": 15385,
+   "out": 166,
+   "usd": 0.008651,
+   "cached": 13683
+  },
+  {
+   "in": 16947,
+   "out": 122,
+   "usd": 0.008206,
+   "cached": 15383
+  },
+  {
+   "in": 18459,
+   "out": 140,
+   "usd": 0.008573,
+   "cached": 16945
+  }
+ ]
+}

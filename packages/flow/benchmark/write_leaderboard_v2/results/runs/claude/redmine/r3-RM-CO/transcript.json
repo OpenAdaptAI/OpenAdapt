@@ -1,0 +1,349 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      217,
+      95
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "No existing duplicate (open filter only, but fine).",
+   "actions": [
+    {
+     "coordinate": [
+      889,
+      133
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Changing tracker reloads the form, so set it first.",
+   "actions": [
+    {
+     "coordinate": [
+      243,
+      177
+     ]
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Layout shifted; dropdown didn't open. Click again.",
+   "actions": [
+    {
+     "coordinate": [
+      243,
+      183
+     ]
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The dropdown may be open but not rendered in screenshots. Use keyboard: type \"Feature\".",
+   "actions": [
+    {
+     "text": "Feature"
+    },
+    {
+     "text": "Return"
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      700,
+      280
+     ]
+    },
+    {
+     "text": "Room booking reminders by email"
+    },
+    {
+     "coordinate": [
+      700,
+      415
+     ]
+    },
+    {
+     "text": "A reminder an hour before."
+    },
+    {
+     "coordinate": [
+      845,
+      586
+     ]
+    },
+    {
+     "text": "12122026"
+    },
+    {
+     "coordinate": [
+      855,
+      620
+     ]
+    },
+    {
+     "text": "6"
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      842,
+      595
+     ]
+    },
+    {
+     "text": "20261212"
+    },
+    {
+     "region": [
+      640,
+      510,
+      1280,
+      680
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Due date is 2026-12-12. Create.",
+   "actions": [
+    {
+     "coordinate": [
+      43,
+      791
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I created issue #97 in Synthetic Helpdesk with the values you gave. The issue page shows:\n\n- **Tracker:** Feature\n- **Subject:** Room booking reminders by email\n- **Description:** A reminder an hour before.\n- **Priority:** Normal\n- **Due date:** 12/12/2026\n- **Estimated time:** 6:00 h\n\nEvery other field is at its default. The start date is today's date, 11/11/2026, which the form filled in itself.\n\nMy first Enter keypress submitted the form with a blank subject and was rejected, so nothing was created from it. I also mistyped the due date once and corrected it before saving.\n\nRESULT: DONE #97",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 217,
+   "y": 95,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 889,
+   "y": 133,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 243,
+   "y": 177,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 243,
+   "y": 183,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Feature"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Return"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 280,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Room booking reminders by email"
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 415,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "A reminder an hour before."
+  },
+  {
+   "a": "click",
+   "x": 845,
+   "y": 586,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "12122026"
+  },
+  {
+   "a": "click",
+   "x": 855,
+   "y": 620,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "6"
+  },
+  {
+   "a": "click",
+   "x": 842,
+   "y": 595,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "20261212"
+  },
+  {
+   "a": "click",
+   "x": 43,
+   "y": 791,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6157,
+   "out": 92,
+   "usd": 0.01631,
+   "cached": 0
+  },
+  {
+   "in": 7653,
+   "out": 116,
+   "usd": 0.00614,
+   "cached": 6153
+  },
+  {
+   "in": 9167,
+   "out": 108,
+   "usd": 0.006399,
+   "cached": 7651
+  },
+  {
+   "in": 10653,
+   "out": 111,
+   "usd": 0.006662,
+   "cached": 9165
+  },
+  {
+   "in": 12142,
+   "out": 149,
+   "usd": 0.007347,
+   "cached": 10651
+  },
+  {
+   "in": 13690,
+   "out": 267,
+   "usd": 0.008972,
+   "cached": 12140
+  },
+  {
+   "in": 15426,
+   "out": 208,
+   "usd": 0.009162,
+   "cached": 13688
+  },
+  {
+   "in": 17030,
+   "out": 114,
+   "usd": 0.008239,
+   "cached": 15424
+  },
+  {
+   "in": 18542,
+   "out": 222,
+   "usd": 0.00941,
+   "cached": 17028
+  }
+ ]
+}

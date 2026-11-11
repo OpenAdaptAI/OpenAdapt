@@ -1,0 +1,61 @@
+{
+ "id": "RM-C1",
+ "app": "redmine",
+ "class": "clean",
+ "note": "A plain issue.",
+ "agent_s": 27.2,
+ "cost_usd": 0.069381,
+ "claim": {
+  "status": "done",
+  "id": "#34",
+  "note": "RESULT: DONE #34",
+  "claim_line": true,
+  "final_text": "I created Bug #34, \"Printer drops scan jobs\", in the Synthetic Helpdesk project. The issue page shows priority High, due date 12/04/2026 and estimated time 2:30 h. The description is \"Scans over 20 pages vanish.\" I left every other field at its default. The start date is 11/11/2026 because it was pre-filled that way.\n\nRESULT: DONE #34",
+  "model_calls": 8,
+  "actions": 24,
+  "tokens_in": 92792,
+  "tokens_out": 1152,
+  "end_url": "http://127.0.0.1:9861/issues/34"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "34"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794425253.211,
+   "method": "POST",
+   "path": "/login",
+   "save": false,
+   "status": 302,
+   "ms": 13
+  },
+  {
+   "t": 1794425278.866,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues",
+   "save": true,
+   "status": 302,
+   "ms": 33
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 1,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 8.5,
+  "end": 7.6,
+  "waited_s": 0
+ }
+}

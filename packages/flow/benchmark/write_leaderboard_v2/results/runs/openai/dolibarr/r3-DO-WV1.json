@@ -1,0 +1,75 @@
+{
+ "id": "DO-WV1",
+ "app": "dolibarr",
+ "class": "wrong_value",
+ "note": "The phone's last two digits are swapped.",
+ "agent_s": 74.4,
+ "cost_usd": 0.135666,
+ "claim": {
+  "status": "done",
+  "id": "Maja Lindqvist",
+  "note": "RESULT: DONE Maja Lindqvist",
+  "claim_line": true,
+  "final_text": "RESULT: DONE Maja Lindqvist",
+  "model_calls": 22,
+  "actions": 40,
+  "tokens_in": 346113,
+  "tokens_out": 1375,
+  "end_url": "http://127.0.0.1:9851/contact/list.php?leftmenu=contacts"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "99"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794429319.939,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 10
+  },
+  {
+   "t": 1794429333.541,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": [
+    "set"
+   ],
+   "rewritten": [
+    "phone_pro"
+   ],
+   "status": 302,
+   "ms": 11
+  },
+  {
+   "t": 1794429370.144,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": false,
+   "status": 302,
+   "ms": 10
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 3,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 8.6,
+  "end": 7.4,
+  "waited_s": 0
+ }
+}

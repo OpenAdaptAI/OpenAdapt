@@ -1,0 +1,665 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      806,
+      700
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "coordinate": [
+      391,
+      30
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      423,
+      65
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      444,
+      318
+     ]
+    },
+    {
+     "text": "Henrik"
+    },
+    {
+     "coordinate": [
+      670,
+      318
+     ]
+    },
+    {
+     "text": "Dahl"
+    },
+    {
+     "coordinate": [
+      426,
+      431
+     ]
+    },
+    {
+     "text": "1966-01-27"
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      972,
+      431
+     ]
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "Male"
+    },
+    {
+     "text": "Return"
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      640,
+      600
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 10
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Contact section is collapsed; the Who section collapsed? Open Contact.",
+   "actions": [
+    {
+     "coordinate": [
+      131,
+      465
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      479,
+      521
+     ]
+    },
+    {
+     "text": "64 Maple Drive"
+    },
+    {
+     "coordinate": [
+      444,
+      556
+     ]
+    },
+    {
+     "text": "Springfield"
+    },
+    {
+     "coordinate": [
+      419,
+      595
+     ]
+    },
+    {
+     "text": "01109"
+    },
+    {
+     "coordinate": [
+      461,
+      708
+     ]
+    },
+    {
+     "text": "413-555-0176"
+    },
+    {
+     "coordinate": [
+      1035,
+      743
+     ]
+    },
+    {
+     "text": "h.dahl@example.invalid"
+    },
+    {
+     "coordinate": [
+      1016,
+      556
+     ]
+    },
+    {
+     "text": "Massachusetts"
+    },
+    {
+     "text": "Return"
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      640,
+      400
+     ],
+     "scroll_direction": "up",
+     "scroll_amount": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1037,
+      466
+     ]
+    },
+    {
+     "text": "Male"
+    },
+    {
+     "text": "Return"
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": [
+      90,
+      410,
+      1180,
+      520
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      640,
+      500
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 30
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      285,
+      772
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "No duplicates. Confirm.",
+   "actions": [
+    {
+     "coordinate": [
+      599,
+      280
+     ]
+    },
+    {
+     "duration": 4
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Henrik Dahl is now registered as patient ID 4, with date of birth 1966-01-27. The search before saving found no existing patient with that name, so this is a new record.\n\nI entered the street, city, state (Massachusetts), postal code, home phone and email as given. The email went in the Contact Email field. I did not open the Contact tab on the saved record afterwards to re-check those values.\n\nThe form has two sex fields, Birth Sex and Sex. Birth Sex is required, so I set both to Male. Everything else stayed at its default. A product-registration pop-up was open when I started, and I dismissed it with \"Ask again later\".\n\nRESULT: DONE patient ID 4 (Henrik Dahl)",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 806,
+   "y": 700,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 391,
+   "y": 30,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 423,
+   "y": 65,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 444,
+   "y": 318,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Henrik"
+  },
+  {
+   "a": "click",
+   "x": 670,
+   "y": 318,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Dahl"
+  },
+  {
+   "a": "click",
+   "x": 426,
+   "y": 431,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "1966-01-27"
+  },
+  {
+   "a": "click",
+   "x": 972,
+   "y": 431,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Male"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Return"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 600,
+   "dx": 0,
+   "dy": 1200
+  },
+  {
+   "a": "click",
+   "x": 131,
+   "y": 465,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 479,
+   "y": 521,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "64 Maple Drive"
+  },
+  {
+   "a": "click",
+   "x": 444,
+   "y": 556,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Springfield"
+  },
+  {
+   "a": "click",
+   "x": 419,
+   "y": 595,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "01109"
+  },
+  {
+   "a": "click",
+   "x": 461,
+   "y": 708,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "413-555-0176"
+  },
+  {
+   "a": "click",
+   "x": 1035,
+   "y": 743,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "h.dahl@example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 1016,
+   "y": 556,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Massachusetts"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Return"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -360
+  },
+  {
+   "a": "click",
+   "x": 1037,
+   "y": 466,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Male"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Return"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 500,
+   "dx": 0,
+   "dy": 3600
+  },
+  {
+   "a": "click",
+   "x": 285,
+   "y": 772,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 599,
+   "y": 280,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 4.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6195,
+   "out": 189,
+   "usd": 0.017375,
+   "cached": 0
+  },
+  {
+   "in": 7819,
+   "out": 98,
+   "usd": 0.006287,
+   "cached": 6191
+  },
+  {
+   "in": 9315,
+   "out": 317,
+   "usd": 0.008477,
+   "cached": 7817
+  },
+  {
+   "in": 11069,
+   "out": 130,
+   "usd": 0.007552,
+   "cached": 9313
+  },
+  {
+   "in": 12577,
+   "out": 152,
+   "usd": 0.007507,
+   "cached": 11067
+  },
+  {
+   "in": 14128,
+   "out": 369,
+   "usd": 0.010086,
+   "cached": 12575
+  },
+  {
+   "in": 15883,
+   "out": 124,
+   "usd": 0.008457,
+   "cached": 14126
+  },
+  {
+   "in": 17405,
+   "out": 383,
+   "usd": 0.010815,
+   "cached": 15881
+  },
+  {
+   "in": 19328,
+   "out": 522,
+   "usd": 0.013512,
+   "cached": 17403
+  },
+  {
+   "in": 21228,
+   "out": 154,
+   "usd": 0.010159,
+   "cached": 19326
+  },
+  {
+   "in": 22793,
+   "out": 111,
+   "usd": 0.009272,
+   "cached": 21226
+  },
+  {
+   "in": 24282,
+   "out": 98,
+   "usd": 0.009265,
+   "cached": 22791
+  },
+  {
+   "in": 25778,
+   "out": 75,
+   "usd": 0.00935,
+   "cached": 24280
+  },
+  {
+   "in": 27238,
+   "out": 110,
+   "usd": 0.009909,
+   "cached": 25776
+  },
+  {
+   "in": 28746,
+   "out": 230,
+   "usd": 0.011521,
+   "cached": 27236
+  }
+ ]
+}

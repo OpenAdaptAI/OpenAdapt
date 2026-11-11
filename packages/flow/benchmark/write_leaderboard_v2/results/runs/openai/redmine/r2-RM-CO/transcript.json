@@ -1,0 +1,380 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_06d8e955288a8672016af4c8eae35c87d2a95b4c2b0efeef63",
+     "call_id": "call_Z79H0OtuaKgLTPkBZoxnKic7",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_06d8e955288a8672016af4c8eda7c887d29c73bdbb28aa65e9",
+     "call_id": "call_HUTs28USayN9uDHYZ5Huh1Bu",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 23,
+       "y": 94
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_06d8e955288a8672016af4c8efd52087d29c56f29749728517",
+     "call_id": "call_BEHmbeLp3TrsUPa6ecyjaWQz",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 49,
+       "y": 120
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_06d8e955288a8672016af4c8f22d6887d2873523e5bd34871d",
+     "call_id": "call_iwC71p4VOKdTqQEhS25BW0Nt",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 248,
+       "y": 176
+      },
+      {
+       "keys": [
+        "f"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ENTER"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_06d8e955288a8672016af4c8f4e00c87d283887b72aab0fe0d",
+     "call_id": "call_efdGHlBTVNQHPw86bGW3oDgt",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "text": "Room booking reminders by email",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 362,
+       "y": 386
+      },
+      {
+       "text": "A reminder an hour before.",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 847,
+       "y": 585
+      },
+      {
+       "keys": [
+        "ARROWUP"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_06d8e955288a8672016af4c8f8769087d2a39d8eeaf954a30e",
+     "call_id": "call_7SteS6SFvJFcVnlujevf1eNK",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "ARROWRIGHT"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "1"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "2"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ARROWRIGHT"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "1"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "2"
+       ],
+       "type": "keypress"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 853,
+       "y": 628
+      },
+      {
+       "text": "6",
+       "type": "type"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_06d8e955288a8672016af4c8fb595887d29e58d0372c64e29d",
+     "call_id": "call_Xj8CnYQpDDRpQJbtXD6zcXE8",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 44,
+       "y": 793
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: DONE 72",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "move",
+   "x": 23,
+   "y": 94
+  },
+  {
+   "a": "click",
+   "x": 49,
+   "y": 120,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 248,
+   "y": 176,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "f"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ENTER"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Room booking reminders by email"
+  },
+  {
+   "a": "click",
+   "x": 362,
+   "y": 386,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "A reminder an hour before."
+  },
+  {
+   "a": "click",
+   "x": 847,
+   "y": 585,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ARROWUP"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ARROWRIGHT"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "1"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "2"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ARROWRIGHT"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "1"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "2"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 853,
+   "y": 628,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "6"
+  },
+  {
+   "a": "click",
+   "x": 44,
+   "y": 793,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  }
+ ],
+ "usage": [
+  {
+   "in": 2215,
+   "out": 45,
+   "usd": 0.000898,
+   "cached": 2212
+  },
+  {
+   "in": 3432,
+   "out": 27,
+   "usd": 0.000962,
+   "cached": 3429
+  },
+  {
+   "in": 4684,
+   "out": 31,
+   "usd": 0.001252,
+   "cached": 4681
+  },
+  {
+   "in": 5940,
+   "out": 49,
+   "usd": 0.003944,
+   "cached": 4681
+  },
+  {
+   "in": 7222,
+   "out": 83,
+   "usd": 0.004587,
+   "cached": 5937
+  },
+  {
+   "in": 8549,
+   "out": 99,
+   "usd": 0.005094,
+   "cached": 7219
+  },
+  {
+   "in": 9901,
+   "out": 31,
+   "usd": 0.004729,
+   "cached": 8546
+  },
+  {
+   "in": 11157,
+   "out": 9,
+   "usd": 0.004588,
+   "cached": 9898
+  }
+ ]
+}

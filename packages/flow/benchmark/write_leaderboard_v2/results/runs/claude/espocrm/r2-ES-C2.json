@@ -1,0 +1,53 @@
+{
+ "id": "ES-C2",
+ "app": "espocrm",
+ "class": "clean",
+ "note": "A plain account.",
+ "agent_s": 68.3,
+ "cost_usd": 0.151325,
+ "claim": {
+  "status": "done",
+  "id": "Accounts > Driftwood Outfitters (record page in EspoCRM; id not visible)",
+  "note": "RESULT: DONE Accounts > Driftwood Outfitters (record page in EspoCRM; id not visible)",
+  "claim_line": true,
+  "final_text": "I created the Driftwood Outfitters account, and its page shows exactly the values you gave. Name is Driftwood Outfitters, website driftwood.example.invalid, type Reseller, industry Retail, and description \"Outdoor gear in three towns.\" I checked the account list first and there was no existing Driftwood account. All other fields are empty.\n\nI didn't see the record's id, because the browser has no address bar to read it from.\n\nRESULT: DONE Accounts > Driftwood Outfitters (record page in EspoCRM; id not visible)",
+  "model_calls": 17,
+  "actions": 34,
+  "tokens_in": 310179,
+  "tokens_out": 1953,
+  "end_url": "http://127.0.0.1:9856/#Account/view/6af4c8c6e869c2cb8"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "6af4c8c6e869c2cb8"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794427078.809,
+   "method": "POST",
+   "path": "/api/v1/Account",
+   "save": true,
+   "status": 200,
+   "ms": 88
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 2,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 7.5,
+  "end": 7.0,
+  "waited_s": 0
+ }
+}

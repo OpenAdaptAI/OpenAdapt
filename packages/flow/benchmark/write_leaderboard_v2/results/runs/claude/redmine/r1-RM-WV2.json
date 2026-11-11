@@ -1,0 +1,83 @@
+{
+ "id": "RM-WV2",
+ "app": "redmine",
+ "class": "wrong_value",
+ "note": "The due date moves a month later.",
+ "agent_s": 35.3,
+ "cost_usd": 0.097142,
+ "claim": {
+  "status": "done",
+  "id": "#40",
+  "note": "RESULT: DONE #40",
+  "claim_line": true,
+  "final_text": "I created issue #40 in Synthetic Helpdesk, and it now has all the requested values. These are tracker Feature, subject \"Add a dark theme to the kiosk\", description \"Staff asked for a night mode.\", priority Normal, due date 12/15/2026 and estimated time 4:00 h. I left every other field at its default.\n\nThe due date was saved as 01/15/2027 on the first save, even though the form showed 2026-12-15. I edited the issue and corrected it, so the issue's history now has one entry recording that change.\n\nRESULT: DONE #40",
+  "model_calls": 11,
+  "actions": 29,
+  "tokens_in": 152625,
+  "tokens_out": 1668,
+  "end_url": "http://127.0.0.1:9861/issues/40"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "40"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794425522.537,
+   "method": "POST",
+   "path": "/login",
+   "save": false,
+   "status": 302,
+   "ms": 8
+  },
+  {
+   "t": 1794425536.911,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues/new.js",
+   "save": false,
+   "status": 200,
+   "ms": 25
+  },
+  {
+   "t": 1794425545.92,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues",
+   "save": true,
+   "fault": [
+    "set"
+   ],
+   "rewritten": [
+    "issue[due_date]"
+   ],
+   "status": 302,
+   "ms": 27
+  },
+  {
+   "t": 1794425555.964,
+   "method": "POST",
+   "path": "/issues/40",
+   "save": false,
+   "status": 302,
+   "ms": 28
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 1,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 7.0,
+  "end": 7.8,
+  "waited_s": 0
+ }
+}

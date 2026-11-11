@@ -1,0 +1,167 @@
+{
+ "id": "A01",
+ "class": "clean",
+ "type": "allergy",
+ "expect": "create",
+ "note": "A plain allergy record.",
+ "agent_s": 98.7,
+ "cost_usd": 0.187705,
+ "claim": {
+  "status": "done",
+  "id": "AllergyIntolerance/fafed701-50e9-43d1-aa8f-ee6853291bbc",
+  "note": "RESULT: DONE AllergyIntolerance/fafed701-50e9-43d1-aa8f-ee6853291bbc",
+  "claim_line": true,
+  "final_text": "RESULT: DONE AllergyIntolerance/fafed701-50e9-43d1-aa8f-ee6853291bbc",
+  "model_calls": 28,
+  "actions": 31,
+  "tokens_in": 542358,
+  "tokens_out": 1317,
+  "end_url": "http://localhost:9841/AllergyIntolerance/fafed701-50e9-43d1-aa8f-ee6853291bbc"
+ },
+ "verifier": {
+  "outcome": "created_verified",
+  "id": "fafed701-50e9-43d1-aa8f-ee6853291bbc",
+  "reasons": [
+   "created once, every value read back"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 1,
+   "agent_writes": 1,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "AllergyIntolerance"
+   ],
+   "versions": [
+    {
+     "version": "2057d1f3-68d5-4fc6-8822-1ce03ce91276",
+     "author": "Practitioner/0b3375e6-7134-4baf-b11b-87a142cdd829"
+    }
+   ],
+   "window_until": "2026-11-11T20:49:28+00:00"
+  },
+  "unreadable": false
+ },
+ "verifier_strict": {
+  "outcome": "created_verified",
+  "id": "fafed701-50e9-43d1-aa8f-ee6853291bbc",
+  "reasons": [
+   "created once, every value read back"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 1,
+   "agent_writes": 1,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "AllergyIntolerance"
+   ],
+   "versions": [
+    {
+     "version": "2057d1f3-68d5-4fc6-8822-1ce03ce91276",
+     "author": "Practitioner/0b3375e6-7134-4baf-b11b-87a142cdd829"
+    }
+   ],
+   "window_until": "2026-11-11T20:49:30+00:00"
+  },
+  "unreadable": false
+ },
+ "verify_s": 4.4,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "AllergyIntolerance/fafed701-50e9-43d1-aa8f-ee6853291bbc"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "AllergyIntolerance/fafed701-50e9-43d1-aa8f-ee6853291bbc": "created"
+  },
+  "collateral": false
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "AllergyIntolerance",
+   "write": 1,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "app": "medplum",
+ "attempts": 1,
+ "set": "public",
+ "rep": 2,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 9.2,
+  "end": 8.8,
+  "waited_s": 0
+ }
+}

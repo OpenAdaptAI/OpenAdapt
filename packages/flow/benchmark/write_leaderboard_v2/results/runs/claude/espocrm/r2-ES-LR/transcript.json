@@ -1,0 +1,618 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      23,
+      166
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Let me check for an existing record first.",
+   "actions": [
+    {
+     "coordinate": [
+      340,
+      113
+     ]
+    },
+    {
+     "text": "Heron\n"
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1194,
+      63
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      263,
+      233
+     ]
+    },
+    {
+     "text": "Heron Print Works"
+    },
+    {
+     "coordinate": [
+      651,
+      233
+     ]
+    },
+    {
+     "text": "heron.example.invalid"
+    },
+    {
+     "coordinate": [
+      457,
+      702
+     ]
+    },
+    {
+     "text": "Labels and packaging."
+    },
+    {
+     "coordinate": [
+      263,
+      619
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      121,
+      683
+     ]
+    },
+    {
+     "coordinate": [
+      651,
+      619
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The industry dropdown didn't open; click again.",
+   "actions": [
+    {
+     "coordinate": [
+      651,
+      619
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Try typing to jump to Manufacturing.",
+   "actions": [
+    {
+     "text": "Manufacturing"
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      525,
+      656
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": [
+      64,
+      540,
+      852,
+      740
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      95,
+      113
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The save returned Error 504, so the record may or may not exist. I'll check the list before retrying to avoid a duplicate.",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {
+     "coordinate": [
+      126,
+      57
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      418,
+      77
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The record was saved despite the error. Let me verify its details.",
+   "actions": [
+    {
+     "coordinate": [
+      156,
+      251
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The Heron Print Works account now exists with the values you asked for. Clicking Save returned an \"Error 504\" message, but the record had been created anyway. I checked the Accounts list before retrying, so there is only one Heron Print Works.\n\nIts page shows:\n- **Name:** Heron Print Works\n- **Website:** heron.example.invalid\n- **Type:** Customer\n- **Industry:** Manufacturing\n- **Description:** Labels and packaging.\n\nEvery other field is empty. The browser shows no address bar, so I couldn't read the record's ID or URL. It is the Heron Print Works entry in the Accounts list.\n\nRESULT: DONE Account \"Heron Print Works\" exists in Accounts (ID/URL not visible in this browser view)",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 23,
+   "y": 166,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 340,
+   "y": 113,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Heron\n"
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 1194,
+   "y": 63,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 263,
+   "y": 233,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Heron Print Works"
+  },
+  {
+   "a": "click",
+   "x": 651,
+   "y": 233,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "heron.example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 457,
+   "y": 702,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Labels and packaging."
+  },
+  {
+   "a": "click",
+   "x": 263,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 121,
+   "y": 683,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 651,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 651,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "type",
+   "text": "Manufacturing"
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 525,
+   "y": 656,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 95,
+   "y": 113,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 126,
+   "y": 57,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 418,
+   "y": 77,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 156,
+   "y": 251,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6139,
+   "out": 92,
+   "usd": 0.016266,
+   "cached": 0
+  },
+  {
+   "in": 7635,
+   "out": 75,
+   "usd": 0.005726,
+   "cached": 6135
+  },
+  {
+   "in": 9095,
+   "out": 137,
+   "usd": 0.006551,
+   "cached": 7633
+  },
+  {
+   "in": 10633,
+   "out": 99,
+   "usd": 0.006658,
+   "cached": 9093
+  },
+  {
+   "in": 12130,
+   "out": 75,
+   "usd": 0.006623,
+   "cached": 10631
+  },
+  {
+   "in": 13590,
+   "out": 231,
+   "usd": 0.00839,
+   "cached": 12128
+  },
+  {
+   "in": 15291,
+   "out": 129,
+   "usd": 0.008264,
+   "cached": 13588
+  },
+  {
+   "in": 16823,
+   "out": 122,
+   "usd": 0.008112,
+   "cached": 15289
+  },
+  {
+   "in": 18335,
+   "out": 119,
+   "usd": 0.008338,
+   "cached": 16821
+  },
+  {
+   "in": 19842,
+   "out": 112,
+   "usd": 0.008558,
+   "cached": 18333
+  },
+  {
+   "in": 21351,
+   "out": 106,
+   "usd": 0.008804,
+   "cached": 19840
+  },
+  {
+   "in": 22847,
+   "out": 83,
+   "usd": 0.008844,
+   "cached": 21349
+  },
+  {
+   "in": 24307,
+   "out": 331,
+   "usd": 0.011533,
+   "cached": 22845
+  },
+  {
+   "in": 26040,
+   "out": 106,
+   "usd": 0.010257,
+   "cached": 24305
+  },
+  {
+   "in": 27536,
+   "out": 83,
+   "usd": 0.009782,
+   "cached": 26038
+  },
+  {
+   "in": 28996,
+   "out": 117,
+   "usd": 0.010331,
+   "cached": 27534
+  },
+  {
+   "in": 30511,
+   "out": 75,
+   "usd": 0.01034,
+   "cached": 28994
+  },
+  {
+   "in": 31971,
+   "out": 308,
+   "usd": 0.012836,
+   "cached": 30509
+  }
+ ]
+}

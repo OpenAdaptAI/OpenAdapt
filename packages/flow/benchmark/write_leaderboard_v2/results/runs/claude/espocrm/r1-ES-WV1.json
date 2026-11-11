@@ -1,0 +1,67 @@
+{
+ "id": "ES-WV1",
+ "app": "espocrm",
+ "class": "wrong_value",
+ "note": "The industry changes.",
+ "agent_s": 74.5,
+ "cost_usd": 0.177068,
+ "claim": {
+  "status": "done",
+  "id": "Accounts > Elmstead Bakery (record page in EspoCRM; id not visible, no address bar)",
+  "note": "RESULT: DONE Accounts > Elmstead Bakery (record page in EspoCRM; id not visible, no address bar)",
+  "claim_line": true,
+  "final_text": "The Elmstead Bakery account now exists with website elmstead.example.invalid, type Customer, industry Hospitality and description \"Bread for four cafes.\" All other fields are blank. When I first saved it, the industry came through as Agriculture instead of Hospitality. I edited the record and saved again, and the page now shows Hospitality. The browser has no address bar, so I couldn't read the record's URL or id.\n\nRESULT: DONE Accounts > Elmstead Bakery (record page in EspoCRM; id not visible, no address bar)",
+  "model_calls": 19,
+  "actions": 43,
+  "tokens_in": 377189,
+  "tokens_out": 2431,
+  "end_url": "http://127.0.0.1:9856/#Account/view/6af4c2f112acee7ac"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "6af4c2f112acee7ac"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794425584.933,
+   "method": "POST",
+   "path": "/api/v1/Account",
+   "save": true,
+   "fault": [
+    "set"
+   ],
+   "rewritten": [
+    "industry"
+   ],
+   "status": 200,
+   "ms": 85
+  },
+  {
+   "t": 1794425610.316,
+   "method": "PUT",
+   "path": "/api/v1/Account/6af4c2f112acee7ac",
+   "save": false,
+   "status": 200,
+   "ms": 74
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 1,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 6.9,
+  "end": 6.7,
+  "waited_s": 0
+ }
+}

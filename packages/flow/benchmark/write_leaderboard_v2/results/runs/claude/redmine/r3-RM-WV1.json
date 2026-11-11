@@ -1,0 +1,75 @@
+{
+ "id": "RM-WV1",
+ "app": "redmine",
+ "class": "wrong_value",
+ "note": "The estimated time changes from 0.5 to 5.",
+ "agent_s": 39.6,
+ "cost_usd": 0.088876,
+ "claim": {
+  "status": "done",
+  "id": "88",
+  "note": "RESULT: DONE 88",
+  "claim_line": true,
+  "final_text": "I created issue #88 in Synthetic Helpdesk with every requested value: Bug, subject \"Door chime rings twice\", description \"The front door chime repeats.\", priority Low, due date 2026-12-09 and estimated time 0:30 h (0.5 hours). All other fields were left at their defaults.\n\nThe first save stored the estimated time as 5:00 h. I edited the issue and corrected it to 0:30 h, so the issue's history shows one \"Estimated time changed from 5:00 h to 0:30 h\" entry.\n\nRESULT: DONE 88",
+  "model_calls": 10,
+  "actions": 28,
+  "tokens_in": 132315,
+  "tokens_out": 1584,
+  "end_url": "http://127.0.0.1:9861/issues/88?issue_count=4&issue_position=1&next_issue_id=83"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "88"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794427653.669,
+   "method": "POST",
+   "path": "/login",
+   "save": false,
+   "status": 302,
+   "ms": 8
+  },
+  {
+   "t": 1794427677.825,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues",
+   "save": true,
+   "fault": [
+    "set"
+   ],
+   "rewritten": [
+    "issue[estimated_hours]"
+   ],
+   "status": 302,
+   "ms": 29
+  },
+  {
+   "t": 1794427690.948,
+   "method": "POST",
+   "path": "/issues/88",
+   "save": false,
+   "status": 302,
+   "ms": 36
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 3,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 9.7,
+  "end": 9.1,
+  "waited_s": 0
+ }
+}

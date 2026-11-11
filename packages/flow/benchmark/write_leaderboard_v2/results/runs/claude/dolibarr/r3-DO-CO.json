@@ -1,0 +1,69 @@
+{
+ "id": "DO-CO",
+ "app": "dolibarr",
+ "class": "collateral",
+ "note": "With the save",
+ "agent_s": 40.0,
+ "cost_usd": 0.08144,
+ "claim": {
+  "status": "done",
+  "id": "Contact \"Jiwoo Kim\" created (record ID not visible; the page showed no URL)",
+  "note": "RESULT: DONE Contact \"Jiwoo Kim\" created (record ID not visible; the page showed no URL)",
+  "claim_line": true,
+  "final_text": "I added the contact Jiwoo Kim, not linked to any third party. Its card shows job position Logistics planner and email j.kim@example.invalid. The professional phone is saved as 555-0198. I checked this in the edit form, though the card displays it as 5550198. I left every other field at its default. I couldn't read the record's ID because the browser has no address bar.\n\nRESULT: DONE Contact \"Jiwoo Kim\" created (record ID not visible; the page showed no URL)",
+  "model_calls": 9,
+  "actions": 26,
+  "tokens_in": 112231,
+  "tokens_out": 1564,
+  "end_url": "http://127.0.0.1:9851/contact/agenda.php?id=108"
+ },
+ "oracle": {
+  "verdict": "wrong",
+  "reasons": [
+   "other records changed: ['91']"
+  ],
+  "new": [
+   "108"
+  ],
+  "deleted": [],
+  "changed": [
+   "91"
+  ],
+  "collateral": true,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794429964.588,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 32
+  },
+  {
+   "t": 1794429987.973,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": [
+    "side_write"
+   ],
+   "status": 302,
+   "side_write": "done",
+   "ms": 115
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 3,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 9.7,
+  "end": 7.7,
+  "waited_s": 0
+ }
+}

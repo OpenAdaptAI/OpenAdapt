@@ -1,0 +1,157 @@
+{
+ "id": "OE-C2",
+ "app": "openemr",
+ "class": "clean",
+ "note": "A plain registration.",
+ "agent_s": 59.8,
+ "cost_usd": 0.13762,
+ "claim": {
+  "status": "done",
+  "id": "patient id 4 (Lucia Ferreira)",
+  "note": "RESULT: DONE patient id 4 (Lucia Ferreira)",
+  "claim_line": true,
+  "final_text": "I registered Lucia Ferreira as a new patient, and her dashboard opened with patient ID 4 and date of birth 1984-11-03. The duplicate check found no matches.\n\n- **Fields filled:** first and last name, date of birth, street (18 Pine Avenue), city (Springfield), state (Massachusetts), postal code (01108), home phone (413-555-0173), and email. The email went into the Contact Email field.\n- **Sex:** The form has two fields that fit. Birth Sex is required, so I set it to Female. The separate Sex field also reads Female, because the task said \"sex\".\n- **Address casing:** The form shows the street and city in capitals (18 PINE AVENUE, SPRINGFIELD). I typed them in normal case.\n- **Not checked after saving:** I didn't open her demographics to confirm the saved values.\n- **Popup:** I dismissed the OpenEMR product-registration popup with \"Ask again later\" to get to the patient form.\n\nRESULT: DONE patient id 4 (Lucia Ferreira)",
+  "model_calls": 14,
+  "actions": 47,
+  "tokens_in": 235415,
+  "tokens_out": 2819,
+  "end_url": "http://127.0.0.1:9866/interface/main/tabs/main.php?token_main=PvyflOvixEGnitzD3esTfdSf0djJA7wztz4NdkCQ"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "4"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794425456.385,
+   "method": "POST",
+   "path": "/interface/main/main_screen.php",
+   "save": false,
+   "status": 302,
+   "ms": 241
+  },
+  {
+   "t": 1794425456.98,
+   "method": "POST",
+   "path": "/library/ajax/dated_reminders_counter.php",
+   "save": false,
+   "status": 200,
+   "ms": 19
+  },
+  {
+   "t": 1794425457.06,
+   "method": "POST",
+   "path": "/interface/main/dated_reminders/dated_reminders.php",
+   "save": false,
+   "status": 200,
+   "ms": 17
+  },
+  {
+   "t": 1794425467.035,
+   "method": "POST",
+   "path": "/library/ajax/execute_background_services.php",
+   "save": false,
+   "status": 200,
+   "ms": 23
+  },
+  {
+   "t": 1794425507.925,
+   "method": "POST",
+   "path": "/interface/new/new_comprehensive_save.php",
+   "save": true,
+   "status": 200,
+   "ms": 62
+  },
+  {
+   "t": 1794425508.446,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/labdata_fragment.php",
+   "save": false,
+   "status": 200,
+   "ms": 27
+  },
+  {
+   "t": 1794425508.442,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/disc_fragment.php",
+   "save": false,
+   "status": 200,
+   "ms": 48
+  },
+  {
+   "t": 1794425508.448,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/vitals_fragment.php",
+   "save": false,
+   "status": 200,
+   "ms": 42
+  },
+  {
+   "t": 1794425508.438,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/pnotes_fragment.php",
+   "save": false,
+   "status": 200,
+   "ms": 64
+  },
+  {
+   "t": 1794425508.438,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/stats.php",
+   "save": false,
+   "status": 200,
+   "ms": 74
+  },
+  {
+   "t": 1794425508.492,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/patient_reminders_fragment.php",
+   "save": false,
+   "status": 200,
+   "ms": 56
+  },
+  {
+   "t": 1794425508.476,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/clinical_reminders_fragment.php",
+   "save": false,
+   "status": 200,
+   "ms": 347
+  },
+  {
+   "t": 1794425517.342,
+   "method": "POST",
+   "path": "/interface/main/dated_reminders/dated_reminders.php",
+   "save": false,
+   "status": 200,
+   "ms": 29
+  },
+  {
+   "t": 1794425517.342,
+   "method": "POST",
+   "path": "/library/ajax/dated_reminders_counter.php",
+   "save": false,
+   "status": 200,
+   "ms": 31
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 1,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 9.2,
+  "end": 7.0,
+  "waited_s": 0
+ }
+}

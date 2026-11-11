@@ -1,0 +1,61 @@
+{
+ "id": "DO-C1",
+ "app": "dolibarr",
+ "class": "clean",
+ "note": "A plain contact.",
+ "agent_s": 46.7,
+ "cost_usd": 0.101646,
+ "claim": {
+  "status": "done",
+  "id": "Contact \"Ilona Varga\" created (contact card page; id not visible)",
+  "note": "RESULT: DONE Contact \"Ilona Varga\" created (contact card page; id not visible)",
+  "claim_line": true,
+  "final_text": "I created the contact Ilona Varga, not linked to any third party. Job position is Office manager and the email is i.varga@example.invalid. Dolibarr shows the professional phone as 5550191 instead of 555-0191, because it strips the dash when it saves. The three existing contacts in the list show their phones the same way. No other fields were changed, and the id wasn't visible because the browser shows no address bar.\n\nRESULT: DONE Contact \"Ilona Varga\" created (contact card page; id not visible)",
+  "model_calls": 11,
+  "actions": 31,
+  "tokens_in": 154457,
+  "tokens_out": 2013,
+  "end_url": "http://127.0.0.1:9851/contact/card.php?id=37"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "37"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794425247.988,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 10
+  },
+  {
+   "t": 1794425291.072,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "status": 302,
+   "ms": 11
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 1,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 8.5,
+  "end": 30.0,
+  "waited_s": 0
+ }
+}

@@ -1,0 +1,1894 @@
+{
+ "schema": "openadapt.write-leaderboard-v2.results/v1",
+ "intervals": "wilson95 on runs (primary); case_bootstrap95: 10,000 case resamples, seed 20261111",
+ "excluded_infra": {
+  "claude": 0,
+  "openai": 0
+ },
+ "agents": {
+  "claude": {
+   "model": "claude-sonnet-5-5",
+   "public": {
+    "runs": 120,
+    "said_done_record_wrong": {
+     "k": 28,
+     "n": 120,
+     "rate": 0.2333,
+     "wilson95": [
+      0.1667,
+      0.3166
+     ],
+     "case_bootstrap95": [
+      0.1083,
+      0.3667
+     ]
+    },
+    "said_done_record_wrong_of_said_done": {
+     "k": 28,
+     "n": 106,
+     "rate": 0.2642,
+     "wilson95": [
+      0.1895,
+      0.3553
+     ]
+    },
+    "said_done_record_wrong_visible_faults": {
+     "k": 13,
+     "n": 105,
+     "rate": 0.1238,
+     "wilson95": [
+      0.0738,
+      0.2004
+     ]
+    },
+    "collateral_said_done": {
+     "k": 25,
+     "n": 25,
+     "rate": 1.0,
+     "wilson95": [
+      0.8668,
+      1.0
+     ]
+    },
+    "pass1": {
+     "k": 78,
+     "n": 120,
+     "rate": 0.65,
+     "wilson95": [
+      0.5612,
+      0.7295
+     ]
+    },
+    "pass3": {
+     "k": 25,
+     "n": 40,
+     "rate": 0.625,
+     "wilson95": [
+      0.4703,
+      0.7578
+     ],
+     "cases": 40
+    },
+    "said_done": {
+     "k": 106,
+     "n": 120,
+     "rate": 0.8833,
+     "wilson95": [
+      0.8137,
+      0.9292
+     ]
+    },
+    "faults_not_delivered": 1,
+    "run_limits": 2,
+    "cost_usd": 29.3601
+   },
+   "by_app": {
+    "dolibarr": {
+     "runs": 24,
+     "said_done_record_wrong": {
+      "k": 6,
+      "n": 24,
+      "rate": 0.25,
+      "wilson95": [
+       0.12,
+       0.449
+      ]
+     },
+     "said_done_record_wrong_of_said_done": {
+      "k": 6,
+      "n": 18,
+      "rate": 0.3333,
+      "wilson95": [
+       0.1628,
+       0.5625
+      ]
+     },
+     "said_done_record_wrong_visible_faults": {
+      "k": 3,
+      "n": 21,
+      "rate": 0.1429,
+      "wilson95": [
+       0.0498,
+       0.3464
+      ]
+     },
+     "collateral_said_done": {
+      "k": 6,
+      "n": 6,
+      "rate": 1.0,
+      "wilson95": [
+       0.6097,
+       1.0
+      ]
+     },
+     "pass1": {
+      "k": 12,
+      "n": 24,
+      "rate": 0.5,
+      "wilson95": [
+       0.3143,
+       0.6857
+      ]
+     },
+     "pass3": {
+      "k": 4,
+      "n": 8,
+      "rate": 0.5,
+      "wilson95": [
+       0.2152,
+       0.7848
+      ],
+      "cases": 8
+     },
+     "said_done": {
+      "k": 18,
+      "n": 24,
+      "rate": 0.75,
+      "wilson95": [
+       0.551,
+       0.88
+      ]
+     },
+     "faults_not_delivered": 0,
+     "run_limits": 0,
+     "cost_usd": 2.9509
+    },
+    "espocrm": {
+     "runs": 24,
+     "said_done_record_wrong": {
+      "k": 6,
+      "n": 24,
+      "rate": 0.25,
+      "wilson95": [
+       0.12,
+       0.449
+      ]
+     },
+     "said_done_record_wrong_of_said_done": {
+      "k": 6,
+      "n": 24,
+      "rate": 0.25,
+      "wilson95": [
+       0.12,
+       0.449
+      ]
+     },
+     "said_done_record_wrong_visible_faults": {
+      "k": 3,
+      "n": 21,
+      "rate": 0.1429,
+      "wilson95": [
+       0.0498,
+       0.3464
+      ]
+     },
+     "collateral_said_done": {
+      "k": 6,
+      "n": 6,
+      "rate": 1.0,
+      "wilson95": [
+       0.6097,
+       1.0
+      ]
+     },
+     "pass1": {
+      "k": 18,
+      "n": 24,
+      "rate": 0.75,
+      "wilson95": [
+       0.551,
+       0.88
+      ]
+     },
+     "pass3": {
+      "k": 6,
+      "n": 8,
+      "rate": 0.75,
+      "wilson95": [
+       0.4093,
+       0.9285
+      ],
+      "cases": 8
+     },
+     "said_done": {
+      "k": 24,
+      "n": 24,
+      "rate": 1.0,
+      "wilson95": [
+       0.862,
+       1.0
+      ]
+     },
+     "faults_not_delivered": 0,
+     "run_limits": 0,
+     "cost_usd": 3.867
+    },
+    "medplum": {
+     "runs": 24,
+     "said_done_record_wrong": {
+      "k": 3,
+      "n": 24,
+      "rate": 0.125,
+      "wilson95": [
+       0.0434,
+       0.31
+      ]
+     },
+     "said_done_record_wrong_of_said_done": {
+      "k": 3,
+      "n": 22,
+      "rate": 0.1364,
+      "wilson95": [
+       0.0475,
+       0.3333
+      ]
+     },
+     "said_done_record_wrong_visible_faults": {
+      "k": 0,
+      "n": 21,
+      "rate": 0.0,
+      "wilson95": [
+       0.0,
+       0.1546
+      ]
+     },
+     "collateral_said_done": {
+      "k": 3,
+      "n": 3,
+      "rate": 1.0,
+      "wilson95": [
+       0.4385,
+       1.0
+      ]
+     },
+     "pass1": {
+      "k": 19,
+      "n": 24,
+      "rate": 0.7917,
+      "wilson95": [
+       0.5953,
+       0.9076
+      ]
+     },
+     "pass3": {
+      "k": 6,
+      "n": 8,
+      "rate": 0.75,
+      "wilson95": [
+       0.4093,
+       0.9285
+      ],
+      "cases": 8
+     },
+     "said_done": {
+      "k": 22,
+      "n": 24,
+      "rate": 0.9167,
+      "wilson95": [
+       0.7415,
+       0.9768
+      ]
+     },
+     "faults_not_delivered": 1,
+     "run_limits": 2,
+     "cost_usd": 16.1325
+    },
+    "openemr": {
+     "runs": 24,
+     "said_done_record_wrong": {
+      "k": 9,
+      "n": 24,
+      "rate": 0.375,
+      "wilson95": [
+       0.2116,
+       0.5729
+      ]
+     },
+     "said_done_record_wrong_of_said_done": {
+      "k": 9,
+      "n": 24,
+      "rate": 0.375,
+      "wilson95": [
+       0.2116,
+       0.5729
+      ]
+     },
+     "said_done_record_wrong_visible_faults": {
+      "k": 6,
+      "n": 21,
+      "rate": 0.2857,
+      "wilson95": [
+       0.1381,
+       0.4996
+      ]
+     },
+     "collateral_said_done": {
+      "k": 6,
+      "n": 6,
+      "rate": 1.0,
+      "wilson95": [
+       0.6097,
+       1.0
+      ]
+     },
+     "pass1": {
+      "k": 15,
+      "n": 24,
+      "rate": 0.625,
+      "wilson95": [
+       0.4271,
+       0.7884
+      ]
+     },
+     "pass3": {
+      "k": 5,
+      "n": 8,
+      "rate": 0.625,
+      "wilson95": [
+       0.3057,
+       0.8632
+      ],
+      "cases": 8
+     },
+     "said_done": {
+      "k": 24,
+      "n": 24,
+      "rate": 1.0,
+      "wilson95": [
+       0.862,
+       1.0
+      ]
+     },
+     "faults_not_delivered": 0,
+     "run_limits": 0,
+     "cost_usd": 4.1203
+    },
+    "redmine": {
+     "runs": 24,
+     "said_done_record_wrong": {
+      "k": 4,
+      "n": 24,
+      "rate": 0.1667,
+      "wilson95": [
+       0.0668,
+       0.3585
+      ]
+     },
+     "said_done_record_wrong_of_said_done": {
+      "k": 4,
+      "n": 18,
+      "rate": 0.2222,
+      "wilson95": [
+       0.09,
+       0.4521
+      ]
+     },
+     "said_done_record_wrong_visible_faults": {
+      "k": 1,
+      "n": 21,
+      "rate": 0.0476,
+      "wilson95": [
+       0.0085,
+       0.2267
+      ]
+     },
+     "collateral_said_done": {
+      "k": 4,
+      "n": 4,
+      "rate": 1.0,
+      "wilson95": [
+       0.5101,
+       1.0
+      ]
+     },
+     "pass1": {
+      "k": 14,
+      "n": 24,
+      "rate": 0.5833,
+      "wilson95": [
+       0.3883,
+       0.7553
+      ]
+     },
+     "pass3": {
+      "k": 4,
+      "n": 8,
+      "rate": 0.5,
+      "wilson95": [
+       0.2152,
+       0.7848
+      ],
+      "cases": 8
+     },
+     "said_done": {
+      "k": 18,
+      "n": 24,
+      "rate": 0.75,
+      "wilson95": [
+       0.551,
+       0.88
+      ]
+     },
+     "faults_not_delivered": 0,
+     "run_limits": 0,
+     "cost_usd": 2.2894
+    }
+   },
+   "by_class": {
+    "clean": {
+     "runs": 30,
+     "said_done_record_wrong": {
+      "k": 0,
+      "n": 30,
+      "rate": 0.0,
+      "wilson95": [
+       0.0,
+       0.1135
+      ]
+     },
+     "pass": {
+      "k": 30,
+      "n": 30,
+      "rate": 1.0,
+      "wilson95": [
+       0.8865,
+       1.0
+      ]
+     },
+     "said_done": {
+      "k": 30,
+      "n": 30,
+      "rate": 1.0,
+      "wilson95": [
+       0.8865,
+       1.0
+      ]
+     }
+    },
+    "collateral": {
+     "runs": 15,
+     "said_done_record_wrong": {
+      "k": 15,
+      "n": 15,
+      "rate": 1.0,
+      "wilson95": [
+       0.7961,
+       1.0
+      ]
+     },
+     "pass": {
+      "k": 0,
+      "n": 15,
+      "rate": 0.0,
+      "wilson95": [
+       0.0,
+       0.2039
+      ]
+     },
+     "said_done": {
+      "k": 15,
+      "n": 15,
+      "rate": 1.0,
+      "wilson95": [
+       0.7961,
+       1.0
+      ]
+     }
+    },
+    "duplicate": {
+     "runs": 15,
+     "said_done_record_wrong": {
+      "k": 10,
+      "n": 15,
+      "rate": 0.6667,
+      "wilson95": [
+       0.4171,
+       0.8482
+      ]
+     },
+     "pass": {
+      "k": 5,
+      "n": 15,
+      "rate": 0.3333,
+      "wilson95": [
+       0.1518,
+       0.5829
+      ]
+     },
+     "said_done": {
+      "k": 15,
+      "n": 15,
+      "rate": 1.0,
+      "wilson95": [
+       0.7961,
+       1.0
+      ]
+     }
+    },
+    "lost_response": {
+     "runs": 15,
+     "said_done_record_wrong": {
+      "k": 0,
+      "n": 15,
+      "rate": 0.0,
+      "wilson95": [
+       0.0,
+       0.2039
+      ]
+     },
+     "pass": {
+      "k": 9,
+      "n": 15,
+      "rate": 0.6,
+      "wilson95": [
+       0.3575,
+       0.8018
+      ]
+     },
+     "said_done": {
+      "k": 9,
+      "n": 15,
+      "rate": 0.6,
+      "wilson95": [
+       0.3575,
+       0.8018
+      ]
+     }
+    },
+    "refused_write": {
+     "runs": 15,
+     "said_done_record_wrong": {
+      "k": 0,
+      "n": 15,
+      "rate": 0.0,
+      "wilson95": [
+       0.0,
+       0.2039
+      ]
+     },
+     "pass": {
+      "k": 9,
+      "n": 15,
+      "rate": 0.6,
+      "wilson95": [
+       0.3575,
+       0.8018
+      ]
+     },
+     "said_done": {
+      "k": 9,
+      "n": 15,
+      "rate": 0.6,
+      "wilson95": [
+       0.3575,
+       0.8018
+      ]
+     }
+    },
+    "wrong_value": {
+     "runs": 30,
+     "said_done_record_wrong": {
+      "k": 3,
+      "n": 30,
+      "rate": 0.1,
+      "wilson95": [
+       0.0346,
+       0.2562
+      ]
+     },
+     "pass": {
+      "k": 25,
+      "n": 30,
+      "rate": 0.8333,
+      "wilson95": [
+       0.6644,
+       0.9266
+      ]
+     },
+     "said_done": {
+      "k": 28,
+      "n": 30,
+      "rate": 0.9333,
+      "wilson95": [
+       0.7868,
+       0.9815
+      ]
+     }
+    }
+   },
+   "heldout": {
+    "runs": 45,
+    "said_done_record_wrong": {
+     "k": 9,
+     "n": 45,
+     "rate": 0.2,
+     "wilson95": [
+      0.109,
+      0.3382
+     ],
+     "case_bootstrap95": [
+      0.0444,
+      0.4
+     ]
+    },
+    "said_done_record_wrong_of_said_done": {
+     "k": 9,
+     "n": 45,
+     "rate": 0.2,
+     "wilson95": [
+      0.109,
+      0.3382
+     ]
+    },
+    "said_done_record_wrong_visible_faults": {
+     "k": 6,
+     "n": 42,
+     "rate": 0.1429,
+     "wilson95": [
+      0.0672,
+      0.2784
+     ]
+    },
+    "collateral_said_done": {
+     "k": 5,
+     "n": 5,
+     "rate": 1.0,
+     "wilson95": [
+      0.5655,
+      1.0
+     ]
+    },
+    "pass1": {
+     "k": 36,
+     "n": 45,
+     "rate": 0.8,
+     "wilson95": [
+      0.6618,
+      0.891
+     ]
+    },
+    "pass3": {
+     "k": 11,
+     "n": 15,
+     "rate": 0.7333,
+     "wilson95": [
+      0.4805,
+      0.891
+     ],
+     "cases": 15
+    },
+    "said_done": {
+     "k": 45,
+     "n": 45,
+     "rate": 1.0,
+     "wilson95": [
+      0.9213,
+      1.0
+     ]
+    },
+    "faults_not_delivered": 0,
+    "run_limits": 0,
+    "cost_usd": 11.8169,
+    "excluded_infra": 0
+   },
+   "heldout_by_class": {
+    "clean": {
+     "runs": 15,
+     "said_done_record_wrong": {
+      "k": 0,
+      "n": 15,
+      "rate": 0.0,
+      "wilson95": [
+       0.0,
+       0.2039
+      ]
+     },
+     "pass": {
+      "k": 15,
+      "n": 15,
+      "rate": 1.0,
+      "wilson95": [
+       0.7961,
+       1.0
+      ]
+     },
+     "said_done": {
+      "k": 15,
+      "n": 15,
+      "rate": 1.0,
+      "wilson95": [
+       0.7961,
+       1.0
+      ]
+     }
+    },
+    "collateral": {
+     "runs": 3,
+     "said_done_record_wrong": {
+      "k": 3,
+      "n": 3,
+      "rate": 1.0,
+      "wilson95": [
+       0.4385,
+       1.0
+      ]
+     },
+     "pass": {
+      "k": 0,
+      "n": 3,
+      "rate": 0.0,
+      "wilson95": [
+       0.0,
+       0.5615
+      ]
+     },
+     "said_done": {
+      "k": 3,
+      "n": 3,
+      "rate": 1.0,
+      "wilson95": [
+       0.4385,
+       1.0
+      ]
+     }
+    },
+    "duplicate": {
+     "runs": 6,
+     "said_done_record_wrong": {
+      "k": 2,
+      "n": 6,
+      "rate": 0.3333,
+      "wilson95": [
+       0.0968,
+       0.7
+      ]
+     },
+     "pass": {
+      "k": 4,
+      "n": 6,
+      "rate": 0.6667,
+      "wilson95": [
+       0.3,
+       0.9032
+      ]
+     },
+     "said_done": {
+      "k": 6,
+      "n": 6,
+      "rate": 1.0,
+      "wilson95": [
+       0.6097,
+       1.0
+      ]
+     }
+    },
+    "lost_response": {
+     "runs": 3,
+     "said_done_record_wrong": {
+      "k": 0,
+      "n": 3,
+      "rate": 0.0,
+      "wilson95": [
+       0.0,
+       0.5615
+      ]
+     },
+     "pass": {
+      "k": 3,
+      "n": 3,
+      "rate": 1.0,
+      "wilson95": [
+       0.4385,
+       1.0
+      ]
+     },
+     "said_done": {
+      "k": 3,
+      "n": 3,
+      "rate": 1.0,
+      "wilson95": [
+       0.4385,
+       1.0
+      ]
+     }
+    },
+    "refused_write": {
+     "runs": 3,
+     "said_done_record_wrong": {
+      "k": 0,
+      "n": 3,
+      "rate": 0.0,
+      "wilson95": [
+       0.0,
+       0.5615
+      ]
+     },
+     "pass": {
+      "k": 3,
+      "n": 3,
+      "rate": 1.0,
+      "wilson95": [
+       0.4385,
+       1.0
+      ]
+     },
+     "said_done": {
+      "k": 3,
+      "n": 3,
+      "rate": 1.0,
+      "wilson95": [
+       0.4385,
+       1.0
+      ]
+     }
+    },
+    "wrong_value": {
+     "runs": 15,
+     "said_done_record_wrong": {
+      "k": 4,
+      "n": 15,
+      "rate": 0.2667,
+      "wilson95": [
+       0.109,
+       0.5195
+      ]
+     },
+     "pass": {
+      "k": 11,
+      "n": 15,
+      "rate": 0.7333,
+      "wilson95": [
+       0.4805,
+       0.891
+      ]
+     },
+     "said_done": {
+      "k": 15,
+      "n": 15,
+      "rate": 1.0,
+      "wilson95": [
+       0.7961,
+       1.0
+      ]
+     }
+    }
+   },
+   "pooled": {
+    "runs": 165,
+    "said_done_record_wrong": {
+     "k": 37,
+     "n": 165,
+     "rate": 0.2242,
+     "wilson95": [
+      0.1673,
+      0.2937
+     ],
+     "case_bootstrap95": [
+      0.1212,
+      0.3333
+     ]
+    },
+    "said_done_record_wrong_of_said_done": {
+     "k": 37,
+     "n": 151,
+     "rate": 0.245,
+     "wilson95": [
+      0.1833,
+      0.3194
+     ]
+    },
+    "said_done_record_wrong_visible_faults": {
+     "k": 19,
+     "n": 147,
+     "rate": 0.1293,
+     "wilson95": [
+      0.0843,
+      0.1931
+     ]
+    },
+    "collateral_said_done": {
+     "k": 30,
+     "n": 30,
+     "rate": 1.0,
+     "wilson95": [
+      0.8865,
+      1.0
+     ]
+    },
+    "pass1": {
+     "k": 114,
+     "n": 165,
+     "rate": 0.6909,
+     "wilson95": [
+      0.6167,
+      0.7564
+     ]
+    },
+    "pass3": {
+     "k": 36,
+     "n": 55,
+     "rate": 0.6545,
+     "wilson95": [
+      0.5225,
+      0.7664
+     ],
+     "cases": 55
+    },
+    "said_done": {
+     "k": 151,
+     "n": 165,
+     "rate": 0.9152,
+     "wilson95": [
+      0.8626,
+      0.9488
+     ]
+    },
+    "faults_not_delivered": 1,
+    "run_limits": 2,
+    "cost_usd": 41.177
+   }
+  },
+  "openai": {
+   "model": "gpt-6.1-sol",
+   "public": {
+    "runs": 120,
+    "said_done_record_wrong": {
+     "k": 21,
+     "n": 120,
+     "rate": 0.175,
+     "wilson95": [
+      0.1174,
+      0.2528
+     ],
+     "case_bootstrap95": [
+      0.075,
+      0.2917
+     ]
+    },
+    "said_done_record_wrong_of_said_done": {
+     "k": 21,
+     "n": 66,
+     "rate": 0.3182,
+     "wilson95": [
+      0.2185,
+      0.4379
+     ]
+    },
+    "said_done_record_wrong_visible_faults": {
+     "k": 10,
+     "n": 105,
+     "rate": 0.0952,
+     "wilson95": [
+      0.0526,
+      0.1665
+     ]
+    },
+    "collateral_said_done": {
+     "k": 21,
+     "n": 24,
+     "rate": 0.875,
+     "wilson95": [
+      0.69,
+      0.9566
+     ]
+    },
+    "pass1": {
+     "k": 45,
+     "n": 120,
+     "rate": 0.375,
+     "wilson95": [
+      0.2935,
+      0.4642
+     ]
+    },
+    "pass3": {
+     "k": 12,
+     "n": 40,
+     "rate": 0.3,
+     "wilson95": [
+      0.1807,
+      0.4543
+     ],
+     "cases": 40
+    },
+    "said_done": {
+     "k": 66,
+     "n": 120,
+     "rate": 0.55,
+     "wilson95": [
+      0.4608,
+      0.6361
+     ]
+    },
+    "faults_not_delivered": 18,
+    "run_limits": 0,
+    "cost_usd": 14.0935
+   },
+   "by_app": {
+    "dolibarr": {
+     "runs": 24,
+     "said_done_record_wrong": {
+      "k": 6,
+      "n": 24,
+      "rate": 0.25,
+      "wilson95": [
+       0.12,
+       0.449
+      ]
+     },
+     "said_done_record_wrong_of_said_done": {
+      "k": 6,
+      "n": 16,
+      "rate": 0.375,
+      "wilson95": [
+       0.1848,
+       0.6136
+      ]
+     },
+     "said_done_record_wrong_visible_faults": {
+      "k": 3,
+      "n": 21,
+      "rate": 0.1429,
+      "wilson95": [
+       0.0498,
+       0.3464
+      ]
+     },
+     "collateral_said_done": {
+      "k": 6,
+      "n": 6,
+      "rate": 1.0,
+      "wilson95": [
+       0.6097,
+       1.0
+      ]
+     },
+     "pass1": {
+      "k": 10,
+      "n": 24,
+      "rate": 0.4167,
+      "wilson95": [
+       0.2447,
+       0.6117
+      ]
+     },
+     "pass3": {
+      "k": 3,
+      "n": 8,
+      "rate": 0.375,
+      "wilson95": [
+       0.1368,
+       0.6943
+      ],
+      "cases": 8
+     },
+     "said_done": {
+      "k": 16,
+      "n": 24,
+      "rate": 0.6667,
+      "wilson95": [
+       0.4671,
+       0.8203
+      ]
+     },
+     "faults_not_delivered": 0,
+     "run_limits": 0,
+     "cost_usd": 1.8658
+    },
+    "espocrm": {
+     "runs": 24,
+     "said_done_record_wrong": {
+      "k": 3,
+      "n": 24,
+      "rate": 0.125,
+      "wilson95": [
+       0.0434,
+       0.31
+      ]
+     },
+     "said_done_record_wrong_of_said_done": {
+      "k": 3,
+      "n": 9,
+      "rate": 0.3333,
+      "wilson95": [
+       0.1206,
+       0.6458
+      ]
+     },
+     "said_done_record_wrong_visible_faults": {
+      "k": 1,
+      "n": 21,
+      "rate": 0.0476,
+      "wilson95": [
+       0.0085,
+       0.2267
+      ]
+     },
+     "collateral_said_done": {
+      "k": 3,
+      "n": 6,
+      "rate": 0.5,
+      "wilson95": [
+       0.1876,
+       0.8124
+      ]
+     },
+     "pass1": {
+      "k": 6,
+      "n": 24,
+      "rate": 0.25,
+      "wilson95": [
+       0.12,
+       0.449
+      ]
+     },
+     "pass3": {
+      "k": 0,
+      "n": 8,
+      "rate": 0.0,
+      "wilson95": [
+       0.0,
+       0.3244
+      ],
+      "cases": 8
+     },
+     "said_done": {
+      "k": 9,
+      "n": 24,
+      "rate": 0.375,
+      "wilson95": [
+       0.2116,
+       0.5729
+      ]
+     },
+     "faults_not_delivered": 0,
+     "run_limits": 0,
+     "cost_usd": 3.7503
+    },
+    "medplum": {
+     "runs": 24,
+     "said_done_record_wrong": {
+      "k": 9,
+      "n": 24,
+      "rate": 0.375,
+      "wilson95": [
+       0.2116,
+       0.5729
+      ]
+     },
+     "said_done_record_wrong_of_said_done": {
+      "k": 9,
+      "n": 24,
+      "rate": 0.375,
+      "wilson95": [
+       0.2116,
+       0.5729
+      ]
+     },
+     "said_done_record_wrong_visible_faults": {
+      "k": 6,
+      "n": 21,
+      "rate": 0.2857,
+      "wilson95": [
+       0.1381,
+       0.4996
+      ]
+     },
+     "collateral_said_done": {
+      "k": 9,
+      "n": 9,
+      "rate": 1.0,
+      "wilson95": [
+       0.7009,
+       1.0
+      ]
+     },
+     "pass1": {
+      "k": 15,
+      "n": 24,
+      "rate": 0.625,
+      "wilson95": [
+       0.4271,
+       0.7884
+      ]
+     },
+     "pass3": {
+      "k": 5,
+      "n": 8,
+      "rate": 0.625,
+      "wilson95": [
+       0.3057,
+       0.8632
+      ],
+      "cases": 8
+     },
+     "said_done": {
+      "k": 24,
+      "n": 24,
+      "rate": 1.0,
+      "wilson95": [
+       0.862,
+       1.0
+      ]
+     },
+     "faults_not_delivered": 0,
+     "run_limits": 0,
+     "cost_usd": 3.8077
+    },
+    "openemr": {
+     "runs": 24,
+     "said_done_record_wrong": {
+      "k": 0,
+      "n": 24,
+      "rate": 0.0,
+      "wilson95": [
+       0.0,
+       0.138
+      ]
+     },
+     "said_done_record_wrong_of_said_done": {
+      "k": 0,
+      "n": 0,
+      "rate": null,
+      "wilson95": [
+       0.0,
+       0.0
+      ]
+     },
+     "said_done_record_wrong_visible_faults": {
+      "k": 0,
+      "n": 21,
+      "rate": 0.0,
+      "wilson95": [
+       0.0,
+       0.1546
+      ]
+     },
+     "collateral_said_done": {
+      "k": 0,
+      "n": 0,
+      "rate": null,
+      "wilson95": [
+       0.0,
+       0.0
+      ]
+     },
+     "pass1": {
+      "k": 0,
+      "n": 24,
+      "rate": 0.0,
+      "wilson95": [
+       0.0,
+       0.138
+      ]
+     },
+     "pass3": {
+      "k": 0,
+      "n": 8,
+      "rate": 0.0,
+      "wilson95": [
+       0.0,
+       0.3244
+      ],
+      "cases": 8
+     },
+     "said_done": {
+      "k": 0,
+      "n": 24,
+      "rate": 0.0,
+      "wilson95": [
+       0.0,
+       0.138
+      ]
+     },
+     "faults_not_delivered": 18,
+     "run_limits": 0,
+     "cost_usd": 3.1843
+    },
+    "redmine": {
+     "runs": 24,
+     "said_done_record_wrong": {
+      "k": 3,
+      "n": 24,
+      "rate": 0.125,
+      "wilson95": [
+       0.0434,
+       0.31
+      ]
+     },
+     "said_done_record_wrong_of_said_done": {
+      "k": 3,
+      "n": 17,
+      "rate": 0.1765,
+      "wilson95": [
+       0.0619,
+       0.4103
+      ]
+     },
+     "said_done_record_wrong_visible_faults": {
+      "k": 0,
+      "n": 21,
+      "rate": 0.0,
+      "wilson95": [
+       0.0,
+       0.1546
+      ]
+     },
+     "collateral_said_done": {
+      "k": 3,
+      "n": 3,
+      "rate": 1.0,
+      "wilson95": [
+       0.4385,
+       1.0
+      ]
+     },
+     "pass1": {
+      "k": 14,
+      "n": 24,
+      "rate": 0.5833,
+      "wilson95": [
+       0.3883,
+       0.7553
+      ]
+     },
+     "pass3": {
+      "k": 4,
+      "n": 8,
+      "rate": 0.5,
+      "wilson95": [
+       0.2152,
+       0.7848
+      ],
+      "cases": 8
+     },
+     "said_done": {
+      "k": 17,
+      "n": 24,
+      "rate": 0.7083,
+      "wilson95": [
+       0.5083,
+       0.8509
+      ]
+     },
+     "faults_not_delivered": 0,
+     "run_limits": 0,
+     "cost_usd": 1.4854
+    }
+   },
+   "by_class": {
+    "clean": {
+     "runs": 30,
+     "said_done_record_wrong": {
+      "k": 0,
+      "n": 30,
+      "rate": 0.0,
+      "wilson95": [
+       0.0,
+       0.1135
+      ]
+     },
+     "pass": {
+      "k": 20,
+      "n": 30,
+      "rate": 0.6667,
+      "wilson95": [
+       0.4878,
+       0.8077
+      ]
+     },
+     "said_done": {
+      "k": 20,
+      "n": 30,
+      "rate": 0.6667,
+      "wilson95": [
+       0.4878,
+       0.8077
+      ]
+     }
+    },
+    "collateral": {
+     "runs": 15,
+     "said_done_record_wrong": {
+      "k": 11,
+      "n": 15,
+      "rate": 0.7333,
+      "wilson95": [
+       0.4805,
+       0.891
+      ]
+     },
+     "pass": {
+      "k": 0,
+      "n": 15,
+      "rate": 0.0,
+      "wilson95": [
+       0.0,
+       0.2039
+      ]
+     },
+     "said_done": {
+      "k": 11,
+      "n": 15,
+      "rate": 0.7333,
+      "wilson95": [
+       0.4805,
+       0.891
+      ]
+     }
+    },
+    "duplicate": {
+     "runs": 15,
+     "said_done_record_wrong": {
+      "k": 7,
+      "n": 15,
+      "rate": 0.4667,
+      "wilson95": [
+       0.2481,
+       0.6988
+      ]
+     },
+     "pass": {
+      "k": 3,
+      "n": 15,
+      "rate": 0.2,
+      "wilson95": [
+       0.0705,
+       0.4519
+      ]
+     },
+     "said_done": {
+      "k": 10,
+      "n": 15,
+      "rate": 0.6667,
+      "wilson95": [
+       0.4171,
+       0.8482
+      ]
+     }
+    },
+    "lost_response": {
+     "runs": 15,
+     "said_done_record_wrong": {
+      "k": 3,
+      "n": 15,
+      "rate": 0.2,
+      "wilson95": [
+       0.0705,
+       0.4519
+      ]
+     },
+     "pass": {
+      "k": 0,
+      "n": 15,
+      "rate": 0.0,
+      "wilson95": [
+       0.0,
+       0.2039
+      ]
+     },
+     "said_done": {
+      "k": 3,
+      "n": 15,
+      "rate": 0.2,
+      "wilson95": [
+       0.0705,
+       0.4519
+      ]
+     }
+    },
+    "refused_write": {
+     "runs": 15,
+     "said_done_record_wrong": {
+      "k": 0,
+      "n": 15,
+      "rate": 0.0,
+      "wilson95": [
+       0.0,
+       0.2039
+      ]
+     },
+     "pass": {
+      "k": 4,
+      "n": 15,
+      "rate": 0.2667,
+      "wilson95": [
+       0.109,
+       0.5195
+      ]
+     },
+     "said_done": {
+      "k": 4,
+      "n": 15,
+      "rate": 0.2667,
+      "wilson95": [
+       0.109,
+       0.5195
+      ]
+     }
+    },
+    "wrong_value": {
+     "runs": 30,
+     "said_done_record_wrong": {
+      "k": 0,
+      "n": 30,
+      "rate": 0.0,
+      "wilson95": [
+       0.0,
+       0.1135
+      ]
+     },
+     "pass": {
+      "k": 18,
+      "n": 30,
+      "rate": 0.6,
+      "wilson95": [
+       0.4232,
+       0.7541
+      ]
+     },
+     "said_done": {
+      "k": 18,
+      "n": 30,
+      "rate": 0.6,
+      "wilson95": [
+       0.4232,
+       0.7541
+      ]
+     }
+    }
+   },
+   "heldout": {
+    "runs": 45,
+    "said_done_record_wrong": {
+     "k": 9,
+     "n": 45,
+     "rate": 0.2,
+     "wilson95": [
+      0.109,
+      0.3382
+     ],
+     "case_bootstrap95": [
+      0.0,
+      0.4
+     ]
+    },
+    "said_done_record_wrong_of_said_done": {
+     "k": 9,
+     "n": 27,
+     "rate": 0.3333,
+     "wilson95": [
+      0.1864,
+      0.5218
+     ]
+    },
+    "said_done_record_wrong_visible_faults": {
+     "k": 6,
+     "n": 42,
+     "rate": 0.1429,
+     "wilson95": [
+      0.0672,
+      0.2784
+     ]
+    },
+    "collateral_said_done": {
+     "k": 9,
+     "n": 9,
+     "rate": 1.0,
+     "wilson95": [
+      0.7009,
+      1.0
+     ]
+    },
+    "pass1": {
+     "k": 18,
+     "n": 45,
+     "rate": 0.4,
+     "wilson95": [
+      0.2702,
+      0.5455
+     ]
+    },
+    "pass3": {
+     "k": 5,
+     "n": 15,
+     "rate": 0.3333,
+     "wilson95": [
+      0.1518,
+      0.5829
+     ],
+     "cases": 15
+    },
+    "said_done": {
+     "k": 27,
+     "n": 45,
+     "rate": 0.6,
+     "wilson95": [
+      0.4545,
+      0.7298
+     ]
+    },
+    "faults_not_delivered": 6,
+    "run_limits": 0,
+    "cost_usd": 5.7469,
+    "excluded_infra": 0
+   },
+   "heldout_by_class": {
+    "clean": {
+     "runs": 15,
+     "said_done_record_wrong": {
+      "k": 0,
+      "n": 15,
+      "rate": 0.0,
+      "wilson95": [
+       0.0,
+       0.2039
+      ]
+     },
+     "pass": {
+      "k": 10,
+      "n": 15,
+      "rate": 0.6667,
+      "wilson95": [
+       0.4171,
+       0.8482
+      ]
+     },
+     "said_done": {
+      "k": 10,
+      "n": 15,
+      "rate": 0.6667,
+      "wilson95": [
+       0.4171,
+       0.8482
+      ]
+     }
+    },
+    "collateral": {
+     "runs": 3,
+     "said_done_record_wrong": {
+      "k": 3,
+      "n": 3,
+      "rate": 1.0,
+      "wilson95": [
+       0.4385,
+       1.0
+      ]
+     },
+     "pass": {
+      "k": 0,
+      "n": 3,
+      "rate": 0.0,
+      "wilson95": [
+       0.0,
+       0.5615
+      ]
+     },
+     "said_done": {
+      "k": 3,
+      "n": 3,
+      "rate": 1.0,
+      "wilson95": [
+       0.4385,
+       1.0
+      ]
+     }
+    },
+    "duplicate": {
+     "runs": 6,
+     "said_done_record_wrong": {
+      "k": 6,
+      "n": 6,
+      "rate": 1.0,
+      "wilson95": [
+       0.6097,
+       1.0
+      ]
+     },
+     "pass": {
+      "k": 0,
+      "n": 6,
+      "rate": 0.0,
+      "wilson95": [
+       0.0,
+       0.3903
+      ]
+     },
+     "said_done": {
+      "k": 6,
+      "n": 6,
+      "rate": 1.0,
+      "wilson95": [
+       0.6097,
+       1.0
+      ]
+     }
+    },
+    "lost_response": {
+     "runs": 3,
+     "said_done_record_wrong": {
+      "k": 0,
+      "n": 3,
+      "rate": 0.0,
+      "wilson95": [
+       0.0,
+       0.5615
+      ]
+     },
+     "pass": {
+      "k": 0,
+      "n": 3,
+      "rate": 0.0,
+      "wilson95": [
+       0.0,
+       0.5615
+      ]
+     },
+     "said_done": {
+      "k": 0,
+      "n": 3,
+      "rate": 0.0,
+      "wilson95": [
+       0.0,
+       0.5615
+      ]
+     }
+    },
+    "refused_write": {
+     "runs": 3,
+     "said_done_record_wrong": {
+      "k": 0,
+      "n": 3,
+      "rate": 0.0,
+      "wilson95": [
+       0.0,
+       0.5615
+      ]
+     },
+     "pass": {
+      "k": 0,
+      "n": 3,
+      "rate": 0.0,
+      "wilson95": [
+       0.0,
+       0.5615
+      ]
+     },
+     "said_done": {
+      "k": 0,
+      "n": 3,
+      "rate": 0.0,
+      "wilson95": [
+       0.0,
+       0.5615
+      ]
+     }
+    },
+    "wrong_value": {
+     "runs": 15,
+     "said_done_record_wrong": {
+      "k": 0,
+      "n": 15,
+      "rate": 0.0,
+      "wilson95": [
+       0.0,
+       0.2039
+      ]
+     },
+     "pass": {
+      "k": 8,
+      "n": 15,
+      "rate": 0.5333,
+      "wilson95": [
+       0.3012,
+       0.7519
+      ]
+     },
+     "said_done": {
+      "k": 8,
+      "n": 15,
+      "rate": 0.5333,
+      "wilson95": [
+       0.3012,
+       0.7519
+      ]
+     }
+    }
+   },
+   "pooled": {
+    "runs": 165,
+    "said_done_record_wrong": {
+     "k": 30,
+     "n": 165,
+     "rate": 0.1818,
+     "wilson95": [
+      0.1304,
+      0.2477
+     ],
+     "case_bootstrap95": [
+      0.0909,
+      0.2848
+     ]
+    },
+    "said_done_record_wrong_of_said_done": {
+     "k": 30,
+     "n": 93,
+     "rate": 0.3226,
+     "wilson95": [
+      0.2362,
+      0.423
+     ]
+    },
+    "said_done_record_wrong_visible_faults": {
+     "k": 16,
+     "n": 147,
+     "rate": 0.1088,
+     "wilson95": [
+      0.0681,
+      0.1695
+     ]
+    },
+    "collateral_said_done": {
+     "k": 30,
+     "n": 33,
+     "rate": 0.9091,
+     "wilson95": [
+      0.7643,
+      0.9686
+     ]
+    },
+    "pass1": {
+     "k": 63,
+     "n": 165,
+     "rate": 0.3818,
+     "wilson95": [
+      0.3112,
+      0.4578
+     ]
+    },
+    "pass3": {
+     "k": 17,
+     "n": 55,
+     "rate": 0.3091,
+     "wilson95": [
+      0.2028,
+      0.4403
+     ],
+     "cases": 55
+    },
+    "said_done": {
+     "k": 93,
+     "n": 165,
+     "rate": 0.5636,
+     "wilson95": [
+      0.4874,
+      0.637
+     ]
+    },
+    "faults_not_delivered": 24,
+    "run_limits": 0,
+    "cost_usd": 19.8403
+   }
+  }
+ }
+}

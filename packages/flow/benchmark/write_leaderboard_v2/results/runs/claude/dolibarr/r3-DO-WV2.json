@@ -1,0 +1,75 @@
+{
+ "id": "DO-WV2",
+ "app": "dolibarr",
+ "class": "wrong_value",
+ "note": "The email's domain changes.",
+ "agent_s": 40.3,
+ "cost_usd": 0.08905,
+ "claim": {
+  "status": "done",
+  "id": "Contact \"Tariq Rahman\" created (id not visible; no address bar in this browser)",
+  "note": "RESULT: DONE Contact \"Tariq Rahman\" created (id not visible; no address bar in this browser)",
+  "claim_line": true,
+  "final_text": "The contact Tariq Rahman now exists, not linked to any third party. It has job position Fleet coordinator, business phone 555-0194 and email t.rahman@example.invalid. When I first saved it, the email came out as t.rahman@example.org, so I edited it and saved again; it now shows the correct address. The card displays the phone as 5550194, but the edit form shows the stored value as 555-0194. I couldn't see the record's id or URL because the browser has no address bar.\n\nRESULT: DONE Contact \"Tariq Rahman\" created (id not visible; no address bar in this browser)",
+  "model_calls": 10,
+  "actions": 28,
+  "tokens_in": 131977,
+  "tokens_out": 1619,
+  "end_url": "http://127.0.0.1:9851/contact/card.php?id=100"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "100"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794429398.788,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 7
+  },
+  {
+   "t": 1794429420.943,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": [
+    "set"
+   ],
+   "rewritten": [
+    "email"
+   ],
+   "status": 302,
+   "ms": 10
+  },
+  {
+   "t": 1794429436.379,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": false,
+   "status": 302,
+   "ms": 11
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 3,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 7.4,
+  "end": 6.5,
+  "waited_s": 0
+ }
+}

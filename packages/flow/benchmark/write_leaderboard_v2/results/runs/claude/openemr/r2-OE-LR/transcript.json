@@ -1,0 +1,743 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      806,
+      700
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "coordinate": [
+      404,
+      30
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      423,
+      65
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      444,
+      318
+     ]
+    },
+    {
+     "text": "Amara"
+    },
+    {
+     "coordinate": [
+      670,
+      318
+     ]
+    },
+    {
+     "text": "Nwosu"
+    },
+    {
+     "coordinate": [
+      426,
+      431
+     ]
+    },
+    {
+     "text": "2001-08-14"
+    },
+    {
+     "text": "Escape"
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Now the selects.",
+   "actions": [
+    {
+     "coordinate": [
+      1038,
+      466
+     ]
+    },
+    {
+     "region": null
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The select is focused; use keyboard typing.",
+   "actions": [
+    {
+     "text": "Female"
+    },
+    {
+     "text": "Return"
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": null
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      972,
+      431
+     ]
+    },
+    {
+     "text": "Female"
+    },
+    {
+     "text": "Return"
+    },
+    {
+     "coordinate": [
+      640,
+      600
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 10
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      131,
+      464
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      479,
+      521
+     ]
+    },
+    {
+     "text": "3 Willow Way"
+    },
+    {
+     "coordinate": [
+      444,
+      555
+     ]
+    },
+    {
+     "text": "Springfield"
+    },
+    {
+     "coordinate": [
+      419,
+      594
+     ]
+    },
+    {
+     "text": "01107"
+    },
+    {
+     "coordinate": [
+      461,
+      707
+     ]
+    },
+    {
+     "text": "413-555-0177"
+    },
+    {
+     "coordinate": [
+      1035,
+      743
+     ]
+    },
+    {
+     "text": "a.nwosu@example.invalid"
+    },
+    {
+     "coordinate": [
+      1016,
+      556
+     ]
+    },
+    {
+     "text": "Massachusetts"
+    },
+    {
+     "text": "Return"
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      640,
+      400
+     ],
+     "scroll_direction": "up",
+     "scroll_amount": 3
+    },
+    {
+     "region": null
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      640,
+      500
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 30
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": null
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      284,
+      772
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      599,
+      280
+     ]
+    },
+    {
+     "duration": 4
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1055,
+      31
+     ]
+    },
+    {
+     "text": "Nwosu\n"
+    },
+    {
+     "duration": 4
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I registered Amara Nwosu as a new patient, and a search for \"Nwosu\" now finds exactly one record. It shows date of birth 2001-08-14 and home phone 413-555-0177. After I clicked Create New Patient, the new patient's chart page stayed blank, so I didn't open the saved chart to check the address and email.\n\n- **Fields filled in:**\n  - First and last name\n  - Date of birth\n  - Sex: Female\n  - Street: 3 Willow Way\n  - City: Springfield\n  - State: Massachusetts\n  - Postal code: 01107\n  - Home phone\n  - Contact email: a.nwosu@example.invalid\n- **Birth Sex:** The form marks Birth Sex as required, so I also set it to Female to be able to submit. Every other field is as it was.\n- **Registration pop-up:** At the start, a product registration pop-up covered the screen. I closed it with \"Ask again later\".\n- **Address display:** The address and city display in capitals on the form, which looks like the form's own formatting.\n\nThe Patient Finder shows 4 as the External ID for this patient. I'm using that as the record's id, but I didn't confirm it's the internal patient number.\n\nRESULT: DONE 4",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 806,
+   "y": 700,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 404,
+   "y": 30,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 423,
+   "y": 65,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 444,
+   "y": 318,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Amara"
+  },
+  {
+   "a": "click",
+   "x": 670,
+   "y": 318,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Nwosu"
+  },
+  {
+   "a": "click",
+   "x": 426,
+   "y": 431,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "2001-08-14"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Escape"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 1038,
+   "y": 466,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Female"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Return"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 972,
+   "y": 431,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Female"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Return"
+   ]
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 600,
+   "dx": 0,
+   "dy": 1200
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 131,
+   "y": 464,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 479,
+   "y": 521,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "3 Willow Way"
+  },
+  {
+   "a": "click",
+   "x": 444,
+   "y": 555,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Springfield"
+  },
+  {
+   "a": "click",
+   "x": 419,
+   "y": 594,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "01107"
+  },
+  {
+   "a": "click",
+   "x": 461,
+   "y": 707,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "413-555-0177"
+  },
+  {
+   "a": "click",
+   "x": 1035,
+   "y": 743,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "a.nwosu@example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 1016,
+   "y": 556,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Massachusetts"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Return"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -360
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 500,
+   "dx": 0,
+   "dy": 3600
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 284,
+   "y": 772,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 599,
+   "y": 280,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 4.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 1055,
+   "y": 31,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Nwosu\n"
+  },
+  {
+   "a": "wait",
+   "s": 4.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6195,
+   "out": 185,
+   "usd": 0.017336,
+   "cached": 0
+  },
+  {
+   "in": 7815,
+   "out": 98,
+   "usd": 0.006277,
+   "cached": 6191
+  },
+  {
+   "in": 9311,
+   "out": 408,
+   "usd": 0.009387,
+   "cached": 7813
+  },
+  {
+   "in": 11175,
+   "out": 94,
+   "usd": 0.007466,
+   "cached": 9309
+  },
+  {
+   "in": 12655,
+   "out": 105,
+   "usd": 0.006989,
+   "cached": 11173
+  },
+  {
+   "in": 14133,
+   "out": 126,
+   "usd": 0.00749,
+   "cached": 12653
+  },
+  {
+   "in": 15666,
+   "out": 204,
+   "usd": 0.008703,
+   "cached": 14131
+  },
+  {
+   "in": 17303,
+   "out": 98,
+   "usd": 0.008209,
+   "cached": 15664
+  },
+  {
+   "in": 18799,
+   "out": 352,
+   "usd": 0.010724,
+   "cached": 17301
+  },
+  {
+   "in": 20691,
+   "out": 144,
+   "usd": 0.009933,
+   "cached": 18797
+  },
+  {
+   "in": 22221,
+   "out": 123,
+   "usd": 0.009197,
+   "cached": 20689
+  },
+  {
+   "in": 23742,
+   "out": 98,
+   "usd": 0.00923,
+   "cached": 22219
+  },
+  {
+   "in": 25238,
+   "out": 75,
+   "usd": 0.009242,
+   "cached": 23740
+  },
+  {
+   "in": 26698,
+   "out": 98,
+   "usd": 0.009681,
+   "cached": 25236
+  },
+  {
+   "in": 28194,
+   "out": 75,
+   "usd": 0.009833,
+   "cached": 26696
+  },
+  {
+   "in": 29654,
+   "out": 146,
+   "usd": 0.010752,
+   "cached": 28192
+  },
+  {
+   "in": 31209,
+   "out": 449,
+   "usd": 0.014312,
+   "cached": 29652
+  }
+ ]
+}

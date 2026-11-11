@@ -1,0 +1,173 @@
+{
+ "id": "A01",
+ "class": "clean",
+ "type": "allergy",
+ "expect": "create",
+ "note": "A plain allergy record.",
+ "agent_s": 143.6,
+ "cost_usd": 0.287685,
+ "claim": {
+  "status": "done",
+  "id": "AllergyIntolerance/95118fd2-05a4-42dc-828e-0e70521e2212",
+  "note": "RESULT: DONE AllergyIntolerance/95118fd2-05a4-42dc-828e-0e70521e2212",
+  "claim_line": true,
+  "final_text": "Rosa Delgado (born 1979-06-14) had no penicillin allergy on file, so I added one. There was no existing AllergyIntolerance for her, and the AllergyIntolerance list was empty before I created this one. It now shows exactly one record, and no duplicate was created.\n\n- **Patient:** only one Rosa Delgado came up in the Patient list (Patient/5d16a292-e51d-4074-b79e-046c8ea92a08).\n- **Code:** Allergy to penicillin, SNOMED CT 91936005.\n- **Criticality:** high.\n- **Clinical status:** active.\n- **Verification status:** confirmed.\n\nI wrote only the patient, code, criticality, clinicalStatus and verificationStatus fields.\n\nRESULT: DONE AllergyIntolerance/95118fd2-05a4-42dc-828e-0e70521e2212",
+  "model_calls": 26,
+  "actions": 53,
+  "tokens_in": 673139,
+  "tokens_out": 4788,
+  "end_url": "http://localhost:9841/AllergyIntolerance?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated"
+ },
+ "verifier": {
+  "outcome": "created_verified",
+  "id": "95118fd2-05a4-42dc-828e-0e70521e2212",
+  "reasons": [
+   "created once, every value read back"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 1,
+   "agent_writes": 1,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "AllergyIntolerance"
+   ],
+   "versions": [
+    {
+     "version": "2a700404-a879-4946-a1ba-1b5e4ade9b4c",
+     "author": "Practitioner/0b3375e6-7134-4baf-b11b-87a142cdd829"
+    }
+   ],
+   "window_until": "2026-11-11T20:47:41+00:00"
+  },
+  "unreadable": false
+ },
+ "verifier_strict": {
+  "outcome": "created_verified",
+  "id": "95118fd2-05a4-42dc-828e-0e70521e2212",
+  "reasons": [
+   "created once, every value read back"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 1,
+   "agent_writes": 1,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "AllergyIntolerance"
+   ],
+   "versions": [
+    {
+     "version": "2a700404-a879-4946-a1ba-1b5e4ade9b4c",
+     "author": "Practitioner/0b3375e6-7134-4baf-b11b-87a142cdd829"
+    }
+   ],
+   "window_until": "2026-11-11T20:47:43+00:00"
+  },
+  "unreadable": false
+ },
+ "verify_s": 4.5,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "AllergyIntolerance/95118fd2-05a4-42dc-828e-0e70521e2212"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "AllergyIntolerance/95118fd2-05a4-42dc-828e-0e70521e2212": "created"
+  },
+  "collateral": false
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "AllergyIntolerance",
+   "write": 1,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "app": "medplum",
+ "attempts": 1,
+ "set": "public",
+ "rep": 2,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 11.1,
+  "end": 9.2,
+  "waited_s": 0
+ }
+}

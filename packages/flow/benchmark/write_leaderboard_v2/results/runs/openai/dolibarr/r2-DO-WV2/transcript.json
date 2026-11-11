@@ -1,0 +1,651 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04402a4d667dbcf0016af4ca87075c87d2a86b0bfabc00c164",
+     "call_id": "call_U9wif3PKY2pccihPJiaQ9unx",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04402a4d667dbcf0016af4ca89a07887d29bf466fd293d0149",
+     "call_id": "call_wxS5740mq5gzFMU6Eo84dDbk",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 114,
+       "y": 26
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04402a4d667dbcf0016af4ca8bfef887d29e800fbe4ec6eb91",
+     "call_id": "call_L0UknID8EM2S1JSSmVIUtdZZ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 103,
+       "y": 369
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04402a4d667dbcf0016af4ca8f975887d2b39a94eb7fdbd23b",
+     "call_id": "call_IV2cPIioaZ862msQ6GEKb6V0",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "text": "Rahman",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 656,
+       "y": 198
+      },
+      {
+       "text": "Tariq",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 658,
+       "y": 295
+      },
+      {
+       "text": "Fleet coordinator",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 676,
+       "y": 478
+      },
+      {
+       "text": "555-0194",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 674,
+       "y": 545
+      },
+      {
+       "text": "t.rahman@example.invalid",
+       "type": "type"
+      },
+      {
+       "scroll_x": 0,
+       "scroll_y": 468,
+       "type": "scroll",
+       "x": 1178,
+       "y": 649
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04402a4d667dbcf0016af4ca93f14887d2945139ea06f754da",
+     "call_id": "call_y881EJCEBE3KGqADLzYNLMiM",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 719,
+       "y": 759
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04402a4d667dbcf0016af4ca96995487d281aa01e4418b9581",
+     "call_id": "call_sLDgIXxGNLRA1q8v6dbFcRro",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1008,
+       "y": 427
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04402a4d667dbcf0016af4ca9b1c8c87d2b7f51ab41eb5b0a1",
+     "call_id": "call_tvkxGRio2mJDWXF9BimI5Qha",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": 433,
+       "type": "scroll",
+       "x": 1141,
+       "y": 655
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04402a4d667dbcf0016af4ca9dff6c87d2a7ada3bd2fd50a2a",
+     "call_id": "call_lB1PurB6k74RTMYcWO3yYx3H",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 700,
+       "y": 402
+      },
+      {
+       "keys": [
+        "CTRL",
+        "a"
+       ],
+       "type": "keypress"
+      },
+      {
+       "text": "t.rahman@example.invalid",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 721,
+       "y": 760
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04402a4d667dbcf0016af4caa1aac087d296da81162a3bf9c2",
+     "call_id": "call_7my4kBx5Nwxd6pa9y19MBci0",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 696,
+       "y": 400
+      },
+      {
+       "keys": [
+        "Control",
+        "a"
+       ],
+       "type": "keypress"
+      },
+      {
+       "text": "t.rahman@example.invalid",
+       "type": "type"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04402a4d667dbcf0016af4caa5be1087d29d33bf4f97e77a79",
+     "call_id": "call_TQIXYboWA2ciWTrxEIZ3smUE",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 677,
+       "y": 159
+      },
+      {
+       "keys": [
+        "Control_L",
+        "a"
+       ],
+       "type": "keypress"
+      },
+      {
+       "text": "Rahman",
+       "type": "type"
+      }
+     ]
+    }
+   ],
+   "error": "Keyboard.press: Unknown key: \"Control_L\""
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04402a4d667dbcf0016af4caa8765487d2ab8051fae1dc1e77",
+     "call_id": "call_GbkWKXZPnUiXgMancHFQt4N3",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 674,
+       "y": 160
+      },
+      {
+       "keys": [
+        "CTRL",
+        "a"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04402a4d667dbcf0016af4caab09cc87d2b22013fafd19a3cf",
+     "call_id": "call_VBkVVRqFjiPBysCZTZasXQLw",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 674,
+       "y": 160
+      },
+      {
+       "keys": [
+        "CTRL",
+        "a"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04402a4d667dbcf0016af4cd071a4487d280f79c0cbb61c8d6",
+     "call_id": "call_NAOobZwPNqASBhEhDaZ9xc0g",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 676,
+       "y": 160
+      },
+      {
+       "keys": [
+        "CTRL",
+        "a"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE The contact was created, but the app saved a different email and I could not correct it to the requested value.",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 114,
+   "y": 26,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 103,
+   "y": 369,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Rahman"
+  },
+  {
+   "a": "click",
+   "x": 656,
+   "y": 198,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Tariq"
+  },
+  {
+   "a": "click",
+   "x": 658,
+   "y": 295,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Fleet coordinator"
+  },
+  {
+   "a": "click",
+   "x": 676,
+   "y": 478,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "555-0194"
+  },
+  {
+   "a": "click",
+   "x": 674,
+   "y": 545,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "t.rahman@example.invalid"
+  },
+  {
+   "a": "scroll",
+   "x": 1178,
+   "y": 649,
+   "dx": 0,
+   "dy": 468
+  },
+  {
+   "a": "click",
+   "x": 719,
+   "y": 759,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1008,
+   "y": 427,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 1141,
+   "y": 655,
+   "dx": 0,
+   "dy": 433
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 402,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "a"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "t.rahman@example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 721,
+   "y": 760,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 696,
+   "y": 400,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Control",
+    "a"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "t.rahman@example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 677,
+   "y": 159,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Control_L",
+    "a"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 674,
+   "y": 160,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "a"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 674,
+   "y": 160,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "a"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 676,
+   "y": 160,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "a"
+   ]
+  }
+ ],
+ "usage": [
+  {
+   "in": 2220,
+   "out": 22,
+   "usd": 0.000669,
+   "cached": 2217
+  },
+  {
+   "in": 3437,
+   "out": 31,
+   "usd": 0.001003,
+   "cached": 3434
+  },
+  {
+   "in": 4693,
+   "out": 31,
+   "usd": 0.003515,
+   "cached": 3434
+  },
+  {
+   "in": 5949,
+   "out": 154,
+   "usd": 0.004996,
+   "cached": 4690
+  },
+  {
+   "in": 7380,
+   "out": 31,
+   "usd": 0.004367,
+   "cached": 5946
+  },
+  {
+   "in": 8636,
+   "out": 46,
+   "usd": 0.004453,
+   "cached": 7377
+  },
+  {
+   "in": 9907,
+   "out": 38,
+   "usd": 0.004655,
+   "cached": 8633
+  },
+  {
+   "in": 11170,
+   "out": 71,
+   "usd": 0.005223,
+   "cached": 9904
+  },
+  {
+   "in": 12482,
+   "out": 82,
+   "usd": 0.005683,
+   "cached": 11167
+  },
+  {
+   "in": 13797,
+   "out": 72,
+   "usd": 0.005852,
+   "cached": 12479
+  },
+  {
+   "in": 15102,
+   "out": 42,
+   "usd": 0.005795,
+   "cached": 13794
+  },
+  {
+   "in": 16373,
+   "out": 59,
+   "usd": 0.006158,
+   "cached": 15099
+  },
+  {
+   "in": 17661,
+   "out": 69,
+   "usd": 0.004228,
+   "cached": 17658
+  },
+  {
+   "in": 18959,
+   "out": 42,
+   "usd": 0.006554,
+   "cached": 17658
+  }
+ ]
+}

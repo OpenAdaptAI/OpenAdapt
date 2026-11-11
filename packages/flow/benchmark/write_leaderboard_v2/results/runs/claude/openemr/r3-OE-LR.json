@@ -1,0 +1,112 @@
+{
+ "id": "OE-LR",
+ "app": "openemr",
+ "class": "lost_response",
+ "note": "The save lands; the page gets a 504.",
+ "agent_s": 113.2,
+ "cost_usd": 0.179305,
+ "claim": {
+  "status": "done",
+  "id": "4",
+  "note": "RESULT: DONE 4",
+  "claim_line": true,
+  "final_text": "I registered Amara Nwosu as a new patient. Patient Finder shows one matching record, with home phone 413-555-0177 and date of birth 2001-08-14. I didn't open the patient's chart, because the page loaded blank after I confirmed creation.\n\nI entered these values:\n- **Name and date of birth:** Amara Nwosu, 2001-08-14.\n- **Address:** 3 Willow Way, Springfield, Massachusetts, 01107.\n- **Contact:** home phone 413-555-0177, contact email a.nwosu@example.invalid.\n- **Sex:** I set both the required Birth Sex field and the Sex field to Female.\n\nThe form displays the street and city in capitals.\n\nBefore starting, I dismissed the product registration pop-up with \"Ask again later\". The ID below is the External ID Patient Finder shows for the record, which I'm treating as the patient ID.\n\nRESULT: DONE 4",
+  "model_calls": 18,
+  "actions": 54,
+  "tokens_in": 356324,
+  "tokens_out": 3200,
+  "end_url": "http://127.0.0.1:9866/interface/main/tabs/main.php?token_main=LMQAEGwhEEh7UhxiHlAvNXzuIcQQL99SmnfsnKSp"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "4"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794430416.013,
+   "method": "POST",
+   "path": "/interface/main/main_screen.php",
+   "save": false,
+   "status": 302,
+   "ms": 241
+  },
+  {
+   "t": 1794430416.509,
+   "method": "POST",
+   "path": "/library/ajax/dated_reminders_counter.php",
+   "save": false,
+   "status": 200,
+   "ms": 18
+  },
+  {
+   "t": 1794430416.589,
+   "method": "POST",
+   "path": "/interface/main/dated_reminders/dated_reminders.php",
+   "save": false,
+   "status": 200,
+   "ms": 15
+  },
+  {
+   "t": 1794430427.639,
+   "method": "POST",
+   "path": "/library/ajax/execute_background_services.php",
+   "save": false,
+   "status": 200,
+   "ms": 22
+  },
+  {
+   "t": 1794430480.051,
+   "method": "POST",
+   "path": "/interface/main/dated_reminders/dated_reminders.php",
+   "save": false,
+   "status": 200,
+   "ms": 39
+  },
+  {
+   "t": 1794430480.051,
+   "method": "POST",
+   "path": "/library/ajax/dated_reminders_counter.php",
+   "save": false,
+   "status": 200,
+   "ms": 40
+  },
+  {
+   "t": 1794430483.451,
+   "method": "POST",
+   "path": "/interface/new/new_comprehensive_save.php",
+   "save": true,
+   "fault": [
+    "drop_response"
+   ],
+   "status": "200->504",
+   "ms": 45
+  },
+  {
+   "t": 1794430489.149,
+   "method": "POST",
+   "path": "/library/ajax/execute_background_services.php",
+   "save": false,
+   "status": 200,
+   "ms": 22
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 3,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 7.5,
+  "end": 6.5,
+  "waited_s": 0
+ }
+}

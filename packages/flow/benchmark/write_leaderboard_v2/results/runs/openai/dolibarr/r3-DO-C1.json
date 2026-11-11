@@ -1,0 +1,61 @@
+{
+ "id": "DO-C1",
+ "app": "dolibarr",
+ "class": "clean",
+ "note": "A plain contact.",
+ "agent_s": 46.1,
+ "cost_usd": 0.070277,
+ "claim": {
+  "status": "done",
+  "id": "4",
+  "note": "RESULT: DONE 4",
+  "claim_line": true,
+  "final_text": "RESULT: DONE 4",
+  "model_calls": 14,
+  "actions": 24,
+  "tokens_in": 147314,
+  "tokens_out": 685,
+  "end_url": "http://127.0.0.1:9851/contact/card.php?id=95&save_lastsearch_values=1"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "95"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794429122.389,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 8
+  },
+  {
+   "t": 1794429138.158,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "status": 302,
+   "ms": 9
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 3,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 7.1,
+  "end": 7.9,
+  "waited_s": 0
+ }
+}

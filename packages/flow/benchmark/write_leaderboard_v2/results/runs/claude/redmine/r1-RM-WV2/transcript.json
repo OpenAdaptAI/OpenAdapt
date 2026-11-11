@@ -1,0 +1,447 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      23,
+      95
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      52,
+      121
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Changing the tracker reloads the form, so I'll do that first.",
+   "actions": [
+    {
+     "coordinate": [
+      243,
+      177
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The layout shifted. I'll click the tracker dropdown again.",
+   "actions": [
+    {
+     "coordinate": [
+      243,
+      183
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "Escape"
+    },
+    {
+     "text": "Feature"
+    },
+    {
+     "text": "Return"
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      700,
+      217
+     ]
+    },
+    {
+     "text": "Add a dark theme to the kiosk"
+    },
+    {
+     "coordinate": [
+      700,
+      350
+     ]
+    },
+    {
+     "text": "Staff asked for a night mode."
+    },
+    {
+     "coordinate": [
+      850,
+      522
+     ]
+    },
+    {
+     "text": "20261215"
+    },
+    {
+     "coordinate": [
+      855,
+      555
+     ]
+    },
+    {
+     "text": "4"
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      44,
+      722
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The due date was saved as 01/15/2027, not 2026-12-15. I'll edit the issue to fix it.",
+   "actions": [
+    {
+     "coordinate": [
+      777,
+      184
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      687,
+      257
+     ]
+    },
+    {
+     "text": "20261215"
+    },
+    {
+     "region": [
+      480,
+      170,
+      960,
+      340
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      44,
+      714
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I created issue #40 in Synthetic Helpdesk, and it now has all the requested values. These are tracker Feature, subject \"Add a dark theme to the kiosk\", description \"Staff asked for a night mode.\", priority Normal, due date 12/15/2026 and estimated time 4:00 h. I left every other field at its default.\n\nThe due date was saved as 01/15/2027 on the first save, even though the form showed 2026-12-15. I edited the issue and corrected it, so the issue's history now has one entry recording that change.\n\nRESULT: DONE #40",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 23,
+   "y": 95,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 52,
+   "y": 121,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 243,
+   "y": 177,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 243,
+   "y": 183,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Escape"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Feature"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Return"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 217,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Add a dark theme to the kiosk"
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 350,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Staff asked for a night mode."
+  },
+  {
+   "a": "click",
+   "x": 850,
+   "y": 522,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "20261215"
+  },
+  {
+   "a": "click",
+   "x": 855,
+   "y": 555,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "4"
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 44,
+   "y": 722,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 777,
+   "y": 184,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 687,
+   "y": 257,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "20261215"
+  },
+  {
+   "a": "click",
+   "x": 44,
+   "y": 714,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6163,
+   "out": 92,
+   "usd": 0.016325,
+   "cached": 0
+  },
+  {
+   "in": 7659,
+   "out": 98,
+   "usd": 0.005961,
+   "cached": 6159
+  },
+  {
+   "in": 9155,
+   "out": 128,
+   "usd": 0.006555,
+   "cached": 7657
+  },
+  {
+   "in": 10673,
+   "out": 128,
+   "usd": 0.00691,
+   "cached": 9153
+  },
+  {
+   "in": 12191,
+   "out": 167,
+   "usd": 0.007603,
+   "cached": 10671
+  },
+  {
+   "in": 13768,
+   "out": 250,
+   "usd": 0.008884,
+   "cached": 12189
+  },
+  {
+   "in": 15499,
+   "out": 106,
+   "usd": 0.008145,
+   "cached": 13766
+  },
+  {
+   "in": 16995,
+   "out": 235,
+   "usd": 0.009193,
+   "cached": 15497
+  },
+  {
+   "in": 18628,
+   "out": 175,
+   "usd": 0.009235,
+   "cached": 16993
+  },
+  {
+   "in": 20199,
+   "out": 106,
+   "usd": 0.008717,
+   "cached": 18626
+  },
+  {
+   "in": 21695,
+   "out": 183,
+   "usd": 0.009613,
+   "cached": 20197
+  }
+ ]
+}

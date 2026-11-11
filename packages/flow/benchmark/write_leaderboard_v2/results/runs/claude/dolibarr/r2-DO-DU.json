@@ -1,0 +1,67 @@
+{
+ "id": "DO-DU",
+ "app": "dolibarr",
+ "class": "duplicate",
+ "note": "The save is delivered twice.",
+ "agent_s": 28.7,
+ "cost_usd": 0.063055,
+ "claim": {
+  "status": "done",
+  "id": "Contact \"Claire Moreau\" created (id not visible; page: Third-parties > Contacts/Addresses > Claire Moreau)",
+  "note": "RESULT: DONE Contact \"Claire Moreau\" created (id not visible; page: Third-parties > Contacts/Addresses > Claire Moreau)",
+  "claim_line": true,
+  "final_text": "I created the contact Claire Moreau with job position Receptionist, professional phone 555-0195 and email c.moreau@example.invalid. The contact is not linked to any third party. I left every other field as it was.\n\nDolibarr's contact page shows the phone as 5550195, with the dash dropped. The existing contacts' phones display the same way, so I take it to be display formatting, but I did not check the stored value. I couldn't see the page URL, so I don't have the record's id.\n\nRESULT: DONE Contact \"Claire Moreau\" created (id not visible; page: Third-parties > Contacts/Addresses > Claire Moreau)",
+  "model_calls": 7,
+  "actions": 20,
+  "tokens_in": 75058,
+  "tokens_out": 1248,
+  "end_url": "http://127.0.0.1:9851/contact/card.php?id=73"
+ },
+ "oracle": {
+  "verdict": "wrong",
+  "reasons": [
+   "2 new records"
+  ],
+  "new": [
+   "73",
+   "74"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": true,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794428174.826,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 12
+  },
+  {
+   "t": 1794428199.079,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": [
+    "duplicate"
+   ],
+   "status": "302+302",
+   "ms": 23
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 2,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 7.3,
+  "end": 8.1,
+  "waited_s": 0
+ }
+}

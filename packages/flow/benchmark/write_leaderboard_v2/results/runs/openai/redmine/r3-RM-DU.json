@@ -1,0 +1,80 @@
+{
+ "id": "RM-DU",
+ "app": "redmine",
+ "class": "duplicate",
+ "note": "The save is delivered twice.",
+ "agent_s": 21.9,
+ "cost_usd": 0.028204,
+ "claim": {
+  "status": "done",
+  "id": "94",
+  "note": "RESULT: DONE 94",
+  "claim_line": true,
+  "final_text": "RESULT: DONE 94",
+  "model_calls": 8,
+  "actions": 18,
+  "tokens_in": 53185,
+  "tokens_out": 363,
+  "end_url": "http://127.0.0.1:9861/issues/94"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "94"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794427913.31,
+   "method": "POST",
+   "path": "/login",
+   "save": false,
+   "status": 302,
+   "ms": 8
+  },
+  {
+   "t": 1794427924.335,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues/new.js",
+   "save": false,
+   "status": 200,
+   "ms": 21
+  },
+  {
+   "t": 1794427924.338,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues",
+   "save": true,
+   "fault": [
+    "duplicate"
+   ],
+   "status": "200+200",
+   "ms": 72
+  },
+  {
+   "t": 1794427933.842,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues",
+   "save": true,
+   "status": 302,
+   "ms": 28
+  }
+ ],
+ "saves_seen": 2,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 3,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 8.2,
+  "end": 8.7,
+  "waited_s": 0
+ }
+}

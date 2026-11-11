@@ -1,0 +1,972 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_059a65504b91c7c2016af4d57d80b887d2b1942408dff4e20b",
+     "call_id": "call_ovGmDzlBJK1lCRSFeqBTadSj",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_059a65504b91c7c2016af4d580f58c87d2bbb146da573ebd8d",
+     "call_id": "call_hc7DMkuhOOa7UHa7bV6ay3pZ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 22,
+       "y": 165
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_059a65504b91c7c2016af4d58372d087d2b374d49479ffb95b",
+     "call_id": "call_SR0Vidn2ENeEI52R0jOSuyKN",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_059a65504b91c7c2016af4d5865fa487d28b6fd0625b8482df",
+     "call_id": "call_NXwpEVfyzyLdP8Lmjxx54DAN",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1192,
+       "y": 62
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_059a65504b91c7c2016af4d58936dc87d2bb28be2349cc08ae",
+     "call_id": "call_PGvNdACK0VKxqIuvxljEfu1v",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_059a65504b91c7c2016af4d58b63d487d2ab3fc66b558baba7",
+     "call_id": "call_oXkONQq7aQ5kcZQYYUtIkFV8",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 218,
+       "y": 230
+      },
+      {
+       "text": "Foxglove Pharmacy",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 584,
+       "y": 233
+      },
+      {
+       "text": "foxglove.example.invalid",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 240,
+       "y": 698
+      },
+      {
+       "text": "Late hours on weekdays.",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 435,
+       "y": 619
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_059a65504b91c7c2016af4d58ed19087d28ad8ab08c9291c0d",
+     "call_id": "call_xiRXBwsx3rrmLXK1fId1BqNx",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 436,
+       "y": 619
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_059a65504b91c7c2016af4d5917cbc87d2bdb603fbe09ff704",
+     "call_id": "call_bpdAeJRvtSXawKs0UX8NADMG",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_059a65504b91c7c2016af4d593efc887d2ac9c261c0394e6dd",
+     "call_id": "call_BsHEpx6x0iPgggLC5OOlQ7Jw",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 270,
+       "y": 618
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_059a65504b91c7c2016af4d5965f3c87d2ac3e078808244d04",
+     "call_id": "call_mgPQDtSvh8z83fbNRMomAIdW",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 130,
+       "y": 683
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 650,
+       "y": 618
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_059a65504b91c7c2016af4d598bbc487d29c0d54b1ab42d4ba",
+     "call_id": "call_LUbW0JByY9wgYzrgRZHNpqOB",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 650,
+       "y": 618
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_059a65504b91c7c2016af4d59bb87c87d291869a384e589326",
+     "call_id": "call_CfPzGWAmlDywO602P6Oy84FL",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": 340,
+       "type": "scroll",
+       "x": 653,
+       "y": 503
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_059a65504b91c7c2016af4d59e723487d2af94ba2e17dece3c",
+     "call_id": "call_uN07gnTXO4yvW2UXHKsdxpn6",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": 220,
+       "type": "scroll",
+       "x": 653,
+       "y": 503
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_059a65504b91c7c2016af4d5a1175087d2aa03e2a4e7fef958",
+     "call_id": "call_3cW6orjDp3gj3TSwfVuGwrFY",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 523,
+       "y": 479
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_059a65504b91c7c2016af4d5a35eb887d2b6cf71538ae67c98",
+     "call_id": "call_wP8qeawZea77m6CJU92xVn0Q",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 94,
+       "y": 112
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_059a65504b91c7c2016af4d5a5f51c87d2903541ac33f5a558",
+     "call_id": "call_4dyMe2NpjTBvPjJ0rJr2O1PG",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_059a65504b91c7c2016af4d5a90dd087d2a20509d6b5660ef0",
+     "call_id": "call_PjlvodgpaSO3mmRccUw69bDT",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_059a65504b91c7c2016af4d5ab7fa087d2a18ab76122f8a3a1",
+     "call_id": "call_eih7smpi3t13HAlnoww60hmy",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 97,
+       "y": 113
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_059a65504b91c7c2016af4d5ae21e087d28321b18e9c633fca",
+     "call_id": "call_A4blZGGKdtAKxX72zvUHnhBE",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 260,
+       "y": 618
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_059a65504b91c7c2016af4d5b0980487d2879f0fc17a84d51c",
+     "call_id": "call_pOq1t7tqDuBkJQHfScPHr5WW",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 124,
+       "y": 682
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_059a65504b91c7c2016af4d5b3315887d285f323dd30b68828",
+     "call_id": "call_VjAu3SCWBbUPfNJkBoaezOjl",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 95,
+       "y": 112
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_059a65504b91c7c2016af4d5b6868087d2af11ea5314488919",
+     "call_id": "call_393aglsj4CZg4Vac9ZCjTRKQ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "l"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_059a65504b91c7c2016af4d5b9213887d283261da1ff69c018",
+     "call_id": "call_ssRd4KdHpqZDZ3Fh7nNIPaOW",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "F11"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_059a65504b91c7c2016af4d5bd545487d28befdfa43ef858ff",
+     "call_id": "call_1XQGDFoiSMs91InmSZ8saRTL",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 122,
+       "y": 57
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_059a65504b91c7c2016af4d5c03c0c87d2a8ada6b37b172d25",
+     "call_id": "call_aiVq3TxsnBhp5DObAozDhlRn",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_059a65504b91c7c2016af4d5c2fbd887d2acdae9a0af42a07e",
+     "call_id": "call_nM12sjxgkrLXcipu3orVu4oR",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 158,
+       "y": 251
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_059a65504b91c7c2016af4d5c5e48887d2ae0781cd11c45a75",
+     "call_id": "call_qCseycaG1aKNYO8eqoCZ8U1b",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "right",
+       "type": "click",
+       "x": 155,
+       "y": 251
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_059a65504b91c7c2016af4d5c9c83887d2a8b5a868b8fbbcd6",
+     "call_id": "call_EkIhYnDypF8AE28LKtDW1gfJ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1262,
+       "y": 251
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_059a65504b91c7c2016af4d5ce206487d28e9164d1b93c5a4c",
+     "call_id": "call_XIyYydiEbUbNQXbkGUN2HZow",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1152,
+       "y": 288
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "Created Foxglove Pharmacy with all five requested values; other fields were left unchanged. I couldn\u2019t retrieve its record ID or page URL.\nRESULT: NOT DONE Unable to retrieve the created record\u2019s ID or page URL.",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 22,
+   "y": 165,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1192,
+   "y": 62,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 218,
+   "y": 230,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Foxglove Pharmacy"
+  },
+  {
+   "a": "click",
+   "x": 584,
+   "y": 233,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "foxglove.example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 240,
+   "y": 698,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Late hours on weekdays."
+  },
+  {
+   "a": "click",
+   "x": 435,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 436,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 270,
+   "y": 618,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 130,
+   "y": 683,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 650,
+   "y": 618,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 650,
+   "y": 618,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 653,
+   "y": 503,
+   "dx": 0,
+   "dy": 340
+  },
+  {
+   "a": "scroll",
+   "x": 653,
+   "y": 503,
+   "dx": 0,
+   "dy": 220
+  },
+  {
+   "a": "click",
+   "x": 523,
+   "y": 479,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 94,
+   "y": 112,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 97,
+   "y": 113,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 260,
+   "y": 618,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 124,
+   "y": 682,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 95,
+   "y": 112,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "l"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "F11"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 122,
+   "y": 57,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "move",
+   "x": 158,
+   "y": 251
+  },
+  {
+   "a": "click",
+   "x": 155,
+   "y": 251,
+   "button": "right",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1262,
+   "y": 251,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1152,
+   "y": 288,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  }
+ ],
+ "usage": [
+  {
+   "in": 2206,
+   "out": 36,
+   "usd": 0.004772,
+   "cached": 0
+  },
+  {
+   "in": 3423,
+   "out": 31,
+   "usd": 0.003191,
+   "cached": 2203
+  },
+  {
+   "in": 4679,
+   "out": 18,
+   "usd": 0.003382,
+   "cached": 3420
+  },
+  {
+   "in": 5907,
+   "out": 32,
+   "usd": 0.003717,
+   "cached": 4676
+  },
+  {
+   "in": 7164,
+   "out": 15,
+   "usd": 0.003851,
+   "cached": 5904
+  },
+  {
+   "in": 8392,
+   "out": 114,
+   "usd": 0.005034,
+   "cached": 7161
+  },
+  {
+   "in": 9766,
+   "out": 31,
+   "usd": 0.004742,
+   "cached": 8389
+  },
+  {
+   "in": 11022,
+   "out": 15,
+   "usd": 0.004621,
+   "cached": 9763
+  },
+  {
+   "in": 12250,
+   "out": 31,
+   "usd": 0.004976,
+   "cached": 11019
+  },
+  {
+   "in": 13506,
+   "out": 47,
+   "usd": 0.005437,
+   "cached": 12247
+  },
+  {
+   "in": 14786,
+   "out": 31,
+   "usd": 0.005577,
+   "cached": 13503
+  },
+  {
+   "in": 16042,
+   "out": 37,
+   "usd": 0.005845,
+   "cached": 14783
+  },
+  {
+   "in": 17304,
+   "out": 37,
+   "usd": 0.006108,
+   "cached": 16039
+  },
+  {
+   "in": 18566,
+   "out": 31,
+   "usd": 0.0063,
+   "cached": 17301
+  },
+  {
+   "in": 19822,
+   "out": 31,
+   "usd": 0.006541,
+   "cached": 18563
+  },
+  {
+   "in": 21078,
+   "out": 15,
+   "usd": 0.006632,
+   "cached": 19819
+  },
+  {
+   "in": 22306,
+   "out": 15,
+   "usd": 0.006827,
+   "cached": 21075
+  },
+  {
+   "in": 23534,
+   "out": 42,
+   "usd": 0.007343,
+   "cached": 22303
+  },
+  {
+   "in": 24801,
+   "out": 31,
+   "usd": 0.007556,
+   "cached": 23531
+  },
+  {
+   "in": 26057,
+   "out": 31,
+   "usd": 0.007788,
+   "cached": 24798
+  },
+  {
+   "in": 27313,
+   "out": 31,
+   "usd": 0.008039,
+   "cached": 26054
+  },
+  {
+   "in": 28569,
+   "out": 26,
+   "usd": 0.00824,
+   "cached": 27310
+  },
+  {
+   "in": 29816,
+   "out": 36,
+   "usd": 0.008573,
+   "cached": 28566
+  },
+  {
+   "in": 31073,
+   "out": 45,
+   "usd": 0.008933,
+   "cached": 29813
+  },
+  {
+   "in": 32343,
+   "out": 15,
+   "usd": 0.00891,
+   "cached": 31070
+  },
+  {
+   "in": 33571,
+   "out": 27,
+   "usd": 0.0092,
+   "cached": 32340
+  },
+  {
+   "in": 34823,
+   "out": 50,
+   "usd": 0.009724,
+   "cached": 33568
+  },
+  {
+   "in": 36098,
+   "out": 61,
+   "usd": 0.01013,
+   "cached": 34820
+  },
+  {
+   "in": 37384,
+   "out": 75,
+   "usd": 0.010547,
+   "cached": 36095
+  },
+  {
+   "in": 38684,
+   "out": 79,
+   "usd": 0.010872,
+   "cached": 37381
+  }
+ ]
+}

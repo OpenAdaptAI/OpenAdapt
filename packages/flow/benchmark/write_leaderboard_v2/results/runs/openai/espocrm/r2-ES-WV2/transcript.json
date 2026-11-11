@@ -1,0 +1,911 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f5dcacb720457c1016af4cc9b7b0887d2898c07ff03f1536d",
+     "call_id": "call_pSlBqhFrLqHX0Uq0a1nlqTGO",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f5dcacb720457c1016af4cc9e957487d2b02ab7c646a1f438",
+     "call_id": "call_uHkpue3aRk3N8vMIUaE4KpF4",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 23,
+       "y": 165
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f5dcacb720457c1016af4cca0df6887d28a58c361a0e21669",
+     "call_id": "call_lvexcDg7t7cjxSMVzVTWmCY8",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f5dcacb720457c1016af4cca36f6087d28adb864c2515848c",
+     "call_id": "call_6yNQqdTKsLzoUxw7RS00jCy9",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1180,
+       "y": 61
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f5dcacb720457c1016af4cca5af6087d2933fea01561a4b8e",
+     "call_id": "call_eRPvj4jvbHP2D46ySxHmBYZ7",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f5dcacb720457c1016af4cca81d6887d2918f6e44fbb24024",
+     "call_id": "call_elU9Z23Xfe0AIBNpD4jC5cBk",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 214,
+       "y": 232
+      },
+      {
+       "text": "Foxglove Pharmacy",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 567,
+       "y": 233
+      },
+      {
+       "text": "foxglove.example.invalid",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 203,
+       "y": 696
+      },
+      {
+       "text": "Late hours on weekdays.",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 282,
+       "y": 619
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f5dcacb720457c1016af4ccac04a087d2be6656bdf11e478a",
+     "call_id": "call_sF7Oei7x38yrsbzi69WXdW7x",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f5dcacb720457c1016af4ccaf509887d2a794cd9652840dfa",
+     "call_id": "call_9XpritxwCICRXuY94KyBvrKh",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 127,
+       "y": 683
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 652,
+       "y": 618
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f5dcacb720457c1016af4ccb1675487d28433ffb184f8b1de",
+     "call_id": "call_b3lXwl9ZYdBDQnzX62FvHNRl",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": 359,
+       "type": "scroll",
+       "x": 671,
+       "y": 494
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f5dcacb720457c1016af4ccb3b13487d2b200540058e45c03",
+     "call_id": "call_munuxoFLAc4uI72alCZrkKp3",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 650,
+       "y": 613
+      },
+      {
+       "keys": [
+        "h"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ENTER"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f5dcacb720457c1016af4ccb6604887d2a0882215f10683a3",
+     "call_id": "call_wY8NVg2xkbNqjoCnD5zwV9X6",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 96,
+       "y": 106
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f5dcacb720457c1016af4ccb938dc87d2b14ccbe8bc7599e8",
+     "call_id": "call_ex2VadoJLa64wXXB74uBi1pA",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f5dcacb720457c1016af4ccbcdc9487d28dfabb6e462d0d55",
+     "call_id": "call_VWEMkPYOC9SZXxDS848wl4He",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f5dcacb720457c1016af4ccbf6ebc87d2ae1011d766fb6d97",
+     "call_id": "call_YTrmV4cXmQ7O8socj2RNnCKl",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 93,
+       "y": 111
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f5dcacb720457c1016af4ccc2be8c87d2972be1f1e2f7da35",
+     "call_id": "call_bIKBQWHb9LuKlVtMec7WDYoq",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 273,
+       "y": 616
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f5dcacb720457c1016af4ccc62c0c87d29a6dc8d73a5278c5",
+     "call_id": "call_gtWd0wPedmiyEgkqdgdUSRhU",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 138,
+       "y": 682
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f5dcacb720457c1016af4ccca0d3c87d2982f17d6c6a02a45",
+     "call_id": "call_vQqnaF7sh01XiJqISEl4evA6",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 96,
+       "y": 111
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f5dcacb720457c1016af4cccc764487d29406b624599afa18",
+     "call_id": "call_iSgunEnfQEe66urYbVkgKc63",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "L"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f5dcacb720457c1016af4cccf5f5887d2b74cff4dedc57ac9",
+     "call_id": "call_vq6Xg5lNDgozA57W1SWGAoP5",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "F11"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f5dcacb720457c1016af4ccd3eef487d2907bf924882a0a20",
+     "call_id": "call_dP8qqNPo77OwA7aFrRRNFBes",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "right",
+       "type": "click",
+       "x": 290,
+       "y": 57
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f5dcacb720457c1016af4ccd697a887d2b64b7870e074c769",
+     "call_id": "call_Gbdc0jg9NlHNbjENU1wSm0rY",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "L"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f5dcacb720457c1016af4ccda821087d2bf2e00af5f0a00b0",
+     "call_id": "call_WgilKnmQTBgUPTJdGZXqaA23",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 144,
+       "y": 112
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f5dcacb720457c1016af4ccde276c87d294b96bf676347735",
+     "call_id": "call_V7dm5yhGZEBWhry9sV9MiByJ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 297,
+       "y": 114
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 123,
+       "y": 56
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f5dcacb720457c1016af4cce107f887d29a2bf1513f97d5f9",
+     "call_id": "call_7t5p86LycUTNR7j3JpzmLapO",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f5dcacb720457c1016af4cce444a487d29a43486f25f7514f",
+     "call_id": "call_gVZcP7wb027VUmhESVxAsnkQ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 166,
+       "y": 250
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f5dcacb720457c1016af4cce71ca887d2b82e4a42c741119b",
+     "call_id": "call_Xz2Yer2XcnPhYvoSsyhaLSTt",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "right",
+       "type": "click",
+       "x": 166,
+       "y": 250
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "Created Foxglove Pharmacy with all five requested values; other fields were left unchanged.\nRESULT: NOT DONE Unable to retrieve the created record\u2019s ID or page URL.",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 23,
+   "y": 165,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1180,
+   "y": 61,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 214,
+   "y": 232,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Foxglove Pharmacy"
+  },
+  {
+   "a": "click",
+   "x": 567,
+   "y": 233,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "foxglove.example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 203,
+   "y": 696,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Late hours on weekdays."
+  },
+  {
+   "a": "click",
+   "x": 282,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 127,
+   "y": 683,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 652,
+   "y": 618,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 671,
+   "y": 494,
+   "dx": 0,
+   "dy": 359
+  },
+  {
+   "a": "click",
+   "x": 650,
+   "y": 613,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "h"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ENTER"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 96,
+   "y": 106,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 93,
+   "y": 111,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 273,
+   "y": 616,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 138,
+   "y": 682,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 96,
+   "y": 111,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "L"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "F11"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 290,
+   "y": 57,
+   "button": "right",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "L"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 144,
+   "y": 112,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 297,
+   "y": 114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 123,
+   "y": 56,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "move",
+   "x": 166,
+   "y": 250
+  },
+  {
+   "a": "click",
+   "x": 166,
+   "y": 250,
+   "button": "right",
+   "count": 1,
+   "mods": []
+  }
+ ],
+ "usage": [
+  {
+   "in": 2206,
+   "out": 37,
+   "usd": 0.004782,
+   "cached": 0
+  },
+  {
+   "in": 3423,
+   "out": 31,
+   "usd": 0.003191,
+   "cached": 2203
+  },
+  {
+   "in": 4679,
+   "out": 18,
+   "usd": 0.003382,
+   "cached": 3420
+  },
+  {
+   "in": 5907,
+   "out": 32,
+   "usd": 0.003717,
+   "cached": 4676
+  },
+  {
+   "in": 7164,
+   "out": 15,
+   "usd": 0.003851,
+   "cached": 5904
+  },
+  {
+   "in": 8392,
+   "out": 114,
+   "usd": 0.005034,
+   "cached": 7161
+  },
+  {
+   "in": 9766,
+   "out": 15,
+   "usd": 0.004582,
+   "cached": 8389
+  },
+  {
+   "in": 10994,
+   "out": 47,
+   "usd": 0.004885,
+   "cached": 9763
+  },
+  {
+   "in": 12274,
+   "out": 37,
+   "usd": 0.005134,
+   "cached": 10991
+  },
+  {
+   "in": 13536,
+   "out": 49,
+   "usd": 0.005474,
+   "cached": 12271
+  },
+  {
+   "in": 14818,
+   "out": 31,
+   "usd": 0.005587,
+   "cached": 13533
+  },
+  {
+   "in": 16074,
+   "out": 15,
+   "usd": 0.005631,
+   "cached": 14815
+  },
+  {
+   "in": 17302,
+   "out": 15,
+   "usd": 0.005826,
+   "cached": 16071
+  },
+  {
+   "in": 18530,
+   "out": 48,
+   "usd": 0.006402,
+   "cached": 17299
+  },
+  {
+   "in": 19803,
+   "out": 31,
+   "usd": 0.006567,
+   "cached": 18527
+  },
+  {
+   "in": 21059,
+   "out": 31,
+   "usd": 0.006788,
+   "cached": 19800
+  },
+  {
+   "in": 22315,
+   "out": 31,
+   "usd": 0.007039,
+   "cached": 21056
+  },
+  {
+   "in": 23571,
+   "out": 26,
+   "usd": 0.00724,
+   "cached": 22312
+  },
+  {
+   "in": 24818,
+   "out": 37,
+   "usd": 0.007584,
+   "cached": 23568
+  },
+  {
+   "in": 26076,
+   "out": 72,
+   "usd": 0.008205,
+   "cached": 24815
+  },
+  {
+   "in": 27373,
+   "out": 40,
+   "usd": 0.008215,
+   "cached": 26073
+  },
+  {
+   "in": 28634,
+   "out": 43,
+   "usd": 0.008432,
+   "cached": 27370
+  },
+  {
+   "in": 29902,
+   "out": 96,
+   "usd": 0.009228,
+   "cached": 28631
+  },
+  {
+   "in": 31231,
+   "out": 15,
+   "usd": 0.008794,
+   "cached": 29899
+  },
+  {
+   "in": 32459,
+   "out": 51,
+   "usd": 0.009218,
+   "cached": 31228
+  },
+  {
+   "in": 33735,
+   "out": 50,
+   "usd": 0.009549,
+   "cached": 32456
+  },
+  {
+   "in": 35010,
+   "out": 92,
+   "usd": 0.010222,
+   "cached": 33732
+  }
+ ]
+}

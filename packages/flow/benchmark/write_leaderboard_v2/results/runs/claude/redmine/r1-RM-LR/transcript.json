@@ -1,0 +1,603 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      23,
+      95
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      52,
+      121
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Tracker is already Bug. The priority is a select; I'll set it with the keyboard.",
+   "actions": [
+    {
+     "coordinate": [
+      700,
+      211
+     ]
+    },
+    {
+     "text": "Parking permit form rejects plates"
+    },
+    {
+     "coordinate": [
+      700,
+      340
+     ]
+    },
+    {
+     "text": "Plates with a space fail."
+    },
+    {
+     "coordinate": [
+      855,
+      516
+     ]
+    },
+    {
+     "text": "20261208"
+    },
+    {
+     "coordinate": [
+      855,
+      550
+     ]
+    },
+    {
+     "text": "3"
+    },
+    {
+     "coordinate": [
+      333,
+      482
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The layout shifted, so the dropdown didn't open. Click priority again.",
+   "actions": [
+    {
+     "coordinate": [
+      333,
+      488
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The dropdown popup may not render in screenshots. Use keyboard: type \"High\".",
+   "actions": [
+    {
+     "text": "Escape"
+    },
+    {
+     "text": "High"
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      43,
+      722
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {
+     "coordinate": [
+      600,
+      400
+     ]
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "alt+Left"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 5
+    },
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 10
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "alt+Home"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      640,
+      400
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "text": "ctrl+l"
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "Escape"
+    },
+    {
+     "duration": 30
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "alt+Left"
+    },
+    {
+     "duration": 3
+    },
+    {
+     "text": "alt+Left"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I submitted the form, but I can't confirm the issue exists. After I clicked Create, the browser went to a blank white page and stayed that way. Waiting, refreshing (F5), back and home shortcuts, and clicking on the page changed nothing.\n\nI filled the form as asked before submitting: tracker Bug, the subject, the description, priority High, due date 2026-12-08 and estimated time 3 hours. Everything else stayed at its default. I have no issue ID or URL, and I can't open the issues list to check.\n\nMy F5 refresh may have resubmitted the form, so there could be a duplicate issue. Someone should check the Synthetic Helpdesk issue list for \"Parking permit form rejects plates\".\n\nRESULT: NOT DONE Create was clicked but the page went blank and stayed blank, so I couldn't confirm the issue was saved (a refresh may also have duplicated it).",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 23,
+   "y": 95,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 52,
+   "y": 121,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 211,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Parking permit form rejects plates"
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 340,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Plates with a space fail."
+  },
+  {
+   "a": "click",
+   "x": 855,
+   "y": 516,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "20261208"
+  },
+  {
+   "a": "click",
+   "x": 855,
+   "y": 550,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "3"
+  },
+  {
+   "a": "click",
+   "x": 333,
+   "y": 482,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 333,
+   "y": 488,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Escape"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "High"
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 43,
+   "y": 722,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "move",
+   "x": 600,
+   "y": 400
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 10.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Home"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 640,
+   "y": 400,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "l"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Escape"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 30.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6157,
+   "out": 92,
+   "usd": 0.01631,
+   "cached": 0
+  },
+  {
+   "in": 7653,
+   "out": 98,
+   "usd": 0.00596,
+   "cached": 6153
+  },
+  {
+   "in": 9149,
+   "out": 299,
+   "usd": 0.008264,
+   "cached": 7651
+  },
+  {
+   "in": 10942,
+   "out": 131,
+   "usd": 0.007626,
+   "cached": 9147
+  },
+  {
+   "in": 12463,
+   "out": 143,
+   "usd": 0.007424,
+   "cached": 10940
+  },
+  {
+   "in": 14005,
+   "out": 98,
+   "usd": 0.007331,
+   "cached": 12461
+  },
+  {
+   "in": 15501,
+   "out": 75,
+   "usd": 0.007295,
+   "cached": 14003
+  },
+  {
+   "in": 16961,
+   "out": 139,
+   "usd": 0.008144,
+   "cached": 15499
+  },
+  {
+   "in": 18500,
+   "out": 167,
+   "usd": 0.008913,
+   "cached": 16959
+  },
+  {
+   "in": 20063,
+   "out": 107,
+   "usd": 0.008681,
+   "cached": 18498
+  },
+  {
+   "in": 21578,
+   "out": 120,
+   "usd": 0.009004,
+   "cached": 20061
+  },
+  {
+   "in": 23083,
+   "out": 147,
+   "usd": 0.009552,
+   "cached": 21576
+  },
+  {
+   "in": 24626,
+   "out": 170,
+   "usd": 0.010178,
+   "cached": 23081
+  },
+  {
+   "in": 26217,
+   "out": 108,
+   "usd": 0.009986,
+   "cached": 24624
+  },
+  {
+   "in": 27721,
+   "out": 174,
+   "usd": 0.010747,
+   "cached": 26215
+  },
+  {
+   "in": 29314,
+   "out": 293,
+   "usd": 0.01246,
+   "cached": 27719
+  }
+ ]
+}

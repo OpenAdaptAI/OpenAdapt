@@ -1,0 +1,310 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+l"
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      113,
+      28
+     ]
+    },
+    {
+     "duration": 2
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Check existing contacts first.",
+   "actions": [
+    {
+     "coordinate": [
+      25,
+      397
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "No existing Moreau. Create new.",
+   "actions": [
+    {
+     "coordinate": [
+      85,
+      372
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      665,
+      164
+     ]
+    },
+    {
+     "text": "Moreau"
+    },
+    {
+     "coordinate": [
+      665,
+      198
+     ]
+    },
+    {
+     "text": "Claire"
+    },
+    {
+     "coordinate": [
+      665,
+      297
+     ]
+    },
+    {
+     "text": "Receptionist"
+    },
+    {
+     "coordinate": [
+      685,
+      476
+     ]
+    },
+    {
+     "text": "555-0195"
+    },
+    {
+     "coordinate": [
+      685,
+      544
+     ]
+    },
+    {
+     "text": "c.moreau@example.invalid"
+    },
+    {
+     "coordinate": [
+      760,
+      600
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 30
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      720,
+      756
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I created the contact Claire Moreau with job position Receptionist, professional phone 555-0195 and email c.moreau@example.invalid. The contact is not linked to any third party. I left every other field as it was.\n\nDolibarr's contact page shows the phone as 5550195, with the dash dropped. The existing contacts' phones display the same way, so I take it to be display formatting, but I did not check the stored value. I couldn't see the page URL, so I don't have the record's id.\n\nRESULT: DONE Contact \"Claire Moreau\" created (id not visible; page: Third-parties > Contacts/Addresses > Claire Moreau)",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "l"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 113,
+   "y": 28,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 25,
+   "y": 397,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 85,
+   "y": 372,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 665,
+   "y": 164,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Moreau"
+  },
+  {
+   "a": "click",
+   "x": 665,
+   "y": 198,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Claire"
+  },
+  {
+   "a": "click",
+   "x": 665,
+   "y": 297,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Receptionist"
+  },
+  {
+   "a": "click",
+   "x": 685,
+   "y": 476,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "555-0195"
+  },
+  {
+   "a": "click",
+   "x": 685,
+   "y": 544,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "c.moreau@example.invalid"
+  },
+  {
+   "a": "scroll",
+   "x": 760,
+   "y": 600,
+   "dx": 0,
+   "dy": 3600
+  },
+  {
+   "a": "click",
+   "x": 720,
+   "y": 756,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6153,
+   "out": 77,
+   "usd": 0.016151,
+   "cached": 0
+  },
+  {
+   "in": 7616,
+   "out": 133,
+   "usd": 0.006226,
+   "cached": 6149
+  },
+  {
+   "in": 9120,
+   "out": 116,
+   "usd": 0.006447,
+   "cached": 7614
+  },
+  {
+   "in": 10626,
+   "out": 111,
+   "usd": 0.006703,
+   "cached": 9118
+  },
+  {
+   "in": 12135,
+   "out": 315,
+   "usd": 0.009051,
+   "cached": 10624
+  },
+  {
+   "in": 13956,
+   "out": 98,
+   "usd": 0.007963,
+   "cached": 12133
+  },
+  {
+   "in": 15452,
+   "out": 398,
+   "usd": 0.010515,
+   "cached": 13954
+  }
+ ]
+}

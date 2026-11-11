@@ -1,0 +1,69 @@
+{
+ "id": "DO-CO",
+ "app": "dolibarr",
+ "class": "collateral",
+ "note": "With the save",
+ "agent_s": 37.7,
+ "cost_usd": 0.057928,
+ "claim": {
+  "status": "done",
+  "id": "/contact/card.php",
+  "note": "RESULT: DONE /contact/card.php",
+  "claim_line": true,
+  "final_text": "RESULT: DONE /contact/card.php",
+  "model_calls": 12,
+  "actions": 19,
+  "tokens_in": 110769,
+  "tokens_out": 644,
+  "end_url": "http://127.0.0.1:9851/contact/card.php?id=52"
+ },
+ "oracle": {
+  "verdict": "wrong",
+  "reasons": [
+   "other records changed: ['34']"
+  ],
+  "new": [
+   "52"
+  ],
+  "deleted": [],
+  "changed": [
+   "34"
+  ],
+  "collateral": true,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794426683.361,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 10
+  },
+  {
+   "t": 1794426698.058,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": [
+    "side_write"
+   ],
+   "status": 302,
+   "side_write": "done",
+   "ms": 124
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 1,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 7.2,
+  "end": 8.5,
+  "waited_s": 0
+ }
+}

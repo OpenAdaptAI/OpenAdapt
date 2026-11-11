@@ -1,0 +1,414 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_06a49e538d01aae3016af4c7d097cc87d2b3ae5c313d79c4de",
+     "call_id": "call_aIGGMWrq6BcOQjPAak2afoXk",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_06a49e538d01aae3016af4c7d3d36c87d2b8c8567f39534178",
+     "call_id": "call_ohxmxiQ5zySSXT9huIvGg4YK",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 24,
+       "y": 96
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_06a49e538d01aae3016af4c7d61f9c87d2ba5108706cd8a283",
+     "call_id": "call_tZDlMmhcfPsClKjHBuX9Ghh2",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 54,
+       "y": 121
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_06a49e538d01aae3016af4c7d85b2487d293910c07dd65745b",
+     "call_id": "call_ApDSlHBshOAXawdOdrd1xwdK",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 246,
+       "y": 176
+      },
+      {
+       "keys": [
+        "s"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ENTER"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_06a49e538d01aae3016af4c7dba30c87d2aa974e4ad07be39f",
+     "call_id": "call_rLG6NdFvTz4Ea5p2Z6HDw7mp",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "text": "Reset the meeting room display",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 361,
+       "y": 392
+      },
+      {
+       "text": "Room 2 display shows the wrong day.",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 852,
+       "y": 624
+      },
+      {
+       "text": "0.25",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 849,
+       "y": 590
+      },
+      {
+       "keys": [
+        "ARROWLEFT"
+       ],
+       "type": "keypress"
+      },
+      {
+       "text": "2026",
+       "type": "type"
+      },
+      {
+       "keys": [
+        "ARROWRIGHT"
+       ],
+       "type": "keypress"
+      },
+      {
+       "text": "12",
+       "type": "type"
+      },
+      {
+       "keys": [
+        "ARROWRIGHT"
+       ],
+       "type": "keypress"
+      },
+      {
+       "text": "03",
+       "type": "type"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_06a49e538d01aae3016af4c7de94bc87d28120800225b294ec",
+     "call_id": "call_XaPAQ8XAmr621OUAbNySnQ8H",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "ARROWLEFT"
+       ],
+       "type": "keypress"
+      },
+      {
+       "text": "12",
+       "type": "type"
+      },
+      {
+       "keys": [
+        "TAB"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_06a49e538d01aae3016af4c7e1092487d29c4a62884b027761",
+     "call_id": "call_omkQ3nh6RpOLQoGpo0u2GZTI",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 43,
+       "y": 793
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_06a49e538d01aae3016af4c7e3a2fc87d2abcbeb10424c0022",
+     "call_id": "call_flnYb9pL8gxTz9jWf2zZFArV",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: DONE 68",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 24,
+   "y": 96,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 54,
+   "y": 121,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 246,
+   "y": 176,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "s"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ENTER"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Reset the meeting room display"
+  },
+  {
+   "a": "click",
+   "x": 361,
+   "y": 392,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Room 2 display shows the wrong day."
+  },
+  {
+   "a": "click",
+   "x": 852,
+   "y": 624,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "0.25"
+  },
+  {
+   "a": "click",
+   "x": 849,
+   "y": 590,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ARROWLEFT"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "2026"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ARROWRIGHT"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "12"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ARROWRIGHT"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "03"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ARROWLEFT"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "12"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "TAB"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 43,
+   "y": 793,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  }
+ ],
+ "usage": [
+  {
+   "in": 2220,
+   "out": 15,
+   "usd": 0.000599,
+   "cached": 2217
+  },
+  {
+   "in": 3437,
+   "out": 31,
+   "usd": 0.001003,
+   "cached": 3434
+  },
+  {
+   "in": 4693,
+   "out": 31,
+   "usd": 0.003515,
+   "cached": 3434
+  },
+  {
+   "in": 5949,
+   "out": 49,
+   "usd": 0.003946,
+   "cached": 4690
+  },
+  {
+   "in": 7231,
+   "out": 161,
+   "usd": 0.005369,
+   "cached": 5946
+  },
+  {
+   "in": 8668,
+   "out": 43,
+   "usd": 0.004756,
+   "cached": 7228
+  },
+  {
+   "in": 9940,
+   "out": 31,
+   "usd": 0.004593,
+   "cached": 8665
+  },
+  {
+   "in": 11196,
+   "out": 18,
+   "usd": 0.004685,
+   "cached": 9937
+  },
+  {
+   "in": 12424,
+   "out": 9,
+   "usd": 0.004791,
+   "cached": 11193
+  }
+ ]
+}

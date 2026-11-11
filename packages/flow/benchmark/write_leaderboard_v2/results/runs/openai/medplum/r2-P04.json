@@ -1,0 +1,162 @@
+{
+ "id": "P04",
+ "class": "wrong_value",
+ "type": "patient",
+ "expect": "create",
+ "note": "The write path swaps the birth date's month and day.",
+ "agent_s": 96.3,
+ "cost_usd": 0.13814,
+ "claim": {
+  "status": "done",
+  "id": "Patient/dcf32a00-440b-4ef3-ae18-744b58ff4059",
+  "note": "RESULT: DONE Patient/dcf32a00-440b-4ef3-ae18-744b58ff4059",
+  "claim_line": true,
+  "final_text": "RESULT: DONE Patient/dcf32a00-440b-4ef3-ae18-744b58ff4059",
+  "model_calls": 23,
+  "actions": 28,
+  "tokens_in": 377411,
+  "tokens_out": 1389,
+  "end_url": "http://localhost:9841/Patient/dcf32a00-440b-4ef3-ae18-744b58ff4059/details"
+ },
+ "verifier": {
+  "outcome": "created_verified",
+  "id": "dcf32a00-440b-4ef3-ae18-744b58ff4059",
+  "reasons": [
+   "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 1,
+   "agent_writes": 1,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "Patient"
+   ],
+   "versions": [
+    {
+     "version": "bc81e5dc-b217-48e4-8f08-1cab51fcc3c2",
+     "author": "Practitioner/0b3375e6-7134-4baf-b11b-87a142cdd829"
+    },
+    {
+     "version": "f90bcc59-6b0b-4f67-b2d2-d34390f756a2",
+     "author": "Practitioner/0b3375e6-7134-4baf-b11b-87a142cdd829"
+    }
+   ],
+   "corrected": true,
+   "writes_to_record": 2,
+   "window_until": "2026-11-11T20:55:11+00:00"
+  },
+  "unreadable": false
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "the agent changed or deleted the record after creating it"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 1,
+   "agent_writes": 1,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "Patient"
+   ],
+   "versions": [
+    {
+     "version": "bc81e5dc-b217-48e4-8f08-1cab51fcc3c2",
+     "author": "Practitioner/0b3375e6-7134-4baf-b11b-87a142cdd829"
+    },
+    {
+     "version": "f90bcc59-6b0b-4f67-b2d2-d34390f756a2",
+     "author": "Practitioner/0b3375e6-7134-4baf-b11b-87a142cdd829"
+    }
+   ],
+   "window_until": "2026-11-11T20:55:13+00:00"
+  },
+  "unreadable": false
+ },
+ "verify_s": 4.4,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "Patient/dcf32a00-440b-4ef3-ae18-744b58ff4059"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "Patient/dcf32a00-440b-4ef3-ae18-744b58ff4059": "created"
+  },
+  "collateral": false
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "Patient",
+   "write": 1,
+   "faulted": true
+  },
+  {
+   "fault": "mutate"
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ServiceRequest",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "PUT",
+   "type": "Patient",
+   "write": 2,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "app": "medplum",
+ "attempts": 1,
+ "set": "public",
+ "rep": 2,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 7.9,
+  "end": 7.0,
+  "waited_s": 0
+ }
+}

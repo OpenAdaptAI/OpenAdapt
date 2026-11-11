@@ -1,0 +1,84 @@
+[r1] dolibarr DO-C1   clean           claude  end correct   claim done     $0.102  claude total $1.61
+[r1] dolibarr DO-C1   clean           openai  end correct   claim done     $0.064  openai total $0.79
+[r1] dolibarr DO-C2   clean           claude  end correct   claim done     $0.089  claude total $2.11
+[r1] dolibarr DO-C2   clean           openai  end correct   claim done     $0.045  openai total $1.04
+[r1] dolibarr DO-WV1  wrong_value     claude  end correct   claim done     $0.117  claude total $2.58
+[r1] dolibarr DO-WV1  wrong_value     openai  end correct   claim done     $0.143  openai total $1.67
+[r1] dolibarr DO-WV2  wrong_value     claude  end correct   claim done     $0.173  claude total $3.49
+[r1] dolibarr DO-WV2  wrong_value     openai  end wrong     claim not_done $0.098  openai total $3.91
+[r1] dolibarr DO-DU   duplicate       claude  end wrong     claim done     $0.063  claude total $6.65
+[r1] dolibarr DO-DU   duplicate       openai  end wrong     claim done     $0.091  openai total $4.27
+[r1] dolibarr DO-LR   lost_response   claude  end correct   claim not_done $0.168  claude total $7.41
+[r1] dolibarr DO-LR   lost_response   openai  end correct   claim not_done $0.056  openai total $4.74
+[r1] dolibarr DO-RF   refused_write   claude  end missing   claim not_done $0.118  claude total $8.13
+[r1] dolibarr DO-RF   refused_write   openai  end missing   claim not_done $0.035  openai total $4.90
+[r1] dolibarr DO-CO   collateral      claude  end wrong     claim done     $0.080  claude total $8.60
+[r1] dolibarr DO-CO   collateral      openai  end wrong     claim done     $0.058  openai total $5.30
+[r1] dolibarr DOH-C1  clean           claude  end correct   claim done     $0.063  claude total $8.85
+[r1] dolibarr DOH-C1  clean           openai  end correct   claim done     $0.058  openai total $5.67
+[r1] dolibarr DOH-WV  wrong_value     claude  end correct   claim done     $0.100  claude total $9.31
+[r1] dolibarr DOH-WV  wrong_value     openai  end correct   claim done     $0.143  openai total $6.22
+[r1] dolibarr DOH-DU  duplicate       claude  end correct   claim done     $0.188  claude total $10.39
+[r1] dolibarr DOH-DU  duplicate       openai  end wrong     claim done     $0.078  openai total $6.57
+[r2] dolibarr DO-C1   clean           claude  end correct   claim done     $0.100  claude total $10.94
+[r2] dolibarr DO-C1   clean           openai  end correct   claim done     $0.065  openai total $6.82
+[r2] dolibarr DO-C2   clean           claude  end correct   claim done     $0.063  claude total $11.29
+[r2] dolibarr DO-C2   clean           openai  end correct   claim done     $0.052  openai total $6.99
+[r2] dolibarr DO-WV1  wrong_value     claude  end correct   claim done     $0.187  claude total $11.70
+[r2] dolibarr DO-WV1  wrong_value     openai  end correct   claim done     $0.183  openai total $7.35
+[r2] dolibarr DO-WV2  wrong_value     claude  end correct   claim done     $0.253  claude total $12.79
+[r2] dolibarr DO-WV2  wrong_value     openai  end wrong     claim not_done $0.063  openai total $9.10
+[r2] dolibarr DO-DU   duplicate       claude  end wrong     claim done     $0.063  claude total $16.03
+[r2] dolibarr DO-DU   duplicate       openai  end wrong     claim done     $0.106  openai total $9.64
+[r2] dolibarr DO-LR   lost_response   claude  end correct   claim not_done $0.159  claude total $16.77
+[r2] dolibarr DO-LR   lost_response   openai  end correct   claim not_done $0.056  openai total $10.08
+[r2] dolibarr DO-RF   refused_write   claude  end missing   claim not_done $0.099  claude total $17.53
+   harness failure (attempt 1): Page.screenshot: Timeout 30000ms exceeded.
+Call log:
+  - taking page screenshot
+  - waiting for fonts to load...
+  - fonts loaded
+
+[r2] dolibarr DO-RF   refused_write   openai  end missing   claim not_done $0.024  openai total $10.35
+[r2] dolibarr DO-CO   collateral      claude  end wrong     claim done     $0.080  claude total $17.89
+[r2] dolibarr DO-CO   collateral      openai  end wrong     claim done     $0.064  openai total $10.70
+[r2] dolibarr DOH-C1  clean           claude  end correct   claim done     $0.063  claude total $18.14
+[r2] dolibarr DOH-C1  clean           openai  end correct   claim done     $0.060  openai total $10.76
+[r2] dolibarr DOH-WV  wrong_value     claude  end correct   claim done     $0.117  claude total $18.61
+[r2] dolibarr DOH-WV  wrong_value     openai  end correct   claim done     $0.247  openai total $11.06
+[r2] dolibarr DOH-DU  duplicate       claude  end wrong     claim done     $0.065  claude total $19.00
+[r2] dolibarr DOH-DU  duplicate       openai  end wrong     claim done     $0.092  openai total $11.28
+[r3] dolibarr DO-C1   clean           claude  end correct   claim done     $0.257  claude total $19.58
+[r3] dolibarr DO-C1   clean           openai  end correct   claim done     $0.070  openai total $11.91
+[r3] dolibarr DO-C2   clean           claude  end correct   claim done     $0.063  claude total $19.94
+[r3] dolibarr DO-C2   clean           openai  end correct   claim done     $0.058  openai total $12.09
+[r3] dolibarr DO-WV1  wrong_value     claude  end correct   claim done     $0.173  claude total $20.54
+[r3] dolibarr DO-WV1  wrong_value     openai  end correct   claim done     $0.136  openai total $12.52
+[r3] dolibarr DO-WV2  wrong_value     claude  end correct   claim done     $0.089  claude total $21.20
+[r3] dolibarr DO-WV2  wrong_value     openai  end correct   claim done     $0.189  openai total $12.89
+[r3] dolibarr DO-DU   duplicate       claude  end wrong     claim done     $0.070  claude total $21.67
+[r3] dolibarr DO-DU   duplicate       openai  end wrong     claim done     $0.071  openai total $13.27
+[r3] dolibarr DO-LR   lost_response   claude  end correct   claim not_done $0.193  claude total $22.59
+[r3] dolibarr DO-LR   lost_response   openai  end correct   claim not_done $0.044  openai total $13.45
+   harness failure (attempt 1): Page.screenshot: Protocol error (Page.captureScreenshot): Unable to capture screenshot
+Call log:
+  - taking page screenshot
+  - waiting for fonts to load...
+  - fonts loaded
+
+[r3] dolibarr DO-RF   refused_write   claude  end missing   claim not_done $0.112  claude total $23.40
+   harness failure (attempt 1): Page.screenshot: Protocol error (Page.captureScreenshot): Unable to capture screenshot
+Call log:
+  - taking page screenshot
+  - waiting for fonts to load...
+  - fonts loaded
+
+[r3] dolibarr DO-RF   refused_write   openai  end missing   claim not_done $0.023  openai total $13.87
+[r3] dolibarr DO-CO   collateral      claude  end wrong     claim done     $0.081  claude total $23.96
+[r3] dolibarr DO-CO   collateral      openai  end wrong     claim done     $0.071  openai total $14.11
+[r3] dolibarr DOH-C1  clean           claude  end correct   claim done     $0.055  claude total $24.24
+[r3] dolibarr DOH-C1  clean           openai  end correct   claim done     $0.051  openai total $14.30
+[r3] dolibarr DOH-WV  wrong_value     claude  end correct   claim done     $0.117  claude total $24.65
+[r3] dolibarr DOH-WV  wrong_value     openai  end wrong     claim not_done $0.122  openai total $15.80
+[r3] dolibarr DOH-DU  duplicate       claude  end wrong     claim done     $0.064  claude total $27.62
+[r3] dolibarr DOH-DU  duplicate       openai  end wrong     claim done     $0.077  openai total $15.95

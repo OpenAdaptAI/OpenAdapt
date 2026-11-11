@@ -1,0 +1,711 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_09cc73a09a553725016af4d60bd6c487d2ae5d66f4f960a31b",
+     "call_id": "call_c1rVsYj1r4oH48w8NbDcX0Tt",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_09cc73a09a553725016af4d60ea7d487d2b2fcb49eaf3500b8",
+     "call_id": "call_TceqkR9PDXp71O2KUaBMwTSM",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 22,
+       "y": 165
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_09cc73a09a553725016af4d6116f8c87d2810be60a03223dae",
+     "call_id": "call_EjQO5HLzuJQJuSDgSKryPdZ8",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_09cc73a09a553725016af4d613b3fc87d2966aa005119edeeb",
+     "call_id": "call_JGtjylYLp6UtBGAKmjhF2AN7",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1191,
+       "y": 61
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_09cc73a09a553725016af4d61780ec87d294baf844db14c269",
+     "call_id": "call_XO7PR0OnCoOmhLtE5x2Ohsj1",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_09cc73a09a553725016af4d619dd0c87d2ab3f0f5c9fab8813",
+     "call_id": "call_Hej98BXRqt5ydK6nLrFIlUXH",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 220,
+       "y": 230
+      },
+      {
+       "text": "Granite Roofing",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 581,
+       "y": 231
+      },
+      {
+       "text": "granite.example.invalid",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 197,
+       "y": 698
+      },
+      {
+       "text": "Flat roofs and repairs.",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 432,
+       "y": 618
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_09cc73a09a553725016af4d61d14f487d285fb7ab92101e5c1",
+     "call_id": "call_DycFgOzudCbKrTfCfi5kTzlv",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 128,
+       "y": 682
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 820,
+       "y": 617
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_09cc73a09a553725016af4d620075887d28538b9d91f154a39",
+     "call_id": "call_JcjOMDTQcGsqrBA1s07qWXA9",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": 194,
+       "type": "scroll",
+       "x": 666,
+       "y": 535
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_09cc73a09a553725016af4d623bcc087d29aa7274a49491865",
+     "call_id": "call_uijt1U4jlCfRFNy4xU8TQZ3o",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 716,
+       "y": 613
+      },
+      {
+       "keys": [
+        "c"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_09cc73a09a553725016af4d626437c87d29a28a8b8c42011cc",
+     "call_id": "call_k1RflkJxeBgKL1HvVipba9B9",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 538,
+       "y": 522
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 95,
+       "y": 106
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_09cc73a09a553725016af4d6296dd487d2834249618973b1c9",
+     "call_id": "call_j0IAR7laDH6Wt5ygf65lbrKP",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_09cc73a09a553725016af4d62be47887d2a6d92ace42cfa4d2",
+     "call_id": "call_lkXr19kN3AwZxZqbXfRhZ7s3",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      },
+      {
+       "keys": [
+        "CTRL",
+        "l"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_09cc73a09a553725016af4d62fecec87d2a1ab1b6931ab37dc",
+     "call_id": "call_8geAciDooqkAFsjlOzUJiuLQ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "F11"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_09cc73a09a553725016af4d633ae4887d2bd0ee8bd175d2669",
+     "call_id": "call_LD4kmEVsmtLLC60xSJQX9EOQ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "right",
+       "type": "click",
+       "x": 280,
+       "y": 56
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_09cc73a09a553725016af4d636d0cc87d2aaa079ed972ad792",
+     "call_id": "call_GF49GpBpwanTonOXzk2AhdFZ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 143,
+       "y": 112
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_09cc73a09a553725016af4d63a5c2487d2b2f04cc9489d2860",
+     "call_id": "call_g2O0kFjtFO1dHQExdUY4taby",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 136,
+       "y": 230
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_09cc73a09a553725016af4d64124b087d2a0784f7e44042bf2",
+     "call_id": "call_2gayZgEUjvMOJ6OBvRKYZKvn",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 492,
+       "y": 70
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 120,
+       "y": 56
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_09cc73a09a553725016af4d644688887d2a2409b6475b7aa99",
+     "call_id": "call_xGPPSMosWJs0Cg0YZi1zgwuH",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_09cc73a09a553725016af4d647dc2487d2a08c3e273cac847e",
+     "call_id": "call_JDWpIsGqQK6MUZJVISkFJjt9",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 157,
+       "y": 250
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE Account created with all five requested values, but I could not retrieve its record ID or page URL.",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 22,
+   "y": 165,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1191,
+   "y": 61,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 220,
+   "y": 230,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Granite Roofing"
+  },
+  {
+   "a": "click",
+   "x": 581,
+   "y": 231,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "granite.example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 197,
+   "y": 698,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Flat roofs and repairs."
+  },
+  {
+   "a": "click",
+   "x": 432,
+   "y": 618,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 128,
+   "y": 682,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 820,
+   "y": 617,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 666,
+   "y": 535,
+   "dx": 0,
+   "dy": 194
+  },
+  {
+   "a": "click",
+   "x": 716,
+   "y": 613,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "c"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 538,
+   "y": 522,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 95,
+   "y": 106,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "l"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "F11"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 280,
+   "y": 56,
+   "button": "right",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 143,
+   "y": 112,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 136,
+   "y": 230,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 492,
+   "y": 70,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 120,
+   "y": 56,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "move",
+   "x": 157,
+   "y": 250
+  }
+ ],
+ "usage": [
+  {
+   "in": 2202,
+   "out": 19,
+   "usd": 0.004594,
+   "cached": 0
+  },
+  {
+   "in": 3419,
+   "out": 31,
+   "usd": 0.00319,
+   "cached": 2199
+  },
+  {
+   "in": 4675,
+   "out": 18,
+   "usd": 0.003381,
+   "cached": 3416
+  },
+  {
+   "in": 5903,
+   "out": 32,
+   "usd": 0.003716,
+   "cached": 4672
+  },
+  {
+   "in": 7160,
+   "out": 15,
+   "usd": 0.00385,
+   "cached": 5900
+  },
+  {
+   "in": 8388,
+   "out": 112,
+   "usd": 0.005013,
+   "cached": 7157
+  },
+  {
+   "in": 9760,
+   "out": 47,
+   "usd": 0.004897,
+   "cached": 8385
+  },
+  {
+   "in": 11040,
+   "out": 37,
+   "usd": 0.004887,
+   "cached": 9757
+  },
+  {
+   "in": 12302,
+   "out": 67,
+   "usd": 0.005407,
+   "cached": 11037
+  },
+  {
+   "in": 13598,
+   "out": 47,
+   "usd": 0.005528,
+   "cached": 12299
+  },
+  {
+   "in": 14878,
+   "out": 15,
+   "usd": 0.005435,
+   "cached": 13595
+  },
+  {
+   "in": 16106,
+   "out": 30,
+   "usd": 0.005737,
+   "cached": 14875
+  },
+  {
+   "in": 17361,
+   "out": 40,
+   "usd": 0.006137,
+   "cached": 16103
+  },
+  {
+   "in": 18622,
+   "out": 68,
+   "usd": 0.00668,
+   "cached": 17358
+  },
+  {
+   "in": 19915,
+   "out": 46,
+   "usd": 0.006776,
+   "cached": 18619
+  },
+  {
+   "in": 21186,
+   "out": 43,
+   "usd": 0.00696,
+   "cached": 19912
+  },
+  {
+   "in": 22454,
+   "out": 138,
+   "usd": 0.008159,
+   "cached": 21183
+  },
+  {
+   "in": 23825,
+   "out": 15,
+   "usd": 0.007388,
+   "cached": 22451
+  },
+  {
+   "in": 25053,
+   "out": 27,
+   "usd": 0.007496,
+   "cached": 23822
+  },
+  {
+   "in": 26305,
+   "out": 158,
+   "usd": 0.0091,
+   "cached": 25050
+  }
+ ]
+}

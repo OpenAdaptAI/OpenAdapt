@@ -1,0 +1,60 @@
+{
+ "id": "ES-DU",
+ "app": "espocrm",
+ "class": "duplicate",
+ "note": "The save is delivered twice (the second without the app's duplicate check).",
+ "agent_s": 80.5,
+ "cost_usd": 0.194991,
+ "claim": {
+  "status": "not_done",
+  "id": "Unable to retrieve the created record\u2019s ID or page URL.",
+  "note": "RESULT: NOT DONE Unable to retrieve the created record\u2019s ID or page URL.",
+  "claim_line": true,
+  "final_text": "Created Granite Roofing with the five requested values; all other fields were left unchanged.\n\nRESULT: NOT DONE Unable to retrieve the created record\u2019s ID or page URL.",
+  "model_calls": 29,
+  "actions": 31,
+  "tokens_in": 575245,
+  "tokens_out": 1206,
+  "end_url": "http://127.0.0.1:9856/#Account/view/6af4cd443f2bf9375"
+ },
+ "oracle": {
+  "verdict": "wrong",
+  "reasons": [
+   "2 new records"
+  ],
+  "new": [
+   "6af4cd442d6375236",
+   "6af4cd443f2bf9375"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": true,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794428228.11,
+   "method": "POST",
+   "path": "/api/v1/Account",
+   "save": true,
+   "fault": [
+    "duplicate",
+    "replay_headers"
+   ],
+   "status": "200+200",
+   "ms": 146
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 2,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 8.2,
+  "end": 9.3,
+  "waited_s": 0
+ }
+}

@@ -1,0 +1,396 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f90c56f39eb5495016af4caa9288087d287c91e56a79f8541",
+     "call_id": "call_eQi4A0vPOFlBF7hIZsYpeNfe",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f90c56f39eb5495016af4caab65b087d28d18be0cf23491a7",
+     "call_id": "call_iVI7rANgXJzCXM6kvn1WKoto",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 24,
+       "y": 95
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f90c56f39eb5495016af4caad98ec87d28e451e046998f537",
+     "call_id": "call_779gD7ZRmvaNGCIKnPbqVkyw",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 53,
+       "y": 121
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f90c56f39eb5495016af4cab048c887d2a16906e1189b3443",
+     "call_id": "call_MVDuUVzM0FQdXBYQaD2mVPLY",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "text": "Printer drops scan jobs",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 350,
+       "y": 310
+      },
+      {
+       "text": "Scans over 20 pages vanish.",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 335,
+       "y": 483
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f90c56f39eb5495016af4cab2f65c87d2b7b293ad85eeabc0",
+     "call_id": "call_l9u5dJj4BXAgb0UoAnxHcwDo",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "h"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "TAB"
+       ],
+       "type": "keypress"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 843,
+       "y": 521
+      },
+      {
+       "keys": [
+        "ARROWUP"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f90c56f39eb5495016af4cab5ab5487d2afc118d6140a8bd5",
+     "call_id": "call_IGZlFlMjlccCkJq5UE7Zl59O",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "ARROWRIGHT"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "1"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "2"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ARROWRIGHT"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "0"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "4"
+       ],
+       "type": "keypress"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 852,
+       "y": 554
+      },
+      {
+       "text": "2.5",
+       "type": "type"
+      },
+      {
+       "keys": [
+        "TAB"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f90c56f39eb5495016af4cab841c487d28eb4ae059ad6e194",
+     "call_id": "call_IulqL06a1asJWOFRFQw4V1NG",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 40,
+       "y": 724
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: DONE 85",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 24,
+   "y": 95,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 53,
+   "y": 121,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Printer drops scan jobs"
+  },
+  {
+   "a": "click",
+   "x": 350,
+   "y": 310,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Scans over 20 pages vanish."
+  },
+  {
+   "a": "click",
+   "x": 335,
+   "y": 483,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "h"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "TAB"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 843,
+   "y": 521,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ARROWUP"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ARROWRIGHT"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "1"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "2"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ARROWRIGHT"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "0"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "4"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 852,
+   "y": 554,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "2.5"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "TAB"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 40,
+   "y": 724,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  }
+ ],
+ "usage": [
+  {
+   "in": 2218,
+   "out": 18,
+   "usd": 0.000629,
+   "cached": 2215
+  },
+  {
+   "in": 3435,
+   "out": 31,
+   "usd": 0.001002,
+   "cached": 3432
+  },
+  {
+   "in": 4691,
+   "out": 31,
+   "usd": 0.003514,
+   "cached": 3432
+  },
+  {
+   "in": 5947,
+   "out": 73,
+   "usd": 0.004186,
+   "cached": 4688
+  },
+  {
+   "in": 7260,
+   "out": 60,
+   "usd": 0.004421,
+   "cached": 5944
+  },
+  {
+   "in": 8557,
+   "out": 110,
+   "usd": 0.005151,
+   "cached": 7257
+  },
+  {
+   "in": 9924,
+   "out": 31,
+   "usd": 0.004761,
+   "cached": 8554
+  },
+  {
+   "in": 11180,
+   "out": 9,
+   "usd": 0.004592,
+   "cached": 9921
+  }
+ ]
+}
