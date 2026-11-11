@@ -38,6 +38,7 @@ HoldCode = Literal[
     "ledger_authority_interrupted",
     "ledger_journal_mismatch",
     "ledger_legacy_unauthenticated",
+    "ledger_protected_requires_authority",
 ]
 
 
@@ -99,6 +100,12 @@ class SQLiteJournalAuthority:
             generation,
             hashlib.sha256(os.fsencode(self.root)).hexdigest(),
         )
+
+    def protection_scope_sha256(self) -> str:
+        """Bind the local protection marker to the exact external authority."""
+
+        scope = json.dumps((str(self.path), *self._scope), separators=(",", ":"))
+        return hashlib.sha256(scope.encode("ascii")).hexdigest()
 
     def require_existing(self) -> None:
         """Require an existing authority file without opening or creating it."""

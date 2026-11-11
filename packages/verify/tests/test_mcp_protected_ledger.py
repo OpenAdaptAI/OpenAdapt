@@ -9,11 +9,13 @@ from pathlib import Path
 
 import anyio
 from test_cli_protected_ledger import (
+    _AUTHORITY_ENV,
     _assert_no_new_evidence,
     _child_env,
     _configure_authority,
     _installed_verify,
     _protected_attempt,
+    _retained_evidence,
 )
 from test_cli_verdicts import _files
 from test_verification import VALUES
@@ -156,3 +158,62 @@ def test_installed_mcp_missing_authority_refuses_write(store, tmp_path, monkeypa
     anyio.run(exercise)
     assert store.posts == 0 and store.records() == []
     _assert_no_new_evidence(authority, state)
+
+
+def test_installed_mcp_restart_requires_authority_after_enrolled_write(
+    store, tmp_path, monkeypatch
+):
+    authority = _configure_authority(tmp_path, monkeypatch, enroll=True)
+    env = _child_env(tmp_path)
+    contracts, state = tmp_path / "contracts", tmp_path / "mcp-state"
+    contracts.mkdir()
+    contract, _ = _files(store, contracts, 3600)
+    request = {
+        "contract": contract.stem,
+        "values": VALUES,
+        "write_key": "synthetic-protected-write",
+    }
+
+    async def exercise():
+        async with _installed_session(tmp_path, contracts, state, env, monkeypatch) as (
+            session,
+            first_child,
+        ):
+            begun = _json_reply(await session.call_tool("verify_begin", request))
+            assert begun["ok_to_write"] is True
+            write_id = begun["write_id"]
+            await anyio.to_thread.run_sync(store.save, VALUES)
+            first = _json_reply(
+                await session.call_tool("verify_check", {"write_id": write_id})
+            )
+            assert first["verified"] is True and first["provisional"] is True
+
+        attempt = _protected_attempt(authority, write_id)
+        assert attempt.recheck_owed == first["recheck_due_at"]
+        receipt = Path(first["receipt_path"])
+        outputs = (receipt, receipt.parent / "recheck.json")
+        evidence = _retained_evidence(authority, state, *outputs)
+
+        monkeypatch.delenv(_AUTHORITY_ENV)
+        del env[_AUTHORITY_ENV]
+        async with _installed_session(tmp_path, contracts, state, env, monkeypatch) as (
+            session,
+            restarted_child,
+        ):
+            assert restarted_child is not first_child and first_child.returncode == 0
+            checked = await session.call_tool("verify_recheck", {"write_id": write_id})
+            assert _is_error(checked) is True and len(checked.content) == 1
+            assert (
+                "the write ledger is held (ledger_protected_requires_authority)"
+                in checked.content[0].text
+            )
+            refused = _json_reply(await session.call_tool("verify_begin", request))
+            assert refused["ok_to_write"] is False
+            assert refused["hold_reason"] == "ledger_protected_requires_authority"
+            assert "write_id" not in refused and "earlier_result" not in refused
+
+        assert _retained_evidence(authority, state, *outputs) == evidence
+        assert _protected_attempt(authority, write_id) == attempt
+
+    anyio.run(exercise)
+    assert store.posts == 1 and store.records() == [{"id": 1, **VALUES}]

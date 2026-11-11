@@ -175,6 +175,12 @@ def test_verify_ledger_explicit_root_must_match_protected_configuration(
     assert not other.exists()
     assert authority.snapshot().revision == 2
 
+    monkeypatch.delenv("OPENADAPT_LEDGER_AUTHORITY_CONFIG")
+    unconfigured = runner.invoke(main, [*command, str(journal)])
+    assert unconfigured.exit_code == 1
+    assert unconfigured.output == "Error: ledger_protected_requires_authority\n"
+    assert authority.snapshot().revision == 2
+
 
 def test_verify_serve_refuses_configured_protection_without_flow_support(
     tmp_path, monkeypatch
@@ -192,3 +198,16 @@ def test_verify_serve_refuses_configured_protection_without_flow_support(
     assert result.exit_code != 0
     assert "ledger_authority_unsupported" in result.output
     assert seen == []
+
+
+def test_verify_ledger_list_reports_named_read_hold(tmp_path, monkeypatch) -> None:
+    from openadapt_flow.write_ledger import Ledger, LedgerIntegrityHeld
+
+    def unavailable(_ledger):
+        raise LedgerIntegrityHeld("ledger_authority_unavailable")
+
+    monkeypatch.setattr(Ledger, "unresolved", unavailable)
+    command = ["verify", "ledger", "list", "--ledger", str(tmp_path / "journal")]
+    result = CliRunner().invoke(main, command)
+    assert result.exit_code == 1
+    assert result.output == "Error: ledger_authority_unavailable\n"

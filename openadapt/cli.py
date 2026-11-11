@@ -1546,6 +1546,20 @@ def _protected_ledger_requested() -> bool:
     return True
 
 
+@contextmanager
+def _ledger_hold_error():
+    """Report a named integrity hold without an operator traceback."""
+    try:
+        yield
+    except RuntimeError as exc:
+        from openadapt_flow import write_ledger
+
+        held = getattr(write_ledger, "LedgerIntegrityHeld", None)
+        if isinstance(held, type) and isinstance(exc, held):
+            raise click.ClickException(str(exc)) from None
+        raise
+
+
 def _write_ledger(folder: Optional[str]):
     """The uncertain-write ledger (default ~/.openadapt/ledger)."""
     _require_supported_python()
@@ -1554,14 +1568,10 @@ def _write_ledger(folder: Optional[str]):
     except ImportError:
         click.echo("Error: the OpenAdapt engine is not installed.", err=True)
         sys.exit(1)
-    if _protected_ledger_requested():
-        from openadapt_flow.write_ledger import LedgerIntegrityHeld
-
-        try:
+    with _ledger_hold_error():
+        if _protected_ledger_requested():
             return default_ledger(root=folder)
-        except LedgerIntegrityHeld as exc:
-            raise click.ClickException(exc.code) from None
-    return Ledger(FileLedger(folder)) if folder else default_ledger()
+        return Ledger(FileLedger(folder)) if folder else default_ledger()
 
 
 _LEDGER_OPTION = click.option(
@@ -1593,8 +1603,9 @@ def verify_ledger_list(ledger_dir: Optional[str]) -> None:
     time, so a recheck isn't lost when the server that holds it restarts.
     """
     ledger = _write_ledger(ledger_dir)
-    rows = ledger.unresolved()
-    owed = ledger.rechecks_owed()
+    with _ledger_hold_error():
+        rows = ledger.unresolved()
+        owed = ledger.rechecks_owed()
     if not rows and not owed:
         click.echo("No held or open writes. No rechecks owed.")
         return
@@ -1639,7 +1650,8 @@ def verify_ledger_reconcile(
             click.echo(f"Error: contract {path.name}: {exc}", err=True)
             sys.exit(2)
         by_digest[contract.identity] = contract
-    rows = [(k, a) for k, a in ledger.unresolved() if key is None or k == key]
+    with _ledger_hold_error():
+        rows = [(k, a) for k, a in ledger.unresolved() if key is None or k == key]
     if key is not None and not rows:
         click.echo(f"Error: no held or open write with key {key}", err=True)
         sys.exit(2)
@@ -1649,7 +1661,8 @@ def verify_ledger_reconcile(
             click.echo(f"{k}  skipped: its contract isn't in {contracts}")
             continue
         try:
-            state = reconcile(held_contract, k, ledger=ledger)
+            with _ledger_hold_error():
+                state = reconcile(held_contract, k, ledger=ledger)
         except VerifierError as exc:
             click.echo(f"{k}  skipped: {exc}")
             continue

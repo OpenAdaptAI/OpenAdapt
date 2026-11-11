@@ -205,3 +205,102 @@ def test_installed_cli_missing_authority_holds_before_writer(
     assert not marker.exists()
     assert store.posts == 0 and store.records() == []
     _assert_no_new_evidence(authority, state)
+
+
+def _retained_evidence(authority, state, *outputs):
+    entries = authority.root / "entries"
+    event_streams = sorted(entries.glob("*.jsonl"))
+    assert event_streams
+    journal_layout = sorted(
+        path.relative_to(authority.root) for path in authority.root.rglob("*")
+    )
+    state_layout = sorted(path.relative_to(state) for path in state.rglob("*"))
+    return (
+        journal_layout,
+        state_layout,
+        {path: path.read_bytes() for path in [*event_streams, *outputs]},
+    )
+
+
+def test_installed_cli_requires_authority_after_enrolled_write(
+    store, tmp_path, monkeypatch
+):
+    authority = _configure_authority(tmp_path, monkeypatch, enroll=True)
+    env = _child_env(tmp_path)
+    contract, params = _files(store, tmp_path, 3600)
+    state = tmp_path / "writes"
+    writer = (
+        "import sqlite3,sys\n"
+        "with sqlite3.connect(sys.argv[1]) as db:\n"
+        "    db.execute('INSERT INTO item(code, quantity) VALUES (?, ?)', sys.argv[2:])"
+    )
+    started = _cli(
+        env,
+        "run",
+        "--contract",
+        contract,
+        "--params",
+        params,
+        "--state",
+        state,
+        "--",
+        sys.executable,
+        "-c",
+        writer,
+        store.path,
+        VALUES["code"],
+        VALUES["quantity"],
+    )
+    assert started.returncode == 5, started.stderr
+    first = json.loads(started.stdout)
+    assert first["outcome"] == "CONFIRMED" and first["provisional"] is True
+    assert first["command_returncode"] == 0 and first["write_receipt"] == "issued"
+    attempt = _protected_attempt(authority, first["write_id"])
+    assert attempt.recheck_owed == first["recheck_due_at"]
+    outputs = (Path(first["write_receipt_path"]), Path(first["recheck_state_path"]))
+    evidence = _retained_evidence(authority, state, *outputs)
+    assert store.records() == [{"id": 1, **VALUES}]
+
+    # Both fresh CLI processes use the same journal and evidence paths.
+    monkeypatch.delenv(_AUTHORITY_ENV)
+    del env[_AUTHORITY_ENV]
+    hold = {
+        "verified": False,
+        "outcome": "UNCERTAIN",
+        "hold_reason": "ledger_protected_requires_authority",
+    }
+    checked = _cli(
+        env,
+        "recheck",
+        "--contract",
+        contract,
+        "--params",
+        params,
+        "--recheck-state",
+        outputs[1],
+    )
+    assert checked.returncode == 3, checked.stderr
+    assert json.loads(checked.stdout) == hold
+
+    marker = tmp_path / "unexpected-writer"
+    refused = _cli(
+        env,
+        "run",
+        "--contract",
+        contract,
+        "--params",
+        params,
+        "--state",
+        state,
+        "--",
+        sys.executable,
+        "-c",
+        "from pathlib import Path; import sys; Path(sys.argv[1]).touch()",
+        marker,
+    )
+    assert refused.returncode == 3, refused.stderr
+    assert json.loads(refused.stdout) == {**hold, "written": False}
+    assert not marker.exists()
+    assert _retained_evidence(authority, state, *outputs) == evidence
+    assert _protected_attempt(authority, first["write_id"]) == attempt
+    assert store.posts == 0 and store.records() == [{"id": 1, **VALUES}]

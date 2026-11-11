@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from openadapt_flow import write_ledger as ledger_module
 from openadapt_flow.write_ledger import (
     PROTECTED_LEDGER_CONFIG_ENV,
     FileLedger,
@@ -176,4 +177,110 @@ def test_default_does_not_rebuild_incomplete_journal(
     assert held.value.code == "ledger_authority_unavailable"
     assert not missing_path.exists()
     assert not (root / "ledger.key").exists()
+    assert authority.snapshot().revision == 0
+
+
+@pytest.mark.parametrize("access", ["default", "constructor", "retained"])
+def test_legacy_paths_refuse_marked_journal_before_opening_data(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, access: str
+) -> None:
+    root = tmp_path / "journal"
+    legacy = FileLedger(root)
+    authority = _authority(tmp_path / "authority.sqlite", root)
+    legacy.enroll(authority, authorized=True)
+    assert (root / ".protected-ledger").is_file()
+    monkeypatch.setenv("OPENADAPT_LEDGER_DIR", str(root))
+
+    def unexpected(*_args, **_kwargs):
+        pytest.fail("a marked journal must hold before opening data")
+
+    monkeypatch.setattr(ledger_module, "_private_dir", unexpected)
+    monkeypatch.setattr(legacy, "_events", unexpected)
+    with pytest.raises(
+        LedgerIntegrityHeld, match="^ledger_protected_requires_authority$"
+    ):
+        if access == "default":
+            default_ledger()
+        elif access == "constructor":
+            FileLedger(root)
+        else:
+            legacy.events("a" * 64)
+
+
+def test_interrupted_enrollment_keeps_the_marker_and_refuses_legacy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "journal"
+    legacy = FileLedger(root)
+    authority = _authority(tmp_path / "authority.sqlite", root)
+    marker = root / ".protected-ledger"
+
+    def refuse_initialization(_heads, _lookup_key):
+        assert marker.is_file()
+        raise LedgerIntegrityHeld("ledger_authority_interrupted")
+
+    monkeypatch.setattr(authority, "initialize", refuse_initialization)
+    with pytest.raises(LedgerIntegrityHeld, match="^ledger_authority_interrupted$"):
+        legacy.enroll(authority, authorized=True)
+
+    assert marker.is_file()
+    assert not authority.path.exists()
+    with pytest.raises(
+        LedgerIntegrityHeld, match="^ledger_protected_requires_authority$"
+    ):
+        FileLedger(root)
+
+
+def test_installed_binding_refuses_an_unmarked_authority(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "journal"
+    FileLedger(root)
+    authority = _authority(tmp_path / "authority.sqlite", root)
+    authority.initialize({}, b"s" * 32)
+    _configure(monkeypatch, tmp_path / "binding.json", root, authority.path)
+
+    with pytest.raises(LedgerIntegrityHeld, match="^ledger_authority_absent$"):
+        default_ledger()
+
+    assert not (root / ".protected-ledger").exists()
+    assert authority.snapshot().revision == 0
+
+
+def test_installed_binding_requires_the_marker_scope(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "journal"
+    authority = _authority(tmp_path / "authority.sqlite", root)
+    FileLedger(root).enroll(authority, authorized=True)
+    descriptor = tmp_path / "binding.json"
+    _configure(monkeypatch, descriptor, root, authority.path)
+    wrong = _descriptor(root, authority.path) | {"generation": "unrelated"}
+    descriptor.write_text(json.dumps(wrong), encoding="utf-8")
+
+    with pytest.raises(LedgerIntegrityHeld, match="^ledger_authority_wrong_scope$"):
+        default_ledger()
+
+    assert authority.snapshot().revision == 0
+
+
+@pytest.mark.parametrize("field", ["journal", "authority"])
+def test_installed_binding_refuses_symlinked_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, field: str
+) -> None:
+    root = tmp_path / "journal"
+    authority = _authority(tmp_path / "authority.sqlite", root)
+    FileLedger(root).enroll(authority, authorized=True)
+    alias = tmp_path / "alias"
+    alias.symlink_to(root if field == "journal" else authority.path)
+    _configure(
+        monkeypatch,
+        tmp_path / "binding.json",
+        alias if field == "journal" else root,
+        alias if field == "authority" else authority.path,
+    )
+
+    with pytest.raises(LedgerIntegrityHeld, match="^ledger_authority_wrong_scope$"):
+        default_ledger()
+
     assert authority.snapshot().revision == 0
