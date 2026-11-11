@@ -14,6 +14,8 @@ from typing import Any, Iterator
 import pytest
 
 from openadapt_flow.runtime.effects import db_snapshot as snap
+from openadapt_flow.runtime.effects.history import HistoryFeed, _sql
+from openadapt_flow.runtime.effects.sql import SqlRecordVerifier
 
 KEY = b"k" * 32
 
@@ -33,7 +35,7 @@ def test_unsafe_or_unknown_results_refuse_before_any_database_read(
 
         def execute(self, sql: str) -> None:
             queries.append(sql)
-            assert sql in ("SELECT @@SESSION.character_set_results", "COMMIT")
+            assert sql == "SELECT @@SESSION.character_set_results"
 
         def fetchall(self) -> Any:
             return rows
@@ -44,7 +46,7 @@ def test_unsafe_or_unknown_results_refuse_before_any_database_read(
     con = Connection()
     with pytest.raises(snap.SnapshotError, match="character_set_results=utf8mb4"):
         snap.take_snapshot(lambda: con, "mysql", key=KEY, modes={"t": mode})
-    assert queries == ["SELECT @@SESSION.character_set_results", "COMMIT"]
+    assert queries == ["SELECT @@SESSION.character_set_results"]
     assert con.closed
 
 
@@ -81,6 +83,60 @@ def charset_database() -> Iterator[Any]:
         with admin.cursor() as cur:
             cur.execute(f"DROP DATABASE IF EXISTS `{name}`")
         admin.close()
+
+
+@live
+@pytest.mark.parametrize("charset", ["latin1", "utf8", "utf8mb4"])
+def test_mysql_history_requires_exact_result_charset(
+    charset_database: Any, charset: str
+) -> None:
+    from pymysql.cursors import Cursor
+
+    admin, connect = charset_database
+    body = "Résumé 😀"
+    with admin.cursor() as cur:
+        cur.execute("INSERT INTO t (body) VALUES (%s)", (body,))
+
+    statements: list[str] = []
+
+    class RecordingCursor(Cursor):
+        def execute(self, query: str, args: Any = None) -> Any:
+            statements.append(query)
+            return super().execute(query, args)
+
+    query = "SELECT id, body FROM t"
+    coverage = (
+        "SELECT COUNT(*) AS event_count, "
+        "'2025-01-01T00:00:00Z' AS retained_since, "
+        "'2025-01-02T00:00:00Z' AS `through` FROM t"
+    )
+    feed = HistoryFeed(
+        read={"kind": "sql", "sql_driver": "pymysql", "sql_query": query},
+        dialect="mysql",
+        coverage_query=coverage,
+    )
+    con = connect(charset, cursorclass=RecordingCursor)
+    statements.clear()
+    charset_query = "SELECT @@SESSION.character_set_results"
+    try:
+        reader = SqlRecordVerifier(lambda: con, query)
+        if charset != "utf8mb4":
+            with pytest.raises(
+                snap.SnapshotError, match="character_set_results=utf8mb4"
+            ):
+                _sql(feed, reader, budget=1)
+            assert statements == [charset_query]
+        else:
+            rows, retained_since, through = _sql(feed, reader, budget=1)
+            assert rows == [{"id": 1, "body": body}]
+            assert retained_since.isoformat() == "2025-01-01T00:00:00+00:00"
+            assert through.isoformat() == "2025-01-02T00:00:00+00:00"
+            assert statements[0] == charset_query
+            assert statements.count(charset_query) == 1
+        assert not con.open
+    finally:
+        if con.open:
+            con.close()
 
 
 @live
