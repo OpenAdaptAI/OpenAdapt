@@ -53,7 +53,6 @@ from openadapt_flow.repair.standard_change import (
     daily_digest,
     revert,
 )
-
 from tests._rest_read_contract_fixtures import mockmed_rest_read_kwargs
 
 pytest.importorskip("playwright.sync_api")
