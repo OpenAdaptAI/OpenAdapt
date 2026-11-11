@@ -120,3 +120,23 @@ def test_heading_discovery_does_not_make_noncanonical_or_extra_heading_valid(
     body = f"From: Claude\nReviewed-Head: {HEAD}\n{heading}"
     with pytest.raises(EvidenceError):
         parse_review_report(body, HEAD)
+
+
+def test_bang_closed_html_comment_cannot_hide_block() -> None:
+    body = (
+        "<!-- x --!>\n"
+        f"From: Claude\nReviewed-Head: {HEAD}\n"
+        "## Independent adversarial review: BLOCK"
+    )
+    with pytest.raises(EvidenceError, match="BLOCK"):
+        parse_review_report(body, HEAD)
+
+
+def test_approval_after_bang_closed_html_comment_does_not_count() -> None:
+    body = (
+        "<!-- x --!>\n"
+        f"From: Claude\nReviewed-Head: {HEAD}\n"
+        "## Independent adversarial review: APPROVE"
+    )
+    with pytest.raises(EvidenceError, match="ambiguous"):
+        parse_review_report(body, HEAD)

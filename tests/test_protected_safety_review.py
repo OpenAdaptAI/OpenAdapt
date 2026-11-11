@@ -306,16 +306,56 @@ def test_noncanonical_comment_timestamps_never_count(timestamp: str) -> None:
     assert any("edited current" in error for error in _evaluate(comments=comments))
 
 
-@pytest.mark.parametrize("verdict", ["APPROVE", "BLOCK"])
-def test_html_comment_examples_neither_approve_nor_veto(verdict: str) -> None:
-    example = _comment(
-        f"Template:\n<!--\n{_review(verdict=verdict)}-->\n", "reviewer-login", 3
-    )
-    inline = _comment(f"<!-- {_review(verdict=verdict)} -->", "reviewer-login", 4)
+def test_html_comment_approval_examples_never_approve() -> None:
+    example = _comment(f"Template:\n<!--\n{_review()}-->\n", "reviewer-login", 3)
+    inline = _comment(f"<!-- {_review()} -->", "reviewer-login", 4)
     assert _evaluate(comments=_comments() + [example, inline]) == []
     assert _evaluate(comments=[example, inline]) == [
         "expected exactly one current exact-head independent review"
     ]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        # HTML5 closes a comment at --!>, so this BLOCK renders.
+        f"<!-- x --!>\n{_review(verdict='BLOCK')}",
+        f"<!-- x --!> {_review(verdict='BLOCK')}",
+        # A BLOCK inside a normal comment still vetoes (fail closed).
+        f"<!--\n{_review(verdict='BLOCK')}-->\n",
+        f"<!-- {_review(verdict='BLOCK')} -->",
+        f"<!--\n{_review(verdict='BLOCK')}",
+        # A fence-like line inside a comment cannot hide a later BLOCK.
+        f"<!--\n```\n-->\n{_review(verdict='BLOCK')}```\n",
+    ],
+    ids=[
+        "bang-close-then-block",
+        "bang-close-same-line",
+        "block-in-comment",
+        "block-in-inline-comment",
+        "block-in-unclosed-comment",
+        "fence-inside-comment",
+    ],
+)
+def test_html_comments_never_hide_a_block(body: str) -> None:
+    errors = _evaluate(comments=_comments() + [_comment(body, "reviewer-login", 3)])
+    assert any("BLOCK" in error for error in errors), errors
+
+
+@pytest.mark.parametrize(
+    "prefix",
+    ["<!-- x --!>\n", "<!-->\n", "<!--->\n", "<!-- a <!-- b -->\n"],
+    ids=["bang-close", "abrupt-open", "abrupt-open-dash", "nested-open"],
+)
+def test_approval_after_ambiguous_html_comment_does_not_count(prefix: str) -> None:
+    review = _comment(prefix + _review(), "reviewer-login", 2)
+    errors = _evaluate(comments=[review])
+    # The approval never counts. Abrupt openings hide the whole body from the
+    # approval view, so the comment is an ignored example; the others fail as
+    # ambiguous.
+    assert "expected exactly one current exact-head independent review" in errors
+    if prefix in {"<!-- x --!>\n", "<!-- a <!-- b -->\n"}:
+        assert any("ambiguous or unclosed HTML comment" in e for e in errors)
 
 
 def test_pr_does_not_need_rebase_to_current_main_tip() -> None:

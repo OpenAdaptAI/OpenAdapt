@@ -25,13 +25,14 @@ from typing import Any
 
 from scripts.ci.attestation import (
     EvidenceError,
-    declaration_text,
     head_reference_lines,
+    is_hidden_approval_example,
     is_legacy_coordinator_note,
     parse_author_declaration,
     parse_review_report,
     review_headings,
     vendor_family,
+    veto_text,
 )
 
 REPOSITORY = "OpenAdaptAI/OpenAdapt"
@@ -144,7 +145,7 @@ def _matches(path: str, pattern: str) -> bool:
 
 
 def _headers(body: str, key: str) -> list[str]:
-    return re.findall(rf"(?m)^{re.escape(key)}: (.*)$", declaration_text(body))
+    return re.findall(rf"(?m)^{re.escape(key)}: (.*)$", veto_text(body))
 
 
 def _current_comment(body: str, head: str) -> bool:
@@ -154,7 +155,7 @@ def _current_comment(body: str, head: str) -> bool:
     is unrecognizable, so only the strict parser decides whether they are valid.
     """
     mentions = re.findall(
-        r"(?m)^ {0,3}Reviewed-Head[ \t]*:[ \t]*(.*)$", declaration_text(body)
+        r"(?m)^ {0,3}Reviewed-Head[ \t]*:[ \t]*(.*)$", veto_text(body)
     )
     return any(
         re.search(rf"(?i)(?<![0-9a-f]){re.escape(head)}(?![0-9a-f])", value)
@@ -173,7 +174,7 @@ def _review_needs_validation(body: str, head: str) -> bool:
         return True
     if heads[0].strip() == head:
         return True
-    visible = unicodedata.normalize("NFKC", declaration_text(body)).casefold()
+    visible = unicodedata.normalize("NFKC", veto_text(body)).casefold()
     references = re.findall(r"[0-9a-f]{8,}", visible)
     return any(head.startswith(value) or value.startswith(head) for value in references)
 
@@ -234,6 +235,8 @@ def _review_errors(
             continue
         unedited = _unedited_comment(comment)
         if review_headings(body):
+            if is_hidden_approval_example(body):
+                continue
             if not _review_needs_validation(body, head):
                 continue
             if not unedited:

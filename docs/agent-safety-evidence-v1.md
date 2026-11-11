@@ -73,8 +73,12 @@ no other heading or verdict word; any other shape fails.
 Only comments from accounts whose `author_association` is `OWNER`, `MEMBER` or
 `COLLABORATOR` count; others neither approve nor block. A review bound to an
 earlier head is ignored, unless it also refers to the current head. Text inside
-Markdown code fences, `>` quotes and HTML comments (`<!-- -->`) is an example
-and never counts as a review or a BLOCK.
+Markdown code fences and `>` quotes is an example and never counts as a review
+or a BLOCK. HTML comments (`<!-- -->`) can only remove approval: an APPROVE
+inside one never counts, but a BLOCK heading inside one still blocks. A review
+whose body has an ambiguous or unclosed HTML comment, including one closed by
+`--!>`, never approves. A fence-like line inside an HTML comment does not open
+a fence.
 
 ## How the check runs
 
