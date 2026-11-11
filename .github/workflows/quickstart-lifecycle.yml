@@ -41,12 +41,32 @@ jobs:
           python scripts/ci/locked_install.py --lock .github/ci-tools:build
           python -m build --wheel --outdir lifecycle-dist
 
+      # Linux system packages are host preparation, not part of the public
+      # command under test. Install Playwright's own Chromium package list
+      # through the cached apt action (no network on a warm cache, mirror
+      # fallback otherwise) instead of `playwright install-deps`, which always
+      # runs `apt-get update` and failed main when the Ubuntu mirrors were
+      # down. Chromium itself is still downloaded lazily by the quickstart.
+      # The throwaway Playwright is the latest release, which is what the
+      # clean environment below resolves (Flow requires playwright>=1.44).
+      - name: Read the Playwright browser dependency list
+        run: |
+          python -m venv "$RUNNER_TEMP/playwright-deps"
+          "$RUNNER_TEMP/playwright-deps/bin/python" -m pip install --disable-pip-version-check -q playwright
+
+      - name: Preinstall Chromium system packages with mirror fallback
+        timeout-minutes: 15
+        uses: ./.github/actions/apt-install
+        with:
+          playwright-deps: chromium
+          playwright-python: ${{ runner.temp }}/playwright-deps/bin/python
+
       - name: Run the public quickstart from a clean environment
         run: >-
           python scripts/quickstart_lifecycle.py
           --launcher-wheel "lifecycle-dist/*.whl"
           --work-dir "runs/launcher-lifecycle"
-          --browser-system-deps
+          --browser-system-deps-preinstalled
           --source-revision "${{ github.sha }}"
 
       - name: Upload lifecycle evidence

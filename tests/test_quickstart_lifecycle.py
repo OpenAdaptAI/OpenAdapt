@@ -163,7 +163,13 @@ def test_browser_probe_reports_exact_install_state(
     )
 
 
-def test_lifecycle_summary_proves_preflight_and_lazy_install(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    ("preinstalled", "recorded"),
+    [(False, "installed-via-playwright"), (True, "preinstalled-by-host")],
+)
+def test_lifecycle_summary_proves_preflight_and_lazy_install(
+    tmp_path, monkeypatch, preinstalled, recorded
+):
     lifecycle = _module()
     launcher_wheel = tmp_path / "openadapt.whl"
     launcher_wheel.write_bytes(b"launcher")
@@ -205,12 +211,13 @@ def test_lifecycle_summary_proves_preflight_and_lazy_install(tmp_path, monkeypat
         launcher_wheel,
         work_dir,
         flow_wheel=None,
-        browser_system_deps=True,
+        browser_system_deps=not preinstalled,
         source_revision="abc123",
+        browser_system_deps_preinstalled=preinstalled,
     )
 
     assert summary["browser_preflight"] == {
-        "system_dependencies": "installed-via-playwright",
+        "system_dependencies": recorded,
         "doctor": "passed-before-browser-download",
         "chromium_present_before_quickstart": False,
         "chromium_present_after_quickstart": True,
@@ -219,7 +226,7 @@ def test_lifecycle_summary_proves_preflight_and_lazy_install(tmp_path, monkeypat
     }
     written = json.loads((work_dir / "summary.json").read_text(encoding="utf-8"))
     assert written["browser_preflight"] == summary["browser_preflight"]
-    assert any("install-deps" in command for command in commands)
+    assert any("install-deps" in command for command in commands) is not preinstalled
     assert not any("--with-deps" in command for command in commands)
 
 
@@ -233,8 +240,18 @@ def test_workflow_runs_the_public_command_in_one_bounded_weekly_job():
     steps = jobs["quickstart"]["steps"]
     run = next(step["run"] for step in steps if step.get("name", "").startswith("Run"))
     assert "scripts/quickstart_lifecycle.py" in run
-    assert "--browser-system-deps" in run
+    # The workflow preinstalls Playwright's package list through the cached
+    # apt action, so the lifecycle records that instead of reaching a mirror.
+    assert "--browser-system-deps-preinstalled" in run.split()
+    assert "--browser-system-deps" not in run.split()
     assert "--browser-with-deps" not in run
+    preinstall = next(
+        step for step in steps if step.get("uses") == "./.github/actions/apt-install"
+    )
+    assert preinstall["with"]["playwright-deps"] == "chromium"
+    assert steps.index(preinstall) < steps.index(
+        next(step for step in steps if step.get("name", "").startswith("Run"))
+    )
     assert jobs["quickstart"]["runs-on"] == "ubuntu-latest"
 
 

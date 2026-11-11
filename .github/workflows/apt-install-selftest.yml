@@ -1,0 +1,196 @@
+name: apt-install self-test
+
+# Exercises .github/actions/apt-install on real runners: mirror fallback when
+# the runner's default mirror is unreachable, a warm-cache install with no
+# network at all, the Playwright dependency list, and the ::error:: a total
+# outage produces. Runs when the action changes, and on demand.
+on:
+  pull_request:
+    paths:
+      - .github/actions/apt-install/**
+      - .github/workflows/apt-install-selftest.yml
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  UNREACHABLE: http://unreachable.invalid/ubuntu
+
+jobs:
+  fallback:
+    name: falls back when the default mirror is unreachable (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # 24.04 uses the deb822 ubuntu.sources file; 22.04 the legacy sources.list.
+        os: [ubuntu-24.04, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Point the default mirror at an unreachable host
+        run: |
+          set -euo pipefail
+          if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+            sudo sed -i -E "s|^URIs:.*|URIs: ${UNREACHABLE}|" /etc/apt/sources.list.d/ubuntu.sources
+          fi
+          sudo sed -i -E "s|^(deb(-src)? +(\[[^]]*\] +)?)[^ ]+|\1${UNREACHABLE}|" /etc/apt/sources.list
+          grep -rh "unreachable.invalid" /etc/apt/sources.list /etc/apt/sources.list.d/ | head -3
+      - name: Install through the action
+        id: apt
+        uses: ./.github/actions/apt-install
+        with:
+          packages: cowsay
+          use-cache: "false"
+      - name: The second mirror installed the package
+        env:
+          SOURCE: ${{ steps.apt.outputs.source }}
+          MIRROR: ${{ steps.apt.outputs.mirror }}
+        run: |
+          set -euo pipefail
+          echo "source=$SOURCE mirror=$MIRROR"
+          test "$SOURCE" = network
+          test "$MIRROR" = "archive.ubuntu.com and security.ubuntu.com"
+          /usr/games/cowsay fallback-ok
+
+  warm-cache:
+    name: installs from the cache with no network
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Record the baseline packages
+        run: dpkg-query -W -f='${Package}\n' | sort > "$RUNNER_TEMP/baseline.txt"
+      - name: Cold install (downloads and saves the cache)
+        id: cold
+        uses: ./.github/actions/apt-install
+        with:
+          packages: cowsay
+          cache-key-suffix: selftest-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Remove what the cold install added, then cut off every mirror
+        env:
+          SOURCE: ${{ steps.cold.outputs.source }}
+        run: |
+          set -euo pipefail
+          test "$SOURCE" = network
+          dpkg-query -W -f='${Package}\n' | sort > "$RUNNER_TEMP/after.txt"
+          comm -13 "$RUNNER_TEMP/baseline.txt" "$RUNNER_TEMP/after.txt" | xargs -r sudo apt-get purge -y
+          if command -v /usr/games/cowsay; then exit 1; fi
+          sudo sed -i -E "s|^URIs:.*|URIs: ${UNREACHABLE}|" /etc/apt/sources.list.d/ubuntu.sources
+          printf '0.0.0.0 %s\n' archive.ubuntu.com security.ubuntu.com mirrors.ubuntu.com \
+            azure.archive.ubuntu.com | sudo tee -a /etc/hosts
+          sudo rm -rf /var/lib/apt/lists/*
+      - name: Warm install (cache only)
+        id: warm
+        uses: ./.github/actions/apt-install
+        with:
+          packages: cowsay
+          cache-key-suffix: selftest-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: The cache installed the package
+        env:
+          SOURCE: ${{ steps.warm.outputs.source }}
+        run: |
+          set -euo pipefail
+          test "$SOURCE" = cache
+          /usr/games/cowsay cache-ok
+
+  playwright-deps:
+    name: installs the pinned Playwright's Chromium list
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install a pinned Playwright
+        run: |
+          python3 -m venv "$RUNNER_TEMP/pw"
+          "$RUNNER_TEMP/pw/bin/python" -m pip install -q playwright==1.61.0
+      - name: Point the default mirror at an unreachable host
+        run: |
+          sudo sed -i -E "s|^URIs:.*|URIs: ${UNREACHABLE}|" /etc/apt/sources.list.d/ubuntu.sources
+      - name: Install through the action
+        id: apt
+        uses: ./.github/actions/apt-install
+        with:
+          playwright-deps: chromium
+          playwright-python: ${{ runner.temp }}/pw/bin/python
+          use-cache: "false"
+      - name: The list came from Playwright and is installed
+        env:
+          PACKAGES: ${{ steps.apt.outputs.packages }}
+        run: |
+          set -euo pipefail
+          echo "$PACKAGES"
+          for p in libnss3 libgbm1 xvfb; do
+            grep -qw "$p" <<<"$PACKAGES"
+            dpkg-query -W "$p"
+          done
+          "$RUNNER_TEMP/pw/bin/python" -m playwright install chromium
+          "$RUNNER_TEMP/pw/bin/python" -c "
+          from playwright.sync_api import sync_playwright
+          with sync_playwright() as p:
+              p.chromium.launch().close()
+          print('chromium launched')
+          "
+
+  total-outage:
+    name: reports an outage as infrastructure (${{ matrix.mode }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Every Ubuntu host refuses connections.
+          - mode: mirrors down
+            reason: mirror-unreachable
+          # No Ubuntu host resolves, as on main on 2026-11-11.
+          - mode: DNS down
+            reason: dns-unreachable
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Cut off every mirror
+        env:
+          MODE: ${{ matrix.mode }}
+        run: |
+          set -euo pipefail
+          sudo sed -i -E "s|^URIs:.*|URIs: ${UNREACHABLE}|" /etc/apt/sources.list.d/ubuntu.sources
+          if [ "$MODE" = "DNS down" ]; then
+            # A resolver address that refuses every query.
+            sudo rm -f /etc/resolv.conf
+            echo "nameserver 127.0.0.9" | sudo tee /etc/resolv.conf
+          else
+            printf '0.0.0.0 %s\n' archive.ubuntu.com security.ubuntu.com mirrors.ubuntu.com \
+              azure.archive.ubuntu.com | sudo tee -a /etc/hosts
+          fi
+      - name: Install through the action (expected to fail)
+        id: apt
+        continue-on-error: true
+        uses: ./.github/actions/apt-install
+        with:
+          packages: cowsay
+          use-cache: "false"
+      - name: It failed and named the cause
+        env:
+          OUTCOME: ${{ steps.apt.outcome }}
+          REASON: ${{ matrix.reason }}
+        run: |
+          set -euo pipefail
+          cat "$RUNNER_TEMP/apt-install-result.json"
+          test "$OUTCOME" = failure
+          python3 -c "import json,sys; r=json.load(open(sys.argv[1])); assert r['reason']==sys.argv[2], r" \
+            "$RUNNER_TEMP/apt-install-result.json" "$REASON"
+          # The action restored the runner's original sources.
+          grep -q unreachable.invalid /etc/apt/sources.list.d/ubuntu.sources

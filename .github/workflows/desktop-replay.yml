@@ -173,11 +173,11 @@ jobs:
           cache-dependency-glob: packages/flow/uv.lock
           cache-suffix: freerdp-replay
       - name: Install the RDP client, shadow server and virtual display
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q --no-install-recommends \
-            xvfb freerdp3-x11 freerdp3-shadow-x11 xdotool imagemagick python3-tk
-          for t in Xvfb xfreerdp3 freerdp-shadow-cli3 xdotool; do command -v "$t"; done
+        uses: ./.github/actions/apt-install
+        with:
+          packages: xvfb freerdp3-x11 freerdp3-shadow-x11 xdotool imagemagick python3-tk
+      - name: Check the RDP and display tools are on PATH
+        run: for t in Xvfb xfreerdp3 freerdp-shadow-cli3 xdotool; do command -v "$t"; done
       - name: Install from the lock
         run: >-
           python ../../scripts/ci/locked_install.py --lock 'packages/flow[dev]'
@@ -242,12 +242,14 @@ jobs:
           cache-dependency-glob: packages/flow/uv.lock
           cache-suffix: check-it-gtk
       - name: Install X11, D-Bus, GTK3 and AT-SPI
+        uses: ./.github/actions/apt-install
+        with:
+          packages: >-
+            at-spi2-core dbus-x11 gir1.2-atspi-2.0 gir1.2-gtk-3.0 libatk-adaptor
+            libcairo2-dev libgirepository-2.0-dev openbox pkg-config xauth xvfb
+      - name: Record the installed system packages
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            at-spi2-core dbus-x11 gir1.2-atspi-2.0 gir1.2-gtk-3.0 libatk-adaptor \
-            libcairo2-dev libgirepository-2.0-dev openbox pkg-config xauth xvfb
           dpkg-query -W at-spi2-core dbus-x11 gir1.2-atspi-2.0 gir1.2-gtk-3.0 openbox xvfb \
             | tee "$EVIDENCE_DIR/system-packages.log"
       - name: Install the locked native Flow environment
