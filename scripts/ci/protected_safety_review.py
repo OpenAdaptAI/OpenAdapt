@@ -4,7 +4,9 @@ This file is run only from the trusted base by a ``pull_request_target``
 workflow. It reads GitHub metadata and comments; it never checks out, imports,
 or executes pull-request-head code. A protected change needs one current-head
 independent review from a vendor other than the author's. The author vendor
-comes from the pull request branch prefix (for example ``codex/...``). This is
+comes from the pull request branch prefix (for example ``codex/...``) or, for a
+shared or legacy branch such as ``agent/...``, from one current-head author
+declaration. This is
 an evidence-presence control, not cryptographic proof or a defense against a
 malicious actor.
 """
@@ -22,10 +24,11 @@ from pathlib import Path
 from typing import Any
 
 from scripts.ci.attestation import (
-    VENDOR_FAMILIES,
     EvidenceError,
     declaration_text,
     head_reference_lines,
+    is_legacy_coordinator_note,
+    parse_author_declaration,
     parse_review_report,
     review_headings,
     vendor_family,
@@ -187,9 +190,18 @@ def _trusted_comment(comment: dict[str, Any]) -> bool:
     )
 
 
+# GitHub's REST timestamps. Nothing parses them; they are only compared as
+# strings, and anything other than this exact shape counts as edited.
+TIMESTAMP = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
+
+
 def _unedited_comment(comment: dict[str, Any]) -> bool:
     created = comment.get("created_at")
-    return isinstance(created, str) and created == comment.get("updated_at")
+    return (
+        isinstance(created, str)
+        and TIMESTAMP.fullmatch(created) is not None
+        and created == comment.get("updated_at")
+    )
 
 
 def author_vendor(branch: Any) -> str | None:
@@ -203,33 +215,68 @@ def _review_errors(
     *,
     comments: list[dict[str, Any]],
     head: str,
-    author_family: str | None,
+    branch_family: str | None,
+    pull_request_author: Any,
 ) -> list[str]:
+    """Check one cross-vendor review, with the author vendor from the branch.
+
+    ``branch_family`` is None for a shared or legacy branch such as
+    ``agent/...``; the author vendor then comes from exactly one unedited
+    current-head author declaration posted by the pull request author.
+    """
     errors: list[str] = []
-    if author_family is None:
-        errors.append(
-            "protected change branch must start with a known vendor prefix: "
-            + ", ".join(f"{name}/" for name in sorted(VENDOR_FAMILIES))
-        )
     reviewers: list[str] = []
+    declared: list[str] = []
     for comment in comments:
         body = comment.get("body")
         if not _trusted_comment(comment) or not isinstance(body, str):
             continue
+        unedited = _unedited_comment(comment)
         if review_headings(body):
             if not _review_needs_validation(body, head):
                 continue
-        elif not _current_comment(body, head):
+            if not unedited:
+                errors.append(
+                    "edited current independent review cannot authorize success"
+                )
+            try:
+                family, _verdict = parse_review_report(body, head)
+                if unedited:
+                    reviewers.append(family)
+            except EvidenceError as exc:
+                errors.append(f"invalid independent review: {exc}")
             continue
-        unedited = _unedited_comment(comment)
-        if not unedited:
-            errors.append("edited current independent review cannot authorize success")
+        if not _current_comment(body, head) or is_legacy_coordinator_note(body):
+            continue
+        # A current-head comment without a review heading must be a valid
+        # author declaration. Anything else, such as a mistyped BLOCK, fails.
         try:
-            family, _verdict = parse_review_report(body, head)
-            if unedited:
-                reviewers.append(family)
+            family = parse_author_declaration(body, head)
         except EvidenceError as exc:
-            errors.append(f"invalid independent review: {exc}")
+            errors.append(f"invalid independent review or author declaration: {exc}")
+            continue
+        login = comment.get("user", {}).get("login")
+        if (
+            not isinstance(pull_request_author, str)
+            or login.casefold() != pull_request_author.casefold()
+        ):
+            errors.append(
+                "author declaration must be posted by the pull request author"
+            )
+        elif unedited:
+            declared.append(family)
+
+    author_family = branch_family
+    if branch_family is None:
+        if len(declared) != 1:
+            errors.append(
+                "branch has no vendor prefix; expected exactly one current "
+                "exact-head author declaration"
+            )
+        else:
+            author_family = declared[0]
+    elif any(family != branch_family for family in declared):
+        errors.append("author declaration conflicts with the branch vendor prefix")
 
     if len(reviewers) != 1:
         errors.append("expected exactly one current exact-head independent review")
@@ -312,10 +359,14 @@ def evaluate_pull_request(
     )
     if not protected:
         return []
+    # A branch prefix names the author vendor only for branches in this
+    # repository; a fork can pick any name, so it needs a declaration.
+    same_repository = head.get("repo", {}).get("full_name") == REPOSITORY
     return _review_errors(
         comments=comments,
         head=head_sha,
-        author_family=author_vendor(head.get("ref")),
+        branch_family=author_vendor(head.get("ref")) if same_repository else None,
+        pull_request_author=pull_request.get("user", {}).get("login"),
     )
 
 
@@ -393,6 +444,19 @@ def _pull_request_number(event: dict[str, Any]) -> int:
     if type(number) is not int or number <= 0:
         raise EvidenceError("pull request number is missing")
     return number
+
+
+def _head_identity(pull_request: Any) -> tuple[Any, Any, Any]:
+    """The head SHA, branch name and repository the author vendor relies on."""
+    head = pull_request.get("head") if isinstance(pull_request, dict) else None
+    if not isinstance(head, dict):
+        return (None, None, None)
+    repo = head.get("repo")
+    return (
+        head.get("sha"),
+        head.get("ref"),
+        repo.get("full_name") if isinstance(repo, dict) else None,
+    )
 
 
 def _comment_snapshot(comments: list[dict[str, Any]]) -> list[str]:
@@ -752,6 +816,7 @@ def run(
     workflow_run: Any = None
     comments_by_pr: dict[int, list[str]] = {}
     initial_heads: dict[int, str] = {}
+    initial_identity: dict[int, tuple[Any, Any, Any]] = {}
     try:
         if run_id:
             workflow_run = api.request(f"/actions/runs/{run_id}")
@@ -822,6 +887,7 @@ def run(
                         main_sha=main_sha,
                     )
                 )
+            initial_identity[number] = _head_identity(pull_request)
             comments_by_pr[number] = _comment_snapshot(comments)
             errors.extend(f"PR #{number}: {error}" for error in pr_errors)
 
@@ -843,6 +909,11 @@ def run(
             ):
                 errors.append(
                     f"PR #{number} head changed during review; rerun on current head"
+                )
+            if _head_identity(latest_pull_request) != initial_identity.get(number):
+                errors.append(
+                    f"PR #{number} head SHA, branch or repository changed during "
+                    "review; rerun on current head"
                 )
             if latest_pull_request.get("state") != "open":
                 errors.append(f"PR #{number} is no longer open")

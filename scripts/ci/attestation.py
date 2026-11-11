@@ -1,7 +1,9 @@
 """Parse independent safety review comments without executing PR code.
 
 A review comment guards against accidental omissions in a shared-account
-workflow. It is not a signature, and its vendor line is self-reported.
+workflow. It is not a signature, and its vendor line is self-reported. An
+author declaration names the author vendor for a shared or legacy branch. It
+has no review heading and is never counted as a review.
 """
 
 from __future__ import annotations
@@ -139,3 +141,48 @@ def parse_review_report(body: str, expected_head: str) -> tuple[str, str]:
     if block_count:
         raise EvidenceError("independent reviewer returned BLOCK")
     return family, "APPROVE"
+
+
+# A declaration never carries a verdict. Any Markdown heading or verdict word
+# makes the comment a (possibly mistyped) review, so a mistyped BLOCK cannot be
+# read as a declaration and disappear.
+_VERDICT_LIKE = re.compile(r"(?im)^ {0,3}#|\bblock|\bapprove")
+
+
+def is_legacy_coordinator_note(body: str) -> bool:
+    """Return True for an old ``From: Coordinator`` approval note.
+
+    Coordinator approval is no longer required. Old notes grant nothing and are
+    ignored so they do not fail open pull requests.
+    """
+    if review_headings(body):
+        return False
+    text = declaration_text(body)
+    froms = re.findall(r"(?m)^From: (.*)$", text)
+    approvals = re.findall(r"(?m)^Coordinator-Approval: (.*)$", text)
+    return (
+        len(froms) == 1
+        and froms[0].strip() == "Coordinator"
+        and len(approvals) == 1
+        and approvals[0].strip() == "APPROVE"
+    )
+
+
+def parse_author_declaration(body: str, expected_head: str) -> str:
+    """Return the author vendor family for an exact-head author declaration.
+
+    The format is unchanged: one ``From: <vendor>`` line and one
+    ``Reviewed-Head: <sha>`` line, with no review heading.
+    """
+    if not _SHA.fullmatch(expected_head):
+        raise EvidenceError("expected_head must be a full lowercase commit SHA")
+    if review_headings(body) or _VERDICT_LIKE.search(declaration_text(body)):
+        raise EvidenceError("author declaration must not contain a heading or verdict")
+    match = _VENDOR.fullmatch(_one_header(body, "From"))
+    family = vendor_family(match[1]) if match else None
+    if family is None:
+        raise EvidenceError("From must start with a known vendor name")
+    declared_head = _one_header(body, "Reviewed-Head")
+    if not _SHA.fullmatch(declared_head) or declared_head != expected_head:
+        raise EvidenceError("author declaration is malformed or stale")
+    return family

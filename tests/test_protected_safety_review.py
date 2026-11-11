@@ -146,7 +146,7 @@ def test_author_vendor_needs_a_known_branch_prefix(branch: str | None) -> None:
     pull["head"]["ref"] = branch
     assert author_vendor(branch) is None
     errors = _evaluate(pull_request=pull)
-    assert any("known vendor prefix" in error for error in errors)
+    assert any("author declaration" in error for error in errors)
 
 
 def test_unknown_reviewer_vendor_fails_closed() -> None:
@@ -163,12 +163,147 @@ def test_two_current_approvals_fail_closed() -> None:
     )
 
 
-def test_current_head_comment_without_review_heading_fails_closed() -> None:
+@pytest.mark.parametrize(
+    "extra",
+    [
+        "BLOCK",
+        "## Independant review: BLOCK",
+        "# Review\nFound a bug.",
+        "Approve with nits.",
+    ],
+)
+def test_current_head_comment_without_review_heading_fails_closed(extra: str) -> None:
     comments = _comments()
-    comments.append(_comment(f"From: Codex\nReviewed-Head: {HEAD}", "author-login", 3))
+    body = f"From: Codex\nReviewed-Head: {HEAD}\n\n{extra}"
+    comments.append(_comment(body, "author-login", 3))
     assert any(
-        "invalid independent review" in error for error in _evaluate(comments=comments)
+        "invalid independent review or author declaration" in error
+        for error in _evaluate(comments=comments)
     )
+
+
+def _declaration(vendor: str = "Codex", head: str = HEAD) -> str:
+    return f"From: {vendor}\nReviewed-Head: {head}\n"
+
+
+@pytest.mark.parametrize("branch", ["agent/123", "fix/example", "flow/example"])
+def test_legacy_branch_with_declaration_and_cross_vendor_review_passes(
+    branch: str,
+) -> None:
+    comments = [_comment(_declaration(), "author-login", 1)] + _comments()
+    assert _evaluate(pull_request=_pull_request(branch), comments=comments) == []
+    assert (
+        _evaluate(
+            pull_request=_pull_request(branch), comments=comments, files=GATE_FILE
+        )
+        == []
+    )
+
+
+def test_legacy_declaration_may_add_free_text_after_the_vendor() -> None:
+    comments = [
+        _comment(_declaration("Codex (independent worker)"), "author-login", 1)
+    ] + _comments()
+    assert _evaluate(pull_request=_pull_request("agent/1"), comments=comments) == []
+
+
+def test_legacy_branch_without_declaration_fails_closed() -> None:
+    errors = _evaluate(pull_request=_pull_request("agent/123"))
+    assert errors == [
+        "branch has no vendor prefix; expected exactly one current exact-head "
+        "author declaration"
+    ]
+
+
+@pytest.mark.parametrize(
+    "declarations",
+    [
+        [("Codex", HEAD, "author-login", False)] * 2,
+        [("Codex", PARENT, "author-login", False)],
+        [("Codex", HEAD, "author-login", True)],
+        [("Codex", HEAD, "someone-else", False)],
+        [("Someone", HEAD, "author-login", False)],
+    ],
+    ids=["two", "stale", "edited", "not-pr-author", "unknown-vendor"],
+)
+def test_legacy_branch_needs_one_valid_current_declaration(
+    declarations: list[tuple[str, str, str, bool]],
+) -> None:
+    comments = _comments()
+    for index, (vendor, head, login, edited) in enumerate(declarations):
+        comment = _comment(_declaration(vendor, head), login, 10 + index)
+        if edited:
+            comment["updated_at"] = "2026-11-05T18:01:00Z"
+        comments.append(comment)
+    assert _evaluate(pull_request=_pull_request("agent/123"), comments=comments)
+
+
+def test_legacy_declaration_and_review_from_same_vendor_fail() -> None:
+    comments = [_comment(_declaration("Claude Code"), "author-login", 1)] + _comments()
+    errors = _evaluate(pull_request=_pull_request("agent/123"), comments=comments)
+    assert errors == ["author and reviewer must be from different vendors"]
+
+
+def test_declaration_is_never_counted_as_a_review() -> None:
+    declaration = [_comment(_declaration(), "author-login", 1)]
+    for branch in ("agent/123", "codex/example"):
+        assert _evaluate(pull_request=_pull_request(branch), comments=declaration) == [
+            "expected exactly one current exact-head independent review"
+        ]
+    # A matching declaration on a vendor branch is harmless next to a review.
+    assert _evaluate(comments=declaration + _comments()) == []
+
+
+def test_declaration_conflicting_with_branch_prefix_fails() -> None:
+    comments = [_comment(_declaration("Grok"), "author-login", 1)] + _comments()
+    assert _evaluate(comments=comments) == [
+        "author declaration conflicts with the branch vendor prefix"
+    ]
+
+
+def test_vendor_prefixed_branch_needs_no_declaration() -> None:
+    for branch in ("codex/example", "grok/example", "gpt/example"):
+        assert _evaluate(pull_request=_pull_request(branch)) == []
+
+
+def test_fork_branch_prefix_does_not_name_the_author_vendor() -> None:
+    pull = _pull_request("codex/example")
+    pull["head"]["repo"]["full_name"] = "someone/OpenAdapt"
+    assert _evaluate(pull_request=pull) == [
+        "branch has no vendor prefix; expected exactly one current exact-head "
+        "author declaration"
+    ]
+    comments = [_comment(_declaration(), "author-login", 1)] + _comments()
+    assert _evaluate(pull_request=pull, comments=comments) == []
+
+
+def test_legacy_coordinator_note_is_ignored() -> None:
+    note = _comment(
+        f"From: Coordinator\nReviewed-Head: {HEAD}\nCoordinator-Approval: APPROVE\n",
+        "author-login",
+        1,
+    )
+    assert _evaluate(comments=[note] + _comments(), files=GATE_FILE) == []
+    assert _evaluate(comments=[note], files=GATE_FILE) == [
+        "expected exactly one current exact-head independent review"
+    ]
+
+
+@pytest.mark.parametrize(
+    "timestamp",
+    [
+        "2026-11-05T18:00:00ZZ",
+        "2026-11-05T18:00:00",
+        "2026-11-05T18:00:00+00:00",
+        "2026-11-05T18:00:00.000Z",
+        " 2026-11-05T18:00:00Z",
+        "2026-11-05T18:00:00Z\n",
+    ],
+)
+def test_noncanonical_comment_timestamps_never_count(timestamp: str) -> None:
+    comments = _comments()
+    comments[0]["created_at"] = comments[0]["updated_at"] = timestamp
+    assert any("edited current" in error for error in _evaluate(comments=comments))
 
 
 @pytest.mark.parametrize("verdict", ["APPROVE", "BLOCK"])
@@ -690,6 +825,40 @@ def test_module_entrypoint_missing_environment_exits_without_network() -> None:
         "missing GitHub event path, token, event name, run id/attempt, or SHA"
         in result.stderr
     )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("ref", "claude/renamed"), ("ref", "agent/renamed"), ("repo", "fork/OpenAdapt")],
+)
+def test_head_ref_or_repo_change_between_reads_fails_closed(
+    field: str, value: str
+) -> None:
+    class RenamedApi(FakeApi):
+        def __init__(self) -> None:
+            super().__init__()
+            self.pull_calls = 0
+
+        def request(self, path: str, *, method: str = "GET", data: Any = None) -> Any:
+            if path == "/pulls/42":
+                self.pull_calls += 1
+                pull = _pull_request()
+                if self.pull_calls > 1:
+                    if field == "ref":
+                        pull["head"]["ref"] = value
+                    else:
+                        pull["head"]["repo"]["full_name"] = value
+                return pull
+            return super().request(path, method=method, data=data)
+
+    api = RenamedApi()
+    event = {"issue": {"number": 42, "pull_request": {}}}
+    conclusion, errors = run(event, BASE, api, event_name="issue_comment")
+    assert conclusion == "failure"
+    assert any("branch or repository changed" in error for error in errors)
+    assert api.check_run is not None
+    assert api.check_run["head_sha"] == HEAD
+    assert api.check_run["conclusion"] == "failure"
 
 
 @pytest.mark.parametrize(
