@@ -1027,6 +1027,12 @@ def main() -> int:
     print("protected-safety-review: " + conclusion)
     for error in errors:
         print("- " + error)
+    # GitHub attaches an issue_comment job to main's head commit, not the PR.
+    # Once the verdict is published as the check run on the PR head, that
+    # comment-triggered job succeeds so an evidence failure never marks main
+    # red. Internal errors still exit 2 above.
+    if event_name == "issue_comment":
+        return 0
     return 0 if conclusion == "success" else 1
 
 

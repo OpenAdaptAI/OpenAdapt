@@ -1331,3 +1331,94 @@ def test_main_never_prints_exception_values(
         assert api.check_run is None
         assert output.out == ""
         assert output.err == "unable to publish protected safety review\n"
+
+
+@pytest.mark.parametrize(
+    ("event_name", "expected_status"),
+    [("issue_comment", 0), ("pull_request_target", 1)],
+)
+def test_comment_job_succeeds_once_failure_verdict_is_published_on_pr_head(
+    event_name: str,
+    expected_status: int,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from scripts.ci import protected_safety_review as safety
+
+    event = (
+        {"issue": {"number": 42, "pull_request": {}}}
+        if event_name == "issue_comment"
+        else {"pull_request": {"number": 42, "head": {"sha": HEAD}}}
+    )
+    event_file = tmp_path / "event.json"
+    event_file.write_text(json.dumps(event), encoding="utf-8")
+
+    class NoReviewApi(FakeApi):
+        def request(self, path: str, *, method: str = "GET", data: Any = None) -> Any:
+            if path == "/actions/runs/77":
+                run_data = dict(super().request(path))
+                run_data["event"] = event_name
+                run_data["run_attempt"] = 1
+                return run_data
+            return super().request(path, method=method, data=data)
+
+        def pages(self, path: str) -> list[dict[str, Any]]:
+            if path == "/issues/42/comments":
+                return []
+            return super().pages(path)
+
+    api = NoReviewApi()
+    monkeypatch.setattr(safety, "GitHubApi", lambda _token: api)
+    for name, value in {
+        "GITHUB_EVENT_PATH": str(event_file),
+        "GITHUB_TOKEN": "synthetic-not-a-credential",
+        "TRUSTED_BASE_SHA": BASE,
+        "GITHUB_EVENT_NAME": event_name,
+        "GITHUB_RUN_ID": "77",
+        "GITHUB_RUN_ATTEMPT": "1",
+        "GITHUB_SHA": BASE,
+    }.items():
+        monkeypatch.setenv(name, value)
+    status = safety.main()
+    assert status == expected_status
+    assert api.check_run is not None
+    assert api.check_run["head_sha"] == HEAD
+    assert api.check_run["conclusion"] == "failure"
+    assert "protected-safety-review: failure" in capsys.readouterr().out
+
+
+def test_comment_job_still_fails_on_internal_publication_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from scripts.ci import protected_safety_review as safety
+
+    canary = "synthetic-comment-canary-not-a-credential"
+    event_file = tmp_path / "event.json"
+    event_file.write_text(
+        json.dumps({"issue": {"number": 42, "pull_request": {}}}), encoding="utf-8"
+    )
+
+    class FailedPublishApi(FakeApi):
+        def request(self, path: str, *, method: str = "GET", data: Any = None) -> Any:
+            if method == "POST":
+                raise ValueError(canary)
+            return super().request(path, method=method, data=data)
+
+    monkeypatch.setattr(safety, "GitHubApi", lambda _token: FailedPublishApi())
+    for name, value in {
+        "GITHUB_EVENT_PATH": str(event_file),
+        "GITHUB_TOKEN": "synthetic-not-a-credential",
+        "TRUSTED_BASE_SHA": BASE,
+        "GITHUB_EVENT_NAME": "issue_comment",
+        "GITHUB_RUN_ID": "77",
+        "GITHUB_RUN_ATTEMPT": "1",
+        "GITHUB_SHA": BASE,
+    }.items():
+        monkeypatch.setenv(name, value)
+    assert safety.main() == 2
+    output = capsys.readouterr()
+    assert canary not in output.out + output.err
+    assert output.err == "unable to publish protected safety review\n"
