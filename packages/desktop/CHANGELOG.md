@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## Unreleased
+
+- Check prefilled workflows without delivering application input when the
+  selected engine supports that mode.
+
 
 ## v0.29.3 (2026-11-08)
 
