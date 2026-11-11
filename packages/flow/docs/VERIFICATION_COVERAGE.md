@@ -352,6 +352,44 @@ attribution, which lets a concurrent edit by another user stop counting as
 collateral. That exception is confined to edits an audit log or a
 modified-by field attributes to a named actor other than the bot.
 
+### Owned write attempts
+
+`begin_write(..., purpose="owned_attempt")` asks the verifier to confirm
+that this attempt committed the change. The baseline and ledger record the
+purpose before dispatch. A matching read without independent commit evidence
+leaves the write uncertain and held for reconciliation. An earlier write by
+the same actor, a fast read, and a transport acknowledgment cannot establish
+which attempt committed. A later matching read cannot supply missing proof.
+
+The controlled SQLite insert is the first supported writer. Set
+`owned_sqlite_insert` in the operator's verification contract with `table`
+and `identity_field`. Use a local database under the operator's control,
+with a built-in, unfiltered `SELECT * FROM <table>` reader. The one
+`record_written` effect must declare the full typed row, including its
+integer primary key. The operator provisions this bookkeeping table separately:
+
+```sql
+CREATE TABLE openadapt_owned_insert_events (
+    attempt TEXT PRIMARY KEY NOT NULL,
+    witness TEXT NOT NULL
+) STRICT;
+```
+
+The native writer reads the reserved attempt from the private baseline and
+claims it once before dispatch. It commits the declared insert and its
+witness together. A separate read-only connection checks the witness and
+exact row. The normal read-back, frame,
+source, and approval checks still apply. A whole-database frame must account
+for the bookkeeping table in its existing declared scope. Keep the database
+and private baseline under operator control. This proof covers one controlled
+insert. Update, delete, external writers, and other providers need their own
+supported proof before they can confirm an owned attempt.
+
+Standalone verification and the legacy snapshot API retain observation
+semantics. New receipts identify that purpose. Existing ledger entry points
+without either opt-in also retain observation semantics. An owned baseline
+cannot be verified or rechecked under observation purpose.
+
 ## Measurement
 
 The benchmark lives in `benchmark/verification_coverage/`. It reruns the
