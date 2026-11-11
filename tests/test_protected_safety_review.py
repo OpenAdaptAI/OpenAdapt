@@ -831,3 +831,198 @@ def test_fenced_examples_do_not_change_valid_declaration_roles(fence: str) -> No
     for comment in comments[:2]:
         comment["body"] += example
     assert _evaluate(comments=comments) == []
+
+
+@pytest.mark.parametrize(
+    "reference",
+    [
+        "canonical",
+        "bold",
+        "list",
+        "lowercase",
+        "prefix",
+        "unicode-hyphen",
+        "unicode-colon",
+        "prose",
+        "prose-prefix",
+        "missing",
+        "stale-plus-current-prose",
+        "stale-plus-prefix-prose",
+        "extra-head-character",
+        "backticks",
+    ],
+)
+@pytest.mark.parametrize("verdict", ["APPROVE", "BLOCK"])
+@pytest.mark.parametrize("edited", [False, True])
+@pytest.mark.parametrize("event_name", ["issue_comment", "pull_request_target"])
+def test_current_or_ambiguous_reviews_never_disappear_before_validation(
+    reference: str, verdict: str, edited: bool, event_name: str
+) -> None:
+    head_lines = {
+        "canonical": f"Reviewed-Head: {HEAD}",
+        "bold": f"**Reviewed-Head:** {HEAD}",
+        "list": f"- Reviewed-Head: {HEAD}",
+        "lowercase": f"reviewed-head: {HEAD}",
+        "prefix": f"Reviewed-Head: {HEAD[:8]}",
+        "unicode-hyphen": f"Reviewed‐Head: {HEAD}",
+        "unicode-colon": f"Reviewed-Head： {HEAD}",
+        "prose": f"I reviewed the current commit {HEAD}.",
+        "prose-prefix": f"I reviewed the current commit {HEAD[:8]}.",
+        "missing": "The review has no head binding.",
+        "stale-plus-current-prose": f"Reviewed-Head: {PARENT}\nNow reviewing {HEAD}.",
+        "stale-plus-prefix-prose": f"Reviewed-Head: {PARENT}\nNow reviewing {HEAD[:8]}.",
+        "extra-head-character": f"Reviewed-Head: {HEAD}0",
+        "backticks": f"Reviewed-Head: `{HEAD}`",
+    }
+    comments = _comments()
+    review = _comment(
+        f"## Independent adversarial review: {verdict}\nFrom: Claude\n{head_lines[reference]}",
+        "reviewer-login",
+        4,
+    )
+    if edited:
+        review["updated_at"] = "2026-11-05T18:01:00Z"
+    comments.append(review)
+    errors = _evaluate(comments=comments)
+    assert errors, "ambiguous or edited evidence must not restore an older approval"
+
+    class ReviewApi(FakeApi):
+        def pages(self, path: str) -> list[dict[str, Any]]:
+            if path == "/issues/42/comments":
+                return comments
+            return super().pages(path)
+
+    api = ReviewApi()
+    event = (
+        {"issue": {"number": 42, "pull_request": {}}}
+        if event_name == "issue_comment"
+        else {"pull_request": {"number": 42, "head": {"sha": HEAD}}}
+    )
+    conclusion, published_errors = run(event, BASE, api, event_name=event_name)
+    assert conclusion == "failure"
+    assert published_errors
+    assert api.check_run is not None
+    assert api.check_run["head_sha"] == HEAD
+    assert api.check_run["conclusion"] == "failure"
+
+
+@pytest.mark.parametrize("edited", [False, True])
+@pytest.mark.parametrize("verdict", ["APPROVE", "BLOCK"])
+def test_proven_stale_reviews_do_not_veto_current_evidence(
+    edited: bool, verdict: str
+) -> None:
+    comments = _comments()
+    stale = _comment(
+        f"## Independent adversarial review: {verdict}\nFrom: Claude\nReviewed-Head: {PARENT}",
+        "reviewer-login",
+        4,
+    )
+    if edited:
+        stale["updated_at"] = "2026-11-05T18:01:00Z"
+    comments.append(stale)
+    assert _evaluate(comments=comments) == []
+
+
+@pytest.mark.parametrize("fence", ["```", "~~~~"])
+@pytest.mark.parametrize("edited", [False, True])
+def test_fenced_later_review_example_is_neither_approval_nor_veto(
+    fence: str, edited: bool
+) -> None:
+    comments = _comments()
+    example = _comment(
+        f"{fence}text\n## Independent adversarial review: BLOCK\n"
+        f"From: Claude\nReviewed-Head: {HEAD}\n{fence}",
+        "reviewer-login",
+        4,
+    )
+    if edited:
+        example["updated_at"] = "2026-11-05T18:01:00Z"
+    comments.append(example)
+    assert _evaluate(comments=comments) == []
+
+
+@pytest.mark.parametrize(
+    "heading",
+    [
+        "## INDEPENDENT ADVERSARIAL REVIEW: BLOCK",
+        "＃＃ Independent adversarial review： BLOCK",
+        "## Independent adversarial review: APPROVE\n## INDEPENDENT ADVERSARIAL REVIEW: BLOCK",
+    ],
+)
+@pytest.mark.parametrize("edited", [False, True])
+def test_normalized_heading_discovery_cannot_normalize_approval(
+    heading: str, edited: bool
+) -> None:
+    comments = _comments()
+    review = _comment(
+        f"{heading}\nFrom: Claude\nReviewed-Head: {HEAD}",
+        "reviewer-login",
+        4,
+    )
+    if edited:
+        review["updated_at"] = "2026-11-05T18:01:00Z"
+    comments.append(review)
+    assert any("invalid independent review" in error for error in _evaluate(comments=comments))
+
+
+@pytest.mark.parametrize("edited", [False, True])
+def test_untrusted_review_does_not_grant_or_veto(edited: bool) -> None:
+    comments = _comments()
+    review = _comment(
+        f"## Independent adversarial review: BLOCK\nFrom: Claude\nReviewed-Head: {HEAD}",
+        "untrusted-login",
+        4,
+    )
+    review["author_association"] = "NONE"
+    if edited:
+        review["updated_at"] = "2026-11-05T18:01:00Z"
+    comments.append(review)
+    assert _evaluate(comments=comments) == []
+
+
+@pytest.mark.parametrize("role", ["author", "reviewer", "coordinator"])
+@pytest.mark.parametrize("alias", ["bold", "italic", "link", "list", "lowercase", "unicode-hyphen", "unicode-colon", "prefix"])
+def test_noncanonical_extra_head_binding_is_rejected_for_every_declaration(
+    role: str, alias: str
+) -> None:
+    comments = _comments()
+    comments.append(
+        _comment(
+            f"From: Coordinator\nReviewed-Head: {HEAD}\nCoordinator-Approval: APPROVE",
+            "coordinator-login",
+            4,
+        )
+    )
+    slot = {"author": 0, "reviewer": 1, "coordinator": 3}[role]
+    aliases = {
+        "bold": f"**Reviewed-Head:** {PARENT}",
+        "italic": f"*Reviewed-Head:* {PARENT}",
+        "link": f"[Reviewed-Head](#example): {PARENT}",
+        "list": f"- Reviewed-Head: {PARENT}",
+        "lowercase": f"reviewed-head: {PARENT}",
+        "unicode-hyphen": f"Reviewed‐Head: {PARENT}",
+        "unicode-colon": f"Reviewed-Head： {PARENT}",
+        "prefix": f"Reviewed-Head: {PARENT[:8]}",
+    }
+    comments[slot]["body"] += "\n" + aliases[alias]
+    assert any(
+        "invalid " in error
+        for error in _evaluate(
+            comments=comments, files=[{"filename": ".github/agent-safety-manifest.json"}]
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    "explanation",
+    [
+        "The Reviewed-Head field matches the trusted metadata.",
+        "> Reviewed-Head: example\n> ## Independent adversarial review: BLOCK",
+    ],
+)
+def test_ordinary_prose_and_quoted_example_do_not_create_extra_bindings(
+    explanation: str,
+) -> None:
+    comments = _comments()
+    comments[1]["body"] += "\n" + explanation
+    assert _evaluate(comments=comments) == []

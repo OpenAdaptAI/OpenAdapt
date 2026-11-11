@@ -14,6 +14,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 import urllib.error
 import urllib.request
 from datetime import datetime
@@ -23,9 +24,11 @@ from typing import Any
 from scripts.ci.attestation import (
     EvidenceError,
     declaration_text,
+    head_reference_lines,
     parse_author_declaration,
     parse_precommit_report,
     parse_review_report,
+    review_headings,
     validate_independent_review,
 )
 
@@ -156,6 +159,22 @@ def _current_comment(body: Any, head: str) -> bool:
     )
 
 
+def _review_needs_validation(body: str, head: str) -> bool:
+    """Ignore only a proven stale review, not an unknown declaration shape."""
+    heads = _headers(body, "Reviewed-Head")
+    if (
+        len(heads) != 1
+        or len(head_reference_lines(body)) != 1
+        or not SHA.fullmatch(heads[0].strip())
+    ):
+        return True
+    if heads[0].strip() == head:
+        return True
+    visible = unicodedata.normalize("NFKC", declaration_text(body)).casefold()
+    references = re.findall(r"[0-9a-f]{8,}", visible)
+    return any(head.startswith(value) or value.startswith(head) for value in references)
+
+
 TRUSTED_ASSOCIATIONS = {"OWNER", "MEMBER", "COLLABORATOR"}
 
 
@@ -182,18 +201,32 @@ def _review_and_attestation_errors(
     pull_request_author: str,
 ) -> list[str]:
     errors: list[str] = []
-    trusted_comments = [
-        c for c in comments if _trusted_comment(c) and _unedited_comment(c)
-    ]
+    trusted_comments = [c for c in comments if _trusted_comment(c)]
     all_bodies = [c.get("body") for c in trusted_comments]
     current = [body for body in all_bodies if _current_comment(body, head)]
     authors: list[tuple[str, str]] = []
-    reviewers: list[tuple[str, str]] = []
+    reviewers: list[tuple[str, str, str]] = []
     coordinator_notes: list[str] = []
     for comment, body in zip(trusted_comments, all_bodies, strict=True):
-        if body not in current:
+        if not isinstance(body, str):
             continue
-        assert isinstance(body, str)
+        if review_headings(body):
+            if not _review_needs_validation(body, head):
+                continue
+            unedited = _unedited_comment(comment)
+            if not unedited:
+                errors.append("edited current independent review cannot authorize success")
+            try:
+                vendor, verdict = parse_review_report(body, head)
+                if _headers(body, "Coordinator-Approval"):
+                    raise EvidenceError("review must be separate from a coordinator note")
+                if unedited:
+                    reviewers.append((vendor, verdict, body))
+            except EvidenceError as exc:
+                errors.append(f"invalid independent review: {exc}")
+            continue
+        if not _unedited_comment(comment) or body not in current:
+            continue
         if _headers(body, "Coordinator-Approval"):
             try:
                 vendor = parse_author_declaration(body, head)
@@ -210,12 +243,6 @@ def _review_and_attestation_errors(
             except EvidenceError as exc:
                 errors.append(f"invalid coordinator note: {exc}")
             continue
-        if "## Independent adversarial review:" in declaration_text(body):
-            try:
-                vendor, verdict = parse_review_report(body, head)
-                reviewers.append((vendor, verdict))
-            except EvidenceError as exc:
-                errors.append(f"invalid independent review: {exc}")
         else:
             try:
                 vendor = parse_author_declaration(body, head)
@@ -235,13 +262,7 @@ def _review_and_attestation_errors(
         errors.append("expected exactly one current exact-head independent review")
     if len(authors) == 1 and len(reviewers) == 1:
         try:
-            reviewer_body = next(
-                body
-                for body in current
-                if isinstance(body, str)
-                and "## Independent adversarial review:" in declaration_text(body)
-            )
-            validate_independent_review(authors[0][1], reviewer_body, head)
+            validate_independent_review(authors[0][1], reviewers[0][2], head)
         except (EvidenceError, StopIteration) as exc:
             errors.append(f"independent review mismatch: {exc}")
     if coordinator_needed and len(coordinator_notes) != 1:
@@ -269,7 +290,7 @@ def _review_and_attestation_errors(
         for comment, body in zip(trusted_comments, all_bodies, strict=True):
             if not isinstance(body, str):
                 continue
-            if not _trusted_comment(comment):
+            if not _unedited_comment(comment):
                 continue
             candidates = re.findall(r'"commit"\s*:\s*"([0-9a-f]{40})"', body)
             if sha in candidates:

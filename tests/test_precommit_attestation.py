@@ -160,3 +160,21 @@ def test_visible_review_is_independent_of_fenced_example() -> None:
         "## Independent adversarial review: BLOCK\n```"
     )
     assert parse_review_report(body, HEAD) == ("Claude", "APPROVE")
+
+
+@pytest.mark.parametrize(
+    "heading",
+    [
+        "## INDEPENDENT ADVERSARIAL REVIEW: APPROVE",
+        "＃＃ Independent adversarial review： APPROVE",
+        "## Independent adversarial review: APPROVE\n## INDEPENDENT ADVERSARIAL REVIEW: BLOCK",
+    ],
+)
+def test_heading_discovery_does_not_make_noncanonical_or_extra_heading_valid(
+    heading: str,
+) -> None:
+    body = f"From: Claude\nReviewed-Head: {HEAD}\n{heading}"
+    with pytest.raises(EvidenceError):
+        parse_review_report(body, HEAD)
+    with pytest.raises(EvidenceError):
+        parse_author_declaration(body, HEAD)

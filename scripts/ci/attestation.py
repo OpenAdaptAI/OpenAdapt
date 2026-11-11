@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from datetime import datetime, timezone
 from typing import Any
 
@@ -50,8 +51,35 @@ def declaration_text(body: str) -> str:
     return "\n".join(lines)
 
 
+def review_headings(body: str) -> list[str]:
+    """Find review declarations for validation, never normalize approval."""
+    return [
+        line
+        for line in declaration_text(body).splitlines()
+        if re.match(
+            r"^ {0,3}##[ \t]+independent[ \t]+adversarial[ \t]+review[ \t]*:",
+            unicodedata.normalize("NFKC", line).casefold(),
+        )
+    ]
+
+
+def head_reference_lines(body: str) -> list[str]:
+    """Retain head-like bindings for rejection, including decorated aliases."""
+    return [
+        line
+        for line in declaration_text(body).splitlines()
+        if re.match(
+            r"^(?! {4}) {0,3}(?:\d+[.)][ \t]+)?[^a-z0-9>\s]*[ \t]*"
+            r"reviewed[^a-z0-9]*head(?![a-z0-9])",
+            unicodedata.normalize("NFKC", line).casefold(),
+        )
+    ]
+
+
 def _one_header(body: str, name: str) -> str:
     values = re.findall(rf"(?m)^{re.escape(name)}: (.*)$", declaration_text(body))
+    if name == "Reviewed-Head" and len(head_reference_lines(body)) != len(values):
+        raise EvidenceError("head-like bindings must use the exact Reviewed-Head header")
     if len(values) != 1 or not values[0].strip():
         raise EvidenceError(f"expected exactly one nonempty {name} header")
     return values[0].strip()
@@ -70,7 +98,7 @@ def parse_review_report(body: str, expected_head: str) -> tuple[str, str]:
     lines = declaration_text(body).splitlines()
     approve_count = lines.count(_REVIEW_HEADING)
     block_count = lines.count(_BLOCK_HEADING)
-    if approve_count + block_count != 1:
+    if len(review_headings(body)) != 1 or approve_count + block_count != 1:
         raise EvidenceError(
             "expected exactly one existing review heading: APPROVE or BLOCK"
         )
@@ -89,8 +117,7 @@ def parse_author_declaration(body: str, expected_head: str) -> str:
     declared_head = _one_header(body, "Reviewed-Head")
     if not _SHA.fullmatch(declared_head) or declared_head != expected_head:
         raise EvidenceError("author declaration is malformed or stale")
-    lines = declaration_text(body).splitlines()
-    if _REVIEW_HEADING in lines or _BLOCK_HEADING in lines:
+    if review_headings(body):
         raise EvidenceError(
             "author declaration must be separate from the review comment"
         )

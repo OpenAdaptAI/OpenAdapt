@@ -21,6 +21,13 @@ missing, duplicate, malformed, or BLOCK declaration fails closed.
 A current-head reference selects a comment for validation even when its
 headers are ambiguous. Markdown fenced examples are not declarations; author,
 reviewer and coordinator evidence must appear outside backtick or tilde fences.
+Review-heading discovery is case-insensitive and uses Unicode NFKC only to
+select evidence for strict validation. It does not normalize an approval.
+A trusted review with an unknown or malformed head binding cannot be discarded;
+neither can a current-head review that names that head or its prefix in prose.
+Selected edited reviews fail the check. Edited comments never supply approval.
+A uniquely bound full stale head is ignored only when the review does not also
+refer to the current head.
 Evidence comments are accepted only from GitHub accounts whose API
 `author_association` is `OWNER`, `MEMBER`, or `COLLABORATOR`. The author
 declaration must also be posted by the API-reported pull request author. The
