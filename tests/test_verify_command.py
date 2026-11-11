@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from click.testing import CliRunner
 
@@ -130,3 +132,63 @@ def test_verify_ledger_lists_a_recheck_owed_until_it_runs(tmp_path) -> None:
     listed = runner.invoke(main, ["verify", "ledger", "list", "--ledger", str(folder)])
     assert "recheck-owed" not in listed.output
     assert "No rechecks owed." in listed.output
+
+
+def test_verify_ledger_explicit_root_must_match_protected_configuration(
+    tmp_path, monkeypatch
+) -> None:
+    from openadapt_flow.write_ledger import FileLedger, Ledger, SQLiteJournalAuthority
+
+    journal = tmp_path / "journal"
+    authority = SQLiteJournalAuthority(
+        tmp_path / "authority.sqlite", root=journal, ledger_id="test", generation="1"
+    )
+    FileLedger(journal).enroll(authority, authorized=True)
+    ledger = Ledger(FileLedger(journal, authority=authority))
+    key = "a" * 64
+    ledger.begun(key, "write-1", contract="c" * 64, actor_kind="agent", actor_id="bot")
+    ledger.resolved(key, "write-1", outcome="REFUTED", retry_safe=False)
+    descriptor = tmp_path / "protected.json"
+    descriptor.write_text(
+        json.dumps(
+            {
+                "journal_root": str(journal),
+                "authority_path": str(authority.path),
+                "ledger_id": "test",
+                "generation": "1",
+            }
+        )
+    )
+    monkeypatch.delenv("OPENADAPT_LEDGER_DIR", raising=False)
+    monkeypatch.setenv("OPENADAPT_LEDGER_AUTHORITY_CONFIG", str(descriptor))
+    runner = CliRunner()
+    command = ["verify", "ledger", "list", "--ledger"]
+
+    listed = runner.invoke(main, [*command, str(journal)])
+    assert listed.exit_code == 0, listed.output
+    assert key in listed.output and "held" in listed.output
+
+    other = tmp_path / "other"
+    refused = runner.invoke(main, [*command, str(other)])
+    assert refused.exit_code != 0
+    assert "ledger_authority_wrong_scope" in refused.output
+    assert not other.exists()
+    assert authority.snapshot().revision == 2
+
+
+def test_verify_serve_refuses_configured_protection_without_flow_support(
+    tmp_path, monkeypatch
+) -> None:
+    from openadapt_flow import write_ledger
+    from openadapt_flow.agent import cli as agent_cli
+
+    monkeypatch.setenv("OPENADAPT_LEDGER_AUTHORITY_CONFIG", "/unused-config.json")
+    monkeypatch.delattr(write_ledger, "PROTECTED_LEDGER_CONFIG_ENV", raising=False)
+    seen = []
+    monkeypatch.setattr(agent_cli, "main", lambda argv: seen.append(argv) or 0)
+
+    result = CliRunner().invoke(main, ["verify", "serve", "--contracts", str(tmp_path)])
+
+    assert result.exit_code != 0
+    assert "ledger_authority_unsupported" in result.output
+    assert seen == []

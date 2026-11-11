@@ -1013,8 +1013,9 @@ def begin_write(
             authorize the baseline. Keep its session open through verification.
         ledger: The uncertain-write ledger: a :class:`Ledger`, a
             :class:`LedgerBackend`, or None to turn it off (only for a
-            sandbox that resets between runs). Default: :class:`FileLedger`
-            in ``OPENADAPT_LEDGER_DIR`` or ``~/.openadapt/ledger``.
+            sandbox that resets between runs). The default uses
+            ``OPENADAPT_LEDGER_AUTHORITY_CONFIG`` when set, otherwise
+            ``OPENADAPT_LEDGER_DIR`` or ``~/.openadapt/ledger``.
         write_key: The caller's id for this one write (a task id). With it,
             a confirmed write is never made again under the same key;
             without it, two writes with the same values are the same write

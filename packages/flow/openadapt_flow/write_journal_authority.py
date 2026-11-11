@@ -30,6 +30,7 @@ class LedgerError(RuntimeError):
 
 HoldCode = Literal[
     "ledger_authority_absent",
+    "ledger_authority_config_invalid",
     "ledger_authority_unavailable",
     "ledger_authority_lock_timeout",
     "ledger_authority_wrong_scope",
@@ -99,7 +100,9 @@ class SQLiteJournalAuthority:
             hashlib.sha256(os.fsencode(self.root)).hexdigest(),
         )
 
-    def _require_file(self) -> None:
+    def require_existing(self) -> None:
+        """Require an existing authority file without opening or creating it."""
+
         try:
             info = self.path.stat()
         except FileNotFoundError as exc:
@@ -110,7 +113,7 @@ class SQLiteJournalAuthority:
             raise LedgerIntegrityHeld("ledger_authority_unavailable")
 
     def _connect(self) -> sqlite3.Connection:
-        self._require_file()
+        self.require_existing()
         db = sqlite3.connect(self.path.as_uri() + "?mode=rw", uri=True, timeout=1)
         try:
             db.execute("PRAGMA synchronous=FULL")
@@ -126,7 +129,7 @@ class SQLiteJournalAuthority:
         Use committed_snapshot() when the critical section needs the committed
         inventory. A lock timeout leaves the journal and authority unchanged.
         """
-        self._require_file()
+        self.require_existing()
         try:
             fd = os.open(
                 self.path.with_name(self.path.name + ".lock"),

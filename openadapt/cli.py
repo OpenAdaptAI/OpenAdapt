@@ -1528,10 +1528,22 @@ def verify_serve(contracts: str, state: Optional[str]) -> None:
         click.echo("Error: the OpenAdapt engine is not installed.", err=True)
         click.echo("Reinstall with: pip install --upgrade openadapt", err=True)
         sys.exit(1)
+    _protected_ledger_requested()
     argv = ["serve", "--verify", contracts]
     if state:
         argv += ["--verify-state", state]
     sys.exit(int(agent_main(argv) or 0))
+
+
+def _protected_ledger_requested() -> bool:
+    name = "OPENADAPT_LEDGER_AUTHORITY_CONFIG"
+    if name not in os.environ:
+        return False
+    from openadapt_flow import write_ledger
+
+    if getattr(write_ledger, "PROTECTED_LEDGER_CONFIG_ENV", None) != name:
+        raise click.ClickException("ledger_authority_unsupported")
+    return True
 
 
 def _write_ledger(folder: Optional[str]):
@@ -1542,6 +1554,13 @@ def _write_ledger(folder: Optional[str]):
     except ImportError:
         click.echo("Error: the OpenAdapt engine is not installed.", err=True)
         sys.exit(1)
+    if _protected_ledger_requested():
+        from openadapt_flow.write_ledger import LedgerIntegrityHeld
+
+        try:
+            return default_ledger(root=folder)
+        except LedgerIntegrityHeld as exc:
+            raise click.ClickException(exc.code) from None
     return Ledger(FileLedger(folder)) if folder else default_ledger()
 
 
@@ -1550,7 +1569,7 @@ _LEDGER_OPTION = click.option(
     "ledger_dir",
     default=None,
     type=click.Path(file_okay=False),
-    help="Ledger folder (default: OPENADAPT_LEDGER_DIR or ~/.openadapt/ledger).",
+    help="Ledger folder (must match the configured protected journal, if set).",
 )
 
 

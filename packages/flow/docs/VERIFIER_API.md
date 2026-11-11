@@ -357,8 +357,8 @@ an atomic substitute. `MemoryLedger` is for tests.
 uses a separate database bound to the expected journal root, ledger identity,
 and generation. Protect that database, its locks and its backups independently
 of the journal directory. Two paths writable by the same untrusted process
-do not establish that boundary. This adapter does not change the default
-storage or provide cross-host fencing or authority recovery.
+do not establish that boundary. This adapter does not provide cross-host
+fencing or authority recovery.
 
 The authority holds the latest committed revision and the complete key inventory.
 Before writing, the adapter records a protected pending marker. It then appends
@@ -377,6 +377,47 @@ events were accurate or settle earlier attempts. Existing keys remain available
 for inspection and may block workflows that depend on their history until an
 operator can reconcile them. Opening the protected adapter never enrolls or
 falls back automatically.
+
+### Use the protected journal from installed tools
+
+After enrollment, set `OPENADAPT_LEDGER_AUTHORITY_CONFIG` in the verifier's
+launch environment to the absolute path of an operator-owned JSON file. Use
+the same file for `openadapt-verify run`, `openadapt-verify recheck`, and the
+MCP server, including after a restart. The file contains exactly these fields:
+
+```json
+{
+  "journal_root": "/absolute/path/to/journal",
+  "authority_path": "/absolute/path/to/authority.sqlite",
+  "ledger_id": "example-ledger",
+  "generation": "1"
+}
+```
+
+Both paths must be absolute. Keep the descriptor outside the journal and
+use the identity and generation recorded at enrollment. If set,
+`OPENADAPT_LEDGER_DIR` and the operator's `--ledger` must match the descriptor.
+Without the descriptor setting, installed tools keep the legacy default.
+Do not open a protected journal from an unconfigured process.
+
+The verifier needs write access to the authority database and its directory
+to maintain the lock and lease files. A process that can only read the
+authority and cannot open the lock for writing gets
+`ledger_authority_unavailable`. If a writer holds the lock for ten seconds,
+the verifier returns `ledger_authority_lock_timeout` without changing journal
+or authority state. Keep the descriptor, authority, locks, and backups outside
+the checked agent's write access, including their parent directories. A command
+launched by `openadapt-verify run` inherits the verifier's OS permissions. Use
+only a trusted command there, or isolate it under a different OS identity that
+cannot write to the authority.
+
+Configured mode holds when the descriptor or authority is missing
+(`ledger_authority_absent`), the descriptor is invalid
+(`ledger_authority_config_invalid`), or the authority and journal do not
+match (`ledger_authority_wrong_scope`). Use a Flow version that supports the
+configured default. The Verify facade refuses older versions in configured
+mode with `ledger_authority_unsupported`. Offline receipt verification does
+not consult the journal.
 
 Ledger mutations record the target attempt and journal revision. Settlements
 derived from a read supply the revision they observed before that read.
