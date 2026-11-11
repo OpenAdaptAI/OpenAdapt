@@ -11,11 +11,12 @@ from openadapt_flow.backends.worker_containment import (
     WORKER_STARTED,
     WorkerContainment,
 )
-from openadapt_flow.ir import ApiBinding, WebFormField, WebFormSpec
+from openadapt_flow.ir import ActionKind, ApiBinding, Step, WebFormField, WebFormSpec
 from openadapt_flow.runtime.actuators import ActuationStatus, form_eval
 from openadapt_flow.runtime.actuators.web_form import (
     PlaywrightSessionTransport,
     WebFormActuator,
+    folded_checks_digest,
 )
 
 BASE_URL = "https://form.example.test"
@@ -226,6 +227,7 @@ def test_scratch_containment_refuses_before_api_save(
 ) -> None:
     scratch = _Scratch(phase=phase)
     monkeypatch.setattr(form_eval, "contain_workers", scratch.install, raising=False)
+    save_step = Step(id="step_001", intent="save", action=ActionKind.KEY, key="Enter")
     binding = ApiBinding(
         kind="web_form",
         url_template=SAVE_PATH,
@@ -235,6 +237,8 @@ def test_scratch_containment_refuses_before_api_save(
                 WebFormField(name="value", source="form_default", value="synthetic")
             ],
             submitter="#submit",
+            replaces_steps=[save_step.id],
+            folded_checks_digest=folded_checks_digest([save_step]),
         ),
     )
     transport = PlaywrightSessionTransport(scratch.live_page)
