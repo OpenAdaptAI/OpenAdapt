@@ -275,6 +275,57 @@ def test_cli_setup_dry_run_and_nothing_found(tmp_path: Path, monkeypatch) -> Non
     assert not (tmp_path / ".cursor" / "mcp.json").read_text().count("openadapt")
 
 
+def test_cli_setup_app_registers_the_write_teach_server(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(sc.shutil, "which", lambda name: None)
+    (tmp_path / ".cursor").mkdir()
+    deploy = tmp_path / "deploy.yaml"
+    deploy.write_text("backend:\n  kind: macos\n  macos_app: Chart\n")
+    verify = tmp_path / "verify.yaml"
+    verify.write_text("verifier: {}\n")
+    signed = tmp_path / "teach-authorization.json"
+    signed.write_text("{}")
+
+    result = CliRunner().invoke(main, ["setup", "--app", str(deploy)])
+    assert result.exit_code != 0 and "--app and --verify go together" in result.output
+    result = CliRunner().invoke(
+        main, ["setup", "--client", "cursor", "--authorization", str(signed)]
+    )
+    assert result.exit_code != 0 and "needs --app" in result.output
+
+    result = CliRunner().invoke(
+        main,
+        [
+            "setup",
+            "--client",
+            "cursor",
+            "--app",
+            str(deploy),
+            "--verify",
+            str(verify),
+            "--authorization",
+            str(signed),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    server = json.loads((tmp_path / ".cursor" / "mcp.json").read_text())["mcpServers"][
+        "openadapt"
+    ]
+    args = server["args"]
+    assert "--teach-browser" not in args
+    assert args[args.index("--teach") + 1] == str(verify.resolve())
+    assert args[args.index("--config") + 1] == str(deploy.resolve())
+    assert args[args.index("--teach-authorization") + 1] == str(signed.resolve())
+
+
+def test_app_serve_args_without_an_authorization() -> None:
+    args = sc.app_serve_args(Path("d.yaml"), Path("v.yaml"))
+    assert args[0] == "--teach" and "--config" in args
+    assert "--teach-authorization" not in args
+
+
 def test_real_subprocess_failure_is_reported(tmp_path: Path) -> None:
     def failing(argv, **_):
         return subprocess.CompletedProcess(argv, 1, "", "boom")

@@ -446,13 +446,13 @@ class SkillCache:
         stored = compiler.dir / _KEY_FILE
         if not compiler._jit().admitted or not stored.is_file():
             return None
-        if json.loads(stored.read_text()) != key:
+        if json.loads(stored.read_text(encoding="utf-8")) != key:
             # Never serve a program compiled for another task or record.
             return None
         emitted = compiler.out_dir / "emitted.json"
         if not emitted.is_file():
             compiler.emit()
-        return Path(json.loads(emitted.read_text())["mcp_server"])
+        return Path(json.loads(emitted.read_text(encoding="utf-8"))["mcp_server"])
 
     def held(self, prompt: str, params: Mapping[str, Any]) -> bool:
         """True when a previous cached attempt of this task is held.
@@ -858,7 +858,9 @@ class SkillCache:
             **common,
         )
         if result.admitted:
-            (compiler.dir / _KEY_FILE).write_text(json.dumps(key, sort_keys=True))
+            (compiler.dir / _KEY_FILE).write_text(
+                json.dumps(key, sort_keys=True), encoding="utf-8"
+            )
         agent_run = result.run1.get("agent") or {}
         check = result.record_check or {}
         usage_known = bool(agent_run.get("usage_known", False))

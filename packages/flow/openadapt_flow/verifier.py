@@ -2051,7 +2051,7 @@ class Snapshot:
         what's judged; it verifies only where :func:`capture` recorded it."""
 
         source = Path(path)
-        return cls(json.loads(source.read_text()), path=source)
+        return cls(json.loads(source.read_text(encoding="utf-8")), path=source)
 
 
 #: The salt of every snapshot this process has used. Each capture draws a

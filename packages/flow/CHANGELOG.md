@@ -32,6 +32,7 @@ ledger settlement atomic and extends zero-config verifier generation.
 
 - Programs certified before the `Anchor.form_identity` and `TokenTemplate.bearing` fields were added load again. When the current workflow-contract digest does not match, the loader tries the older form, leaving out only fields on the reviewed sealed-omission list for the bundle's format version that are unset and `None`, and accepts it only if it reproduces the bound digest exactly. A program whose content changed is still refused.
 - Ledger settlements record the journal revision they observed, so a stale or concurrent observation cannot release a hold, grant a retry, complete a recheck or hand back an older result. Rechecks are bound to the original receipt and the exact set of validated later receipts.
+- A person's approval of a desktop save is no longer voided by text that changes by itself outside the app, such as the taskbar clock ticking over a minute while the run waits. Off the browser, the approval's "form unchanged" check read every word on the screen. On Windows it now reads the app window the item's verified steps were in, in reading order, with the window's frame in the digest, so any change inside that window, or a moved window, still stops the save. When a window of the app reaches outside that frame, the whole screen is read. A resumed run names the window under the earlier steps' recorded points, so an approval given during a hold still holds when the form is unchanged. Elsewhere the whole screen is read as before ([#1697](https://github.com/OpenAdaptAI/OpenAdapt/issues/1697)).
 
 ### Features
 
@@ -44,7 +45,6 @@ ledger settlement atomic and extends zero-config verifier generation.
 
 ### Fixes
 
-- A person's approval of a desktop save is no longer voided by text that changes by itself outside the app, such as the taskbar clock ticking over a minute while the run waits. Off the browser, the approval's "form unchanged" check read every word on the screen. On Windows it now reads the app window the item's verified steps were in, in reading order, with the window's frame in the digest, so any change inside that window, or a moved window, still stops the save. When a window of the app reaches outside that frame, the whole screen is read. A resumed run names the window under the earlier steps' recorded points, so an approval given during a hold still holds when the form is unchanged. Elsewhere the whole screen is read as before ([#1697](https://github.com/OpenAdaptAI/OpenAdapt/issues/1697)).
 - A frame with `audit_read` attribution and no `frame.database` never holds: it reports `not_checked`, so `verify-run` can't call the save `verified`. The bot's log entries for the saved record were excused whatever table they wrote, so an extra insurance row, allergy or note for the new patient passed when the frame read only the record's own table ([#1505](https://github.com/OpenAdaptAI/OpenAdapt/issues/1505)). Add `frame.database` (the whole-database diff) to such a contract; its own refutations are unchanged.
 
 ## v2.7.0 (2026-11-09)

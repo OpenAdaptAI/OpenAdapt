@@ -1017,10 +1017,10 @@ class WindowsBackend:
             # under the earlier steps' points instead, without keeping it as a
             # capture. A different window gives a different digest, and the
             # save halts.
-            named = {self.window_root_at(x, y) for x, y in points}
-            if None in named:
+            found = {self.window_root_at(x, y) for x, y in points}
+            if None in found:
                 return None
-            captures = {pair for pair in named if pair is not None}
+            captures = {c for c in found if c is not None}
         if len(captures) != 1:
             return None
         hwnd, pid = next(iter(captures))

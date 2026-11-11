@@ -4258,7 +4258,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             values = json.loads(values)
             before = store.load_snapshot(args.before)
             meta = args.before.with_suffix(".meta.json")
-            started = json.loads(meta.read_text())["taken_at"] if meta.exists() else ""
+            started = (
+                json.loads(meta.read_text(encoding="utf-8"))["taken_at"]
+                if meta.exists()
+                else ""
+            )
             after = store.snapshot(connect, schema)
             d = store.diff(before, after)
             args.demos.mkdir(parents=True, exist_ok=True)

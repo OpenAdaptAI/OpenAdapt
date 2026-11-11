@@ -72,9 +72,19 @@ If the page changed, ask the agent to teach the task again; it passes `replace: 
 
 Point the agent at your own page the same way: give it the URL, the task, the values that change, and what a right file looks like. Things to know:
 
-- Pages that need a sign-in can't be taught yet. The browser starts with no cookies.
+- The browser starts with no cookies. For a page that needs a sign-in, give the server the values from environment variables (`openadapt-agent serve --teach-browser --sign-in username=APP_USER --sign-in password=APP_PASSWORD`); the agent types them by name and never sees them.
 - A control that would save, send or delete is refused, and a form that sends a POST is refused.
 - Taught tools are stored in `~/.openadapt/tools/<name>/program.json`. Files go to `~/Downloads/OpenAdapt/`. `openadapt-agent serve --teach-browser --tools-dir DIR --files-dir DIR` changes both.
 - To watch the browser while the agent works, add `--headed` to the server command in your agent's MCP settings.
 
-Tasks that write to an app, such as entering a record and checking that it saved, use the governed teach path instead: `openadapt-agent serve --teach VERIFY_YAML`. See [COMPILE_AGENT.md](COMPILE_AGENT.md).
+## Desktop apps, RDP and Citrix, and tasks that save
+
+Read-only teaching needs a guard that stops every write before it leaves, and only a browser has one. A desktop app, or one you reach over RDP or Citrix, writes to its store over its own connection, so OpenAdapt teaches its tasks as saves: each save is read back from the app's system of record, and a person approves each one while it is taught. The same applies to a web task that saves.
+
+Name the app in a deployment file (its `backend` section: `windows`, `macos`, `linux`, `rdp`, `citrix` or `web`), say how to read its records in a verify file, and set up your agent for that app:
+
+```bash
+openadapt setup --app deploy.yaml --verify verify.yaml --authorization teach-authorization.json
+```
+
+The authorization is a person's signed statement of what the agent may teach (`openadapt-flow teach-authorization`); without one, nothing the agent teaches is admitted. The skill tells the agent how to teach the save, confirm its check with a person, and admit it. See [COMPILE_AGENT.md](COMPILE_AGENT.md) and [TEACH_AUTHORIZATION.md](TEACH_AUTHORIZATION.md).

@@ -37,7 +37,7 @@ class RepairSelectionError(RuntimeError):
 def _document(path: Path) -> dict[str, Any]:
     if path.is_symlink() or not path.is_file() or path.stat().st_size > 1_048_576:
         raise ValueError("missing regular evidence")
-    value = json.loads(path.read_text())
+    value = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(value, dict):
         raise ValueError("evidence is not an object")
     return value

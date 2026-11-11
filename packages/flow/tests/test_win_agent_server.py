@@ -1448,7 +1448,7 @@ class _FakeDesktop:
         self.foreground_window = self.PINNED
         self.roots: dict[int, int] = {}  # child hwnd -> top-level
         self.paint_border: dict[int, int] = {}  # self-drawn frame, in px
-        self.origin = (0, 0)  # the virtual desktop's top-left corner
+        self.origin: tuple[int, int] = (0, 0)  # virtual-desktop top-left
 
     def add(
         self,
@@ -1466,6 +1466,9 @@ class _FakeDesktop:
 
     def top_level_windows(self):
         return list(self.stack)
+
+    def virtual_origin(self):
+        return self.origin
 
     def is_window(self, hwnd):
         return hwnd in self.windows
@@ -1492,9 +1495,6 @@ class _FakeDesktop:
 
     def title(self, hwnd):
         return self.windows[hwnd][5]
-
-    def virtual_screen_origin(self):
-        return self.origin
 
     def window_from_point(self, x, y):
         return self.stack[0]
@@ -1840,26 +1840,25 @@ def test_window_bounds_reports_the_visible_frame(monkeypatch) -> None:
         _perform_uia("window-bounds", {"hwnd": True, "pid": 10})
 
 
-@pytest.mark.parametrize("origin", [(-1920, 0), (0, -1080), None])
-def test_window_bounds_refuses_an_offset_virtual_desktop(monkeypatch, origin) -> None:
-    """A monitor left of or above the primary puts the screenshot's (0, 0)
-    away from the screen's: a crop by the window's screen rect would read
-    another part of the screen, so no frame is given."""
+@pytest.mark.parametrize(
+    "origin", [(-1920, 0), (0, -1080), (-1280, -200), None], ids=str
+)
+def test_window_bounds_refuses_a_virtual_desktop_not_at_zero(
+    monkeypatch, origin
+) -> None:
+    """A monitor left of or above the primary gives the screenshot a negative
+    origin, so a crop at the window's bounds would be offset: no frame."""
     import openadapt_flow.backends.win_agent.server as agent_server
 
     desktop = _FakeDesktop()
     if origin is None:
-
-        def unknown():
-            raise OSError("no metrics")
-
-        desktop.virtual_screen_origin = unknown
+        desktop.virtual_origin = lambda: 1 / 0  # the origin can't be read
     else:
         desktop.origin = origin
     monkeypatch.setattr(agent_server.os, "name", "nt")
     monkeypatch.setattr(agent_server, "_user32_factory", lambda: desktop)
-    window = _perform_uia("window-bounds", {"hwnd": _FakeDesktop.PINNED, "pid": 10})
-    assert window == {"status": "ok", "window": None}
+    payload = {"hwnd": _FakeDesktop.PINNED, "pid": 10}
+    assert _perform_uia("window-bounds", payload)["window"] is None
 
 
 @pytest.mark.parametrize(

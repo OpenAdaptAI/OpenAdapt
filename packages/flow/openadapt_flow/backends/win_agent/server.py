@@ -1872,18 +1872,19 @@ class _User32:
         and points are physical pixels like the screenshot's."""
         return bool(self._dll.SetThreadDpiAwarenessContext(self._ctypes.c_void_p(-4)))
 
-    def virtual_screen_origin(self) -> tuple[int, int]:
-        """The virtual desktop's top-left corner, where the screenshot's
-        pixel (0, 0) is (SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN)."""
-        return (
-            int(self._dll.GetSystemMetrics(76)),
-            int(self._dll.GetSystemMetrics(77)),
-        )
-
     def title(self, hwnd: int) -> str:
         buffer = self._ctypes.create_unicode_buffer(512)
         self._dll.GetWindowTextW(hwnd, buffer, 512)
         return buffer.value
+
+    def virtual_origin(self) -> tuple[int, int]:
+        """Top-left of the virtual desktop (SM_XVIRTUALSCREEN and
+        SM_YVIRTUALSCREEN): negative when a monitor sits left of or above
+        the primary. The screenshot (mss ``monitors[0]``) starts there."""
+        return (
+            int(self._dll.GetSystemMetrics(76)),
+            int(self._dll.GetSystemMetrics(77)),
+        )
 
     def is_cloaked(self, hwnd: int) -> Optional[bool]:
         """A cloaked window (another virtual desktop, a suspended UWP app) is
@@ -2118,16 +2119,16 @@ def _window_operation(
         rect = user32.rect(hwnd)
         if rect is None or rect[2] <= rect[0] or rect[3] <= rect[1]:
             return {"status": "ok", "window": None}
-        # The bounds are screen coordinates and the screenshot starts at the
-        # virtual desktop's corner. Unless that corner is (0, 0), the two are
-        # offset (a monitor left of or above the primary), and a crop would
-        # read part of the screen other than the window: answer None, and
-        # the caller reads the whole screen.
+        # The caller crops the screenshot at these bounds as pixels. That
+        # holds only when the virtual desktop starts at (0, 0); with a monitor
+        # left of or above the primary the crop would be offset, so answer
+        # None (and the caller reads the whole screen). Unknown is None too.
+        origin = getattr(user32, "virtual_origin", None)
         try:
-            origin = tuple(user32.virtual_screen_origin())
-        except Exception:  # noqa: BLE001 - unknown origin: no frame
-            origin = None
-        if origin != (0, 0):
+            at_zero = callable(origin) and tuple(origin()) == (0, 0)
+        except Exception:  # noqa: BLE001 - unknown origin is no frame
+            at_zero = False
+        if not at_zero:
             return {"status": "ok", "window": None}
         # The frame bounds the whole form only if every window the app shows
         # sits inside it: a dialog or second window of the app that reaches
