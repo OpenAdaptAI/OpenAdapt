@@ -139,7 +139,6 @@ __all__ = [
     "WriteHeld",
     "WriteResult",
     "begin_write",
-    "commit_pending_sqlite_insert",
     "capture",
     "capture_database",
     "diff_database",

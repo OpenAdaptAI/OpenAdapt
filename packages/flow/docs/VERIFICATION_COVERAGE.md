@@ -389,7 +389,8 @@ insert. Update, delete, external writers, and other providers need their own
 supported proof before they can confirm an owned attempt.
 
 Standalone verification and the legacy snapshot API retain observation
-semantics. New receipts identify that purpose. Existing ledger entry points
+semantics. The evidence identifies that purpose, and the receipt binds the
+evidence digest using its existing fields. Existing ledger entry points
 without either opt-in also retain observation semantics. An owned baseline
 cannot be verified or rechecked under observation purpose.
 

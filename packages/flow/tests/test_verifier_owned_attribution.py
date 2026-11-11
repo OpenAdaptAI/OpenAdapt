@@ -72,6 +72,7 @@ class Store:
                 "dialect": "sqlite",
                 "read": {"sqlite_database": str(self.database)},
                 "allow_tables": [WITNESS_TABLE],
+                "views": {"records": ""},
                 "settle_s": 0,
                 "recheck_after_s": 30,
             }
@@ -263,11 +264,11 @@ def test_legacy_observation_keeps_its_desired_state_verdict(
             baseline_path=baseline,
         )
         receipt, evidence = document["receipt"], document["evidence"]
-    assert receipt["write_attribution"] == {
+    assert "write_attribution" not in receipt
+    assert evidence["write_attribution"] == {
         "purpose": "observation",
         "status": "observed",
     }
-    assert evidence["write_attribution"] == receipt["write_attribution"]
     assert receipt["outcome"] == "verified" and receipt["effect_verdict"] == "CONFIRMED"
     assert receipt["contracts"]["effect_passed"] is True
 
@@ -511,7 +512,6 @@ def test_owned_contract_cannot_be_opened_for_observation(store: Store) -> None:
     assert store.event_attempts() == () and store.ledger.attempts() == []
 
 
-
 def test_native_witness_append_failure_rolls_back_target_write(store: Store) -> None:
     with closing(sqlite3.connect(store.database)) as initializer:
         initializer.executescript(
@@ -540,7 +540,9 @@ def test_native_witness_append_failure_rolls_back_target_write(store: Store) -> 
         )
     claim = pending.baseline_path.with_name("baseline.json.dispatched")
     assert claim.is_file()
-    with pytest.raises(VerifyRunError) as replay:
+    with pytest.raises(
+        VerifyRunError, match="^the owned SQLite insert was already claimed$"
+    ) as replay:
         commit_pending_sqlite_insert(pending)
     assert replay.value.__cause__ is None
     assert store.read_frame() == StoreFrame(0, PROTECTED)

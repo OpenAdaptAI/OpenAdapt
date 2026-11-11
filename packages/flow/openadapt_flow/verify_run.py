@@ -2660,7 +2660,7 @@ def _load_baseline(path: Path, identity: str) -> tuple[dict[str, Any], bytes]:
         "purpose", _SQLITE_RESERVATION, _OWNED_DISPATCH_OWNER
     }:
         # Every field must be one the digest names; nothing rides along unbound.
-        raise VerifyRunError("baseline file has missing or unknown fields")
+        raise VerifyRunError("baseline file must hold exactly the required and supported fields")
     _baseline_purpose(raw)
     if raw["verifier_identity"] != identity:
         raise VerifyRunError("baseline was captured by a different verifier")
@@ -2753,10 +2753,14 @@ def _commit_owned_sqlite_insert(
     ):
         raise VerifyRunError("the owned SQLite insert does not match an active reservation")
     try:
-        if not _claim_owned_dispatch(path):
-            raise VerifyRunError("the owned SQLite insert was already claimed")
-        if _used_marker(path).exists():
-            raise VerifyRunError("the owned SQLite reservation was already checked")
+        claimed = _claim_owned_dispatch(path)
+    except OSError as exc:
+        raise VerifyRunError("the owned SQLite dispatch could not be claimed") from exc
+    if not claimed:
+        raise VerifyRunError("the owned SQLite insert was already claimed")
+    if _used_marker(path).exists():
+        raise VerifyRunError("the owned SQLite reservation was already checked")
+    try:
         insert.commit(execution_id, reservation, salt)
     except (OSError, ValueError, sqlite3.Error) as exc:
         raise VerifyRunError("the owned SQLite insert could not be committed") from exc
@@ -3469,7 +3473,8 @@ def verify_run(
     receipt["verification_tier"] = verification_tier
     receipt["checked_how"] = checked_how
     receipt["checked"] = checked
-    receipt[_WRITE_ATTRIBUTION] = dict(write_attribution)
+    if purpose == "owned_attempt":
+        receipt[_WRITE_ATTRIBUTION] = dict(write_attribution)
     if remediates is not None:
         receipt["remediates"] = remediates
     if correlation_id is not None:
@@ -3956,21 +3961,19 @@ def receipt_problem(receipt: Mapping[str, Any]) -> Optional[str]:
             return "write_attribution"
         pair = (attribution["purpose"], attribution["status"])
         if any(type(part) is not str for part in pair) or pair not in (
-            ("observation", "observed"),
             ("owned_attempt", "attributed"),
             ("owned_attempt", "unattributed"),
         ):
             return "write_attribution"
-        if pair[0] == "owned_attempt":
-            attributed = pair[1] == "attributed"
-            contracts = receipt["contracts"]
-            landed = attributed and receipt["effect_verdict"] != "REFUTED"
-            if not isinstance(contracts, Mapping) or contracts.get("effect_passed") is not landed:
-                return "write_attribution"
-            if not attributed and (
-                outcome in ("verified", "rolled_back_verified") or receipt["effect_verdict"] == "CONFIRMED"
-            ):
-                return "write_attribution"
+        attributed = pair[1] == "attributed"
+        contracts = receipt["contracts"]
+        landed = attributed and receipt["effect_verdict"] != "REFUTED"
+        if not isinstance(contracts, Mapping) or contracts.get("effect_passed") is not landed:
+            return "write_attribution"
+        if not attributed and (
+            outcome in ("verified", "rolled_back_verified") or receipt["effect_verdict"] == "CONFIRMED"
+        ):
+            return "write_attribution"
     # Optional: receipts issued before docs/VERIFICATION_COVERAGE.md lack it.
     if "checked" in receipt:
         parts = receipt["checked"]
@@ -4026,9 +4029,12 @@ def evidence_problem(
 
     if sha256_tagged(dict(evidence)) != receipt.get("evidence_digest"):
         return "evidence_mismatch"
-    if (_WRITE_ATTRIBUTION in evidence) != (_WRITE_ATTRIBUTION in receipt) or (
-        evidence.get(_WRITE_ATTRIBUTION) != receipt.get(_WRITE_ATTRIBUTION)
-    ):
+    if _WRITE_ATTRIBUTION in receipt:
+        if evidence.get(_WRITE_ATTRIBUTION) != receipt[_WRITE_ATTRIBUTION]:
+            return "write_attribution"
+    elif _WRITE_ATTRIBUTION in evidence and evidence[_WRITE_ATTRIBUTION] != {
+        "purpose": "observation", "status": "observed"
+    }:
         return "write_attribution"
     if "request_context" in receipt or "request_context" in evidence:
         from openadapt_flow.request_binding import BindingError, RequestContext
