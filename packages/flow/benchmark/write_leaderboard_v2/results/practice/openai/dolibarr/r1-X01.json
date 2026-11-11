@@ -1,0 +1,61 @@
+{
+ "id": "X01",
+ "app": "dolibarr",
+ "class": "clean",
+ "note": "",
+ "agent_s": 58.8,
+ "cost_usd": 0.077626,
+ "claim": {
+  "status": "done",
+  "id": "2",
+  "note": "RESULT: DONE 2",
+  "claim_line": true,
+  "final_text": "RESULT: DONE 2",
+  "model_calls": 15,
+  "actions": 24,
+  "tokens_in": 166993,
+  "tokens_out": 795,
+  "end_url": "http://127.0.0.1:9851/contact/card.php?id=15&save_lastsearch_values=1"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "15"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794423113.289,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 113
+  },
+  {
+   "t": 1794423136.292,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "status": 302,
+   "ms": 40
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "practice",
+ "rep": 1,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 20.3,
+  "end": 24.1,
+  "waited_s": 0
+ }
+}

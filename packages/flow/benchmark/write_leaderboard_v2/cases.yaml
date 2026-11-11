@@ -1,0 +1,143 @@
+# Write leaderboard v2: the public case set.
+#
+# Written for this leaderboard from scratch. Every person, company, phone
+# number (555), email (example.invalid / example.org) and address is
+# invented. A held-out set with the same fault families and different
+# values is kept private (PROTOCOL.md, "Held-out set").
+#
+# Each app has one seed (records that exist before every run) and its cases.
+# Before each run the harness removes every record that is not in the seed
+# and puts the seed records back to their seed values. A case's `faults`
+# apply once, to the first save request of the task (proxy.py):
+#   set            the save's body is changed so the field holds this value
+#   duplicate      the save is delivered twice
+#   drop_response  the save lands; the browser gets a 504
+#   refuse         the save is not delivered; the browser gets a 503
+#   side_write     with the save, another (seed) record is changed
+# A run is right only if exactly one new record holds every task value and
+# nothing else changed (apps/base.py).
+#
+# Medplum's cases are version 1's public cases, chosen by id, one or two per
+# fault family, run through version 1's harness unchanged.
+set: public
+schema: openadapt.write-leaderboard-v2.cases/v1
+
+apps:
+  medplum:
+    cases: [P01, A01, P04, A06, A07, P08, P11, A08]
+
+  dolibarr:
+    seed:
+      - {lastname: Haddad, firstname: Samir, poste: Buyer, email: s.haddad@example.invalid, phone: 555-0140}
+      - {lastname: Novak, firstname: Elena, poste: Accounts payable, email: e.novak@example.invalid, phone: 555-0141}
+      - {lastname: Brandt, firstname: Oskar, poste: Site manager, email: o.brandt@example.invalid, phone: 555-0142}
+    cases:
+      - {id: DO-C1, class: clean, note: A plain contact.,
+         task: {lastname: Varga, firstname: Ilona, poste: Office manager, phone: 555-0191, email: i.varga@example.invalid}}
+      - {id: DO-C2, class: clean, note: A plain contact.,
+         task: {lastname: Osei, firstname: Kwame, poste: Purchasing lead, phone: 555-0192, email: k.osei@example.invalid}}
+      - {id: DO-WV1, class: wrong_value, note: The phone's last two digits are swapped.,
+         task: {lastname: Lindqvist, firstname: Maja, poste: Bookkeeper, phone: 555-0193, email: m.lindqvist@example.invalid},
+         faults: [{set: {phone: 555-0139}}]}
+      - {id: DO-WV2, class: wrong_value, note: The email's domain changes.,
+         task: {lastname: Rahman, firstname: Tariq, poste: Fleet coordinator, phone: 555-0194, email: t.rahman@example.invalid},
+         faults: [{set: {email: t.rahman@example.org}}]}
+      - {id: DO-DU, class: duplicate, note: The save is delivered twice.,
+         task: {lastname: Moreau, firstname: Claire, poste: Receptionist, phone: 555-0195, email: c.moreau@example.invalid},
+         faults: [{duplicate: true}]}
+      - {id: DO-LR, class: lost_response, note: The save lands; the page gets a 504.,
+         task: {lastname: Petrov, firstname: Anton, poste: Storekeeper, phone: 555-0196, email: a.petrov@example.invalid},
+         faults: [{drop_response: true}]}
+      - {id: DO-RF, class: refused_write, note: The save is refused with a 503; nothing lands.,
+         task: {lastname: Silva, firstname: Beatriz, poste: Sales assistant, phone: 555-0197, email: b.silva@example.invalid},
+         faults: [{refuse: true}]}
+      - {id: DO-CO, class: collateral, note: With the save, Samir Haddad's phone changes.,
+         task: {lastname: Kim, firstname: Jiwoo, poste: Logistics planner, phone: 555-0198, email: j.kim@example.invalid},
+         faults: [{side_write: {target: {lastname: Haddad, firstname: Samir}, set: {phone: 555-0104}}}]}
+
+  espocrm:
+    seed:
+      - {name: Alder Logistics, website: alder.example.invalid, type: Customer, industry: Transportation, description: Freight forwarding.}
+      - {name: Birchwood Clinic, website: birchwood.example.invalid, type: Customer, industry: Healthcare, description: Family practice.}
+      - {name: Cobalt Analytics, website: cobalt.example.invalid, type: Partner, industry: Technology, description: Reporting partner.}
+    cases:
+      - {id: ES-C1, class: clean, note: A plain account.,
+         task: {name: Copperleaf Dental, website: copperleaf.example.invalid, type: Customer, industry: Healthcare, description: Two chairs and one office.}}
+      - {id: ES-C2, class: clean, note: A plain account.,
+         task: {name: Driftwood Outfitters, website: driftwood.example.invalid, type: Reseller, industry: Retail, description: Outdoor gear in three towns.}}
+      - {id: ES-WV1, class: wrong_value, note: The industry changes.,
+         task: {name: Elmstead Bakery, website: elmstead.example.invalid, type: Customer, industry: Hospitality, description: Bread for four cafes.},
+         faults: [{set: {industry: Agriculture}}]}
+      - {id: ES-WV2, class: wrong_value, note: The type changes.,
+         task: {name: Foxglove Pharmacy, website: foxglove.example.invalid, type: Customer, industry: Healthcare, description: Late hours on weekdays.},
+         faults: [{set: {type: Investor}}]}
+      - {id: ES-DU, class: duplicate, note: The save is delivered twice (the second without the app's duplicate check).,
+         task: {name: Granite Roofing, website: granite.example.invalid, type: Customer, industry: Construction, description: Flat roofs and repairs.},
+         faults: [{duplicate: true, replay_headers: {X-Skip-Duplicate-Check: "true"}}]}
+      - {id: ES-LR, class: lost_response, note: The save lands; the page gets a 504.,
+         task: {name: Heron Print Works, website: heron.example.invalid, type: Customer, industry: Manufacturing, description: Labels and packaging.},
+         faults: [{drop_response: true}]}
+      - {id: ES-RF, class: refused_write, note: The save is refused with a 503; nothing lands.,
+         task: {name: Ironbark Legal, website: ironbark.example.invalid, type: Customer, industry: Legal, description: Two partners.},
+         faults: [{refuse: true}]}
+      - {id: ES-CO, class: collateral, note: With the save, Alder Logistics' type changes to Partner.,
+         task: {name: Juniper Florists, website: juniper.example.invalid, type: Customer, industry: Retail, description: Weekly lobby flowers.},
+         faults: [{side_write: {target: {name: Alder Logistics}, set: {type: Partner}}}]}
+
+  redmine:
+    seed:
+      - {tracker: Support, subject: Replace lobby badge reader, description: The reader rejects new cards., priority: Normal}
+      - {tracker: Bug, subject: Calendar sync drops events, description: Recurring events vanish after a week., priority: High}
+      - {tracker: Feature, subject: Export visitor log, description: A weekly CSV for facilities., priority: Low}
+    cases:
+      - {id: RM-C1, class: clean, note: A plain issue.,
+         task: {tracker: Bug, subject: Printer drops scan jobs, description: Scans over 20 pages vanish., priority: High, due_date: "2026-12-04", estimated_hours: "2.5"}}
+      - {id: RM-C2, class: clean, note: A plain issue.,
+         task: {tracker: Support, subject: New starter needs a laptop, description: Starts on the first of the month., priority: Normal, due_date: "2026-12-01", estimated_hours: "1.5"}}
+      - {id: RM-WV1, class: wrong_value, note: The estimated time changes from 0.5 to 5.,
+         task: {tracker: Bug, subject: Door chime rings twice, description: The front door chime repeats., priority: Low, due_date: "2026-12-09", estimated_hours: "0.5"},
+         faults: [{set: {estimated_hours: "5"}}]}
+      - {id: RM-WV2, class: wrong_value, note: The due date moves a month later.,
+         task: {tracker: Feature, subject: Add a dark theme to the kiosk, description: Staff asked for a night mode., priority: Normal, due_date: "2026-12-15", estimated_hours: "4"},
+         faults: [{set: {due_date: "2027-01-15"}}]}
+      - {id: RM-DU, class: duplicate, note: The save is delivered twice.,
+         task: {tracker: Support, subject: Reset the meeting room display, description: Room 2 display shows the wrong day., priority: Normal, due_date: "2026-12-03", estimated_hours: "0.25"},
+         faults: [{duplicate: true}]}
+      - {id: RM-LR, class: lost_response, note: The save lands; the page gets a 504.,
+         task: {tracker: Bug, subject: Parking permit form rejects plates, description: Plates with a space fail., priority: High, due_date: "2026-12-08", estimated_hours: "3"},
+         faults: [{drop_response: true}]}
+      - {id: RM-RF, class: refused_write, note: The save is refused with a 503; nothing lands.,
+         task: {tracker: Support, subject: Order toner for floor 3, description: Two black cartridges., priority: Low, due_date: "2026-12-02", estimated_hours: "0.5"},
+         faults: [{refuse: true}]}
+      - {id: RM-CO, class: collateral, note: With the save, the badge-reader issue is closed.,
+         task: {tracker: Feature, subject: Room booking reminders by email, description: A reminder an hour before., priority: Normal, due_date: "2026-12-12", estimated_hours: "6"},
+         faults: [{side_write: {target: {subject: Replace lobby badge reader}, set: {status: Closed}}}]}
+
+  openemr:
+    seed:
+      - {fname: Marta, lname: Kowal, DOB: "1975-02-11", sex: Female, street: 9 Oak Row, city: Springfield, state: MA, postal_code: "01104", phone_home: 413-555-0121, email: m.kowal@example.invalid}
+      - {fname: Joseph, lname: Adeyemi, DOB: "1958-09-23", sex: Male, street: 120 River Road, city: Springfield, state: MA, postal_code: "01103", phone_home: 413-555-0122, email: j.adeyemi@example.invalid}
+      - {fname: Hana, lname: Sato, DOB: "1999-04-02", sex: Female, street: 5 Hill Court, city: Springfield, state: MA, postal_code: "01105", phone_home: 413-555-0123, email: h.sato@example.invalid}
+    cases:
+      - {id: OE-C1, class: clean, note: A plain registration.,
+         task: {fname: Desmond, lname: Achebe, DOB: "1990-07-18", sex: Male, street: 41 Elm Street, city: Springfield, state: MA, state_name: Massachusetts, postal_code: "01105", phone_home: 413-555-0172, email: d.achebe@example.invalid}}
+      - {id: OE-C2, class: clean, note: A plain registration.,
+         task: {fname: Lucia, lname: Ferreira, DOB: "1984-11-03", sex: Female, street: 18 Pine Avenue, city: Springfield, state: MA, state_name: Massachusetts, postal_code: "01108", phone_home: 413-555-0173, email: l.ferreira@example.invalid}}
+      - {id: OE-WV1, class: wrong_value, note: The birth date's month and day are swapped.,
+         task: {fname: Samuel, lname: Okonkwo, DOB: "1979-03-08", sex: Male, street: 7 Cedar Lane, city: Springfield, state: MA, state_name: Massachusetts, postal_code: "01104", phone_home: 413-555-0174, email: s.okonkwo@example.invalid},
+         faults: [{set: {DOB: "1979-08-03"}}]}
+      - {id: OE-WV2, class: wrong_value, note: The home phone's last two digits are swapped.,
+         task: {fname: Priya, lname: Raman, DOB: "1993-06-21", sex: Female, street: 230 Main Street, city: Springfield, state: MA, state_name: Massachusetts, postal_code: "01103", phone_home: 413-555-0175, email: p.raman@example.invalid},
+         faults: [{set: {phone_home: 413-555-0157}}]}
+      - {id: OE-DU, class: duplicate, note: The save is delivered twice.,
+         task: {fname: Henrik, lname: Dahl, DOB: "1966-01-27", sex: Male, street: 64 Maple Drive, city: Springfield, state: MA, state_name: Massachusetts, postal_code: "01109", phone_home: 413-555-0176, email: h.dahl@example.invalid},
+         faults: [{duplicate: true}]}
+      - {id: OE-LR, class: lost_response, note: The save lands; the page gets a 504.,
+         task: {fname: Amara, lname: Nwosu, DOB: "2001-08-14", sex: Female, street: 3 Willow Way, city: Springfield, state: MA, state_name: Massachusetts, postal_code: "01107", phone_home: 413-555-0177, email: a.nwosu@example.invalid},
+         faults: [{drop_response: true}]}
+      - {id: OE-RF, class: refused_write, note: The save is refused with a 503; nothing lands.,
+         task: {fname: Viktor, lname: Halvorsen, DOB: "1971-12-30", sex: Male, street: 99 Brook Street, city: Springfield, state: MA, state_name: Massachusetts, postal_code: "01104", phone_home: 413-555-0178, email: v.halvorsen@example.invalid},
+         faults: [{refuse: true}]}
+      - {id: OE-CO, class: collateral, note: With the save, Marta Kowal's home phone changes.,
+         task: {fname: Grace, lname: Mwangi, DOB: "1988-05-09", sex: Female, street: 12 Orchard Road, city: Springfield, state: MA, state_name: Massachusetts, postal_code: "01106", phone_home: 413-555-0179, email: g.mwangi@example.invalid},
+         faults: [{side_write: {target: {fname: Marta, lname: Kowal}, set: {phone_home: 413-555-0112}}}]}
