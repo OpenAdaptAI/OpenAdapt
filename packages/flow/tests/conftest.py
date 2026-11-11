@@ -69,6 +69,7 @@ def _isolation_env(root: Path) -> dict[str, str | None]:
         "OPENADAPT_FRAME_SECRET_FILE": None,
         # The uncertain-write ledger is owned by this fixture, not the user.
         "OPENADAPT_LEDGER_DIR": str(root / ".write-ledger"),
+        "OPENADAPT_LEDGER_AUTHORITY_CONFIG": None,
         # Preserve the suite's recorded synthetic-data opt-out. The default
         # encryption and strict modes are covered by test_at_rest_default.py.
         "OPENADAPT_FLOW_PLAINTEXT_AT_REST": "test suite: synthetic data",

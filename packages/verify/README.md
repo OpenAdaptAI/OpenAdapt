@@ -150,4 +150,10 @@ and `verify_recheck` MCP tools. Their contracts remain operator-owned, and a
 refusal never authorizes retrying the write. The `openadapt_verify.shadow`
 module also exposes the canonical shadow verifier without changing its scope.
 
+To configure the same protected journal for `run`, `recheck`, and `serve`,
+see [Use the protected journal from installed tools](../flow/docs/VERIFIER_API.md#use-the-protected-journal-from-installed-tools).
+An enrolled journal refuses if a process opens it without its authority.
+The legacy default provides no tamper evidence when the checked agent can
+write to its journal directory.
+
 A recheck exits zero only after the exact ledger attempt records confirmation for the same receipt. A prior refutation remains held for person review even if the unexplained change is later removed. A transient unreadable-store recheck can recover after a fresh read of the same originally confirmed write.
