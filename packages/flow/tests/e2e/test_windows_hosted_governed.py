@@ -316,6 +316,31 @@ def _report(run_dir: Path):
     )
 
 
+def _halts(run_dir: Path) -> Any:
+    """Each step that stopped the run, and why (diagnostics only)."""
+
+    try:
+        return [
+            {
+                "step": r.step_id,
+                "category": getattr(r, "failure_category", None),
+                "error": str(getattr(r, "error", "") or "")[:400],
+            }
+            for r in _report(run_dir).results
+            if r.error or r.failure_category
+        ]
+    except Exception as exc:  # noqa: BLE001 - diagnostics never fail the test
+        return {"report_error": repr(exc)}
+
+
+def _print_diagnostics(phase: str, record: dict[str, Any]) -> None:
+    """Print the halts and the form-state probe in full; pytest's assertion
+    message shortens a long dict."""
+
+    for key in ("halts", "form_state_probe"):
+        print(f"{phase} {key}: {json.dumps(record.get(key), default=str)}")
+
+
 def _form_state_probe(backend, run_dir: Path, frame_png: bytes) -> dict[str, Any]:
     """Which form-state read reproduces the approval request's digest.
 
@@ -531,24 +556,14 @@ def _governed(host, tmp_path, evidence: dict[str, Any]) -> None:
     if done.returncode != 0:
         # Diagnostics only: why the approved run stopped, and which read
         # reproduces the request's digest from the save's own frame.
-        try:
-            evidence["approved"]["halts"] = [
-                {
-                    "step": r.step_id,
-                    "category": getattr(r, "failure_category", None),
-                    "error": str(getattr(r, "error", "") or "")[:400],
-                }
-                for r in _report(run_dir).results
-                if r.error or r.failure_category
-            ]
-        except Exception as exc:  # noqa: BLE001 - diagnostics never fail the test
-            evidence["approved"]["halts"] = {"report_error": repr(exc)}
+        evidence["approved"]["halts"] = _halts(run_dir)
         try:
             evidence["approved"]["form_state_probe"] = _form_state_probe(
                 backend, run_dir, _save_frame(run_dir)
             )
         except Exception as exc:  # noqa: BLE001 - diagnostics never fail the test
             evidence["approved"]["form_state_probe"] = {"probe_error": repr(exc)}
+        _print_diagnostics("approved", evidence["approved"])
     assert person.errors == [], evidence["approved"]
     assert done.returncode == 0, (
         evidence["approved"].get("halts"),
@@ -606,6 +621,7 @@ def _governed(host, tmp_path, evidence: dict[str, Any]) -> None:
         "tail": (resumed.stdout + resumed.stderr)[-3000:],
     }
     if resumed.returncode != 0:
+        evidence["resumed"]["halts"] = _halts(run_dir)
         # The resumed save's own frame, read both ways against the request.
         try:
             evidence["resumed"]["form_state_probe"] = _form_state_probe(
@@ -613,7 +629,12 @@ def _governed(host, tmp_path, evidence: dict[str, Any]) -> None:
             )
         except Exception as exc:  # noqa: BLE001 - diagnostics never fail the test
             evidence["resumed"]["form_state_probe"] = {"probe_error": repr(exc)}
-    assert resumed.returncode == 0, evidence["resumed"]
+        _print_diagnostics("resumed", evidence["resumed"])
+    assert resumed.returncode == 0, (
+        evidence["resumed"].get("halts"),
+        evidence["resumed"].get("form_state_probe"),
+        evidence["resumed"],
+    )
     assert rows[TARGET_ID]["note"] == DEMO_NOTE
     assert all(r["note"] == "" for i, r in rows.items() if i != TARGET_ID)
     assert _report(run_dir).transaction_outcome == "VERIFIED"
