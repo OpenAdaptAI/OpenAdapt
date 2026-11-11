@@ -1,7 +1,7 @@
-"""Desktop's Flow imports must exist in its real bundled, exact-pinned wheel.
+"""Check every Desktop Flow import against the runtime selected by CI.
 
-The plain unit lane may lack Flow. The bundled-runtime CI job must run these
-checks with Desktop's build extra; an editable sibling is not installer proof.
+Source tests exercise the same checkout. Bundled qualification requires the
+real exact-pinned wheel installed by Desktop's build extra.
 """
 
 from __future__ import annotations
@@ -71,7 +71,11 @@ def _bundled_flow_files(*, required: bool) -> set[Path]:
 
 
 @pytest.fixture(scope="module")
-def bundled_flow_files():
+def flow_files(source_flow_package):
+    if source_flow_package is not None:
+        files = {path.resolve() for path in source_flow_package.rglob("*.py")}
+        assert files and all(path.is_relative_to(source_flow_package) for path in files)
+        return files
     return _bundled_flow_files(
         required=os.environ.get("OPENADAPT_DESKTOP_REQUIRE_BUNDLED_FLOW") == "1"
     )
@@ -80,26 +84,26 @@ def bundled_flow_files():
 def _real_import(name: str, files: set[Path]):
     module = importlib.import_module(name)
     assert isinstance(module.__file__, str) and Path(module.__file__).resolve() in files, (
-        f"{name} did not come from the pinned Flow distribution"
+        f"{name} did not come from the selected Flow runtime"
     )
     return module
 
 
-def test_every_desktop_flow_import_uses_the_real_pinned_module(bundled_flow_files) -> None:
+def test_every_desktop_flow_import_uses_the_real_pinned_module(flow_files) -> None:
     references: set[tuple[str, tuple[str, ...]]] = set()
     for path in sorted((ROOT / "openadapt_desktop").rglob("*.py")):
         references.update(_references(path.read_text(encoding="utf-8")))
     assert references, "the Desktop/Flow import contract must exercise actual imports"
     for name, imported in sorted(references):
-        module = _real_import(name, bundled_flow_files)
+        module = _real_import(name, flow_files)
         for member in imported:
             if member != "*" and not hasattr(module, member):
-                _real_import(name + "." + member, bundled_flow_files)
+                _real_import(name + "." + member, flow_files)
 
 
-def test_missing_flow_module_is_not_replaced_by_a_stub(bundled_flow_files) -> None:
+def test_missing_flow_module_is_not_replaced_by_a_stub(flow_files) -> None:
     with pytest.raises(ModuleNotFoundError):
-        _real_import("openadapt_flow._synthetic_missing_contract_module", bundled_flow_files)
+        _real_import("openadapt_flow._synthetic_missing_contract_module", flow_files)
 
 
 def test_required_contract_refuses_a_missing_distribution(monkeypatch) -> None:

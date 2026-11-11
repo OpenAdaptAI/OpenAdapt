@@ -55,6 +55,7 @@ type Busy =
   | "effect"
   | "app"
   | "practice"
+  | "dry_run"
   | "drills"
   | "approve";
 
@@ -462,6 +463,14 @@ export function CheckIt({
   // Which values change per item, as ticked on screen (null: as proposed).
   const [changing, setChanging] = useState<Set<string> | null>(null);
   const [practiceNote, setPracticeNote] = useState("");
+  const [dryRun, setDryRun] = useState<RunReport | null>(null);
+  const [dryRunNote, setDryRunNote] = useState("");
+  const [dryRunContext, setDryRunContext] = useState("");
+  // A previous result cannot describe another version, screen or test values.
+  const checkContext = JSON.stringify([
+    workflowId, activeId.current, values, target, deploymentConfig,
+  ]);
+  const dryRunCurrent = dryRunContext === checkContext;
   const [drillNote, setDrillNote] = useState("");
   const [approvedId, setApprovedId] = useState<string | null>(null);
   const [appName, setAppName] = useState("");
@@ -716,6 +725,31 @@ export function CheckIt({
   function runSettings(): { deployment_config?: string } {
     const path = deploymentConfig.trim();
     return path ? { deployment_config: path } : {};
+  }
+
+  async function checkWithoutSaving() {
+    if (!target) return;
+    setBusy("dry_run");
+    setDryRun(null);
+    setDryRunNote("");
+    setDryRunContext(checkContext);
+    fail("");
+    try {
+      const response = await engineInvoke<RunReport>(CMD.DRY_RUN_WORKFLOW, {
+        workflow_id: activeId.current,
+        target,
+        inputs: JSON.parse(caseParameters()),
+        ...runSettings(),
+      });
+      setDryRun(response);
+      setDryRunNote(response.dry_run?.reached_boundary
+        ? "Stopped at the declared save boundary before any input. Nothing was saved."
+        : "Check refused: OpenAdapt could not prove a stop at the declared save boundary.");
+    } catch {
+      setDryRunNote("The check did not finish. Open the local run evidence before trying again.");
+    } finally {
+      setBusy(null);
+    }
   }
 
   /** Runs the practice item; returns the project when it passed. */
@@ -1387,8 +1421,40 @@ export function CheckIt({
             ) : (
               <p>This workflow takes no values: every item is the same.</p>
             )}
+            <div className="check-dry-run">
+              <h3>Check without saving</h3>
+              <p className="simple-sub">
+                Open the prefilled screen first. This check observes it and refuses
+                every application input. A step that needs typing, clicking or
+                navigation stops the check. Web checks use your already-open,
+                signed-in browser.
+              </p>
+              <Button disabled={busy !== null || !valuesReady || !target}
+                onClick={() => void checkWithoutSaving()}>
+                {busy === "dry_run" ? "Checking without saving…" : "Check without saving"}
+              </Button>
+              {dryRunCurrent && dryRunNote && <p role="status" className="result-line">{dryRunNote}</p>}
+              {dryRunCurrent && dryRun?.dry_run?.checks.some((check) => check.passed) && (
+                <ul aria-label="Checks that passed">
+                  {Array.from(new Set(dryRun.dry_run.checks.filter((check) => check.passed)
+                    .map((check) => check.code === "right_record" ? "Right-record identity passed."
+                      : ({ guard_passed: "The declared guard passed.",
+                           wait_until_passed: "The declared readiness predicate passed.",
+                           starting_state_settled: "The starting screen settled.",
+                           no_input_delivered: "No application input was delivered.",
+                           stopped_before_delivery: "The declared save boundary was reached." } as Record<string, string>)[check.detail])
+                    .filter((label): label is string => Boolean(label))))
+                    .map((label) => <li key={label}>{label}</li>)}
+                </ul>
+              )}
+              {dryRunCurrent && dryRun?.dry_run?.reached_boundary && (
+                <p>Declared changes: {joinPlain(plan.writes.map((step) => step.caption))}.
+                  The test values shown here describe the declared save. The check does
+                  not confirm saved values or qualify the workflow.</p>
+              )}
+            </div>
             <p className="simple-sub">
-              Then OpenAdapt does the workflow once with these test values in{" "}
+              For qualification, OpenAdapt does the workflow once with these test values in{" "}
               {targetSummary(target)}
               {deploymentConfig.trim() ? ", with your deployment settings file" : ""}.
               It saves for real, so it shows you the filled form and waits for
