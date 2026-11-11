@@ -51,7 +51,10 @@ import urllib.parse as up
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from openadapt_flow.backends.worker_containment import WorkerContainment, contain_workers
+from openadapt_flow.backends.worker_containment import (
+    WorkerContainment,
+    contain_workers,
+)
 
 URLENCODED = "application/x-www-form-urlencoded"
 
