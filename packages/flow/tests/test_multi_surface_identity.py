@@ -35,7 +35,9 @@ from openadapt_flow.runtime.effects import Effect, EffectKind  # noqa: E402
 from openadapt_flow.runtime.replayer import Replayer  # noqa: E402
 from tests.test_durable_runtime import (  # noqa: E402
     FakeSoRVerifier,
+    _approval,
     _retry_approval,
+    _StopBeforeInput,
 )
 
 pytestmark = pytest.mark.timeout(600)
@@ -83,13 +85,41 @@ def _pause_on_the_tab(browser, app_url, bundle, tmp_path):
     verifier = FakeSoRVerifier()
     verifier.refute.add((("step", PAUSE_STEP),))
     page = _e2e._fresh_page(browser, app_url)
-    report = Replayer(
-        PlaywrightBackend(page),
-        durable=True,
-        effect_verifier=verifier,
-        poll_interval_s=0.05,
-    ).run(Workflow.load(bundle_dir), bundle_dir=bundle_dir, run_dir=run_dir)
-    return report, page, bundle_dir, run_dir, verifier
+    try:
+        stopped = _StopBeforeInput(
+            PlaywrightBackend(page),
+            durable=True,
+            effect_verifier=verifier,
+            poll_interval_s=0.05,
+        ).run(Workflow.load(bundle_dir), bundle_dir=bundle_dir, run_dir=run_dir)
+        assert not stopped.success, _e2e._summary(stopped)
+        first = stopped.results[-1]
+        assert first.step_id == "step_000" and first.delivery_attempted is False
+        assert "synthetic operator stop before input" in (first.error or "")
+        assert page.context.pages == [page]
+        assert page.locator("#popup-status").inner_text() == "Approval pending"
+        assert page.locator("#done").inner_text() == ""
+        assert verifier.verify_calls == []
+
+        store = CheckpointStore(run_dir)
+        pending = store.read_pending()
+        assert pending is not None and pending.step_id == "step_000"
+        assert pending.delivery_uncertainty is None
+        assert store.checkpoints() == []
+
+        approval = _approval(bundle_dir, run_dir)
+        assert approval.authorize_uncertain_retry is False
+        report = resume(
+            run_dir,
+            Replayer(
+                PlaywrightBackend(page), effect_verifier=verifier, poll_interval_s=0.05
+            ),
+            approval=approval,
+        )
+        return report, page, bundle_dir, run_dir, verifier
+    except BaseException:
+        page.context.close()
+        raise
 
 
 def test_resume_rebinds_surfaces_by_identity(bundle, app_url, browser, tmp_path):
