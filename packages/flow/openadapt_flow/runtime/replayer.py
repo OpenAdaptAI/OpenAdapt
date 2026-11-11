@@ -222,6 +222,7 @@ from openadapt_flow.runtime.effects.adapter import (
 from openadapt_flow.runtime.effects.adapter import (
     verifier_identity as effect_verifier_identity,
 )
+from openadapt_flow.runtime.effects.pipeline_safety import _pipeline_safe_verifier
 from openadapt_flow.runtime.known_ids import (
     lookalike_class as known_ids_lookalike_class,
 )
@@ -503,50 +504,6 @@ class _GraphStepContext:
         self.next_anchored = next_anchored
         self.following = following
         self.has_exception_handler = has_exception_handler
-
-
-def _pipeline_safe_verifier(verifier: Any) -> bool:
-    """Whether a read-back may run on a side thread while the next item runs.
-
-    Only verifiers that read the system of record over the network and never
-    touch the screen: REST, FHIR, GraphQL and SQL. Anything that binds to a
-    backend (on-screen read-backs, and the redacting and candidate wrappers,
-    which forward ``bind_backend``) or any other kind verifies inline.
-    """
-
-    if (
-        verifier is None
-        or hasattr(verifier, "bind_backend")
-        or getattr(verifier, "backend", None) is not None
-        or getattr(verifier, "_backend", None) is not None
-    ):
-        return False
-    safe: list[type] = []
-    for load, name in (
-        (
-            lambda: importlib.import_module("openadapt_flow.runtime.effects.rest"),
-            "RestRecordVerifier",
-        ),
-        (
-            lambda: importlib.import_module("openadapt_flow.runtime.effects.fhir"),
-            "FhirEffectVerifier",
-        ),
-        (
-            lambda: importlib.import_module("openadapt_flow.runtime.effects.graphql"),
-            "GraphQLRecordVerifier",
-        ),
-        (
-            lambda: importlib.import_module("openadapt_flow.runtime.effects.sql"),
-            "SqlRecordVerifier",
-        ),
-    ):
-        try:
-            import importlib
-
-            safe.append(getattr(load(), name))
-        except Exception:  # noqa: BLE001 - an unavailable kind is not safe
-            continue
-    return isinstance(verifier, tuple(safe))
 
 
 class _ProgramHalt(Exception):
