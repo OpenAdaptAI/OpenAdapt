@@ -30,6 +30,7 @@ from alternatives import (  # noqa: E402
     audit_alternative,
     read_only_pool,
 )
+
 from openadapt_flow.verifier_audit.families import (  # noqa: E402
     DEFAULT_FAMILIES,
     Polarity,
@@ -103,7 +104,9 @@ def cmd_run(args: argparse.Namespace) -> int:
                     done[(cell["task"], cell["family"])] = cell
     families = [f for f in ALTERNATIVES if not args.only or f in args.only.split(",")]
     foreign = (
-        read_only_pool(target, all_tasks) if args.foreign_reads else {t: [] for t in kept}
+        read_only_pool(target, all_tasks)
+        if args.foreign_reads
+        else {t: [] for t in kept}
     )
     for n, task in enumerate(kept, 1):
         pending = [f for f in families if (task, f) not in done]
@@ -200,7 +203,9 @@ def summarize_benchmark(run_dirs: list[Path]) -> dict[str, Any]:
     tasks: set[str] = set()
     for d in run_dirs:
         h, a, e = _load_cells(d)
-        prefix = d.name + ":" if len(run_dirs) > 1 and d.parent.name == "agentdojo" else ""
+        prefix = (
+            d.name + ":" if len(run_dirs) > 1 and d.parent.name == "agentdojo" else ""
+        )
         for group in (h, a, e):
             for cell in group:
                 cell["task"] = prefix + cell["task"]

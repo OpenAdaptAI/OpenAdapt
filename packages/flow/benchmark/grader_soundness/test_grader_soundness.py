@@ -16,6 +16,7 @@ from alternatives import (  # noqa: E402
     refused_attempt,
     reordered_writes,
 )
+
 from openadapt_flow.verifier_audit.families import Refusal  # noqa: E402
 from openadapt_flow.verifier_audit.targets.toy import ToyPayments  # noqa: E402
 
@@ -44,9 +45,7 @@ def test_refused_attempt_counts_only_when_the_environment_refuses_it():
     target = ToyPayments(strict=True)
     ctx, control = _ctx(target, "pay-bob")
     cands = refused_attempt(ctx)
-    assert cands and "nonexistent" in json.dumps(
-        [c.to_json() for c in cands[0].calls]
-    )
+    assert cands and "nonexistent" in json.dumps([c.to_json() for c in cands[0].calls])
     cell = audit_alternative(target, ctx.task, "refused_attempt", ctx, control)
     assert cell["status"] == "ACCEPTED"
     assert cell["census_attempts"][0]["calls_as_expected"] is True
@@ -76,7 +75,13 @@ def test_end_to_end_run_and_summary(tmp_path):
     assert rc == 0
     summary_path = tmp_path / "results.json"
     gs_run.main(
-        ["summarize", "--results", str(tmp_path / "results"), "--out", str(summary_path)]
+        [
+            "summarize",
+            "--results",
+            str(tmp_path / "results"),
+            "--out",
+            str(summary_path),
+        ]
     )
     bench = json.loads(summary_path.read_text())["benchmarks"]["toy"]
     rows = {r["family"]: r for r in bench["families"]}
