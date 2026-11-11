@@ -65,10 +65,13 @@ from openadapt_flow.runtime.effects.effect import (
 )
 from openadapt_flow.verification import VerificationTier
 
+_SQL_READ_DIALECT_REFUSAL = "SQL read dialect is unidentified; declare sql_dialect"
+_POSTGRESQL_DRIVER_MODULES = frozenset({"psycopg", "psycopg2", "pg8000"})
+
 # A named refusal belongs to one read, including subclass calls through
 # _fetch_records(). Outside a public read, that method still returns None.
-_mysql_charset_refused: ContextVar[bool | None] = ContextVar(
-    "_mysql_charset_refused", default=None
+_sql_read_refusal: ContextVar[str | None] = ContextVar(
+    "_sql_read_refusal", default=None
 )
 
 # Words that could make a SELECT-leading statement mutate, checked on the
@@ -243,6 +246,23 @@ _TABLE_NAME = re.compile(r"^[A-Za-z0-9_ ]+$")
 READ_ONLY_DRIVERS = frozenset(
     {"sqlite3", "psycopg", "psycopg2", "pymysql", "MySQLdb", "mysql.connector"}
 )
+
+
+def _known_non_mysql_read(conn: Any, dialect: Optional[str]) -> bool:
+    return (
+        dialect in ("sqlite", "postgresql")
+        or isinstance(conn, sqlite3.Connection)
+        or any(
+            cls.__module__.partition(".")[0] in _POSTGRESQL_DRIVER_MODULES
+            for cls in type(conn).__mro__
+        )
+    )
+
+
+def _note_sql_read_refusal(reason: str) -> None:
+    # An empty string marks an active read without a named refusal.
+    if _sql_read_refusal.get() == "":
+        _sql_read_refusal.set(reason)
 
 
 def read_only_connection(conn: Any, driver: str) -> Any:
@@ -585,7 +605,8 @@ class SqlRecordVerifier(VerifierAdapterBase):
             and expose no attribution witness.
         sql_driver: Trusted configured DB-API module name, if available.
             Native MySQL-family connections are also recognized directly.
-        sql_dialect: Optional trusted dialect for an opaque DB-API connector.
+        sql_dialect: Trusted dialect required for an opaque DB-API connector.
+            Each connection must retain its session across statements.
     """
 
     substrate = "sql"
@@ -632,12 +653,15 @@ class SqlRecordVerifier(VerifierAdapterBase):
             conn = self._connect()
         except Exception:  # noqa: BLE001 - unreachable SoR is unreadable
             return None
+        if conn is None:
+            return None
         try:
-            cursor = (
-                mysql_utf8mb4_cursor(conn)
-                if self._sql_dialect == "mysql" or is_mysql_read(conn, self._sql_driver)
-                else None
-            )
+            cursor = None
+            if self._sql_dialect == "mysql" or is_mysql_read(conn, self._sql_driver):
+                cursor = mysql_utf8mb4_cursor(conn)
+            elif not _known_non_mysql_read(conn, self._sql_dialect):
+                _note_sql_read_refusal(_SQL_READ_DIALECT_REFUSAL)
+                return None
             prepared = (
                 _prepare_source(conn, self.query)
                 if capture_source and self._source_metadata
@@ -666,8 +690,7 @@ class SqlRecordVerifier(VerifierAdapterBase):
                 self.drop_fields,
             )
         except MySQLResultCharsetRefused:
-            if _mysql_charset_refused.get() is not None:
-                _mysql_charset_refused.set(True)
+            _note_sql_read_refusal(MYSQL_RESULT_CHARSET_REFUSAL)
             return None
         except Exception:  # noqa: BLE001 - any read failure is unreadable
             return None
@@ -677,29 +700,28 @@ class SqlRecordVerifier(VerifierAdapterBase):
             except Exception:  # noqa: BLE001 - close failure changes nothing
                 pass
 
-    def _fetch_with_charset_refusal(
+    def _fetch_with_refusal(
         self, *, capture_source: bool = False
-    ) -> tuple[Optional[list[dict[str, Any]]], bool]:
-        token = _mysql_charset_refused.set(False)
+    ) -> tuple[Optional[list[dict[str, Any]]], Optional[str]]:
+        token = _sql_read_refusal.set("")
         try:
             records = (
                 self._fetch_records(capture_source=True)
                 if capture_source
                 else self._fetch_records()
             )
-            if _mysql_charset_refused.get():
-                return None, True
-            return records, False
+            refusal = _sql_read_refusal.get()
+            return (None, refusal) if refusal else (records, None)
         finally:
-            _mysql_charset_refused.reset(token)
+            _sql_read_refusal.reset(token)
 
     # -- EffectVerifier protocol --------------------------------------------
 
     def capture_pre_state(self, context: Any = None) -> EffectState:
-        records, charset_refused = self._fetch_with_charset_refusal(capture_source=True)
+        records, refusal = self._fetch_with_refusal(capture_source=True)
         detail = {"query": self.query}
-        if charset_refused:
-            detail["read_error"] = MYSQL_RESULT_CHARSET_REFUSAL
+        if refusal is not None:
+            detail["read_error"] = refusal
         return EffectState(
             substrate=self.substrate,
             reachable=records is not None,
@@ -714,11 +736,12 @@ class SqlRecordVerifier(VerifierAdapterBase):
     ) -> EffectVerdict:
         deadline = time.monotonic() + max(0.0, expected.timeout_s)
         while True:
-            current, charset_refused = self._fetch_with_charset_refusal()
+            current, refusal = self._fetch_with_refusal()
             last = judge_records(expected, before, current, substrate=self.substrate)
-            if charset_refused:
-                last.reason = MYSQL_RESULT_CHARSET_REFUSAL
-            if charset_refused or last.confirmed or time.monotonic() >= deadline:
+            if refusal is not None:
+                last.reason = refusal
+                return last
+            if last.confirmed or time.monotonic() >= deadline:
                 return last
             time.sleep(self.poll_interval_s)
 

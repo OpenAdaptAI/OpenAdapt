@@ -320,6 +320,64 @@ def test_explicit_mysql_dialect_checks_opaque_connector_on_its_native_session(
             native.close()
 
 
+@live
+@pytest.mark.parametrize("entrypoint", ["direct", "configured"])
+def test_undeclared_opaque_sql_connector_refuses_before_opening_a_cursor(
+    charset_database: Any, entrypoint: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, connect = charset_database
+    sessions: list[Any] = []
+    cursor_calls = 0
+
+    class OpaqueConnection:
+        def __init__(self, session: Any) -> None:
+            self.session = session
+
+        def cursor(self) -> Any:
+            nonlocal cursor_calls
+            cursor_calls += 1
+            return self.session.cursor()
+
+        def close(self) -> None:
+            self.session.close()
+
+    def open_opaque() -> OpaqueConnection:
+        session = connect("latin1")
+        sessions.append(session)
+        return OpaqueConnection(session)
+
+    query = "SELECT id FROM t"
+    try:
+        if entrypoint == "configured":
+            driver = ModuleType("_synthetic_undeclared_connector")
+            driver.connect = open_opaque
+            monkeypatch.setitem(sys.modules, driver.__name__, driver)
+            verifier = build_effect_verifier(
+                EffectsConfig(kind="sql", sql_driver=driver.__name__, sql_query=query)
+            )
+        else:
+            verifier = SqlRecordVerifier(open_opaque, query, source_metadata=True)
+        assert isinstance(verifier, SqlRecordVerifier)
+        error = "SQL read dialect is unidentified; declare sql_dialect"
+        before = verifier.capture_pre_state()
+        assert before.reachable is False and before.readback_complete is False
+        assert before.records == [] and before.detail["read_error"] == error
+        expected = Effect(
+            kind=EffectKind.RECORD_WRITTEN, match={"id": "1"}, timeout_s=1.0
+        )
+        verdict = verifier.verify(expected, before)
+        assert verdict.verdict is Verdict.INDETERMINATE
+        assert verdict.should_halt and verdict.unavailable
+        assert verdict.reason == error and verdict.matched_records == []
+        assert cursor_calls == 0
+        assert len(sessions) == 2 and sessions[0] is not sessions[1]
+        assert all(not session.open for session in sessions)
+    finally:
+        for session in sessions:
+            if session.open:
+                session.close()
+
+
 @pytest.mark.parametrize("entrypoint", ["direct", "configured"])
 def test_sqlite_effect_readback_keeps_exact_values_and_source(
     tmp_path: Path, entrypoint: str
@@ -330,7 +388,7 @@ def test_sqlite_effect_readback_keeps_exact_values_and_source(
         connection.execute("CREATE TABLE t (id INTEGER PRIMARY KEY, body TEXT)")
         connection.execute("INSERT INTO t VALUES (1, ?)", (body,))
 
-    query = "SELECT id, body FROM t"
+    query = "SELECT * FROM t"
     if entrypoint == "configured":
         verifier = build_effect_verifier(
             EffectsConfig(kind="sql", sqlite_database=database, sql_query=query)

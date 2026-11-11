@@ -508,7 +508,8 @@ class EffectsConfig(BaseModel):
     #: Alternatively: an importable DB-API driver module name (``pymysql``,
     #: ``mariadb``, ``psycopg``) ...
     sql_driver: Optional[str] = None
-    #: Explicit dialect for an operator-configured DB-API adapter.
+    #: Explicit dialect for an opaque DB-API adapter. Its connections must
+    #: retain the same session across statements.
     sql_dialect: Optional[Literal["sqlite", "mysql", "postgresql"]] = None
     #: ... plus its non-secret ``connect(**kwargs)`` arguments ...
     sql_connect_args: dict[str, Any] = Field(default_factory=dict)

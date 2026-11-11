@@ -3,7 +3,6 @@
 from collections.abc import Mapping
 from typing import Any
 
-
 MYSQL_RESULT_CHARSET_REFUSAL = "MySQL reads require character_set_results=utf8mb4"
 _MYSQL_DRIVERS = frozenset({"pymysql", "MySQLdb", "mysql.connector", "mariadb"})
 _NATIVE_MODULES = _MYSQL_DRIVERS | {"_mysql", "_mysql_connector", "_mariadb"}
