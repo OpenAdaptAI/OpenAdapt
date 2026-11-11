@@ -889,6 +889,7 @@ def begin_write(
     workdir: Union[str, Path, None] = None,
     declared_by: DeclaredBy = "agent",
     read_provider: Optional[CompleteReadProvider] = None,
+    task_record_sha256: Optional[str] = None,
 ) -> PendingWrite:
     """Consult the ledger, then read the system of record before the write.
 
@@ -909,6 +910,9 @@ def begin_write(
             a confirmed write is never made again under the same key;
             without it, two writes with the same values are the same write
             only while the first one's outcome is open.
+        task_record_sha256: An optional lowercase SHA-256 digest stored
+            on the original begun event only. It requires a ledger and does
+            not affect write identity, verification, or retry decisions.
         authorization_ref: An opaque reference to what authorized the write;
             only its salted digest enters the receipt.
         workdir: Where this write's private folder goes (default: the
@@ -924,6 +928,13 @@ def begin_write(
     (:meth:`Contract.null_unsafe_params`).
     """
 
+    if task_record_sha256 is not None and (
+        not isinstance(task_record_sha256, str)
+        or re.fullmatch(r"[0-9a-f]{64}", task_record_sha256) is None
+    ):
+        raise VerifierError("task_record_sha256 must be 64 lowercase hex digits")
+    if task_record_sha256 is not None and ledger is None:
+        raise VerifierError("task_record_sha256 requires a write ledger")
     actor.run_record()  # an unknown kind fails before anything is read
     if authorization_ref and not _OPAQUE.match(authorization_ref):
         raise VerifierError(
@@ -1029,6 +1040,11 @@ def begin_write(
             declared_by=declared_by
             if isinstance(declared_by, str)
             else {str(k): str(v) for k, v in declared_by.items()},
+            **(
+                {"task_record_sha256": task_record_sha256}
+                if task_record_sha256 is not None
+                else {}
+            ),
         )
     except LedgerError as exc:
         lease.release()
