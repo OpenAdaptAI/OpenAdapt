@@ -18,7 +18,47 @@ This is a test helper (leading underscore: pytest does not collect it).
 
 from __future__ import annotations
 
+import subprocess
+import sys
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
+from pathlib import Path
 from typing import Any
+
+from openadapt_flow._browser_readiness import chromium_launch_args
+from openadapt_flow.backends._owned import close_owned
+
+
+@contextmanager
+def owned_chromium(
+    executable: Path,
+    options: Sequence[str],
+    url: str,
+    *,
+    stderr: int = subprocess.DEVNULL,
+    wait_s: float = 10,
+) -> Iterator[subprocess.Popen[bytes]]:
+    """Launch and reap only the browser process owned by the test."""
+    process = subprocess.Popen(
+        [str(executable), *chromium_launch_args(options), url],
+        stdout=subprocess.DEVNULL,
+        stderr=stderr,
+    )
+
+    def reap() -> None:
+        if process.poll() is None:
+            process.terminate()
+        try:
+            process.wait(timeout=wait_s)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=wait_s)
+
+    try:
+        yield process
+    finally:
+        closers = (reap,) if process.stderr is None else (reap, process.stderr.close)
+        close_owned(closers, primary=sys.exc_info()[1])
 
 
 def resize_tab_viewport(page: Any, width: int, height: int) -> None:
