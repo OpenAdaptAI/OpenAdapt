@@ -1,5 +1,14 @@
 # CHANGELOG
 
+
+## v0.30.0 (2026-11-11)
+
+### Features
+
+- **desktop**: check a workflow without saving
+
+
+
 ## Unreleased
 
 - Check prefilled workflows without delivering application input when the
