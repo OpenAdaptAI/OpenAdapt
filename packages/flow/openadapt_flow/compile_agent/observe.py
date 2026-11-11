@@ -89,7 +89,7 @@ _OBSERVE_JS = (
   function esc(s) { return s.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&'); }
   var res = values.map(function (v) {
     return new RegExp('(?<![\\\\p{L}\\\\p{N}_])' +
-      v.split(/\\\\s+/).map(esc).join('\\\\s+') + '(?![\\\\p{L}\\\\p{N}_])', 'gu');
+      v.split(/\\s+/).map(esc).join('\\\\s+') + '(?![\\\\p{L}\\\\p{N}_])', 'gu');
   });
   function visible(el) {
     var r = el.getBoundingClientRect();

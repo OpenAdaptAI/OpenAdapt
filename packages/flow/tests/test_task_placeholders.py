@@ -402,3 +402,21 @@ def test_split_element_task_value_bound_in_listing(page) -> None:
     assert f"Patient: {privacy.placeholder('identity_1')}" in obs.text
     assert "Jane Sample" not in obs.text
     assert "MRN P1" not in obs.text
+
+
+def test_split_element_task_value_bound_across_line_break(page) -> None:
+    from openadapt_flow.compile_agent.observe import observe
+
+    # A <br> between the child elements makes the parent's innerText contain a
+    # newline, so the split value only binds if the gap between its words matches
+    # any whitespace run (not a single literal space).
+    page.set_content(
+        "<!doctype html><html><body>"
+        "<div>Patient: <span>Jane</span><br><span>Sample</span></div>"
+        "</body></html>"
+    )
+    bindings = privacy.task_bindings(identity=["Jane Sample"])
+    obs = observe(page, bindings=bindings)
+
+    assert f"Patient: {privacy.placeholder('identity_1')}" in obs.text
+    assert "Jane Sample" not in obs.text
