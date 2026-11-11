@@ -23,6 +23,28 @@ def _params(path: str) -> dict:
     return values
 
 
+def _ledger_hold_code(exc: RuntimeError) -> Optional[str]:
+    from openadapt_flow import write_ledger
+
+    held = getattr(write_ledger, "LedgerIntegrityHeld", None)
+    if isinstance(held, type) and isinstance(exc, held):
+        code = getattr(exc, "code", None)
+        return code if isinstance(code, str) else None
+    return None
+
+
+def _report_ledger_hold(code: str, *, before_write: bool = False) -> int:
+    reply: dict[str, str | bool] = {
+        "verified": False,
+        "outcome": "UNCERTAIN",
+        "hold_reason": code,
+    }
+    if before_write:
+        reply["written"] = False
+    print(json.dumps(reply, sort_keys=True))
+    return 3
+
+
 def _run(args: argparse.Namespace) -> int:
     from openadapt_verify import (
         Actor,
@@ -52,6 +74,11 @@ def _run(args: argparse.Namespace) -> int:
     except WriteBlocked as exc:
         print(json.dumps({"verified": False, "written": False, "reason": str(exc)}))
         return 1
+    except RuntimeError as exc:
+        code = _ledger_hold_code(exc)
+        if code is None:
+            raise
+        return _report_ledger_hold(code, before_write=True)
 
     returncode = None
     error = None
@@ -67,19 +94,24 @@ def _run(args: argparse.Namespace) -> int:
         delivered = False
         raise
     finally:
-        result = verify_write(
-            pending,
-            write_attempted=True,
-            delivered=delivered,
-            write_receipt=True,
-        )
-        reply = result.to_dict()
-        reply.update(
-            command_returncode=returncode,
-            command_error=error,
-            recheck_state_path=str(result.recheck.path) if result.recheck else None,
-        )
-        print(json.dumps(reply, sort_keys=True))
+        try:
+            result = verify_write(
+                pending,
+                write_attempted=True,
+                delivered=delivered,
+                write_receipt=True,
+            )
+        except RuntimeError as exc:
+            if delivered or _ledger_hold_code(exc) is None:
+                raise
+        else:
+            reply = result.to_dict()
+            reply.update(
+                command_returncode=returncode,
+                command_error=error,
+                recheck_state_path=str(result.recheck.path) if result.recheck else None,
+            )
+            print(json.dumps(reply, sort_keys=True))
     outcome = _outcome_exit(result.outcome.value, result.provisional)
     if outcome:
         return outcome
@@ -251,3 +283,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     except (OSError, ValueError) as exc:
         print(f"openadapt-verify: {exc}", file=sys.stderr)
         return 2
+    except RuntimeError as exc:
+        code = _ledger_hold_code(exc)
+        if code is None:
+            raise
+        return _report_ledger_hold(code)

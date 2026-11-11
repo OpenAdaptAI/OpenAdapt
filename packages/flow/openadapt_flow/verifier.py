@@ -57,6 +57,7 @@ import json
 import os
 import re
 import secrets
+import stat
 import tempfile
 import threading
 import time
@@ -97,7 +98,9 @@ from openadapt_flow.verify_run import (
     _require_verification_purpose,
     _write_private,
     capture_baseline,
+    evidence_problem,
     parse_verify_config,
+    receipt_problem,
     receipt_sha256,
     recheck_problem,
     recheck_run,
@@ -111,6 +114,7 @@ from openadapt_flow.write_ledger import (
     Ledger,
     LedgerBackend,
     LedgerError,
+    LedgerIntegrityHeld,
     MemoryLedger,
     default_ledger,
 )
@@ -968,6 +972,13 @@ def commit_pending_sqlite_insert(pending: PendingWrite) -> None:
         )
 
 
+def _protected_ledger(ledger: Optional[Ledger]) -> bool:
+    return (
+        ledger is not None
+        and getattr(ledger.backend, "integrity_protected", False) is True
+    )
+
+
 def _resolve_ledger(ledger: Any) -> Optional[Ledger]:
     if ledger is _NO_LEDGER:
         return default_ledger()
@@ -1130,6 +1141,8 @@ def _begin_write(
             raise VerifierError(f"parameter {name!r}: {exc}") from None
     try:
         led = _resolve_ledger(ledger)
+    except LedgerIntegrityHeld:
+        raise
     except LedgerError as exc:
         raise WriteHeld(f"the write ledger can't be used ({exc})") from exc
     write_id = f"write-{secrets.token_hex(12)}"
@@ -1151,6 +1164,8 @@ def _begin_write(
         values_key = led.key_for(contract.identity, values, None)
         shape_key = led.key_for(contract.shape, values, write_key)
         lease = led.backend.lease(key)
+    except LedgerIntegrityHeld:
+        raise
     except LedgerError as exc:
         raise WriteHeld(f"the write ledger can't be used ({exc})") from exc
     if lease is None:
@@ -1226,6 +1241,9 @@ def _begin_write(
             ),
             **owned_fields,
         )
+    except LedgerIntegrityHeld:
+        lease.release()
+        raise
     except LedgerError as exc:
         lease.release()
         raise WriteHeld(f"the write ledger can't be used ({exc})", key=key) from exc
@@ -1286,6 +1304,8 @@ def _capture(
         pending._owned_reference = _owned_baseline_reference(
             payload, bytes.fromhex(payload["salt"])
         )
+    except LedgerIntegrityHeld:
+        raise
     except Exception as exc:  # a store that can't be reached, a bad binding
         raise BaselineUnreadable(
             "the system of record could not be read before the write "
@@ -1330,6 +1350,41 @@ def _sql_history_coverage(contract: Contract) -> Optional[dict[str, str]]:
     from openadapt_flow.runtime.effects.history import SQL_INVENTORY
 
     return {"model": SQL_INVENTORY, "frame_sha256": spec.digest()}
+
+
+def _require_protected_handback(attempt: Attempt) -> None:
+    """Refuse a recorded result whose post-commit proof was never published."""
+
+    resolution = attempt.resolved or {}
+    if resolution.get("outcome") != "CONFIRMED":
+        return
+    result = resolution.get("result")
+    try:
+        if not isinstance(result, Mapping) or result.get("verified") is not True:
+            raise ValueError("confirmation proof is missing")
+        path = Path(result["receipt_path"])
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        receipt = doc["receipt"]
+        digest = resolution.get("receipt_sha256")
+        if (
+            receipt_problem(receipt)
+            or receipt.get("outcome") != "verified"
+            or receipt_sha256(receipt) != digest
+            or evidence_problem(doc["evidence"], receipt)
+        ):
+            raise ValueError("receipt proof mismatch")
+        due_at = attempt.recheck_owed
+        if due_at:
+            state = RecheckState.load(path.with_name("recheck.json"))
+            if (
+                receipt_sha256(state.payload["receipt"]) != digest
+                or state.due_at != due_at
+                or not _recheck_issued(state.payload)
+                or _recheck_withdrawn(state.payload)
+            ):
+                raise ValueError("recheck proof mismatch")
+    except (OSError, KeyError, TypeError, ValueError) as exc:
+        raise LedgerIntegrityHeld("ledger_authority_interrupted") from exc
 
 
 def _settle(
@@ -1381,6 +1436,8 @@ def _settle(
         # Refuse before journaling a handback, so a held write's journal
         # stays exactly as it was.
         _require_history_proof(attempt)
+        if _protected_ledger(led):
+            _require_protected_handback(attempt)
         # The lifecycle lease does not exclude late rechecks. Linearize the
         # handback against their settlements even if an earlier reply was
         # already delivered, then use that accepted snapshot.
@@ -1549,12 +1606,14 @@ def _reconcile(
         purpose=purpose,
         _owned_reference=reference,
     )
+    protected = _protected_ledger(led)
     result = _judge(
         pending,
         write_attempted=True,
         source=None,
         seal=True,
         remediates=f"sha256:{previous}" if previous else None,
+        defer_proof=protected,
     )
     result = _check_overlap(
         led,
@@ -1589,6 +1648,8 @@ def _reconcile(
             write_key_bound=bool(attempt.begun.get("write_key_bound")),
             folder=folder,
             expected_revision=attempt.revision,
+            pending_proof=pending if protected else None,
+            seal=True,
         )
 
 
@@ -1667,7 +1728,10 @@ def verify_write(
     # Without the lease (released), another worker may be reconciling this
     # attempt: judge, but leave the ledger to it.
     holds_lease = pending.ledger is not None and pending._lease is not None
+    protected = _protected_ledger(pending.ledger)
     try:
+        if protected and not holds_lease:
+            raise WriteHeld("the protected write has no live ledger lease")
         before_judge = (
             pending.ledger.latest(pending.write_key)
             if pending.ledger is not None
@@ -1695,7 +1759,11 @@ def verify_write(
                 key=pending.write_key,
             )
         result = _judge(
-            pending, write_attempted=write_attempted, source=source, seal=seal
+            pending,
+            write_attempted=write_attempted,
+            source=source,
+            seal=seal,
+            defer_proof=protected,
         )
         if holds_lease and pending.ledger is not None:
             result = _check_overlap(
@@ -1719,6 +1787,8 @@ def verify_write(
                 expected_revision=before_judge.revision
                 if before_judge is not None
                 else -1,
+                pending_proof=pending if protected else None,
+                seal=seal,
             )
     finally:
         pending.release()
@@ -1802,7 +1872,29 @@ def _record(
     write_key_bound: bool,
     folder: Optional[Path] = None,
     expected_revision: Optional[int] = None,
+    pending_proof: Optional[PendingWrite] = None,
+    seal: bool = False,
 ) -> WriteResult:
+    protected = _protected_ledger(led)
+    if protected and pending_proof is None:
+        raise LedgerIntegrityHeld("ledger_authority_interrupted")
+
+    published: Optional[WriteResult] = None
+    digest = result.receipt_sha256 or None
+
+    def publish(accepted: Attempt) -> None:
+        nonlocal published
+        resolution = accepted.resolved or {}
+        if (
+            pending_proof is None
+            or accepted.attempt_id != attempt_id
+            or resolution.get("receipt_sha256") != digest
+            or resolution.get("outcome") != result.outcome.value
+            or (_landed(result) and not result.receipt)
+        ):
+            raise LedgerIntegrityHeld("ledger_authority_interrupted")
+        published = _publish_protected_judgment(result, pending_proof, seal=seal)
+
     attempt = led.resolved(
         key,
         attempt_id,
@@ -1813,19 +1905,31 @@ def _record(
         delivered=delivered,
         via=via,
         write_key_bound=write_key_bound,
-        receipt_sha256=result.receipt_sha256 or None,
+        receipt_sha256=digest,
         result=result.to_dict(),
         expected_revision=expected_revision,
         cleanup=folder if _landed(result) else None,
+        _after_commit=publish if protected else None,
     )
     if (
         attempt.attempt_id != attempt_id
         or not attempt.events
         or attempt.events[-1].get("applied") is False
     ):
-        return _downgrade(
-            result, "the ledger attempt changed while the write was checked"
+        downgraded = _downgrade(
+            result,
+            "the ledger attempt changed while the write was checked",
+            recheck_issued=not protected,
         )
+        if protected:
+            from dataclasses import replace
+
+            return replace(downgraded, receipt_path=None, recheck=None)
+        return downgraded
+    if protected:
+        if published is None:
+            raise LedgerIntegrityHeld("ledger_authority_interrupted")
+        return published
     return result
 
 
@@ -1836,11 +1940,16 @@ def _landed(result: WriteResult) -> bool:
 
 
 def _downgrade(
-    result: WriteResult, reason: str, *, landed: bool = False, review: bool = False
+    result: WriteResult,
+    reason: str,
+    *,
+    landed: bool = False,
+    review: bool = False,
+    recheck_issued: bool = True,
 ) -> WriteResult:
     import dataclasses
 
-    if result.recheck is not None and result.outcome is Outcome.CONFIRMED:
+    if recheck_issued and result.recheck is not None and result.verified:
         # Its receipt says verified, but the write is no longer CONFIRMED: a
         # recheck of it must not say "the earlier verdict still stands". It
         # still excuses its own window for later writes (its frame held).
@@ -1896,6 +2005,8 @@ def _live(led: Ledger, key: str) -> bool:
 
     try:
         lease = led.backend.lease(key)
+    except LedgerIntegrityHeld:
+        raise
     except LedgerError:
         return True
     if lease is None:
@@ -1936,6 +2047,7 @@ def _check_overlap(
                 "another attempt with the same values was open during this "
                 "write, so the record may be that write; a person checks "
                 "which one landed",
+                recheck_issued=not _protected_ledger(led),
             )
         return result
     if (
@@ -1979,6 +2091,7 @@ def _judge(
     source: Optional[Source],
     seal: bool,
     remediates: Optional[str] = None,
+    defer_proof: bool = False,
 ) -> WriteResult:
     run_record = pending.actor.run_record()
     base: dict[str, Any] = {
@@ -2007,7 +2120,13 @@ def _judge(
             purpose=pending.purpose,
             _owned_reference=pending._owned_reference,
         )
-        path: Optional[str] = str(write_result(doc, pending.workdir))
+        path: Optional[str] = (
+            str(pending.workdir / "effect-receipt.json")
+            if defer_proof
+            else str(write_result(doc, pending.workdir))
+        )
+    except LedgerIntegrityHeld:
+        raise
     except Exception as exc:  # noqa: BLE001 - unreadable store, timeout, used baseline
         reasons = [
             "the system of record could not be read back "
@@ -2035,11 +2154,19 @@ def _judge(
     checked = dict(receipt.get("checked") or {})
     outcome, retry_safe = classify(receipt_outcome, checked, evidence)
     seal_path, seal_state = None, "off"
-    if outcome is Outcome.CONFIRMED and seal and path:
-        seal_path, seal_state = _seal(path, pending.write_id)
-    state = _issue_state(baseline, doc, post_state, pending.params)
-    if state is not None:
-        state.path = state.save(pending.workdir / "recheck.json")
+    if defer_proof:
+        payload = recheck_state(baseline, doc, post_state)
+        state = (
+            RecheckState(payload, params=dict(pending.params))
+            if payload is not None
+            else None
+        )
+    else:
+        if outcome is Outcome.CONFIRMED and seal and path:
+            seal_path, seal_state = _seal(path, pending.write_id)
+        state = _issue_state(baseline, doc, post_state, pending.params)
+        if state is not None:
+            state.path = state.save(pending.workdir / "recheck.json")
     return WriteResult(
         outcome=outcome,
         scope=_scope(pending.contract, evidence, receipt),
@@ -2058,6 +2185,57 @@ def _judge(
         recheck_due_at=receipt.get("recheck_due_at"),
         **base,
     )
+
+
+def _sync_protected_proof(path: Path) -> None:
+    """Sync a mandatory proof file and its directory before raw cleanup."""
+
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise OSError("protected proof is not a regular file")
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    fd = os.open(path.parent, os.O_RDONLY | os.O_NOFOLLOW | os.O_DIRECTORY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _publish_protected_judgment(
+    result: WriteResult, pending: PendingWrite, *, seal: bool
+) -> WriteResult:
+    """Publish the exact read evidence only after protected settlement."""
+
+    from dataclasses import replace
+
+    if not result.receipt:
+        return result
+    try:
+        downgraded = result.receipt_outcome == "verified" and not result.verified
+        path = None
+        if not downgraded:
+            artifact = write_result(
+                {"receipt": result.receipt, "evidence": result.evidence},
+                pending.workdir,
+            )
+            _sync_protected_proof(artifact)
+            path = str(artifact)
+        if result.recheck is not None:
+            if downgraded:
+                _withdraw_recheck(result.recheck.payload, sync=True)
+            saved = result.recheck.save(pending.workdir / "recheck.json")
+            _sync_protected_proof(saved)
+            result.recheck.path = saved
+            _issue_recheck(result.recheck.payload, sync=True)
+        if result.verified and seal and path:
+            seal_path, seal_state = _seal(path, pending.write_id)
+            result = replace(result, seal=seal_state, seal_path=seal_path)
+        return replace(result, receipt_path=path)
+    except (OSError, ValueError) as exc:
+        raise LedgerIntegrityHeld("ledger_authority_interrupted") from exc
 
 
 def _issue_state(
@@ -2408,7 +2586,7 @@ def _state_digest(payload: Any) -> str:
     return hashlib.sha256(body.encode("utf-8")).hexdigest()
 
 
-def _issue_recheck(payload: Mapping[str, Any]) -> None:
+def _issue_recheck(payload: Mapping[str, Any], *, sync: bool = False) -> None:
     """Record a recheck state as issued here: an empty file named by the
     digest of its whole payload, under the state directory's ``rechecks``.
     A state is used only when its record is there, so one written by hand
@@ -2421,9 +2599,11 @@ def _issue_recheck(payload: Mapping[str, Any]) -> None:
     except OSError as exc:
         raise VerifierError(f"can't record the recheck state: {exc}") from exc
     os.close(fd)
+    if sync:
+        _sync_protected_proof(path)
 
 
-def _withdraw_recheck(payload: Mapping[str, Any]) -> None:
+def _withdraw_recheck(payload: Mapping[str, Any], *, sync: bool = False) -> None:
     """Mark an issued recheck state as not to be rechecked: the result it
     came with was downgraded from CONFIRMED."""
 
@@ -2433,6 +2613,8 @@ def _withdraw_recheck(payload: Mapping[str, Any]) -> None:
     except OSError as exc:
         raise VerifierError(f"can't withdraw the recheck state: {exc}") from exc
     os.close(fd)
+    if sync:
+        _sync_protected_proof(path)
 
 
 def _recheck_withdrawn(payload: Any) -> bool:
@@ -2684,6 +2866,8 @@ def recheck(
                     held = _terminal_recheck(attempt, late)
                     if held is not None:
                         return held
+            except LedgerIntegrityHeld:
+                raise
             except Exception:  # noqa: BLE001 - the read remains owed
                 pass
         return late
@@ -2783,6 +2967,8 @@ def _recheck_journal(
             return None, None
         if attempt is not None:
             return attempt.revision, attempt
+    except LedgerIntegrityHeld:
+        raise
     except Exception:  # noqa: BLE001 - no read can grant permission on failure
         pass
     return -1, None
@@ -2900,6 +3086,8 @@ def _mark_rechecked(
         problem = _recheck_claim_problem(recorded.events, late)
         if problem is not None:
             return _replace(late, outcome="UNCERTAIN", reasons=[*late.reasons, problem])
+    except LedgerIntegrityHeld:
+        raise
     except Exception:  # noqa: BLE001 - the list keeps showing it owed
         return _replace(
             late,
@@ -3175,6 +3363,8 @@ def _hold_after_recheck(
             return unheld(
                 "a concurrent settlement kept the existing hold or changed the attempt"
             )
+    except LedgerIntegrityHeld:
+        raise
     except Exception as exc:  # noqa: BLE001 - the verdict stands; say so
         return _replace(
             late,
@@ -3346,6 +3536,8 @@ def _judge_recheck(
         )
     except VerifyRunError as exc:
         raise VerifierError(str(exc)) from exc
+    except LedgerIntegrityHeld:
+        raise
     except Exception as exc:  # noqa: BLE001 - an unreadable store is not a pass
         return (
             _replace(

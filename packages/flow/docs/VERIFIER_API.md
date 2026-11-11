@@ -352,6 +352,32 @@ which a write holds while a late recheck may settle its journal. A backend
 without this primitive refuses mutations; a separate read and append is not
 an atomic substitute. `MemoryLedger` is for tests.
 
+**Protected file journals.** On a single host, an application may pass
+`FileLedger(root, authority=authority)` to `Ledger`. The `SQLiteJournalAuthority`
+uses a separate database bound to the expected journal root, ledger identity,
+and generation. Protect that database, its locks and its backups independently
+of the journal directory. Two paths writable by the same untrusted process
+do not establish that boundary. This adapter does not change the default
+storage or provide cross-host fencing or authority recovery.
+
+The authority holds the latest committed revision and the complete key inventory.
+Before writing, the adapter records a protected pending marker. It then appends
+and syncs the file, verifies the resulting inventory, and commits the new head
+through the authority. A missing authority, an interrupted append, or a mismatch
+raises `LedgerIntegrityHeld` with a fixed reason code. The adapter does not
+repair a mismatch, authorize dispatch, promote an outcome, or remove evidence
+while the journal is held. A matching older copy of both the authority and the
+journal is outside this trust model; the authority must retain its current state.
+
+Use `FileLedger(root).inspect_legacy(key)` to read older events as unauthenticated
+history. Only the operator who controls the separate authority should call
+`enroll(authority, authorized=True)`, with all old workers stopped. Enrollment
+anchors the complete inventory at that point. It does not establish that older
+events were accurate or settle earlier attempts. Existing keys remain available
+for inspection and may block workflows that depend on their history until an
+operator can reconcile them. Opening the protected adapter never enrolls or
+falls back automatically.
+
 Ledger mutations record the target attempt and journal revision. Settlements
 derived from a read supply the revision they observed before that read.
 Concurrent observations remain in the journal, including rejected ones, but
