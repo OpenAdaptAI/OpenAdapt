@@ -8,9 +8,9 @@ as a ``pastDate`` rule. The API step can't read what that script does,
 so it runs it, before each save, the way the person's steps would:
 
 1. open the form page in a scratch copy of the live session: a separate
-   browser context with the session's cookies, no service workers, every
-   request of every page in it routed, every WebSocket closed, and
-   EventSource and RTCPeerConnection stubbed out;
+   browser context with the session's cookies, worker and window containment,
+   every request routed, every WebSocket closed, and EventSource and
+   RTCPeerConnection stubbed out;
 2. while the page loads, let only same-origin GET requests through (no
    other origin at all). Once it has loaded, block every request except the
    exact scripts and stylesheets the page loaded, the reads the person's
@@ -51,10 +51,12 @@ import urllib.parse as up
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from openadapt_flow.backends.worker_containment import WorkerContainment, contain_workers
+
 URLENCODED = "application/x-www-form-urlencoded"
 
 #: Before any page script: what a form's own ``submit()`` would send is
-#: recorded instead of navigating; window.open, WebSocket, EventSource and
+#: recorded instead of navigating; WebSocket, EventSource and
 #: RTCPeerConnection do nothing but say they were used; every click
 #: listener's target is noted.
 _INSTRUMENT_JS = """
@@ -76,7 +78,6 @@ _INSTRUMENT_JS = """
   HTMLFormElement.prototype.submit = function () {
     try { state.programmatic.push(submission(this, null)); } catch (e) { state.programmatic.push(null); }
   };
-  window.open = function (url) { state.channels.push('window.open ' + String(url || '')); return null; };
   for (const name of ['WebSocket', 'EventSource', 'RTCPeerConnection', 'webkitRTCPeerConnection']) {
     if (name in window) {
       window[name] = function () { state.channels.push(name); throw new Error(name + ' is blocked'); };
@@ -267,7 +268,15 @@ def evaluate_form(
     reads = {r.split(" ", 1)[1] for r in submitter_requests if r.startswith("GET ")}
     #: Exact script and stylesheet URLs the form page loaded.
     loaded_code: set[str] = set()
-    context = None
+    context: Any = None
+    containment: Optional[WorkerContainment] = None
+
+    def containment_problem() -> Optional[str]:
+        if containment is None:
+            return None
+        if containment.problem is not None:
+            return containment.problem
+        return containment.violations[0] if containment.violations else None
 
     def _allowed_after_load(req: Any, parts: Any) -> bool:
         """Once loaded, only what the person's steps also load gets through.
@@ -374,7 +383,8 @@ def evaluate_form(
             seconds=round(time.monotonic() - started, 3),
         )
 
-    try:
+    def run_scratch() -> FormEvaluation:
+        nonlocal context, containment
         if origin is None or expected is None or origin[:3] != expected[:3]:
             return done(
                 "unevaluable", "the save has no bound same-origin HTTP destination"
@@ -401,16 +411,8 @@ def evaluate_form(
         context.route_web_socket("**", on_web_socket)
         context.add_init_script(_INSTRUMENT_JS)
         scratch = context.new_page()
-
-        def on_page(other: Any) -> None:
-            # A popup or new tab: the scratch run can't follow it.
-            stray.append(f"a new page ({other.url or 'about:blank'})")
-            try:
-                other.close()
-            except Exception:  # noqa: BLE001 - already closed
-                pass
-
-        context.on("page", on_page)
+        # The shared route runs first and delegates this page to route().
+        containment = contain_workers(scratch, report_window_open=True)
         scratch.on("pageerror", lambda exc: errors.append(str(exc)[:200]))
 
         def on_dialog(d: Any) -> None:
@@ -421,9 +423,13 @@ def evaluate_form(
                 pass
 
         scratch.on("dialog", on_dialog)
+        if problem := containment_problem():
+            return done("unevaluable", problem)
         resp = scratch.goto(
             base_url + form_path, wait_until="load", timeout=timeout_s * 1000.0
         )
+        if problem := containment_problem():
+            return done("unevaluable", problem)
         if resp is None or resp.status != 200:
             return done(
                 "unevaluable",
@@ -450,6 +456,8 @@ def evaluate_form(
             return done("unevaluable", problem)
         scratch.wait_for_timeout(settle_ms)
         pre = scratch.evaluate(_PRESUBMIT_JS)
+        if problem := containment_problem():
+            return done("unevaluable", problem)
         if submitter:
             target = scratch.locator(submitter)
             if target.count() != 1:
@@ -480,6 +488,8 @@ def evaluate_form(
             )
         scratch.wait_for_timeout(settle_ms)
         state = _collect(scratch)
+        if problem := containment_problem():
+            return done("unevaluable", problem)
         if confirm and not _submitted(state, late):
             # The recorded reads ran; the person confirmed in what they
             # showed. Confirm the same way, wherever the control is.
@@ -488,6 +498,8 @@ def evaluate_form(
             except Exception:  # noqa: BLE001 - no navigation is fine
                 pass
             frame = _frame_with(scratch, confirm)
+            if problem := containment_problem():
+                return done("unevaluable", problem)
             if frame is not None:
                 frame.locator(confirm).first.click(timeout=_ACT_TIMEOUT_MS)
                 scratch.wait_for_timeout(settle_ms)
@@ -516,14 +528,24 @@ def evaluate_form(
             for b in writes
         ]
         return verdict
+
+    close_failed = False
+    try:
+        result = run_scratch()
     except Exception as exc:  # noqa: BLE001 - a failure to run is unevaluable
-        return done("unevaluable", f"the scratch page failed ({type(exc).__name__})")
+        result = done("unevaluable", f"the scratch page failed ({type(exc).__name__})")
     finally:
-        try:
-            if context is not None:
+        if context is not None:
+            try:
                 context.close()
-        except Exception:  # noqa: BLE001 - cleanup only
-            pass
+            except Exception:  # noqa: BLE001 - the scratch lifetime is unconfirmed
+                close_failed = True
+    # Closing the context can deliver a final violation notification.
+    if problem := containment_problem():
+        return done("unevaluable", problem)
+    if close_failed:
+        return done("unevaluable", "the scratch context could not be closed")
+    return result
 
 
 def _type_values(scratch: Any, fields: list[tuple[str, str]]) -> Optional[str]:
