@@ -63,6 +63,28 @@ class named with `--allow-halt`. A handoff copies an effect-bound parameter
 from a confirmed receipt. Missing evidence HALTs. Subflows and worklists
 stay inside each child, on that child's surface.
 
+## Wrapped requests and verifier receipt bindings
+
+`WrappedTask.verify_reply` associates reserved request context
+(`ai.openadapt/request-context`) with verifier receipts and validates byte-level
+digest invariants against the RunStore record. This mechanism carries the
+following boundaries and residual security considerations:
+
+- **Caller authentication**: Local bindings do not authenticate a caller,
+  issuer, or signing key. A direct local MCP caller of a compiled server can
+  supply `ai.openadapt/request-context` for any request whose run ID it knows.
+  The stored digest in the RunStore prevents substitution or tampering after the
+  fact, but the binding certifies only request-record association and byte
+  integrity, not the identity or authority of the calling process.
+- **Symlinked receipt root ancestors**: Receipt reading uses a strict, no-follow
+  directory file-descriptor chain (`O_NOFOLLOW | O_DIRECTORY`) starting from the
+  filesystem root (`/`). If any ancestor directory of the receipt root is a
+  symlink (for instance, on macOS where `/tmp` symlinks to `/private/tmp` and
+  `/var` symlinks to `/private/var`, or on platforms with symlinked home
+  directories), the no-follow check refuses the read as `receipt_owner`. To
+  avoid unexpected refusals, operators should ensure the receipt root is
+  configured using canonical, real paths (e.g. via `os.path.realpath`).
+
 ## Parallel worklists
 
 `--workers N` runs a worklist's items on N signed-in sessions at once

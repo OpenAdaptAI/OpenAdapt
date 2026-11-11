@@ -1360,21 +1360,63 @@ FIRST_TOOL_GUIDE = "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/
     type=click.Choice(["claude", "cursor", "codex", "gemini"]),
     help="Set up only this client (repeat for more). Default: every one found.",
 )
-def setup(dry_run: bool, undo: bool, only: tuple[str, ...]) -> None:
+@click.option(
+    "--app",
+    "app_config",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help=(
+        "deploy.yaml naming one app (web, desktop, RDP or Citrix). The agent "
+        "then teaches saves in that app, each read back with --verify."
+    ),
+)
+@click.option(
+    "--verify",
+    "verify_config",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="With --app: the verify.yaml that reads the app's system of record.",
+)
+@click.option(
+    "--authorization",
+    "authorization",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help=(
+        "With --app: a person's signed teach authorization (openadapt-flow "
+        "teach-authorization). Without one, nothing the agent teaches is admitted."
+    ),
+)
+def setup(
+    dry_run: bool,
+    undo: bool,
+    only: tuple[str, ...],
+    app_config: Optional[Path],
+    verify_config: Optional[Path],
+    authorization: Optional[Path],
+) -> None:
     """Add OpenAdapt to Claude Code, Cursor, Codex and Gemini CLI.
 
     For each one installed, register the OpenAdapt MCP server and install a
-    skill that tells the agent how to turn a browser task into a tool it can
-    call again. Prints every change. Running it again changes nothing that is
-    already set up.
+    skill that tells the agent how to turn an app task into a tool it can call
+    again. By default the agent teaches read-only tasks in web apps. With
+    --app and --verify it teaches saves in that one app, on the web, the
+    desktop, or over RDP or Citrix. Prints every change. Running it again
+    changes nothing that is already set up.
     """
-    from openadapt.setup_clients import CLIENTS, Setup, server_command
+    from openadapt.setup_clients import CLIENTS, Setup, app_serve_args, server_command
 
     _require_supported_python()
+    if (app_config is None) != (verify_config is None):
+        raise click.UsageError("--app and --verify go together")
+    if authorization is not None and app_config is None:
+        raise click.UsageError("--authorization needs --app and --verify")
     clients = [c for c in CLIENTS if not only or c.key in only]
-    run = Setup(
-        home=Path.home(), command=server_command(), say=click.echo, dry_run=dry_run
+    command = (
+        server_command(
+            serve_args=app_serve_args(app_config, verify_config, authorization)
+        )
+        if app_config is not None and verify_config is not None
+        else server_command()
     )
+    run = Setup(home=Path.home(), command=command, say=click.echo, dry_run=dry_run)
     if undo:
         run.undo()
         sys.exit(1 if run.failures else 0)
