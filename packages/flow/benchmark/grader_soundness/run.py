@@ -339,6 +339,60 @@ def cmd_summarize(args: argparse.Namespace) -> int:
     return 0
 
 
+def _pct(rate: Any) -> str:
+    return "n/a" if rate is None else f"{100 * rate:.1f}%"
+
+
+def tables(summary: dict[str, Any]) -> str:
+    """Markdown tables for RESULTS.md, from results.json."""
+    lines: list[str] = []
+    for name, b in summary["benchmarks"].items():
+        h = b["headline"]
+        lines += [
+            f"### {name}",
+            "",
+            f"{b['tasks_in_sample']} tasks in the sample, {b['tasks_excluded']} excluded "
+            f"({', '.join(f'{k}: {v}' for k, v in b['exclusion_reasons'].items()) or 'none'}), "
+            f"{b['tasks_analyzed']} analyzed.",
+            "",
+            "| Class | Family | Hits / n | Rate | Wilson 95% | Not counted |",
+            "|---|---|---|---|---|---|",
+        ]
+        for r in b["families"]:
+            lo, hi = r["wilson95"]
+            st = r["statuses"]
+            if r["class"] == "unspecified":
+                other = "reported only"
+            else:
+                skip = {
+                    k: v
+                    for k, v in st.items()
+                    if k not in ("FALSE_ACCEPT", "CAUGHT", "FALSE_REJECT", "ACCEPTED")
+                }
+                other = ", ".join(f"{k.lower()} {v}" for k, v in sorted(skip.items()))
+            lines.append(
+                f"| {r['class'].replace('_', ' ')} | {r['requested_name']} (`{r['family']}`) "
+                f"| {r['hits']} / {r['n']} | {_pct(r['rate'])} "
+                f"| {100 * lo:.1f}–{100 * hi:.1f}% | {other or '-'} |"
+            )
+        fa, fr, t = (
+            h["false_accept_pooled"],
+            h["false_reject_pooled"],
+            h["tasks_with_any_false_accept"],
+        )
+        lines += [
+            "",
+            f"Pooled false accepts (descriptive): {fa['hits']} / {fa['n']} "
+            f"({_pct(fa['rate'])}, {100 * fa['wilson95'][0]:.1f}–{100 * fa['wilson95'][1]:.1f}%). "
+            f"Pooled false rejects: {fr['hits']} / {fr['n']} "
+            f"({_pct(fr['rate'])}, {100 * fr['wilson95'][0]:.1f}–{100 * fr['wilson95'][1]:.1f}%). "
+            f"Tasks with at least one false accept: {t['hits']} / {t['n']} "
+            f"({_pct(t['rate'])}, {100 * t['wilson95'][0]:.1f}–{100 * t['wilson95'][1]:.1f}%).",
+            "",
+        ]
+    return "\n".join(lines)
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(allow_abbrev=False)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -357,7 +411,12 @@ def main(argv: list[str] | None = None) -> int:
     s = sub.add_parser("summarize", allow_abbrev=False)
     s.add_argument("--results", type=Path, default=HERE / "results")
     s.add_argument("--out", type=Path, default=HERE / "results.json")
+    t = sub.add_parser("tables", allow_abbrev=False)
+    t.add_argument("--summary", type=Path, default=HERE / "results.json")
     args = p.parse_args(argv)
+    if args.cmd == "tables":
+        print(tables(json.loads(args.summary.read_text())))
+        return 0
     return cmd_run(args) if args.cmd == "run" else cmd_summarize(args)
 
 
