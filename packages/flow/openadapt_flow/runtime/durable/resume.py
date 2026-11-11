@@ -36,6 +36,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Optional
 
+from openadapt_flow.action_evidence import AUTOMATED_GUI_ACTUATIONS
 from openadapt_flow.ir import ExecutionTargetKind, RunReport, Step, Workflow
 from openadapt_flow.policy import effects_for_actuation
 from openadapt_flow.runtime.authorization import (
@@ -47,13 +48,17 @@ from openadapt_flow.runtime.durable.approval import (
     ApprovalRequired,
     BundleMismatch,
     StateDiverged,
+    approval_pause_digest,
     enforce_resume_authorization,
 )
 from openadapt_flow.runtime.durable.checkpoint import (
+    ENC_SUFFIX,
+    PENDING_FILENAME,
     CheckpointStore,
     PendingEscalation,
     RunCheckpoint,
     RunManifest,
+    _now_after,
 )
 from openadapt_flow.runtime.durable.program_checkpoint import (
     TOP_GRAPH_ID,
@@ -321,6 +326,69 @@ def _deferred_readback_settled(
     )
 
 
+_FIRST_LOCAL_DELIVERY_HOLD = (
+    "first_local_delivery_held: no matching verified first-delivery checkpoint; "
+    "reconcile without repeating the action"
+)
+
+
+def _validate_first_local_deferred(
+    store: CheckpointStore,
+    pending: PendingEscalation,
+    manifest: RunManifest,
+    workflow: Workflow,
+) -> None:
+    """Require the original typed, encrypted pre-delivery readback scope."""
+
+    from openadapt_flow.runtime.effects import EffectState
+
+    deferred = pending.deferred_readback
+    assert deferred is not None
+    plain = store.run_dir / PENDING_FILENAME
+    encrypted = plain.with_name(plain.name + ENC_SUFFIX)
+    result = deferred.result
+    if (
+        manifest.delivery_authority_kind != "customer_local"
+        or not store.key
+        or plain.exists()
+        or plain.is_symlink()
+        or not encrypted.is_file()
+        or encrypted.is_symlink()
+        or pending.program
+        or workflow.program is not None
+        or workflow.name != manifest.workflow_name
+        or pending.step_index != pending.resume_from_index
+        or not 0 <= pending.step_index < len(workflow.steps)
+        or deferred.step_index != pending.step_index
+        or deferred.step_id != pending.step_id
+        or workflow.steps[pending.step_index].id != pending.step_id
+        or result.step_id != pending.step_id
+        or not result.ok
+        or result.delivery_attempted is not True
+        or result.skipped
+        or result.effect_approved_unverified
+        or (
+            result.actuation not in (None, "api")
+            and result.actuation not in AUTOMATED_GUI_ACTUATIONS
+        )
+        or (result.actuation == "api") != (deferred.actuation == "api")
+        or pending.params != manifest.params
+        or store.program_checkpoints()
+    ):
+        raise StateDiverged(_FIRST_LOCAL_DELIVERY_HOLD)
+    try:
+        before = EffectState.model_validate(deferred.before, strict=True)
+    except ValueError as exc:
+        raise StateDiverged(_FIRST_LOCAL_DELIVERY_HOLD) from exc
+    if (
+        not before.reachable
+        or not before.substrate
+        or before.model_dump(mode="json") != deferred.before
+        or not _created_no_later(before.captured_at, pending.created_at)
+    ):
+        raise StateDiverged(_FIRST_LOCAL_DELIVERY_HOLD)
+
+
 def _settle_deferred_readback_on_resume(
     *,
     run_dir: Path,
@@ -330,6 +398,7 @@ def _settle_deferred_readback_on_resume(
     replayer: Any,
     bundle_dir: Path,
     key: Optional[str],
+    first_local_bundle_version: Optional[str] = None,
 ) -> None:
     """Re-run a pause's deferred record check; never send the save again.
 
@@ -342,7 +411,8 @@ def _settle_deferred_readback_on_resume(
 
     deferred = pending.deferred_readback
     assert deferred is not None
-    if _deferred_readback_settled(store.checkpoints(), pending):
+    first_local = first_local_bundle_version is not None
+    if not first_local and _deferred_readback_settled(store.checkpoints(), pending):
         return
     from openadapt_flow.runtime.durable.controller import (
         classify_halt,
@@ -350,6 +420,30 @@ def _settle_deferred_readback_on_resume(
     )
 
     workflow = Workflow.load(bundle_dir, key=key)
+    first_local_prefix: Optional[list[RunCheckpoint]] = None
+    if first_local:
+        if (
+            bundle_version(bundle_dir) != first_local_bundle_version
+            or bundle_version(manifest.bundle_dir) != first_local_bundle_version
+        ):
+            raise StateDiverged(_FIRST_LOCAL_DELIVERY_HOLD)
+        _validate_first_local_deferred(store, pending, manifest, workflow)
+        first_local_prefix = store.checkpoints()
+        if len(first_local_prefix) == pending.step_index + 1:
+            # The caller will validate the existing exact tail before any resume.
+            return
+        if len(first_local_prefix) != pending.step_index:
+            raise StateDiverged(_FIRST_LOCAL_DELIVERY_HOLD)
+        try:
+            _linear_resume_checkpoint(
+                run_dir=run_dir,
+                checkpoints=first_local_prefix,
+                pending=pending,
+                manifest=manifest,
+                workflow=workflow,
+            )
+        except StateDiverged as exc:
+            raise StateDiverged(_FIRST_LOCAL_DELIVERY_HOLD) from exc
     if workflow.program is not None or deferred.step_index >= len(workflow.steps):
         raise StateDiverged("a deferred record check belongs to a linear run")
     step = workflow.steps[deferred.step_index]
@@ -366,12 +460,38 @@ def _settle_deferred_readback_on_resume(
         raise StateDiverged(
             "durable continuation lost its authority guard before the record check"
         )
-    result = replayer.recheck_deferred_readback(
-        workflow, deferred, params=dict(manifest.params), run_id=manifest.run_id
-    )
+    if first_local_prefix is not None:
+        try:
+            result = replayer.recheck_deferred_readback(
+                workflow,
+                deferred,
+                params=dict(manifest.params),
+                run_id=manifest.run_id,
+                read_only=True,
+            )
+        except (StateDiverged, TypeError, ValueError) as exc:
+            raise StateDiverged(_FIRST_LOCAL_DELIVERY_HOLD) from exc
+        if (
+            not result.ok
+            or result.skipped
+            or result.delivery_attempted is not True
+            or result.effect_verified is not True
+            or result.effect_approved_unverified
+            or result.actuation != deferred.result.actuation
+            or result.step_id != deferred.step_id
+            or store.read_pending() != pending
+            or store.checkpoints() != first_local_prefix
+            or bundle_version(bundle_dir) != first_local_bundle_version
+            or bundle_version(manifest.bundle_dir) != first_local_bundle_version
+        ):
+            raise StateDiverged(_FIRST_LOCAL_DELIVERY_HOLD)
+    else:
+        result = replayer.recheck_deferred_readback(
+            workflow, deferred, params=dict(manifest.params), run_id=manifest.run_id
+        )
     if result.ok:
-        store.write_checkpoint(
-            verified_checkpoint(
+        try:
+            checkpoint = verified_checkpoint(
                 run_id=manifest.run_id,
                 workflow_name=manifest.workflow_name,
                 bundle_version=bundle_version(manifest.bundle_dir),
@@ -383,7 +503,28 @@ def _settle_deferred_readback_on_resume(
                 active_surface=deferred.active_surface,
                 surface_observations=dict(deferred.surface_observations),
             )
-        )
+            if first_local_prefix is not None:
+                checkpoint = checkpoint.model_copy(
+                    update={
+                        "first_local_pause_sha256": approval_pause_digest(pending),
+                        "created_at": _now_after(
+                            checkpoint.created_at, pending.created_at
+                        ),
+                    }
+                )
+                _linear_resume_checkpoint(
+                    run_dir=run_dir,
+                    checkpoints=[*first_local_prefix, checkpoint],
+                    pending=pending,
+                    manifest=manifest,
+                    workflow=workflow,
+                    first_local_tail=True,
+                )
+        except StateDiverged as exc:
+            if first_local:
+                raise StateDiverged(_FIRST_LOCAL_DELIVERY_HOLD) from exc
+            raise
+        store.write_checkpoint(checkpoint)
         # Commit the save's checkpoint to the continuation authority before
         # the ordinary resume admits the rest of the run.
         guard.acknowledge_progress()
@@ -427,10 +568,11 @@ def _linear_resume_checkpoint(
     pending: PendingEscalation,
     manifest: RunManifest,
     workflow: Workflow,
+    first_local_tail: bool = False,
 ) -> Optional[RunCheckpoint]:
     """Validate the exact linear history retained by one active pause."""
 
-    continuing = pending.status == "continuing"
+    continuing = pending.status == "continuing" and not first_local_tail
     attended = (
         bool(checkpoints)
         and pending.status in {"approved", "continuing"}
@@ -438,7 +580,8 @@ def _linear_resume_checkpoint(
         and checkpoints[-1].step_id == pending.step_id
         and checkpoints[-1].actuation in {"human_attended", "human_attended_skip"}
     ) or _deferred_readback_settled(checkpoints, pending)
-    expected_count = pending.resume_from_index + (1 if attended else 0)
+    tail_follows_pause = attended or first_local_tail
+    expected_count = pending.resume_from_index + int(tail_follows_pause)
     valid_count = (
         pending.resume_from_index <= len(checkpoints) <= len(workflow.steps)
         if continuing
@@ -465,10 +608,10 @@ def _linear_resume_checkpoint(
                 "the linear checkpoint history does not match the workflow"
             )
         is_post_pause = continuing and index >= pending.resume_from_index
-        is_attended_tail = attended and index == len(checkpoints) - 1
+        is_verified_tail = tail_follows_pause and index == len(checkpoints) - 1
         valid_time = (
             _created_later(checkpoint.created_at, pending.created_at)
-            if is_post_pause or is_attended_tail
+            if is_post_pause or is_verified_tail
             else _created_no_later(checkpoint.created_at, pending.created_at)
         )
         if not valid_time:
@@ -535,6 +678,73 @@ def _linear_resume_checkpoint(
             "the linear checkpoint cursor does not match the durable pause"
         )
     return checkpoints[-1] if checkpoints else None
+
+
+def _validate_first_local_tail(
+    *,
+    run_dir: Path,
+    store: CheckpointStore,
+    pending: PendingEscalation,
+    manifest: RunManifest,
+    bundle_dir: Path,
+    live_bundle_version: str,
+    key: Optional[str],
+) -> tuple[Workflow, list[RunCheckpoint]]:
+    """Admit only the exact native, independently verified first-delivery tail."""
+
+    if (
+        manifest.delivery_authority_kind != "customer_local"
+        or pending.program
+        or pending.resume_from_index != pending.step_index
+        or pending.step_index < 0
+    ):
+        raise StateDiverged(_FIRST_LOCAL_DELIVERY_HOLD)
+
+    checkpoints = store.checkpoints()
+    if len(checkpoints) != pending.step_index + 1:
+        raise StateDiverged(_FIRST_LOCAL_DELIVERY_HOLD)
+    tail = checkpoints[-1]
+    if (
+        tail.first_local_pause_sha256 != approval_pause_digest(pending)
+        or tail.bundle_version != live_bundle_version
+        or tail.step_id != pending.step_id
+        or tail.state_id is not None
+        or tail.skipped
+        or tail.delivery_attempted is not True
+        or tail.effect_verified is not True
+        or tail.effect_approved_unverified
+        or tail.attended_capability_digest is not None
+        or tail.attended_reconciliation_request_digest is not None
+        or (
+            pending.deferred_readback is not None
+            and tail.actuation != pending.deferred_readback.result.actuation
+        )
+        or (
+            tail.actuation not in (None, "api")
+            and tail.actuation not in AUTOMATED_GUI_ACTUATIONS
+        )
+    ):
+        raise StateDiverged(_FIRST_LOCAL_DELIVERY_HOLD)
+
+    workflow = Workflow.load(bundle_dir, key=key)
+    if (
+        workflow.program is not None
+        or workflow.name != manifest.workflow_name
+        or store.program_checkpoints()
+    ):
+        raise StateDiverged(_FIRST_LOCAL_DELIVERY_HOLD)
+    try:
+        _linear_resume_checkpoint(
+            run_dir=run_dir,
+            checkpoints=checkpoints,
+            pending=pending,
+            manifest=manifest,
+            workflow=workflow,
+            first_local_tail=True,
+        )
+    except StateDiverged as exc:
+        raise StateDiverged(_FIRST_LOCAL_DELIVERY_HOLD) from exc
+    return workflow, checkpoints
 
 
 def _program_resume_checkpoints(
@@ -1001,6 +1211,26 @@ def _resume_under_lease(
         raise StateDiverged(
             "the durable pause does not match the exact retained run manifest"
         )
+    from openadapt_flow.runtime.durable.first_local_delivery import (
+        is_first_local_delivery,
+    )
+
+    first_local = is_first_local_delivery(pending.delivery_uncertainty)
+    first_local_deferred = first_local and pending.deferred_readback is not None
+    first_local_history = (
+        _validate_first_local_tail(
+            run_dir=run_dir,
+            store=store,
+            pending=pending,
+            manifest=manifest,
+            bundle_dir=resolved_bundle,
+            live_bundle_version=live_bundle_version,
+            key=key,
+        )
+        if first_local and not first_local_deferred
+        else None
+    )
+
     stored_approval = store.read_approval()
     approved: ApprovalRecord = enforce_resume_authorization(
         pending,
@@ -1042,7 +1272,9 @@ def _resume_under_lease(
         # before retained-state checks or resumed execution can call a model.
         continuation_guard.acknowledge_progress()
         manifest = updated_manifest
-    if pending.deferred_readback is not None and not pending.program:
+    if pending.deferred_readback is not None and (
+        not pending.program or first_local_deferred
+    ):
         _settle_deferred_readback_on_resume(
             run_dir=run_dir,
             store=store,
@@ -1051,8 +1283,21 @@ def _resume_under_lease(
             replayer=replayer,
             bundle_dir=resolved_bundle,
             key=key,
+            first_local_bundle_version=(
+                live_bundle_version if first_local_deferred else None
+            ),
         )
-    if pending.delivery_uncertainty is not None:
+        if first_local_deferred:
+            first_local_history = _validate_first_local_tail(
+                run_dir=run_dir,
+                store=store,
+                pending=pending,
+                manifest=manifest,
+                bundle_dir=resolved_bundle,
+                live_bundle_version=live_bundle_version,
+                key=key,
+            )
+    if not first_local and pending.delivery_uncertainty is not None:
         last_linear = store.last_checkpoint()
         last_program = store.last_program_checkpoint()
         reconciled_without_retry = (
@@ -1081,7 +1326,11 @@ def _resume_under_lease(
                 "uncertain-delivery retry"
             )
 
-    workflow = Workflow.load(resolved_bundle, key=key)
+    workflow = (
+        first_local_history[0]
+        if first_local_history is not None
+        else Workflow.load(resolved_bundle, key=key)
+    )
     if workflow.name != manifest.workflow_name:
         raise StateDiverged(
             "the durable manifest names a different workflow than the bundle"
@@ -1168,15 +1417,21 @@ def _resume_under_lease(
             "a linear continuation contains program checkpoint artifacts"
         )
     # -- linear resume -------------------------------------------------------
-    linear_checkpoints = store.checkpoints()
-    last_linear = _linear_resume_checkpoint(
-        run_dir=run_dir,
-        checkpoints=linear_checkpoints,
-        pending=pending,
-        manifest=manifest,
-        workflow=workflow,
+    if first_local_history is not None:
+        linear_checkpoints = first_local_history[1]
+        last_linear = linear_checkpoints[-1]
+    else:
+        linear_checkpoints = store.checkpoints()
+        last_linear = _linear_resume_checkpoint(
+            run_dir=run_dir,
+            checkpoints=linear_checkpoints,
+            pending=pending,
+            manifest=manifest,
+            workflow=workflow,
+        )
+    deferred_tail = not first_local and _deferred_readback_settled(
+        linear_checkpoints, pending
     )
-    deferred_tail = _deferred_readback_settled(linear_checkpoints, pending)
     for position, checkpoint in enumerate(linear_checkpoints):
         if checkpoint.effect_verified is not True:
             continue

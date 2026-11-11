@@ -5300,6 +5300,9 @@ def _cmd_resume_roll_back(
     the sealed state (docs/ROLLBACK.md, Durable runs). Afterwards the run is
     never resumed."""
     from openadapt_flow.rollback_durable import SealedRollback, SealedStateError
+    from openadapt_flow.runtime.durable.first_local_delivery import (
+        FirstLocalDeliveryHeld,
+    )
 
     if ckpt_key is None:
         print(
@@ -5309,9 +5312,10 @@ def _cmd_resume_roll_back(
         return 3
     sealed = SealedRollback(run_dir, ckpt_key)
     try:
+        store.require_first_local_rollback_idle()
         with sealed.lock():
             return _roll_back_sealed(args, run_dir, store, ckpt_key, sealed)
-    except SealedStateError as exc:
+    except (SealedStateError, FirstLocalDeliveryHeld) as exc:
         print(f"Roll back REFUSED: {exc}. Nothing ran.")
         return 3
 
