@@ -2528,7 +2528,10 @@ def _mark_rechecked(
             return _replace(
                 late,
                 outcome="UNCERTAIN",
-                reasons=[*late.reasons, "the ledger confirmation names another receipt"],
+                reasons=[
+                    *late.reasons,
+                    "the ledger confirmation names another receipt",
+                ],
             )
         # Only reached after this contract's authenticated checkpoint and
         # actual recheck confirmed.
@@ -2574,7 +2577,6 @@ def _mark_rechecked(
     return late
 
 
-
 def _recover_recheck(
     ledger: Ledger,
     key: str,
@@ -2600,7 +2602,8 @@ def _recover_recheck(
         or any(
             event.get("event") == "released"
             or event.get("via") == "person"
-            or event.get("event") == "resolved" and event.get("outcome") == "REFUTED"
+            or event.get("event") == "resolved"
+            and event.get("outcome") == "REFUTED"
             for event in events
         )
     ):

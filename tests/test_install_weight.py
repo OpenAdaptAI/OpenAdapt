@@ -34,7 +34,11 @@ def _result(*dists: str, mb: float = 1.0, import_error: str | None = None) -> di
     }
 
 
-BUDGET = {"allow": ["pydantic", "pydantic-core", "pyobjc-*"], "max_mb": 10, "max_dists": 3}
+BUDGET = {
+    "allow": ["pydantic", "pydantic-core", "pyobjc-*"],
+    "max_mb": 10,
+    "max_dists": 3,
+}
 
 
 def test_an_install_inside_its_budget_passes() -> None:
@@ -57,7 +61,14 @@ def test_a_forbidden_distribution_fails_even_when_allowed() -> None:
 
 def test_size_count_and_import_failures_fail() -> None:
     problems = weigh.violations(
-        _result("pydantic", "pydantic-core", "pyobjc-core", "pyobjc-cocoa", mb=11, import_error="boom"),
+        _result(
+            "pydantic",
+            "pydantic-core",
+            "pyobjc-core",
+            "pyobjc-cocoa",
+            mb=11,
+            import_error="boom",
+        ),
         BUDGET,
         DEFAULTS,
     )
@@ -71,7 +82,9 @@ def test_size_count_and_import_failures_fail() -> None:
 def _forbids(label: str, name: str) -> bool:
     budget = PACKAGES[label]
     return bool(
-        weigh.violations(_result(name), dict(budget, max_dists=99, max_mb=1e9), DEFAULTS)
+        weigh.violations(
+            _result(name), dict(budget, max_dists=99, max_mb=1e9), DEFAULTS
+        )
     )
 
 
@@ -90,11 +103,15 @@ def _forbids(label: str, name: str) -> bool:
     ],
 )
 @pytest.mark.parametrize("label", ["privacy", "types"])
-def test_leaf_packages_never_pull_the_engine_desktop_or_vision_stacks(label: str, name: str) -> None:
+def test_leaf_packages_never_pull_the_engine_desktop_or_vision_stacks(
+    label: str, name: str
+) -> None:
     assert _forbids(label, name)
 
 
-@pytest.mark.parametrize("name", ["matplotlib", "sounddevice", "soundfile", "pympler", "alembic"])
+@pytest.mark.parametrize(
+    "name", ["matplotlib", "sounddevice", "soundfile", "pympler", "alembic"]
+)
 def test_capture_core_never_pulls_its_opt_in_stacks(name: str) -> None:
     assert _forbids("capture", name)
 
@@ -111,13 +128,24 @@ def test_types_allows_only_pydantic_and_itself() -> None:
 
 
 def test_every_package_has_a_budget_and_no_allow_forbid_overlap() -> None:
-    assert set(PACKAGES) == {"types", "privacy", "capture", "flow", "agent", "verify", "desktop", "launcher"}
+    assert set(PACKAGES) == {
+        "types",
+        "privacy",
+        "capture",
+        "flow",
+        "agent",
+        "verify",
+        "desktop",
+        "launcher",
+    }
     for label, budget in PACKAGES.items():
         assert {"path", "module", "max_mb", "max_dists", "allow"} <= set(budget), label
         overlap = [
             name
             for name in budget["allow"]
-            if weigh.violations(_result(name), dict(budget, max_dists=99, max_mb=1e9), DEFAULTS)
+            if weigh.violations(
+                _result(name), dict(budget, max_dists=99, max_mb=1e9), DEFAULTS
+            )
         ]
         assert not overlap, (label, overlap)
 
@@ -128,21 +156,30 @@ def test_local_build_patches_a_copy_and_never_the_checkout(
     package = tmp_path / "pkg"
     (package / "example").mkdir(parents=True)
     (package / "example" / "__init__.py").write_text("", encoding="utf-8")
-    original = '[project]\nname = "example"\nversion = "1.2.3"\n\n[tool.x]\nversion = "9"\n'
+    original = (
+        '[project]\nname = "example"\nversion = "1.2.3"\n\n[tool.x]\nversion = "9"\n'
+    )
     (package / "pyproject.toml").write_text(original, encoding="utf-8")
     seen = {}
 
     def fake_run(command, check=False, **kwargs):  # noqa: ANN001 - subprocess.run stand-in
         if command[0] == "git":
-            return weigh.subprocess.CompletedProcess(command, 128, "", "not a git repository")
+            return weigh.subprocess.CompletedProcess(
+                command, 128, "", "not a git repository"
+            )
         built = Path(command[-1])
         seen["text"] = (built / "pyproject.toml").read_text(encoding="utf-8")
-        seen["files"] = sorted(p.relative_to(built).as_posix() for p in built.rglob("*") if p.is_file())
+        seen["files"] = sorted(
+            p.relative_to(built).as_posix() for p in built.rglob("*") if p.is_file()
+        )
         seen["dir"] = built
         return weigh.subprocess.CompletedProcess(command, 0)
 
     monkeypatch.setattr(weigh.subprocess, "run", fake_run)
-    assert weigh.build_local_wheel(package, tmp_path / "dist") == ("example", "1.2.3+weight")
+    assert weigh.build_local_wheel(package, tmp_path / "dist") == (
+        "example",
+        "1.2.3+weight",
+    )
     assert 'version = "1.2.3+weight"' in seen["text"]
     assert 'version = "9"' in seen["text"]
     assert seen["files"] == ["example/__init__.py", "pyproject.toml"]

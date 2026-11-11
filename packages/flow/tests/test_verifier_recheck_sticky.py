@@ -172,7 +172,9 @@ def test_generated_transient_and_terminal_recheck_histories(tmp_path, monkeypatc
             if terminal:
                 assert _attempt(first).rechecked is None
             else:
-                assert _attempt(first).rechecked["receipt_sha256"] == first.receipt_sha256
+                assert (
+                    _attempt(first).rechecked["receipt_sha256"] == first.receipt_sha256
+                )
 
     history()
 

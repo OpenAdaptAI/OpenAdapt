@@ -159,7 +159,9 @@ def test_signer_failure_does_not_become_signature_success(store, tmp_path, monke
 
 
 @pytest.mark.parametrize("complete", [None, False], ids=["undeclared", "false"])
-def test_rest_completeness_is_required_before_writer_dispatch(store, tmp_path, complete):
+def test_rest_completeness_is_required_before_writer_dispatch(
+    store, tmp_path, complete
+):
     contract = store.contract("rest")
     if complete is None:
         del contract["verifier"]["records_complete"]

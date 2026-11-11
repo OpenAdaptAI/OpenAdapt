@@ -24,8 +24,9 @@ def _provisional(store, tmp_path):
 
 
 def _check(contract, params, state):
-    return _cli("recheck", "--contract", contract, "--params", params,
-                "--recheck-state", state)
+    return _cli(
+        "recheck", "--contract", contract, "--params", params, "--recheck-state", state
+    )
 
 
 def _attempt(first):
