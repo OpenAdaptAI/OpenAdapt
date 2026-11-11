@@ -1007,6 +1007,9 @@ def run(
                 for entry in group_entries
             ]:
                 errors.append("merge-group queue mapping changed before publication")
+    except EvidenceError as exc:
+        # First-party validation errors contain canonical diagnostics, not transport values.
+        errors.append(f"safety review could not verify GitHub metadata: {exc}")
     except Exception:  # noqa: BLE001 - metadata errors can contain response values
         errors.append("safety review could not verify GitHub metadata")
     if head_sha is None:

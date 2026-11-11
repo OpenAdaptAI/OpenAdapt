@@ -1127,6 +1127,17 @@ def test_api_transport_exception_values_never_become_diagnostics(
     assert canary not in str(failure.value)
     assert failure.value.__suppress_context__ is True
 
+    if kind == "other":
+        errors[kind] = EvidenceError(canary)
+        with pytest.raises(RuntimeError) as declared_failure:
+            if method == "request":
+                api.request("/fixed")
+            else:
+                api.graphql("query { viewer { login } }", {})
+        assert observed == [kind, kind]
+        assert str(declared_failure.value) == str(failure.value)
+        assert declared_failure.value.__suppress_context__ is True
+
 
 def test_metadata_exception_cannot_enter_errors_or_published_check() -> None:
     canary = "synthetic-metadata-canary-not-a-credential"
