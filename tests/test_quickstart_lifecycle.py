@@ -163,7 +163,14 @@ def test_browser_probe_reports_exact_install_state(
     )
 
 
-def test_lifecycle_summary_proves_preflight_and_lazy_install(tmp_path, monkeypatch):
+def _fake_lifecycle(
+    tmp_path,
+    monkeypatch,
+    *,
+    channel="chrome",
+    auto_output="",
+    bundled_after_auto=False,
+):
     lifecycle = _module()
     launcher_wheel = tmp_path / "openadapt.whl"
     launcher_wheel.write_bytes(b"launcher")
@@ -181,19 +188,23 @@ def test_lifecycle_summary_proves_preflight_and_lazy_install(tmp_path, monkeypat
         lambda **_kwargs: FakeEnvironment(),
     )
 
-    commands = []
+    calls = []
 
-    def successful_run(command, **_kwargs):
-        commands.append(command)
-        output = (
-            lifecycle._LAZY_BROWSER_INSTALL_NOTICE if "quickstart" in command else ""
-        )
+    def successful_run(command, **kwargs):
+        calls.append((command, kwargs["env"]))
+        output = ""
+        if "quickstart" in command:
+            auto = str(command[-1]).endswith("-auto")
+            output = auto_output if auto else lifecycle._LAZY_BROWSER_INSTALL_NOTICE
         return subprocess.CompletedProcess(command, 0, stdout=output)
 
     monkeypatch.setattr(lifecycle, "_run", successful_run)
-    browser_states = iter([False, True])
+    browser_states = iter([False, True, bundled_after_auto])
     monkeypatch.setattr(
         lifecycle, "_browser_present", lambda *_a, **_k: next(browser_states)
+    )
+    monkeypatch.setattr(
+        lifecycle, "_installed_browser_channel", lambda *_a, **_k: channel
     )
     monkeypatch.setattr(
         lifecycle,
@@ -201,13 +212,22 @@ def test_lifecycle_summary_proves_preflight_and_lazy_install(tmp_path, monkeypat
         lambda _root: {"outcome": "VERIFIED"},
     )
 
-    summary = lifecycle.run_lifecycle(
-        launcher_wheel,
-        work_dir,
-        flow_wheel=None,
-        browser_system_deps=True,
-        source_revision="abc123",
-    )
+    def run():
+        return lifecycle.run_lifecycle(
+            launcher_wheel,
+            work_dir,
+            flow_wheel=None,
+            browser_system_deps=True,
+            source_revision="abc123",
+        )
+
+    return lifecycle, run, calls, work_dir
+
+
+def test_lifecycle_summary_proves_preflight_and_lazy_install(tmp_path, monkeypatch):
+    _lifecycle, run, calls, work_dir = _fake_lifecycle(tmp_path, monkeypatch)
+
+    summary = run()
 
     assert summary["browser_preflight"] == {
         "system_dependencies": "installed-via-playwright",
@@ -217,10 +237,77 @@ def test_lifecycle_summary_proves_preflight_and_lazy_install(tmp_path, monkeypat
         "lazy_install_performed": True,
         "lazy_install_notice_seen": True,
     }
+    assert summary["auto_browser_pass"] == {
+        "browser_setting": "auto",
+        "installed_browser_channel": "chrome",
+        "outcome": "VERIFIED",
+        "download_notice_seen": False,
+        "bundled_present_after_quickstart": False,
+        "no_download_checked": True,
+    }
     written = json.loads((work_dir / "summary.json").read_text(encoding="utf-8"))
     assert written["browser_preflight"] == summary["browser_preflight"]
+    assert written["auto_browser_pass"] == summary["auto_browser_pass"]
+    commands = [command for command, _env in calls]
     assert any("install-deps" in command for command in commands)
     assert not any("--with-deps" in command for command in commands)
+
+    quickstarts = [(command, env) for command, env in calls if "quickstart" in command]
+    assert len(quickstarts) == 2
+    (_lazy, lazy_env), (_auto, auto_env) = quickstarts
+    assert lazy_env["OPENADAPT_FLOW_BROWSER"] == "bundled"
+    assert "OPENADAPT_FLOW_BROWSER" not in auto_env
+    assert auto_env["PLAYWRIGHT_BROWSERS_PATH"] != lazy_env["PLAYWRIGHT_BROWSERS_PATH"]
+
+
+def test_lazy_install_notice_matches_the_headless_shell_download():
+    lifecycle = _module()
+
+    assert lifecycle._LAZY_BROWSER_INSTALL_NOTICE == (
+        "openadapt-flow: no Chrome or Edge found, so downloading Playwright's "
+        "headless Chromium once (about 90 MB). Later runs reuse it."
+    )
+
+
+@pytest.mark.parametrize(
+    ("auto_output", "bundled_after_auto", "message"),
+    [
+        ("LAZY", False, "download notice"),
+        ("", True, "downloaded Playwright's Chromium"),
+    ],
+)
+def test_auto_pass_fails_when_it_downloads_despite_installed_chrome(
+    tmp_path, monkeypatch, auto_output, bundled_after_auto, message
+):
+    lifecycle = _module()
+    output = lifecycle._LAZY_BROWSER_INSTALL_NOTICE if auto_output else ""
+    _lifecycle, run, _calls, _work_dir = _fake_lifecycle(
+        tmp_path,
+        monkeypatch,
+        auto_output=output,
+        bundled_after_auto=bundled_after_auto,
+    )
+
+    with pytest.raises(AssertionError, match=message):
+        run()
+
+
+def test_auto_pass_skips_the_no_download_check_without_chrome(
+    tmp_path, monkeypatch, capsys
+):
+    lifecycle = _module()
+    _lifecycle, run, _calls, _work_dir = _fake_lifecycle(
+        tmp_path,
+        monkeypatch,
+        channel=None,
+        auto_output=lifecycle._LAZY_BROWSER_INSTALL_NOTICE,
+        bundled_after_auto=True,
+    )
+
+    summary = run()
+
+    assert summary["auto_browser_pass"]["no_download_checked"] is False
+    assert "SKIP no-download check" in capsys.readouterr().out
 
 
 def test_workflow_runs_the_public_command_in_one_bounded_weekly_job():
