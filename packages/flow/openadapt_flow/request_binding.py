@@ -393,6 +393,11 @@ def _check_document(
     if type(receipt) is not dict or type(evidence) is not dict:
         raise BindingError("receipt_shape")
     if (
+        receipt.get("request_context") is None
+        and evidence.get("request_context") is None
+    ):
+        raise BindingError("receipt_missing_request_context")
+    if (
         RequestContext.parse(receipt.get("request_context")) != expected
         or RequestContext.parse(evidence.get("request_context")) != expected
     ):

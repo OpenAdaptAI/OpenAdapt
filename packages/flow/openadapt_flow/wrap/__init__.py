@@ -155,6 +155,7 @@ class WrappedTask:
         from openadapt_flow.agent.runs import RunStore
         from openadapt_flow.request_binding import (
             BINDING_SCHEMA,
+            BindingError,
             RequestContext,
             capture_receipt_binding,
             request_scope,
@@ -206,6 +207,18 @@ class WrappedTask:
                     result["receipt_binding"] = capture_receipt_binding(
                         result, context, root
                     )
+                except BindingError as exc:
+                    binding = {
+                        "schema": BINDING_SCHEMA,
+                        "status": "REFUSED",
+                        "reason": "RECEIPT_BINDING_UNAVAILABLE",
+                    }
+                    if str(exc) == "receipt_missing_request_context":
+                        binding["diagnostic"] = (
+                            "receipt carries no request context; if server was "
+                            "emitted before #2154, re-emit with compile-agent emit"
+                        )
+                    result["receipt_binding"] = binding
                 except Exception:
                     # Binding diagnostics never replace the actual effect result.
                     # A strict binding consumer refuses this fixed state.

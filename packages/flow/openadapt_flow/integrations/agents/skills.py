@@ -450,7 +450,10 @@ class SkillCache:
             # Never serve a program compiled for another task or record.
             return None
         emitted = compiler.out_dir / "emitted.json"
-        if not emitted.is_file():
+        if (
+            not emitted.is_file()
+            or getattr(compiler, "server_needs_reemit", lambda: False)()
+        ):
             compiler.emit()
         return Path(json.loads(emitted.read_text(encoding="utf-8"))["mcp_server"])
 
