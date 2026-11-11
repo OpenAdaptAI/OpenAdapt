@@ -2752,14 +2752,20 @@ def _terminal_recheck(attempt: Attempt, late: RecheckResult) -> Optional[Recheck
         "released_attempt": "a person already released this attempt; it remains REFUTED for recheck",
     }[reason]
     return _HeldRecheckResult(
-        **{
-            **vars(late),
-            "outcome": "REFUTED",
-            "recheck_owed": False,
-            "reasons": [*late.reasons, message],
-            "_hold_reason": reason,
-            "_observed_status": late.outcome,
-        }
+        outcome="REFUTED",
+        frame=late.frame,
+        reasons=[*late.reasons, message],
+        receipt_sha256=late.receipt_sha256,
+        post_save_read_at=late.post_save_read_at,
+        due_at=late.due_at,
+        read_at=late.read_at,
+        excused=late.excused,
+        evidence=late.evidence,
+        recheck_claim_sha256=late.recheck_claim_sha256,
+        excuse_receipt_sha256s=late.excuse_receipt_sha256s,
+        recheck_owed=False,
+        _hold_reason=reason,
+        _observed_status=late.outcome,
     )
 
 
