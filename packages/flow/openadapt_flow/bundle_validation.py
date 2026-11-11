@@ -576,7 +576,9 @@ def transfer_verified_load_capability(source: "Workflow", target: "Workflow") ->
     if has_verified_load_capability(source) and not source._unverified_load:
         target._loaded_seal = source._loaded_seal
         target._decrypted_templates = dict(source._decrypted_templates)
-        target._pending_template_replacements = dict(source._pending_template_replacements)
+        target._pending_template_replacements = dict(
+            source._pending_template_replacements
+        )
         target._pending_derived_assets = dict(source._pending_derived_assets)
         target._unverified_load = False
         _grant_verified_load_capability(target)
@@ -586,13 +588,19 @@ def derive_verified_workflow(
     source: "Workflow", *, update: dict[str, Any]
 ) -> "Workflow":
     """Validate an intentional edit while retaining its verified source binding."""
-    if source._unverified_load or source.manifest is None or source._loaded_seal is None:
+    if (
+        source._unverified_load
+        or source.manifest is None
+        or source._loaded_seal is None
+    ):
         raise BundleIntegrityError("derivation requires a verified loaded source")
     verify_loaded_source_integrity(
         source,
         source._loaded_seal.source_bundle_dir,
         source.manifest,
-        decrypted_assets=source._decrypted_templates if source._loaded_seal.encrypted else None,
+        decrypted_assets=source._decrypted_templates
+        if source._loaded_seal.encrypted
+        else None,
     )
     if type(update) is not dict or any(
         type(name) is not str
@@ -605,7 +613,9 @@ def derive_verified_workflow(
     payload.update(update)
     target = type(source).model_validate(payload)
     transfer_verified_load_capability(source, target)
-    if target.model_dump(exclude={"manifest"}) != source.model_dump(exclude={"manifest"}):
+    if target.model_dump(exclude={"manifest"}) != source.model_dump(
+        exclude={"manifest"}
+    ):
         invalidate_derivative_certification(target)
     return target
 
@@ -614,7 +624,9 @@ def invalidate_derivative_certification(workflow: "Workflow") -> None:
     """Source integrity does not carry an old production decision to new content."""
     from openadapt_flow.bundle_sealing import _invalidate_prior_certification
 
-    _invalidate_prior_certification(workflow, reason="an authored derivative changed the workflow contract")
+    _invalidate_prior_certification(
+        workflow, reason="an authored derivative changed the workflow contract"
+    )
     if workflow.manifest is not None:
         workflow.manifest.provenance.governed_authorization_template = None
 
@@ -810,7 +822,9 @@ def _referenced_asset_paths(workflow: "Workflow") -> set[str]:
     # Declared undo steps are not part of the run, but their crops are bundle
     # content a person may later approve running, so they are hashed too.
     undo_steps = [step for undo in workflow.undo_steps for step in undo.steps]
-    cleanup_steps = workflow.halt_cleanup.steps if workflow.halt_cleanup is not None else []
+    cleanup_steps = (
+        workflow.halt_cleanup.steps if workflow.halt_cleanup is not None else []
+    )
     for step in [*iter_workflow_steps(workflow), *undo_steps, *cleanup_steps]:
         for anchor in (step.anchor, step.drag_end_anchor):
             if anchor is not None:

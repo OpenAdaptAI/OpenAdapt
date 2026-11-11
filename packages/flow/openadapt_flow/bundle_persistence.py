@@ -131,20 +131,27 @@ def _check_destination_assets(
                 f"save-as destination asset {rel!r} conflicts with verified source"
             )
 
+
 def _asset_authority(workflow: Workflow) -> None:
     from openadapt_flow import bundle_validation as _bv
 
     if workflow._unverified_load:
-        raise _bv.BundleIntegrityError("an unchecked load cannot stage derivative assets")
+        raise _bv.BundleIntegrityError(
+            "an unchecked load cannot stage derivative assets"
+        )
     if workflow.manifest is None and workflow._loaded_seal is None:
         return  # Fresh construction grants no verified-source authority.
     if workflow.manifest is None or workflow._loaded_seal is None:
-        raise _bv.BundleIntegrityError("asset staging requires a verified source or fresh construction")
+        raise _bv.BundleIntegrityError(
+            "asset staging requires a verified source or fresh construction"
+        )
     _bv.verify_loaded_source_integrity(
         workflow,
         workflow._loaded_seal.source_bundle_dir,
         workflow.manifest,
-        decrypted_assets=workflow._decrypted_templates if workflow._loaded_seal.encrypted else None,
+        decrypted_assets=workflow._decrypted_templates
+        if workflow._loaded_seal.encrypted
+        else None,
     )
 
 
@@ -167,20 +174,28 @@ def _checked_derived_assets(workflow: Workflow) -> dict[str, bytes]:
             or change[0] not in {"add", "replace"}
             or not isinstance(change[1], bytes)
         ):
-            raise _bv.BundleIntegrityError("derived assets require canonical referenced paths and bytes")
+            raise _bv.BundleIntegrityError(
+                "derived assets require canonical referenced paths and bytes"
+            )
         _bv.bundle_asset_relative(rel)
     _asset_authority(workflow)
     for rel, (mode, data) in changes.items():
         if original is None:
             if mode != "add":
-                raise _bv.BundleIntegrityError("fresh construction cannot replace a verified source asset")
+                raise _bv.BundleIntegrityError(
+                    "fresh construction cannot replace a verified source asset"
+                )
         else:
             in_source = rel in dict(original.file_hashes)
             source = _bv.bundle_asset_path(original.source_bundle_dir, rel)
             if (mode == "replace") != in_source:
-                raise _bv.BundleIntegrityError("derived asset mode does not match its verified source")
+                raise _bv.BundleIntegrityError(
+                    "derived asset mode does not match its verified source"
+                )
             if mode == "add" and source.exists():
-                raise _bv.BundleIntegrityError("new asset already exists outside the verified source manifest")
+                raise _bv.BundleIntegrityError(
+                    "new asset already exists outside the verified source manifest"
+                )
         checked[rel] = data
     return checked
 
@@ -196,7 +211,11 @@ def _ensure_output_layout(
 
     if type(output) is not str or output not in {"plain", "encrypted", "sealed"}:
         raise _bv.BundleIntegrityError("unknown derivative output layout")
-    if output != "plain" or _sealed.active_writer(destination) is not None or _sealed.is_sealed(destination):
+    if (
+        output != "plain"
+        or _sealed.active_writer(destination) is not None
+        or _sealed.is_sealed(destination)
+    ):
         # An absent reference is not emitted or included in the manifest.
         # Actual carried, staged, or existing referenced bytes must stay within
         # the layout covered by the native encrypted writers.
@@ -212,7 +231,9 @@ def _ensure_output_layout(
             and _bv.bundle_asset_path(destination, rel).is_file()
         )
         if any(not rel.startswith("templates/") for rel in assets):
-            raise _bv.BundleIntegrityError("encrypted derivative assets must remain under templates/")
+            raise _bv.BundleIntegrityError(
+                "encrypted derivative assets must remain under templates/"
+            )
 
 
 def validate_derived_asset_paths(workflow: Workflow, names: Iterable[str]) -> Workflow:
@@ -228,7 +249,9 @@ def validate_derived_asset_paths(workflow: Workflow, names: Iterable[str]) -> Wo
     for rel in names:
         _bv.bundle_asset_relative(rel)
         if rel not in references:
-            raise _bv.BundleIntegrityError("derivative assets must reference validated workflow paths")
+            raise _bv.BundleIntegrityError(
+                "derivative assets must reference validated workflow paths"
+            )
     return candidate
 
 
@@ -243,7 +266,9 @@ def prepare_derived_assets(
     from openadapt_flow import bundle_validation as _bv
 
     if type(changes) is not dict:
-        raise _bv.BundleIntegrityError("derivative assets must be an explicit path-to-bytes map")
+        raise _bv.BundleIntegrityError(
+            "derivative assets must be an explicit path-to-bytes map"
+        )
     candidate = validate_derived_asset_paths(workflow, changes)
     if any(not isinstance(data, bytes) for data in changes.values()):
         raise _bv.BundleIntegrityError("derivative assets must contain bytes")
@@ -251,13 +276,23 @@ def prepare_derived_assets(
     # Fresh construction carries edit data, never a loaded-source capability.
     if _bv.has_verified_load_capability(workflow):
         _bv.transfer_verified_load_capability(workflow, candidate)
-    elif workflow.manifest is None and workflow._loaded_seal is None and not workflow._unverified_load:
+    elif (
+        workflow.manifest is None
+        and workflow._loaded_seal is None
+        and not workflow._unverified_load
+    ):
         candidate._pending_derived_assets = dict(workflow._pending_derived_assets)
     else:
-        raise _bv.BundleIntegrityError("derivative assets require verified source authority or fresh construction")
+        raise _bv.BundleIntegrityError(
+            "derivative assets require verified source authority or fresh construction"
+        )
     _ensure_output_layout(candidate, Path(destination), output, changes)
     _asset_authority(candidate)
-    original_paths = dict(candidate._loaded_seal.file_hashes) if candidate._loaded_seal is not None else {}
+    original_paths = (
+        dict(candidate._loaded_seal.file_hashes)
+        if candidate._loaded_seal is not None
+        else {}
+    )
     for rel, data in changes.items():
         candidate._pending_template_replacements.pop(rel, None)
         candidate._pending_derived_assets = {
@@ -274,7 +309,9 @@ def prepare_derived_assets(
         _bv.invalidate_derivative_certification(candidate)
     workflow.manifest = candidate.manifest
     workflow.qualification = candidate.qualification
-    workflow._pending_template_replacements = dict(candidate._pending_template_replacements)
+    workflow._pending_template_replacements = dict(
+        candidate._pending_template_replacements
+    )
     workflow._pending_derived_assets = dict(candidate._pending_derived_assets)
 
 

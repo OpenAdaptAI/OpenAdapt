@@ -1379,7 +1379,10 @@ class SelfRepair:
         prepare_derived_assets(
             patched,
             bundle_out,
-            {**{rel: path.read_bytes() for rel, path in staged_paths.items()}, **changes},
+            {
+                **{rel: path.read_bytes() for rel, path in staged_paths.items()},
+                **changes,
+            },
             output="encrypted" if workflow.encrypted else "plain",
         )
         if bundle_out.exists():

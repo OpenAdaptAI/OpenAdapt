@@ -3613,7 +3613,9 @@ class Workflow(BaseModel):
     # Authorized in-memory edits to existing template assets. The verified
     # source crop cache above remains unchanged until the destination is saved.
     _pending_template_replacements: dict[str, bytes] = PrivateAttr(default_factory=dict)
-    _pending_derived_assets: dict[str, tuple[str, bytes]] = PrivateAttr(default_factory=dict)
+    _pending_derived_assets: dict[str, tuple[str, bytes]] = PrivateAttr(
+        default_factory=dict
+    )
     # Immutable source seal + upgraded-model fingerprint; never serialized.
     _loaded_seal: Any = PrivateAttr(default=None)
     # Process-local authority granted only after integrity verification or by

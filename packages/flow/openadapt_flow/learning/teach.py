@@ -926,7 +926,9 @@ def _copy_carried(carried: dict[str, Path], out_bundle: Path) -> None:
         _write_crop(out_bundle / rel, artifacts.open_read(source))
 
 
-def _carried_asset_bytes(workflow: Workflow, carried: dict[str, Path]) -> dict[str, bytes]:
+def _carried_asset_bytes(
+    workflow: Workflow, carried: dict[str, Path]
+) -> dict[str, bytes]:
     from openadapt_flow.bundle_persistence import validate_derived_asset_paths
 
     validate_derived_asset_paths(workflow, carried)
@@ -1140,7 +1142,9 @@ def teach(
 
     updated = derive_verified_workflow(
         base_workflow,
-        update=updated.model_dump(mode="python", exclude={"manifest", "encrypted", "schema_version"}),
+        update=updated.model_dump(
+            mode="python", exclude={"manifest", "encrypted", "schema_version"}
+        ),
     )
     prepare_derived_assets(
         updated,

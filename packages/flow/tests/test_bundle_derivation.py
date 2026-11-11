@@ -125,7 +125,9 @@ def test_derivative_asset_model(fault, builder, rel, data):
         assert reopened.manifest.file_hashes[rel] == _digest(data)
         assert controls._bundle_files(source) == source_before
         if rel != ORIGINAL:
-            assert (destination / ORIGINAL).read_bytes() == (source / ORIGINAL).read_bytes()
+            assert (destination / ORIGINAL).read_bytes() == (
+                source / ORIGINAL
+            ).read_bytes()
 
 
 @pytest.mark.parametrize("builder", BUILDERS)
@@ -155,7 +157,11 @@ def test_verified_source_and_staged_assets_survive_each_save_layout(
         with sealed_set.writing(destination, "bundle", KEY):
             candidate.save(destination)
     else:
-        candidate.save(destination, encrypt=storage == "encrypted", key=KEY if storage == "encrypted" else None)
+        candidate.save(
+            destination,
+            encrypt=storage == "encrypted",
+            key=KEY if storage == "encrypted" else None,
+        )
     reopened = Workflow.load(destination, key=KEY if storage != "plain" else None)
     assert reopened.manifest is not None
     for rel, data in changes.items():
@@ -177,7 +183,9 @@ def test_unsupported_crypto_layout_refuses_before_destination_effects(tmp_path, 
     destination = tmp_path / "unsupported"
     before = controls._bundle_files(source)
     with pytest.raises(bundles.BundleIntegrityError, match="under templates/"):
-        prepare_derived_assets(workflow, destination, {OUTSIDE: b"asset"}, output=output)
+        prepare_derived_assets(
+            workflow, destination, {OUTSIDE: b"asset"}, output=output
+        )
     assert not destination.exists()
     assert controls._bundle_files(source) == before
     if output == "encrypted":
@@ -193,7 +201,9 @@ def test_healer_never_copies_over_a_foreign_destination(tmp_path):
     workflow = Workflow.load(source)
     source_before = controls._bundle_files(source)
     destination_before = controls._bundle_files(destination)
-    with pytest.raises(bundles.BundleIntegrityError, match="conflicts with verified source"):
+    with pytest.raises(
+        bundles.BundleIntegrityError, match="conflicts with verified source"
+    ):
         write_healed_bundle(workflow, source, destination, {"click": b"healed"})
     assert controls._bundle_files(source) == source_before
     assert controls._bundle_files(destination) == destination_before
@@ -213,7 +223,9 @@ def test_fresh_staging_does_not_invent_verified_authority(tmp_path):
 
 
 @pytest.mark.parametrize("legacy_last", (False, True))
-def test_latest_explicit_staging_intent_survives_other_staging_api(tmp_path, legacy_last):
+def test_latest_explicit_staging_intent_survives_other_staging_api(
+    tmp_path, legacy_last
+):
     source = controls.saved_bundle(tmp_path)
     workflow = Workflow.load(source)
     destination = tmp_path / "restaged"
@@ -230,7 +242,9 @@ def test_latest_explicit_staging_intent_survives_other_staging_api(tmp_path, leg
 
 
 @pytest.mark.parametrize("operation", ("model-edit", "asset-edit"))
-def test_verified_source_context_does_not_carry_a_stale_certification_flag(tmp_path, operation):
+def test_verified_source_context_does_not_carry_a_stale_certification_flag(
+    tmp_path, operation
+):
     source = controls.saved_bundle(tmp_path)
     loaded = Workflow.load(source)
     assert loaded.manifest is not None
@@ -242,7 +256,9 @@ def test_verified_source_context_does_not_carry_a_stale_certification_flag(tmp_p
     else:
         candidate = loaded.model_copy(deep=True)
         prepare_derived_assets(candidate, destination, {ORIGINAL: b"changed"})
-    assert candidate.manifest is not None and not candidate.manifest.provenance.certified
+    assert (
+        candidate.manifest is not None and not candidate.manifest.provenance.certified
+    )
     assert loaded.manifest.provenance.certified
     candidate.save(destination)
     reopened = Workflow.load(destination)
@@ -250,7 +266,9 @@ def test_verified_source_context_does_not_carry_a_stale_certification_flag(tmp_p
 
 
 @pytest.mark.parametrize("storage", ("encrypted", "sealed"))
-def test_verified_asset_cache_requires_manifest_membership(tmp_path, monkeypatch, storage):
+def test_verified_asset_cache_requires_manifest_membership(
+    tmp_path, monkeypatch, storage
+):
     monkeypatch.setenv(crypto.ENV_KEY, KEY)
     plain = controls.saved_bundle(tmp_path / "original")
     source = tmp_path / "protected"
@@ -274,17 +292,20 @@ def test_verified_asset_cache_requires_manifest_membership(tmp_path, monkeypatch
     extra = "templates/unlisted.png"
     assert extra not in manifest.file_hashes
     bad_cache = {**original_cache, extra: b"synthetic extra asset"}
-    with pytest.raises(bundles.BundleIntegrityError, match="outside the verified manifest"):
+    with pytest.raises(
+        bundles.BundleIntegrityError, match="outside the verified manifest"
+    ):
         ir._verify_sealed_template_integrity(loaded, source, manifest, bad_cache)
     candidate = loaded.model_copy(deep=True)
     candidate._decrypted_templates = bad_cache
     destination = tmp_path / "refused"
-    with pytest.raises(bundles.BundleIntegrityError, match="outside the verified manifest"):
+    with pytest.raises(
+        bundles.BundleIntegrityError, match="outside the verified manifest"
+    ):
         candidate.save(destination)
     assert not destination.exists()
     assert loaded.decrypted_templates() == original_cache
     assert controls._bundle_files(source) == original_files
-
 
 
 @pytest.mark.parametrize("output", ("encrypted", "sealed"))

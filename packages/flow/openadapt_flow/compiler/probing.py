@@ -272,7 +272,9 @@ def _stage_bundle(
         candidate,
         dest,
         {rel: source.read_bytes() for rel, source in asset_paths.items()},
-        output="sealed" if _sealed.is_sealed(src) else ("encrypted" if candidate.encrypted else "plain"),
+        output="sealed"
+        if _sealed.is_sealed(src)
+        else ("encrypted" if candidate.encrypted else "plain"),
     )
     if dest.exists():
         shutil.rmtree(dest)

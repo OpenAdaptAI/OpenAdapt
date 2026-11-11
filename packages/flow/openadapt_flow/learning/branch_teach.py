@@ -765,7 +765,9 @@ def teach_branch(
 
     updated = derive_verified_workflow(
         base,
-        update=updated.model_dump(mode="python", exclude={"manifest", "encrypted", "schema_version"}),
+        update=updated.model_dump(
+            mode="python", exclude={"manifest", "encrypted", "schema_version"}
+        ),
     )
     prepare_derived_assets(updated, out_bundle, _carried_asset_bytes(updated, carried))
     evidence = {

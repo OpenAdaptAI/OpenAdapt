@@ -349,8 +349,13 @@ def write_healed_bundle(
     )
     from openadapt_flow.bundle_validation import BundleIntegrityError
 
-    if workflow._loaded_seal is not None and src.resolve() != workflow._loaded_seal.source_bundle_dir:
-        raise BundleIntegrityError("healed bundle source does not match the verified source")
+    if (
+        workflow._loaded_seal is not None
+        and src.resolve() != workflow._loaded_seal.source_bundle_dir
+    ):
+        raise BundleIntegrityError(
+            "healed bundle source does not match the verified source"
+        )
     steps_by_id = {step.id: step for step in workflow.steps}
     changes = {}
     for step_id, crop in new_crops.items():

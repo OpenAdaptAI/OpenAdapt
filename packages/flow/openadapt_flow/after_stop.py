@@ -1292,7 +1292,9 @@ def declare_undo(
         candidate,
         bundle_dir,
         {rel: Path(source).read_bytes() for rel, source in (assets or {}).items()},
-        output="sealed" if _sealed.is_sealed(bundle_dir) else ("encrypted" if workflow.encrypted else "plain"),
+        output="sealed"
+        if _sealed.is_sealed(bundle_dir)
+        else ("encrypted" if workflow.encrypted else "plain"),
     )
     return save_undo_steps(
         bundle_dir,
