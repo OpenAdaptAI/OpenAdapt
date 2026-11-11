@@ -106,6 +106,11 @@ class WrappedTask:
         The caller supplies its actual expected request and arguments, not an
         arbitrary purported run record. UNBOUND and REFUSED never pass. This
         checks local association, not a signing issuer or store completeness.
+
+        Note: A BOUND return status certifies local request/receipt association
+        and byte integrity against the stored run record, but does not mean the
+        underlying execution succeeded or verified; callers must still check
+        ``reply['verified']`` and ``reply['receipt_outcome']``.
         """
         from openadapt_flow.agent.runs import RunStore
         from openadapt_flow.request_binding import BindingError, verify_receipt_binding

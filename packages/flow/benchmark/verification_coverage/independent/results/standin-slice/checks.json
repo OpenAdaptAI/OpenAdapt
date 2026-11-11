@@ -1,0 +1,1859 @@
+{
+  "gates": {
+    "framed": {
+      "applicable": 18,
+      "cases": [
+        {
+          "applicable": false,
+          "checked": {
+            "delta": "held",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "the save as the app makes it",
+          "fault": "clean",
+          "outcome": "verified",
+          "result": "not applicable"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "refuted",
+            "source": "instruction"
+          },
+          "detail": "email changed",
+          "fault": "wrong_value",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "refuted",
+            "source": "instruction"
+          },
+          "detail": "lname changed",
+          "fault": "wrong_value",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "title changed",
+          "fault": "wrong_value",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "fname changed",
+          "fault": "wrong_value",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "DOB changed",
+          "fault": "wrong_value",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "sex changed",
+          "fault": "wrong_value",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "street changed",
+          "fault": "wrong_value",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "city changed",
+          "fault": "wrong_value",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "state changed",
+          "fault": "wrong_value",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "postal_code changed",
+          "fault": "wrong_value",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "phone_home changed",
+          "fault": "wrong_value",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "country_code changed",
+          "fault": "wrong_value",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "refuted",
+            "source": "instruction"
+          },
+          "detail": "the values saved on a look-alike record",
+          "fault": "wrong_record",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "held",
+            "frame": "refuted",
+            "source": "instruction"
+          },
+          "detail": "another record in the slice edited",
+          "fault": "unrelated_edit",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "street, city, state, postal_code, phone_home, country_code left blank",
+          "fault": "partial",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "not_checked",
+            "source": "instruction"
+          },
+          "detail": "the target saved twice",
+          "fault": "duplicate",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "nothing saved",
+          "fault": "missing",
+          "outcome": "halted_before_effect",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "the target lands after the check's timeout",
+          "fault": "delayed",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        }
+      ],
+      "check_sha256": "sha256:bd1032e11616b1a355a0dfcae6d8138f93da72730c37f01f1e3d6f72c8d89692",
+      "claims": [
+        "delta",
+        "frame"
+      ],
+      "classes": {
+        "delayed": {
+          "applicable": 1,
+          "killed": 1
+        },
+        "duplicate": {
+          "applicable": 1,
+          "killed": 1
+        },
+        "missing": {
+          "applicable": 1,
+          "killed": 1
+        },
+        "partial": {
+          "applicable": 1,
+          "killed": 1
+        },
+        "unrelated_edit": {
+          "applicable": 1,
+          "killed": 1
+        },
+        "wrong_record": {
+          "applicable": 1,
+          "killed": 1
+        },
+        "wrong_value": {
+          "applicable": 12,
+          "killed": 12
+        }
+      },
+      "clean_pass": true,
+      "killed": 18,
+      "schema_version": "openadapt.check-coverage/v1",
+      "suite": {
+        "id": "openadapt.fault-suite/public",
+        "version": "1.0.0"
+      },
+      "test_copy": "sqlite"
+    },
+    "shipped": {
+      "applicable": 18,
+      "cases": [
+        {
+          "applicable": false,
+          "checked": {
+            "delta": "held",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "the save as the app makes it",
+          "fault": "clean",
+          "outcome": "verified",
+          "result": "not applicable"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "refuted",
+            "source": "instruction"
+          },
+          "detail": "email changed",
+          "fault": "wrong_value",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "refuted",
+            "source": "instruction"
+          },
+          "detail": "lname changed",
+          "fault": "wrong_value",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "title changed",
+          "fault": "wrong_value",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "fname changed",
+          "fault": "wrong_value",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "DOB changed",
+          "fault": "wrong_value",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "sex changed",
+          "fault": "wrong_value",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "street changed",
+          "fault": "wrong_value",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "city changed",
+          "fault": "wrong_value",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "state changed",
+          "fault": "wrong_value",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "postal_code changed",
+          "fault": "wrong_value",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "phone_home changed",
+          "fault": "wrong_value",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "country_code changed",
+          "fault": "wrong_value",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "refuted",
+            "source": "instruction"
+          },
+          "detail": "the values saved on a look-alike record",
+          "fault": "wrong_record",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "held",
+            "frame": "refuted",
+            "source": "instruction"
+          },
+          "detail": "another record in the slice edited",
+          "fault": "unrelated_edit",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "street, city, state, postal_code, phone_home, country_code left blank",
+          "fault": "partial",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "the target saved twice",
+          "fault": "duplicate",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "nothing saved",
+          "fault": "missing",
+          "outcome": "halted_before_effect",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "the target lands after the check's timeout",
+          "fault": "delayed",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        }
+      ],
+      "check_sha256": "sha256:e788e0dad8351168546da5e87e646859f9e0f47eb8e98508e272f1a8a5462526",
+      "claims": [
+        "delta",
+        "frame"
+      ],
+      "classes": {
+        "delayed": {
+          "applicable": 1,
+          "killed": 1
+        },
+        "duplicate": {
+          "applicable": 1,
+          "killed": 1
+        },
+        "missing": {
+          "applicable": 1,
+          "killed": 1
+        },
+        "partial": {
+          "applicable": 1,
+          "killed": 1
+        },
+        "unrelated_edit": {
+          "applicable": 1,
+          "killed": 1
+        },
+        "wrong_record": {
+          "applicable": 1,
+          "killed": 1
+        },
+        "wrong_value": {
+          "applicable": 12,
+          "killed": 12
+        }
+      },
+      "clean_pass": true,
+      "killed": 18,
+      "schema_version": "openadapt.check-coverage/v1",
+      "suite": {
+        "id": "openadapt.fault-suite/public",
+        "version": "1.0.0"
+      },
+      "test_copy": "sqlite"
+    },
+    "synthesized": {
+      "applicable": 7,
+      "cases": [
+        {
+          "applicable": false,
+          "checked": {
+            "delta": "refuted",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "the save as the app makes it",
+          "fault": "clean",
+          "outcome": "reconciliation_required",
+          "result": "not applicable"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "refuted",
+            "source": "instruction"
+          },
+          "detail": "log_id changed",
+          "fault": "wrong_value",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "refuted",
+            "source": "instruction"
+          },
+          "detail": "the values saved on a look-alike record",
+          "fault": "wrong_record",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "refuted",
+            "source": "instruction"
+          },
+          "detail": "another record in the slice edited",
+          "fault": "unrelated_edit",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "refuted",
+            "source": "instruction"
+          },
+          "detail": "log_id left blank",
+          "fault": "partial",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "the target saved twice",
+          "fault": "duplicate",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "nothing saved",
+          "fault": "missing",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "the target lands after the check's timeout",
+          "fault": "delayed",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        }
+      ],
+      "check_sha256": "sha256:00b5b6f39e4dbbbfa3feb55fdb4f14cd794851c1b36bff52ca97f482b21b6519",
+      "claims": [
+        "delta",
+        "frame"
+      ],
+      "classes": {
+        "delayed": {
+          "applicable": 1,
+          "killed": 1
+        },
+        "duplicate": {
+          "applicable": 1,
+          "killed": 1
+        },
+        "missing": {
+          "applicable": 1,
+          "killed": 1
+        },
+        "partial": {
+          "applicable": 1,
+          "killed": 1
+        },
+        "unrelated_edit": {
+          "applicable": 1,
+          "killed": 1
+        },
+        "wrong_record": {
+          "applicable": 1,
+          "killed": 1
+        },
+        "wrong_value": {
+          "applicable": 1,
+          "killed": 1
+        }
+      },
+      "clean_pass": false,
+      "killed": 7,
+      "schema_version": "openadapt.check-coverage/v1",
+      "suite": {
+        "id": "openadapt.fault-suite/public",
+        "version": "1.0.0"
+      },
+      "test_copy": "sqlite"
+    }
+  },
+  "synthesized": {
+    "closed_world": "database",
+    "coverage": {
+      "applicable": 7,
+      "cases": [
+        {
+          "applicable": false,
+          "checked": {
+            "delta": "refuted",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "the save as the app makes it",
+          "fault": "clean",
+          "outcome": "reconciliation_required",
+          "result": "not applicable"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "refuted",
+            "source": "instruction"
+          },
+          "detail": "log_id changed",
+          "fault": "wrong_value",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "refuted",
+            "source": "instruction"
+          },
+          "detail": "the values saved on a look-alike record",
+          "fault": "wrong_record",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "refuted",
+            "source": "instruction"
+          },
+          "detail": "another record in the slice edited",
+          "fault": "unrelated_edit",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "refuted",
+            "source": "instruction"
+          },
+          "detail": "log_id left blank",
+          "fault": "partial",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "the target saved twice",
+          "fault": "duplicate",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "nothing saved",
+          "fault": "missing",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        },
+        {
+          "applicable": true,
+          "checked": {
+            "delta": "refuted",
+            "frame": "held",
+            "source": "instruction"
+          },
+          "detail": "the target lands after the check's timeout",
+          "fault": "delayed",
+          "outcome": "reconciliation_required",
+          "result": "killed"
+        }
+      ],
+      "check_sha256": "sha256:00b5b6f39e4dbbbfa3feb55fdb4f14cd794851c1b36bff52ca97f482b21b6519",
+      "claims": [
+        "delta",
+        "frame"
+      ],
+      "classes": {
+        "delayed": {
+          "applicable": 1,
+          "killed": 1
+        },
+        "duplicate": {
+          "applicable": 1,
+          "killed": 1
+        },
+        "missing": {
+          "applicable": 1,
+          "killed": 1
+        },
+        "partial": {
+          "applicable": 1,
+          "killed": 1
+        },
+        "unrelated_edit": {
+          "applicable": 1,
+          "killed": 1
+        },
+        "wrong_record": {
+          "applicable": 1,
+          "killed": 1
+        },
+        "wrong_value": {
+          "applicable": 1,
+          "killed": 1
+        }
+      },
+      "clean_pass": false,
+      "killed": 7,
+      "schema_version": "openadapt.check-coverage/v1",
+      "suite": {
+        "id": "openadapt.fault-suite/public",
+        "version": "1.0.0"
+      },
+      "test_copy": "sqlite"
+    },
+    "doc": {
+      "effects": [
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "forbid_collateral_loss": false,
+          "kind": "record_written",
+          "probe": "surface=api_log|the save adds no row here",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "kind": "record_written",
+          "match": {
+            "_openadapt_no_such_field": {
+              "literal": "-"
+            }
+          },
+          "probe": "surface=api_log|no row here changes or disappears",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "forbid_collateral_loss": false,
+          "kind": "record_written",
+          "probe": "surface=clinical_rules_log|the save adds no row here",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "kind": "record_written",
+          "match": {
+            "_openadapt_no_such_field": {
+              "literal": "-"
+            }
+          },
+          "probe": "surface=clinical_rules_log.content|no record that was there before changes or disappears (records compared by content, not id)",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "forbid_collateral_loss": false,
+          "kind": "record_written",
+          "probe": "surface=contact|the save adds no row here",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "kind": "record_written",
+          "match": {
+            "_openadapt_no_such_field": {
+              "literal": "-"
+            }
+          },
+          "probe": "surface=contact.content|no record that was there before changes or disappears (records compared by content, not id)",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "forbid_collateral_loss": false,
+          "kind": "record_written",
+          "probe": "surface=documents|the save adds no row here",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "kind": "record_written",
+          "match": {
+            "_openadapt_no_such_field": {
+              "literal": "-"
+            }
+          },
+          "probe": "surface=documents|no row here changes or disappears",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "forbid_collateral_loss": false,
+          "kind": "record_written",
+          "probe": "surface=employer_data|the save adds no row here",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "kind": "record_written",
+          "match": {
+            "_openadapt_no_such_field": {
+              "literal": "-"
+            }
+          },
+          "probe": "surface=employer_data|no row here changes or disappears",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "forbid_collateral_loss": false,
+          "kind": "record_written",
+          "probe": "surface=facility|the save adds no row here",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "kind": "record_written",
+          "match": {
+            "_openadapt_no_such_field": {
+              "literal": "-"
+            }
+          },
+          "probe": "surface=facility.content|no record that was there before changes or disappears (records compared by content, not id)",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "forbid_collateral_loss": false,
+          "kind": "record_written",
+          "probe": "surface=form_encounter|the save adds no row here",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "kind": "record_written",
+          "match": {
+            "_openadapt_no_such_field": {
+              "literal": "-"
+            }
+          },
+          "probe": "surface=form_encounter|no row here changes or disappears",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "forbid_collateral_loss": false,
+          "kind": "record_written",
+          "probe": "surface=forms|the save adds no row here",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "kind": "record_written",
+          "match": {
+            "_openadapt_no_such_field": {
+              "literal": "-"
+            }
+          },
+          "probe": "surface=forms|no row here changes or disappears",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "forbid_collateral_loss": false,
+          "kind": "record_written",
+          "probe": "surface=history_data|the save adds no row here",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "kind": "record_written",
+          "match": {
+            "_openadapt_no_such_field": {
+              "literal": "-"
+            }
+          },
+          "probe": "surface=history_data.content|no record that was there before changes or disappears (records compared by content, not id)",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "forbid_collateral_loss": false,
+          "kind": "record_written",
+          "probe": "surface=insurance_data|the save adds no row here",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "kind": "record_written",
+          "match": {
+            "_openadapt_no_such_field": {
+              "literal": "-"
+            }
+          },
+          "probe": "surface=insurance_data|no row here changes or disappears",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "forbid_collateral_loss": false,
+          "kind": "record_written",
+          "probe": "surface=lists|the save adds no row here",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "kind": "record_written",
+          "match": {
+            "_openadapt_no_such_field": {
+              "literal": "-"
+            }
+          },
+          "probe": "surface=lists|no row here changes or disappears",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "forbid_collateral_loss": false,
+          "kind": "record_written",
+          "probe": "surface=log|the save adds no row here",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "kind": "record_written",
+          "match": {
+            "_openadapt_no_such_field": {
+              "literal": "-"
+            }
+          },
+          "probe": "surface=log.content|no record that was there before changes or disappears (records compared by content, not id)",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "kind": "record_written",
+          "match": {
+            "log_id": {
+              "param": "providerID"
+            }
+          },
+          "probe": "surface=log_comment_encrypt|exactly one new record with the run's values; no record that was there before may disappear",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "kind": "record_written",
+          "match": {
+            "_openadapt_no_such_field": {
+              "literal": "-"
+            }
+          },
+          "probe": "surface=log_comment_encrypt.content|no record that was there before changes or disappears (records compared by content, not id)",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "kind": "record_written",
+          "match": {
+            "log_id": {
+              "param": "providerID"
+            }
+          },
+          "probe": "surface=log_comment_encrypt_all|exactly one new record with the run's values; no record that was there before may disappear",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "kind": "record_written",
+          "match": {
+            "_openadapt_no_such_field": {
+              "literal": "-"
+            }
+          },
+          "probe": "surface=log_comment_encrypt_all.content|no record that was there before changes or disappears (records compared by content, not id)",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "forbid_collateral_loss": false,
+          "kind": "record_written",
+          "probe": "surface=openemr_postcalendar_events|the save adds no row here",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "kind": "record_written",
+          "match": {
+            "_openadapt_no_such_field": {
+              "literal": "-"
+            }
+          },
+          "probe": "surface=openemr_postcalendar_events|no row here changes or disappears",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "kind": "record_written",
+          "match": {
+            "DOB": {
+              "param": "DOB"
+            },
+            "city": {
+              "param": "city"
+            },
+            "country_code": {
+              "param": "country_code"
+            },
+            "email": {
+              "param": "email"
+            },
+            "fname": {
+              "param": "fname"
+            },
+            "lname": {
+              "param": "lname"
+            },
+            "phone_home": {
+              "param": "phone_home"
+            },
+            "postal_code": {
+              "param": "postal_code"
+            },
+            "providerID": {
+              "param": "providerID"
+            },
+            "sex": {
+              "param": "sex"
+            },
+            "street": {
+              "param": "street"
+            },
+            "title": {
+              "param": "title"
+            }
+          },
+          "probe": "surface=patient_data|exactly one new record with the run's values; no record that was there before may disappear",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "kind": "record_written",
+          "match": {
+            "_openadapt_no_such_field": {
+              "literal": "-"
+            }
+          },
+          "probe": "surface=patient_data.content|no record that was there before changes or disappears (records compared by content, not id)",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "kind": "record_written",
+          "match": {
+            "DOB": {
+              "param": "DOB"
+            },
+            "city": {
+              "param": "city"
+            },
+            "country_code": {
+              "param": "country_code"
+            },
+            "email": {
+              "param": "email"
+            },
+            "fname": {
+              "param": "fname"
+            },
+            "lname": {
+              "param": "lname"
+            },
+            "phone_home": {
+              "param": "phone_home"
+            },
+            "postal_code": {
+              "param": "postal_code"
+            },
+            "providerID": {
+              "param": "providerID"
+            },
+            "sex": {
+              "param": "sex"
+            },
+            "street": {
+              "param": "street"
+            },
+            "title": {
+              "param": "title"
+            }
+          },
+          "probe": "surface=patient_data_all|exactly one new record with the run's values; no record that was there before may disappear",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "kind": "record_written",
+          "match": {
+            "_openadapt_no_such_field": {
+              "literal": "-"
+            }
+          },
+          "probe": "surface=patient_data_all.content|no record that was there before changes or disappears (records compared by content, not id)",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "forbid_collateral_loss": false,
+          "kind": "record_written",
+          "probe": "surface=pnotes|the save adds no row here",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "kind": "record_written",
+          "match": {
+            "_openadapt_no_such_field": {
+              "literal": "-"
+            }
+          },
+          "probe": "surface=pnotes|no row here changes or disappears",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "forbid_collateral_loss": false,
+          "kind": "record_written",
+          "probe": "surface=prescriptions|the save adds no row here",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "kind": "record_written",
+          "match": {
+            "_openadapt_no_such_field": {
+              "literal": "-"
+            }
+          },
+          "probe": "surface=prescriptions|no row here changes or disappears",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "forbid_collateral_loss": false,
+          "kind": "record_written",
+          "probe": "surface=recent_patients|the save adds no row here",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "kind": "record_written",
+          "match": {
+            "_openadapt_no_such_field": {
+              "literal": "-"
+            }
+          },
+          "probe": "surface=recent_patients|no row here changes or disappears",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "forbid_collateral_loss": false,
+          "kind": "record_written",
+          "probe": "surface=sequences|the save adds no row here",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "kind": "record_written",
+          "match": {
+            "_openadapt_no_such_field": {
+              "literal": "-"
+            }
+          },
+          "probe": "surface=sequences.content|no record that was there before changes or disappears (records compared by content, not id)",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "forbid_collateral_loss": false,
+          "kind": "record_written",
+          "probe": "surface=transactions|the save adds no row here",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "kind": "record_written",
+          "match": {
+            "_openadapt_no_such_field": {
+              "literal": "-"
+            }
+          },
+          "probe": "surface=transactions|no row here changes or disappears",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "forbid_collateral_loss": false,
+          "kind": "record_written",
+          "probe": "surface=user_settings|the save adds no row here",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "kind": "record_written",
+          "match": {
+            "_openadapt_no_such_field": {
+              "literal": "-"
+            }
+          },
+          "probe": "surface=user_settings|no row here changes or disappears",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "forbid_collateral_loss": false,
+          "kind": "record_written",
+          "probe": "surface=users|the save adds no row here",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "kind": "record_written",
+          "match": {
+            "_openadapt_no_such_field": {
+              "literal": "-"
+            }
+          },
+          "probe": "surface=users.content|no record that was there before changes or disappears (records compared by content, not id)",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "forbid_collateral_loss": false,
+          "kind": "record_written",
+          "probe": "surface=uuid_mapping|the save adds no row here",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "kind": "record_written",
+          "match": {
+            "_openadapt_no_such_field": {
+              "literal": "-"
+            }
+          },
+          "probe": "surface=uuid_mapping|no row here changes or disappears",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "forbid_collateral_loss": false,
+          "kind": "record_written",
+          "probe": "surface=uuid_registry|the save adds no row here",
+          "risk": "irreversible"
+        },
+        {
+          "count_new_only": true,
+          "expected_count": 0,
+          "kind": "record_written",
+          "match": {
+            "_openadapt_no_such_field": {
+              "literal": "-"
+            }
+          },
+          "probe": "surface=uuid_registry|no row here changes or disappears",
+          "risk": "irreversible"
+        }
+      ],
+      "schema_version": "openadapt.verify/v1",
+      "verifier": {
+        "kind": "surfaces",
+        "surfaces": {
+          "api_log": {
+            "kind": "sql",
+            "sql_query": "SELECT * FROM \"api_log\"",
+            "sqlite_database": "<case database>"
+          },
+          "clinical_rules_log": {
+            "kind": "sql",
+            "sql_query": "SELECT * FROM \"clinical_rules_log\"",
+            "sqlite_database": "<case database>"
+          },
+          "clinical_rules_log.content": {
+            "kind": "sql",
+            "records_drop_fields": [
+              "id"
+            ],
+            "sql_query": "SELECT * FROM \"clinical_rules_log\"",
+            "sqlite_database": "<case database>"
+          },
+          "contact": {
+            "kind": "sql",
+            "sql_query": "SELECT * FROM \"contact\"",
+            "sqlite_database": "<case database>"
+          },
+          "contact.content": {
+            "kind": "sql",
+            "records_drop_fields": [
+              "id"
+            ],
+            "sql_query": "SELECT * FROM \"contact\"",
+            "sqlite_database": "<case database>"
+          },
+          "documents": {
+            "kind": "sql",
+            "sql_query": "SELECT * FROM \"documents\"",
+            "sqlite_database": "<case database>"
+          },
+          "employer_data": {
+            "kind": "sql",
+            "sql_query": "SELECT * FROM \"employer_data\"",
+            "sqlite_database": "<case database>"
+          },
+          "facility": {
+            "kind": "sql",
+            "sql_query": "SELECT * FROM \"facility\"",
+            "sqlite_database": "<case database>"
+          },
+          "facility.content": {
+            "kind": "sql",
+            "records_drop_fields": [
+              "id"
+            ],
+            "sql_query": "SELECT * FROM \"facility\"",
+            "sqlite_database": "<case database>"
+          },
+          "form_encounter": {
+            "kind": "sql",
+            "sql_query": "SELECT * FROM \"form_encounter\"",
+            "sqlite_database": "<case database>"
+          },
+          "forms": {
+            "kind": "sql",
+            "sql_query": "SELECT * FROM \"forms\"",
+            "sqlite_database": "<case database>"
+          },
+          "history_data": {
+            "kind": "sql",
+            "sql_query": "SELECT * FROM \"history_data\"",
+            "sqlite_database": "<case database>"
+          },
+          "history_data.content": {
+            "kind": "sql",
+            "records_drop_fields": [
+              "id"
+            ],
+            "sql_query": "SELECT * FROM \"history_data\"",
+            "sqlite_database": "<case database>"
+          },
+          "insurance_data": {
+            "kind": "sql",
+            "sql_query": "SELECT * FROM \"insurance_data\"",
+            "sqlite_database": "<case database>"
+          },
+          "lists": {
+            "kind": "sql",
+            "sql_query": "SELECT * FROM \"lists\"",
+            "sqlite_database": "<case database>"
+          },
+          "log": {
+            "kind": "sql",
+            "sql_query": "SELECT * FROM \"log\"",
+            "sqlite_database": "<case database>"
+          },
+          "log.content": {
+            "kind": "sql",
+            "records_drop_fields": [
+              "id"
+            ],
+            "sql_query": "SELECT * FROM \"log\"",
+            "sqlite_database": "<case database>"
+          },
+          "log_comment_encrypt": {
+            "kind": "sql",
+            "sql_query": "SELECT * FROM \"log_comment_encrypt\" WHERE \"log_id\" = :p0",
+            "sql_query_params": {
+              "p0": {
+                "param": "providerID"
+              }
+            },
+            "sqlite_database": "<case database>"
+          },
+          "log_comment_encrypt.content": {
+            "kind": "sql",
+            "records_drop_fields": [
+              "id"
+            ],
+            "sql_query": "SELECT * FROM \"log_comment_encrypt\" WHERE \"log_id\" = :p0",
+            "sql_query_params": {
+              "p0": {
+                "param": "providerID"
+              }
+            },
+            "sqlite_database": "<case database>"
+          },
+          "log_comment_encrypt_all": {
+            "kind": "sql",
+            "sql_query": "SELECT * FROM \"log_comment_encrypt\"",
+            "sqlite_database": "<case database>"
+          },
+          "log_comment_encrypt_all.content": {
+            "kind": "sql",
+            "records_drop_fields": [
+              "id"
+            ],
+            "sql_query": "SELECT * FROM \"log_comment_encrypt\"",
+            "sqlite_database": "<case database>"
+          },
+          "openemr_postcalendar_events": {
+            "kind": "sql",
+            "sql_query": "SELECT * FROM \"openemr_postcalendar_events\"",
+            "sqlite_database": "<case database>"
+          },
+          "patient_data": {
+            "kind": "sql",
+            "sql_query": "SELECT * FROM \"patient_data\" WHERE \"DOB\" = :p0 AND \"city\" = :p1 AND \"country_code\" = :p2 AND \"email\" = :p3 AND \"fname\" = :p4 AND \"lname\" = :p5 AND \"phone_home\" = :p6 AND \"postal_code\" = :p7 AND \"providerID\" = :p8 AND \"sex\" = :p9 AND \"title\" = :p10",
+            "sql_query_params": {
+              "p0": {
+                "param": "DOB"
+              },
+              "p1": {
+                "param": "city"
+              },
+              "p10": {
+                "param": "title"
+              },
+              "p2": {
+                "param": "country_code"
+              },
+              "p3": {
+                "param": "email"
+              },
+              "p4": {
+                "param": "fname"
+              },
+              "p5": {
+                "param": "lname"
+              },
+              "p6": {
+                "param": "phone_home"
+              },
+              "p7": {
+                "param": "postal_code"
+              },
+              "p8": {
+                "param": "providerID"
+              },
+              "p9": {
+                "param": "sex"
+              }
+            },
+            "sqlite_database": "<case database>"
+          },
+          "patient_data.content": {
+            "kind": "sql",
+            "records_drop_fields": [
+              "id"
+            ],
+            "sql_query": "SELECT * FROM \"patient_data\" WHERE \"DOB\" = :p0 AND \"city\" = :p1 AND \"country_code\" = :p2 AND \"email\" = :p3 AND \"fname\" = :p4 AND \"lname\" = :p5 AND \"phone_home\" = :p6 AND \"postal_code\" = :p7 AND \"providerID\" = :p8 AND \"sex\" = :p9 AND \"title\" = :p10",
+            "sql_query_params": {
+              "p0": {
+                "param": "DOB"
+              },
+              "p1": {
+                "param": "city"
+              },
+              "p10": {
+                "param": "title"
+              },
+              "p2": {
+                "param": "country_code"
+              },
+              "p3": {
+                "param": "email"
+              },
+              "p4": {
+                "param": "fname"
+              },
+              "p5": {
+                "param": "lname"
+              },
+              "p6": {
+                "param": "phone_home"
+              },
+              "p7": {
+                "param": "postal_code"
+              },
+              "p8": {
+                "param": "providerID"
+              },
+              "p9": {
+                "param": "sex"
+              }
+            },
+            "sqlite_database": "<case database>"
+          },
+          "patient_data_all": {
+            "kind": "sql",
+            "sql_query": "SELECT * FROM \"patient_data\"",
+            "sqlite_database": "<case database>"
+          },
+          "patient_data_all.content": {
+            "kind": "sql",
+            "records_drop_fields": [
+              "id"
+            ],
+            "sql_query": "SELECT * FROM \"patient_data\"",
+            "sqlite_database": "<case database>"
+          },
+          "pnotes": {
+            "kind": "sql",
+            "sql_query": "SELECT * FROM \"pnotes\"",
+            "sqlite_database": "<case database>"
+          },
+          "prescriptions": {
+            "kind": "sql",
+            "sql_query": "SELECT * FROM \"prescriptions\"",
+            "sqlite_database": "<case database>"
+          },
+          "recent_patients": {
+            "kind": "sql",
+            "sql_query": "SELECT * FROM \"recent_patients\"",
+            "sqlite_database": "<case database>"
+          },
+          "sequences": {
+            "kind": "sql",
+            "sql_query": "SELECT * FROM \"sequences\"",
+            "sqlite_database": "<case database>"
+          },
+          "sequences.content": {
+            "kind": "sql",
+            "records_drop_fields": [
+              "id"
+            ],
+            "sql_query": "SELECT * FROM \"sequences\"",
+            "sqlite_database": "<case database>"
+          },
+          "transactions": {
+            "kind": "sql",
+            "sql_query": "SELECT * FROM \"transactions\"",
+            "sqlite_database": "<case database>"
+          },
+          "user_settings": {
+            "kind": "sql",
+            "sql_query": "SELECT * FROM \"user_settings\"",
+            "sqlite_database": "<case database>"
+          },
+          "users": {
+            "kind": "sql",
+            "sql_query": "SELECT * FROM \"users\"",
+            "sqlite_database": "<case database>"
+          },
+          "users.content": {
+            "kind": "sql",
+            "records_drop_fields": [
+              "id"
+            ],
+            "sql_query": "SELECT * FROM \"users\"",
+            "sqlite_database": "<case database>"
+          },
+          "uuid_mapping": {
+            "kind": "sql",
+            "sql_query": "SELECT * FROM \"uuid_mapping\"",
+            "sqlite_database": "<case database>"
+          },
+          "uuid_registry": {
+            "kind": "sql",
+            "sql_query": "SELECT * FROM \"uuid_registry\"",
+            "sqlite_database": "<case database>"
+          }
+        }
+      }
+    },
+    "gate_error": null,
+    "misses": [
+      "stale: log_comment_encrypt: the save destroyed another record of the same subject (every checked field identifies the subject, so another record of the same subject looks like the saved one)",
+      "stale: log_comment_encrypt_all: the save destroyed another record of the same subject (every checked field identifies the subject, so another record of the same subject looks like the saved one)",
+      "read: facility: the generated query returns 1 row(s), the scan saw 1",
+      "read: facility.content: the generated query returns 1 row(s), the scan saw 1",
+      "read: history_data: the generated query returns 4 row(s), the scan saw 4",
+      "read: history_data.content: the generated query returns 4 row(s), the scan saw 4",
+      "read: patient_data: the generated query returns 1 row(s), the scan saw 1",
+      "read: patient_data.content: the generated query returns 1 row(s), the scan saw 1",
+      "read: patient_data_all: the generated query returns 4 row(s), the scan saw 4",
+      "read: patient_data_all.content: the generated query returns 4 row(s), the scan saw 4",
+      "read: uuid_registry: the generated query returns 9 row(s), the scan saw 9",
+      "fault gate: the clean save did not verify on the copy"
+    ],
+    "params": [
+      "DOB",
+      "city",
+      "country_code",
+      "email",
+      "fname",
+      "lname",
+      "phone_home",
+      "postal_code",
+      "providerID",
+      "sex",
+      "street",
+      "title"
+    ],
+    "surfaces": [
+      "api_log",
+      "clinical_rules_log",
+      "contact",
+      "documents",
+      "employer_data",
+      "facility",
+      "form_encounter",
+      "forms",
+      "history_data",
+      "insurance_data",
+      "lists",
+      "log",
+      "log_comment_encrypt",
+      "log_comment_encrypt_all",
+      "openemr_postcalendar_events",
+      "patient_data",
+      "patient_data_all",
+      "pnotes",
+      "prescriptions",
+      "recent_patients",
+      "sequences",
+      "transactions",
+      "user_settings",
+      "users",
+      "uuid_mapping",
+      "uuid_registry"
+    ],
+    "targets": [
+      {
+        "bound": {
+          "log_id": "providerID"
+        },
+        "surface": "log_comment_encrypt"
+      },
+      {
+        "bound": {
+          "log_id": "providerID"
+        },
+        "surface": "log_comment_encrypt_all"
+      },
+      {
+        "bound": {
+          "DOB": "DOB",
+          "city": "city",
+          "country_code": "country_code",
+          "email": "email",
+          "fname": "fname",
+          "lname": "lname",
+          "phone_home": "phone_home",
+          "postal_code": "postal_code",
+          "providerID": "providerID",
+          "sex": "sex",
+          "street": "street",
+          "title": "title"
+        },
+        "surface": "patient_data"
+      },
+      {
+        "bound": {
+          "DOB": "DOB",
+          "city": "city",
+          "country_code": "country_code",
+          "email": "email",
+          "fname": "fname",
+          "lname": "lname",
+          "phone_home": "phone_home",
+          "postal_code": "postal_code",
+          "providerID": "providerID",
+          "sex": "sex",
+          "street": "street",
+          "title": "title"
+        },
+        "surface": "patient_data_all"
+      }
+    ],
+    "working": false
+  }
+}

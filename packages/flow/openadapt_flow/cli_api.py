@@ -207,7 +207,7 @@ def cmd_api_admit(
         identity[key.strip()] = param.strip()
     footprint = None
     if getattr(args, "footprint", None):
-        footprint = json.loads(Path(args.footprint).read_text())
+        footprint = json.loads(Path(args.footprint).read_text(encoding="utf-8"))
     # Build the admission first, so the person reads exactly what is admitted.
     try:
         updated, steps = admit_api_step(

@@ -1,9 +1,12 @@
 """``openadapt setup``: add OpenAdapt to the coding agents on this computer.
 
 For each of Claude Code, Cursor, Codex and Gemini CLI that is installed, it
-registers the OpenAdapt MCP server (``openadapt-agent serve
---teach-browser``) and installs the ``openadapt-workflow-tools`` skill, which
-tells the agent when and how to teach a browser task and call it again.
+registers the OpenAdapt MCP server and installs the ``openadapt-workflow-tools``
+skill, which tells the agent when and how to teach a task and call it again.
+By default the server teaches read-only web tasks (``openadapt-agent serve
+--teach-browser``). With ``--app deploy.yaml --verify verify.yaml`` it teaches
+saves in that one app instead, a web, desktop, RDP or Citrix app (``serve
+--teach``), each read back from the app's system of record.
 
 Every change is listed as it is made. Running it again changes nothing that
 is already right. ``--dry-run`` lists the changes without making them.
@@ -24,7 +27,14 @@ from importlib import resources
 from pathlib import Path
 from typing import Any, Callable, Optional, Sequence
 
-__all__ = ["CLIENTS", "SERVER_NAME", "SKILL_NAME", "Setup", "server_command"]
+__all__ = [
+    "CLIENTS",
+    "SERVER_NAME",
+    "SKILL_NAME",
+    "Setup",
+    "app_serve_args",
+    "server_command",
+]
 
 SERVER_NAME = "openadapt"
 SKILL_NAME = "openadapt-workflow-tools"
@@ -60,12 +70,17 @@ CLIENTS = (
 
 
 def server_command(
-    executable: Optional[str] = None, prefix: Optional[str] = None
+    executable: Optional[str] = None,
+    prefix: Optional[str] = None,
+    serve_args: Sequence[str] = ("--teach-browser",),
 ) -> list[str]:
     """The command a client runs to start OpenAdapt's MCP server: the
     ``openadapt-agent`` installed next to this Python, so the client starts
-    the same install that ran setup."""
+    the same install that ran setup. ``serve_args`` pick what it teaches:
+    read-only web tasks (the default), or saves in one app
+    (:func:`app_serve_args`)."""
 
+    serve_args = list(serve_args)
     executable = executable or sys.executable
     prefix = prefix if prefix is not None else sys.prefix
     if "/uv/archive-v" in prefix.replace("\\", "/"):
@@ -80,13 +95,35 @@ def server_command(
             "openadapt",
             "agent",
             "serve",
-            "--teach-browser",
+            *serve_args,
         ]
     folder = Path(executable).parent
     for name in ("openadapt-agent", "openadapt-agent.exe"):
         if (folder / name).exists():
-            return [str(folder / name), "serve", "--teach-browser"]
-    return [executable, "-m", "openadapt_flow.agent", "serve", "--teach-browser"]
+            return [str(folder / name), "serve", *serve_args]
+    return [executable, "-m", "openadapt_flow.agent", "serve", *serve_args]
+
+
+def app_serve_args(
+    deployment: Path, verify: Path, authorization: Optional[Path] = None
+) -> list[str]:
+    """Serve arguments that teach saves in the app ``deployment`` names (a
+    web, desktop, RDP or Citrix app), each read back with ``verify``.
+    ``authorization`` is a person's signed teach authorization; without one
+    every draft the agent teaches is refused at admission."""
+
+    args = [
+        "--teach",
+        str(Path(verify).expanduser().resolve()),
+        "--config",
+        str(Path(deployment).expanduser().resolve()),
+    ]
+    if authorization is not None:
+        args += [
+            "--teach-authorization",
+            str(Path(authorization).expanduser().resolve()),
+        ]
+    return args
 
 
 def skill_text() -> str:

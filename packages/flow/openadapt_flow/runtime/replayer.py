@@ -231,6 +231,7 @@ from openadapt_flow.runtime.resolver import (
     visual_resolution_anchor_contract_sha256,
     visual_resolution_evaluator_contract_sha256,
 )
+from openadapt_flow.runtime.row_dates import _ROW_DATE_PATTERNS, _row_dates  # noqa: F401
 from openadapt_flow.runtime.step_timing import timed_span
 from openadapt_flow.runtime.surfaces import SurfaceRouter
 from openadapt_flow.verification import (
@@ -1350,6 +1351,7 @@ class Replayer:
                 raise ValueError("approval_gate must be an approval_mode ApprovalGate")
         self.approval_gate = approval_gate
         self._approval_report: Optional[RunReport] = None
+        self._approval_form_step_id: Optional[str] = None
         self._approval_run_dir: Optional[Path] = None
         self._approval_refusal: Optional[str] = None
         self._qualification_fault_mutations: list[FaultMutationReceipt] = []
@@ -1978,6 +1980,11 @@ class Replayer:
         clear_guard = getattr(self.backend, "set_qualification_input_guard", None)
         if callable(clear_guard):
             clear_guard(None)
+        # An earlier run's captured windows name no step of this one. Cleared
+        # after the refusal checks, so a refused run never touches the backend.
+        forget = getattr(self.backend, "clear_verified_windows", None)
+        if callable(forget):
+            forget()
         # Parameter resolution (Workflow-program IR, Phase 1): recorded defaults
         # (``params`` dict) plus each TYPED ``param_specs`` example as a default,
         # with caller-supplied values overriding both. A v0 bundle (empty
@@ -13032,6 +13039,7 @@ class Replayer:
 
         gate = self.approval_gate
         assert gate is not None
+        self._approval_form_step_id = step.id
         report = self._approval_report
         run_dir = self._approval_run_dir
 
@@ -13149,10 +13157,13 @@ class Replayer:
 
         if self._web_form_form_state_set:
             return self._web_form_form_state
-        from openadapt_flow.approval_mode.form_state import capture_form_state
+        from openadapt_flow.approval_mode import form_state as fs
 
         try:
-            return capture_form_state(self.backend, self.vision, frame_png)
+            results = getattr(self._approval_report, "results", ())
+            step, backend = self._approval_form_step_id, self.backend
+            regions = fs.approval_window_regions(backend, frame_png, step, results)
+            return fs.capture_form_state(backend, self.vision, frame_png, regions)
         except Exception:  # noqa: BLE001 - unreadable is never "unchanged"
             return None
 
@@ -13189,6 +13200,7 @@ class Replayer:
         """
 
         gate = self.approval_gate
+        self._approval_form_step_id = step.id
         assert gate is not None
         authorization = self.governed_authorization
         drill_fault_step = self._is_qualification_fault_step(step)
@@ -20110,52 +20122,3 @@ class Replayer:
         rel = f"steps/{step_id}_{suffix}.png"
         _sealed.write_bytes(Path(run_dir) / rel, _scrub_png(png))
         return rel
-
-
-#: Date-looking text in a listed row: ISO or Y/M/D, numeric with / . or -,
-#: and a spelled-out month either side of the day.
-_ROW_DATE_PATTERNS = (
-    r"\b\d{4}[-/]\d{1,2}[-/]\d{1,2}\b",
-    r"\b\d{1,2}[./-]\d{1,2}[./-]\d{4}\b",
-    r"\b\d{1,2}\s+[A-Za-z]{3,9}\.?,?\s+\d{4}\b",
-    r"\b[A-Za-z]{3,9}\.?\s+\d{1,2},?\s+\d{4}\b",
-)
-
-
-def _row_dates(row: str) -> set[str]:
-    """Every ISO date a listed row could be showing.
-
-    Each date-looking substring is read the way intake reads a date
-    (``intake.extract.normalize_date``). One that reads either way (03/04/1970)
-    contributes both readings; one that isn't a date contributes nothing.
-    """
-
-    from datetime import date as _date
-
-    from openadapt_flow.intake.extract import normalize_date
-
-    found: set[str] = set()
-    for pattern in _ROW_DATE_PATTERNS:
-        for match in re.finditer(pattern, row):
-            text = match.group(0)
-            ymd = re.fullmatch(r"(\d{4})[-/](\d{1,2})[-/](\d{1,2})", text)
-            if ymd:
-                try:
-                    found.add(
-                        _date(
-                            int(ymd.group(1)), int(ymd.group(2)), int(ymd.group(3))
-                        ).isoformat()
-                    )
-                except ValueError:
-                    pass
-                continue
-            text = re.sub(r"(\d)\.(?=\d)", r"\1/", text).replace(".", "")
-            iso, error, _ = normalize_date(text)
-            if iso is not None:
-                found.add(iso)
-            elif error and "ambiguous" in error:
-                for order in ("MM/DD/YYYY", "DD/MM/YYYY"):
-                    reading = normalize_date(text, order)[0]
-                    if reading is not None:
-                        found.add(reading)
-    return found

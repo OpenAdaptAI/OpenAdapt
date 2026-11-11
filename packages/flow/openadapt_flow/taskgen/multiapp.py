@@ -158,7 +158,7 @@ def _a(word: str) -> str:
 def write_flows(
     flow_path: Path, manifests: dict[str, Path], out: Path, *, count: int, seed: int
 ) -> list[dict[str, Any]]:
-    flow = yaml.safe_load(flow_path.read_text())
+    flow = yaml.safe_load(flow_path.read_text(encoding="utf-8"))
     if flow.get("schema_version") != FLOW_SCHEMA:
         raise ValueError(f"{flow_path}: not an {FLOW_SCHEMA} document")
     (out / "contracts").mkdir(parents=True, exist_ok=True)

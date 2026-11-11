@@ -172,19 +172,48 @@ class RunStore:
 
     def _fingerprint_key(self) -> bytes:
         path = self.root / "fingerprint.key"
-        existing = (
-            path.read_bytes() if path.is_file() and not path.is_symlink() else b""
-        )
-        if len(existing) >= 32:
+        if path.is_symlink():
+            raise ValueError(f"fingerprint key at {path} must not be a symlink")
+        if path.is_file():
+            existing = path.read_bytes()
+            if len(existing) < 32:
+                raise ValueError(
+                    f"fingerprint key at {path} is shorter than 32 bytes ({len(existing)} bytes)"
+                )
             return existing
+
         key = secrets.token_bytes(32)
+        fd, tmp = tempfile.mkstemp(prefix=".tmp-key-", dir=self.root)
         try:
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        except FileExistsError:
-            return path.read_bytes()
-        with os.fdopen(fd, "wb") as handle:
-            handle.write(key)
-        return key
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(key)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.chmod(tmp, 0o600)
+            try:
+                os.link(tmp, path)
+            except FileExistsError:
+                pass
+            except OSError:
+                if not path.exists():
+                    try:
+                        os.replace(tmp, path)
+                    except OSError:
+                        pass
+        finally:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+
+        if path.is_symlink():
+            raise ValueError(f"fingerprint key at {path} must not be a symlink")
+        existing = path.read_bytes() if path.is_file() else b""
+        if len(existing) < 32:
+            raise ValueError(
+                f"fingerprint key at {path} is shorter than 32 bytes ({len(existing)} bytes)"
+            )
+        return existing
 
     def fingerprint(self, workflow: str, inputs: Any) -> str:
         material = json.dumps(
