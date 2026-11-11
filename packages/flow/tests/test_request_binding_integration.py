@@ -809,3 +809,29 @@ def test_run_in_executor_hop_without_copied_context_gives_refused(task_case):
         reply_copied,
     )
     assert verified["status"] == "BOUND"
+
+
+def test_pre_2154_emitted_server_missing_request_context_gives_refused_with_diagnostic(
+    task_case,
+):
+    """Pin that a receipt lacking request context (e.g. from a pre-#2154 emitted server)
+    fails closed with REFUSED and includes the operator diagnostic directing to re-emit (#2155).
+    """
+    import concurrent.futures
+
+    task, cache, _runs = task_case
+    original_run = cache.run
+
+    # Simulates execution in a server or worker that does not set request context
+    def run_without_context(instruction, params, agent):
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(original_run, instruction, params, agent).result()
+
+    cache.run = run_without_context
+    reply = task.call("req-pre-2154", {"patient_id": "p1", "note": "pre-2154 note"})
+    binding = reply.get("receipt_binding")
+    assert binding is not None
+    assert binding["status"] == "REFUSED"
+    assert binding["reason"] == "RECEIPT_BINDING_UNAVAILABLE"
+    assert "compile-agent emit" in binding.get("diagnostic", "")
+    assert "before #2154" in binding.get("diagnostic", "")

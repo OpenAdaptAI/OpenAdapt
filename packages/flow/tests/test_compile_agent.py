@@ -788,3 +788,96 @@ def test_a_click_on_a_text_field_is_not_a_commit() -> None:
     harness = Harness(computer, SaveGate(["MRN P1"]))  # type: ignore[arg-type]
     harness.act({"action": "left_click", "coordinate": [1, 2]})
     assert len(computer.executed) == 1 and harness.stats.gate_checks == 0
+
+
+def test_server_needs_reemit_identifies_pre_2154_server(tmp_path: Path) -> None:
+    from openadapt_flow.compile_agent import FirstRunCompiler
+
+    verify = tmp_path / "verify.yaml"
+    verify.write_text(
+        "verifier:\n  kind: rest\n  base_url: http://127.0.0.1:1\n"
+        "  records_path: /records\n  records_key: records\n"
+    )
+    compiler = FirstRunCompiler(
+        "Save {note}",
+        params=["note"],
+        url="http://app.test",
+        verify=verify,
+        expect={"patient_id": "p1"},
+        on_screen=["MRN P1"],
+        cache_dir=tmp_path / "cache",
+    )
+    # 1. No server exists yet -> needs re-emit
+    assert compiler.server_needs_reemit() is True
+
+    # 2. Server emitted before #2154 (no mcp_request_scope) -> needs re-emit
+    server_dir = compiler.out_dir / "mcp"
+    server_dir.mkdir(parents=True, exist_ok=True)
+    server_path = server_dir / "server.py"
+    server_path.write_text(
+        '"""Legacy server emitted before #2154."""\n'
+        "from mcp.server.fastmcp import FastMCP\n"
+        'mcp = FastMCP("demo")\n'
+    )
+    assert compiler.server_needs_reemit() is True
+
+    # 3. Modern server emitted with mcp_request_scope -> up to date
+    server_path.write_text(
+        '"""Modern server with request-context scope."""\n'
+        "from openadapt_flow.request_binding import mcp_request_scope\n"
+        'mcp = FastMCP("demo")\n'
+    )
+    assert compiler.server_needs_reemit() is False
+
+
+def test_cmd_compile_agent_emit_subcommand(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import argparse
+
+    from openadapt_flow.compile_agent import FirstRunCompiler
+    from openadapt_flow.compile_agent.cli import cmd_compile_agent
+
+    task_dir = tmp_path / "task"
+    task_dir.mkdir()
+    verify = tmp_path / "verify.yaml"
+    verify.write_text(
+        "verifier:\n  kind: rest\n  base_url: http://127.0.0.1:1\n"
+        "  records_path: /records\n  records_key: records\n"
+    )
+
+    compiler = FirstRunCompiler(
+        "Save {note}",
+        params=["note"],
+        url="http://app.test",
+        verify=verify,
+        expect={"patient_id": "p1"},
+        on_screen=["MRN P1"],
+        cache_dir=tmp_path / "cache",
+        task_id="task",
+    )
+    compiler.save_spec()
+
+    # Unadmitted task directory raises SystemExit
+    args = argparse.Namespace(prompt="emit", task_dir=str(compiler.dir), json=False)
+    with pytest.raises(SystemExit, match="has no admitted program"):
+        cmd_compile_agent(args)
+
+    # Missing task_dir raises SystemExit
+    args_no_dir = argparse.Namespace(prompt="re-emit", task_dir=None, json=False)
+    with pytest.raises(SystemExit, match="needs the compiled task directory"):
+        cmd_compile_agent(args_no_dir)
+
+    # When admitted, emit succeeds and returns 0
+    monkeypatch.setattr(compiler, "_jit", lambda: SimpleNamespace(admitted=True))
+    emitted_calls = []
+    monkeypatch.setattr(
+        FirstRunCompiler,
+        "load",
+        lambda _path: SimpleNamespace(
+            _jit=lambda: SimpleNamespace(admitted=True),
+            emit=lambda: emitted_calls.append(True) or {"mcp_server": "server.py"},
+        ),
+    )
+    assert cmd_compile_agent(args) == 0
+    assert len(emitted_calls) == 1

@@ -1311,6 +1311,17 @@ class FirstRunCompiler:
         _write_json(self.out_dir / "emitted.json", emitted)
         return emitted
 
+    def server_needs_reemit(self) -> bool:
+        """True when the emitted mcp/server.py lacks request context binding (#2154)."""
+        server = self.out_dir / "mcp" / "server.py"
+        if not server.is_file():
+            return True
+        try:
+            source = server.read_text(encoding="utf-8")
+            return "mcp_request_scope" not in source
+        except OSError:
+            return True
+
     # -- every later run -------------------------------------------------------------
 
     def run(self, /, **params: Any) -> ReplayResult:
