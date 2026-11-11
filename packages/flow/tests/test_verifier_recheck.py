@@ -1498,6 +1498,7 @@ def _settled_ledger(outcome: str) -> tuple[Any, str]:
         key,
         "first",
         outcome=outcome,
+        receipt_sha256="a" * 64,
         result={"provisional": outcome == "CONFIRMED", "recheck_due_at": "due"},
     )
     return led, key
@@ -1508,6 +1509,7 @@ def _late_confirmed() -> RecheckResult:
         outcome="CONFIRMED",
         frame="held",
         reasons=["nothing unexplained moved"],
+        receipt_sha256="a" * 64,
         read_at="2026-11-09T00:00:00Z",
     )
 

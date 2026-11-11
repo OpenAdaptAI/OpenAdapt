@@ -2481,11 +2481,10 @@ def _mark_rechecked(
     retry is handed a result that is no longer provisional.
 
     A journal change can invalidate this positive observation. If the
-    revision changed or recording fails, return UNCERTAIN. When the ledger
-    already settled the attempt as REFUTED or UNCERTAIN, a fresh positive
-    read never upgrades that entry in place: nothing is recorded, the
-    ledger outcome stays as it was, and the reply is UNCERTAIN with the
-    prior settlement as the reason. The read facts stay intact.
+    revision changed or recording fails, return UNCERTAIN. A prior REFUTED settlement is never upgraded by a fresh positive read.
+    A transient UNCERTAIN recheck may recover only the same originally
+    confirmed receipt under the unchanged pre-read journal revision.
+    The read facts stay intact when recording refuses.
     """
 
     try:
@@ -2523,9 +2522,15 @@ def _mark_rechecked(
                 ],
             )
         prior = (attempt.resolved or {}).get("outcome")
+        if prior == "UNCERTAIN":
+            recovered = _recover_recheck(led, key, attempt, late, expected_revision)
+            if recovered is not None:
+                attempt = recovered
+                expected_revision = attempt.revision
+                prior = (attempt.resolved or {}).get("outcome")
         if prior != "CONFIRMED":
-            # Never upgrade an old REFUTED or UNCERTAIN ledger entry in place:
-            # the ledger keeps its settlement and this reply is not a pass.
+            # Other settlements cannot authorize a pass. Transient recovery
+            # above requires the original receipt and an unchanged journal.
             return _replace(
                 late,
                 outcome="UNCERTAIN",
@@ -2533,6 +2538,15 @@ def _mark_rechecked(
                     *late.reasons,
                     f"the ledger settled this write as {prior or 'unresolved'}; "
                     "a later positive read does not change that settlement",
+                ],
+            )
+        if (attempt.resolved or {}).get("receipt_sha256") != late.receipt_sha256:
+            return _replace(
+                late,
+                outcome="UNCERTAIN",
+                reasons=[
+                    *late.reasons,
+                    "the ledger confirmation names another receipt",
                 ],
             )
         # Only reached after this contract's authenticated checkpoint and
@@ -2577,6 +2591,76 @@ def _mark_rechecked(
             ],
         )
     return late
+
+
+def _recover_recheck(
+    ledger: Ledger,
+    key: str,
+    attempt: Attempt,
+    late: RecheckResult,
+    expected_revision: Optional[int],
+) -> Optional[Attempt]:
+    """Recover only a transient recheck of this originally confirmed receipt.
+
+    The pre-read journal revision binds the fresh native observation. A
+    refutation or person decision is never replaced by restoring current rows.
+    The restored result stays provisional until the separate rechecked event
+    is accepted, so an interrupted recovery cannot claim final completion.
+    """
+    prior = attempt.resolved or {}
+    events = [event for event in attempt.events if event.get("applied") is not False]
+    if (
+        type(expected_revision) is not int
+        or expected_revision < 0
+        or attempt.released
+        or prior.get("via") != "recheck"
+        or prior.get("receipt_sha256") != late.receipt_sha256
+        or any(
+            event.get("event") == "released"
+            or event.get("via") == "person"
+            or event.get("event") == "resolved"
+            and event.get("outcome") == "REFUTED"
+            for event in events
+        )
+    ):
+        return None
+    original = next(
+        (
+            event
+            for event in reversed(events)
+            if event.get("event") == "resolved"
+            and event.get("outcome") == "CONFIRMED"
+            and event.get("receipt_sha256") == late.receipt_sha256
+            and isinstance(event.get("result"), Mapping)
+            and event["result"].get("verified") is True
+            and event["result"].get("outcome") == "CONFIRMED"
+            and event["result"].get("provisional") is True
+        ),
+        None,
+    )
+    if original is None:
+        return None
+    recorded = ledger.resolved(
+        key,
+        attempt.attempt_id,
+        outcome="CONFIRMED",
+        retry_safe=False,
+        landed=False,
+        review=False,
+        delivered=True,
+        via="recheck",
+        write_key_bound=bool(original.get("write_key_bound")),
+        receipt_sha256=late.receipt_sha256,
+        result=dict(original["result"]),
+        expected_revision=expected_revision,
+    )
+    if (
+        recorded.attempt_id != attempt.attempt_id
+        or not recorded.events
+        or recorded.events[-1].get("applied") is False
+    ):
+        raise LedgerError("the ledger changed during the fresh recheck")
+    return recorded
 
 
 def _recheck_claim_id(receipt: str, excuses: Sequence[str]) -> str:
