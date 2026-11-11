@@ -115,9 +115,7 @@ def _teach_hooks(acquisition: _Acquisition, monkeypatch: pytest.MonkeyPatch) -> 
     )
 
 
-@pytest.mark.parametrize(
-    "failure", ["new-context", "route", "new-page", "containment"]
-)
+@pytest.mark.parametrize("failure", ["new-context", "route", "new-page", "containment"])
 def test_teach_closes_only_acquired_resources(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str
 ) -> None:

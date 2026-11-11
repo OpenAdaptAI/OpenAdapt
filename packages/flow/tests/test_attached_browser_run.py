@@ -252,9 +252,10 @@ def test_practice_run_starts_from_the_signed_in_session_it_was_recorded_in(
 
     # The fix: the same program attached to the signed-in browser passes
     # step 1 and finishes, and the person's browser stays open and signed in.
-    with _start_signed_in_chromium(
-        executable, signed_in_app, tmp_path / "profile"
-    ) as (process, endpoint):
+    with _start_signed_in_chromium(executable, signed_in_app, tmp_path / "profile") as (
+        process,
+        endpoint,
+    ):
         # A window that shows the application at another size is refused
         # before any input, so the run never acts on unproven geometry.
         _size_signed_in_tab(endpoint, recorded_width, recorded_height - 100)

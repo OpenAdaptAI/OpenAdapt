@@ -934,9 +934,7 @@ class _Browser:
 
         self.redirects = guard_redirects(self.page, self._guard, self.blocked.append)
         if not self.redirects.ok:
-            raise BridgeError(
-                self.redirects.problem or self.redirects.violations[0]
-            )
+            raise BridgeError(self.redirects.problem or self.redirects.violations[0])
         if scope is not None:
             forbidden = scope.forbidden_actions
             if "new_window" in forbidden:
