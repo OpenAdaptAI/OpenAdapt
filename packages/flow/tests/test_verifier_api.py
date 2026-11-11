@@ -16,8 +16,10 @@ import pytest
 from openadapt_flow import verifier as verifier_api
 from openadapt_flow.verifier import (
     Actor,
+    AlreadyWritten,
     BaselineUnreadable,
     Contract,
+    FileLedger,
     MemoryLedger,
     Outcome,
     RecheckResult,
@@ -106,6 +108,78 @@ def test_a_correct_write_is_confirmed(tmp_path: Path) -> None:
     assert len(result.receipt_sha256) == 64
     assert result.checked["delta"] == "held" and result.checked["frame"] == "held"
     assert result.reasons == [] and result.observed == "present"
+
+
+@pytest.mark.parametrize(
+    ("options", "digest"),
+    [
+        ({}, None),
+        ({"task_record_sha256": None}, None),
+        ({"task_record_sha256": "a" * 64}, "a" * 64),
+    ],
+    ids=["omitted", "explicit-none", "digest"],
+)
+def test_task_record_digest_only_annotates_the_original_begin(
+    tmp_path: Path, options: dict[str, Any], digest: str | None
+) -> None:
+    db = _store(tmp_path)
+    contract = _contract(db)
+    pending = begin_write(contract, PARAMS, actor=BOT, write_key="task", **options)
+    reopened = FileLedger(tmp_path / "ledger")
+    assert reopened.keys() == [pending.write_key]
+    (begun,) = reopened.events(pending.write_key)
+    assert begun["event"] == "begun" and begun["attempt"] == pending.write_id
+    if digest is None:
+        assert "task_record_sha256" not in begun
+    else:
+        assert begun["task_record_sha256"] == digest
+
+    _write(db, SAVE)
+    result = verify_write(pending)
+    assert result.outcome is Outcome.CONFIRMED
+    assert "task_record_sha256" not in result.to_dict()
+    assert "task_record_sha256" not in result.receipt
+    with pytest.raises(AlreadyWritten) as caught:
+        begin_write(
+            contract,
+            PARAMS,
+            actor=BOT,
+            ledger=reopened,
+            write_key="task",
+            task_record_sha256="b" * 64,
+        )
+    assert caught.value.key == pending.write_key
+    assert caught.value.result["receipt_sha256"] == result.receipt_sha256
+    assert caught.value.result["not_sent_again"] is True
+    events = reopened.events(pending.write_key)
+    assert events[0] == begun
+    assert all("task_record_sha256" not in event for event in events[1:])
+
+
+@pytest.mark.parametrize("digest", ["", "a" * 63, "A" * 64, "g" * 64, "a" * 64 + "\n", 42])
+def test_invalid_task_record_digest_fails_before_ledger_or_baseline(
+    tmp_path: Path, digest: Any
+) -> None:
+    contract = _contract(tmp_path / "unreadable.sqlite")
+    with pytest.raises(VerifierError, match="task_record_sha256 must be 64 lowercase hex"):
+        begin_write(contract, PARAMS, actor=BOT, task_record_sha256=digest)
+    assert not (tmp_path / "ledger").exists()
+
+
+def test_task_record_digest_cannot_be_silently_discarded_without_a_ledger(
+    tmp_path: Path,
+) -> None:
+    contract = _contract(tmp_path / "unreadable.sqlite")
+    with pytest.raises(VerifierError, match="task_record_sha256 requires a write ledger"):
+        begin_write(
+            contract,
+            PARAMS,
+            actor=BOT,
+            ledger=None,
+            workdir=tmp_path,
+            task_record_sha256="a" * 64,
+        )
+    assert not list(tmp_path.iterdir())
 
 
 def test_a_result_says_what_it_establishes(tmp_path: Path) -> None:
@@ -341,7 +415,10 @@ def test_the_public_api_is_stable() -> None:
         ("workdir", "KEYWORD_ONLY"),
         ("declared_by", "KEYWORD_ONLY"),
         ("read_provider", "KEYWORD_ONLY"),
+        ("task_record_sha256", "KEYWORD_ONLY"),
     ]
+    digest_parameter = inspect.signature(begin_write).parameters["task_record_sha256"]
+    assert digest_parameter.default is None
     assert params(verify_write) == [
         ("pending", "POSITIONAL_OR_KEYWORD"),
         # before, params, actor and authorization_ref: the deprecated
