@@ -383,7 +383,7 @@ jobs:
           python - <<'PY'
           import xml.etree.ElementTree as ET
           cases = ET.parse("tests.xml").getroot().findall(".//testcase")
-          assert len(cases) == 45, "all independent-store controls must run"
+          assert len(cases) == 52, "all independent-store controls must run"
           assert not any(c.find("skipped") is not None for c in cases), "SDK/MCP controls must not skip"
           PY
       - name: MCP transport against the facade's own lock
