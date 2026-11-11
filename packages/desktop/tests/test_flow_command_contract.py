@@ -7,12 +7,12 @@ version before exercising its genuine parser and CLI.
 
 from __future__ import annotations
 
-from importlib.metadata import PackageNotFoundError, version
 import os
-from pathlib import Path
 import subprocess
 import sysconfig
 import tomllib
+from importlib.metadata import PackageNotFoundError, version
+from pathlib import Path
 
 import pytest
 
