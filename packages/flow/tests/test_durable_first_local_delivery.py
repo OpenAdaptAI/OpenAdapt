@@ -11,6 +11,7 @@ from types import SimpleNamespace
 import pytest
 
 from openadapt_flow.ir import ApiBinding, Workflow
+from openadapt_flow.run_gate import is_consequential, must_be_identity_armed
 from openadapt_flow.runtime.actuators import ApiActuator
 from openadapt_flow.runtime.durable import (
     ApprovalRequired,
@@ -25,7 +26,14 @@ from openadapt_flow.runtime.durable.first_local_delivery import FirstLocalDelive
 from openadapt_flow.runtime.effects import Effect, EffectKind, SqlRecordVerifier
 from openadapt_flow.runtime.replayer import Replayer
 from tests.test_durable_runtime import _approval, _key_step, _vision_ok
-from tests.test_replayer import FakeBackend
+from tests.test_governed_authorization import _authorization
+from tests.test_replayer import (
+    FakeBackend,
+    OcrLine,
+    context_click_step,
+    make_png,
+    resolving_vision,
+)
 
 
 class LegInterrupted(BaseException):
@@ -68,15 +76,16 @@ class LocalRun:
         with closing(sqlite3.connect(self.database)) as conn:
             return conn.execute("SELECT step FROM records ORDER BY id").fetchall()
 
-    def replayer(self, backend, *, actuator=None):
+    def replayer(self, backend, *, actuator=None, vision=None, authorization=None):
         verifier = SqlRecordVerifier(
             lambda: sqlite3.connect(self.database.as_uri() + "?mode=ro", uri=True),
             "SELECT id, step FROM records",
         )
         return Replayer(
             backend,
-            vision=_vision_ok(),
+            vision=vision if vision is not None else _vision_ok(),
             effect_verifier=verifier,
+            governed_authorization=authorization,
             api_actuator=actuator,
             durable=True,
             poll_interval_s=0.01,
@@ -265,3 +274,126 @@ def test_standalone_first_local_api_is_armed_before_the_fake_request(tmp_path):
     assert checkpoint.actuation == "api" and checkpoint.effect_verified is True
     assert seen_pauses == [checkpoint.first_local_pause_sha256]
     assert local.store.read_pending() is None
+
+
+def test_identity_navigation_precedes_a_separately_fenced_write(tmp_path):
+    local = LocalRun(tmp_path)
+    context = "Jane Sample Knee pain referral High"
+    navigation = context_click_step(context, step_id="open", ocr_text="Open")
+    local.bundle = tmp_path / "navigation-bundle"
+    templates = local.bundle / "templates"
+    templates.mkdir(parents=True)
+    (templates / "btn.png").write_bytes(make_png((50, 20)))
+    workflow = Workflow(
+        name="navigate-then-write", steps=[navigation, *local.workflow.steps]
+    )
+    workflow.save(local.bundle)
+    workflow = Workflow.load(local.bundle)
+    navigation, write = workflow.steps
+    assert must_be_identity_armed(navigation, workflow)
+    assert not is_consequential(navigation, workflow)
+    assert is_consequential(write, workflow)
+    authorization = _authorization(workflow, required=(navigation.id,))
+
+    class NavigatingBackend(WritingBackend):
+        def click(self, x, y, *, double=False):
+            assert local.store.read_pending() is None
+            assert local.store.checkpoints() == []
+            assert local.rows() == []
+            super().click(x, y, double=double)
+
+    pause_digests = []
+
+    def before_write():
+        [checkpoint] = local.store.checkpoints()
+        assert checkpoint.step_id == "open"
+        assert checkpoint.first_local_pause_sha256 is None
+        pending = local.store.read_pending()
+        assert pending is not None and pending.step_id == "write"
+        assert pending.resume_from_index == 1 and pending.resume_from_step_id == "open"
+        assert pending.category == "delivery_uncertain"
+        assert pending.delivery_uncertainty is not None
+        assert pending.delivery_uncertainty.operation == "first_local_delivery"
+        assert pending.delivery_uncertainty.native is True
+        assert local.rows() == []
+        pause_digests.append(approval_pause_digest(pending))
+
+    vision = resolving_vision()
+    vision.ocr_lines = [OcrLine(context)]
+    vision.text_results = _vision_ok().text_results
+    backend = NavigatingBackend(local, before_write=before_write)
+    report = local.replayer(
+        backend, vision=vision, authorization=authorization
+    ).run(workflow, bundle_dir=local.bundle, run_dir=local.run_dir)
+
+    assert report.success is True
+    opened, written = report.results
+    assert opened.identity is not None and opened.identity.status == "verified"
+    assert opened.effect_verified is None and written.effect_verified is True
+    assert backend.actions == [("click", 110, 105, False), ("press", "A")]
+    first, second = local.store.checkpoints()
+    assert first.step_id == "open" and first.first_local_pause_sha256 is None
+    assert second.step_id == "write" and second.effect_verified is True
+    assert pause_digests == [second.first_local_pause_sha256]
+    assert local.rows() == [("write",)] and local.store.read_pending() is None
+
+
+@pytest.mark.parametrize("actuation", ["gui", "api"])
+@pytest.mark.parametrize("contract", ["empty", "placeholder"])
+def test_invalid_selected_effect_contract_refuses_before_input(
+    tmp_path, actuation, contract
+):
+    local = LocalRun(tmp_path)
+    [step] = local.workflow.steps
+    [effect] = step.effects
+    invalid = (
+        [effect.model_copy(update={"needs_operator_confirmation": True})]
+        if contract == "placeholder"
+        else []
+    )
+    # Each fixture has valid effects on the alternate path. They cannot cover
+    # missing or placeholder evidence on the path the runtime would select.
+    step.effects = invalid if actuation == "gui" else [effect]
+    step.api_binding = ApiBinding(
+        method="POST",
+        url_template="/records",
+        body_template={"step": "write"},
+        effects=invalid if actuation == "api" else [effect],
+        on_unavailable="gui",
+    )
+    local.bundle = tmp_path / "invalid-contract-bundle"
+    local.workflow.save(local.bundle)
+    requests = []
+
+    def request(method, url, **kwargs):
+        requests.append((method, url))
+        local.write()
+        return SimpleNamespace(status_code=201)
+
+    actuator = (
+        ApiActuator("https://fixture.invalid", session=SimpleNamespace(request=request))
+        if actuation == "api"
+        else None
+    )
+    backend = WritingBackend(local)
+    report = local.run(backend, actuator=actuator)
+
+    assert report.success is False
+    [result] = report.results
+    assert result.safety_halt and result.delivery_attempted is False
+    assert backend.actions == [] and requests == [] and local.rows() == []
+    assert local.store.checkpoints() == []
+    pending = local.store.read_pending()
+    assert pending is not None and pending.step_id == "write"
+    assert pending.delivery_uncertainty is None and pending.reason == result.error
+    if contract == "placeholder":
+        assert pending.category == "placeholder_effect"
+        assert result.effect_verified is False
+        assert "unconfirmed PLACEHOLDER" in pending.reason
+        assert any("binding" in option for option in pending.proposed_options)
+    elif actuation == "api":
+        assert "no api_binding.effects contract" in result.effect_results[0]
+    else:
+        assert "requires an effect contract for the selected actuation path" in (
+            pending.reason
+        )

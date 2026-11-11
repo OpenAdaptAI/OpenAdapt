@@ -190,7 +190,9 @@ from openadapt_flow.runtime.durable.first_local_delivery import FirstLocalDelive
 from openadapt_flow.runtime.durable.first_local_runtime import (
     FirstLocalDeliveryStep,
     arm_first_local_delivery,
+    first_local_effect_refusal,
     mark_first_local_delivery_held,
+    placeholder_effect_refusal,
     run_with_output,
 )
 from openadapt_flow.runtime.durable.program_checkpoint import (
@@ -8272,6 +8274,14 @@ class Replayer:
             result.elapsed_ms = (time.monotonic() - t0) * 1000.0
             return result
 
+        first_local_gui = (
+            self._first_local_delivery_step is not None
+            and is_consequential(step, workflow)
+        )
+        if first_local_gui and first_local_effect_refusal(step, result, step.effects):
+            result.elapsed_ms = (time.monotonic() - t0) * 1000.0
+            return result
+
         # Default behavior settles exactly as before. The opt-in readiness gate
         # owns its own single bounded settle call inside ``_apply_step_gates``;
         # capture only a raw diagnostic frame here so it is not preceded by an
@@ -8609,6 +8619,7 @@ class Replayer:
                     authorization = self.governed_authorization
                     approved = (
                         authorization is not None
+                        and not first_local_gui
                         and authorization.approves_unverified_write(step)
                     )
                     if approved:
@@ -9665,6 +9676,10 @@ class Replayer:
                 "(deployment/configuration error); run aborted"
             )
             return True
+        if self._first_local_delivery_step is not None and first_local_effect_refusal(
+            step, result, effects
+        ):
+            return True
         identity_refusal = self._api_identity_refusal(
             step,
             params,
@@ -10652,26 +10667,9 @@ class Replayer:
         if effects is None:
             effects = step.effects
         for effect in effects:
-            # A compiler-mined PLACEHOLDER effect (binding not derivable from
-            # the demonstration — see compiler.effect_mining) carries a
-            # sentinel selector, NOT a real one. Never verify it against the
-            # system of record: that would either falsely refute or, worse,
-            # silently pass. Fail-safe HALT until an operator completes the
-            # binding and clears the flag — same posture as the identity gate.
-            if effect.needs_operator_confirmation:
-                result.effect_verified = False
-                result.effect_results.append(
-                    f"[unbound] {effect.kind.value}: NEEDS OPERATOR "
-                    "CONFIRMATION — placeholder effect not bound to the system "
-                    "of record (compiler could not derive it); HALT"
-                )
-                return (
-                    f"System-of-record effect for step '{step.id}' "
-                    f"({step.intent}) is an unconfirmed PLACEHOLDER — the "
-                    "compiler flagged its binding as app-specific and it must "
-                    "be completed by an operator before this consequential "
-                    "write can run — run aborted"
-                )
+            refusal = placeholder_effect_refusal(step, effect, result)
+            if refusal is not None:
+                return refusal
             try:
                 verdict = verify_effect_without_mutation(verifier, effect, before)
                 scope = effect_endpoint_scope(verifier)
@@ -12968,7 +12966,7 @@ class Replayer:
             and self._first_local_delivery_step is not None
             and not interstitial
             and not api_delivery
-            and self._step_is_consequential(step, workflow)
+            and is_consequential(step, workflow)
         ):
             refusal = arm_first_local_delivery(self, step, params, actuation="gui")
         if refusal is not None:

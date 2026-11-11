@@ -692,6 +692,7 @@ def test_sealed_run_pauses_and_resumes_without_plaintext(
     from openadapt_flow.runtime.replayer import Replayer
     from tests.test_durable_runtime import (
         FakeSoRVerifier,
+        _resume_after_proven_no_input,
         _three_step_workflow,
         _vision_ok,
     )
@@ -705,17 +706,9 @@ def test_sealed_run_pauses_and_resumes_without_plaintext(
     verifier = FakeSoRVerifier()
     verifier.refute.add((("step", "s2"),))
     with watching_disk() as watch:
-        report = Replayer(
-            FakeBackend(),
-            vision=_vision_ok(),
-            effect_verifier=verifier,
-            durable=True,
-            poll_interval_s=0.01,
-        ).run(
-            Workflow.load(bundle),
-            params={"who": "Testpatient Zed"},
-            bundle_dir=bundle,
-            run_dir=run_dir,
+        report = _resume_after_proven_no_input(
+            Workflow.load(bundle), bundle, run_dir, FakeBackend(), verifier,
+            params={"who": "Testpatient Zed"}, checkpoint_key=KEY,
         )
         assert report.success is False
         store = CheckpointStore(run_dir, key=KEY)

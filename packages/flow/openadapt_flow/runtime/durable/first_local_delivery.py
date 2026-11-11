@@ -12,7 +12,6 @@ from pathlib import Path
 
 from openadapt_flow.ir import ActionDeliveryUncertainty
 
-
 FIRST_LOCAL_DELIVERY = "first_local_delivery"
 FIRST_LOCAL_DELIVERY_CAUSE = "FirstLocalDeliveryWriteAhead"
 _ACTIVE_LOCAL_OWNER: ContextVar[Path | None] = ContextVar(

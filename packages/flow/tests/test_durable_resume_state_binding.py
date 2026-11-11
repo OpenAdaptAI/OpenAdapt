@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from openadapt_flow.bundle_validation import BundleIntegrityError
 from openadapt_flow.ir import (
     ActionKind,
     Anchor,
@@ -26,7 +27,12 @@ from openadapt_flow.runtime.durable import (
 )
 from openadapt_flow.runtime.effects import Effect, EffectKind
 from openadapt_flow.runtime.replayer import Replayer
-from tests.test_durable_runtime import FakeSoRVerifier, _approval, _retry_approval
+from tests.test_durable_runtime import (
+    FakeSoRVerifier,
+    _approval,
+    _resume_after_proven_no_input,
+    _retry_approval,
+)
 from tests.test_replayer import FakeBackend, FakeVision, Match
 
 
@@ -98,13 +104,18 @@ def _run_to_second_action_pause(tmp_path, workflow: Workflow):
     workflow.save(bundle)
     verifier = FakeSoRVerifier()
     verifier.refute.add((("step", "s1"),))
-    report = Replayer(
-        FakeBackend(),
-        vision=FakeVision(),
-        effect_verifier=verifier,
-        durable=True,
-        poll_interval_s=0.0,
-    ).run(workflow, bundle_dir=bundle, run_dir=run_dir)
+    if workflow.program is None:
+        report = _resume_after_proven_no_input(
+            workflow, bundle, run_dir, FakeBackend(), verifier, vision=FakeVision()
+        )
+    else:
+        report = Replayer(
+            FakeBackend(),
+            vision=FakeVision(),
+            effect_verifier=verifier,
+            durable=True,
+            poll_interval_s=0.0,
+        ).run(workflow, bundle_dir=bundle, run_dir=run_dir)
     assert report.success is False
     return bundle, run_dir, verifier
 
@@ -240,9 +251,21 @@ def test_replacing_sealed_template_invalidates_exact_resume_approval(
     approval = _approval(bundle)
     approved_version = approval.bundle_version
 
+    # An edited file cannot be saved as if it were still the verified source.
+    loaded = Workflow.load(bundle)
+    original = asset.read_bytes()
     asset.write_bytes(b"replacement template")
-    workflow.save(bundle)
-    assert bundle_version(bundle) != approved_version
+    try:
+        with pytest.raises(BundleIntegrityError):
+            loaded.save(tmp_path / "refused")
+    finally:
+        asset.write_bytes(original)
+
+    # A valid, intentionally derived bundle still cannot inherit approval.
+    derivative = tmp_path / "derivative"
+    loaded.stage_verified_template_replacement(relative, b"replacement template")
+    loaded.save(derivative)
+    assert bundle_version(derivative) != approved_version
 
     backend = FakeBackend()
     with pytest.raises(BundleMismatch, match="program changed"):
@@ -255,5 +278,6 @@ def test_replacing_sealed_template_invalidates_exact_resume_approval(
                 poll_interval_s=0.0,
             ),
             approval=approval,
+            bundle_dir=derivative,
         )
     assert backend.actions == []

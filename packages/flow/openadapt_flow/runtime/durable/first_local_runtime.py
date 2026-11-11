@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from openadapt_flow.ir import RunReport, Step, StepResult, Workflow
     from openadapt_flow.runtime.authorization import RuntimeParamScalar
     from openadapt_flow.runtime.durable.program_checkpoint import ProgramCheckpoint
+    from openadapt_flow.runtime.effects.effect import Effect
     from openadapt_flow.runtime.replayer import Replayer
 
 
@@ -36,6 +37,48 @@ def mark_first_local_delivery_held(result: StepResult, reason: str) -> None:
     result.safety_halt = True
     result.failure_category = "safety_halt"
     result.error = reason
+
+
+def placeholder_effect_refusal(
+    step: Step, effect: Effect, result: StepResult
+) -> Optional[str]:
+    # A compiler-mined placeholder carries a sentinel selector, not a real one.
+    # Refuse before using it as evidence until an operator completes the binding.
+    if not effect.needs_operator_confirmation:
+        return None
+    result.effect_verified = False
+    result.effect_results.append(
+        f"[unbound] {effect.kind.value}: NEEDS OPERATOR "
+        "CONFIRMATION — placeholder effect not bound to the system "
+        "of record (compiler could not derive it); HALT"
+    )
+    return (
+        f"System-of-record effect for step '{step.id}' "
+        f"({step.intent}) is an unconfirmed PLACEHOLDER — the "
+        "compiler flagged its binding as app-specific and it must "
+        "be completed by an operator before this consequential "
+        "write can run — run aborted"
+    )
+
+
+def first_local_effect_refusal(
+    step: Step, result: StepResult, effects: list[Effect]
+) -> bool:
+    if not effects:
+        result.error = (
+            "first local consequential delivery requires an effect contract "
+            "for the selected actuation path; refusing input"
+        )
+    else:
+        for effect in effects:
+            refusal = placeholder_effect_refusal(step, effect, result)
+            if refusal is not None:
+                result.error = refusal
+                break
+        else:
+            return False
+    result.safety_halt = True
+    return True
 
 
 def arm_first_local_delivery(

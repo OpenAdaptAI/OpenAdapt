@@ -175,13 +175,13 @@ def _dirs(tmp_path):
 
 
 def _approval(
-    bundle, run_dir=None, *, authorize_uncertain_retry: bool = False
+    bundle, run_dir=None, *, authorize_uncertain_retry: bool = False, checkpoint_key=None
 ) -> ApprovalRecord:
     """An authenticated approval for the given bundle (P0-5): resume now REQUIRES
     one, so every legitimate resume in these tests carries an operator identity,
     a chosen resolution, and the bundle version it was granted against."""
     run_dir = run_dir or bundle.parent / "run"
-    store = CheckpointStore(run_dir)
+    store = CheckpointStore(run_dir, key=checkpoint_key)
     manifest = store.read_manifest()
     pending = store.read_pending()
     assert manifest is not None and pending is not None
@@ -259,10 +259,52 @@ def test_linear_resume_never_synthesizes_missing_verified_history(tmp_path):
 # -- halt mid-way: pending escalation + prior checkpoints -------------------
 
 
-def _run_to_halt(tmp_path):
-    """A 3-step effectful run whose THIRD step (s2) is REFUTED -> halt.
+class _StopBeforeInput(Replayer):
+    """Add an authorization refusal to a synthetic run before any input."""
 
-    Returns (report, run_dir, bundle, verifier)."""
+    def _fresh_actuation_authorization_refusal(self, workflow, params, step):
+        return super()._fresh_actuation_authorization_refusal(
+            workflow, params, step
+        ) or "synthetic operator stop before the first input"
+
+
+def _resume_after_proven_no_input(
+    workflow, bundle, run_dir, backend, verifier, *, params=None,
+    ledger=None, key=None, checkpoint_key=None, vision=None,
+):
+    """Exercise existing resume with an authenticated pre-input pause."""
+    first_backend = FakeBackend()
+    first = _StopBeforeInput(
+        first_backend,
+        vision=vision or _vision_ok(),
+        effect_verifier=verifier,
+        idempotency_ledger=ledger,
+        durable=True,
+        poll_interval_s=0.01,
+    ).run(workflow, params=params, bundle_dir=bundle, run_dir=run_dir, idempotency_key=key)
+    assert first.success is False
+    assert first_backend.actions == []
+    store = CheckpointStore(run_dir, key=checkpoint_key)
+    pending = store.read_pending()
+    assert pending is not None and pending.step_index == 0
+    assert pending.delivery_uncertainty is None
+    assert store.checkpoints() == []
+    return resume(
+        run_dir,
+        Replayer(
+            backend,
+            vision=vision or _vision_ok(),
+            effect_verifier=verifier,
+            idempotency_ledger=ledger,
+            poll_interval_s=0.01,
+        ),
+        approval=_approval(bundle, run_dir, checkpoint_key=checkpoint_key),
+        key=checkpoint_key,
+    )
+
+
+def _run_to_halt(tmp_path):
+    """Create a post-delivery halt on the authenticated resumed leg."""
     verifier = FakeSoRVerifier()
     verifier.refute.add((("step", "s2"),))  # the third step's effect refutes
     backend = FakeBackend()
@@ -270,16 +312,13 @@ def _run_to_halt(tmp_path):
     bundle, run_dir = _dirs(tmp_path)
     workflow.save(bundle)
 
-    replayer = Replayer(
-        backend,
-        vision=_vision_ok(),
-        effect_verifier=verifier,
-        durable=True,
-        poll_interval_s=0.01,
+    report = _resume_after_proven_no_input(
+        workflow, bundle, run_dir, backend, verifier, params={"who": "alice"}
     )
-    report = replayer.run(
-        workflow, params={"who": "alice"}, bundle_dir=bundle, run_dir=run_dir
-    )
+    assert backend.actions == [("press", "A"), ("press", "B"), ("press", "C")]
+    pending = CheckpointStore(run_dir).read_pending()
+    assert pending is not None and pending.delivery_uncertainty is not None
+    assert pending.delivery_uncertainty.cause_type == "post_delivery_unverified"
     return report, run_dir, bundle, backend, verifier
 
 
@@ -539,13 +578,9 @@ def test_resume_egress_posture_stays_sticky_across_a_second_resume(tmp_path):
     bundle, run_dir = _dirs(tmp_path)
     workflow.save(bundle)
 
-    initial = Replayer(
-        FakeBackend(),
-        vision=_vision_ok(),
-        effect_verifier=verifier,
-        durable=True,
-        poll_interval_s=0.01,
-    ).run(workflow, bundle_dir=bundle, run_dir=run_dir)
+    initial = _resume_after_proven_no_input(
+        workflow, bundle, run_dir, FakeBackend(), verifier
+    )
     assert initial.success is False
     store = CheckpointStore(run_dir)
     manifest = store.read_manifest()
@@ -644,19 +679,9 @@ def test_durable_resume_projection_failure_keeps_fail_closed_terminal_evidence(
     workflow = _three_step_workflow(with_effects=True)
     bundle, run_dir = _dirs(tmp_path)
     workflow.save(bundle)
-    initial = Replayer(
-        FakeBackend(),
-        vision=_vision_ok(),
-        effect_verifier=verifier,
-        idempotency_ledger=ledger,
-        durable=True,
-        poll_interval_s=0.01,
-    ).run(
-        workflow,
-        params={"who": "alice"},
-        bundle_dir=bundle,
-        run_dir=run_dir,
-        idempotency_key="durable-projection-key",
+    initial = _resume_after_proven_no_input(
+        workflow, bundle, run_dir, FakeBackend(), verifier,
+        params={"who": "alice"}, ledger=ledger, key="durable-projection-key",
     )
     assert initial.success is False
     pending = CheckpointStore(run_dir).read_pending()
@@ -718,19 +743,9 @@ def test_durable_pause_defers_ledger_outcome_until_resume_verifies(tmp_path):
     workflow = _three_step_workflow(with_effects=True)
     bundle, run_dir = _dirs(tmp_path)
     workflow.save(bundle)
-    Replayer(
-        FakeBackend(),
-        vision=_vision_ok(),
-        effect_verifier=verifier,
-        idempotency_ledger=ledger,
-        durable=True,
-        poll_interval_s=0.01,
-    ).run(
-        workflow,
-        params={"who": "alice"},
-        bundle_dir=bundle,
-        run_dir=run_dir,
-        idempotency_key="durable-final-key",
+    _resume_after_proven_no_input(
+        workflow, bundle, run_dir, FakeBackend(), verifier,
+        params={"who": "alice"}, ledger=ledger, key="durable-final-key",
     )
     assert ledger.lookup("durable-final-key")["outcome"] is None
 
@@ -1140,14 +1155,10 @@ def test_halt_on_first_step_resumes_from_zero(tmp_path):
     bundle, run_dir = _dirs(tmp_path)
     workflow.save(bundle)
 
-    replayer = Replayer(
-        backend,
-        vision=_vision_ok(),
-        effect_verifier=verifier,
-        durable=True,
-        poll_interval_s=0.01,
+    report = _resume_after_proven_no_input(
+        workflow, bundle, run_dir, backend, verifier
     )
-    report = replayer.run(workflow, bundle_dir=bundle, run_dir=run_dir)
+    assert backend.actions == [("press", "A")]
 
     assert report.success is False
     store = CheckpointStore(run_dir)
