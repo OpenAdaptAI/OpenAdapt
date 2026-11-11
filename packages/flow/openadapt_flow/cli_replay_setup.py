@@ -1,18 +1,32 @@
 """Deployment wiring and non-authorizing replay preparation for the CLI."""
+
 from __future__ import annotations
 
 import argparse
 from typing import TYPE_CHECKING, Callable, Mapping
 
 if TYPE_CHECKING:
-    from openadapt_flow.deployment import ActuationConfig, BackendConfig, DeploymentConfig, EffectsConfig
+    from openadapt_flow.deployment import (
+        ActuationConfig,
+        BackendConfig,
+        DeploymentConfig,
+        EffectsConfig,
+    )
     from openadapt_flow.ir import Workflow
     from openadapt_flow.runtime.authorization import RuntimeParamScalar
 
 
 def deployment_runtime(
-    args: argparse.Namespace, params: Mapping[str, RuntimeParamScalar] | None,
-    *, sections: Callable[[], Callable[[argparse.Namespace], tuple[DeploymentConfig, EffectsConfig, ActuationConfig]]],
+    args: argparse.Namespace,
+    params: Mapping[str, RuntimeParamScalar] | None,
+    *,
+    sections: Callable[
+        [],
+        Callable[
+            [argparse.Namespace],
+            tuple[DeploymentConfig, EffectsConfig, ActuationConfig],
+        ],
+    ],
 ):
     """Resolve the deployment wiring for a replay/run from ``--config`` + flags.
 
@@ -69,12 +83,19 @@ def deployment_runtime(
 
 
 def dry_run_replay_refusal(
-    args: argparse.Namespace, cfg: DeploymentConfig, backend_cfg: BackendConfig,
-    workflow: Workflow, durable: bool, qualification_case: object,
-    worklists: object, surface_cfgs: object, normalize_kind: Callable[[str], str],
+    args: argparse.Namespace,
+    cfg: DeploymentConfig,
+    backend_cfg: BackendConfig,
+    workflow: Workflow,
+    durable: bool,
+    qualification_case: object,
+    worklists: object,
+    surface_cfgs: object,
+    normalize_kind: Callable[[str], str],
 ) -> int | None:
     from openadapt_flow.cli_worklist_pool import requested_pool
     from openadapt_flow.ir import ActionKind
+
     unsupported = (
         durable
         or qualification_case is not None

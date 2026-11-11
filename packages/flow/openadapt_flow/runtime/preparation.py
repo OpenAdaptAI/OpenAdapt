@@ -1,4 +1,5 @@
 """Replay preparation checks, including the non-authorizing no-input path."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Mapping, Optional
@@ -12,6 +13,7 @@ if TYPE_CHECKING:
     from openadapt_flow.runtime.durable.program_checkpoint import ProgramCheckpoint
     from openadapt_flow.runtime.effects.effect import Effect
     from openadapt_flow.runtime.replayer import Replayer
+
 
 def sealed_run_unsupported(self: Replayer, workflow: Workflow) -> Optional[str]:
     """Name a run feature whose run-directory state is not sealed yet."""
@@ -74,7 +76,9 @@ def actuator_for(self: Replayer, binding: Any) -> Optional[Any]:
         return None
 
 
-def record_dry_run_preconditions(self: Replayer, step: Step, result: StepResult) -> None:
+def record_dry_run_preconditions(
+    self: Replayer, step: Step, result: StepResult
+) -> None:
     if self.approval_gate is None:
         return
     from openadapt_flow.approval_mode.dry_run import DryRunGate
@@ -83,7 +87,9 @@ def record_dry_run_preconditions(self: Replayer, step: Step, result: StepResult)
         self.approval_gate.record_preconditions(step, result)
 
 
-def disable_api_for_dry_run(self: Replayer, approval_gate: Optional[ApprovalGate]) -> None:
+def disable_api_for_dry_run(
+    self: Replayer, approval_gate: Optional[ApprovalGate]
+) -> None:
     if getattr(approval_gate, "stops_before_any_input", False) is True:
         # Request preparation can execute page scripts. Never enter an API
         # span or construct its actuator in a zero-input Check-it run.
@@ -94,7 +100,10 @@ def disable_api_for_dry_run(self: Replayer, approval_gate: Optional[ApprovalGate
 
 
 def validate_dry_run_entry(
-    self: Replayer, workflow: Workflow, *, resume_from: Optional[int],
+    self: Replayer,
+    workflow: Workflow,
+    *,
+    resume_from: Optional[int],
     resume_program: Optional[ProgramCheckpoint],
     worklists: Optional[dict[str, list[dict[str, str]]]],
 ) -> None:
@@ -110,9 +119,7 @@ def validate_dry_run_entry(
             or worklists
             or workflow.surfaces
             or self.surface_backends
-            or any(
-                step.action is ActionKind.SWITCH_SURFACE for step in workflow.steps
-            )
+            or any(step.action is ActionKind.SWITCH_SURFACE for step in workflow.steps)
         ):
             raise ValueError(
                 "Check-it dry-run requires a single-surface linear replay without durable continuation"
@@ -120,16 +127,18 @@ def validate_dry_run_entry(
 
 
 def dry_run_preparation_refusal(
-    self: Replayer, workflow: Workflow, params: Mapping[str, RuntimeParamScalar],
-    step: Step, result: StepResult, error: Optional[str], resolved_effects: list[Effect],
-) -> tuple[Optional[str], list[Effect]]:
+    self: Replayer,
+    workflow: Workflow,
+    params: Mapping[str, RuntimeParamScalar],
+    step: Step,
+    result: StepResult,
+    error: Optional[str],
+    resolved_effects: Optional[list[Effect]],
+) -> tuple[Optional[str], Optional[list[Effect]]]:
     if (
         error is None
         and getattr(self.approval_gate, "stops_before_any_input", False) is True
-        and (
-            step.action not in (ActionKind.READ, ActionKind.WAIT)
-            or step.effects
-        )
+        and (step.action not in (ActionKind.READ, ActionKind.WAIT) or step.effects)
     ):
         # A verifier may navigate a second UI session to snapshot a
         # record. Stop before that preparation as well as before input.
@@ -139,11 +148,8 @@ def dry_run_preparation_refusal(
             result.effect_contract_hashes.extend(
                 effect.contract_hash() for effect in resolved_effects
             )
-        error = self._delivery_authorization_refusal(
-            workflow, params, step, result
-        )
+        error = self._delivery_authorization_refusal(workflow, params, step, result)
     return error, resolved_effects
-
 
 
 def stamp_approval(self: Replayer, report: RunReport) -> None:

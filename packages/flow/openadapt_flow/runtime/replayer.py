@@ -1683,8 +1683,11 @@ class Replayer:
         from openadapt_flow.runtime.preparation import validate_dry_run_entry
 
         validate_dry_run_entry(
-            self, workflow, resume_from=resume_from,
-            resume_program=resume_program, worklists=worklists,
+            self,
+            workflow,
+            resume_from=resume_from,
+            resume_program=resume_program,
+            worklists=worklists,
         )
         bundle_path = Path(bundle_dir)
         bundle_sealed = (

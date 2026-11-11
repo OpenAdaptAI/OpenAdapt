@@ -3112,8 +3112,15 @@ def _cmd_replay(args: argparse.Namespace) -> int:
         from openadapt_flow.cli_replay_setup import dry_run_replay_refusal
 
         refusal = dry_run_replay_refusal(
-            args, cfg, backend_cfg, workflow, durable, qualification_case,
-            worklists, surface_cfgs, _normalize_kind,
+            args,
+            cfg,
+            backend_cfg,
+            workflow,
+            durable,
+            qualification_case,
+            worklists,
+            surface_cfgs,
+            _normalize_kind,
         )
         if refusal is not None:
             return refusal
