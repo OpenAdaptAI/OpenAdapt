@@ -1,0 +1,14 @@
+{
+  "families": [
+    "duplicate",
+    "late_write",
+    "optimistic_success",
+    "partial_write",
+    "unauthorized_side_effect",
+    "wrong_record",
+    "wrong_value"
+  ],
+  "kit_version": "verifier-audit/1",
+  "redact": false,
+  "target": "agentdojo/v1.2.2/banking"
+}

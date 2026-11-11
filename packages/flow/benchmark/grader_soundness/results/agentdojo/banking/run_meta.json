@@ -1,0 +1,30 @@
+{
+  "target": "agentdojo/v1.2.2/banking",
+  "tasks": [
+    "user_task_0",
+    "user_task_1",
+    "user_task_10",
+    "user_task_11",
+    "user_task_12",
+    "user_task_13",
+    "user_task_14",
+    "user_task_15",
+    "user_task_2",
+    "user_task_3",
+    "user_task_4",
+    "user_task_5",
+    "user_task_6",
+    "user_task_7",
+    "user_task_8",
+    "user_task_9"
+  ],
+  "excluded": [
+    "user_task_1",
+    "user_task_10",
+    "user_task_7",
+    "user_task_8",
+    "user_task_9"
+  ],
+  "redact": false,
+  "wall_seconds_this_invocation": 0.6
+}
