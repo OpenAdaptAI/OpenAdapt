@@ -70,6 +70,7 @@ from typing import (
 from urllib.parse import urlsplit
 
 from openadapt_flow import sealed_set as _sealed
+from openadapt_flow.assurance import effect_read_wording as _effect_read_wording
 from openadapt_flow.backend import (
     ActionDeliveryUncertain,
     Backend,
@@ -641,26 +642,6 @@ def _all_workflow_steps(workflow: Workflow):
         for state in graph.states.values():
             if state.kind is StateKind.ACTION and state.step is not None:
                 yield state.step
-
-
-def _effect_read_wording(tier: Any) -> tuple[str, str]:
-    """Name an effect check in a halt message by its evidence tier.
-
-    A separate-session record-page read (tier 2) and a screen read-back
-    (tiers 3 and 4) are not system-of-record reads, so their halt messages
-    must not call them that. Untyped legacy verifiers keep the old wording.
-    """
-
-    from openadapt_flow.verification import VerificationTier
-
-    if tier is VerificationTier.INDEPENDENT_SESSION:
-        return "Effect verification", "record page read in a separate session"
-    if tier in (
-        VerificationTier.PERSISTED_STATE_REACQUISITION,
-        VerificationTier.IMMEDIATE_SCREEN,
-    ):
-        return "Effect verification", "screen read-back"
-    return "System-of-record effect verification", "system of record"
 
 
 class EgressNotPermitted(RuntimeError):
@@ -6820,6 +6801,7 @@ class Replayer:
                         final_verdict=verdict.verdict.value,
                         observed_effect=verdict.observed_effect,
                         endpoint_scope=effect_endpoint_scope(current_verifier),
+                        read_evidence=verdict.read_evidence,
                     )
                 )
             else:
@@ -10754,6 +10736,7 @@ class Replayer:
                         final_verdict=verdict.verdict.value,
                         observed_effect=verdict.observed_effect,
                         endpoint_scope=scope,
+                        read_evidence=verdict.read_evidence,
                     )
                 )
                 result.effect_results.append(
@@ -10788,6 +10771,7 @@ class Replayer:
                             final_verdict=final_verdict.verdict.value,
                             observed_effect=final_verdict.observed_effect,
                             endpoint_scope=scope,
+                            read_evidence=final_verdict.read_evidence,
                             reconciliation_completed=True,
                             reconciliation_actions=comp.actions_taken,
                         )
@@ -10810,6 +10794,7 @@ class Replayer:
                         final_verdict=final_verdict.verdict.value,
                         observed_effect=final_verdict.observed_effect,
                         endpoint_scope=scope,
+                        read_evidence=final_verdict.read_evidence,
                         reconciliation_actions=comp.actions_taken,
                         deferred_check=verdict.deferred_check,
                     )
@@ -10840,6 +10825,7 @@ class Replayer:
                     final_verdict=verdict.verdict.value,
                     observed_effect=verdict.observed_effect,
                     endpoint_scope=scope,
+                    read_evidence=verdict.read_evidence,
                     deferred_check=verdict.deferred_check,
                 )
             )

@@ -1,0 +1,35 @@
+{
+  "_doc": "Network chaos profiles for real-app lab runs. See README.md. Ports 9650-9699 on the fixture host.",
+  "toxiproxy_version": "2.12.0",
+  "host": "lab-host.invalid",
+  "profiles": {
+    "vpn-typical": {
+      "latency_ms": 250, "jitter_ms": 150,
+      "p502": 0.0, "p504": 0.0, "stale_s": 0
+    },
+    "vpn-bad": {
+      "latency_ms": 1100, "jitter_ms": 700,
+      "p502": 0.01, "p504": 0.01, "stale_s": 0
+    },
+    "replica-lag": {
+      "latency_ms": 0, "jitter_ms": 0,
+      "p502": 0.0, "p504": 0.0, "stale_s": 3
+    },
+    "vpn-bad+replica-lag": {
+      "latency_ms": 1100, "jitter_ms": 700,
+      "p502": 0.01, "p504": 0.01, "stale_s": 3
+    }
+  },
+  "apps": {
+    "dolibarr": {
+      "upstream_port": 9635,
+      "ports": {"vpn-typical": 9650, "vpn-bad": 9651, "replica-lag": 9652, "vpn-bad+replica-lag": 9653},
+      "list_paths": ["/societe/list.php"]
+    },
+    "openemr": {
+      "upstream_port": 9640,
+      "ports": {"vpn-typical": 9660, "vpn-bad": 9661, "replica-lag": 9662, "vpn-bad+replica-lag": 9663},
+      "list_paths": ["/interface/main/finder/patient_select.php", "/interface/main/finder/dynamic_finder_ajax.php"]
+    }
+  }
+}

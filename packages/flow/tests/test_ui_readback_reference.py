@@ -156,7 +156,7 @@ def _effect(**kw: Any) -> Effect:
 def test_reads_the_reference_from_the_run_url_and_opens_that_record() -> None:
     driver = RecordingDriver(_saved())
     verifier = _verifier(
-        driver, backend=RunSession(url=BASE + "/chart/patient/CLM-20431?saved=1")
+        driver, backend=RunSession(url=BASE + "/chart/patient/CLM-20431/saved")
     )
     verdict = verifier.verify(_effect(), verifier.capture_pre_state())
     assert verdict.verdict is Verdict.CONFIRMED
@@ -169,7 +169,7 @@ def test_reads_the_reference_from_the_run_url_and_opens_that_record() -> None:
 def test_reads_the_reference_from_the_run_screen() -> None:
     driver = RecordingDriver(_saved())
     vision = FakeVision("Claim submitted", "Reference: CLM-20431", "Thank you")
-    run = RunSession()
+    run = RunSession(url=BASE + "/submitted")
     verifier = _verifier(
         driver,
         backend=run,
@@ -188,8 +188,20 @@ def test_reads_the_reference_from_the_run_screen() -> None:
 def test_a_bound_backend_is_used_after_build() -> None:
     driver = RecordingDriver(_saved())
     verifier = _verifier(driver)
-    verifier.bind_backend(RunSession(url=BASE + "/chart/patient/CLM-20431"))
+    verifier.bind_backend(RunSession(url=BASE + "/chart/patient/CLM-20431/saved"))
     assert verifier.verify(_effect(), verifier.capture_pre_state()).confirmed
+
+
+def test_the_page_the_save_left_is_not_an_independent_read() -> None:
+    # The read opens exactly the URL the acting session shows after the
+    # save: the same view, so it can't confirm (ui_read_checks).
+    verifier = _verifier(
+        RecordingDriver(_saved()),
+        backend=RunSession(url=BASE + "/chart/patient/CLM-20431"),
+    )
+    verdict = verifier.verify(_effect(), verifier.capture_pre_state())
+    assert verdict.verdict is Verdict.INDETERMINATE
+    assert verdict.read_evidence["independence"]["distinct_view"] == "no"
 
 
 @pytest.mark.parametrize(
@@ -231,7 +243,7 @@ def test_the_same_reference_shown_twice_is_one_reference() -> None:
     driver = RecordingDriver(_saved())
     verifier = _verifier(
         driver,
-        backend=RunSession(),
+        backend=RunSession(url=BASE + "/submitted"),
         vision=FakeVision("Reference: CLM-20431", "Your Reference: CLM-20431"),
         source="screen",
         pattern=SCREEN_PATTERN,
@@ -416,9 +428,16 @@ def test_deployment_wires_the_run_session(monkeypatch: pytest.MonkeyPatch) -> No
         {"kind": "ui_readback", "ui_readback": chart_readback_spec(BASE)}
     )
     plain_verifier = build_effect_verifier(plain, {"patient_id": "p1"})
-    assert _effect_verifier_config_identity(plain, plain_verifier) == (
+    legacy_spec = chart_readback_spec(BASE)
+    legacy_spec["sign_in"].pop("post_url")
+    legacy = EffectsConfig.model_validate(
+        {"kind": "ui_readback", "ui_readback": legacy_spec}
+    )
+    legacy_identity = _effect_verifier_config_identity(legacy, plain_verifier)
+    assert legacy_identity == (
         "sha256:b9c837bb91e9f4f75dc6ff4dff79e53fcb56e92c87ae552354d08c7296c6c1de"
     )
+    assert _effect_verifier_config_identity(plain, plain_verifier) != legacy_identity
     assert _effect_verifier_config_identity(cfg, verifier) != (
         _effect_verifier_config_identity(plain, plain_verifier)
     )
