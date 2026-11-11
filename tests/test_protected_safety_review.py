@@ -962,7 +962,9 @@ def test_normalized_heading_discovery_cannot_normalize_approval(
     if edited:
         review["updated_at"] = "2026-11-05T18:01:00Z"
     comments.append(review)
-    assert any("invalid independent review" in error for error in _evaluate(comments=comments))
+    assert any(
+        "invalid independent review" in error for error in _evaluate(comments=comments)
+    )
 
 
 @pytest.mark.parametrize("edited", [False, True])
@@ -981,7 +983,19 @@ def test_untrusted_review_does_not_grant_or_veto(edited: bool) -> None:
 
 
 @pytest.mark.parametrize("role", ["author", "reviewer", "coordinator"])
-@pytest.mark.parametrize("alias", ["bold", "italic", "link", "list", "lowercase", "unicode-hyphen", "unicode-colon", "prefix"])
+@pytest.mark.parametrize(
+    "alias",
+    [
+        "bold",
+        "italic",
+        "link",
+        "list",
+        "lowercase",
+        "unicode-hyphen",
+        "unicode-colon",
+        "prefix",
+    ],
+)
 def test_noncanonical_extra_head_binding_is_rejected_for_every_declaration(
     role: str, alias: str
 ) -> None:
@@ -1008,7 +1022,8 @@ def test_noncanonical_extra_head_binding_is_rejected_for_every_declaration(
     assert any(
         "invalid " in error
         for error in _evaluate(
-            comments=comments, files=[{"filename": ".github/agent-safety-manifest.json"}]
+            comments=comments,
+            files=[{"filename": ".github/agent-safety-manifest.json"}],
         )
     )
 

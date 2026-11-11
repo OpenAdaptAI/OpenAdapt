@@ -215,11 +215,15 @@ def _review_and_attestation_errors(
                 continue
             unedited = _unedited_comment(comment)
             if not unedited:
-                errors.append("edited current independent review cannot authorize success")
+                errors.append(
+                    "edited current independent review cannot authorize success"
+                )
             try:
                 vendor, verdict = parse_review_report(body, head)
                 if _headers(body, "Coordinator-Approval"):
-                    raise EvidenceError("review must be separate from a coordinator note")
+                    raise EvidenceError(
+                        "review must be separate from a coordinator note"
+                    )
                 if unedited:
                     reviewers.append((vendor, verdict, body))
             except EvidenceError as exc:

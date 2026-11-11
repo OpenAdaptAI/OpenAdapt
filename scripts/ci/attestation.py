@@ -79,7 +79,9 @@ def head_reference_lines(body: str) -> list[str]:
 def _one_header(body: str, name: str) -> str:
     values = re.findall(rf"(?m)^{re.escape(name)}: (.*)$", declaration_text(body))
     if name == "Reviewed-Head" and len(head_reference_lines(body)) != len(values):
-        raise EvidenceError("head-like bindings must use the exact Reviewed-Head header")
+        raise EvidenceError(
+            "head-like bindings must use the exact Reviewed-Head header"
+        )
     if len(values) != 1 or not values[0].strip():
         raise EvidenceError(f"expected exactly one nonempty {name} header")
     return values[0].strip()
