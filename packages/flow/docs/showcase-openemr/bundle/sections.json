@@ -1,0 +1,139 @@
+{
+  "schema": "openadapt.flow.sections/v1",
+  "note": "Display metadata: named groups of steps for program maps. Execution and the outcome classifier ignore this file, and it is outside the content digest and the workflow contract hash.",
+  "workflow_contract_sha256": "93afd9d58a95ecbe1a09a99b822a110f7be535a182759887d1b6e9d3dc3beef8",
+  "sections": [
+    {
+      "id": "fields-step_000",
+      "title": "1 field: text",
+      "title_source": "fields",
+      "kind": "fields",
+      "steps": [
+        "step_000",
+        "step_001",
+        "step_002",
+        "step_003",
+        "step_004",
+        "step_005",
+        "step_006",
+        "step_007"
+      ],
+      "fields": [
+        "text"
+      ],
+      "params": []
+    },
+    {
+      "id": "save-step_008",
+      "title": "+ Add",
+      "title_source": "ui",
+      "kind": "save",
+      "steps": [
+        "step_008",
+        "step_009",
+        "step_010",
+        "step_011",
+        "step_012",
+        "step_013",
+        "step_014"
+      ],
+      "fields": [],
+      "params": []
+    },
+    {
+      "id": "fields-step_015",
+      "title": "1 field: note",
+      "title_source": "fields",
+      "kind": "fields",
+      "steps": [
+        "step_015",
+        "step_016"
+      ],
+      "fields": [
+        "note"
+      ],
+      "params": [
+        "note"
+      ]
+    },
+    {
+      "id": "save-step_017",
+      "title": "Save as new message",
+      "title_source": "ui",
+      "kind": "save",
+      "steps": [
+        "step_017"
+      ],
+      "fields": [],
+      "params": []
+    }
+  ],
+  "compiled": [
+    {
+      "id": "fields-step_000",
+      "title": "1 field: text",
+      "title_source": "fields",
+      "kind": "fields",
+      "steps": [
+        "step_000",
+        "step_001",
+        "step_002",
+        "step_003",
+        "step_004",
+        "step_005",
+        "step_006",
+        "step_007"
+      ],
+      "fields": [
+        "text"
+      ],
+      "params": []
+    },
+    {
+      "id": "save-step_008",
+      "title": "+ Add",
+      "title_source": "ui",
+      "kind": "save",
+      "steps": [
+        "step_008",
+        "step_009",
+        "step_010",
+        "step_011",
+        "step_012",
+        "step_013",
+        "step_014"
+      ],
+      "fields": [],
+      "params": []
+    },
+    {
+      "id": "fields-step_015",
+      "title": "1 field: note",
+      "title_source": "fields",
+      "kind": "fields",
+      "steps": [
+        "step_015",
+        "step_016"
+      ],
+      "fields": [
+        "note"
+      ],
+      "params": [
+        "note"
+      ]
+    },
+    {
+      "id": "save-step_017",
+      "title": "Save as new message",
+      "title_source": "ui",
+      "kind": "save",
+      "steps": [
+        "step_017"
+      ],
+      "fields": [],
+      "params": []
+    }
+  ],
+  "edits": [],
+  "context": {}
+}

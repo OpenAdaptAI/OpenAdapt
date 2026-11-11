@@ -129,3 +129,19 @@ time: Playwright, OpenCV, onnxruntime and RapidOCR are the largest wheels.
   containers don't.
 - Flow's `uv.lock` predates the fold and still pins openadapt-types 0.21. CI
   doesn't enforce it.
+
+### Standalone verifier facade
+
+`openadapt-verify` depends on `openadapt-flow[receipts]`; its small wheel does
+not imply a small dependency tree. A fresh Python 3.12 x86_64 WSL installation
+of the in-tree Types 0.24.0, Flow 2.6.0 and Verify 0.1.0 wheels on 2026-11-05
+installed 33 distributions and 413.2 MB of site-packages before import. The facade
+wheel was 10,370 bytes. OpenAI/Claude SDKs, MCP, browser-use and Stagehand were
+absent from that core installation. This measures installation size, not live
+provider behavior or grounding latency.
+
+The new `verify` budget allows 500 MB and 42 distributions, following the existing
+size/count margin rules. It permits Flow's core closure plus the existing
+portable receipt dependencies (`cbor2`, `cwt`, `pyhpke`) and the facade itself.
+The optional SDK/MCP stacks stay outside the core budget. Existing package
+budgets remain unchanged.

@@ -364,6 +364,62 @@
         "typing-inspection",
         "uvicorn"
       ]
+    },
+    "verify": {
+      "path": "packages/verify",
+      "module": "openadapt_verify",
+      "max_mb": 500,
+      "max_dists": 42,
+      "forbid": [
+        "browser-use",
+        "claude-agent-sdk",
+        "fastapi",
+        "matplotlib",
+        "mcp",
+        "openadapt",
+        "openadapt-agent",
+        "openadapt-capture",
+        "openadapt-desktop",
+        "openai",
+        "openai-agents",
+        "playwright",
+        "stagehand"
+      ],
+      "allow": [
+        "annotated-types",
+        "anyio",
+        "cbor2",
+        "certifi",
+        "cffi",
+        "cryptography",
+        "cwt",
+        "flatbuffers",
+        "h11",
+        "httpcore",
+        "httpx",
+        "idna",
+        "numpy",
+        "onnxruntime",
+        "openadapt-flow",
+        "openadapt-types",
+        "openadapt-verify",
+        "opencv-python",
+        "packaging",
+        "pillow",
+        "protobuf",
+        "pyclipper",
+        "pycparser",
+        "pydantic",
+        "pydantic-core",
+        "pyhpke",
+        "pyyaml",
+        "rapidocr-onnxruntime",
+        "shapely",
+        "six",
+        "tqdm",
+        "typing-extensions",
+        "typing-inspection"
+      ]
     }
   }
 }

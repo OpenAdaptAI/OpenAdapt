@@ -197,6 +197,22 @@ def issue_resume_approval(
 ) -> ApprovalRecord:
     """Create one approval bound to the exact active durable pause."""
 
+    from openadapt_flow.runtime.durable.first_local_delivery import (
+        FirstLocalDeliveryHeld,
+        is_first_local_delivery,
+        require_local_delivery_idle,
+    )
+
+    if is_first_local_delivery(getattr(pending, "delivery_uncertainty", None)):
+        if authorize_uncertain_retry:
+            raise ApprovalRequired(
+                "first_local_delivery_held: an uncertain first delivery cannot be retried"
+            )
+        try:
+            require_local_delivery_idle(Path(run_dir))
+        except FirstLocalDeliveryHeld as exc:
+            raise ApprovalRequired(str(exc)) from exc
+
     if not approver.strip():
         raise ApprovalRequired("an authenticated approver identity is required")
     if not resolution.strip():

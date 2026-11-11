@@ -304,6 +304,7 @@ def chart_readback_spec(
         "url_params": {"patient": {"param": patient_param}},
         "sign_in": {
             "url": base + "/chart/signin",
+            "post_url": base + "/chart/signin",
             "username_selector": "#chart-username",
             "password_selector": "#chart-password",
             "submit_selector": "#chart-signin",

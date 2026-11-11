@@ -46,4 +46,8 @@ jobs:
           GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
           GITHUB_SERVER_URL: ${{ github.server_url }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+        # For issue_comment events GitHub attaches this job to main's head
+        # commit. The verdict goes only to the protected-safety-review check
+        # run on the PR head, so this step exits 0 once that is published and
+        # fails only on an internal error.
         run: python3 -m scripts.ci.protected_safety_review

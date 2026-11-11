@@ -3,19 +3,26 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 from PIL import Image
 
 from openadapt_flow import bundle_validation as bundles
+from openadapt_flow import crypto, sealed_set
+from openadapt_flow.bundle_sealing import seal_bundle
 from openadapt_flow.ir import ActionKind, Anchor, Step, Workflow
 
 
-def saved_bundle(tmp_path):
+def saved_bundle(tmp_path, *, template_color="white"):
     bundle = tmp_path / "bundle"
     (bundle / "templates").mkdir(parents=True)
-    Image.new("RGB", (20, 20), "white").save(bundle / "templates/button.png")
+    Image.new("RGB", (20, 20), template_color).save(bundle / "templates/button.png")
     workflow = Workflow(
         name="original",
         steps=[
@@ -55,6 +62,25 @@ def test_upgrade_is_explicit_deterministic_and_does_not_mutate_source(monkeypatc
     monkeypatch.setattr(bundles, "_BUNDLE_UPGRADERS", {})
     with pytest.raises(bundles.BundleSchemaError, match="no upgrader"):
         bundles.migrate_bundle_dict(original)
+
+
+@pytest.mark.parametrize(
+    "asset", ["../outside.png", "/outside.png", "templates\\x.png"]
+)
+def test_manifest_asset_paths_cannot_escape_bundle(tmp_path, asset):
+    with pytest.raises(bundles.BundleIntegrityError, match="unsafe bundle asset path"):
+        bundles.bundle_asset_path(tmp_path / "bundle", asset)
+
+
+def test_manifest_asset_paths_reject_symlink_escape(tmp_path):
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (bundle / "templates").symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(bundles.BundleIntegrityError, match="escapes its directory"):
+        bundles.bundle_asset_path(bundle, "templates/crop.png")
 
 
 def test_original_seal_is_checked_before_current_model_construction(
@@ -190,6 +216,293 @@ def test_loaded_asset_tamper_refuses(tmp_path):
         bundles.verify_integrity(loaded, bundle, loaded.manifest)
 
 
+def _bundle_files(bundle):
+    return {
+        path.relative_to(bundle): path.read_bytes()
+        for path in bundle.rglob("*")
+        if path.is_file()
+    }
+
+
+def test_verified_template_replacement_saves_plaintext_derivative(tmp_path):
+    source = saved_bundle(tmp_path)
+    original_asset = (source / "templates/button.png").read_bytes()
+    replacement = b"replacement crop bytes"
+    loaded = Workflow.load(source)
+    derivative = loaded.model_copy()
+    derivative.stage_verified_template_replacement("templates/button.png", replacement)
+
+    assert (source / "templates/button.png").read_bytes() == original_asset
+    assert "_pending_template_replacements" not in derivative.model_dump()
+    derivative.save(tmp_path / "derivative")
+    loaded.save(tmp_path / "unchanged")
+
+    assert (source / "templates/button.png").read_bytes() == original_asset
+    assert (tmp_path / "derivative/templates/button.png").read_bytes() == replacement
+    assert (tmp_path / "unchanged/templates/button.png").read_bytes() == original_asset
+    assert Workflow.load(tmp_path / "derivative").manifest.content_digest
+
+
+@pytest.mark.parametrize("storage", ["plaintext", "sealed"])
+@pytest.mark.parametrize("location", ["in_place", "relative", "save_as"])
+@settings(deadline=None)
+@given(replacement=st.sampled_from([b"replacement crop one", b"replacement crop two"]))
+def test_verified_replacement_preserves_source_authority_across_save_paths(
+    storage, location, replacement
+):
+    with TemporaryDirectory() as directory, pytest.MonkeyPatch.context() as patch:
+        root = Path(directory)
+        key = "synthetic replacement test key"
+        patch.setenv(crypto.ENV_KEY, key)
+        source = saved_bundle(root)
+        if storage == "sealed":
+            encrypted = root / "encrypted-source"
+            seal_bundle(source, encrypted)
+            source = encrypted
+        loaded = Workflow.load(source, key=key if storage == "sealed" else None)
+        source_before = _bundle_files(source)
+        original_digest = loaded.manifest.content_digest
+        original_hash = loaded.manifest.file_hashes["templates/button.png"]
+        loaded.stage_verified_template_replacement("templates/button.png", replacement)
+        assert _bundle_files(source) == source_before
+        assert loaded.manifest.file_hashes["templates/button.png"] == original_hash
+
+        destination = source
+        if location == "relative":
+            patch.chdir(root)
+            destination = source.relative_to(root)
+        elif location == "save_as":
+            destination = root / "derivative"
+        if storage == "sealed" and location == "save_as":
+            with sealed_set.writing(destination, "bundle", key):
+                loaded.save(destination, key=key)
+        else:
+            loaded.save(destination, key=key if storage == "sealed" else None)
+
+        reopened = Workflow.load(destination, key=key if storage == "sealed" else None)
+        assert reopened.manifest.content_digest != original_digest
+        assert reopened.manifest.file_hashes["templates/button.png"] == (
+            hashlib.sha256(replacement).hexdigest()
+        )
+        if storage == "sealed":
+            sealed_set.open_set(destination, key).verify_all()
+            assert reopened.decrypted_template("templates/button.png") == replacement
+            assert not (destination / "templates/button.png").exists()
+        else:
+            bundles.verify_integrity(reopened, destination, reopened.manifest)
+            assert (destination / "templates/button.png").read_bytes() == replacement
+        assert loaded._pending_template_replacements == {}
+        if location == "save_as":
+            assert _bundle_files(source) == source_before
+
+
+@pytest.mark.parametrize("source_storage", ["plaintext", "sealed"])
+@pytest.mark.parametrize("destination_storage", ["plaintext", "sealed"])
+def test_staged_replacement_refuses_foreign_destination_without_changes(
+    tmp_path, monkeypatch, source_storage, destination_storage
+):
+    key = "synthetic replacement test key"
+    monkeypatch.setenv(crypto.ENV_KEY, key)
+    source = saved_bundle(tmp_path / "source")
+    if source_storage == "sealed":
+        encrypted = tmp_path / "encrypted-source"
+        seal_bundle(source, encrypted)
+        source = encrypted
+    loaded = Workflow.load(source, key=key if source_storage == "sealed" else None)
+    loaded.stage_verified_template_replacement(
+        "templates/button.png", b"authorized replacement"
+    )
+    foreign = saved_bundle(tmp_path / "foreign", template_color="black")
+    destination = foreign
+    if destination_storage == "sealed":
+        destination = tmp_path / "foreign-sealed"
+        seal_bundle(foreign, destination)
+    source_before = _bundle_files(source)
+    destination_before = _bundle_files(destination)
+
+    with pytest.raises(
+        bundles.BundleIntegrityError,
+        match=r"save-as destination asset.*conflicts with verified source",
+    ):
+        loaded.save(destination, key=key if destination_storage == "sealed" else None)
+
+    assert _bundle_files(source) == source_before
+    assert _bundle_files(destination) == destination_before
+
+
+def test_save_as_refuses_foreign_existing_template_before_writing(tmp_path):
+    source = saved_bundle(tmp_path)
+    source_asset = (source / "templates/button.png").read_bytes()
+    loaded = Workflow.load(source)
+    destination = tmp_path / "preexisting-destination"
+    (destination / "templates").mkdir(parents=True)
+    foreign_asset = b"foreign destination template bytes"
+    target_asset = destination / "templates/button.png"
+    target_asset.write_bytes(foreign_asset)
+
+    with pytest.raises(
+        bundles.BundleIntegrityError,
+        match=r"save-as destination asset.*conflicts with verified source",
+    ):
+        loaded.save(destination)
+
+    assert target_asset.read_bytes() == foreign_asset
+    destination_entries = sorted(
+        path.relative_to(destination).as_posix() for path in destination.rglob("*")
+    )
+    assert destination_entries == ["templates", "templates/button.png"]
+    assert not (destination / "workflow.json").exists()
+    assert not (destination / "manifest.json").exists()
+    assert (source / "templates/button.png").read_bytes() == source_asset
+
+
+def test_save_as_accepts_matching_existing_template(tmp_path):
+    source = saved_bundle(tmp_path)
+    source_asset = (source / "templates/button.png").read_bytes()
+    loaded = Workflow.load(source)
+    destination = tmp_path / "matching-destination"
+    (destination / "templates").mkdir(parents=True)
+    target_asset = destination / "templates/button.png"
+    target_asset.write_bytes(source_asset)
+
+    loaded.save(destination)
+
+    reopened = Workflow.load(destination)
+    bundles.verify_integrity(reopened, destination, reopened.manifest)
+    assert target_asset.read_bytes() == source_asset
+
+
+def test_encrypted_save_as_refuses_foreign_existing_template_before_writing(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv(crypto.ENV_KEY, "correct horse battery staple")
+    source = saved_bundle(tmp_path / "source")
+    encrypted_source = tmp_path / "encrypted-source"
+    seal_bundle(source, encrypted_source)
+    loaded = Workflow.load(encrypted_source, key="correct horse battery staple")
+
+    destination = tmp_path / "foreign-destination"
+    (destination / "templates").mkdir(parents=True)
+    foreign_asset = b"foreign destination template bytes"
+    target_asset = destination / "templates/button.png"
+    target_asset.write_bytes(foreign_asset)
+
+    with pytest.raises(
+        bundles.BundleIntegrityError,
+        match=r"save-as destination asset.*conflicts with verified source",
+    ):
+        loaded.save(destination)
+
+    assert target_asset.read_bytes() == foreign_asset
+    assert not (destination / "workflow.json").exists()
+    assert not (destination / "manifest.json").exists()
+
+
+def test_encrypted_save_as_refuses_foreign_asset_in_sealed_destination(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv(crypto.ENV_KEY, "correct horse battery staple")
+    key = "correct horse battery staple"
+    source = saved_bundle(tmp_path / "source")
+    encrypted_source = tmp_path / "encrypted-source"
+    seal_bundle(source, encrypted_source)
+    loaded = Workflow.load(encrypted_source, key=key)
+
+    # Build a valid, differently hashed asset before its manifest is recorded.
+    foreign_plain = saved_bundle(tmp_path / "foreign-plain", template_color="black")
+    foreign_destination = tmp_path / "foreign-sealed"
+    seal_bundle(foreign_plain, foreign_destination)
+    before = _bundle_files(foreign_destination)
+
+    with pytest.raises(
+        bundles.BundleIntegrityError,
+        match=r"save-as destination asset.*conflicts with verified source",
+    ):
+        loaded.save(foreign_destination, key=key)
+
+    assert _bundle_files(foreign_destination) == before
+
+
+def test_verified_template_replacement_saves_encrypted_derivative(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv(crypto.ENV_KEY, "correct horse battery staple")
+    source = saved_bundle(tmp_path)
+    encrypted_source = tmp_path / "encrypted-source"
+    seal_bundle(source, encrypted_source)
+    source_snapshot = _bundle_files(encrypted_source)
+    replacement = b"encrypted replacement crop bytes"
+    loaded = Workflow.load(encrypted_source)
+    loaded.stage_verified_template_replacement("templates/button.png", replacement)
+
+    destination = tmp_path / "encrypted-derivative"
+    with sealed_set.writing(destination, "bundle", "correct horse battery staple"):
+        loaded.save(destination, key="correct horse battery staple")
+
+    assert _bundle_files(encrypted_source) == source_snapshot
+    assert not (destination / "templates/button.png").exists()
+    sealed_set.open_set(destination, "correct horse battery staple").verify_all()
+    reopened = Workflow.load(destination, key="correct horse battery staple")
+    assert reopened.decrypted_template("templates/button.png") == replacement
+    assert reopened.manifest.content_digest
+
+
+def test_staged_template_replacement_refuses_changed_source(tmp_path):
+    source = saved_bundle(tmp_path)
+    loaded = Workflow.load(source)
+    loaded.stage_verified_template_replacement("templates/button.png", b"replacement")
+    (source / "templates/button.png").write_bytes(b"tampered after staging")
+
+    destination = tmp_path / "must-not-be-created"
+    with pytest.raises(bundles.BundleIntegrityError):
+        loaded.save(destination)
+    assert not destination.exists()
+
+
+@pytest.mark.parametrize("data", [7, "replacement", bytearray(b"replacement")])
+def test_template_replacement_requires_bytes(tmp_path, data):
+    source = saved_bundle(tmp_path)
+    loaded = Workflow.load(source)
+    with pytest.raises(bundles.BundleIntegrityError, match="data must be bytes"):
+        loaded.stage_verified_template_replacement("templates/button.png", data)
+
+
+def test_template_replacement_refuses_save_without_new_seal(tmp_path):
+    source = saved_bundle(tmp_path)
+    loaded = Workflow.load(source)
+    loaded.stage_verified_template_replacement("templates/button.png", b"replacement")
+    destination = tmp_path / "must-not-be-created"
+
+    with pytest.raises(
+        bundles.BundleIntegrityError, match="require a newly sealed manifest"
+    ):
+        loaded.save(destination, seal_manifest=False)
+    assert not destination.exists()
+
+
+@pytest.mark.parametrize(
+    "rel", ["workflow.json", "templates/missing.png", "templates/../workflow.json"]
+)
+def test_template_replacement_requires_existing_safe_template(tmp_path, rel):
+    source = saved_bundle(tmp_path)
+    loaded = Workflow.load(source)
+    with pytest.raises(bundles.BundleIntegrityError):
+        loaded.stage_verified_template_replacement(rel, b"replacement")
+
+
+def test_template_replacement_refuses_new_and_unchecked_workflows(tmp_path):
+    source = saved_bundle(tmp_path)
+    with pytest.raises(bundles.BundleIntegrityError):
+        Workflow(name="new", steps=[]).stage_verified_template_replacement(
+            "templates/button.png", b"replacement"
+        )
+    unchecked = Workflow.load(source, verify_integrity=False)
+    with pytest.raises(bundles.BundleIntegrityError):
+        unchecked.stage_verified_template_replacement(
+            "templates/button.png", b"replacement"
+        )
+
+
 def test_loaded_serialization_requires_explicit_reseal(tmp_path):
     bundle = saved_bundle(tmp_path)
     loaded = Workflow.load(bundle)
@@ -229,8 +542,105 @@ def test_unverified_load_cannot_launder_a_broken_original_seal(tmp_path):
     loaded = Workflow.load(bundle, verify_integrity=False)
     with pytest.raises(bundles.BundleIntegrityError):
         bundles.verify_integrity(loaded, bundle, loaded.manifest)
+    with pytest.raises(bundles.BundleIntegrityError, match="unchecked bundle load"):
+        loaded.save(bundle)
     with pytest.raises(bundles.BundleIntegrityError):
         bundles.content_identity_digest(loaded, loaded.manifest.file_hashes)
+
+
+@pytest.mark.parametrize("attack", ["workflow", "asset"])
+@pytest.mark.parametrize("copy_loaded", [False, True])
+def test_unverified_load_cannot_reseal_tampered_source(tmp_path, attack, copy_loaded):
+    bundle = saved_bundle(tmp_path)
+    if attack == "workflow":
+        raw = json.loads((bundle / "workflow.json").read_bytes())
+        raw["name"] = "tampered before unchecked load"
+        (bundle / "workflow.json").write_text(json.dumps(raw))
+    else:
+        (bundle / "templates/button.png").write_bytes(b"tampered asset")
+    before = {
+        path.relative_to(bundle): path.read_bytes()
+        for path in bundle.rglob("*")
+        if path.is_file()
+    }
+
+    loaded = Workflow.load(bundle, verify_integrity=False)
+    candidate = loaded.model_copy(deep=True) if copy_loaded else loaded
+    with pytest.raises(bundles.BundleIntegrityError):
+        candidate.save(bundle)
+
+    after = {
+        path.relative_to(bundle): path.read_bytes()
+        for path in bundle.rglob("*")
+        if path.is_file()
+    }
+    assert after == before
+
+
+def test_authorization_summary_refuses_manifestless_bundle(tmp_path):
+    bundle = saved_bundle(tmp_path)
+    raw = json.loads((bundle / "workflow.json").read_bytes())
+    raw.pop("manifest")
+    (bundle / "workflow.json").write_text(json.dumps(raw))
+    (bundle / "manifest.json").unlink()
+
+    from openadapt_flow.authorization_summary import bundle_digest
+
+    with pytest.raises(
+        bundles.BundleIntegrityError, match="persisted bundle integrity seal"
+    ):
+        bundle_digest(bundle)
+
+
+def test_missing_seal_cannot_be_migrated_by_loading_and_resaving(tmp_path):
+    bundle = saved_bundle(tmp_path)
+    raw = json.loads((bundle / "workflow.json").read_bytes())
+    raw.pop("manifest")
+    (bundle / "workflow.json").write_text(json.dumps(raw))
+    (bundle / "manifest.json").unlink()
+
+    with pytest.raises(
+        bundles.BundleIntegrityError, match="no persisted integrity seal"
+    ):
+        Workflow.load(bundle)
+
+
+def test_model_validate_dump_does_not_recover_verified_load_capability(tmp_path):
+    bundle = saved_bundle(tmp_path)
+    loaded = Workflow.load(bundle)
+    clone = Workflow.model_validate(loaded.model_dump())
+
+    with pytest.raises(bundles.BundleIntegrityError, match="non-serializable"):
+        clone.save(bundle)
+
+
+def test_authorization_display_paths_verify_bundle_before_reading(tmp_path):
+    bundle = saved_bundle(tmp_path)
+    raw = json.loads((bundle / "workflow.json").read_bytes())
+    raw["name"] = "tampered display input"
+    (bundle / "workflow.json").write_text(json.dumps(raw))
+
+    from openadapt_flow.authorization_summary import _covered_by_digest, outline
+
+    with pytest.raises(bundles.BundleIntegrityError):
+        outline(bundle)
+    report = bundle / "QUALIFICATION.md"
+    report.write_text("synthetic report")
+    assert not _covered_by_digest(bundle, report)
+
+
+def test_verified_load_can_save_as_and_carries_its_assets(tmp_path):
+    source = saved_bundle(tmp_path)
+    loaded = Workflow.load(source)
+    target = tmp_path / "save-as"
+
+    loaded.save(target)
+
+    assert (target / "templates/button.png").read_bytes() == (
+        source / "templates/button.png"
+    ).read_bytes()
+    reloaded = Workflow.load(target)
+    bundles.verify_integrity(reloaded, target, reloaded.manifest)
 
 
 def test_loaded_identity_refuses_replaced_asset_hashes_or_missing_manifest(tmp_path):

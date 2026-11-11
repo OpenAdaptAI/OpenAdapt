@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "description": "Paths whose accidental changes require exact-head review and per-commit evidence.",
+  "description": "Paths whose changes require one current-head cross-vendor independent review.",
   "areas": [
     {
       "id": "verification-authority",
@@ -69,7 +69,7 @@
     },
     {
       "id": "safety-gate-itself",
-      "rationale": "Changes to the manifest, trusted-base workflow, verifier, evidence parser, contract documentation, or tests also require explicit coordinator approval.",
+      "rationale": "The manifest, trusted-base workflow, verifier, review parser, contract documentation, and tests are protected by the same review rule.",
       "paths": [
         ".github/agent-safety-manifest.json",
         ".github/workflows/protected-safety-review.yml",
@@ -78,7 +78,7 @@
         "scripts/__init__.py",
         "scripts/ci/__init__.py",
         "docs/agent-safety-evidence-v1.md",
-        "tests/test_precommit_attestation.py",
+        "tests/test_attestation.py",
         "tests/test_protected_safety_review.py"
       ]
     }

@@ -70,6 +70,7 @@ from typing import (
 from urllib.parse import urlsplit
 
 from openadapt_flow import sealed_set as _sealed
+from openadapt_flow.assurance import effect_read_wording as _effect_read_wording
 from openadapt_flow.backend import (
     ActionDeliveryUncertain,
     Backend,
@@ -185,6 +186,15 @@ from openadapt_flow.runtime.authorization import (
     runtime_params_for_gui,
 )
 from openadapt_flow.runtime.durable.approval import StateDiverged
+from openadapt_flow.runtime.durable.first_local_delivery import FirstLocalDeliveryHeld
+from openadapt_flow.runtime.durable.first_local_runtime import (
+    FirstLocalDeliveryStep,
+    arm_first_local_delivery,
+    first_local_effect_refusal,
+    mark_first_local_delivery_held,
+    placeholder_effect_refusal,
+    run_with_output,
+)
 from openadapt_flow.runtime.durable.program_checkpoint import (
     TOP_GRAPH_ID,
     GraphFrame,
@@ -598,26 +608,6 @@ def _all_workflow_steps(workflow: Workflow):
         for state in graph.states.values():
             if state.kind is StateKind.ACTION and state.step is not None:
                 yield state.step
-
-
-def _effect_read_wording(tier: Any) -> tuple[str, str]:
-    """Name an effect check in a halt message by its evidence tier.
-
-    A separate-session record-page read (tier 2) and a screen read-back
-    (tiers 3 and 4) are not system-of-record reads, so their halt messages
-    must not call them that. Untyped legacy verifiers keep the old wording.
-    """
-
-    from openadapt_flow.verification import VerificationTier
-
-    if tier is VerificationTier.INDEPENDENT_SESSION:
-        return "Effect verification", "record page read in a separate session"
-    if tier in (
-        VerificationTier.PERSISTED_STATE_REACQUISITION,
-        VerificationTier.IMMEDIATE_SCREEN,
-    ):
-        return "Effect verification", "screen read-back"
-    return "System-of-record effect verification", "system of record"
 
 
 class EgressNotPermitted(RuntimeError):
@@ -1176,6 +1166,7 @@ class Replayer:
         self._durable_pending_snapshot: Optional[Any] = None
         self._active_delivery_acknowledgers: tuple[Any, ...] = ()
         self._durable_continuation_guard: Optional[Any] = None
+        self._first_local_delivery_step: Optional[FirstLocalDeliveryStep] = None
         # API/tool actuator -- the TOP of the capability ladder (RFC section 4
         # `api` tier). When set, a step carrying an `api_binding` has its write
         # performed via the API and confirmed by the effect_verifier, SKIPPING
@@ -1326,6 +1317,9 @@ class Replayer:
             if not isinstance(approval_gate, ApprovalGate):
                 raise ValueError("approval_gate must be an approval_mode ApprovalGate")
         self.approval_gate = approval_gate
+        from openadapt_flow.runtime.preparation import disable_api_for_dry_run
+
+        disable_api_for_dry_run(self, approval_gate)
         self._approval_report: Optional[RunReport] = None
         self._approval_form_step_id: Optional[str] = None
         self._approval_run_dir: Optional[Path] = None
@@ -1635,117 +1629,33 @@ class Replayer:
         before they are written, and durable checkpoints use the same key.
         No plaintext of the bundle or of the live screen reaches the disk.
         """
-        from openadapt_flow import at_rest
-
-        bundle_path = Path(bundle_dir)
-        bundle_sealed = (
-            _sealed.is_sealed(bundle_path)
-            or _sealed.active_writer(bundle_path) is not None
+        return run_with_output(
+            self,
+            workflow,
+            params=params,
+            worklists=worklists,
+            bundle_dir=bundle_dir,
+            run_dir=run_dir,
+            save_healed_to=save_healed_to,
+            resume_from=resume_from,
+            resume_program=resume_program,
+            run_id=run_id,
+            idempotency_key=idempotency_key,
+            execution_target_kind=execution_target_kind,
+            surface_override=surface_override,
+            execution_origin=execution_origin,
+            execution_entry_url=execution_entry_url,
+            execution_target_origin=execution_target_origin,
+            prior_screenshots_may_leave_box=prior_screenshots_may_leave_box,
+            prior_model_calls=prior_model_calls,
+            prior_external_network_calls=prior_external_network_calls,
         )
-        # A sealed bundle always runs into a sealed run directory, whatever
-        # the mode or opt-out: encrypted input never yields plaintext output.
-        # Strict mode seals the run of a plaintext bundle too. Otherwise the
-        # plaintext run directory is named on stderr and in the ledger
-        # (docs/phi_at_rest.md).
-        seal_run = at_rest.strict() or bundle_sealed
-        if save_healed_to is not None and seal_run:
-            # The healed copy is written as a plaintext bundle: hold it back
-            # before anything runs rather than decrypt a sealed bundle to disk.
-            raise at_rest.AtRestRefused(
-                f"Not writing a healed bundle at {save_healed_to}: it would be a "
-                "plaintext copy of an encrypted run. Nothing was executed."
-            )
-        if not seal_run or _sealed.active_writer(Path(run_dir)) is not None:
-            if _sealed.active_writer(Path(run_dir)) is None:
-                if not at_rest.plaintext_allowed("a run directory"):
-                    at_rest.unsealed_write("a run directory", run_dir)
-                if self.checkpoint_key is None:
-                    # Durable checkpoints can still be encrypted here.
-                    from openadapt_flow import crypto as _crypto
-
-                    self.checkpoint_key = _crypto.resolve_key(None)
-            return self._run_unsealed(
-                workflow,
-                params=params,
-                worklists=worklists,
-                bundle_dir=bundle_dir,
-                run_dir=run_dir,
-                save_healed_to=save_healed_to,
-                resume_from=resume_from,
-                resume_program=resume_program,
-                run_id=run_id,
-                idempotency_key=idempotency_key,
-                execution_target_kind=execution_target_kind,
-                surface_override=surface_override,
-                execution_origin=execution_origin,
-                execution_entry_url=execution_entry_url,
-                execution_target_origin=execution_target_origin,
-                prior_screenshots_may_leave_box=prior_screenshots_may_leave_box,
-                prior_model_calls=prior_model_calls,
-                prior_external_network_calls=prior_external_network_calls,
-            )
-        passphrase = _sealed.passphrase_for("bundle")
-        if not passphrase:
-            raise _sealed.SealedSetKeyError(
-                _sealed.missing_key_message(bundle_path, "bundle")
-            )
-        unsupported = self._sealed_run_unsupported(workflow)
-        if unsupported is not None:
-            # Refuse before anything is actuated or written: these stores
-            # keep their own plaintext state files in the run directory.
-            raise _sealed.SealedSetError(
-                f"a sealed run keeps {unsupported} outside the sealed set, so "
-                "it is held back. Nothing was executed. Run a plaintext bundle "
-                "outside OPENADAPT_FLOW_AT_REST=strict to use it (recorded)."
-            )
-        if self.checkpoint_key is None:
-            # A sealed bundle's run keeps its durable state under the same key.
-            self.checkpoint_key = passphrase
-        run_path = Path(run_dir)
-        writer = _sealed.SealedSetWriter(
-            run_path, "run", passphrase, resume=_sealed.is_sealed(run_path)
-        )
-        _sealed.register_writer(writer)
-        try:
-            report = self._run_unsealed(
-                workflow,
-                params=params,
-                worklists=worklists,
-                bundle_dir=bundle_dir,
-                run_dir=run_dir,
-                save_healed_to=save_healed_to,
-                resume_from=resume_from,
-                resume_program=resume_program,
-                run_id=run_id,
-                idempotency_key=idempotency_key,
-                execution_target_kind=execution_target_kind,
-                surface_override=surface_override,
-                execution_origin=execution_origin,
-                execution_entry_url=execution_entry_url,
-                execution_target_origin=execution_target_origin,
-                prior_screenshots_may_leave_box=prior_screenshots_may_leave_box,
-                prior_model_calls=prior_model_calls,
-                prior_external_network_calls=prior_external_network_calls,
-            )
-        finally:
-            _sealed.unregister_writer(writer)
-        writer.finalize(adopt_external=True)
-        return report
 
     def _sealed_run_unsupported(self, workflow: Workflow) -> Optional[str]:
         """Name a run feature whose run-directory state is not sealed yet."""
-        if self.approval_gate is not None:
-            return "an approval gate (attended approvals)"
-        if self._attended_draft_by is not None:
-            return "an attended draft"
-        program = workflow.program
-        if program is not None:
-            graphs = [program, *(getattr(workflow, "subflows", None) or {}).values()]
-            for graph in graphs:
-                for state in getattr(graph, "states", {}).values():
-                    if getattr(state, "kind", None) == StateKind.BUSINESS_DECISION:
-                        return "a business-decision state"
-        return None
+        from openadapt_flow.runtime.preparation import sealed_run_unsupported
+
+        return sealed_run_unsupported(self, workflow)
 
     def _run_unsealed(self, workflow: Workflow, **kwargs: Any) -> RunReport:
         """Run the workflow; see :meth:`_run_unsealed_steps`.
@@ -1786,6 +1696,7 @@ class Replayer:
         prior_external_network_calls: Literal[
             "none", "observed", "unknown"
         ] = "unknown",
+        first_local_delivery: bool = False,
     ) -> RunReport:
         """Execute the workflow and write a run directory.
 
@@ -2589,16 +2500,25 @@ class Replayer:
                             why_not = self._web_form_fallback_reason
                         else:
                             span_skip_to = end_index
+                first_local_step = None
                 if batch is None:
-                    result = self._run_step(
-                        step,
-                        workflow=workflow,
-                        step_index=step_index,
-                        params=params,
-                        bundle_dir=bundle_dir,
-                        run_dir=run_dir,
-                        new_crops=new_crops,
-                    )
+                    if first_local_delivery and durable_run is not None:
+                        first_local_step = FirstLocalDeliveryStep(
+                            durable_run, step_index, step, dict(params)
+                        )
+                    self._first_local_delivery_step = first_local_step
+                    try:
+                        result = self._run_step(
+                            step,
+                            workflow=workflow,
+                            step_index=step_index,
+                            params=params,
+                            bundle_dir=bundle_dir,
+                            run_dir=run_dir,
+                            new_crops=new_crops,
+                        )
+                    finally:
+                        self._first_local_delivery_step = None
                     if why_not is not None:
                         result.api_fallback = why_not
                     batch = [result]
@@ -2628,6 +2548,7 @@ class Replayer:
                             if folded and (already or not checkpoint_folded)
                             else durable_run
                         ),
+                        first_local_step=first_local_step,
                     )
                     if stop_run:
                         break
@@ -2766,6 +2687,7 @@ class Replayer:
         step: Step,
         params: Mapping[str, RuntimeParamScalar],
         durable_run: Optional[Any],
+        first_local_step: Optional[FirstLocalDeliveryStep] = None,
     ) -> bool:
         """Account one linear-loop result; True when the run must stop."""
 
@@ -2786,9 +2708,20 @@ class Replayer:
                 f"but the workflow changed during delivery{prior_error}"
             )
         report.results.append(result)
-        self._account_result(report, result)
+        if first_local_step is not None and first_local_step.held:
+            # Arming failed, possibly after the pause write. Do not replace
+            # whatever evidence the authority retained with an ordinary halt.
+            self._account_result(report, result)
+            return True
+        first_local_pause = first_local_step.pause_digest if first_local_step else ""
+        first_local = (
+            {"first_local_pause_digest": first_local_pause} if first_local_pause else {}
+        )
+        if not first_local_pause:
+            self._account_result(report, result)
         if durable_run is not None:
-            self._sync_durable_audit(durable_run, report)
+            if not first_local_pause:
+                self._sync_durable_audit(durable_run, report)
             # Tier-3: verified step -> checkpoint; halt -> pending
             # escalation (resumable from the last checkpoint).
             if post_action_refusal is None:
@@ -2804,20 +2737,29 @@ class Replayer:
                     # The save was sent and its record check runs alongside
                     # the next item: the durable pause holds the check, so a
                     # crash resumes the check and never resends the save.
-                    durable_run.record_deferred_readback(
-                        step_index,
-                        step,
-                        result,
-                        dict(params),
-                        actuation=deferred.actuation,
-                        before=deferred.before.model_dump(mode="json"),
-                        active_surface=(
-                            router.active_id if router is not None else None
-                        ),
-                        surface_observations=(
-                            router.observations if router is not None else None
-                        ),
-                    )
+                    try:
+                        durable_run.record_deferred_readback(
+                            step_index,
+                            step,
+                            result,
+                            dict(params),
+                            actuation=deferred.actuation,
+                            before=deferred.before.model_dump(mode="json"),
+                            active_surface=(
+                                router.active_id if router is not None else None
+                            ),
+                            surface_observations=(
+                                router.observations if router is not None else None
+                            ),
+                            **first_local,
+                        )
+                    except FirstLocalDeliveryHeld as exc:
+                        mark_first_local_delivery_held(result, str(exc))
+                        self._account_result(report, result)
+                        return True
+                    if first_local_pause:
+                        self._account_result(report, result)
+                        self._sync_durable_audit(durable_run, report)
                     deferred.durable_run = durable_run
                     deferred.step_index = step_index
                     deferred.params = dict(params)
@@ -2830,22 +2772,34 @@ class Replayer:
                     )
                     deferred.start.set()
                     return False
-                durable_run.record(
-                    step_index,
-                    step,
-                    result,
-                    params,
-                    workflow=workflow,
-                    transition_observation=(
-                        self._attended_transition_observation()
-                        if not result.ok
-                        else None
-                    ),
-                    active_surface=(router.active_id if router is not None else None),
-                    surface_observations=(
-                        router.observations if router is not None else None
-                    ),
-                )
+                try:
+                    durable_run.record(
+                        step_index,
+                        step,
+                        result,
+                        params,
+                        workflow=workflow,
+                        transition_observation=(
+                            self._attended_transition_observation()
+                            if not result.ok and not first_local_pause
+                            else None
+                        ),
+                        active_surface=(
+                            router.active_id if router is not None else None
+                        ),
+                        surface_observations=(
+                            router.observations if router is not None else None
+                        ),
+                        **first_local,
+                    )
+                    if first_local_pause and result.ok:
+                        durable_run.consume_pause(first_local_pause)
+                        if durable_run.store.read_pending() is not None:
+                            raise FirstLocalDeliveryHeld(
+                                "another pause is retained after the checkpoint"
+                            )
+                except FirstLocalDeliveryHeld as exc:
+                    mark_first_local_delivery_held(result, str(exc))
                 if (
                     self._durable_continuation_guard is not None
                     and result.failure_category != "continuation_preempted"
@@ -2853,6 +2807,10 @@ class Replayer:
                     self._durable_continuation_guard.acknowledge_progress(
                         terminal=not result.ok
                     )
+        if first_local_pause:
+            self._account_result(report, result)
+            if result.ok:
+                self._sync_durable_audit(durable_run, report)
         return not result.ok
 
     def _web_form_span_at(
@@ -3747,6 +3705,7 @@ class Replayer:
         *,
         params: Mapping[str, RuntimeParamScalar],
         run_id: str,
+        read_only: bool = False,
     ) -> StepResult:
         """Re-run a durable pause's deferred record check; send nothing.
 
@@ -3779,7 +3738,12 @@ class Replayer:
         scratch = StepResult(step_id=step.id, intent=step.intent, ok=True)
         try:
             error = self._verify_effects(
-                step, before, scratch, effects=effects, verifier=verifier
+                step,
+                before,
+                scratch,
+                effects=effects,
+                verifier=verifier,
+                read_only=read_only,
             )
         except Exception as exc:  # noqa: BLE001 - a raising verifier fails closed
             error = f"read-back raised {type(exc).__name__}; reconciliation is required"
@@ -6777,6 +6741,7 @@ class Replayer:
                         final_verdict=verdict.verdict.value,
                         observed_effect=verdict.observed_effect,
                         endpoint_scope=effect_endpoint_scope(current_verifier),
+                        read_evidence=verdict.read_evidence,
                     )
                 )
             else:
@@ -8266,6 +8231,14 @@ class Replayer:
             result.elapsed_ms = (time.monotonic() - t0) * 1000.0
             return result
 
+        first_local_gui = (
+            self._first_local_delivery_step is not None
+            and is_consequential(step, workflow)
+        )
+        if first_local_gui and first_local_effect_refusal(step, result, step.effects):
+            result.elapsed_ms = (time.monotonic() - t0) * 1000.0
+            return result
+
         # Default behavior settles exactly as before. The opt-in readiness gate
         # owns its own single bounded settle call inside ``_apply_step_gates``;
         # capture only a raw diagnostic frame here so it is not preceded by an
@@ -8549,6 +8522,12 @@ class Replayer:
                             code="target_ambiguous",
                             detector_input_sha256=sha256_bytes(before_png),
                         )
+            from openadapt_flow.runtime.preparation import dry_run_preparation_refusal
+
+            error, resolved_effects = dry_run_preparation_refusal(
+                self, workflow, params, step, result, error, resolved_effects
+            )
+
             # System-of-record effect verification -- SNAPSHOT the record just
             # before the (consequential) action, so the post-action verifier
             # can count only what THIS step wrote (delta / at-most-once /
@@ -8597,6 +8576,7 @@ class Replayer:
                     authorization = self.governed_authorization
                     approved = (
                         authorization is not None
+                        and not first_local_gui
                         and authorization.approves_unverified_write(step)
                     )
                     if approved:
@@ -9587,29 +9567,9 @@ class Replayer:
 
     def _actuator_for(self, binding: Any) -> Optional[Any]:
         """The actuator that runs ``binding``, or None when none can."""
+        from openadapt_flow.runtime.preparation import actuator_for
 
-        if binding is None:
-            return None
-        if binding.kind != "web_form":
-            return self.api_actuator
-        if self.web_form_actuator is not None:
-            return self.web_form_actuator
-        # In a multi-surface run the request goes through the active
-        # surface's session, which on a resume may not be self.backend yet.
-        router = getattr(self, "_surface_router", None)
-        backend = router.active_backend if router is not None else self.backend
-        page = getattr(backend, "page", None)
-        if page is None:
-            return None
-        from openadapt_flow.runtime.actuators.web_form import (
-            PlaywrightSessionTransport,
-            WebFormActuator,
-        )
-
-        try:
-            return WebFormActuator(PlaywrightSessionTransport(page))
-        except Exception:  # noqa: BLE001 - no live session: the GUI runs
-            return None
+        return actuator_for(self, binding)
 
     def _try_api_tier(
         self,
@@ -9672,6 +9632,10 @@ class Replayer:
                 "must be verifiable; refusing to actuate "
                 "(deployment/configuration error); run aborted"
             )
+            return True
+        if self._first_local_delivery_step is not None and first_local_effect_refusal(
+            step, result, effects
+        ):
             return True
         identity_refusal = self._api_identity_refusal(
             step,
@@ -9822,7 +9786,7 @@ class Replayer:
             self._web_form_form_state_set = True
         try:
             refusal = self._delivery_authorization_refusal(
-                workflow, params, step, result
+                workflow, params, step, result, api_delivery=True
             )
         finally:
             self._web_form_form_state = None
@@ -9904,12 +9868,26 @@ class Replayer:
                     "nothing was sent"
                 )
                 return True
+        local = self._first_local_delivery_step
+        if local is not None:
+            try:
+                self._require_qualification_environment_current()
+            except StructuralResolutionRefused as exc:
+                result.safety_halt = True
+                result.failure_category = "safety_halt"
+                result.error = str(exc)
+                return True
+            refusal = arm_first_local_delivery(self, step, params, actuation="api")
+            if refusal is not None:
+                mark_first_local_delivery_held(result, refusal)
+                return True
         # This transition is the explicit delivery boundary. Set it BEFORE the
         # call because an exception/timeout may occur after the request left the
         # process but before the actuator can return a receipt-like outcome.
         result.delivery_attempted = True
         try:
-            self._require_qualification_environment_current()
+            if local is None:
+                self._require_qualification_environment_current()
             if send_prepared is not None:
                 # Exactly the request whose digest was approved and re-checked.
                 outcome = api_actuator.send(binding, send_prepared)
@@ -10006,6 +9984,16 @@ class Replayer:
         outcome_reason = outcome.reason
 
         if outcome_status is ActuationStatus.UNAVAILABLE:
+            if local is not None and local.pause_digest:
+                # The adapter declined after the fence was published. Keep
+                # that exact pause and never dispatch a fallback write.
+                result.delivery_attempted = False
+                result.actuation = "api"
+                mark_first_local_delivery_held(
+                    result,
+                    "first_local_delivery_held: the armed API action did not verify",
+                )
+                return True
             # The request was NEVER sent -- nothing was written. Remove the
             # unused API-path contracts before applying the binding's exact
             # unavailability policy. A GUI fallback result must describe only
@@ -10601,6 +10589,8 @@ class Replayer:
         result: StepResult,
         effects: Optional[list["Effect"]] = None,
         verifier: Any = None,
+        *,
+        read_only: bool = False,
     ) -> Optional[str]:
         """Verify each declared Effect against the system of record; HALT on
         any non-CONFIRMED verdict.
@@ -10634,26 +10624,9 @@ class Replayer:
         if effects is None:
             effects = step.effects
         for effect in effects:
-            # A compiler-mined PLACEHOLDER effect (binding not derivable from
-            # the demonstration — see compiler.effect_mining) carries a
-            # sentinel selector, NOT a real one. Never verify it against the
-            # system of record: that would either falsely refute or, worse,
-            # silently pass. Fail-safe HALT until an operator completes the
-            # binding and clears the flag — same posture as the identity gate.
-            if effect.needs_operator_confirmation:
-                result.effect_verified = False
-                result.effect_results.append(
-                    f"[unbound] {effect.kind.value}: NEEDS OPERATOR "
-                    "CONFIRMATION — placeholder effect not bound to the system "
-                    "of record (compiler could not derive it); HALT"
-                )
-                return (
-                    f"System-of-record effect for step '{step.id}' "
-                    f"({step.intent}) is an unconfirmed PLACEHOLDER — the "
-                    "compiler flagged its binding as app-specific and it must "
-                    "be completed by an operator before this consequential "
-                    "write can run — run aborted"
-                )
+            refusal = placeholder_effect_refusal(step, effect, result)
+            if refusal is not None:
+                return refusal
             try:
                 verdict = verify_effect_without_mutation(verifier, effect, before)
                 scope = effect_endpoint_scope(verifier)
@@ -10711,6 +10684,7 @@ class Replayer:
                         final_verdict=verdict.verdict.value,
                         observed_effect=verdict.observed_effect,
                         endpoint_scope=scope,
+                        read_evidence=verdict.read_evidence,
                     )
                 )
                 result.effect_results.append(
@@ -10725,7 +10699,7 @@ class Replayer:
             # loss / INDETERMINATE always escalate). A reversible effect just
             # halts. Either way the run stops -- this is the same
             # refuse-rather-than-guess posture as the identity gate.
-            if effect.risk == "irreversible":
+            if effect.risk == "irreversible" and not read_only:
                 comp = reconcile_or_escalate(
                     effect,
                     verdict,
@@ -10745,6 +10719,7 @@ class Replayer:
                             final_verdict=final_verdict.verdict.value,
                             observed_effect=final_verdict.observed_effect,
                             endpoint_scope=scope,
+                            read_evidence=final_verdict.read_evidence,
                             reconciliation_completed=True,
                             reconciliation_actions=comp.actions_taken,
                         )
@@ -10767,6 +10742,7 @@ class Replayer:
                         final_verdict=final_verdict.verdict.value,
                         observed_effect=final_verdict.observed_effect,
                         endpoint_scope=scope,
+                        read_evidence=final_verdict.read_evidence,
                         reconciliation_actions=comp.actions_taken,
                         deferred_check=verdict.deferred_check,
                     )
@@ -10797,6 +10773,7 @@ class Replayer:
                     final_verdict=verdict.verdict.value,
                     observed_effect=verdict.observed_effect,
                     endpoint_scope=scope,
+                    read_evidence=verdict.read_evidence,
                     deferred_check=verdict.deferred_check,
                 )
             )
@@ -12845,6 +12822,7 @@ class Replayer:
         result: StepResult,
         *,
         interstitial: bool = False,
+        api_delivery: bool = False,
     ) -> Optional[str]:
         """Recheck exact authority at the last point before input delivery.
 
@@ -12916,9 +12894,11 @@ class Replayer:
             )
         if (
             refusal is None
-            and not interstitial
             and self.approval_gate is not None
-            and self._step_is_consequential(step, workflow)
+            and (
+                getattr(self.approval_gate, "stops_before_any_input", False) is True
+                or (not interstitial and self._step_is_consequential(step, workflow))
+            )
         ):
             refusal = self._approval_gate_refusal(workflow, step, result)
         initial_guard = getattr(self, "_durable_initial_delivery_guard", None)
@@ -12938,6 +12918,14 @@ class Replayer:
             except Exception as exc:  # noqa: BLE001 - durable fencing boundary
                 refusal = f"durable continuation was preempted before delivery: {exc}"
                 result.failure_category = "continuation_preempted"
+        if (
+            refusal is None
+            and self._first_local_delivery_step is not None
+            and not interstitial
+            and not api_delivery
+            and is_consequential(step, workflow)
+        ):
+            refusal = arm_first_local_delivery(self, step, params, actuation="gui")
         if refusal is not None:
             self._cancel_guarded_coordinate()
             self._cancel_guarded_keyboard()
@@ -13246,24 +13234,9 @@ class Replayer:
 
     def _stamp_approval(self, report: RunReport) -> None:
         """Stamp the approval gate's post-run decision on the report."""
+        from openadapt_flow.runtime.preparation import stamp_approval
 
-        gate = self.approval_gate
-        if gate is None:
-            return
-        try:
-            report.approval = gate.finish_item(report)
-        except Exception:  # noqa: BLE001 - an unknown decision goes to a person
-            from openadapt_flow.approval_mode.model import (
-                ApprovalModeItemEvidence,
-                ItemDecisionKind,
-            )
-
-            report.approval = ApprovalModeItemEvidence(
-                mode=gate.mode,
-                decision=ItemDecisionKind.PROBLEM,
-                decision_reason="gate_error",
-                needs_person=True,
-            )
+        stamp_approval(self, report)
 
     def _read_gate_refusal(self, step: Step, result: StepResult) -> Optional[str]:
         """Halt before acting when values this step needs are below its gate."""
@@ -15649,6 +15622,7 @@ class Replayer:
                     params,
                     workflow=workflow,
                 ):
+                    self._record_dry_run_preconditions(step, result)
                     return True, None, before_png
                 if time.monotonic() >= deadline:
                     return (
@@ -15665,7 +15639,13 @@ class Replayer:
                 time.sleep(self.poll_interval_s)
                 before_png = self.vision.wait_settled(self.backend)
 
+        self._record_dry_run_preconditions(step, result)
         return True, None, before_png
+
+    def _record_dry_run_preconditions(self, step: Step, result: StepResult) -> None:
+        from openadapt_flow.runtime.preparation import record_dry_run_preconditions
+
+        record_dry_run_preconditions(self, step, result)
 
     def _predicate_holds(
         self,

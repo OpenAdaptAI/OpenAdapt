@@ -131,6 +131,7 @@ def test_learns_the_binding_a_person_would_type_from_the_read_after_the_save(
         "base_url": BASE,
         "records_path": "/api/db",
         "records_key": "records",
+        "records_complete": True,
     }
     # The evidence is for this binding, including what it can't catch.
     test = learned["fault_test"]

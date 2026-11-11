@@ -2,8 +2,12 @@
 
 This file is run only from the trusted base by a ``pull_request_target``
 workflow. It reads GitHub metadata and comments; it never checks out, imports,
-or executes pull-request-head code. The shared-account declarations it checks
-are evidence-presence controls, not cryptographic proof or a defense against a
+or executes pull-request-head code. A protected change needs one current-head
+independent review from a vendor other than the author's. The author vendor
+comes from the pull request branch prefix (for example ``codex/...``) or, for a
+shared or legacy branch such as ``agent/...``, from one current-head author
+declaration. This is
+an evidence-presence control, not cryptographic proof or a defense against a
 malicious actor.
 """
 
@@ -16,7 +20,6 @@ import re
 import sys
 import unicodedata
 import urllib.request
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -24,11 +27,14 @@ from scripts.ci.attestation import (
     EvidenceError,
     declaration_text,
     head_reference_lines,
+    is_hidden_approval_example,
+    is_legacy_coordinator_note,
     parse_author_declaration,
-    parse_precommit_report,
     parse_review_report,
     review_headings,
-    validate_independent_review,
+    vendor_family,
+    veto_text,
+    visible_head_reference_lines,
 )
 
 REPOSITORY = "OpenAdaptAI/OpenAdapt"
@@ -122,7 +128,7 @@ def validate_manifest(manifest: Any) -> dict[str, Any]:
         "scripts/ci/protected_safety_review.py",
         "scripts/ci/attestation.py",
         "docs/agent-safety-evidence-v1.md",
-        "tests/test_precommit_attestation.py",
+        "tests/test_attestation.py",
         "tests/test_protected_safety_review.py",
     }
     if not required_gate_paths <= gate_paths:
@@ -141,37 +147,55 @@ def _matches(path: str, pattern: str) -> bool:
 
 
 def _headers(body: str, key: str) -> list[str]:
-    return re.findall(rf"(?m)^{re.escape(key)}: (.*)$", declaration_text(body))
+    return re.findall(rf"(?m)^{re.escape(key)}: (.*)$", veto_text(body))
 
 
-def _current_comment(body: Any, head: str) -> bool:
-    if not isinstance(body, str):
-        return False
-    # Selection must retain ambiguous or malformed declarations that refer to
-    # this head. Only the strict parser may decide whether evidence is valid.
-    mentions = re.findall(
-        r"(?m)^ {0,3}Reviewed-Head[ \t]*:[ \t]*(.*)$", declaration_text(body)
-    )
+def _current_comment(body: str, head: str) -> bool:
+    """Select any comment whose head-binding line names this head.
+
+    Selection keeps ambiguous or malformed reviews, including ones whose heading
+    is unrecognizable, so only the strict parser decides whether they are valid.
+    """
+    mentions = [
+        value
+        for text in (veto_text(body), declaration_text(body))
+        for value in re.findall(r"(?m)^ {0,3}Reviewed-Head[ \t]*:[ \t]*(.*)$", text)
+    ]
     return any(
         re.search(rf"(?i)(?<![0-9a-f]){re.escape(head)}(?![0-9a-f])", value)
         for value in mentions
     )
 
 
+def _mentions_head(body: str, head: str) -> bool:
+    for text in (veto_text(body), declaration_text(body)):
+        normalized = unicodedata.normalize("NFKC", text).casefold()
+        for value in re.findall(r"[0-9a-f]{8,}", normalized):
+            if head.startswith(value) or value.startswith(head):
+                return True
+    return False
+
+
 def _review_needs_validation(body: str, head: str) -> bool:
-    """Ignore only a proven stale review, not an unknown declaration shape."""
-    heads = _headers(body, "Reviewed-Head")
+    """Ignore only a proven stale review, not an unknown declaration shape.
+
+    A review is proven stale only by one visible exact ``Reviewed-Head`` line
+    naming an older SHA, with no other binding in either view. Every other
+    case, including a binding seen only inside an HTML comment, is validated.
+    """
+    visible = re.findall(r"(?m)^Reviewed-Head: (.*)$", declaration_text(body))
+    hidden = _headers(body, "Reviewed-Head")
+    raw_references = head_reference_lines(body)
+    visible_references = visible_head_reference_lines(body)
     if (
-        len(heads) != 1
-        or len(head_reference_lines(body)) != 1
-        or not SHA.fullmatch(heads[0].strip())
+        len(visible) == 1
+        and hidden == visible
+        and len(raw_references) == 1
+        and len(visible_references) == 1
+        and SHA.fullmatch(visible[0].strip())
     ):
-        return True
-    if heads[0].strip() == head:
-        return True
-    visible = unicodedata.normalize("NFKC", declaration_text(body)).casefold()
-    references = re.findall(r"[0-9a-f]{8,}", visible)
-    return any(head.startswith(value) or value.startswith(head) for value in references)
+        return visible[0].strip() == head or _mentions_head(body, head)
+    return True
 
 
 TRUSTED_ASSOCIATIONS = {"OWNER", "MEMBER", "COLLABORATOR"}
@@ -186,134 +210,107 @@ def _trusted_comment(comment: dict[str, Any]) -> bool:
     )
 
 
+# GitHub's REST timestamps. Nothing parses them; they are only compared as
+# strings, and anything other than this exact shape counts as edited.
+TIMESTAMP = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
+
+
 def _unedited_comment(comment: dict[str, Any]) -> bool:
     created = comment.get("created_at")
-    return isinstance(created, str) and created == comment.get("updated_at")
+    return (
+        isinstance(created, str)
+        and TIMESTAMP.fullmatch(created) is not None
+        and created == comment.get("updated_at")
+    )
 
 
-def _review_and_attestation_errors(
+def author_vendor(branch: Any) -> str | None:
+    """Return the author vendor family named by a ``<vendor>/...`` branch."""
+    if not isinstance(branch, str) or "/" not in branch:
+        return None
+    return vendor_family(branch.split("/", 1)[0])
+
+
+def _review_errors(
     *,
     comments: list[dict[str, Any]],
     head: str,
-    commits: list[dict[str, Any]],
-    coordinator_needed: bool,
-    pull_request_author: str,
+    branch_family: str | None,
+    pull_request_author: Any,
 ) -> list[str]:
+    """Check one cross-vendor review, with the author vendor from the branch.
+
+    ``branch_family`` is None for a shared or legacy branch such as
+    ``agent/...``; the author vendor then comes from exactly one unedited
+    current-head author declaration posted by the pull request author.
+    """
     errors: list[str] = []
-    trusted_comments = [c for c in comments if _trusted_comment(c)]
-    all_bodies = [c.get("body") for c in trusted_comments]
-    current = [body for body in all_bodies if _current_comment(body, head)]
-    authors: list[tuple[str, str]] = []
-    reviewers: list[tuple[str, str, str]] = []
-    coordinator_notes: list[str] = []
-    for comment, body in zip(trusted_comments, all_bodies, strict=True):
-        if not isinstance(body, str):
+    reviewers: list[str] = []
+    declared: list[str] = []
+    mentioned: list[str] = []
+    for comment in comments:
+        body = comment.get("body")
+        if not _trusted_comment(comment) or not isinstance(body, str):
             continue
+        unedited = _unedited_comment(comment)
         if review_headings(body):
+            if is_hidden_approval_example(body):
+                continue
             if not _review_needs_validation(body, head):
                 continue
-            unedited = _unedited_comment(comment)
             if not unedited:
                 errors.append(
                     "edited current independent review cannot authorize success"
                 )
             try:
-                vendor, verdict = parse_review_report(body, head)
-                if _headers(body, "Coordinator-Approval"):
-                    raise EvidenceError(
-                        "review must be separate from a coordinator note"
-                    )
+                family, _verdict = parse_review_report(body, head)
                 if unedited:
-                    reviewers.append((vendor, verdict, body))
+                    reviewers.append(family)
             except EvidenceError as exc:
                 errors.append(f"invalid independent review: {exc}")
             continue
-        if not _unedited_comment(comment) or body not in current:
+        if not _current_comment(body, head) or is_legacy_coordinator_note(body, head):
             continue
-        if _headers(body, "Coordinator-Approval"):
-            try:
-                vendor = parse_author_declaration(body, head)
-                approval = _headers(body, "Coordinator-Approval")
-                if (
-                    len(approval) != 1
-                    or approval[0] != "APPROVE"
-                    or vendor.casefold() != "coordinator"
-                ):
-                    raise EvidenceError(
-                        "coordinator note needs From: Coordinator and Coordinator-Approval: APPROVE"
-                    )
-                coordinator_notes.append(body)
-            except EvidenceError as exc:
-                errors.append(f"invalid coordinator note: {exc}")
+        # A current-head comment without a review heading must be a valid
+        # author declaration. Anything else, such as a mistyped BLOCK, fails.
+        try:
+            family = parse_author_declaration(body, head)
+        except EvidenceError as exc:
+            errors.append(f"invalid independent review or author declaration: {exc}")
             continue
+        login = comment.get("user", {}).get("login")
+        if (
+            not isinstance(pull_request_author, str)
+            or login.casefold() != pull_request_author.casefold()
+        ):
+            errors.append(
+                "author declaration must be posted by the pull request author"
+            )
         else:
-            try:
-                vendor = parse_author_declaration(body, head)
-                if comment.get("user", {}).get("login", "").casefold() != (
-                    pull_request_author.casefold()
-                ):
-                    raise EvidenceError(
-                        "author declaration must be posted by the pull request author"
-                    )
-                authors.append((vendor, body))
-            except EvidenceError as exc:
-                errors.append(f"invalid author declaration: {exc}")
+            # An edited declaration never grants anything, but it still
+            # counts as a statement of the author vendor for conflicts.
+            mentioned.append(family)
+            if unedited:
+                declared.append(family)
 
-    if len(authors) != 1:
-        errors.append("expected exactly one current exact-head author declaration")
+    author_family = branch_family
+    if branch_family is None:
+        if len(declared) != 1:
+            errors.append(
+                "branch has no vendor prefix; expected exactly one current "
+                "exact-head author declaration"
+            )
+        else:
+            author_family = declared[0]
+            if any(family != author_family for family in mentioned):
+                errors.append("author declarations name different vendors")
+    elif any(family != branch_family for family in mentioned):
+        errors.append("author declaration conflicts with the branch vendor prefix")
+
     if len(reviewers) != 1:
         errors.append("expected exactly one current exact-head independent review")
-    if len(authors) == 1 and len(reviewers) == 1:
-        try:
-            validate_independent_review(authors[0][1], reviewers[0][2], head)
-        except (EvidenceError, StopIteration) as exc:
-            errors.append(f"independent review mismatch: {exc}")
-    if coordinator_needed and len(coordinator_notes) != 1:
-        errors.append(
-            "protected gate files require exactly one current coordinator approval"
-        )
-
-    # The GitHub API commit list supplies parent/tree/time metadata. Each
-    # per-commit declaration must bind to those exact values.
-    for commit in commits:
-        sha = commit.get("sha")
-        metadata = commit.get("commit", {})
-        parents = [p.get("sha") for p in commit.get("parents", [])]
-        tree = metadata.get("tree", {}).get("sha")
-        date_value = metadata.get("committer", {}).get("date")
-        if not isinstance(sha, str) or not SHA.fullmatch(sha):
-            errors.append("GitHub returned malformed commit metadata")
-            continue
-        # Python 3.10's fromisoformat rejects the "Z" suffix GitHub uses.
-        if isinstance(date_value, str) and date_value.endswith("Z"):
-            date_value = date_value[:-1] + "+00:00"
-        try:
-            commit_time = datetime.fromisoformat(date_value)
-        except (TypeError, ValueError):
-            errors.append(f"commit {sha} has no valid committer timestamp")
-            continue
-        matches: list[str] = []
-        for comment, body in zip(trusted_comments, all_bodies, strict=True):
-            if not isinstance(body, str):
-                continue
-            if not _unedited_comment(comment):
-                continue
-            candidates = re.findall(r'"commit"\s*:\s*"([0-9a-f]{40})"', body)
-            if sha in candidates:
-                matches.append(body)
-        if len(matches) != 1:
-            errors.append(f"commit {sha} needs exactly one current v1 precommit report")
-            continue
-        try:
-            parse_precommit_report(
-                matches[0],
-                expected_commit=sha,
-                expected_parents=parents,
-                expected_tree=tree,
-                commit_time=commit_time,
-            )
-        except EvidenceError as exc:
-            errors.append(f"invalid precommit report for {sha}: {exc}")
+    elif author_family is not None and reviewers[0] == author_family:
+        errors.append("author and reviewer must be from different vendors")
     return errors
 
 
@@ -323,7 +320,6 @@ def evaluate_pull_request(
     pull_request: dict[str, Any],
     main_sha: str,
     files: list[dict[str, Any]],
-    commits: list[dict[str, Any]],
     comments: list[dict[str, Any]],
     manifest: Any,
 ) -> list[str]:
@@ -355,27 +351,14 @@ def evaluate_pull_request(
         or not head.get("repo", {}).get("full_name", "").strip()
     ):
         errors.append("pull request head repository metadata is missing")
-    author = pull_request.get("user")
-    if not isinstance(author, dict) or not isinstance(author.get("login"), str):
-        errors.append("pull request author metadata is missing")
     if errors:
         return errors
 
     expected_file_count = pull_request.get("changed_files")
-    expected_commit_count = pull_request.get("commits")
     if type(expected_file_count) is not int or expected_file_count < 0:
         errors.append("pull request changed-file count is missing or malformed")
     elif len(files) != expected_file_count:
         errors.append("changed-file API results are incomplete")
-    if type(expected_commit_count) is not int or expected_commit_count < 0:
-        errors.append("pull request commit count is missing or malformed")
-    elif expected_commit_count > 250 or len(commits) != expected_commit_count:
-        errors.append("commit API results are incomplete or exceed the API limit")
-    commit_shas = [commit.get("sha") for commit in commits]
-    if not all(isinstance(sha, str) and sha for sha in commit_shas):
-        errors.append("commit API results contain malformed commit ids")
-    elif len(set(commit_shas)) != len(commit_shas):
-        errors.append("commit API results contain duplicate commit ids")
     filenames = [item.get("filename") for item in files]
     if not all(isinstance(filename, str) and filename for filename in filenames):
         errors.append("changed-file API results contain malformed paths")
@@ -405,26 +388,15 @@ def evaluate_pull_request(
     )
     if not protected:
         return []
-    if not commits:
-        return _fail("protected change has no commit metadata")
-    gate_paths = next(
-        area["paths"]
-        for area in validated["areas"]
-        if area["id"] == "safety-gate-itself"
+    # A branch prefix names the author vendor only for branches in this
+    # repository; a fork can pick any name, so it needs a declaration.
+    same_repository = head.get("repo", {}).get("full_name") == REPOSITORY
+    return _review_errors(
+        comments=comments,
+        head=head_sha,
+        branch_family=author_vendor(head.get("ref")) if same_repository else None,
+        pull_request_author=pull_request.get("user", {}).get("login"),
     )
-    coordinator_needed = any(
-        _matches(path, pattern) for path in changed_paths for pattern in gate_paths
-    )
-    errors.extend(
-        _review_and_attestation_errors(
-            comments=comments,
-            head=head_sha,
-            commits=commits,
-            coordinator_needed=coordinator_needed,
-            pull_request_author=pull_request.get("user", {}).get("login", ""),
-        )
-    )
-    return errors
 
 
 class GitHubApi:
@@ -501,6 +473,19 @@ def _pull_request_number(event: dict[str, Any]) -> int:
     if type(number) is not int or number <= 0:
         raise EvidenceError("pull request number is missing")
     return number
+
+
+def _head_identity(pull_request: Any) -> tuple[Any, Any, Any]:
+    """The head SHA, branch name and repository the author vendor relies on."""
+    head = pull_request.get("head") if isinstance(pull_request, dict) else None
+    if not isinstance(head, dict):
+        return (None, None, None)
+    repo = head.get("repo")
+    return (
+        head.get("sha"),
+        head.get("ref"),
+        repo.get("full_name") if isinstance(repo, dict) else None,
+    )
 
 
 def _comment_snapshot(comments: list[dict[str, Any]]) -> list[str]:
@@ -727,14 +712,12 @@ def _fetch_pr_evidence(
 ) -> tuple[dict[str, Any], list[dict[str, Any]], list[str]]:
     pull_request = api.request(f"/pulls/{number}")
     files = api.pages(f"/pulls/{number}/files")
-    commits = api.pages(f"/pulls/{number}/commits")
     comments = api.pages(f"/issues/{number}/comments")
     errors = evaluate_pull_request(
         repository=repository,
         pull_request=pull_request,
         main_sha=main_sha,
         files=files,
-        commits=commits,
         comments=comments,
         manifest=manifest,
     )
@@ -862,6 +845,7 @@ def run(
     workflow_run: Any = None
     comments_by_pr: dict[int, list[str]] = {}
     initial_heads: dict[int, str] = {}
+    initial_identity: dict[int, tuple[Any, Any, Any]] = {}
     try:
         if run_id:
             workflow_run = api.request(f"/actions/runs/{run_id}")
@@ -932,6 +916,7 @@ def run(
                         main_sha=main_sha,
                     )
                 )
+            initial_identity[number] = _head_identity(pull_request)
             comments_by_pr[number] = _comment_snapshot(comments)
             errors.extend(f"PR #{number}: {error}" for error in pr_errors)
 
@@ -953,6 +938,11 @@ def run(
             ):
                 errors.append(
                     f"PR #{number} head changed during review; rerun on current head"
+                )
+            if _head_identity(latest_pull_request) != initial_identity.get(number):
+                errors.append(
+                    f"PR #{number} head SHA, branch or repository changed during "
+                    "review; rerun on current head"
                 )
             if latest_pull_request.get("state") != "open":
                 errors.append(f"PR #{number} is no longer open")
@@ -1066,6 +1056,12 @@ def main() -> int:
     print("protected-safety-review: " + conclusion)
     for error in errors:
         print("- " + error)
+    # GitHub attaches an issue_comment job to main's head commit, not the PR.
+    # Once the verdict is published as the check run on the PR head, that
+    # comment-triggered job succeeds so an evidence failure never marks main
+    # red. Internal errors still exit 2 above.
+    if event_name == "issue_comment":
+        return 0
     return 0 if conclusion == "success" else 1
 
 

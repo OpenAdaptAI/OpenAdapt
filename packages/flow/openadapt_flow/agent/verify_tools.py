@@ -57,7 +57,7 @@ from openadapt_flow.verifier import (
     recheck,
     verify_write,
 )
-from openadapt_flow.write_ledger import default_ledger
+from openadapt_flow.write_ledger import LedgerIntegrityHeld, default_ledger
 
 __all__ = ["VERIFY_TOOLS", "VerifyBridge", "contract_params"]
 
@@ -268,6 +268,12 @@ class VerifyBridge:
                 workdir=self.state_dir,
                 write_key=None if write_key is None else str(write_key),
             )
+        except LedgerIntegrityHeld as exc:
+            return {
+                "ok_to_write": False,
+                "reason": "the write ledger is held; don't make the write",
+                "hold_reason": exc.code,
+            }
         except AlreadyWritten as exc:
             out: dict[str, Any] = {
                 "ok_to_write": False,
@@ -295,9 +301,17 @@ class VerifyBridge:
             raise BridgeError(
                 "no pending write with that write_id (each one is checked once)"
             )
-        result = verify_write(
-            entry, write_attempted=bool(args.get("write_attempted", True))
-        )
+        try:
+            result = verify_write(
+                entry, write_attempted=bool(args.get("write_attempted", True))
+            )
+        except LedgerIntegrityHeld as exc:
+            return {
+                "verified": False,
+                "outcome": "UNCERTAIN",
+                "retry_safe": False,
+                "hold_reason": exc.code,
+            }
         out = result.to_dict()
         if result.recheck is not None:
             # Any outcome: a later write's own window excuses its rows in an
@@ -346,6 +360,8 @@ class VerifyBridge:
             found = default_ledger().find_attempt(write_id)
             if found is not None:
                 owed = found[1].recheck_owed
+        except LedgerIntegrityHeld as exc:
+            return f"the write ledger is held ({exc.code})"
         except Exception:  # noqa: BLE001 - only the wording depends on it
             owed = None
         if owed:
@@ -431,6 +447,15 @@ class VerifyBridge:
                 "next": "Not due yet: call verify_recheck again at or after "
                 "recheck_due_at.",
             }
+        except LedgerIntegrityHeld as exc:
+            return {
+                "write_id": write_id,
+                "verified": False,
+                "outcome": "UNCERTAIN",
+                "final": False,
+                "recheck_owed": True,
+                "hold_reason": exc.code,
+            }
         except VerifierError as exc:
             # Nothing was judged: the recheck is still owed and held here.
             raise BridgeError(
@@ -459,6 +484,14 @@ class VerifyBridge:
             "due": True,
             "write_id": write_id,
             "verified": late.verified,
+            **(
+                {
+                    "hold_reason": late.hold_reason,
+                    "current_observation": late.current_observation,
+                }
+                if late.hold_reason is not None
+                else {}
+            ),
             "outcome": late.outcome,
             "late": late.late,
             "final": late.final,

@@ -780,9 +780,13 @@ def _legacy_runs_dir(args: argparse.Namespace) -> Optional[Path]:
 def _cmd_serve(args: argparse.Namespace) -> int:
     from openadapt_flow.agent.bridge import AgentBridge
     from openadapt_flow.agent.flow_service import open_attended_service
-    from openadapt_flow.agent.mcp import serve
     from openadapt_flow.agent.runner import default_flow_cli
     from openadapt_flow.agent.tutorial import TutorialError
+
+    def serve(*bridges: Any, **options: Any) -> None:
+        from openadapt_flow.agent.mcp import serve as serve_mcp
+
+        serve_mcp(*bridges, **options)
 
     if args.guard:
         return _serve_guard(args, serve)

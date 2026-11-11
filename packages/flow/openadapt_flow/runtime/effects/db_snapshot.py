@@ -69,6 +69,7 @@ import re
 import secrets
 import struct
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from decimal import Context, Decimal, InvalidOperation
 from pathlib import Path
@@ -602,14 +603,28 @@ class _Session:
     def __init__(self, connect: Callable[[], Any], dialect: Dialect) -> None:
         self.dialect = dialect
         self.con = connect()
-        if dialect == "postgresql":
-            # psycopg opens a transaction on the first statement unless told
-            # not to; the snapshot's own BEGIN must be the one that counts.
-            self.con.autocommit = True
-        self.cur = self.con.cursor()
-        if dialect == "postgresql":
-            for sql in _PG_SESSION:
-                self.cur.execute(sql)
+        try:
+            if dialect == "postgresql":
+                # psycopg opens a transaction on the first statement unless told
+                # not to; the snapshot's own BEGIN must be the one that counts.
+                self.con.autocommit = True
+            self.cur = self.con.cursor()
+            if dialect == "mysql":
+                # Preserve exact names, definitions and text in both snapshots
+                # and history reads, before either can inspect metadata or rows.
+                charset = self.rows("SELECT @@SESSION.character_set_results")
+                if charset != [("utf8mb4",)]:
+                    raise SnapshotError(
+                        "MySQL frame reads require character_set_results=utf8mb4"
+                    )
+            elif dialect == "postgresql":
+                for sql in _PG_SESSION:
+                    self.cur.execute(sql)
+        except BaseException:
+            # Setup did not finish. Close without issuing transaction SQL.
+            with suppress(Exception):
+                self.con.close()
+            raise
 
     def begin(self) -> None:
         if self.dialect == "postgresql":
@@ -1757,6 +1772,8 @@ def take_snapshot(
             )
     try:
         s = _Session(connect, dialect)
+    except SnapshotError:
+        raise
     except Exception as exc:  # noqa: BLE001
         raise SnapshotError(f"could not open a connection: {exc}") from exc
     try:

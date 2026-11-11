@@ -45,7 +45,7 @@ import secrets
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Iterator, Literal, Optional
+from typing import Callable, Iterator, Literal, Optional
 
 from pydantic import BaseModel, Field, model_serializer, model_validator
 
@@ -298,6 +298,11 @@ class RunCheckpoint(BaseModel):
         default_factory=list
     )
     attended_reconciliation_at: Optional[str] = None
+    #: The exact write-ahead pause this native verified result settles. Older
+    #: checkpoints omit it so their authority and approval digests are stable.
+    first_local_pause_sha256: Optional[str] = Field(
+        default=None, pattern=r"^sha256:[0-9a-f]{64}$"
+    )
     #: Multi-surface runs only (docs/MULTI_SURFACE.md): the surface this step
     #: ran on, the surface active after it, and each surface's last-seen
     #: identity observation. Never a live handle: a resume re-binds every
@@ -312,7 +317,7 @@ class RunCheckpoint(BaseModel):
     def _serialize_compatible(self, handler):  # type: ignore[no-untyped-def]
         data = handler(self)
         if isinstance(data, dict):
-            for key in ("surface", "active_surface"):
+            for key in ("surface", "active_surface", "first_local_pause_sha256"):
                 if data.get(key) is None:
                     data.pop(key, None)
             if not data.get("surface_observations"):
@@ -862,6 +867,48 @@ class CheckpointStore:
                 "the durable namespace claim does not match this exact run path"
             )
 
+    def validate_attended_namespace(
+        self, manifest: RunManifest, refuse: Callable[[str], Exception]
+    ) -> None:
+        """Bind the local namespace before any attended action can mutate it."""
+
+        self._validate_local_namespace(manifest)
+        if manifest.delivery_authority_kind != "customer_local":
+            return
+        from openadapt_flow.runtime.durable.first_local_delivery import (
+            FirstLocalDeliveryHeld,
+            is_first_local_delivery,
+            require_local_delivery_idle,
+        )
+
+        try:
+            require_local_delivery_idle(self.run_dir)
+        except FirstLocalDeliveryHeld as exc:
+            raise refuse(str(exc)) from exc
+        pending = self.read_pending()
+        if pending is not None and is_first_local_delivery(
+            pending.delivery_uncertainty
+        ):
+            raise refuse(
+                "first_local_delivery_held: use only verified first-delivery recovery"
+            )
+
+    def require_first_local_rollback_idle(self) -> None:
+        """A live or unresolved first delivery cannot enter rollback."""
+
+        from openadapt_flow.runtime.durable.first_local_delivery import (
+            FirstLocalDeliveryHeld,
+            is_first_local_delivery,
+            require_local_delivery_idle,
+        )
+
+        require_local_delivery_idle(self.run_dir)
+        pending = self.read_pending()
+        if pending is not None and is_first_local_delivery(
+            pending.delivery_uncertainty
+        ):
+            raise FirstLocalDeliveryHeld("resolve the exact write before rollback")
+
     # -- checkpoints ---------------------------------------------------------
 
     @staticmethod
@@ -1131,6 +1178,21 @@ class CheckpointStore:
             ApprovalRequired,
             StateDiverged,
         )
+        from openadapt_flow.runtime.durable.first_local_delivery import (
+            FirstLocalDeliveryHeld,
+            is_first_local_delivery,
+            require_local_delivery_idle,
+        )
+
+        if is_first_local_delivery(expected_pending.delivery_uncertainty):
+            if approval.authorize_uncertain_retry:
+                raise ApprovalRequired(
+                    "first_local_delivery_held: an uncertain first delivery cannot be retried"
+                )
+            try:
+                require_local_delivery_idle(self.run_dir)
+            except FirstLocalDeliveryHeld as exc:
+                raise ApprovalRequired(str(exc)) from exc
 
         expected = self.model_digest(expected_pending)
         with self.state_lock():

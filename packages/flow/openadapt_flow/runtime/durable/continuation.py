@@ -179,6 +179,22 @@ class ContinuationCoordinator:
         pending = self.store.read_pending()
         if manifest is None or pending is None:
             raise ContinuationBusy("the run is not durably paused")
+        if manifest.delivery_authority_kind == "customer_local":
+            from openadapt_flow.runtime.durable.first_local_delivery import (
+                FirstLocalDeliveryHeld,
+                require_local_delivery_idle,
+            )
+
+            try:
+                require_local_delivery_idle(self.run_dir)
+            except FirstLocalDeliveryHeld as exc:
+                raise ContinuationBusy(str(exc)) from exc
+            # The first owner may have completed between the initial read and
+            # the admission probe. Bind only the state now on disk.
+            manifest = self.store.read_manifest()
+            pending = self.store.read_pending()
+            if manifest is None or pending is None:
+                raise ContinuationBusy("the run is not durably paused")
         binding = approval_pause_digest(pending)
         current = _CURRENT_TOKEN.get()
         if (
