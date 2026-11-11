@@ -1,111 +1,75 @@
-# Agent safety evidence v1
+# Protected-path safety review
 
-This format supports a small accidental-misuse guard for agents sharing a
-GitHub account. It checks that declarations are present, current, and
-consistent with Git metadata read by the trusted verifier. Reports are
-self-reported evidence. They are not signatures, and do not prove that a
-command ran or that a Git hook could not be bypassed. This mechanism does not
-defend against a malicious actor.
+The `protected-safety-review` check guards against accidental agent changes to
+the paths listed in `.github/agent-safety-manifest.json`. It is an
+evidence-presence check for agents that share a GitHub account. It is not a
+signature and does not defend against a malicious actor.
 
-## Exact-head declarations
+## The rule
 
-Each author and independent reviewer posts a separate issue comment containing
-one `From: <vendor>` line and one `Reviewed-Head: <40-character lowercase SHA>`
-line. The author declaration identifies the vendor that authored the change.
-The independent reviewer comment must use the existing heading
-`## Independent adversarial review: APPROVE` or
-`## Independent adversarial review: BLOCK`. The verifier accepts exactly one
-heading and requires the reviewed SHA to match the current pull request head.
-The author and reviewer declarations must name different vendors. A stale,
-missing, duplicate, malformed, or BLOCK declaration fails closed.
-A current-head reference selects a comment for validation even when its
-headers are ambiguous. Markdown fenced examples are not declarations; author,
-reviewer and coordinator evidence must appear outside backtick or tilde fences.
-Review-heading discovery is case-insensitive and uses Unicode NFKC only to
-select evidence for strict validation. It does not normalize an approval.
-A trusted review with an unknown or malformed head binding cannot be discarded;
-neither can a current-head review that names that head or its prefix in prose.
-Selected edited reviews fail the check. Edited comments never supply approval.
-A uniquely bound full stale head is ignored only when the review does not also
-refer to the current head.
-Evidence comments are accepted only from GitHub accounts whose API
-`author_association` is `OWNER`, `MEMBER`, or `COLLABORATOR`. The author
-declaration must also be posted by the API-reported pull request author. The
-`From` vendor line remains self-reported evidence, not an identity proof.
+A pull request that changes a protected path, including the gate's own files,
+needs exactly one valid independent review comment for the current head. That
+review must say APPROVE, and no current-head review may say BLOCK.
 
-For a change to the manifest or gate implementation itself, add one separate
-current-head coordinator comment with exactly these headers:
+The review is one issue comment with these lines:
 
 ```text
-From: Coordinator
+## Independent adversarial review: APPROVE
+From: <vendor>
 Reviewed-Head: <40-character lowercase PR head SHA>
-Coordinator-Approval: APPROVE
 ```
 
-The comment is a coordinator declaration, not a cryptographic signature.
+Use `## Independent adversarial review: BLOCK` to block. The `From` line starts
+with the reviewer's vendor and may add free text, for example
+`From: Claude (independent reviewer)`.
 
-## Per-commit precommit report
+## Vendors
 
-For every commit in the reviewed change range, post one separate comment with
-exactly one fenced JSON object in this shape:
+The author's vendor comes from the first segment of the pull request branch
+name, for example `codex/fix-ledger`. The reviewer's vendor comes from its
+`From` line. The two must belong to different vendor families:
 
-```json
-{
-  "schema_version": 1,
-  "commit": "0123456789abcdef0123456789abcdef01234567",
-  "parents": ["89abcdef0123456789abcdef0123456789abcdef"],
-  "tree": "abcdef0123456789abcdef0123456789abcdef01",
-  "commands": [
-    {"argv": ["uv", "run", "pytest", "-q", "tests/test_example.py"], "exit_code": 0}
-  ],
-  "completed_before_commit": true,
-  "completed_utc": "2026-11-05T17:59:00Z"
-}
-```
+| Family | Accepted names |
+| --- | --- |
+| Anthropic | `claude`, `anthropic` |
+| OpenAI | `codex`, `gpt`, `openai` |
+| xAI | `grok`, `xai` |
+| Google | `gemini`, `google` |
+| Human | `human` |
 
-`completed_utc` is optional; if present it must include a timezone and be no
-later than the commit timestamp from Git metadata. The verifier compares the
-commit, ordered parents, and tree with trusted Git plumbing. It requires a
-nonempty command list and a zero integer exit code for every entry. Unknown or
-missing fields, unsupported versions, mismatched metadata, invalid times,
-nonzero exits, or `completed_before_commit` other than `true` fail closed. The
-completion statement is self-reported; the parser cannot establish that
-commands ran, that they ran before the commit, or whether a hook was bypassed.
+Names are case-insensitive. A protected change on a branch without one of
+these prefixes fails. Both vendor names are self-reported.
 
-The workflow reads PR and comment metadata through the GitHub API. The verifier
-and manifest come from a trusted base SHA; it does not check out or execute PR
-head code with the token. For merge-group events, it checks out the current
-default-branch commit, never the speculative group base or group head, and
-publishes status on the separate merge-group head SHA. It maps the group head
-to queue entries through GitHub's `baseCommit` and `headCommit` chain for queues
-configured to use merge commits, then requires each mapped PR's exact current
-head to have an already-passed, provenance-checked `protected-safety-review`
-workflow verdict. It also re-evaluates current PR metadata and evidence, and
-fails closed if the chain, verdict, or queue response is incomplete or
-ambiguous. A speculative group base may be an earlier merge-group commit; it is
-used only as a queue-mapping boundary and is never trusted code. Rebase and
-squash queue methods are unsupported because they can rewrite commit history.
-The stable
-`protected-safety-review` check is linked to the running workflow record. This
-is an accidental-misuse control; the shared GitHub Actions app and self-reported
-comments do not prove command execution or defend against malicious actors.
+## What fails
 
-The verifier compares file and commit API result counts to PR metadata, rejects
-duplicate IDs and over-limit commit histories, and includes both sides of file
-renames when matching the protected-path manifest. Accepted author, review,
-coordinator, and precommit comments must be unedited (`created_at` equals
-`updated_at`). It fetches comments again before publishing and fails if their
-IDs, bodies, authors, associations, creation times, or update times changed.
-Per-PR and per-merge-group workflow concurrency cancels an earlier run when a
-newer review event arrives. Rebase onto the current main tip is not required;
-the workflow and manifest remain pinned to the trusted event base.
+- No current-head review, or more than one valid APPROVE.
+- A current-head BLOCK, or a current-head review that is malformed or edited.
+  An edited comment never supplies approval.
+- A comment whose `Reviewed-Head` line names the current head but has no valid
+  review heading.
+- A head binding that is not the exact `Reviewed-Head: <full SHA>` line, such
+  as a bold, listed, prefixed or Unicode look-alike binding.
 
-## Enforcement bootstrap
+Only comments from accounts whose `author_association` is `OWNER`, `MEMBER` or
+`COLLABORATOR` count; others neither approve nor block. A review bound to an
+earlier head is ignored, unless it also refers to the current head. Text inside
+Markdown code fences, `>` quotes and HTML comments (`<!-- -->`) is an example
+and never counts as a review or a BLOCK.
 
-This first change has no running check before it reaches `main`; its own PR's
-status is **UNRUN**. After it reaches `main`, adding the workflow still does
-not make its status a required branch protection check. The repository owner
-must separately configure the exact stable status name in the applicable
-ruleset. Until the coordinator confirms the workflow is on `main` and that
-ruleset is active, the merge freeze remains in force. This change does not
-modify repository settings or claim enforcement before that confirmation.
+## How the check runs
+
+The workflow runs from the trusted base commit under `pull_request_target`. It
+reads pull request metadata, changed files and comments through the GitHub
+API, and never checks out or runs pull request code. It matches both sides of
+file renames against the manifest. It reads the comments and head again before
+publishing, and fails if either changed. Errors never include API response or
+exception text.
+
+For merge-group events it checks out the current `main` commit and maps the
+group head to queue entries through GitHub's merge-commit chain. Each mapped
+pull request needs an earlier passing `protected-safety-review` verdict for its
+exact head, and its evidence is evaluated again. Rebase and squash queue
+methods are not supported.
+
+Making this check required is a repository ruleset setting, separate from this
+file.

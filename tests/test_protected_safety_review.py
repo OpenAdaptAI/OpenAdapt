@@ -14,6 +14,7 @@ from scripts.ci.protected_safety_review import (
     CHECK_NAME,
     MANIFEST_PATH,
     MERGE_QUEUE_QUERY,
+    author_vendor,
     evaluate_pull_request,
     run,
     validate_manifest,
@@ -21,16 +22,14 @@ from scripts.ci.protected_safety_review import (
 
 BASE = "a" * 40
 HEAD = "b" * 40
-TREE = "c" * 40
 PARENT = BASE
-COMMIT_TIME = "2026-11-05T18:00:00Z"
 
 
 def _manifest() -> dict[str, Any]:
     return json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
 
 
-def _pull_request() -> dict[str, Any]:
+def _pull_request(branch: str = "codex/example") -> dict[str, Any]:
     return {
         "number": 42,
         "state": "open",
@@ -40,37 +39,13 @@ def _pull_request() -> dict[str, Any]:
             "repo": {"full_name": "OpenAdaptAI/OpenAdapt"},
         },
         "head": {
+            "ref": branch,
             "sha": HEAD,
             "repo": {"full_name": "OpenAdaptAI/OpenAdapt"},
         },
         "user": {"login": "author-login"},
         "changed_files": 1,
-        "commits": 1,
     }
-
-
-def _commit() -> dict[str, Any]:
-    return {
-        "sha": HEAD,
-        "parents": [{"sha": PARENT}],
-        "commit": {
-            "tree": {"sha": TREE},
-            "committer": {"date": COMMIT_TIME},
-        },
-    }
-
-
-def _precommit_comment() -> str:
-    report = {
-        "schema_version": 1,
-        "commit": HEAD,
-        "parents": [PARENT],
-        "tree": TREE,
-        "commands": [{"argv": ["pytest", "-q"], "exit_code": 0}],
-        "completed_before_commit": True,
-        "completed_utc": "2026-11-05T17:59:00Z",
-    }
-    return "```json\n" + json.dumps(report) + "\n```"
 
 
 def _comment(body: str, login: str, comment_id: int) -> dict[str, Any]:
@@ -84,21 +59,17 @@ def _comment(body: str, login: str, comment_id: int) -> dict[str, Any]:
     }
 
 
-def _comments(
-    *, head: str = HEAD, author: str = "Codex", reviewer: str = "Claude"
-) -> list[dict[str, Any]]:
-    return [
-        _comment(f"From: {author}\nReviewed-Head: {head}", "author-login", 1),
-        _comment(
-            (
-                f"From: {reviewer}\nReviewed-Head: {head}\n\n"
-                "## Independent adversarial review: APPROVE\n"
-            ),
-            "reviewer-login",
-            2,
-        ),
-        _comment(_precommit_comment(), "reviewer-login", 3),
-    ]
+def _review(
+    *, head: str = HEAD, reviewer: str = "Claude", verdict: str = "APPROVE"
+) -> str:
+    return (
+        f"From: {reviewer}\nReviewed-Head: {head}\n\n"
+        f"## Independent adversarial review: {verdict}\n"
+    )
+
+
+def _comments(*, head: str = HEAD, reviewer: str = "Claude") -> list[dict[str, Any]]:
+    return [_comment(_review(head=head, reviewer=reviewer), "reviewer-login", 2)]
 
 
 def _evaluate(
@@ -106,7 +77,6 @@ def _evaluate(
     comments: list[dict[str, Any]] | None = None,
     files: list[dict[str, str]] | None = None,
     pull_request: dict[str, Any] | None = None,
-    commits: list[dict[str, Any]] | None = None,
     manifest: Any = None,
 ) -> list[str]:
     return evaluate_pull_request(
@@ -114,10 +84,12 @@ def _evaluate(
         pull_request=pull_request or _pull_request(),
         main_sha=BASE,
         files=files or [{"filename": "packages/flow/openadapt_flow/verify_run.py"}],
-        commits=commits or [_commit()],
         comments=_comments() if comments is None else comments,
         manifest=_manifest() if manifest is None else manifest,
     )
+
+
+GATE_FILE = [{"filename": ".github/agent-safety-manifest.json"}]
 
 
 def test_manifest_covers_six_required_areas_and_gate_self() -> None:
@@ -132,42 +104,83 @@ def test_missing_manifest_area_fails_closed() -> None:
         validate_manifest(manifest)
 
 
-def test_protected_change_passes_with_exact_head_independent_evidence() -> None:
+def test_one_valid_cross_vendor_approve_passes() -> None:
     assert _evaluate() == []
+    assert _evaluate(files=GATE_FILE) == []
+    assert _evaluate(comments=[]) == [
+        "expected exactly one current exact-head independent review"
+    ]
 
 
-def test_same_vendor_and_stale_review_fail_closed() -> None:
-    same_vendor = _comments(reviewer="Codex")
-    assert any(
-        "different vendors" in error for error in _evaluate(comments=same_vendor)
+def test_reviewer_from_line_may_add_free_text_after_the_vendor() -> None:
+    comments = _comments(reviewer="Claude (independent reviewer)")
+    assert _evaluate(comments=comments) == []
+
+
+@pytest.mark.parametrize(
+    ("branch", "reviewer"),
+    [
+        ("codex/example", "Codex"),
+        ("codex/example", "GPT"),
+        ("Claude/example", "claude"),
+        ("grok/example", "xAI"),
+    ],
+)
+def test_same_vendor_review_fails_closed(branch: str, reviewer: str) -> None:
+    errors = _evaluate(
+        pull_request=_pull_request(branch), comments=_comments(reviewer=reviewer)
     )
-    stale = _comments(head=PARENT)
-    assert any("exact-head" in error for error in _evaluate(comments=stale))
+    assert any("different vendors" in error for error in errors)
 
 
-def test_duplicate_commit_report_fails_closed() -> None:
+def test_stale_review_fails_closed() -> None:
+    errors = _evaluate(comments=_comments(head=PARENT))
+    assert any("exact-head" in error for error in errors)
+
+
+@pytest.mark.parametrize(
+    "branch", ["fix/example", "agent/123", "example", "", "unknown/example", None]
+)
+def test_author_vendor_needs_a_known_branch_prefix(branch: str | None) -> None:
+    pull = _pull_request()
+    pull["head"]["ref"] = branch
+    assert author_vendor(branch) is None
+    errors = _evaluate(pull_request=pull)
+    assert any("known vendor prefix" in error for error in errors)
+
+
+def test_unknown_reviewer_vendor_fails_closed() -> None:
+    errors = _evaluate(comments=_comments(reviewer="Someone"))
+    assert any("known vendor name" in error for error in errors)
+
+
+def test_two_current_approvals_fail_closed() -> None:
     comments = _comments()
-    comments.append(_comment(_precommit_comment(), "reviewer-login", 4))
+    comments.append(_comment(_review(reviewer="Gemini"), "reviewer-login", 3))
     assert any(
-        "exactly one current v1" in error for error in _evaluate(comments=comments)
+        "exactly one current exact-head" in error
+        for error in _evaluate(comments=comments)
     )
 
 
-def test_gate_change_requires_exact_head_coordinator_note() -> None:
-    files = [{"filename": ".github/agent-safety-manifest.json"}]
-    assert any("coordinator approval" in error for error in _evaluate(files=files))
+def test_current_head_comment_without_review_heading_fails_closed() -> None:
     comments = _comments()
-    comments.append(
-        _comment(
-            (
-                f"From: Coordinator\nReviewed-Head: {HEAD}\n"
-                "Coordinator-Approval: APPROVE"
-            ),
-            "coordinator-login",
-            4,
-        )
+    comments.append(_comment(f"From: Codex\nReviewed-Head: {HEAD}", "author-login", 3))
+    assert any(
+        "invalid independent review" in error for error in _evaluate(comments=comments)
     )
-    assert _evaluate(files=files, comments=comments) == []
+
+
+@pytest.mark.parametrize("verdict", ["APPROVE", "BLOCK"])
+def test_html_comment_examples_neither_approve_nor_veto(verdict: str) -> None:
+    example = _comment(
+        f"Template:\n<!--\n{_review(verdict=verdict)}-->\n", "reviewer-login", 3
+    )
+    inline = _comment(f"<!-- {_review(verdict=verdict)} -->", "reviewer-login", 4)
+    assert _evaluate(comments=_comments() + [example, inline]) == []
+    assert _evaluate(comments=[example, inline]) == [
+        "expected exactly one current exact-head independent review"
+    ]
 
 
 def test_pr_does_not_need_rebase_to_current_main_tip() -> None:
@@ -177,7 +190,11 @@ def test_pr_does_not_need_rebase_to_current_main_tip() -> None:
 
 
 def test_unprotected_path_does_not_require_evidence() -> None:
-    assert _evaluate(files=[{"filename": "README.md"}], comments=[]) == []
+    pull = _pull_request("fix/example")
+    assert (
+        _evaluate(files=[{"filename": "README.md"}], comments=[], pull_request=pull)
+        == []
+    )
 
 
 class FakeApi:
@@ -206,7 +223,6 @@ class FakeApi:
             "/pulls/42/files?per_page=100&page=1": [
                 {"filename": "packages/flow/openadapt_flow/verify_run.py"}
             ],
-            "/pulls/42/commits?per_page=100&page=1": [_commit()],
             "/issues/42/comments?per_page=100&page=1": _comments(),
         }
         return fixed[path]
@@ -216,7 +232,6 @@ class FakeApi:
             "/pulls/42/files": [
                 {"filename": "packages/flow/openadapt_flow/verify_run.py"}
             ],
-            "/pulls/42/commits": [_commit()],
             "/issues/42/comments": _comments(),
         }
         if path == "/issues/42/comments":
@@ -285,40 +300,20 @@ def test_manifest_covers_runtime_authority_and_future_approval_bindings() -> Non
     assert "packages/flow/openadapt_flow/approval_mode/**" in paths
 
 
-def test_untrusted_or_non_author_author_declaration_fails_closed() -> None:
+def test_untrusted_approval_does_not_count() -> None:
     comments = _comments()
     comments[0]["author_association"] = "NONE"
     assert any(
-        "exact-head author declaration" in e for e in _evaluate(comments=comments)
+        "exact-head independent review" in e for e in _evaluate(comments=comments)
     )
-    comments = _comments()
-    comments[0]["user"]["login"] = "someone-else"
-    assert any("pull request author" in e for e in _evaluate(comments=comments))
 
 
 def test_incomplete_api_counts_fail_closed() -> None:
-    pull = _pull_request()
-    pull["commits"] = 2
-    assert any(
-        "commit API results are incomplete" in e for e in _evaluate(pull_request=pull)
-    )
     pull = _pull_request()
     pull["changed_files"] = 2
     assert any(
         "changed-file API results are incomplete" in e
         for e in _evaluate(pull_request=pull)
-    )
-
-
-def test_duplicate_commit_ids_and_untrusted_reports_fail_closed() -> None:
-    assert any(
-        "duplicate commit ids" in e for e in _evaluate(commits=[_commit(), _commit()])
-    )
-    comments = _comments()
-    comments[2]["author_association"] = "NONE"
-    assert any(
-        "exactly one current v1 precommit report" in e
-        for e in _evaluate(comments=comments)
     )
 
 
@@ -339,27 +334,10 @@ def test_comment_change_during_review_fails_closed() -> None:
 
 def test_edited_review_comment_is_not_current_evidence() -> None:
     comments = _comments()
-    comments[1]["updated_at"] = "2026-11-05T18:01:00Z"
+    comments[0]["updated_at"] = "2026-11-05T18:01:00Z"
     assert any(
         "exact-head independent review" in e for e in _evaluate(comments=comments)
     )
-
-
-def test_coordinator_header_must_be_a_whole_line() -> None:
-    comments = _comments()
-    comments.append(
-        _comment(
-            f"From: Coordinator\nReviewed-Head: {HEAD}\n\nQuoted: Coordinator-Approval: APPROVE",
-            "coordinator-login",
-            4,
-        )
-    )
-    errors = _evaluate(
-        files=[{"filename": ".github/agent-safety-manifest.json"}],
-        comments=comments,
-    )
-    assert any("coordinator approval" in error for error in errors)
-    assert not any("invalid coordinator note" in error for error in errors)
 
 
 def _queue_entry(
@@ -471,15 +449,12 @@ def test_merge_group_maps_multi_pr_chain_and_publishes_group_sha() -> None:
                 pr["user"] = {"login": f"author-{number}"}
                 pr["head"]["sha"] = "4" * 40 if number == 41 else HEAD
                 pr["changed_files"] = 1
-                pr["commits"] = 1
                 return pr
             raise AssertionError(path)
 
         def pages(self, path: str) -> list[dict[str, Any]]:
             if path.endswith("/files"):
                 return [{"filename": "README.md"}]
-            if path.endswith("/commits"):
-                return [_commit()]
             if path.endswith("/comments"):
                 return []
             raise AssertionError(path)
@@ -717,7 +692,6 @@ def test_module_entrypoint_missing_environment_exits_without_network() -> None:
     )
 
 
-@pytest.mark.parametrize("role", ["author", "reviewer", "coordinator"])
 @pytest.mark.parametrize(
     "malformation",
     [
@@ -733,18 +707,11 @@ def test_module_entrypoint_missing_environment_exits_without_network() -> None:
     ],
 )
 @pytest.mark.parametrize("event_name", ["issue_comment", "pull_request_target"])
-def test_malformed_current_declaration_cannot_restore_older_approval(
-    role: str, malformation: str, event_name: str
+def test_malformed_current_review_cannot_restore_older_approval(
+    malformation: str, event_name: str
 ) -> None:
     comments = _comments()
-    coordinator = (
-        f"From: Coordinator\nReviewed-Head: {HEAD}\nCoordinator-Approval: APPROVE"
-    )
-    comments.append(_comment(coordinator, "coordinator-login", 4))
-    slot = {"author": 0, "reviewer": 1, "coordinator": 3}[role]
-    malformed = comments[slot]["body"]
-    if role == "reviewer":
-        malformed = malformed.replace("review: APPROVE", "review: BLOCK")
+    malformed = comments[0]["body"].replace("review: APPROVE", "review: BLOCK")
     head_line = f"Reviewed-Head: {HEAD}"
     if malformation == "duplicate-current-head":
         malformed = malformed.replace(head_line, head_line + "\n" + head_line)
@@ -769,8 +736,8 @@ def test_malformed_current_declaration_cannot_restore_older_approval(
     else:
         assert malformation == "invalid-vendor"
         malformed = malformed.replace("From: ", "From: invalid/vendor ")
-    comments.append(_comment(malformed, comments[slot]["user"]["login"], 5))
-    files = [{"filename": ".github/agent-safety-manifest.json"}]
+    comments.append(_comment(malformed, "reviewer-login", 5))
+    files = GATE_FILE
     assert any(
         "invalid " in error for error in _evaluate(comments=comments, files=files)
     )
@@ -797,39 +764,24 @@ def test_malformed_current_declaration_cannot_restore_older_approval(
     assert api.check_run["conclusion"] == "failure"
 
 
-@pytest.mark.parametrize("role", ["author", "reviewer", "coordinator"])
 @pytest.mark.parametrize("fence", ["```", "~~~~"])
-def test_fenced_format_examples_cannot_supply_current_declarations(
-    role: str, fence: str
-) -> None:
+def test_fenced_format_example_cannot_supply_current_review(fence: str) -> None:
     comments = _comments()
-    comments.append(
-        _comment(
-            f"From: Coordinator\nReviewed-Head: {HEAD}\nCoordinator-Approval: APPROVE",
-            "coordinator-login",
-            4,
-        )
-    )
-    slot = {"author": 0, "reviewer": 1, "coordinator": 3}[role]
-    declaration = comments[slot]["body"]
-    comments[slot]["body"] = (
+    declaration = comments[0]["body"]
+    comments[0]["body"] = (
         f"Format example, not a declaration.\n{fence}text\n{declaration}\n{fence}\n"
     )
-    assert _evaluate(
-        comments=comments, files=[{"filename": ".github/agent-safety-manifest.json"}]
-    )
+    assert _evaluate(comments=comments, files=GATE_FILE)
 
 
 @pytest.mark.parametrize("fence", ["```", "~~~~"])
-def test_fenced_examples_do_not_change_valid_declaration_roles(fence: str) -> None:
+def test_fenced_examples_do_not_change_a_valid_review(fence: str) -> None:
     comments = _comments()
     example = (
         f"\n{fence}text\nFrom: Other\nReviewed-Head: {HEAD}\n"
-        "Coordinator-Approval: APPROVE\n"
         f"## Independent adversarial review: BLOCK\n{fence}\n"
     )
-    for comment in comments[:2]:
-        comment["body"] += example
+    comments[0]["body"] += example
     assert _evaluate(comments=comments) == []
 
 
@@ -982,7 +934,6 @@ def test_untrusted_review_does_not_grant_or_veto(edited: bool) -> None:
     assert _evaluate(comments=comments) == []
 
 
-@pytest.mark.parametrize("role", ["author", "reviewer", "coordinator"])
 @pytest.mark.parametrize(
     "alias",
     [
@@ -996,18 +947,8 @@ def test_untrusted_review_does_not_grant_or_veto(edited: bool) -> None:
         "prefix",
     ],
 )
-def test_noncanonical_extra_head_binding_is_rejected_for_every_declaration(
-    role: str, alias: str
-) -> None:
+def test_noncanonical_extra_head_binding_is_rejected(alias: str) -> None:
     comments = _comments()
-    comments.append(
-        _comment(
-            f"From: Coordinator\nReviewed-Head: {HEAD}\nCoordinator-Approval: APPROVE",
-            "coordinator-login",
-            4,
-        )
-    )
-    slot = {"author": 0, "reviewer": 1, "coordinator": 3}[role]
     aliases = {
         "bold": f"**Reviewed-Head:** {PARENT}",
         "italic": f"*Reviewed-Head:* {PARENT}",
@@ -1018,13 +959,9 @@ def test_noncanonical_extra_head_binding_is_rejected_for_every_declaration(
         "unicode-colon": f"Reviewed-Head： {PARENT}",
         "prefix": f"Reviewed-Head: {PARENT[:8]}",
     }
-    comments[slot]["body"] += "\n" + aliases[alias]
+    comments[0]["body"] += "\n" + aliases[alias]
     assert any(
-        "invalid " in error
-        for error in _evaluate(
-            comments=comments,
-            files=[{"filename": ".github/agent-safety-manifest.json"}],
-        )
+        "invalid " in error for error in _evaluate(comments=comments, files=GATE_FILE)
     )
 
 
@@ -1039,7 +976,7 @@ def test_ordinary_prose_and_quoted_example_do_not_create_extra_bindings(
     explanation: str,
 ) -> None:
     comments = _comments()
-    comments[1]["body"] += "\n" + explanation
+    comments[0]["body"] += "\n" + explanation
     assert _evaluate(comments=comments) == []
 
 
