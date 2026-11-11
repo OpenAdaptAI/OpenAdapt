@@ -10,6 +10,34 @@ import pytest
 from openadapt_desktop.config import EngineConfig
 
 
+@pytest.fixture(scope="module")
+def source_flow_package() -> Path | None:
+    """Bind the source contract to this checkout's installed Flow package."""
+    mode = os.environ.get("OPENADAPT_DESKTOP_FLOW_CONTRACT", "bundled")
+    assert mode in {"bundled", "source"}, "unknown Desktop Flow contract mode"
+    if mode == "bundled":
+        return None
+    assert os.environ.get("OPENADAPT_DESKTOP_REQUIRE_BUNDLED_FLOW") != "1", (
+        "a bundled Flow qualification cannot run in source mode"
+    )
+
+    import importlib
+    import tomllib
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        installed = version("openadapt-flow")
+    except PackageNotFoundError:
+        pytest.fail("the checkout's Flow distribution is required in source mode")
+    source = Path(__file__).resolve().parents[2] / "flow"
+    package = (source / "openadapt_flow").resolve()
+    module = importlib.import_module("openadapt_flow")
+    assert Path(module.__file__).resolve() == package / "__init__.py"
+    project = tomllib.loads((source / "pyproject.toml").read_text(encoding="utf-8"))
+    assert installed == project["project"]["version"]
+    return package
+
+
 class FakeRecorder:
     """Inert recorder used by unit tests; live capture is contract-tested separately."""
 

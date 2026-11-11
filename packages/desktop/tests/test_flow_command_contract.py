@@ -7,10 +7,10 @@ version before exercising its genuine parser and CLI.
 
 from __future__ import annotations
 
+import importlib
 import os
 import subprocess
 import sysconfig
-import tomllib
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
@@ -20,30 +20,23 @@ from scripts import flow_command_contract as contract
 
 
 @pytest.fixture(scope="module")
-def flow_parser():
-    try:
-        installed = version("openadapt-flow")
-    except PackageNotFoundError:
-        pytest.skip("the bundled openadapt-flow runtime is not installed (--extra build)")
-    from openadapt_desktop.flow_bridge import REQUIRED_FLOW_VERSION
+def flow_parser(source_flow_package):
+    if source_flow_package is None:
+        try:
+            installed = version("openadapt-flow")
+        except PackageNotFoundError:
+            if os.environ.get("OPENADAPT_DESKTOP_REQUIRE_BUNDLED_FLOW") == "1":
+                pytest.fail("the exact bundled Flow wheel is required in this CI lane")
+            pytest.skip("the bundled openadapt-flow runtime is not installed (--extra build)")
+        from openadapt_desktop.flow_bridge import REQUIRED_FLOW_VERSION
 
-    mode = os.environ.get("OPENADAPT_DESKTOP_FLOW_CONTRACT", "bundled")
-    assert mode in {"bundled", "source"}, "unknown Flow command contract mode"
-    if mode == "bundled":
         assert installed == REQUIRED_FLOW_VERSION, (
             f"Desktop runs Flow {REQUIRED_FLOW_VERSION} but {installed} is installed"
         )
-    else:
-        import openadapt_flow
-
-        source = Path(__file__).resolve().parents[2] / "flow"
-        expected = source / "openadapt_flow" / "__init__.py"
-        assert Path(openadapt_flow.__file__).resolve() == expected.resolve()
-        project = tomllib.loads((source / "pyproject.toml").read_text(encoding="utf-8"))
-        assert installed == project["project"]["version"]
-    from openadapt_flow.__main__ import build_parser
-
-    return build_parser
+    cli = importlib.import_module("openadapt_flow.__main__")
+    if source_flow_package is not None:
+        assert Path(cli.__file__).resolve() == source_flow_package / "__main__.py"
+    return cli.build_parser
 
 
 def test_every_command_desktop_builds_parses(flow_parser, tmp_path) -> None:
