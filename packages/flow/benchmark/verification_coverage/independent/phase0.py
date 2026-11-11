@@ -289,6 +289,7 @@ def live_case(case: dict[str, Any], work: Path, contract: str) -> dict[str, Any]
         return {
             "kind": "sql",
             "sql_driver": "verification_coverage.exec_mariadb",
+            "sql_dialect": "mysql",
             "sql_connect_args": {
                 "container": container,
                 "user": live.AUDIT_USER,
@@ -305,7 +306,11 @@ def live_case(case: dict[str, Any], work: Path, contract: str) -> dict[str, Any]
         "records_key": "data",
         "auth": {"bearer_env": TOKEN_ENV},
     }
-    read = {k: v for k, v in sql("").items() if k not in ("kind", "sql_query")}
+    read = {
+        k: v
+        for k, v in sql("").items()
+        if k not in ("kind", "sql_query", "sql_dialect")
+    }
     cfg = parse_verify_config(
         _doc(
             contract,

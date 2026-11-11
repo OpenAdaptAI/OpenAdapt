@@ -508,6 +508,9 @@ class EffectsConfig(BaseModel):
     #: Alternatively: an importable DB-API driver module name (``pymysql``,
     #: ``mariadb``, ``psycopg``) ...
     sql_driver: Optional[str] = None
+    #: Explicit dialect for an opaque DB-API adapter. Its connections must
+    #: retain the same session across statements.
+    sql_dialect: Optional[Literal["sqlite", "mysql", "postgresql"]] = None
     #: ... plus its non-secret ``connect(**kwargs)`` arguments ...
     sql_connect_args: dict[str, Any] = Field(default_factory=dict)
     #: ... and the env var holding the database password (injected as the
@@ -649,7 +652,7 @@ class EffectsConfig(BaseModel):
 
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
-        """Keep configs without a desktop read-back byte-identical."""
+        """Keep configs without newly added read options byte-identical."""
 
         data: dict[str, Any] = handler(self)
         for added in (
@@ -665,6 +668,7 @@ class EffectsConfig(BaseModel):
             "records_consistency",
             "records_path",
             "resource_type",
+            "sql_dialect",
         ):
             if data.get(added, "") is None:
                 data.pop(added, None)
@@ -2561,6 +2565,8 @@ def _build_effect_verifier_unredacted(
             poll_interval_s=cfg.poll_interval_s,
             drop_fields=tuple(cfg.records_drop_fields),
             source_metadata=True,
+            sql_driver=cfg.sql_driver if not cfg.sqlite_database else None,
+            sql_dialect=cfg.sql_dialect,
         )
 
     if kind == "file":

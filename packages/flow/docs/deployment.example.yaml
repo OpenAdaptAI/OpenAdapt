@@ -158,6 +158,7 @@ effects:
   #   applicant: { param: applicant }
   # sqlite_database: /var/lib/app/app.db   # stdlib sqlite3 driver, OR:
   # sql_driver: pymysql                    # any DB-API module name
+  # sql_dialect: mysql  # required for an opaque driver that keeps one session per connection
   # sql_connect_args: { host: db.internal, user: oracle_ro, database: app }
   # sql_password_env: ORACLE_RO_PASSWORD   # injected as connect(password=...)
 

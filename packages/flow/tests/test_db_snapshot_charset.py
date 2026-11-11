@@ -9,13 +9,20 @@ from __future__ import annotations
 import json
 import os
 import secrets
+import sqlite3
+import sys
+from contextlib import closing
+from pathlib import Path
+from types import ModuleType
 from typing import Any, Iterator
 
 import pytest
 
+from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
+from openadapt_flow.runtime.effects import Effect, EffectKind, Verdict
 from openadapt_flow.runtime.effects import db_snapshot as snap
 from openadapt_flow.runtime.effects.history import HistoryFeed, _sql
-from openadapt_flow.runtime.effects.sql import SqlRecordVerifier
+from openadapt_flow.runtime.effects.sql import SqlRecordVerifier, sqlite_read_connection
 
 KEY = b"k" * 32
 
@@ -63,7 +70,8 @@ def charset_database() -> Iterator[Any]:
 
     args = json.loads(_ARGS or "{}")
     name = "openadapt_charset_" + secrets.token_hex(4)
-    admin = pymysql.connect(**(args | {"charset": "utf8mb4", "autocommit": True}))
+    native_connect = pymysql.connect
+    admin = native_connect(**(args | {"charset": "utf8mb4", "autocommit": True}))
     try:
         with admin.cursor() as cur:
             cur.execute(f"CREATE DATABASE `{name}` CHARACTER SET utf8mb4")
@@ -74,7 +82,7 @@ def charset_database() -> Iterator[Any]:
             )
 
         def connect(charset: str = "utf8mb4", **extra: Any) -> Any:
-            return pymysql.connect(
+            return native_connect(
                 **(args | {"database": name, "charset": charset} | extra)
             )
 
@@ -137,6 +145,264 @@ def test_mysql_history_requires_exact_result_charset(
     finally:
         if con.open:
             con.close()
+
+
+@live
+@pytest.mark.parametrize("entrypoint", ["direct", "configured"])
+@pytest.mark.parametrize("charset", ["latin1", "utf8", "utf8mb4"])
+def test_mysql_effect_readback_requires_exact_result_charset(
+    charset_database: Any,
+    charset: str,
+    entrypoint: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pymysql
+    from pymysql.cursors import Cursor
+
+    admin, connect = charset_database
+    baseline_body = "Synthetic résumé"
+    new_body = "Synthetic example 😀"
+    with admin.cursor() as cursor:
+        cursor.execute("INSERT INTO t (body) VALUES (%s)", (baseline_body,))
+
+    sessions: list[tuple[Any, list[str]]] = []
+
+    def open_session(charset: str) -> Any:
+        statements: list[str] = []
+
+        class RecordingCursor(Cursor):
+            def execute(self, query: str, args: Any = None) -> Any:
+                statements.append(query)
+                return super().execute(query, args)
+
+        session = connect(charset, cursorclass=RecordingCursor)
+        statements.clear()
+        sessions.append((session, statements))
+        return session
+
+    query = "SELECT id, body FROM t"
+    if entrypoint == "configured":
+        monkeypatch.setattr(pymysql, "connect", open_session)
+        verifier = build_effect_verifier(
+            EffectsConfig(
+                kind="sql",
+                sql_driver="pymysql",
+                sql_connect_args={"charset": charset},
+                sql_query=query,
+            )
+        )
+    else:
+        verifier = SqlRecordVerifier(
+            lambda: open_session(charset), query, source_metadata=True
+        )
+    assert isinstance(verifier, SqlRecordVerifier)
+    expected = Effect(
+        kind=EffectKind.RECORD_WRITTEN,
+        match={"body": new_body},
+        expected_count=1,
+        count_new_only=True,
+        timeout_s=1.0,
+    )
+    exact = charset == "utf8mb4"
+    error = "MySQL reads require character_set_results=utf8mb4"
+    charset_query = "SELECT @@SESSION.character_set_results"
+    read_only = "SET SESSION TRANSACTION READ ONLY"
+    try:
+        before = verifier.capture_pre_state()
+        assert before.reachable is exact and before.readback_complete is exact
+        if exact:
+            assert before.records == [{"id": 1, "body": baseline_body}]
+            assert "read_error" not in before.detail
+        else:
+            assert before.records == []
+            assert before.detail["read_error"] == error
+
+        with admin.cursor() as cursor:
+            cursor.execute("INSERT INTO t (body) VALUES (%s)", (new_body,))
+        result = verifier.verify(expected, before)
+        if exact:
+            assert result.verdict is Verdict.CONFIRMED and result.observed_count == 1
+            assert result.matched_records == [{"id": 2, "body": new_body}]
+        else:
+            assert result.verdict is Verdict.INDETERMINATE
+            assert result.unavailable and result.should_halt
+            assert result.reason == error and result.matched_records == []
+
+        expected_statements = [charset_query, query] if exact else [charset_query]
+        if entrypoint == "configured":
+            expected_statements.insert(0, read_only)
+        assert len(sessions) == 2 and sessions[0][0] is not sessions[1][0]
+        for session, statements in sessions:
+            assert not session.open
+            assert statements == expected_statements
+    finally:
+        for session, _ in sessions:
+            if session.open:
+                session.close()
+
+
+@live
+@pytest.mark.parametrize("entrypoint", ["direct", "configured"])
+@pytest.mark.parametrize("charset", ["latin1", "utf8mb4"])
+def test_explicit_mysql_dialect_checks_opaque_connector_on_its_native_session(
+    charset_database: Any,
+    charset: str,
+    entrypoint: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pymysql.cursors import Cursor
+
+    admin, connect = charset_database
+    body = "Synthetic résumé 😀"
+    with admin.cursor() as cursor:
+        cursor.execute("INSERT INTO t (body) VALUES (%s)", (body,))
+
+    statements: list[str] = []
+
+    class RecordingCursor(Cursor):
+        def execute(self, query: str, args: Any = None) -> Any:
+            statements.append(query)
+            return super().execute(query, args)
+
+    native = connect(charset, cursorclass=RecordingCursor)
+    statements.clear()
+    opens = 0
+
+    class OpaqueConnection:
+        def cursor(self) -> Any:
+            return native.cursor()
+
+        def close(self) -> None:
+            native.close()
+
+    def open_opaque() -> OpaqueConnection:
+        nonlocal opens
+        opens += 1
+        return OpaqueConnection()
+
+    query = "SELECT id, body FROM t"
+    try:
+        if entrypoint == "configured":
+            driver = ModuleType("_synthetic_opaque_connector")
+            driver.connect = open_opaque
+            monkeypatch.setitem(sys.modules, driver.__name__, driver)
+            verifier = build_effect_verifier(
+                EffectsConfig(
+                    kind="sql",
+                    sql_driver=driver.__name__,
+                    sql_dialect="mysql",
+                    sql_query=query,
+                )
+            )
+        else:
+            verifier = SqlRecordVerifier(open_opaque, query, sql_dialect="mysql")
+        assert isinstance(verifier, SqlRecordVerifier)
+        state = verifier.capture_pre_state()
+        expected_statements = ["SELECT @@SESSION.character_set_results"]
+        exact = charset == "utf8mb4"
+        assert state.reachable is exact and state.readback_complete is exact
+        if exact:
+            assert state.records == [{"id": 1, "body": body}]
+            assert "read_error" not in state.detail
+            expected_statements.append(query)
+        else:
+            assert state.records == []
+            assert state.detail["read_error"] == (
+                "MySQL reads require character_set_results=utf8mb4"
+            )
+        # Both statements, when allowed, ran on this one native connection.
+        # The preflight never changes the native session's configuration.
+        assert opens == 1
+        assert statements == expected_statements
+        assert not native.open
+    finally:
+        if native.open:
+            native.close()
+
+
+@live
+@pytest.mark.parametrize("entrypoint", ["direct", "configured"])
+def test_undeclared_opaque_sql_connector_refuses_before_opening_a_cursor(
+    charset_database: Any, entrypoint: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, connect = charset_database
+    sessions: list[Any] = []
+    cursor_calls = 0
+
+    class OpaqueConnection:
+        def __init__(self, session: Any) -> None:
+            self.session = session
+
+        def cursor(self) -> Any:
+            nonlocal cursor_calls
+            cursor_calls += 1
+            return self.session.cursor()
+
+        def close(self) -> None:
+            self.session.close()
+
+    def open_opaque() -> OpaqueConnection:
+        session = connect("latin1")
+        sessions.append(session)
+        return OpaqueConnection(session)
+
+    query = "SELECT id FROM t"
+    try:
+        if entrypoint == "configured":
+            driver = ModuleType("_synthetic_undeclared_connector")
+            driver.connect = open_opaque
+            monkeypatch.setitem(sys.modules, driver.__name__, driver)
+            verifier = build_effect_verifier(
+                EffectsConfig(kind="sql", sql_driver=driver.__name__, sql_query=query)
+            )
+        else:
+            verifier = SqlRecordVerifier(open_opaque, query, source_metadata=True)
+        assert isinstance(verifier, SqlRecordVerifier)
+        error = "SQL read dialect is unidentified; declare sql_dialect"
+        before = verifier.capture_pre_state()
+        assert before.reachable is False and before.readback_complete is False
+        assert before.records == [] and before.detail["read_error"] == error
+        expected = Effect(
+            kind=EffectKind.RECORD_WRITTEN, match={"id": "1"}, timeout_s=1.0
+        )
+        verdict = verifier.verify(expected, before)
+        assert verdict.verdict is Verdict.INDETERMINATE
+        assert verdict.should_halt and verdict.unavailable
+        assert verdict.reason == error and verdict.matched_records == []
+        assert cursor_calls == 0
+        assert len(sessions) == 2 and sessions[0] is not sessions[1]
+        assert all(not session.open for session in sessions)
+    finally:
+        for session in sessions:
+            if session.open:
+                session.close()
+
+
+@pytest.mark.parametrize("entrypoint", ["direct", "configured"])
+def test_sqlite_effect_readback_keeps_exact_values_and_source(
+    tmp_path: Path, entrypoint: str
+) -> None:
+    database = str(tmp_path / "records.sqlite3")
+    body = "Synthetic example 😀"
+    with closing(sqlite3.connect(database)) as connection, connection:
+        connection.execute("CREATE TABLE t (id INTEGER PRIMARY KEY, body TEXT)")
+        connection.execute("INSERT INTO t VALUES (1, ?)", (body,))
+
+    query = "SELECT * FROM t"
+    if entrypoint == "configured":
+        verifier = build_effect_verifier(
+            EffectsConfig(kind="sql", sqlite_database=database, sql_query=query)
+        )
+    else:
+        verifier = SqlRecordVerifier(
+            lambda: sqlite_read_connection(database), query, source_metadata=True
+        )
+    assert isinstance(verifier, SqlRecordVerifier)
+    state = verifier.capture_pre_state()
+    assert state.reachable and state.readback_complete is True
+    assert state.records == [{"id": 1, "body": body}]
+    assert "read_error" not in state.detail
+    assert verifier.source_relation == ("main", "t", 0)
 
 
 @live
