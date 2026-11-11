@@ -1295,18 +1295,19 @@ class SelfRepair:
                 int(point[0]), int(point[1]), double=op.kind == "double_click"
             )
             after = self._settled(session)
-            # What the click changed on screen is the new step's postcondition,
-            # derived the way the compiler derives a recorded step's.
-            staging = evidence_dir / "expect"
-            (staging / "templates").mkdir(parents=True, exist_ok=True)
-            new_step.expect = _postconditions(
-                screen,
-                after,
-                exclude_texts=tuple(params.values()),
-                bundle=staging,
-                step_id=new_id,
-                click_point=point,
-            )
+            # The final after-bridge step inherits the halted step's original
+            # postconditions. Only generate crops for checks that survive.
+            if mode != "after" or index + 1 < len(ops):
+                staging = evidence_dir / "expect"
+                (staging / "templates").mkdir(parents=True, exist_ok=True)
+                new_step.expect = _postconditions(
+                    screen,
+                    after,
+                    exclude_texts=tuple(params.values()),
+                    bundle=staging,
+                    step_id=new_id,
+                    click_point=point,
+                )
             new_steps.append(new_step)
             screen = after
 
