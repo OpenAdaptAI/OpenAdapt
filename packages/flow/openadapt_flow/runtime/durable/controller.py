@@ -729,7 +729,9 @@ class DurableRun:
                 or self.store.read_pending() is not None
                 or self._active_pause_digest != self.store.model_digest(None)
             ):
-                raise FirstLocalDeliveryHeld("the exact first-leg cursor is unavailable")
+                raise FirstLocalDeliveryHeld(
+                    "the exact first-leg cursor is unavailable"
+                )
             checkpoints = self.store.checkpoints()
             last = checkpoints[-1] if checkpoints else None
             if len(checkpoints) != step_index or (
@@ -741,7 +743,9 @@ class DurableRun:
                     or last.params != params
                 )
             ):
-                raise FirstLocalDeliveryHeld("verified progress does not match this edge")
+                raise FirstLocalDeliveryHeld(
+                    "verified progress does not match this edge"
+                )
             authority = self._authority.validate(self._manifest)
             if authority.progress_digest != self._authority_digest:
                 raise FirstLocalDeliveryHeld("the durable run progress changed")
@@ -770,7 +774,9 @@ class DurableRun:
             self._sync_authority()
             return self._active_pause_digest
         except (OSError, StateDiverged, ValueError) as exc:
-            raise FirstLocalDeliveryHeld("the write-ahead pause was not committed") from exc
+            raise FirstLocalDeliveryHeld(
+                "the write-ahead pause was not committed"
+            ) from exc
 
     def _first_local_pause(
         self,
@@ -848,7 +854,9 @@ class DurableRun:
                 if first_local is not None:
                     checkpoint = checkpoint.model_copy(
                         update={
-                            "first_local_pause_sha256": approval_pause_digest(first_local)
+                            "first_local_pause_sha256": approval_pause_digest(
+                                first_local
+                            )
                         }
                     )
                 self.store.write_checkpoint(self._after_active_pause(checkpoint))
@@ -1012,7 +1020,9 @@ class DurableRun:
             self._sync_authority()
         except (OSError, StateDiverged, ValueError) as exc:
             if first_local is not None:
-                raise FirstLocalDeliveryHeld("the deferred effect was not committed") from exc
+                raise FirstLocalDeliveryHeld(
+                    "the deferred effect was not committed"
+                ) from exc
             raise
 
     def settle_deferred_readback(

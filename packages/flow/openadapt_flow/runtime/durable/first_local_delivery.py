@@ -60,7 +60,9 @@ def local_delivery_owner(run_dir: Path, *, create: bool = True) -> Iterator[None
         yield
         return
     except (OSError, RuntimeError) as exc:
-        raise FirstLocalDeliveryHeld("the local delivery owner could not be checked") from exc
+        raise FirstLocalDeliveryHeld(
+            "the local delivery owner could not be checked"
+        ) from exc
     locked = False
     try:
         try:

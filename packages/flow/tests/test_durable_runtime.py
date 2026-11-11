@@ -175,7 +175,11 @@ def _dirs(tmp_path):
 
 
 def _approval(
-    bundle, run_dir=None, *, authorize_uncertain_retry: bool = False, checkpoint_key=None
+    bundle,
+    run_dir=None,
+    *,
+    authorize_uncertain_retry: bool = False,
+    checkpoint_key=None,
 ) -> ApprovalRecord:
     """An authenticated approval for the given bundle (P0-5): resume now REQUIRES
     one, so every legitimate resume in these tests carries an operator identity,
@@ -263,14 +267,24 @@ class _StopBeforeInput(Replayer):
     """Add an authorization refusal to a synthetic run before any input."""
 
     def _fresh_actuation_authorization_refusal(self, workflow, params, step):
-        return super()._fresh_actuation_authorization_refusal(
-            workflow, params, step
-        ) or "synthetic operator stop before the first input"
+        return (
+            super()._fresh_actuation_authorization_refusal(workflow, params, step)
+            or "synthetic operator stop before the first input"
+        )
 
 
 def _resume_after_proven_no_input(
-    workflow, bundle, run_dir, backend, verifier, *, params=None,
-    ledger=None, key=None, checkpoint_key=None, vision=None,
+    workflow,
+    bundle,
+    run_dir,
+    backend,
+    verifier,
+    *,
+    params=None,
+    ledger=None,
+    key=None,
+    checkpoint_key=None,
+    vision=None,
 ):
     """Exercise existing resume with an authenticated pre-input pause."""
     first_backend = FakeBackend()
@@ -281,7 +295,9 @@ def _resume_after_proven_no_input(
         idempotency_ledger=ledger,
         durable=True,
         poll_interval_s=0.01,
-    ).run(workflow, params=params, bundle_dir=bundle, run_dir=run_dir, idempotency_key=key)
+    ).run(
+        workflow, params=params, bundle_dir=bundle, run_dir=run_dir, idempotency_key=key
+    )
     assert first.success is False
     assert first_backend.actions == []
     store = CheckpointStore(run_dir, key=checkpoint_key)
@@ -680,8 +696,14 @@ def test_durable_resume_projection_failure_keeps_fail_closed_terminal_evidence(
     bundle, run_dir = _dirs(tmp_path)
     workflow.save(bundle)
     initial = _resume_after_proven_no_input(
-        workflow, bundle, run_dir, FakeBackend(), verifier,
-        params={"who": "alice"}, ledger=ledger, key="durable-projection-key",
+        workflow,
+        bundle,
+        run_dir,
+        FakeBackend(),
+        verifier,
+        params={"who": "alice"},
+        ledger=ledger,
+        key="durable-projection-key",
     )
     assert initial.success is False
     pending = CheckpointStore(run_dir).read_pending()
@@ -744,8 +766,14 @@ def test_durable_pause_defers_ledger_outcome_until_resume_verifies(tmp_path):
     bundle, run_dir = _dirs(tmp_path)
     workflow.save(bundle)
     _resume_after_proven_no_input(
-        workflow, bundle, run_dir, FakeBackend(), verifier,
-        params={"who": "alice"}, ledger=ledger, key="durable-final-key",
+        workflow,
+        bundle,
+        run_dir,
+        FakeBackend(),
+        verifier,
+        params={"who": "alice"},
+        ledger=ledger,
+        key="durable-final-key",
     )
     assert ledger.lookup("durable-final-key")["outcome"] is None
 
@@ -1155,9 +1183,7 @@ def test_halt_on_first_step_resumes_from_zero(tmp_path):
     bundle, run_dir = _dirs(tmp_path)
     workflow.save(bundle)
 
-    report = _resume_after_proven_no_input(
-        workflow, bundle, run_dir, backend, verifier
-    )
+    report = _resume_after_proven_no_input(workflow, bundle, run_dir, backend, verifier)
     assert backend.actions == [("press", "A")]
 
     assert report.success is False

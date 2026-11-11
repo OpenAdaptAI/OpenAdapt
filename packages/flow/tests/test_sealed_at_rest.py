@@ -707,8 +707,13 @@ def test_sealed_run_pauses_and_resumes_without_plaintext(
     verifier.refute.add((("step", "s2"),))
     with watching_disk() as watch:
         report = _resume_after_proven_no_input(
-            Workflow.load(bundle), bundle, run_dir, FakeBackend(), verifier,
-            params={"who": "Testpatient Zed"}, checkpoint_key=KEY,
+            Workflow.load(bundle),
+            bundle,
+            run_dir,
+            FakeBackend(),
+            verifier,
+            params={"who": "Testpatient Zed"},
+            checkpoint_key=KEY,
         )
         assert report.success is False
         store = CheckpointStore(run_dir, key=KEY)

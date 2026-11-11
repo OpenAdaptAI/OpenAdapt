@@ -322,9 +322,9 @@ def test_identity_navigation_precedes_a_separately_fenced_write(tmp_path):
     vision.ocr_lines = [OcrLine(context)]
     vision.text_results = _vision_ok().text_results
     backend = NavigatingBackend(local, before_write=before_write)
-    report = local.replayer(
-        backend, vision=vision, authorization=authorization
-    ).run(workflow, bundle_dir=local.bundle, run_dir=local.run_dir)
+    report = local.replayer(backend, vision=vision, authorization=authorization).run(
+        workflow, bundle_dir=local.bundle, run_dir=local.run_dir
+    )
 
     assert report.success is True
     opened, written = report.results

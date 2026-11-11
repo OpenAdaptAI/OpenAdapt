@@ -886,7 +886,9 @@ class CheckpointStore:
         except FirstLocalDeliveryHeld as exc:
             raise refuse(str(exc)) from exc
         pending = self.read_pending()
-        if pending is not None and is_first_local_delivery(pending.delivery_uncertainty):
+        if pending is not None and is_first_local_delivery(
+            pending.delivery_uncertainty
+        ):
             raise refuse(
                 "first_local_delivery_held: use only verified first-delivery recovery"
             )
@@ -902,7 +904,9 @@ class CheckpointStore:
 
         require_local_delivery_idle(self.run_dir)
         pending = self.read_pending()
-        if pending is not None and is_first_local_delivery(pending.delivery_uncertainty):
+        if pending is not None and is_first_local_delivery(
+            pending.delivery_uncertainty
+        ):
             raise FirstLocalDeliveryHeld("resolve the exact write before rollback")
 
     # -- checkpoints ---------------------------------------------------------
