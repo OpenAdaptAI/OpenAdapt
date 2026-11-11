@@ -44,10 +44,10 @@ def _state(first, kind):
 def test_refute_restore_never_reports_confirmation(tmp_path, due_now, kind):
     contract, db, first = _first(tmp_path)
     state = _state(first, kind)
-    _sql(db, "INSERT INTO calendar(pid,title) VALUES (2,'unexplained')")
+    _sql(db, "UPDATE patient_data SET fname='unexplained' WHERE id=1")
     assert _recheck(contract, state).outcome == "REFUTED"
     original = _attempt(first).resolved
-    _sql(db, "DELETE FROM calendar WHERE title='unexplained'")
+    _sql(db, "UPDATE patient_data SET fname='Wendell' WHERE id=1")
     for _ in range(2):
         late = _recheck(contract, state)
         assert late.outcome == "UNCERTAIN" and not late.verified
@@ -161,9 +161,9 @@ def test_generated_transient_and_terminal_recheck_histories(tmp_path, monkeypatc
                 assert _recheck(contract, state, wait=True).outcome == "UNCERTAIN"
                 preserved.rename(db)
             if terminal:
-                _sql(db, "INSERT INTO calendar(pid,title) VALUES (2,'generated')")
+                _sql(db, "UPDATE patient_data SET fname='generated' WHERE id=1")
                 assert _recheck(contract, state, wait=True).outcome == "REFUTED"
-                _sql(db, "DELETE FROM calendar WHERE title='generated'")
+                _sql(db, "UPDATE patient_data SET fname='Wendell' WHERE id=1")
             late = _recheck(contract, state, wait=True)
             assert late.verified is (not terminal)
             assert _attempt(first).resolved["outcome"] == (

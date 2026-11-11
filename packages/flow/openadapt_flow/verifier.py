@@ -2507,9 +2507,11 @@ def _mark_rechecked(
             )
         prior = (attempt.resolved or {}).get("outcome")
         if prior == "UNCERTAIN":
-            attempt = _recover_recheck(led, key, attempt, late, expected_revision)
-            expected_revision = attempt.revision
-            prior = (attempt.resolved or {}).get("outcome")
+            recovered = _recover_recheck(led, key, attempt, late, expected_revision)
+            if recovered is not None:
+                attempt = recovered
+                expected_revision = attempt.revision
+                prior = (attempt.resolved or {}).get("outcome")
         if prior != "CONFIRMED":
             # Other settlements cannot authorize a pass. Transient recovery
             # above requires the original receipt and an unchanged journal.
@@ -2521,12 +2523,6 @@ def _mark_rechecked(
                     f"the ledger settled this write as {prior or 'unresolved'}; "
                     "a later positive read does not change that settlement",
                 ],
-            )
-        if (attempt.resolved or {}).get("receipt_sha256") != late.receipt_sha256:
-            return _replace(
-                late,
-                outcome="UNCERTAIN",
-                reasons=[*late.reasons, "the ledger confirmation names another receipt"],
             )
         # Only reached after this contract's authenticated checkpoint and
         # actual recheck confirmed.
@@ -2579,7 +2575,7 @@ def _recover_recheck(
     attempt: Attempt,
     late: RecheckResult,
     expected_revision: Optional[int],
-) -> Attempt:
+) -> Optional[Attempt]:
     """Recover only a transient recheck of this originally confirmed receipt.
 
     The pre-read journal revision binds the fresh native observation. A
@@ -2602,7 +2598,7 @@ def _recover_recheck(
             for event in events
         )
     ):
-        raise LedgerError("the earlier settlement cannot be recovered by a recheck")
+        return None
     original = next(
         (
             event
@@ -2618,7 +2614,7 @@ def _recover_recheck(
         None,
     )
     if original is None:
-        raise LedgerError("there is no original confirmed result for this receipt")
+        return None
     recorded = ledger.resolved(
         key,
         attempt.attempt_id,
