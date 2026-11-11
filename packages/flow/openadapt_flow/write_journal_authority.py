@@ -116,7 +116,11 @@ class SQLiteJournalAuthority:
 
     @contextmanager
     def serialized(self) -> Iterator[None]:
-        """Serialize protected file reads, append phases and applied cleanup."""
+        """Serialize protected file reads, append phases and applied cleanup.
+
+        Callers that need the committed inventory while holding this lock use
+        committed_snapshot() instead of nesting the lock.
+        """
         self._require_file()
         try:
             fd = os.open(
@@ -216,19 +220,26 @@ class SQLiteJournalAuthority:
         except (TypeError, ValueError) as exc:
             raise LedgerIntegrityHeld("ledger_authority_stale") from exc
 
-    def snapshot(self) -> JournalCommit:
-        try:
-            with closing(self._connect()) as db:
-                current, pending = self._read(db)
+    @contextmanager
+    def committed_snapshot(self) -> Iterator[JournalCommit]:
+        """Hold the journal lock while the caller uses the committed inventory."""
+        with self.serialized():
+            try:
+                with closing(self._connect()) as db:
+                    current, pending = self._read(db)
+            except sqlite3.Error as exc:
+                raise LedgerIntegrityHeld("ledger_authority_unavailable") from exc
             if pending is not None:
                 raise LedgerIntegrityHeld("ledger_authority_interrupted")
+            yield current
+
+    def snapshot(self) -> JournalCommit:
+        with self.committed_snapshot() as current:
             return current
-        except sqlite3.Error as exc:
-            raise LedgerIntegrityHeld("ledger_authority_unavailable") from exc
 
     def lookup_key(self) -> bytes:
         try:
-            with closing(self._connect()) as db, db:
+            with self.serialized(), closing(self._connect()) as db, db:
                 db.execute("BEGIN")
                 _, pending = self._read(db)
                 if pending is not None:
