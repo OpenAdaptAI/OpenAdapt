@@ -266,11 +266,13 @@ def test_linear_resume_never_synthesizes_missing_verified_history(tmp_path):
 class _StopBeforeInput(Replayer):
     """Add an authorization refusal to a synthetic run before any input."""
 
+    stop_before_step = None
+
     def _fresh_actuation_authorization_refusal(self, workflow, params, step):
-        return (
-            super()._fresh_actuation_authorization_refusal(workflow, params, step)
-            or "synthetic operator stop before the first input"
-        )
+        refusal = super()._fresh_actuation_authorization_refusal(workflow, params, step)
+        if self.stop_before_step is None or self.stop_before_step == step.id:
+            return refusal or "synthetic operator stop before input"
+        return refusal
 
 
 def _resume_after_proven_no_input(
@@ -531,14 +533,23 @@ def test_an_approval_on_a_held_wall_clock_resolves_the_pause(tmp_path, monkeypat
 
     monkeypatch.setattr(checkpoint_module, "datetime", _HeldClock)
     monkeypatch.setattr(approval_module, "datetime", _HeldClock)
-    report, run_dir, bundle, _orig_backend, verifier = _run_to_halt(tmp_path)
+    bundle, run_dir = _dirs(tmp_path)
+    workflow = _three_step_workflow(with_effects=True)
+    workflow.save(bundle)
+    backend = FakeBackend()
+    verifier = FakeSoRVerifier()
+    report = _StopBeforeInput(
+        backend, vision=_vision_ok(), effect_verifier=verifier, durable=True
+    ).run(workflow, bundle_dir=bundle, run_dir=run_dir)
     assert report.success is False
+    assert backend.actions == []
     pending = CheckpointStore(run_dir).read_pending()
     assert pending is not None
+    assert pending.delivery_uncertainty is None
     assert datetime.fromisoformat(pending.created_at) == _HeldClock.held
 
     resumed, resume_backend = _resume_retry(
-        run_dir, bundle, verifier, _retry_approval(bundle)
+        run_dir, bundle, verifier, _approval(bundle)
     )
     assert resumed.success is True
     assert ("press", "C") in resume_backend.actions

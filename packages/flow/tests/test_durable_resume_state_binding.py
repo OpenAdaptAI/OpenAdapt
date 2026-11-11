@@ -32,6 +32,7 @@ from tests.test_durable_runtime import (
     _approval,
     _resume_after_proven_no_input,
     _retry_approval,
+    _StopBeforeInput,
 )
 from tests.test_replayer import FakeBackend, FakeVision, Match
 
@@ -239,15 +240,22 @@ def test_replacing_sealed_template_invalidates_exact_resume_approval(
     workflow.save(bundle)
     verifier = FakeSoRVerifier()
     verifier.refute.add((("step", "s1"),))
-    report = Replayer(
-        FakeBackend(),
+    first_backend = FakeBackend()
+    first = _StopBeforeInput(
+        first_backend,
         vision=FakeVision(),
         effect_verifier=verifier,
         durable=True,
         poll_interval_s=0.0,
-    ).run(workflow, bundle_dir=bundle, run_dir=run_dir)
+    )
+    first.stop_before_step = "s1"
+    report = first.run(workflow, bundle_dir=bundle, run_dir=run_dir)
     assert report.success is False
+    assert ("press", "B") not in first_backend.actions
+    store = CheckpointStore(run_dir)
     assert CheckpointStore(run_dir).checkpoints()
+    pending = store.read_pending()
+    assert pending is not None and pending.delivery_uncertainty is None
     approval = _approval(bundle)
     approved_version = approval.bundle_version
 
