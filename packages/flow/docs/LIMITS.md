@@ -84,7 +84,7 @@ following boundaries and residual security considerations:
   directories), the no-follow check refuses the read as `receipt_owner`. To
   avoid unexpected refusals, operators should ensure the receipt root is
   configured using canonical, real paths (e.g. via `os.path.realpath`).
-- **Pre-#2154 emitted servers**: Compiled task servers (`mcp/server.py`)
+- **Pre-#2154 emitted servers**: Compiled task servers (`server.py` in the task's `mcp` subdirectory)
   emitted before request-context binding was introduced (#2154) ignore incoming
   `ai.openadapt/request-context` metadata. Their generated receipts carry no
   `request_context`, causing `WrappedTask` calls to fail closed with
