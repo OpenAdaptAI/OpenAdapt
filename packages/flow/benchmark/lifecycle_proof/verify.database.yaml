@@ -76,6 +76,7 @@ frame:
     read:
       kind: sql
       sql_driver: benchmark.lifecycle_proof.readonly_db
+      sql_dialect: mysql
       sql_connect_args: &db
         container: ${OPENEMR_DB_CONTAINER}
         user: ${OPENEMR_READONLY_DB_USER:-oa_audit_reader}

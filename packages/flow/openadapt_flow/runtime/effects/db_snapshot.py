@@ -75,6 +75,11 @@ from decimal import Context, Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Literal, Optional
 
+from openadapt_flow.runtime.effects._mysql_read import (
+    MySQLResultCharsetRefused,
+    mysql_utf8mb4_cursor,
+)
+
 Dialect = Literal["sqlite", "mysql", "postgresql"]
 TableMode = Literal["compare", "append_only", "skip"]
 
@@ -608,22 +613,20 @@ class _Session:
                 # psycopg opens a transaction on the first statement unless told
                 # not to; the snapshot's own BEGIN must be the one that counts.
                 self.con.autocommit = True
-            self.cur = self.con.cursor()
-            if dialect == "mysql":
-                # Preserve exact names, definitions and text in both snapshots
-                # and history reads, before either can inspect metadata or rows.
-                charset = self.rows("SELECT @@SESSION.character_set_results")
-                if charset != [("utf8mb4",)]:
-                    raise SnapshotError(
-                        "MySQL frame reads require character_set_results=utf8mb4"
-                    )
-            elif dialect == "postgresql":
+            self.cur = (
+                mysql_utf8mb4_cursor(self.con)
+                if dialect == "mysql"
+                else self.con.cursor()
+            )
+            if dialect == "postgresql":
                 for sql in _PG_SESSION:
                     self.cur.execute(sql)
-        except BaseException:
+        except BaseException as exc:
             # Setup did not finish. Close without issuing transaction SQL.
             with suppress(Exception):
                 self.con.close()
+            if isinstance(exc, MySQLResultCharsetRefused):
+                raise SnapshotError(str(exc)) from None
             raise
 
     def begin(self) -> None:

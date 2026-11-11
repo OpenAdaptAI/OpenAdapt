@@ -733,6 +733,7 @@ def run_case(case: dict[str, Any], out: Path, container: str) -> dict[str, Any]:
                 "read": {
                     "kind": "sql",
                     "sql_driver": "verification_coverage.exec_mariadb",
+                    "sql_dialect": "mysql",
                     "sql_connect_args": {
                         "container": container,
                         "user": AUDIT_USER,
