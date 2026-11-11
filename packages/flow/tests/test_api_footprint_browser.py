@@ -166,8 +166,10 @@ save.onclick = async () => {
 def browser():
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=True)
-        yield browser
-        browser.close()
+        try:
+            yield browser
+        finally:
+            browser.close()
 
 
 def open_editor(app, page):

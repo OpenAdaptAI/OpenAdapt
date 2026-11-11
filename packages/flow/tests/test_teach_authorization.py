@@ -365,9 +365,11 @@ def chromium():
             browser = pw.chromium.launch()
         except Exception as exc:  # noqa: BLE001 - no browser installed
             pytest.skip(f"no Chromium: {exc}")
-        page = browser.new_page()
-        yield page
-        browser.close()
+        try:
+            page = browser.new_page()
+            yield page
+        finally:
+            browser.close()
 
 
 def _guard(tmp_path: Path, person: LocalAuthorizer) -> TeachGuard:

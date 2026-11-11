@@ -217,9 +217,11 @@ def live_dialog_page():
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=True)
-        page = browser.new_page(viewport={"width": 1000, "height": 500})
-        yield page, PlaywrightBackend(page)
-        browser.close()
+        try:
+            page = browser.new_page(viewport={"width": 1000, "height": 500})
+            yield page, PlaywrightBackend(page)
+        finally:
+            browser.close()
 
 
 def _compile_page(page, backend, target, tmp_path, *, known_nonrow=False):

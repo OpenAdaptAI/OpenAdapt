@@ -76,8 +76,10 @@ def browser() -> Iterator[Any]:
             chromium = launch_chromium(pw.chromium, headless=True)
         except Exception as exc:  # noqa: BLE001 - no browser on this host
             pytest.skip(f"chromium unavailable: {exc}")
-        yield chromium
-        chromium.close()
+        try:
+            yield chromium
+        finally:
+            chromium.close()
 
 
 def _opener(browser: Any, base: str, clients: list[PageWindowClient]):

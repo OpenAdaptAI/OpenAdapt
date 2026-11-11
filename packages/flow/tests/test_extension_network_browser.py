@@ -74,26 +74,27 @@ def extension(tmp_path):
         except Exception as exc:  # noqa: BLE001 - no browser on this machine
             pytest.skip(f"chromium unavailable: {exc}")
         try:
-            workers = context.service_workers
-            worker = (
-                workers[0]
-                if workers
-                else context.wait_for_event("serviceworker", timeout=15000)
-            )
-        except Exception as exc:  # noqa: BLE001
-            context.close()
-            pytest.skip(f"extension service worker did not start: {exc}")
-        worker.evaluate(
-            """() => {
+            try:
+                workers = context.service_workers
+                worker = (
+                    workers[0]
+                    if workers
+                    else context.wait_for_event("serviceworker", timeout=15000)
+                )
+            except Exception as exc:  # noqa: BLE001
+                pytest.skip(f"extension service worker did not start: {exc}")
+            worker.evaluate(
+                """() => {
               globalThis.__posted = [];
               chrome.runtime.connectNative = () => ({
                 postMessage(m) { globalThis.__posted.push(JSON.parse(JSON.stringify(m))); },
                 onDisconnect: { addListener() {} },
               });
             }"""
-        )
-        yield context, worker
-        context.close()
+            )
+            yield context, worker
+        finally:
+            context.close()
 
 
 def _post(page, base: str) -> None:

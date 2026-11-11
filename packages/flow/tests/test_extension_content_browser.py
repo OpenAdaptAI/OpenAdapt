@@ -48,13 +48,15 @@ def page():
             browser = playwright.chromium.launch(headless=True)
         except Exception as exc:  # noqa: BLE001 - no browser on this machine
             pytest.skip(f"chromium unavailable: {exc}")
-        page = browser.new_page()
-        page.set_content(_PAGE)
-        page.add_script_tag(content=CONTENT.read_text(encoding="utf-8"))
-        page.evaluate("window.__openadaptExtensionContent.setRecording(true)")
-        page.evaluate("window.__sent.length = 0")
-        yield page
-        browser.close()
+        try:
+            page = browser.new_page()
+            page.set_content(_PAGE)
+            page.add_script_tag(content=CONTENT.read_text(encoding="utf-8"))
+            page.evaluate("window.__openadaptExtensionContent.setRecording(true)")
+            page.evaluate("window.__sent.length = 0")
+            yield page
+        finally:
+            browser.close()
 
 
 def _evidence(page) -> list[dict]:

@@ -31,8 +31,10 @@ def server_url() -> Iterator[str]:
 def browser() -> Iterator[Browser]:
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=True)
-        yield browser
-        browser.close()
+        try:
+            yield browser
+        finally:
+            browser.close()
 
 
 @pytest.fixture()
@@ -40,8 +42,10 @@ def page(browser: Browser) -> Iterator[Page]:
     page = browser.new_page(
         viewport={"width": 1280, "height": 800}, device_scale_factor=1
     )
-    yield page
-    page.close()
+    try:
+        yield page
+    finally:
+        page.close()
 
 
 def login(page: Page, url: str) -> None:
