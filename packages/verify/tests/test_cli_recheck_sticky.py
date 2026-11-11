@@ -37,6 +37,18 @@ def _attempt(first):
     return found[1]
 
 
+def _assert_held_reply(reply, status):
+    assert reply["outcome"] == "REFUTED" and reply["verified"] is False
+    assert reply["hold_reason"] == "prior_refutation"
+    assert reply["current_observation"] == {
+        "status": status,
+        "read_window": {
+            "post_save_read_at": reply["post_save_read_at"],
+            "read_at": reply["read_at"] or None,
+        },
+    }
+
+
 @pytest.mark.parametrize("unavailable_after_refute", [False, True])
 def test_cli_refute_restore_retry_never_exits_zero(
     store, tmp_path, unavailable_after_refute
@@ -55,12 +67,14 @@ def test_cli_refute_restore_retry_never_exits_zero(
         unreadable = _check(contract, params, state)
         assert unreadable.returncode == 4, unreadable.stderr
         assert json.loads(unreadable.stdout)["verified"] is False
+        _assert_held_reply(json.loads(unreadable.stdout), "UNCERTAIN")
         preserved.rename(store.path)
     for _ in range(2):
         retry = _check(contract, params, state)
         reply = json.loads(retry.stdout)
         assert retry.returncode == 4, retry.stderr
         assert reply["verified"] is False
+        _assert_held_reply(reply, "CONFIRMED")
         assert reply["ledger_state"] == "held"
         assert reply["ledger_outcome"] == "REFUTED"
         assert reply["receipt_sha256"] == first["receipt_sha256"]

@@ -47,6 +47,7 @@ from typing import (
     Callable,
     ContextManager,
     Iterator,
+    Literal,
     Mapping,
     Optional,
     Protocol,
@@ -430,6 +431,22 @@ class Attempt:
             return "free" if _age(r.get("at")) >= repeat_s else "undelivered"
         return "uncertain"
 
+    def recheck_hold(
+        self,
+    ) -> Optional[Literal["prior_refutation", "person_decision", "released_attempt"]]:
+        """The terminal history that a native reread cannot supersede."""
+
+        for event in reversed(self.events):
+            if event.get("applied") is False:
+                continue
+            if event.get("event") == "released":
+                return "released_attempt"
+            if event.get("event") == "resolved" and event.get("via") == "person":
+                return "person_decision"
+            if event.get("event") == "resolved" and event.get("outcome") == "REFUTED":
+                return "prior_refutation"
+        return None
+
     @property
     def review(self) -> bool:
         """Landed, but a person should look at the store; until released."""
@@ -650,6 +667,21 @@ class Ledger:
                 if person and not person_decision:
                     applied = False
                 if refuted and not tightening and not person and not positive_recheck:
+                    applied = False
+                # Protect the settlement and any projected recheck. A fresh
+                # positive audit row on a non-confirmed settlement does neither.
+                if (
+                    current
+                    and prior is not None
+                    and (
+                        (kind == "resolved" and event.get("via") == "recheck")
+                        or (
+                            kind == "rechecked"
+                            and (prior.resolved or {}).get("outcome") == "CONFIRMED"
+                        )
+                    )
+                    and prior.recheck_hold() is not None
+                ):
                     applied = False
                 if kind == "rechecked" and (
                     prior is None

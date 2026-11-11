@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import sqlite3
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
@@ -11,11 +13,14 @@ import pytest
 
 from openadapt_flow import verifier
 from openadapt_flow.verifier import RecheckState
+from openadapt_flow.write_ledger import Attempt
 from tests import test_verifier_recheck as controls
 from tests.test_verifier_recheck import (
+    _assert_terminal_hold,
     _first,
     _params,
     _recheck,
+    _save_sql,
     _sql,
 )
 
@@ -50,7 +55,7 @@ def test_refute_restore_never_reports_confirmation(tmp_path, due_now, kind):
     _sql(db, "UPDATE patient_data SET fname='Wendell' WHERE id=1")
     for _ in range(2):
         late = _recheck(contract, state)
-        assert late.outcome == "UNCERTAIN" and not late.verified
+        _assert_terminal_hold(late, "CONFIRMED")
         assert _attempt(first).state == "held"
         assert _attempt(first).resolved == original
         assert _attempt(first).rechecked is None
@@ -103,7 +108,7 @@ def test_recovery_read_cannot_overwrite_concurrent_real_refutation(
             assert _recheck(contract, first).outcome == "REFUTED"
         finally:
             resume.set()
-        assert not recovering.result(timeout=15).verified
+        _assert_terminal_hold(recovering.result(timeout=15), "CONFIRMED")
     assert _attempt(first).state == "held"
     assert _attempt(first).resolved["outcome"] == "REFUTED"
     assert _attempt(first).rechecked is None
@@ -171,6 +176,7 @@ def test_generated_transient_and_terminal_recheck_histories(tmp_path, monkeypatc
                 "REFUTED" if terminal else "CONFIRMED"
             )
             if terminal:
+                _assert_terminal_hold(late, "CONFIRMED")
                 assert _attempt(first).rechecked is None
             else:
                 assert (
@@ -178,6 +184,85 @@ def test_generated_transient_and_terminal_recheck_histories(tmp_path, monkeypatc
                 )
 
     history()
+
+
+@pytest.mark.parametrize(
+    ("found", "hold_reason"),
+    [("landed", "person_decision"), ("absent", "released_attempt")],
+)
+def test_person_decision_cannot_be_replaced_by_favorable_read(
+    tmp_path: Path, due_now: None, found: str, hold_reason: str
+) -> None:
+    contract, db, first = _first(tmp_path)
+    saved = _state(first, "saved")
+    assert first.ledger is not None
+    _sql(db, "UPDATE patient_data SET fname='unexplained' WHERE id=1")
+    assert _recheck(contract, saved).outcome == "REFUTED"
+    _sql(db, "UPDATE patient_data SET fname='Wendell' WHERE id=1")
+    if found == "absent":
+        _sql(db, "DELETE FROM patient_data WHERE id=2")
+    with closing(sqlite3.connect(db.as_uri() + "?mode=ro", uri=True)) as reader:
+        observed = reader.execute(
+            "SELECT COUNT(*) FROM patient_data WHERE id=2"
+        ).fetchone()[0]
+    assert observed == int(found == "landed")
+    decision = first.ledger.release(
+        first.write_key, by="synthetic-reviewer", reason="checked store", found=found
+    )
+    assert decision.attempt_id == first.write_id
+    if found == "absent":
+        assert decision.released
+        _sql(db, _save_sql(2)[0])
+    else:
+        assert decision.resolved["via"] == "person"
+    late = _recheck(contract, saved)
+    _assert_terminal_hold(late, "CONFIRMED", reason=hold_reason)
+    assert late.receipt_sha256 == first.receipt_sha256
+    retained = _attempt(first)
+    assert retained.events == decision.events
+    assert retained.resolved == decision.resolved
+    assert retained.released is decision.released
+    assert retained.rechecked is None
+
+
+def test_person_decision_wins_a_refuting_recheck_already_about_to_append(
+    tmp_path: Path, due_now: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    contract, db, first = _first(tmp_path)
+    assert first.ledger is not None
+    ledger = first.ledger
+    preserved = db.with_suffix(".preserved")
+    db.rename(preserved)
+    assert _recheck(contract, first).outcome == "UNCERTAIN"
+    before = _attempt(first)
+    assert before.state == "uncertain"
+    preserved.rename(db)
+    _sql(db, "UPDATE patient_data SET fname='unexplained' WHERE id=1")
+    original = ledger.resolved
+    decisions: list[Attempt] = []
+
+    def decide_before_append(key: str, attempt_id: str, **fields: Any) -> Attempt:
+        assert key == first.write_key and attempt_id == first.write_id
+        assert fields["outcome"] == "REFUTED"
+        assert fields["expected_revision"] == before.revision
+        decisions.append(
+            ledger.release(
+                key, by="synthetic-reviewer", reason="checked store", found="landed"
+            )
+        )
+        return original(key, attempt_id, **fields)
+
+    monkeypatch.setattr(ledger, "resolved", decide_before_append)
+    late = _recheck(contract, first, ledger=ledger)
+    _assert_terminal_hold(late, "REFUTED", reason="person_decision")
+    (decision,) = decisions
+    retained = _attempt(first)
+    assert retained.attempt_id == first.write_id
+    assert retained.resolved == decision.resolved
+    assert retained.resolved["via"] == "person"
+    assert retained.rechecked is None
+    assert retained.events[:-1] == decision.events
+    assert retained.events[-1]["applied"] is False
 
 
 @pytest.mark.parametrize("receipt_sha256", ["b" * 64, ""], ids=["different", "missing"])
