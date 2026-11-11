@@ -25,6 +25,7 @@ on:
       - packages/flow/tests/test_windows_attempt_ledger.py
       - packages/flow/tests/test_check_it_dry_run_apps.py
       - packages/flow/tests/native_apps/check_it_gtk.py
+      - packages/flow/tests/test_approval_form_window.py
       - packages/flow/benchmark/rdp_pool/**
       - packages/flow/pyproject.toml
       - packages/flow/uv.lock
@@ -71,13 +72,13 @@ jobs:
           python ../../scripts/ci/locked_install.py --lock .github/ci-tools:win-agent
           --lock 'packages/flow[dev]'
           --editable packages/types --editable packages/flow
-      - name: Windows file-system guards (the attempt ledger)
+      - name: Windows file-system guards (the attempt ledger, the approval window)
         # The default temp folder is in the user's profile, where the ledger
         # must live; the runner's temp drive is not.
         run: |
           mkdir -p runs
           pytest -v -rs -p no:cacheprovider tests/test_windows_attempt_ledger.py \
-            --junitxml=runs/windows-guards-junit.xml
+            tests/test_approval_form_window.py --junitxml=runs/windows-guards-junit.xml
       - name: Record, compile and replay, judged from the record
         env:
           OAFLOW_WINDOWS_HOSTED_E2E: "1"
