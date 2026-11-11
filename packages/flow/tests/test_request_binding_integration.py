@@ -764,3 +764,48 @@ def _memory_wire_namespace_fault(real_factory, namespace, invalid, observations)
                     forwarding.cancel_scope.cancel()
 
     return streams
+
+
+def test_run_in_executor_hop_without_copied_context_gives_refused(task_case):
+    """Pin that a run_in_executor hop without a copied context gives REFUSED."""
+    import concurrent.futures
+    import contextvars
+
+    task, cache, runs = task_case
+    original_run = cache.run
+
+    def run_uncopied(instruction, params, agent):
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(original_run, instruction, params, agent)
+            return future.result()
+
+    cache.run = run_uncopied
+    reply_uncopied = task.call(
+        "request-uncopied", {"patient_id": "p1", "note": "synthetic uncopied"}
+    )
+    assert reply_uncopied["receipt_binding"]["status"] == "REFUSED"
+    assert reply_uncopied["receipt_binding"]["reason"] == "RECEIPT_BINDING_UNAVAILABLE"
+    with pytest.raises(BindingError, match="^receipt_unbound$"):
+        task.verify_reply(
+            "request-uncopied",
+            {"patient_id": "p1", "note": "synthetic uncopied"},
+            reply_uncopied,
+        )
+
+    def run_copied(instruction, params, agent):
+        ctx = contextvars.copy_context()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(ctx.run, original_run, instruction, params, agent)
+            return future.result()
+
+    cache.run = run_copied
+    reply_copied = task.call(
+        "request-copied", {"patient_id": "p1", "note": "synthetic copied"}
+    )
+    assert reply_copied["receipt_binding"]["status"] == "BOUND"
+    verified = task.verify_reply(
+        "request-copied",
+        {"patient_id": "p1", "note": "synthetic copied"},
+        reply_copied,
+    )
+    assert verified["status"] == "BOUND"

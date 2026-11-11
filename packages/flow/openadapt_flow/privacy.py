@@ -591,13 +591,56 @@ def bind_text(text: Optional[str], bindings: "Mapping[str, str]") -> Optional[st
     """Replace every whole-word occurrence of a bound value with its placeholder.
 
     Longer values are replaced first, so "Jane Sample" is not split by a
-    bound "Jane". The text is otherwise unchanged (nothing is scrubbed).
+    bound "Jane". Existing placeholders and already-bound spans are preserved
+    in one pass, so a short value like "task" does not corrupt a placeholder
+    name. The text is otherwise unchanged (nothing is scrubbed).
     """
     if not text or not bindings:
         return text
-    for name, value in sorted(bindings.items(), key=lambda kv: -len(kv[1])):
-        text = bound_pattern(value).sub(name.replace("\\", "\\\\"), text)
-    return text
+    import re
+
+    sorted_items = sorted(
+        ((k, v) for k, v in bindings.items() if v and str(v).strip()),
+        key=lambda kv: -len(kv[1]),
+    )
+    if not sorted_items:
+        return text
+
+    val_to_name: dict[str, str] = {}
+    branches: list[str] = []
+    for name, value in sorted_items:
+        norm = " ".join(value.split())
+        if norm not in val_to_name:
+            val_to_name[norm] = name
+            branches.append(r"\s+".join(re.escape(w) for w in value.split()))
+
+    if not branches:
+        return text
+
+    placeholder_branches = [
+        re.escape(name)
+        for name in sorted(bindings.keys(), key=len, reverse=True)
+        if name and str(name).strip()
+    ]
+
+    if placeholder_branches:
+        pattern = re.compile(
+            "(?:"
+            + "|".join(placeholder_branches)
+            + ")|(?<!\\w)(?:"
+            + "|".join(branches)
+            + r")(?!\w)"
+        )
+    else:
+        pattern = re.compile(r"(?<!\w)(?:" + "|".join(branches) + r")(?!\w)")
+
+    def _replace(match: re.Match[str]) -> str:
+        matched = match.group(0)
+        if matched in bindings:
+            return matched
+        return val_to_name.get(" ".join(matched.split()), matched)
+
+    return pattern.sub(_replace, text)
 
 
 def label_regions(
