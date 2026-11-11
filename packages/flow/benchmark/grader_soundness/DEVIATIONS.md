@@ -38,3 +38,23 @@ Dated entries, in the order they happened.
    pre-registered whole-word heuristic marked "named in the instruction",
    because some matches are a common word, not a specified value. The
    pre-registered numbers are reported first and unchanged.
+6. **2026-11-11, review changes (after the first PR revision).**
+   (a) **`late_write` taken out of the false-accept rate.** The protocol
+   counts a wrong cell only when the end state differs from the reference.
+   `late_write` is judged on the claim-time effect; its final end state is
+   identical to the reference. The first revision pooled it anyway, which
+   did not match the protocol's own rule and inflated AppWorld's pooled
+   rate from 10 / 148 to 58 / 196. It is now reported as a separate,
+   post hoc claim-timing row, with the note that a standard AppWorld
+   episode ends at the claim.
+   (b) **Strict AgentDojo figure added** (53 / 199), from the manual
+   reading in entry 5, recorded in `results/wrong_value_review.json`.
+   (c) **AppWorld aggregate only.** The redacted per-task AppWorld ledgers
+   were removed from this repository: unsalted digests can be reversed by
+   guessing and call sequences are partial solution derivatives. They are
+   kept in a private repository. `results/appworld/aggregate.json` holds
+   the counts and is what `summarize` reads when no ledger is present.
+   (d) `results.json` moved to `results/results.json`, and
+   `benchmark/grader_soundness/results` is excluded from the Flow wheel and
+   sdist.
+   (e) The draft post was moved out of this repository.

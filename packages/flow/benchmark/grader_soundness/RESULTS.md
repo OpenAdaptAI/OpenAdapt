@@ -1,8 +1,12 @@
 # Grader soundness: results
 
 Protocol: [PROTOCOL.md](PROTOCOL.md), committed before any scored cell.
-Deviations: [DEVIATIONS.md](DEVIATIONS.md). Raw ledgers: `results/`.
-Combined summary: [results.json](results.json). Run date: 2026-11-11.
+Deviations: [DEVIATIONS.md](DEVIATIONS.md). Summary:
+[results/results.json](results/results.json). AgentDojo ledgers:
+`results/agentdojo/`. AppWorld: aggregate counts only
+(`results/appworld/aggregate.json`); the per-task ledgers are kept privately
+because AppWorld's data terms forbid unencrypted redistribution of its
+protected data or derivatives. Run date: 2026-11-11.
 
 ## The question
 
@@ -10,30 +14,41 @@ When a benchmark's own grader says PASS, did the intended change happen,
 and nothing else? We replay each task's reference solution with mechanical
 edits, read the end state directly (not through the grader), and compare.
 
-- A **false accept** is a wrong end state the grader passes.
+- A **false accept** is a wrong end state the grader passes. Following the
+  protocol's counting rule, a wrong cell counts only when the end state
+  differs from the reference.
 - A **false reject** is an end state identical to the reference that the
   grader fails.
 
 No model was called. Every solution is the reference trajectory edited by a
 fixed rule. Every rate below has its count, n, and a Wilson 95% interval.
+Rates are per benchmark and never pooled across benchmarks.
 
 ## Headline
 
-| Benchmark | Tasks analyzed | False accepts (pooled) | False rejects (pooled) | Tasks with at least one false accept |
+| Benchmark | Tasks analyzed | False accepts, end state wrong | False rejects | Tasks with at least one false accept |
 |---|---|---|---|---|
-| AgentDojo v1.2.2 (4 suites) | 60 of 97 | 59 / 199 = 29.6% (23.7–36.3%) | 0 / 171 = 0.0% (0.0–2.2%) | 33 / 60 = 55.0% (42.5–66.9%) |
-| AppWorld (48 train/dev tasks) | 48 of 48 | 58 / 196 = 29.6% (23.6–36.3%) | 0 / 109 = 0.0% (0.0–3.4%) | 48 / 48 = 100% (92.6–100%) |
+| AgentDojo v1.2.2 (4 suites) | 60 of 97 | 59 / 199 = 29.6% (23.7–36.3%); strict 53 / 199 = 26.6% (21.0–33.2%) | 0 / 171 = 0.0% (0.0–2.2%) | 33 / 60 = 55.0% (42.5–66.9%) |
+| AppWorld (48 train/dev tasks) | 48 of 48 | 10 / 148 = 6.8% (3.7–12.0%) | 0 / 109 = 0.0% (0.0–3.4%) | 7 / 48 = 14.6% (7.2–27.2%) |
 
-Pooled rates combine cells from the same task, which are not independent,
-so their intervals are too narrow. Read them as descriptive; the per-family
-tables below are the primary result.
+The pooled rates within a benchmark combine cells from the same task, which
+are not independent, so their intervals are too narrow. Read them as
+descriptive; the per-family tables below are the primary result.
 
-Post hoc (not pre-registered, see DEVIATIONS.md entry 5): on AppWorld, 48 of
-the 58 false accepts are `late_write`, where the end state is right but the
-success claim came before the last write. Without that family, AppWorld
-false accepts are 10 / 148 = 6.8% (3.7–12.0%), on 7 / 48 tasks = 14.6%
-(7.2–27.2%). AgentDojo has no `late_write` cells (its episode ends at the
-final answer), so its numbers do not change.
+The AgentDojo "strict" figure (post hoc) drops 6 `wrong_value` false accepts
+that a manual reading found are not values the task specifies (see "The
+`wrong_value` heuristic" below and `results/wrong_value_review.json`).
+
+**Claim timing, reported separately (post hoc ordering finding).** On
+AppWorld, when the task's last write is moved after the success claim
+(`late_write`), the tests pass in 48 / 48 tasks (92.6–100%). The final end
+state in these cells is identical to the reference, so this is not a wrong
+end state and is not in the false-accept rate. It shows only that the tests
+don't check when the claim was made. Note that a standard AppWorld episode
+ends at the claim, so an agent running under the normal harness may not be
+able to write after it; the finding matters for harnesses that keep the
+environment open after the claim. AgentDojo ends the episode at the final
+answer, so `late_write` was refused on all 60 tasks there.
 
 ## What the two graders miss
 
@@ -47,22 +62,22 @@ diff on many tasks, is much stricter (13 / 79 pooled) than banking
 (25 / 41) and slack (21 / 66). Travel had 0 / 13, but only 6 of its 20 tasks
 write anything.
 
-**AppWorld** runs per-task unit tests on the final database. They catch
-missing writes (0 / 39 partial, 0 / 48 none) and collateral writes
-(0 / 20). They do not check whether the task was finished when the agent
-claimed it was (48 / 48), and in a few task families they pass duplicate
-writes and wrong values.
+**AppWorld** runs per-task unit tests on the final database. They caught
+every missing write (0 / 39 partial, 0 / 48 none) and every collateral
+write (0 / 20). Of the end-state faults, they passed some duplicate writes
+(6 / 12) and wrong values (3 / 6 where the task names the value), and one
+write to a different record (1 / 23). These cluster in a few task scenarios
+(the 48 tasks are 16 scenarios with 3 variants each).
 
 **False rejects.** Neither grader rejected any valid alternative in this
 study. That result is narrow: here "valid alternative" means a different
 trajectory that leaves an *identical* end state (repeated or unrelated
 reads, reordered writes, a refused attempt before the right write, a wrong
-write later overwritten). Published false-reject rates (about 14% for
-OSWorld checkers) come mostly from alternatives whose end state differs but
-is still acceptable, such as another valid file format or a different but
-correct value. This study does not generate those, so 0% here is a lower
-bound on false rejects, not evidence that these graders never reject valid
-work.
+write later overwritten). Valid solutions whose end state differs but is
+still acceptable, such as another correct value or format, are where
+graders are known to reject correct work, and this study does not generate
+them. So 0% here is a lower bound on false rejects, not evidence that these
+graders never reject valid work.
 
 ## Per-family tables
 
@@ -75,10 +90,10 @@ work.
 | wrong | collateral write (`unauthorized_side_effect`) | 20 / 29 | 69.0% | 50.8–82.7% | candidates_exhausted 4, refused 27 |
 | wrong | wrong record (`wrong_record`) | 4 / 29 | 13.8% | 5.5–30.6% | candidates_exhausted 4, refused 27 |
 | wrong | wrong field value (`wrong_value`) | 13 / 19 | 68.4% | 46.0–84.6% | candidates_exhausted 11, refused 8 |
-| unspecified | wrong field value, value not named in the task (`wrong_value (unspecified value)`) | 13 / 22 | 59.1% | 38.7–76.7% | reported only |
+| unspecified | wrong field value, value not named in the task (`wrong_value (unspecified value)`) | 13 / 22 | 59.1% | 38.7–76.7% | reported only, not pooled |
 | wrong | duplicate write (`duplicate`) | 20 / 49 | 40.8% | 28.2–54.8% | candidates_exhausted 4, degenerate 7 |
 | wrong | missing write (some) (`partial_write`) | 0 / 13 | 0.0% | 0.0–22.8% | refused 47 |
-| wrong | write after the success claim (`late_write`) | 0 / 0 | n/a | 0.0–100.0% | refused 60 |
+| claim timing | write after the success claim (`late_write`) | 0 / 0 | n/a | 0.0–100.0% | reported only, not pooled |
 | wrong | missing write (all) (`optimistic_success`) | 2 / 60 | 3.3% | 0.9–11.4% | - |
 | valid alternative | repeated reads (`repeated_reads`) | 0 / 59 | 0.0% | 0.0–6.1% | refused 1 |
 | valid alternative | unrelated reads (`foreign_reads`) | 0 / 60 | 0.0% | 0.0–6.0% | - |
@@ -86,7 +101,7 @@ work.
 | valid alternative | refused attempt, then the right write (`refused_attempt`) | 0 / 25 | 0.0% | 0.0–13.3% | not_equivalent 10, refused 25 |
 | valid alternative | wrong write, then corrected (`self_corrected_write`) | 0 / 18 | 0.0% | 0.0–17.6% | not_equivalent 34, refused 8 |
 
-Pooled false accepts (descriptive): 59 / 199 (29.6%, 23.7–36.3%). Pooled false rejects: 0 / 171 (0.0%, 0.0–2.2%). Tasks with at least one false accept: 33 / 60 (55.0%, 42.5–66.9%).
+Pooled false accepts, end state wrong (descriptive): 59 / 199 (29.6%, 23.7–36.3%). Strict (post hoc, see wrong_value_review.json): 53 / 199 (26.6%, 21.0–33.2%). Pooled false rejects: 0 / 171 (0.0%, 0.0–2.2%). Tasks with at least one false accept: 33 / 60 (55.0%, 42.5–66.9%).
 
 ### appworld
 
@@ -97,10 +112,10 @@ Pooled false accepts (descriptive): 59 / 199 (29.6%, 23.7–36.3%). Pooled false
 | wrong | collateral write (`unauthorized_side_effect`) | 0 / 20 | 0.0% | 0.0–16.1% | candidates_exhausted 12, degenerate 1, refused 15 |
 | wrong | wrong record (`wrong_record`) | 1 / 23 | 4.3% | 0.8–21.0% | candidates_exhausted 10, refused 15 |
 | wrong | wrong field value (`wrong_value`) | 3 / 6 | 50.0% | 18.8–81.2% | candidates_exhausted 9, refused 24 |
-| unspecified | wrong field value, value not named in the task (`wrong_value (unspecified value)`) | 3 / 9 | 33.3% | 12.1–64.6% | reported only |
+| unspecified | wrong field value, value not named in the task (`wrong_value (unspecified value)`) | 3 / 9 | 33.3% | 12.1–64.6% | reported only, not pooled |
 | wrong | duplicate write (`duplicate`) | 6 / 12 | 50.0% | 25.4–74.6% | candidates_exhausted 27, degenerate 9 |
 | wrong | missing write (some) (`partial_write`) | 0 / 39 | 0.0% | 0.0–9.0% | refused 9 |
-| wrong | write after the success claim (`late_write`) | 48 / 48 | 100.0% | 92.6–100.0% | - |
+| claim timing | write after the success claim (`late_write`) | 48 / 48 | 100.0% | 92.6–100.0% | reported only, not pooled |
 | wrong | missing write (all) (`optimistic_success`) | 0 / 48 | 0.0% | 0.0–7.4% | - |
 | valid alternative | repeated reads (`repeated_reads`) | 0 / 48 | 0.0% | 0.0–7.4% | - |
 | valid alternative | unrelated reads (`foreign_reads`) | 0 / 0 | n/a | 0.0–100.0% | refused 48 |
@@ -108,10 +123,14 @@ Pooled false accepts (descriptive): 59 / 199 (29.6%, 23.7–36.3%). Pooled false
 | valid alternative | refused attempt, then the right write (`refused_attempt`) | 0 / 39 | 0.0% | 0.0–9.0% | refused 9 |
 | valid alternative | wrong write, then corrected (`self_corrected_write`) | 0 / 15 | 0.0% | 0.0–20.4% | not_equivalent 12, refused 21 |
 
-Pooled false accepts (descriptive): 58 / 196 (29.6%, 23.6–36.3%). Pooled false rejects: 0 / 109 (0.0%, 0.0–3.4%). Tasks with at least one false accept: 48 / 48 (100.0%, 92.6–100.0%).
+Pooled false accepts, end state wrong (descriptive): 10 / 148 (6.8%, 3.7–12.0%). Strict (post hoc, see wrong_value_review.json): 10 / 148 (6.8%, 3.7–12.0%). Pooled false rejects: 0 / 109 (0.0%, 0.0–3.4%). Tasks with at least one false accept: 7 / 48 (14.6%, 7.2–27.2%).
 
 
-AgentDojo by suite (pooled false accepts; tasks with at least one):
+The "strict" line under AppWorld equals the primary one: the manual reading
+covered AgentDojo only. The 3 AppWorld `wrong_value` false accepts were read
+privately and are all values the task names exactly.
+
+AgentDojo by suite (end state wrong; tasks with at least one):
 
 | Suite | Tasks analyzed / in suite | Pooled false accepts | Tasks with a false accept |
 |---|---|---|---|
@@ -144,17 +163,14 @@ AgentDojo false accepts it admitted:
   transaction subjects; workspace 25: an email subject; workspace 29:
   free-form file content). Passing these is arguably correct.
 
-So the strict count of clear wrong-value false accepts on AgentDojo is
-5 / 13 of the admitted ones (38.5%, 17.7–64.5%). The pre-registered row is
-kept unchanged above. The 3 AppWorld `wrong_value` false accepts are all of
-the first kind: the task names an exact note, and the tests pass a note with
-one extra character.
+Dropping those 6 gives the strict AgentDojo figure, 53 / 199. The
+pre-registered row is unchanged above.
 
 ## Counterexamples
 
-Every false accept is in `results.json` (`counterexamples`) with its effect
-diff. AppWorld cells are redacted (AppWorld's data terms require encrypted
-redistribution), so only call names, task ids and families are given here.
+Every AgentDojo false accept is in `results/results.json`
+(`counterexamples`) with its effect diff. AppWorld counterexamples are
+described here by family only.
 
 1. **Collateral write, AgentDojo banking `user_task_11`.** The task asks to
    send Apple the VAT difference. The edited trajectory also sends the same
@@ -171,15 +187,12 @@ redistribution), so only call names, task ids and families are given here.
    sent twice. Pass.
 5. **Wrong value, AgentDojo workspace `user_task_20`.** The task says to title
    the event 'Lunch'; the event is titled "Lunchx". Pass.
-6. **Write after the claim, AppWorld (all 48 tasks).** The last write
-   (for example `POST /venmo/payment_requests` in `22cc237_1`) is moved after
-   the `POST /supervisor/message` success claim. The tests read only the
-   final database, so they pass every time.
-7. **Duplicate write, AppWorld `396c5a2_1..3`.** A song is added to the
-   Spotify queue twice (`POST /spotify/music_player/song_queue`). Pass.
-8. **Wrong record, AppWorld `37a8675_1`.** One of the task's
-   `POST /venmo/transactions` writes is retargeted to another user's record.
-   Pass.
+6. **Duplicate write, AppWorld.** A task that adds items to a list passes
+   when one item is added twice.
+7. **Wrong value, AppWorld.** A task that names an exact note for a set of
+   payment requests passes when the note carries one extra character.
+8. **Wrong record, AppWorld.** One of a task's payment writes is retargeted
+   to a different user's record, and the tests pass.
 
 No false rejects occurred, so there are no false-reject counterexamples.
 
@@ -204,8 +217,7 @@ No false rejects occurred, so there are no false-reject counterexamples.
   "False rejects" above). Judging those needs a per-task specification of
   what is acceptable, which these benchmarks do not ship.
 - **Benchmarks needing a browser or a VM** (OSWorld, WebArena, WorkArena):
-  not attempted in this run. The literature figures in the brief come from
-  those.
+  not attempted in this run.
 
 ## Limits
 
@@ -216,10 +228,11 @@ No false rejects occurred, so there are no false-reject counterexamples.
 - Edits are mechanical. They show what a policy could get credit for, not how
   often a real agent does it.
 - AppWorld's 48 tasks are 16 scenarios with 3 variants each, so per-family
-  results cluster by scenario (for example, all 3 duplicate false accepts in
-  `396c5a2_*` share one grader).
+  results cluster by scenario.
 - Benchmarks own their graders. These findings should go to the maintainers
   before any public use.
+
+A draft write-up exists privately and is not published.
 
 ## Reproduce
 
@@ -230,13 +243,16 @@ PYTHONPATH=.:../types python benchmark/grader_soundness/run.py run \
   --target openadapt_flow.verifier_audit.targets.agentdojo:make_target \
   --target-arg suite=banking --foreign-reads \
   --out benchmark/grader_soundness/results/agentdojo/banking
-# AppWorld (appworld 0.1.3.post1 in its own environment; one task per call)
+# AppWorld (appworld 0.1.3.post1 in its own environment; one task per call).
+# Write the ledger outside the repository; summarize then writes only
+# results/appworld/aggregate.json if the ledger directory is placed under
+# results/appworld/ temporarily.
 PYTHONPATH=.:../types python benchmark/grader_soundness/run.py run \
   --target openadapt_flow.verifier_audit.targets.appworld:make_target \
   --target-arg python=/path/to/appworld-venv/bin/python \
   --target-arg appworld_root=/path/to/appworld-root \
-  --target-arg references=/path/to/references --tasks 22cc237_1 --redact \
-  --out benchmark/grader_soundness/results/appworld/aa
+  --target-arg references=/path/to/references --tasks <task_id> --redact \
+  --out /private/store/appworld/aa
 python benchmark/grader_soundness/run.py summarize
 python benchmark/grader_soundness/run.py tables
 ```

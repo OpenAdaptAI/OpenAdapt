@@ -58,6 +58,15 @@ REQUESTED_NAME = {
     "self_corrected_write": "wrong write, then corrected",
 }
 RETRY = ("HARNESS_ERROR", "SCORER_ERROR")
+ORDERING_ONLY = ("late_write",)
+"""Families judged on the claim-time effect: the final end state equals the
+reference, so they are not wrong end states and stay out of the pooled
+false-accept rate (PROTOCOL.md counts a wrong cell only when the end state
+differs). Reported as a separate claim-timing row."""
+AGGREGATE_ONLY = ("appworld",)
+"""Benchmarks whose per-task cells must not be public (AppWorld's protected
+data). Only aggregate counts are written; ledgers live in a private store."""
+REVIEW_FILE = HERE / "results" / "wrong_value_review.json"
 
 
 def _factory(spec: str):
@@ -196,7 +205,16 @@ def _value_class(cell: dict) -> str:
     return {True: "named", False: "unnamed"}.get(named, "unknown")
 
 
-def summarize_benchmark(run_dirs: list[Path]) -> dict[str, Any]:
+def _review(bench: str) -> dict[str, str]:
+    """Post hoc manual reading of wrong_value false accepts the heuristic
+    marked as named in the instruction: task -> verdict."""
+    if not REVIEW_FILE.is_file():
+        return {}
+    data = json.loads(REVIEW_FILE.read_text())
+    return {r["task"]: r["verdict"] for r in data.get(bench, {}).get("cells", [])}
+
+
+def summarize_benchmark(run_dirs: list[Path], bench: str = "") -> dict[str, Any]:
     harmful: list[dict] = []
     alts: list[dict] = []
     excluded: list[dict] = []
@@ -216,7 +234,7 @@ def summarize_benchmark(run_dirs: list[Path]) -> dict[str, Any]:
         tasks |= {prefix + t for t in meta["tasks"]}
 
     rows = []
-    pooled_fa = pooled_n = 0
+    pooled_fa = pooled_n = not_specified = 0
     fa_tasks: set[str] = set()
     scored_tasks: set[str] = set()
     for fam in [f.id for f in HARMFUL]:
@@ -241,6 +259,26 @@ def summarize_benchmark(run_dirs: list[Path]) -> dict[str, Any]:
             }
             counted = primary
         hits = sum(c["status"] == "FALSE_ACCEPT" for c in counted)
+        if fam in ORDERING_ONLY:
+            ordering_row = {
+                "family": fam,
+                "requested_name": REQUESTED_NAME[fam],
+                "class": "claim_timing",
+                "metric": "pass_rate_with_claim_before_last_write",
+                **_rate(hits, len(counted)),
+                "statuses": dict(sorted(statuses.items())),
+                "note": "final end state equals the reference; not a wrong end "
+                "state and not pooled",
+            }
+            rows.append(ordering_row)
+            continue
+        if fam == "wrong_value":
+            verdicts = _review(bench)
+            not_specified = sum(
+                c["status"] == "FALSE_ACCEPT"
+                and verdicts.get(c["task"]) == "not_a_specified_value"
+                for c in counted
+            )
         pooled_fa += hits
         pooled_n += len(counted)
         for c in counted:
@@ -259,6 +297,7 @@ def summarize_benchmark(run_dirs: list[Path]) -> dict[str, Any]:
         )
         if extra_row:
             rows.append(extra_row)
+    strict_fa = pooled_fa - not_specified
     pooled_fr = pooled_alt_n = 0
     for fam in ALTERNATIVES:
         group = [c for c in alts if c["family"] == fam]
@@ -290,13 +329,21 @@ def summarize_benchmark(run_dirs: list[Path]) -> dict[str, Any]:
         "tasks_analyzed": len(tasks) - len(excluded),
         "headline": {
             "false_accept_pooled": _rate(pooled_fa, pooled_n),
+            "false_accept_pooled_strict": {
+                **_rate(strict_fa, pooled_n),
+                "note": "post hoc: drops wrong_value false accepts that the manual "
+                "reading (wrong_value_review.json) found are not a value the task "
+                "specifies",
+            },
             "false_reject_pooled": _rate(pooled_fr, pooled_alt_n),
             "tasks_with_any_false_accept": _rate(len(fa_tasks), len(scored_tasks)),
             "note": "pooled over cells; cells from one task are not independent, "
             "so the pooled intervals are descriptive",
         },
         "families": rows,
-        "counterexamples": [
+        "counterexamples": []
+        if bench in AGGREGATE_ONLY
+        else [
             {
                 k: c.get(k)
                 for k in (
@@ -322,8 +369,17 @@ def cmd_summarize(args: argparse.Namespace) -> int:
     out: dict[str, Any] = {"format": "openadapt.grader-soundness/v1", "benchmarks": {}}
     for bench in sorted(p for p in root.iterdir() if p.is_dir()):
         runs = sorted(p for p in bench.iterdir() if (p / "cells.jsonl").is_file())
+        aggregate = bench / "aggregate.json"
         if runs:
-            out["benchmarks"][bench.name] = summarize_benchmark(runs)
+            summary = summarize_benchmark(runs, bench.name)
+            if bench.name in AGGREGATE_ONLY:
+                aggregate.write_text(
+                    json.dumps(summary, indent=2, sort_keys=True, default=str) + "\n"
+                )
+            out["benchmarks"][bench.name] = summary
+        elif aggregate.is_file():
+            # Ledgers kept privately; the committed aggregate is the record.
+            out["benchmarks"][bench.name] = json.loads(aggregate.read_text())
     args.out.write_text(json.dumps(out, indent=2, sort_keys=True, default=str) + "\n")
     for name, b in out["benchmarks"].items():
         h = b["headline"]
@@ -361,8 +417,8 @@ def tables(summary: dict[str, Any]) -> str:
         for r in b["families"]:
             lo, hi = r["wilson95"]
             st = r["statuses"]
-            if r["class"] == "unspecified":
-                other = "reported only"
+            if r["class"] in ("unspecified", "claim_timing"):
+                other = "reported only, not pooled"
             else:
                 skip = {
                     k: v
@@ -375,6 +431,7 @@ def tables(summary: dict[str, Any]) -> str:
                 f"| {r['hits']} / {r['n']} | {_pct(r['rate'])} "
                 f"| {100 * lo:.1f}–{100 * hi:.1f}% | {other or '-'} |"
             )
+        st = h["false_accept_pooled_strict"]
         fa, fr, t = (
             h["false_accept_pooled"],
             h["false_reject_pooled"],
@@ -382,8 +439,10 @@ def tables(summary: dict[str, Any]) -> str:
         )
         lines += [
             "",
-            f"Pooled false accepts (descriptive): {fa['hits']} / {fa['n']} "
+            f"Pooled false accepts, end state wrong (descriptive): {fa['hits']} / {fa['n']} "
             f"({_pct(fa['rate'])}, {100 * fa['wilson95'][0]:.1f}–{100 * fa['wilson95'][1]:.1f}%). "
+            f"Strict (post hoc, see wrong_value_review.json): {st['hits']} / {st['n']} "
+            f"({_pct(st['rate'])}, {100 * st['wilson95'][0]:.1f}–{100 * st['wilson95'][1]:.1f}%). "
             f"Pooled false rejects: {fr['hits']} / {fr['n']} "
             f"({_pct(fr['rate'])}, {100 * fr['wilson95'][0]:.1f}–{100 * fr['wilson95'][1]:.1f}%). "
             f"Tasks with at least one false accept: {t['hits']} / {t['n']} "
@@ -410,9 +469,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     s = sub.add_parser("summarize", allow_abbrev=False)
     s.add_argument("--results", type=Path, default=HERE / "results")
-    s.add_argument("--out", type=Path, default=HERE / "results.json")
+    s.add_argument("--out", type=Path, default=HERE / "results" / "results.json")
     t = sub.add_parser("tables", allow_abbrev=False)
-    t.add_argument("--summary", type=Path, default=HERE / "results.json")
+    t.add_argument("--summary", type=Path, default=HERE / "results" / "results.json")
     args = p.parse_args(argv)
     if args.cmd == "tables":
         print(tables(json.loads(args.summary.read_text())))

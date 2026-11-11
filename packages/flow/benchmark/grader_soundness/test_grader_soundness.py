@@ -92,3 +92,34 @@ def test_end_to_end_run_and_summary(tmp_path):
     assert bench["headline"]["false_reject_pooled"]["hits"] == 0
     assert bench["headline"]["false_accept_pooled"]["n"] > 0
     assert all(c["status"] == "FALSE_ACCEPT" for c in bench["counterexamples"])
+    # A write after the claim leaves the reference end state: reported as a
+    # claim-timing row, never pooled as a wrong end state.
+    late = rows["late_write"]
+    assert late["class"] == "claim_timing" and late["hits"] == 3
+    pooled = sum(r["n"] for r in bench["families"] if r["class"] == "wrong")
+    assert bench["headline"]["false_accept_pooled"]["n"] == pooled
+    assert "strict" not in bench["headline"]["false_accept_pooled"]
+
+
+def test_aggregate_only_benchmark_reads_back_without_ledgers(tmp_path):
+    root = tmp_path / "results"
+    out = root / "appworld" / "aa"
+    gs_run.main(
+        [
+            "run",
+            "--target",
+            "openadapt_flow.verifier_audit.targets.toy:make_target",
+            "--out",
+            str(out),
+        ]
+    )
+    first = tmp_path / "first.json"
+    gs_run.main(["summarize", "--results", str(root), "--out", str(first)])
+    agg = json.loads((root / "appworld" / "aggregate.json").read_text())
+    assert agg["counterexamples"] == []
+    import shutil
+
+    shutil.rmtree(out)
+    second = tmp_path / "second.json"
+    gs_run.main(["summarize", "--results", str(root), "--out", str(second)])
+    assert json.loads(first.read_text()) == json.loads(second.read_text())

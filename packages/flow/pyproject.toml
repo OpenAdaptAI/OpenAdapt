@@ -354,6 +354,8 @@ exclude = [
 
     # Verifier-baselines evidence (judge views, rubrics, scores) is repository-only.
     "/benchmark/verifier_baselines/results",
+    # Grader-soundness ledgers and summaries are repository-only.
+    "/benchmark/grader_soundness/results",
     "/benchmark/verifier_baselines/inputs",
     "/public-demo",
     "/benchmark/reliability",
@@ -421,6 +423,8 @@ exclude = [
 
     # Verifier-baselines evidence (judge views, rubrics, scores) is repository-only.
     "/benchmark/verifier_baselines/results",
+    # Grader-soundness ledgers and summaries are repository-only.
+    "/benchmark/grader_soundness/results",
     "/benchmark/verifier_baselines/inputs",
     "/public-demo",
     "/THIRD_PARTY_NOTICES.md",
