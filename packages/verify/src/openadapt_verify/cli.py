@@ -238,6 +238,29 @@ def _recheck(args: argparse.Namespace) -> int:
     return code
 
 
+def _quickstart(args: argparse.Namespace) -> int:
+    from openadapt_verify import quickstart
+
+    def connect_args(text: Optional[str]) -> Optional[dict]:
+        if text is None:
+            return None
+        value = json.loads(text)
+        if not isinstance(value, dict):
+            raise ValueError("database connect arguments must be a JSON object")
+        return value
+
+    rows = quickstart.run(
+        args.path or ("rest", "sqlite", "fhir"),
+        postgres=connect_args(args.postgres),
+        mysql=connect_args(args.mysql),
+    )
+    if args.json:
+        print(json.dumps([row.to_dict() for row in rows], indent=2, sort_keys=True))
+    else:
+        print(quickstart.render(rows))
+    return 0 if rows and all(row.ok for row in rows) else 1
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(prog="openadapt-verify")
     sub = parser.add_subparsers(dest="command_name", required=True)
@@ -268,8 +291,31 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     serve = sub.add_parser("serve", help="Serve the canonical MCP verification tools")
     serve.add_argument("--contracts", required=True)
     serve.add_argument("--state", required=True)
+    quick = sub.add_parser(
+        "quickstart",
+        help="Check scripted agent writes against disposable local stores",
+    )
+    quick.add_argument(
+        "--path",
+        action="append",
+        choices=("rest", "sqlite", "fhir"),
+        help="read path to run (repeatable; default: rest, sqlite and fhir)",
+    )
+    quick.add_argument(
+        "--postgres",
+        metavar="JSON",
+        help="psycopg connect arguments for a disposable PostgreSQL database",
+    )
+    quick.add_argument(
+        "--mysql",
+        metavar="JSON",
+        help="PyMySQL connect arguments for a disposable MySQL database",
+    )
+    quick.add_argument("--json", action="store_true", help="print JSON rows")
     args = parser.parse_args(argv)
     try:
+        if args.command_name == "quickstart":
+            return _quickstart(args)
         if args.command_name == "run":
             return _run(args)
         if args.command_name == "verify":

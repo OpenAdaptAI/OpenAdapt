@@ -4,21 +4,29 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openadapt-verify"
-version = "0.1.0"
+version = "0.2.0"
 description = "Verify an agent's writes through an independent system-of-record read path"
 readme = "README.md"
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.10,<3.13"
 license = "MIT"
+# Flow 3's base install is its verifier, ledger, journal and receipts without
+# the vision stack (NumPy, OpenCV, Pillow, RapidOCR), which is Flow's `vision`
+# extra. tests/test_import_boundary.py proves the verify path never imports it.
 dependencies = [
-    "openadapt-flow[receipts]>=2.6.0,<3",
+    "openadapt-flow[receipts]>=3.0.0,<4",
     "cryptography>=50.0.0",
-    "pillow>=13.0.0",
 ]
 
 [project.optional-dependencies]
-openai = ["openadapt-flow[openai-agents]>=2.6.0,<3"]
-claude = ["openadapt-flow[claude-agent-sdk]>=2.6.0,<3"]
-mcp = ["openadapt-flow[agent]>=2.6.0,<3"]
+# Read paths. SQLite is in the standard library. PyMySQL is MIT-licensed. The
+# PostgreSQL drivers whose session the verifier can make read-only (psycopg,
+# psycopg2) are LGPL-3.0, so this package declares none: install psycopg
+# yourself for a PostgreSQL read path.
+mysql = ["PyMySQL>=1.1,<2"]
+# Agent frameworks. Each extra is only that framework's SDK.
+openai = ["openadapt-flow[openai-agents]>=3.0.0,<4"]
+claude = ["openadapt-flow[claude-agent-sdk]>=3.0.0,<4"]
+mcp = ["openadapt-flow[agent]>=3.0.0,<4"]
 dev = ["pytest>=8", "ruff>=0.4", "mypy>=1.10", "build>=1.2"]
 
 [project.scripts]
@@ -56,10 +64,18 @@ files = ["src/openadapt_verify"]
 ignore_missing_imports = true
 
 [tool.uv]
-# Verify is installed after Flow, whose locked SciPy 1.15.3 requires NumPy <2.5.
-constraint-dependencies = ["numpy<2.5"]
-required-environments = [
-    "python_version == '3.11' and sys_platform == 'linux'",
-    "python_version == '3.11' and sys_platform == 'darwin'",
-    "python_version == '3.11' and sys_platform == 'win32'",
+# Lock generation only: the published metadata requires Flow 3, which is not
+# on PyPI until its release. CI installs the in-tree Flow over this lock with
+# --no-deps, so until then the lock resolves a published Flow 2.x. An override
+# replaces every requirement on the package, extras included, so it names
+# every Flow extra this package uses. Delete it when relocking after the
+# Flow 3.0.0 release.
+override-dependencies = [
+    "openadapt-flow[receipts,agent,openai-agents,claude-agent-sdk]>=2.6.0,<4",
 ]
+required-environments = [
+    "python_version == '3.10' and sys_platform == 'linux'",
+    "python_version == '3.10' and sys_platform == 'darwin'",
+    "python_version == '3.10' and sys_platform == 'win32'",
+]
+

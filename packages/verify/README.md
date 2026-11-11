@@ -1,17 +1,114 @@
 # openadapt-verify
 
-Check an agent's write through an independent system-of-record read path.
-This package exposes OpenAdapt's existing verifier, signed receipts and agent
-tool wrappers. The operator supplies the read path and verification contract;
-the writer's response is never evidence that its write persisted.
+Check whether an agent's write landed in the system of record, and that
+nothing else changed. openadapt-verify reads the store before and after the
+write through a read path the agent doesn't control (SQL, REST or FHIR), and
+returns `CONFIRMED`, `REFUTED` or `UNCERTAIN` with a signed receipt. The
+writer's own response is never evidence that the write persisted.
 
 ```sh
 pip install openadapt-verify
 ```
 
-Requires Python 3.11 or 3.12. This facade requires Pillow 13 or newer and is a
-small wrapper over `openadapt-flow[receipts]`. Its installation includes Flow's
-dependencies, including its vision stack.
+Requires Python 3.10, 3.11 or 3.12. The install is 21 distributions and about
+41 MB of site-packages, with no vision, OCR, browser, GUI, NumPy or ML stack. It uses the verifier, write ledger, protected journal, SQL guards and
+receipt signing from `openadapt-flow`: the same code, not a copy. Flow's
+vision stack is its `vision` extra, which this package never installs.
+
+## Five-minute quickstart
+
+```sh
+openadapt-verify quickstart
+```
+
+This starts disposable synthetic stores on 127.0.0.1, has a scripted agent
+make three writes against each, and checks each write through an independent
+read path:
+
+| Agent write | Outcome |
+|---|---|
+| Saves the values it declared | `CONFIRMED` |
+| Saves a different value than it declared | `REFUTED` |
+| Reports success, but nothing reached the store | `UNCERTAIN` |
+
+It runs the REST, SQLite and FHIR R4 read paths. Every result gets a portable
+signed receipt (COSE_Sign1 with a local transparency log), and the quickstart
+checks each receipt's signature. All state goes to a temporary directory that
+is deleted afterwards. The keys are generated for the run; in a deployment,
+pin the issuer and log keys you trust.
+
+Add PostgreSQL or MySQL by pointing the quickstart at a **disposable**
+database. It creates and drops its own table. The password comes from
+`OPENADAPT_QUICKSTART_DB_PASSWORD`:
+
+```sh
+pip install 'openadapt-verify[mysql]'    # PyMySQL, MIT
+pip install 'psycopg[binary]'            # LGPL-3.0; not a dependency of this package
+openadapt-verify quickstart \
+  --postgres '{"host": "127.0.0.1", "port": 5432, "user": "qs", "dbname": "qs"}' \
+  --mysql '{"host": "127.0.0.1", "port": 3306, "user": "qs", "database": "qs"}'
+```
+
+A MySQL read must return utf8mb4 results. With any other result charset the
+verifier refuses to read, so the quickstart reports `NOT SENT` and the agent
+writes nothing.
+
+The contracts the quickstart uses are in
+[`quickstart.py`](src/openadapt_verify/quickstart.py). Each is an
+[`openadapt.verify/v1` contract](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/VERIFIER_API.md);
+copy one and point it at your store.
+
+## One line per write
+
+Plain Python, as a decorator. The function's arguments are the contract's
+values. The call returns the verifier's reply instead of raising, and a write
+the verifier can't read first is never sent:
+
+```python
+from openadapt_verify import verified
+
+@verified("verify.yaml", pinned={"account": "account-17"})
+def save_item(code, quantity, account):
+    api.post("/items", json={"code": code, "quantity": quantity})
+
+reply = save_item(code="item-17", quantity="3", account="account-17")
+reply["outcome"], reply["seal_path"]
+```
+
+Or as a context manager, with a portable signed receipt:
+
+```python
+from openadapt_verify import checked_write
+
+with checked_write("verify.yaml", values) as write:
+    api.post("/items", json=values)
+write.result.outcome, write.result.write_receipt_path
+```
+
+Agent frameworks, each SDK behind its own extra:
+
+```python
+from openadapt_verify.adapters.claude_sdk import verified   # [claude]
+tool = verified(save_order, contract="verify.yaml")
+
+from openadapt_verify.adapters.openai_agents import verified  # [openai]
+tool = verified(save_order, contract="verify.yaml")
+```
+
+```sh
+openadapt-verify serve --contracts ./contracts --state ./state   # [mcp]
+```
+
+| Extra | Adds |
+|---|---|
+| `mysql` | PyMySQL, for a MySQL read path |
+| `claude` | Claude Agent SDK tool adapter |
+| `openai` | OpenAI Agents SDK tool adapter |
+| `mcp` | The MCP server behind `openadapt-verify serve` |
+
+SQLite is in the standard library. For PostgreSQL, install `psycopg`
+yourself: the PostgreSQL drivers whose session the verifier can make
+read-only are LGPL-3.0, so this package declares none.
 
 ## Wrap a write
 

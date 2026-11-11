@@ -75,9 +75,17 @@ def check(dist: Path, root: Path) -> dict:
             if requirement.marker is None
         }
         assert base["openadapt-flow"].extras == {"receipts"}
-        assert base["openadapt-flow"].specifier == SpecifierSet(">=2.6.0,<3")
+        assert base["openadapt-flow"].specifier == SpecifierSet(">=3.0.0,<4")
         assert base["cryptography"].specifier == SpecifierSet(">=50.0.0")
-        assert base["pillow"].specifier == SpecifierSet(">=13.0.0")
+        # Flow 3's base install has no vision stack; nothing here adds one.
+        assert set(base) == {"openadapt-flow", "cryptography"}, set(base)
+        extras = {
+            requirement.name: requirement
+            for requirement in required
+            if requirement.marker is not None
+        }
+        assert "vision" not in {e for r in required for e in r.extras}
+        assert {"pymysql", "openadapt-flow"} <= {n.lower() for n in extras}
         entries = configparser.ConfigParser()
         entry_name = next(
             name for name in names if name.endswith(".dist-info/entry_points.txt")
