@@ -116,6 +116,31 @@ def test_capture_core_never_pulls_its_opt_in_stacks(name: str) -> None:
     assert _forbids("capture", name)
 
 
+@pytest.mark.parametrize(
+    "name",
+    [
+        "numpy",
+        "opencv-python",
+        "opencv-python-headless",
+        "pillow",
+        "rapidocr-onnxruntime",
+        "onnxruntime",
+        "playwright",
+        "torch",
+    ],
+)
+@pytest.mark.parametrize("label", ["flow", "verify"])
+def test_flow_base_and_verify_never_pull_the_vision_stack(
+    label: str, name: str
+) -> None:
+    assert _forbids(label, name)
+
+
+def test_flow_vision_budget_weighs_the_vision_extra() -> None:
+    assert PACKAGES["flow-vision"]["extras"] == ["vision"]
+    assert PACKAGES["flow-vision"]["path"] == PACKAGES["flow"]["path"]
+
+
 def test_types_allows_only_pydantic_and_itself() -> None:
     assert set(PACKAGES["types"]["allow"]) == {
         "annotated-types",
@@ -133,6 +158,7 @@ def test_every_package_has_a_budget_and_no_allow_forbid_overlap() -> None:
         "privacy",
         "capture",
         "flow",
+        "flow-vision",
         "agent",
         "verify",
         "desktop",

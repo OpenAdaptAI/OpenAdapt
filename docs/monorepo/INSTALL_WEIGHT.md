@@ -130,18 +130,34 @@ time: Playwright, OpenCV, onnxruntime and RapidOCR are the largest wheels.
 - Flow's `uv.lock` predates the fold and still pins openadapt-types 0.21. CI
   doesn't enforce it.
 
-### Standalone verifier facade
+### Standalone verifier
 
-`openadapt-verify` depends on `openadapt-flow[receipts]`; its small wheel does
-not imply a small dependency tree. A fresh Python 3.12 x86_64 WSL installation
-of the in-tree Types 0.24.0, Flow 2.6.0 and Verify 0.1.0 wheels on 2026-11-05
-installed 33 distributions and 413.2 MB of site-packages before import. The facade
-wheel was 10,370 bytes. OpenAI/Claude SDKs, MCP, browser-use and Stagehand were
-absent from that core installation. This measures installation size, not live
-provider behavior or grounding latency.
+Flow 3.0.0 moved NumPy, OpenCV, Pillow and RapidOCR from its base install to
+the `vision` extra. Its recording and replay extras (`browser`, `capture`,
+`windows`, `macos`, `linux`, `rdp`, `native-ocr`, `local-grounding`,
+`openenv`) include `vision`. `openadapt-verify` depends on
+`openadapt-flow[receipts]>=3.0.0,<4`, so it installs the verifier without the
+vision stack.
 
-The new `verify` budget allows 500 MB and 42 distributions, following the existing
-size/count margin rules. It permits Flow's core closure plus the existing
-portable receipt dependencies (`cbor2`, `cwt`, `pyhpke`) and the facade itself.
-The optional SDK/MCP stacks stay outside the core budget. Existing package
-budgets remain unchanged.
+Measured on 2026-11-11 on macOS arm64 with Python 3.12, each in a fresh
+environment:
+
+| Install | Distributions | site-packages | Tool |
+|---|--:|--:|---|
+| openadapt-flow 2.7.1 (PyPI) | 29 | 300.9 MB | uv |
+| openadapt-flow 3.0.0 (this tree) | 17 | 39.9 MB | uv |
+| openadapt-verify 0.1.0 (main before, with Flow 2.7.1) | 33 | 301.5 MB | uv |
+| openadapt-verify 0.2.0 (this tree) | 21 | 40.6 MB | uv |
+| openadapt-verify 0.1.0, `pip install --no-cache-dir` | 33 | 348.3 MB, 53.4 s | pip |
+| openadapt-verify 0.2.0, `pip install --no-cache-dir` | 21 | 66.9 MB, 26.0 s | pip |
+
+pip also writes bytecode, so its sizes are larger than uv's. Python 3.10 adds
+`exceptiongroup` and `tomli` (23 distributions, 58.8 MB with pip).
+
+The `flow` budget now weighs the base install and imports
+`openadapt_flow.verifier`; `flow-vision` weighs `openadapt-flow[vision]` with
+the previous budget. Both `flow` and `verify` forbid the vision
+distributions. The `verify-clean-install` job in `packages.yml` installs the
+in-tree wheels with pip into a clean venv on Python 3.10 and 3.12 and fails
+over 60 s, 110 MB or 26 distributions, on any copyleft license, or when the
+quickstart misses an outcome on REST, SQLite, FHIR, PostgreSQL or MySQL.

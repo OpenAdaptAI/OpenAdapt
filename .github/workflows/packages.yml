@@ -383,8 +383,15 @@ jobs:
           python - <<'PY'
           import xml.etree.ElementTree as ET
           cases = ET.parse("tests.xml").getroot().findall(".//testcase")
-          assert len(cases) == 61, "all independent-store controls must run"
-          assert not any(c.find("skipped") is not None for c in cases), "SDK/MCP controls must not skip"
+          assert len(cases) == 77, "all independent-store controls must run"
+          # The PostgreSQL and MySQL quickstart controls need the database
+          # services of verify-clean-install, which runs them; nothing else skips.
+          skipped = {c.get("name") for c in cases if c.find("skipped") is not None}
+          assert skipped <= {
+              "test_cli_quickstart_server_databases[postgres]",
+              "test_cli_quickstart_server_databases[mysql]",
+              "test_mysql_non_utf8mb4_result_charset_is_never_sent",
+          }, ("SDK/MCP controls must not skip", skipped)
           PY
       - name: MCP transport against the facade's own lock
         run: |
@@ -410,6 +417,100 @@ jobs:
           uv build --out-dir dist
           python scripts/check_distribution.py --dist dist
           python ../../scripts/check_source_boundary.py --repo OpenAdapt --root ../.. --dist dist
+
+  # The user's install path: a fresh venv, `pip install openadapt-verify`
+  # with no cache (the in-tree types, Flow and Verify wheels through
+  # --find-links, everything else from PyPI), then the quickstart against REST,
+  # SQLite, FHIR, and disposable PostgreSQL and MySQL service containers with
+  # synthetic rows. Fails over the install time, size or distribution budget,
+  # on any vision/GUI/ML distribution or copyleft license, or when a quickstart
+  # write misses its expected outcome or signed-receipt check.
+  verify-clean-install:
+    name: verify clean install and quickstart (py${{ matrix.python-version }})
+    needs: scope
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.verify == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: quickstart
+          POSTGRES_PASSWORD: quickstart-synthetic
+          POSTGRES_DB: quickstart
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U quickstart"
+          --health-interval 2s --health-timeout 5s --health-retries 30
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: quickstart-synthetic-root
+          MYSQL_DATABASE: quickstart
+          MYSQL_USER: quickstart
+          MYSQL_PASSWORD: quickstart-synthetic
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 --silent"
+          --health-interval 2s --health-timeout 5s --health-retries 60
+    env:
+      OPENADAPT_QUICKSTART_DB_PASSWORD: quickstart-synthetic
+      OPENADAPT_VERIFY_TEST_POSTGRES: '{"host": "127.0.0.1", "port": 5432, "user": "quickstart", "dbname": "quickstart"}'
+      OPENADAPT_VERIFY_TEST_MYSQL: '{"host": "127.0.0.1", "port": 3306, "user": "quickstart", "database": "quickstart"}'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: false
+      - name: Build the in-tree types, Flow and Verify wheels
+        run: |
+          for package in types flow verify; do
+            uv build --wheel --out-dir "$RUNNER_TEMP/dist" "packages/$package"
+          done
+      - name: Clean pip install, budgets and quickstart on every read path
+        run: >-
+          python packages/verify/scripts/check_clean_install.py
+          --find-links "$RUNNER_TEMP/dist"
+          --max-seconds 60 --max-mb 110 --max-dists 26
+          --postgres "$OPENADAPT_VERIFY_TEST_POSTGRES"
+          --mysql "$OPENADAPT_VERIFY_TEST_MYSQL"
+          --operator-driver 'psycopg[binary]'
+          --json "$RUNNER_TEMP/clean-install.json"
+      - name: Quickstart, guard and import-boundary tests on the clean install
+        # The same wheels in a second clean venv, with pytest and the
+        # database drivers. The MySQL charset guard must refuse a latin1
+        # result charset before anything is written.
+        run: |
+          python -m venv "$RUNNER_TEMP/tests"
+          "$RUNNER_TEMP/tests/bin/python" -m pip install --quiet --no-cache-dir \
+            --find-links "$RUNNER_TEMP/dist" 'openadapt-verify[mysql]' 'psycopg[binary]' pytest==9.2.0
+          cd packages/verify
+          "$RUNNER_TEMP/tests/bin/python" -m pytest -q -p no:cacheprovider \
+            tests/test_quickstart.py tests/test_guard.py tests/test_import_boundary.py \
+            --junitxml="$RUNNER_TEMP/clean-tests.xml"
+          "$RUNNER_TEMP/tests/bin/python" - "$RUNNER_TEMP/clean-tests.xml" <<'PY'
+          import sys, xml.etree.ElementTree as ET
+          cases = ET.parse(sys.argv[1]).getroot().findall(".//testcase")
+          assert len(cases) == 16, len(cases)
+          assert not any(c.find("skipped") is not None for c in cases), "database controls must run"
+          PY
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: verify-clean-install-py${{ matrix.python-version }}
+          path: ${{ runner.temp }}/clean-install.json
+          if-no-files-found: ignore
 
   flow-lint:
     name: flow core lint (ruff, mypy)
@@ -1718,6 +1819,7 @@ jobs:
       - types
       - agent
       - verify
+      - verify-clean-install
       - flow-lint
       - flow-unit
       - flow-critical
@@ -1773,6 +1875,7 @@ jobs:
               "types": "types",
               "agent": "agent",
               "verify": "verify",
+              "verify-clean-install": "verify",
               "flow-lint": "flow",
               "flow-unit": "flow",
               "flow-critical": "flow",

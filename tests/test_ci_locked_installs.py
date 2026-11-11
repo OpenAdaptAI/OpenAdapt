@@ -26,6 +26,9 @@ ALLOWED = {
     # The launcher's Python-support job checks what a user's pip picks.
     ("main.yml", "pip install --dry-run --quiet --find-links dist"),
     ("main.yml", "pip install dist/*.whl"),
+    # openadapt-verify's clean-install job checks what a user's pip resolves
+    # (its install script runs the measured `pip install openadapt-verify`).
+    ("packages.yml", "--find-links \"$RUNNER_TEMP/dist\" 'openadapt-verify[mysql]'"),
     # Bootstraps uv itself: one exact, dependency-free wheel.
     ("desktop-release.yml", "pip install --disable-pip-version-check uv==0.11.29"),
     # The same bootstrap in the Windows build desktop-release.yml shares.

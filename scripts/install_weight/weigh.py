@@ -295,11 +295,17 @@ def check(args: argparse.Namespace) -> int:
     # Build every in-tree package, not only the selected ones, so a selected
     # package resolves its in-tree dependencies to the in-tree wheels.
     requirements = {}
+    built: dict[Path, tuple[str, str]] = {}
     for label, budget in config["packages"].items():
         path = ROOT / budget["path"] if "path" in budget else None
         if path is not None and (path / "pyproject.toml").is_file():
-            name, version = build_local_wheel(path, dist_dir)
-            requirements[label] = f"{name}=={version}"
+            # Two budgets can weigh one package with different extras.
+            if path not in built:
+                built[path] = build_local_wheel(path, dist_dir)
+            name, version = built[path]
+            extras = budget.get("extras") or []
+            suffix = f"[{','.join(extras)}]" if extras else ""
+            requirements[label] = f"{name}{suffix}=={version}"
         elif "fallback_requirement" in budget:
             requirements[label] = budget["fallback_requirement"]
         else:
