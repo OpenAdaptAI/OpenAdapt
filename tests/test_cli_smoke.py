@@ -817,7 +817,7 @@ def test_deploy_preflight_fails_without_rdp_transport(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "flow_version", ["1.35.1", "2.1.0", "3.0.0", "3.1.0", "invalid"]
+    "flow_version", ["1.35.1", "2.1.0", "4.0.0", "4.1.0", "invalid"]
 )
 def test_deploy_preflight_fails_for_unsupported_flow(monkeypatch, flow_version):
     monkeypatch.setattr("importlib.util.find_spec", lambda _name: object())
