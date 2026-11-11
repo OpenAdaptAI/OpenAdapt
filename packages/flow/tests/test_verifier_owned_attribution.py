@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import subprocess
+import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
@@ -24,6 +26,7 @@ from openadapt_flow.runtime.effects.late_write import (
 )
 from openadapt_flow.verifier import (
     Actor,
+    BaselineUnreadable,
     Contract,
     Outcome,
     PendingWrite,
@@ -32,6 +35,7 @@ from openadapt_flow.verifier import (
     WriteResult,
     begin_owned_write,
     begin_write,
+    capture,
     commit_pending_sqlite_insert,
     recheck,
     reconcile,
@@ -51,6 +55,9 @@ VALUES = {"id": 2, "record_key": "synthetic-target", "label": "desired-value"}
 PROTECTED = "prior-value"
 INSERT = "INSERT INTO records VALUES (:id, :record_key, :label)"
 WITNESS_TABLE = "openadapt_owned_insert_events"
+OWNED_PURPOSE_REFUSAL = (
+    "the configured owned SQLite insert requires owned_attempt verification"
+)
 
 
 @dataclass(frozen=True)
@@ -790,3 +797,233 @@ def test_crossed_genuine_owned_baselines_cannot_cross_ledger_attempts(
             second.release()
     finally:
         first.release()
+
+
+def _tree_paths(root: Path) -> set[Path]:
+    return {path.relative_to(root) for path in root.rglob("*")}
+
+
+def _assert_no_refusal_effects(
+    store: Store, root: Path, paths: set[Path], *, observed_target: bool
+) -> None:
+    assert _tree_paths(root) == paths
+    assert store.read_frame() == StoreFrame(int(observed_target), PROTECTED)
+    assert store.event_attempts() == ()
+    assert store.ledger.attempts() == []
+
+
+def test_owned_config_refuses_deprecated_capture(
+    store: Store, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(verifier_api, "USED_DIR", tmp_path / "issued")
+    before = _tree_paths(tmp_path)
+    with (
+        pytest.warns(DeprecationWarning, match="verifier.capture is deprecated"),
+        pytest.raises(BaselineUnreadable, match=OWNED_PURPOSE_REFUSAL),
+    ):
+        capture(store.contract(), VALUES)
+    _assert_no_refusal_effects(store, tmp_path, before, observed_target=False)
+
+
+def test_owned_config_refuses_deprecated_verify_without_consuming_snapshot(
+    store: Store, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(verifier_api, "USED_DIR", tmp_path / "issued")
+    observer = store.contract(native_writer=False)
+    with pytest.warns(DeprecationWarning, match="verifier.capture is deprecated"):
+        snapshot = capture(observer, VALUES)
+    assert not snapshot.used and store.read_frame() == StoreFrame(0, PROTECTED)
+    with closing(sqlite3.connect(store.database)) as independent:
+        assert _external_commit(independent) == 1
+    before = _tree_paths(tmp_path)
+    with pytest.raises(VerifierError, match=OWNED_PURPOSE_REFUSAL):
+        verify_write(store.contract(), snapshot, params=VALUES, actor=ACTOR)
+    assert not snapshot.used
+    _assert_no_refusal_effects(store, tmp_path, before, observed_target=True)
+
+    observed = verify_write(observer, snapshot, params=VALUES, actor=ACTOR)
+    assert observed.verified and observed.outcome is Outcome.CONFIRMED
+    assert "write_attribution" not in observed.receipt
+    assert observed.evidence["write_attribution"] == {
+        "purpose": "observation",
+        "status": "observed",
+    }
+
+
+@pytest.mark.parametrize("explicit", [False, True], ids=["default", "explicit"])
+def test_owned_config_refuses_direct_observation_capture(
+    store: Store, tmp_path: Path, explicit: bool
+) -> None:
+    config = store.contract().config
+    baseline = tmp_path / "denied-baseline.json"
+    before = _tree_paths(tmp_path)
+    with pytest.raises(VerifyRunError, match=OWNED_PURPOSE_REFUSAL):
+        capture_baseline(
+            config, VALUES, baseline, **({"purpose": "observation"} if explicit else {})
+        )
+    _assert_no_refusal_effects(store, tmp_path, before, observed_target=False)
+
+
+@pytest.mark.parametrize("explicit", [False, True], ids=["default", "explicit"])
+@pytest.mark.parametrize("captured", [False, True], ids=["one-shot", "prior-baseline"])
+def test_owned_config_refuses_direct_observation_verify(
+    store: Store, tmp_path: Path, explicit: bool, captured: bool
+) -> None:
+    observer = store.contract(native_writer=False)
+    baseline = tmp_path / "observation.json" if captured else None
+    if baseline is not None:
+        capture_baseline(observer.config, VALUES, baseline)
+        original_baseline = baseline.read_bytes()
+    assert store.read_frame() == StoreFrame(0, PROTECTED)
+    with closing(sqlite3.connect(store.database)) as independent:
+        assert _external_commit(independent) == 1
+
+    before = _tree_paths(tmp_path)
+    with pytest.raises(VerifyRunError, match=OWNED_PURPOSE_REFUSAL):
+        verify_run(
+            store.contract().config,
+            params=VALUES,
+            run_record=ACTOR.run_record(),
+            authorization_ref=AUTHORIZATION,
+            baseline_path=baseline,
+            private_dir=tmp_path / "denied",
+            **({"purpose": "observation"} if explicit else {}),
+        )
+    _assert_no_refusal_effects(store, tmp_path, before, observed_target=True)
+
+    if baseline is not None:
+        assert baseline.read_bytes() == original_baseline
+        result = verify_run(
+            observer.config,
+            params=VALUES,
+            run_record=ACTOR.run_record(),
+            authorization_ref=AUTHORIZATION,
+            baseline_path=baseline,
+        )
+        assert result["receipt"]["outcome"] == "verified"
+        assert "write_attribution" not in result["receipt"]
+        assert result["evidence"]["write_attribution"] == {
+            "purpose": "observation",
+            "status": "observed",
+        }
+
+
+def test_flow_cli_refuses_observation_capture_for_owned_config(
+    store: Store, tmp_path: Path
+) -> None:
+    config = tmp_path / "contract.json"
+    config.write_text(
+        store.contract().config.model_dump_json(by_alias=True, exclude_unset=True),
+        encoding="utf-8",
+    )
+    params = tmp_path / "params.json"
+    params.write_text(json.dumps(VALUES), encoding="utf-8")
+    baseline = tmp_path / "denied-baseline.json"
+    before = _tree_paths(tmp_path)
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-B",
+            "-m",
+            "openadapt_flow",
+            "verify-run",
+            "--verify",
+            str(config),
+            "--params",
+            str(params),
+            "--capture-baseline",
+            str(baseline),
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert result.stderr.strip() == f"verify-run REFUSED: {OWNED_PURPOSE_REFUSAL}"
+    _assert_no_refusal_effects(store, tmp_path, before, observed_target=False)
+
+
+def test_owned_config_refuses_already_issued_observational_recheck(
+    store: Store, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(verifier_api, "USED_DIR", tmp_path / "issued")
+    observer = store.contract(native_writer=False, with_recheck=True)
+    configured = store.contract(with_recheck=True)
+    pending = begin_write(
+        observer,
+        VALUES,
+        actor=ACTOR,
+        ledger=store.ledger,
+        write_key="synthetic-observation-recheck",
+        authorization_ref=AUTHORIZATION,
+    )
+    with closing(sqlite3.connect(store.database)) as independent:
+        assert _external_commit(independent) == 1
+    first = verify_write(pending, seal=False)
+    assert first.verified and first.provisional
+    state = first.recheck
+    assert state is not None and first.recheck_due_at is not None
+    assert "write_attribution" not in state.payload["receipt"]
+    assert state.payload["evidence"]["write_attribution"] == {
+        "purpose": "observation",
+        "status": "observed",
+    }
+    initial = store.ledger.latest(pending.write_key)
+    assert initial is not None and initial.recheck_owed == first.recheck_due_at
+    paths = _tree_paths(tmp_path)
+    due = parse_time(first.recheck_due_at) + timedelta(seconds=1)
+    monkeypatch.setattr(verify_run_api, "_now", lambda: format_time(due))
+    monkeypatch.setattr(
+        verifier_api, "seconds_until", lambda at: seconds_until(at, due)
+    )
+
+    builds = 0
+    build_verifier = verify_run_api._build_verifier
+
+    def observe_build(*args, **kwargs):
+        nonlocal builds
+        builds += 1
+        return build_verifier(*args, **kwargs)
+
+    with monkeypatch.context() as observed:
+        observed.setattr(verify_run_api, "_build_verifier", observe_build)
+        refused = recheck(
+            configured, first, params=VALUES, actor=ACTOR, ledger=store.ledger
+        )
+        assert refused.outcome == "UNCERTAIN" and not refused.verified
+        assert refused.read_at == "" and refused.frame == "not_checked"
+        assert refused.recheck_owed is True
+        assert any(OWNED_PURPOSE_REFUSAL in reason for reason in refused.reasons)
+        assert (
+            verify_run_api.recheck_problem(
+                configured.config,
+                state.payload,
+                params=VALUES,
+                run_record=ACTOR.run_record(),
+            )
+            == OWNED_PURPOSE_REFUSAL
+        )
+        with pytest.raises(VerifyRunError, match=OWNED_PURPOSE_REFUSAL):
+            verify_run_api.recheck_run(
+                configured.config,
+                state.payload,
+                params=VALUES,
+                run_record=ACTOR.run_record(),
+            )
+        assert builds == 0
+    retained = store.ledger.latest(pending.write_key)
+    assert retained is not None and retained.attempt_id == initial.attempt_id
+    assert retained.events == initial.events
+    assert retained.recheck_owed == first.recheck_due_at
+    assert _tree_paths(tmp_path) == paths
+    assert store.read_frame() == StoreFrame(1, PROTECTED)
+    assert store.event_attempts() == ()
+
+    confirmed = recheck(
+        observer, first, params=VALUES, actor=ACTOR, ledger=store.ledger
+    )
+    assert confirmed.outcome == "CONFIRMED" and confirmed.verified
+    assert confirmed.receipt_sha256 == first.receipt_sha256
