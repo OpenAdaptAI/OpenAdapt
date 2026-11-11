@@ -100,9 +100,8 @@ def save_workflow(
     Returns the path actually written (``workflow.json`` or, when encrypted,
     ``workflow.json.enc``).
     """
-    from openadapt_flow import ir as _ir
-
     from openadapt_flow import bundle_validation as _bv
+    from openadapt_flow import ir as _ir
 
     _bv.bundle_schema_version({"schema_version": workflow.schema_version})
     template_replacements = workflow._checked_template_replacements()
@@ -288,9 +287,8 @@ def save_sealed_set(
     writer, so no plaintext of this workflow touches the disk. Assets come
     from the in-memory crop map and from crops already sealed in the set.
     """
-    from openadapt_flow import ir as _ir
-
     from openadapt_flow import bundle_validation as _bv
+    from openadapt_flow import ir as _ir
     from openadapt_flow import sealed_set as _sealed
 
     writer = _sealed.active_writer(bundle)
