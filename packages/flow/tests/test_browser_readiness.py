@@ -144,7 +144,7 @@ def test_unsupported_attach_never_treats_the_browser_as_owned(kind: str) -> None
 def test_host_deadline_can_refuse_before_scheduling_without_a_timer_pass(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    times = iter([0.0, 2.0])
+    times = iter([0.0, readiness.READINESS_TIMEOUT_MS / 1000 + 1.0])
     monkeypatch.setattr(readiness.time, "monotonic", lambda: next(times))
     browser = Browser()
     context = Context(browser)
