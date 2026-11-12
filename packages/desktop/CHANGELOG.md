@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.30.1 (2026-11-12)
+
+### Bug Fixes
+
+- **desktop**: write approval-mode files in binary mode on Windows
+
+
+
 ## v0.30.0 (2026-11-11)
 
 ### Features
