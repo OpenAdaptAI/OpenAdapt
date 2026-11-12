@@ -182,7 +182,9 @@ def _write_private_json(path: Path, payload: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + ".tmp")
     data = json.dumps(payload, sort_keys=True, indent=2).encode("utf-8")
-    descriptor = os.open(temporary, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600)
+    # O_BINARY keeps Windows from writing "\r\n" in text mode.
+    flags = os.O_CREAT | os.O_WRONLY | os.O_TRUNC | getattr(os, "O_BINARY", 0)
+    descriptor = os.open(temporary, flags, 0o600)
     try:
         os.write(descriptor, data)
         os.fsync(descriptor)
