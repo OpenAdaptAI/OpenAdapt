@@ -38,6 +38,7 @@ class Dolibarr(App):
     save = Save(r"^/contact/card\.php$", body_require=r"(^|&)action=add(&|$)")
     body_field = {"phone": "phone_pro", "poste": "poste", "email": "email", "firstname": "firstname", "lastname": "lastname"}
     home_path = "/index.php"
+    save_ok_status = frozenset({302})
 
     @property
     def pod(self) -> str:

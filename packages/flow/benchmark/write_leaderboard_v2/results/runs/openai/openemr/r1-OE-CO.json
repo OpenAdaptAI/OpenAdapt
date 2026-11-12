@@ -15,7 +15,7 @@
   "actions": 59,
   "tokens_in": 476446,
   "tokens_out": 1280,
-  "end_url": "http://127.0.0.1:9866/interface/main/tabs/main.php?token_main=lE6c9lDYcjswj1vPJB1egIZopBZkB35HyFW0BEcB"
+  "end_url": "http://127.0.0.1:9866/interface/main/tabs/main.php?token_main=REDACTED"
  },
  "oracle": {
   "verdict": "missing",

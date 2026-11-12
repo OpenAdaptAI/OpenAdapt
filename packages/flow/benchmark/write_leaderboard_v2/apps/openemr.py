@@ -41,6 +41,7 @@ class OpenEMR(App):
     body_field = {"fname": "form_fname", "lname": "form_lname", "DOB": "form_DOB", "phone_home": "form_phone_home",
                   "email": "form_email", "street": "form_street", "city": "form_city", "postal_code": "form_postal_code"}
     home_path = None  # main.php needs the token sign-in gives it; without it OpenEMR ends the session
+    save_ok_status = frozenset({200})  # success and failure both answer 200; only an error status shows a refusal
 
     @property
     def pod(self) -> str:

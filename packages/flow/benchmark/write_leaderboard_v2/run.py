@@ -24,6 +24,7 @@ import importlib
 import json
 import os
 import platform
+import re
 import subprocess
 import sys
 import time
@@ -69,6 +70,12 @@ def _git(*args: str) -> str:
         return subprocess.run(["git", *args], capture_output=True, text=True, cwd=HERE, timeout=10).stdout.strip()
     except (OSError, subprocess.SubprocessError):
         return ""
+
+
+def redact_url(url: str) -> str:
+    """A URL without session tokens in its query (OpenEMR's ``token_main``)."""
+
+    return re.sub(r"(token_main|token|csrf_token_form|site_token)=[^&#]*", r"\1=REDACTED", url or "")
 
 
 def wait_for_load() -> int:
@@ -150,6 +157,7 @@ def run_app_case(app: Any, door: Any, browser: Any, agent: str, phase: str, case
     app.reset(task, seed)
     faults: list[dict[str, Any]] = []
     door.side_write = None
+    door.accept = app.save_accepted
     for f in case.get("faults") or []:
         if "set" in f:
             faults.append({"set": app.body_sets(f["set"])})
@@ -189,7 +197,7 @@ def run_app_case(app: Any, door: Any, browser: Any, agent: str, phase: str, case
         ctx.close()
     if signed_out:
         raise RuntimeError("harness: the app was signed out during the run")
-    claim["end_url"] = end_url
+    claim["end_url"] = redact_url(end_url)
     row["agent_s"] = round(time.monotonic() - t0, 1)
     row["cost_usd"] = claim.pop("cost_usd")
     row["claim"] = claim
@@ -265,7 +273,7 @@ class MedplumRig:
                 ctx.close()
             if "/signin" in end_url:
                 raise RuntimeError("harness: the app was signed out during the run")
-            claim["end_url"] = end_url
+            claim["end_url"] = redact_url(end_url)
             return claim
 
         row = self.bench.run_case(case, gui, self.proxy)

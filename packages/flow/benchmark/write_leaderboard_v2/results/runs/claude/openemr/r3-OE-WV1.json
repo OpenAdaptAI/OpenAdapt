@@ -15,7 +15,7 @@
   "actions": 64,
   "tokens_in": 469084,
   "tokens_out": 3946,
-  "end_url": "http://127.0.0.1:9866/interface/main/tabs/main.php?token_main=4lJ0vKDi7cHmHmjhAw8BCpRZQ5xfk6cQPmO3AMEr"
+  "end_url": "http://127.0.0.1:9866/interface/main/tabs/main.php?token_main=REDACTED"
  },
  "oracle": {
   "verdict": "correct",

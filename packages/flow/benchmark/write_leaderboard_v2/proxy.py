@@ -14,7 +14,13 @@ pattern). Fault kinds, the same families as version 1's Medplum proxy:
   browser gets a 504 with an empty body.
 - ``refuse: true`` (refused_write): not forwarded; the browser gets a 503.
 - ``side_write: true`` (collateral): forwarded unchanged, then the harness's
-  ``side_write`` hook changes another record before the answer is returned.
+  ``side_write`` hook changes another record before the answer is returned,
+  if the app accepted the save.
+
+A fault counts as delivered only if the app accepted the faulted save
+(``accept``, the adapter's own success statuses); a save the app rejected,
+such as Redmine's form shown again with a validation error, is logged with
+``accepted: false``. (Added after the v2 runs; see DEVIATIONS.md.)
 
 Bodies may be form-encoded, multipart or JSON. Every request is logged.
 """
@@ -94,6 +100,11 @@ class FrontDoor:
         self.delivered = False
         self.saves = 0
         self.side_write: Optional[Callable[[], None]] = None
+        #: The app's own success test on the save's status (the adapter's
+        #: ``save_accepted``). A fault on a save the app rejected (a
+        #: validation error) is logged ``accepted: false`` and is not
+        #: counted as delivered; the collateral change waits for an accepted save.
+        self.accept: Callable[[Any], bool] = lambda status: int(str(status).split("+")[0].split("->")[0]) < 400
         self._srv: Optional[ThreadingHTTPServer] = None
 
     # -- control --------------------------------------------------------------------
@@ -181,10 +192,15 @@ class FrontDoor:
                         return
                     st, reason, headers, data = self._forward(body)
                     entry["status"] = st
+                    if f:
+                        entry["accepted"] = bool(door.accept(st))
+                        if not entry["accepted"]:
+                            with door.lock:
+                                door.delivered = False
                     if f.get("duplicate"):
                         st2, *_ = self._forward(body, f.get("replay_headers"))
                         entry["status"] = f"{st}+{st2}"
-                    if f.get("side_write") and door.side_write is not None and st < 400:
+                    if f.get("side_write") and door.side_write is not None and entry.get("accepted"):
                         try:
                             door.side_write()
                             entry["side_write"] = "done"

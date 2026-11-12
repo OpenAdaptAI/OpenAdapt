@@ -7,6 +7,7 @@ protocol fixes, checked without any app, browser or model.
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import pytest
 
@@ -72,3 +73,105 @@ def test_normalisation() -> None:
     assert norm("date", "1990-7-8") == "1990-07-08"
     assert norm("number", "2.50") == norm("number", "2.5")
     assert norm("text", " 41 ELM  Street ") == "41 elm street"
+
+
+# -- added after review: rejected saves, soft deletes, token redaction ---------------
+
+
+def test_save_accepted_reads_logged_statuses() -> None:
+    from benchmark.write_leaderboard_v2.apps.dolibarr import Dolibarr
+    from benchmark.write_leaderboard_v2.apps.espocrm import EspoCRM
+
+    doli = Dolibarr("t", 1, 2)
+    assert doli.save_accepted(302) and doli.save_accepted("302+302") and doli.save_accepted("302->504")
+    assert not doli.save_accepted(200) and not doli.save_accepted("200+200")
+    espo = EspoCRM("t", 1, 2)
+    assert espo.save_accepted("200->504") and not espo.save_accepted(409)
+    assert _Toy("t", 1, 2).save_accepted(201) and not _Toy("t", 1, 2).save_accepted(500)
+
+
+def _serve(status: int) -> tuple[Any, int]:
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    hits: list[str] = []
+
+    class H(BaseHTTPRequestHandler):
+        def log_message(self, *a: Any) -> None:
+            pass
+
+        def do_POST(self) -> None:  # noqa: N802
+            self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            hits.append(self.path)
+            self.send_response(status)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    srv.hits = hits  # type: ignore[attr-defined]
+    return srv, srv.server_address[1]
+
+
+@pytest.mark.parametrize("status,delivered", [(302, True), (200, False)])
+def test_proxy_counts_a_fault_only_on_an_accepted_save(status: int, delivered: bool) -> None:
+    import http.client
+    import socket
+
+    from benchmark.write_leaderboard_v2.proxy import FrontDoor
+
+    up, port = _serve(status)
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        listen = s.getsockname()[1]
+    door = FrontDoor(listen, port).start()
+    side: list[int] = []
+    door.side_write = lambda: side.append(1)
+    door.accept = lambda st: int(str(st).split("+")[0].split("->")[0]) == 302
+    door.arm(Save(r"^/save$"), [{"side_write": True}])
+    try:
+        c = http.client.HTTPConnection("127.0.0.1", listen, timeout=10)
+        c.request("POST", "/save", body=b"a=1", headers={"Content-Type": "application/x-www-form-urlencoded"})
+        c.getresponse().read()
+    finally:
+        door.stop()
+        up.shutdown()
+    assert door.delivered is delivered
+    assert door.log[-1]["accepted"] is delivered
+    assert bool(side) is delivered  # the collateral change waits for an accepted save
+
+
+def test_oracle_treats_soft_deleted_rows_as_absent() -> None:
+    from benchmark.write_leaderboard_v2.apps.espocrm import EspoCRM
+
+    app = EspoCRM("t", 1, 2)
+    seed = [{"id": "a", "name": "Seed", "website": "", "type": "", "industry": "", "description": "", "deleted": "0"}]
+    task = {"name": "New Co", "website": "new.example.invalid", "type": "Customer", "industry": "Retail", "description": "x"}
+    rec = {"id": "b", **task, "deleted": "0"}
+    extra = {**rec, "id": "c", "deleted": "1"}
+    assert app.judge(seed, seed + [rec, extra], task)["verdict"] == "correct"
+    gone = [{**seed[0], "deleted": "1"}, rec]
+    v = app.judge(seed, gone, task)
+    assert v["verdict"] == "wrong" and v["deleted"] == ["a"]
+
+
+def test_redact_url_drops_session_tokens() -> None:
+    from benchmark.write_leaderboard_v2.run import redact_url
+
+    url = "http://127.0.0.1:9866/interface/main/tabs/main.php?token_main=abc123XYZ&x=1"
+    assert redact_url(url) == "http://127.0.0.1:9866/interface/main/tabs/main.php?token_main=REDACTED&x=1"
+
+
+def test_rejected_save_and_fault_reached() -> None:
+    from benchmark.write_leaderboard_v2 import score
+
+    row = {"app": "redmine", "class": "duplicate", "proxy": [{"fault": ["duplicate"], "status": "200+200", "save": True}]}
+    assert score.rejected_save(row) and score.fault_reached(row) is False
+    ok = {**row, "proxy": [{"fault": ["duplicate"], "status": "302+302", "save": True}]}
+    assert not score.rejected_save(ok) and score.fault_reached(ok) is True
+    refused = {"app": "redmine", "class": "refused_write", "proxy": [{"fault": ["refuse"], "status": 503}]}
+    assert score.fault_reached(refused) is True and not score.rejected_save(refused)
+    never = {"app": "openemr", "class": "wrong_value", "proxy": []}
+    assert score.fault_reached(never) is False
+    assert score.fault_reached({"app": "dolibarr", "class": "clean"}) is None
+    assert score.fault_reached({"app": "medplum", "class": "duplicate", "fault_delivered": False}) is False

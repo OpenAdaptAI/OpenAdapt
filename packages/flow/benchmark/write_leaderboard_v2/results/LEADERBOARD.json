@@ -79,6 +79,7 @@
      ]
     },
     "faults_not_delivered": 1,
+    "fault_hit_rejected_save": 4,
     "run_limits": 2,
     "cost_usd": 29.3601
    },
@@ -150,6 +151,7 @@
       ]
      },
      "faults_not_delivered": 0,
+     "fault_hit_rejected_save": 0,
      "run_limits": 0,
      "cost_usd": 2.9509
     },
@@ -220,6 +222,7 @@
       ]
      },
      "faults_not_delivered": 0,
+     "fault_hit_rejected_save": 0,
      "run_limits": 0,
      "cost_usd": 3.867
     },
@@ -290,6 +293,7 @@
       ]
      },
      "faults_not_delivered": 1,
+     "fault_hit_rejected_save": 0,
      "run_limits": 2,
      "cost_usd": 16.1325
     },
@@ -360,6 +364,7 @@
       ]
      },
      "faults_not_delivered": 0,
+     "fault_hit_rejected_save": 0,
      "run_limits": 0,
      "cost_usd": 4.1203
     },
@@ -430,6 +435,7 @@
       ]
      },
      "faults_not_delivered": 0,
+     "fault_hit_rejected_save": 4,
      "run_limits": 0,
      "cost_usd": 2.2894
     }
@@ -616,6 +622,84 @@
      }
     }
    },
+   "fault_hit_rejected_save_by_class": {
+    "collateral": 1,
+    "duplicate": 2,
+    "lost_response": 0,
+    "refused_write": 0,
+    "wrong_value": 1
+   },
+   "sensitivity_fault_reached_committed_write": {
+    "runs": 116,
+    "said_done_record_wrong": {
+     "k": 28,
+     "n": 116,
+     "rate": 0.2414,
+     "wilson95": [
+      0.1726,
+      0.3267
+     ]
+    },
+    "said_done_record_wrong_of_said_done": {
+     "k": 28,
+     "n": 102,
+     "rate": 0.2745,
+     "wilson95": [
+      0.1973,
+      0.3681
+     ]
+    },
+    "said_done_record_wrong_visible_faults": {
+     "k": 13,
+     "n": 101,
+     "rate": 0.1287,
+     "wilson95": [
+      0.0768,
+      0.2078
+     ]
+    },
+    "collateral_said_done": {
+     "k": 25,
+     "n": 25,
+     "rate": 1.0,
+     "wilson95": [
+      0.8668,
+      1.0
+     ]
+    },
+    "pass1": {
+     "k": 74,
+     "n": 116,
+     "rate": 0.6379,
+     "wilson95": [
+      0.5474,
+      0.7197
+     ]
+    },
+    "pass3": {
+     "k": 23,
+     "n": 37,
+     "rate": 0.6216,
+     "wilson95": [
+      0.461,
+      0.7594
+     ],
+     "cases": 37
+    },
+    "said_done": {
+     "k": 102,
+     "n": 116,
+     "rate": 0.8793,
+     "wilson95": [
+      0.8076,
+      0.9267
+     ]
+    },
+    "faults_not_delivered": 0,
+    "fault_hit_rejected_save": 1,
+    "run_limits": 2,
+    "cost_usd": 28.6264
+   },
    "heldout": {
     "runs": 45,
     "said_done_record_wrong": {
@@ -687,6 +771,7 @@
      ]
     },
     "faults_not_delivered": 0,
+    "fault_hit_rejected_save": 1,
     "run_limits": 0,
     "cost_usd": 11.8169,
     "excluded_infra": 0
@@ -873,6 +958,13 @@
      }
     }
    },
+   "heldout_fault_hit_rejected_save_by_class": {
+    "collateral": 0,
+    "duplicate": 1,
+    "lost_response": 0,
+    "refused_write": 0,
+    "wrong_value": 0
+   },
    "pooled": {
     "runs": 165,
     "said_done_record_wrong": {
@@ -944,6 +1036,7 @@
      ]
     },
     "faults_not_delivered": 1,
+    "fault_hit_rejected_save": 5,
     "run_limits": 2,
     "cost_usd": 41.177
    }
@@ -1021,6 +1114,7 @@
      ]
     },
     "faults_not_delivered": 18,
+    "fault_hit_rejected_save": 9,
     "run_limits": 0,
     "cost_usd": 14.0935
    },
@@ -1092,6 +1186,7 @@
       ]
      },
      "faults_not_delivered": 0,
+     "fault_hit_rejected_save": 0,
      "run_limits": 0,
      "cost_usd": 1.8658
     },
@@ -1162,6 +1257,7 @@
       ]
      },
      "faults_not_delivered": 0,
+     "fault_hit_rejected_save": 0,
      "run_limits": 0,
      "cost_usd": 3.7503
     },
@@ -1232,6 +1328,7 @@
       ]
      },
      "faults_not_delivered": 0,
+     "fault_hit_rejected_save": 0,
      "run_limits": 0,
      "cost_usd": 3.8077
     },
@@ -1302,6 +1399,7 @@
       ]
      },
      "faults_not_delivered": 18,
+     "fault_hit_rejected_save": 0,
      "run_limits": 0,
      "cost_usd": 3.1843
     },
@@ -1372,6 +1470,7 @@
       ]
      },
      "faults_not_delivered": 0,
+     "fault_hit_rejected_save": 9,
      "run_limits": 0,
      "cost_usd": 1.4854
     }
@@ -1558,6 +1657,84 @@
      }
     }
    },
+   "fault_hit_rejected_save_by_class": {
+    "collateral": 3,
+    "duplicate": 3,
+    "lost_response": 0,
+    "refused_write": 0,
+    "wrong_value": 3
+   },
+   "sensitivity_fault_reached_committed_write": {
+    "runs": 96,
+    "said_done_record_wrong": {
+     "k": 21,
+     "n": 96,
+     "rate": 0.2188,
+     "wilson95": [
+      0.1478,
+      0.3114
+     ]
+    },
+    "said_done_record_wrong_of_said_done": {
+     "k": 21,
+     "n": 60,
+     "rate": 0.35,
+     "wilson95": [
+      0.2417,
+      0.4764
+     ]
+    },
+    "said_done_record_wrong_visible_faults": {
+     "k": 10,
+     "n": 84,
+     "rate": 0.119,
+     "wilson95": [
+      0.066,
+      0.2054
+     ]
+    },
+    "collateral_said_done": {
+     "k": 21,
+     "n": 24,
+     "rate": 0.875,
+     "wilson95": [
+      0.69,
+      0.9566
+     ]
+    },
+    "pass1": {
+     "k": 39,
+     "n": 96,
+     "rate": 0.4062,
+     "wilson95": [
+      0.3135,
+      0.5063
+     ]
+    },
+    "pass3": {
+     "k": 10,
+     "n": 32,
+     "rate": 0.3125,
+     "wilson95": [
+      0.1795,
+      0.4857
+     ],
+     "cases": 32
+    },
+    "said_done": {
+     "k": 60,
+     "n": 96,
+     "rate": 0.625,
+     "wilson95": [
+      0.5251,
+      0.7153
+     ]
+    },
+    "faults_not_delivered": 0,
+    "fault_hit_rejected_save": 3,
+    "run_limits": 0,
+    "cost_usd": 11.2534
+   },
    "heldout": {
     "runs": 45,
     "said_done_record_wrong": {
@@ -1629,6 +1806,7 @@
      ]
     },
     "faults_not_delivered": 6,
+    "fault_hit_rejected_save": 0,
     "run_limits": 0,
     "cost_usd": 5.7469,
     "excluded_infra": 0
@@ -1815,6 +1993,13 @@
      }
     }
    },
+   "heldout_fault_hit_rejected_save_by_class": {
+    "collateral": 0,
+    "duplicate": 0,
+    "lost_response": 0,
+    "refused_write": 0,
+    "wrong_value": 0
+   },
    "pooled": {
     "runs": 165,
     "said_done_record_wrong": {
@@ -1886,6 +2071,7 @@
      ]
     },
     "faults_not_delivered": 24,
+    "fault_hit_rejected_save": 9,
     "run_limits": 0,
     "cost_usd": 19.8403
    }

@@ -42,6 +42,7 @@ class Redmine(App):
     body_field = {"subject": "issue[subject]", "description": "issue[description]",
                   "estimated_hours": "issue[estimated_hours]", "due_date": "issue[due_date]"}
     home_path = "/projects/helpdesk"
+    save_ok_status = frozenset({302})
 
     @property
     def c(self) -> str:

@@ -40,6 +40,7 @@ class EspoCRM(App):
                "deleted": "text"}
     save = Save(r"^/api/v1/Account$")
     home_path = "/"
+    save_ok_status = frozenset({200})
 
     @property
     def pod(self) -> str:
@@ -77,6 +78,9 @@ class EspoCRM(App):
         page.click("#btn-login")
         page.wait_for_selector("#navbar", state="attached", timeout=60000)
         page.wait_for_load_state("networkidle")
+
+    def is_present(self, row: dict[str, Any]) -> bool:
+        return str(row.get("deleted", "0")) in ("0", "", "False", "false")
 
     def rows(self) -> list[dict[str, Any]]:
         return self.sql(json_select(COLS, "account ORDER BY created_at, id"))

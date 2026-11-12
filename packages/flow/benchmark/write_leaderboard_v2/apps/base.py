@@ -9,7 +9,8 @@ The oracle (``judge``) reads the whole record table before and after the
 run and decides from that alone. A run's end state is ``correct`` only when
 exactly one new record exists, it holds every value the task names
 (after the normalisation below), and no other record was changed or
-deleted.
+deleted. A row the app has deleted softly (EspoCRM's ``deleted = 1``)
+counts as not present.
 
 Normalisation (pre-registered): every value is trimmed and inner runs of
 whitespace collapse to one space; text and email compare without regard
@@ -100,6 +101,9 @@ class App:
     #: Task field -> the save request's body field (for ``set`` faults).
     body_field: dict[str, str] = {}
     home_path = "/"
+    #: HTTP statuses of the save's response that mean the app accepted the save
+    #: (adapter data, checked by the proxy and the scorer; empty: any status < 400).
+    save_ok_status: frozenset[int] = frozenset()
     lane = 2
 
     def __init__(self, slot: str, upstream: int, proxy: int) -> None:
@@ -163,11 +167,30 @@ class App:
     def body_sets(self, sets: dict[str, Any]) -> dict[str, Any]:
         return {self.body_field.get(k, k): v for k, v in sets.items()}
 
+    def save_accepted(self, status: Any) -> bool:
+        """Whether a logged save status means the app accepted the save.
+
+        ``status`` is as the proxy logs it: ``302``, ``"302+302"`` (duplicate:
+        the first delivery decides) or ``"302->504"`` (lost response: the
+        app's own answer decides).
+        """
+
+        head = str(status).split("+")[0].split("->")[0]
+        if not head.isdigit():
+            return False
+        code = int(head)
+        return code in self.save_ok_status if self.save_ok_status else code < 400
+
+    def is_present(self, row: dict[str, Any]) -> bool:
+        """Whether a row is a live record (an app that deletes softly overrides this)."""
+
+        return True
+
     # the oracle -----------------------------------------------------------------------
     def judge(self, before: list[dict[str, Any]], after: list[dict[str, Any]], task: dict[str, Any]) -> dict[str, Any]:
         cols = self.columns
-        b = {str(r[self.key]): r for r in before}
-        a = {str(r[self.key]): r for r in after}
+        b = {str(r[self.key]): r for r in before if self.is_present(r)}
+        a = {str(r[self.key]): r for r in after if self.is_present(r)}
         new = [a[k] for k in a if k not in b]
         gone = [k for k in b if k not in a]
         changed = [

@@ -68,6 +68,58 @@ def collateral(r: dict[str, Any]) -> bool:
     return bool((r.get("oracle") or {}).get("collateral"))
 
 
+_APPS: dict[str, Any] = {}
+
+
+def _app(name: str) -> Any:
+    """The adapter for an app's success statuses (no containers are touched)."""
+
+    if name not in _APPS:
+        import importlib
+
+        from benchmark.write_leaderboard_v2.run import APPS
+
+        mod, cls = APPS[name].split(":")
+        _APPS[name] = getattr(importlib.import_module(mod), cls)("score", 0, 0)
+    return _APPS[name]
+
+
+def fault_reached(r: dict[str, Any]) -> Optional[bool]:
+    """Whether the case's fault reached a write the app committed; None for a clean case.
+
+    Not planned in advance (added after review; DEVIATIONS.md). Medplum keeps
+    version 1's ``fault_delivered``. For the other apps: a refused save is
+    the fault itself; a collateral change counts when it ran; a value
+    change, duplicate or lost response counts only when the app accepted
+    the faulted save (the adapter's ``save_accepted`` on the logged status).
+    """
+
+    if r.get("class") == "clean":
+        return None
+    if r.get("fault_delivered") is False and r.get("app") == "medplum":
+        return False
+    if r.get("app") == "medplum":
+        return True
+    faulted = [e for e in r.get("proxy") or [] if e.get("fault")]
+    if not faulted:
+        return False
+    e = faulted[0]
+    if "refuse" in e["fault"]:
+        return True
+    if "side_write" in e["fault"]:
+        return e.get("side_write") == "done"
+    return _app(r["app"]).save_accepted(e.get("status"))
+
+
+def rejected_save(r: dict[str, Any]) -> bool:
+    """The fault met a save the app itself rejected (so no faulted write was committed)."""
+
+    if r.get("class") == "clean" or r.get("app") == "medplum":
+        return False
+    faulted = [e for e in r.get("proxy") or [] if e.get("fault")]
+    return bool(faulted) and "refuse" not in faulted[0]["fault"] and not _app(r["app"]).save_accepted(faulted[0].get("status"))
+
+
 def rate(k: int, n: int) -> dict[str, Any]:
     lo, hi = wilson(k, n)
     return {"k": k, "n": n, "rate": round(k / n, 4) if n else None, "wilson95": [round(lo, 4), round(hi, 4)]}
@@ -119,6 +171,7 @@ def summary(rows: list[dict[str, Any]], with_boot: bool = True) -> dict[str, Any
         "pass3": pass_k(rows),
         "said_done": rate(len(said), n),
         "faults_not_delivered": sum(1 for r in rows if r.get("fault_delivered") is False),
+        "fault_hit_rejected_save": sum(1 for r in rows if rejected_save(r)),
         "run_limits": sum(1 for r in rows if (r.get("claim") or {}).get("stopped") and "cap" in str(r["claim"]["stopped"])),
         "cost_usd": round(sum(float(r.get("cost_usd") or 0) for r in rows), 4),
     }
@@ -134,6 +187,14 @@ def table(rows: list[dict[str, Any]], key: str) -> dict[str, dict[str, Any]]:
     return {k: {"runs": len(v), "said_done_record_wrong": rate(sum(map(misreport, v)), len(v)),
                 "pass": rate(sum(map(passed, v)), len(v)), "said_done": rate(sum(map(done, v)), len(v))}
             for k, v in sorted(by.items())}
+
+
+def rejected_by_class(rows: list[dict[str, Any]]) -> dict[str, int]:
+    out: dict[str, int] = defaultdict(int)
+    for r in scored(rows):
+        if r.get("class") != "clean":
+            out[str(r["class"])] += int(rejected_save(r))
+    return dict(sorted(out.items()))
 
 
 def build(public: Path, heldout: Optional[Path]) -> dict[str, Any]:
@@ -153,12 +214,18 @@ def build(public: Path, heldout: Optional[Path]) -> dict[str, Any]:
             "public": summary(mine),
             "by_app": {app: summary([r for r in mine if r["app"] == app], with_boot=False) for app in sorted({r["app"] for r in mine})},
             "by_class": table(mine, "class"),
+            "fault_hit_rejected_save_by_class": rejected_by_class(mine),
+            # Not planned in advance (added after review): only runs whose fault
+            # reached a committed write, and clean runs.
+            "sensitivity_fault_reached_committed_write": summary(
+                [r for r in mine if fault_reached(r) is not False], with_boot=False),
         }
         theirs = [r for r in hel if r["agent"] == a]
         if theirs:
             entry["heldout"] = summary(theirs)
             entry["heldout"]["excluded_infra"] = sum(1 for r in theirs if r.get("infra_error"))
             entry["heldout_by_class"] = table(theirs, "class")
+            entry["heldout_fault_hit_rejected_save_by_class"] = rejected_by_class(theirs)
             entry["pooled"] = summary(mine + theirs)
         doc["agents"][a] = entry
     return doc
