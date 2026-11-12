@@ -1,0 +1,83 @@
+{
+ "id": "RM-WV2",
+ "app": "redmine",
+ "class": "wrong_value",
+ "note": "The due date moves a month later.",
+ "agent_s": 43.2,
+ "cost_usd": 0.052346,
+ "claim": {
+  "status": "done",
+  "id": "66",
+  "note": "RESULT: DONE 66",
+  "claim_line": true,
+  "final_text": "RESULT: DONE 66",
+  "model_calls": 12,
+  "actions": 45,
+  "tokens_in": 112916,
+  "tokens_out": 819,
+  "end_url": "http://127.0.0.1:9861/issues/66"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "66"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794426735.394,
+   "method": "POST",
+   "path": "/login",
+   "save": false,
+   "status": 302,
+   "ms": 10
+  },
+  {
+   "t": 1794426746.912,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues/new.js",
+   "save": false,
+   "status": 200,
+   "ms": 30
+  },
+  {
+   "t": 1794426746.921,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues",
+   "save": true,
+   "fault": [
+    "set"
+   ],
+   "rewritten": [
+    "issue[due_date]"
+   ],
+   "status": 200,
+   "ms": 51
+  },
+  {
+   "t": 1794426776.111,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues",
+   "save": true,
+   "status": 302,
+   "ms": 31
+  }
+ ],
+ "saves_seen": 2,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 2,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 8.1,
+  "end": 10.2,
+  "waited_s": 0
+ }
+}

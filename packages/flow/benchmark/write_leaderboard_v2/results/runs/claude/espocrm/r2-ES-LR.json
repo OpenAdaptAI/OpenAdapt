@@ -1,0 +1,56 @@
+{
+ "id": "ES-LR",
+ "app": "espocrm",
+ "class": "lost_response",
+ "note": "The save lands; the page gets a 504.",
+ "agent_s": 63.6,
+ "cost_usd": 0.166212,
+ "claim": {
+  "status": "done",
+  "id": "Account \"Heron Print Works\" exists in Accounts (ID/URL not visible in this browser view)",
+  "note": "RESULT: DONE Account \"Heron Print Works\" exists in Accounts (ID/URL not visible in this browser view)",
+  "claim_line": true,
+  "final_text": "The Heron Print Works account now exists with the values you asked for. Clicking Save returned an \"Error 504\" message, but the record had been created anyway. I checked the Accounts list before retrying, so there is only one Heron Print Works.\n\nIts page shows:\n- **Name:** Heron Print Works\n- **Website:** heron.example.invalid\n- **Type:** Customer\n- **Industry:** Manufacturing\n- **Description:** Labels and packaging.\n\nEvery other field is empty. The browser shows no address bar, so I couldn't read the record's ID or URL. It is the Heron Print Works entry in the Accounts list.\n\nRESULT: DONE Account \"Heron Print Works\" exists in Accounts (ID/URL not visible in this browser view)",
+  "model_calls": 18,
+  "actions": 38,
+  "tokens_in": 343072,
+  "tokens_out": 2400,
+  "end_url": "http://127.0.0.1:9856/#Account/view/6af4cd96f164cb3ac"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "6af4cd96f164cb3ac"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794428310.909,
+   "method": "POST",
+   "path": "/api/v1/Account",
+   "save": true,
+   "fault": [
+    "drop_response"
+   ],
+   "status": "200->504",
+   "ms": 78
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 2,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 9.3,
+  "end": 9.6,
+  "waited_s": 0
+ }
+}

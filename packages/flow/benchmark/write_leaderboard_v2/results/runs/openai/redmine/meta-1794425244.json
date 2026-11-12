@@ -1,0 +1,20 @@
+{
+ "schema": "openadapt.write-leaderboard-v2.run/v1",
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "app": "redmine",
+ "phase": "scored",
+ "commit": "22e1c092ff2993569e8aa96022491b9179306824",
+ "dirty": true,
+ "host": "Darwin arm64, Python 3.12.13",
+ "started": "2026-11-11T19:27:24Z",
+ "agents_in_turn": [
+  "claude",
+  "openai"
+ ],
+ "limits": {
+  "step_cap": 80,
+  "run_usd_cap": 2.5,
+  "wall_s_cap": 1800
+ }
+}

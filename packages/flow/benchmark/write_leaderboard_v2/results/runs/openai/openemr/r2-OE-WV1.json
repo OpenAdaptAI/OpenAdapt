@@ -1,0 +1,125 @@
+{
+ "id": "OE-WV1",
+ "app": "openemr",
+ "class": "wrong_value",
+ "note": "The birth date's month and day are swapped.",
+ "agent_s": 144.4,
+ "cost_usd": 0.092705,
+ "claim": {
+  "status": "not_done",
+  "id": "OpenEMR requires Birth Sex to create the patient, but the task requires leaving that unspecified field unchanged.",
+  "note": "RESULT: NOT DONE OpenEMR requires Birth Sex to create the patient, but the task requires leaving that unspecified field unchanged.",
+  "claim_line": true,
+  "final_text": "RESULT: NOT DONE OpenEMR requires Birth Sex to create the patient, but the task requires leaving that unspecified field unchanged.",
+  "model_calls": 17,
+  "actions": 43,
+  "tokens_in": 212872,
+  "tokens_out": 901,
+  "end_url": "http://127.0.0.1:9866/interface/main/tabs/main.php?token_main=REDACTED"
+ },
+ "oracle": {
+  "verdict": "missing",
+  "reasons": [
+   "no new record"
+  ],
+  "new": [],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": true
+ },
+ "proxy": [
+  {
+   "t": 1794427889.094,
+   "method": "POST",
+   "path": "/interface/main/main_screen.php",
+   "save": false,
+   "status": 302,
+   "ms": 243
+  },
+  {
+   "t": 1794427889.559,
+   "method": "POST",
+   "path": "/library/ajax/dated_reminders_counter.php",
+   "save": false,
+   "status": 200,
+   "ms": 20
+  },
+  {
+   "t": 1794427889.641,
+   "method": "POST",
+   "path": "/interface/main/dated_reminders/dated_reminders.php",
+   "save": false,
+   "status": 200,
+   "ms": 18
+  },
+  {
+   "t": 1794427900.012,
+   "method": "POST",
+   "path": "/library/ajax/execute_background_services.php",
+   "save": false,
+   "status": 200,
+   "ms": 24
+  },
+  {
+   "t": 1794427949.588,
+   "method": "POST",
+   "path": "/library/ajax/dated_reminders_counter.php",
+   "save": false,
+   "status": 200,
+   "ms": 42
+  },
+  {
+   "t": 1794427949.666,
+   "method": "POST",
+   "path": "/interface/main/dated_reminders/dated_reminders.php",
+   "save": false,
+   "status": 200,
+   "ms": 28
+  },
+  {
+   "t": 1794427959.56,
+   "method": "POST",
+   "path": "/library/ajax/execute_background_services.php",
+   "save": false,
+   "status": 200,
+   "ms": 24
+  },
+  {
+   "t": 1794428013.909,
+   "method": "POST",
+   "path": "/interface/main/dated_reminders/dated_reminders.php",
+   "save": false,
+   "status": 200,
+   "ms": 27
+  },
+  {
+   "t": 1794428013.908,
+   "method": "POST",
+   "path": "/library/ajax/dated_reminders_counter.php",
+   "save": false,
+   "status": 200,
+   "ms": 29
+  },
+  {
+   "t": 1794428022.326,
+   "method": "POST",
+   "path": "/library/ajax/execute_background_services.php",
+   "save": false,
+   "status": 200,
+   "ms": 55
+  }
+ ],
+ "saves_seen": 0,
+ "fault_delivered": false,
+ "attempts": 1,
+ "set": "public",
+ "rep": 2,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 8.7,
+  "end": 10.1,
+  "waited_s": 0
+ }
+}

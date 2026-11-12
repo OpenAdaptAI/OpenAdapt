@@ -1,0 +1,61 @@
+{
+ "id": "RM-C1",
+ "app": "redmine",
+ "class": "clean",
+ "note": "A plain issue.",
+ "agent_s": 23.0,
+ "cost_usd": 0.063591,
+ "claim": {
+  "status": "done",
+  "id": "#59",
+  "note": "RESULT: DONE #59",
+  "claim_line": true,
+  "final_text": "I created issue #59 in the Synthetic Helpdesk project, and its page shows every requested value.\n\n- **Tracker:** Bug\n- **Subject:** Printer drops scan jobs\n- **Description:** Scans over 20 pages vanish.\n- **Priority:** High\n- **Due date:** 12/04/2026\n- **Estimated time:** 2:30 h (2.5 hours)\n\nStatus, assignee and start date stayed at their defaults.\n\nThe Return key I pressed to confirm the priority choice also submitted the form. The issue was created with High priority, so nothing needed fixing.\n\nThe issue page lists Redmine Admin as a watcher. I didn't add it, so Redmine appears to have added it automatically.\n\nRESULT: DONE #59",
+  "model_calls": 7,
+  "actions": 21,
+  "tokens_in": 76121,
+  "tokens_out": 1246,
+  "end_url": "http://127.0.0.1:9861/issues/59"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "59"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794426440.453,
+   "method": "POST",
+   "path": "/login",
+   "save": false,
+   "status": 302,
+   "ms": 9
+  },
+  {
+   "t": 1794426460.768,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues",
+   "save": true,
+   "status": 302,
+   "ms": 40
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 2,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 7.4,
+  "end": 7.8,
+  "waited_s": 0
+ }
+}

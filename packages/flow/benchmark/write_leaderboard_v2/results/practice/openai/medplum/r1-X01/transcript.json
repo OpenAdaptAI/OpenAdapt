@@ -1,0 +1,624 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a22180f61826d2d016af4bb0615cc87d289527240d24d54e9",
+     "call_id": "call_hEzi1dhCJnmpAYcBHx0LVAfG",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a22180f61826d2d016af4bb083dcc87d2b9afb0c577e91824",
+     "call_id": "call_x9MWWagw8KOQ5QEtRsP84hyo",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1149,
+       "y": 167
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a22180f61826d2d016af4bb0afa3c87d2a7a712b5aa99ce71",
+     "call_id": "call_WNPwxGIE7bHVfDO8KPulN5wX",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1233,
+       "y": 167
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a22180f61826d2d016af4bb0ea57c87d2b244d1db8d668d62",
+     "call_id": "call_2ti9TFZUkQQGINPtbNiBIc5v",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1233,
+       "y": 167
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a22180f61826d2d016af4bb12f35487d2b8cd4fb130ed5265",
+     "call_id": "call_BApb5zTnIrUkHSpQYibtWJUo",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 99,
+       "y": 131
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a22180f61826d2d016af4bb15427487d29afd8c6aca126f1e",
+     "call_id": "call_z73SsliUVIdHiB3izTvfTvsk",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 458,
+       "y": 335
+      },
+      {
+       "keys": [
+        "CTRL",
+        "A"
+       ],
+       "type": "keypress"
+      },
+      {
+       "text": "{\n  \"resourceType\": \"Patient\",\n  \"name\": [{\"family\": \"Haddad\", \"given\": [\"Noor\"]}],\n  \"birthDate\": \"1972-12-05\",\n  \"gender\": \"female\",\n  \"address\": [{\"line\": [\"3 Quarry Road\"], \"city\": \"Springfield\", \"state\": \"MA\", \"postalCode\": \"01109\"}],\n  \"telecom\": [\n    {\"system\": \"phone\", \"value\": \"413-555-0133\", \"use\": \"home\"},\n    {\"system\": \"email\", \"value\": \"noor.haddad@example.org\"}\n  ]\n}",
+       "type": "type"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a22180f61826d2d016af4bb1c4d7887d28d8a6541d14ee15c",
+     "call_id": "call_XKsVpy2PtFpJ7krDI0YH86DF",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "Control",
+        "a"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a22180f61826d2d016af4bb1e937c87d297eef0b7cf686183",
+     "call_id": "call_dm6hVC6bQHmfJaqkH2F8nCMK",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "a"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a22180f61826d2d016af4bb226fd487d29f39bfe0665ec1a4",
+     "call_id": "call_6kxoG4ifRqzzf8kDJSTnCntS",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "A"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a22180f61826d2d016af4bb25429c87d2bd62b777be13a275",
+     "call_id": "call_rE4heGz22v4fOnspsqflGuUX",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CMD",
+        "A"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a22180f61826d2d016af4bb2807bc87d2b2cf06b68e069687",
+     "call_id": "call_0Y2gsC7IzrkMw9tE8VCtKvMQ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "text": "{\n  \"resourceType\": \"Patient\",\n  \"name\": [{\"family\": \"Haddad\", \"given\": [\"Noor\"]}],\n  \"birthDate\": \"1972-12-05\",\n  \"gender\": \"female\",\n  \"address\": [{\"line\": [\"3 Quarry Road\"], \"city\": \"Springfield\", \"state\": \"MA\", \"postalCode\": \"01109\"}],\n  \"telecom\": [\n    {\"system\": \"phone\", \"value\": \"413-555-0133\", \"use\": \"home\"},\n    {\"system\": \"email\", \"value\": \"noor.haddad@example.org\"}\n  ]\n}",
+       "type": "type"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a22180f61826d2d016af4bb2e2a1887d28e5864a5edf6c577",
+     "call_id": "call_69ZLCs4oYDd5TjlOJycZsyRF",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1057,
+       "y": 717
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a22180f61826d2d016af4bb31aa9487d2be14cd270981e223",
+     "call_id": "call_310dwex115WTsrLjnRxhy287",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": 494,
+       "type": "scroll",
+       "x": 1142,
+       "y": 659
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a22180f61826d2d016af4bb36597487d2b585d11cd2334d96",
+     "call_id": "call_3cvASwhI50Z9hSQrYhmsOdBI",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1058,
+       "y": 732
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a22180f61826d2d016af4bb3ab4c487d2b27fc86416b275cb",
+     "call_id": "call_EwQ6kx8yNCGyHf2EnMMu6u7p",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a22180f61826d2d016af4bb3d331087d2a0ac3f9a0f9eb017",
+     "call_id": "call_en9CeeP8OIzAHSerdaC1m1bx",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a22180f61826d2d016af4bb40a97487d2971bc55aea55aa16",
+     "call_id": "call_yLOn0xZUJcV1jeTywDxx5rPj",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 473,
+       "y": 150
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a22180f61826d2d016af4bb442a2087d2a56968b938d6f1f3",
+     "call_id": "call_1jikLXTmiil7BMAkRRd0bsTu",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a22180f61826d2d016af4bb47da7c87d2bc2a412c7d18aadd",
+     "call_id": "call_XDln8qCdvHp0UNNMyBiGO2sH",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": 474,
+       "type": "scroll",
+       "x": 1142,
+       "y": 664
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: DONE Patient/deb643a1-d892-4aa6-8561-64ac928e744c",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 1149,
+   "y": 167,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 1233,
+   "y": 167,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1233,
+   "y": 167,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 99,
+   "y": 131,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 458,
+   "y": 335,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "A"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "{\n  \"resourceType\": \"Patient\",\n  \"name\": [{\"family\": \"Haddad\", \"given\": [\"Noor\"]}],\n  \"birthDate\": \"1972-12-05\",\n  \"gender\": \"female\",\n  \"address\": [{\"line\": [\"3 Quarry Road\"], \"city\": \"Springfield\", \"state\": \"MA\", \"postalCode\": \"01109\"}],\n  \"telecom\": [\n    {\"system\": \"phone\", \"value\": \"413-555-0133\", \"use\": \"home\"},\n    {\"system\": \"email\", \"value\": \"noor.haddad@example.org\"}\n  ]\n}"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Control",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "A"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CMD",
+    "A"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "{\n  \"resourceType\": \"Patient\",\n  \"name\": [{\"family\": \"Haddad\", \"given\": [\"Noor\"]}],\n  \"birthDate\": \"1972-12-05\",\n  \"gender\": \"female\",\n  \"address\": [{\"line\": [\"3 Quarry Road\"], \"city\": \"Springfield\", \"state\": \"MA\", \"postalCode\": \"01109\"}],\n  \"telecom\": [\n    {\"system\": \"phone\", \"value\": \"413-555-0133\", \"use\": \"home\"},\n    {\"system\": \"email\", \"value\": \"noor.haddad@example.org\"}\n  ]\n}"
+  },
+  {
+   "a": "click",
+   "x": 1057,
+   "y": 717,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 1142,
+   "y": 659,
+   "dx": 0,
+   "dy": 494
+  },
+  {
+   "a": "click",
+   "x": 1058,
+   "y": 732,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 473,
+   "y": 150,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 1142,
+   "y": 664,
+   "dx": 0,
+   "dy": 474
+  }
+ ],
+ "usage": [
+  {
+   "in": 2316,
+   "out": 15,
+   "usd": 0.004782,
+   "cached": 0
+  },
+  {
+   "in": 3533,
+   "out": 32,
+   "usd": 0.003223,
+   "cached": 2313
+  },
+  {
+   "in": 4790,
+   "out": 36,
+   "usd": 0.003586,
+   "cached": 3530
+  },
+  {
+   "in": 6055,
+   "out": 49,
+   "usd": 0.003983,
+   "cached": 4787
+  },
+  {
+   "in": 7329,
+   "out": 31,
+   "usd": 0.004074,
+   "cached": 6052
+  },
+  {
+   "in": 8585,
+   "out": 208,
+   "usd": 0.006063,
+   "cached": 7326
+  },
+  {
+   "in": 10026,
+   "out": 43,
+   "usd": 0.005034,
+   "cached": 8582
+  },
+  {
+   "in": 11290,
+   "out": 26,
+   "usd": 0.004799,
+   "cached": 10023
+  },
+  {
+   "in": 12537,
+   "out": 54,
+   "usd": 0.005297,
+   "cached": 11287
+  },
+  {
+   "in": 13812,
+   "out": 40,
+   "usd": 0.005463,
+   "cached": 12534
+  },
+  {
+   "in": 15073,
+   "out": 181,
+   "usd": 0.0071,
+   "cached": 13809
+  },
+  {
+   "in": 16475,
+   "out": 32,
+   "usd": 0.006144,
+   "cached": 15070
+  },
+  {
+   "in": 17732,
+   "out": 38,
+   "usd": 0.006194,
+   "cached": 16472
+  },
+  {
+   "in": 18995,
+   "out": 32,
+   "usd": 0.006398,
+   "cached": 17729
+  },
+  {
+   "in": 20252,
+   "out": 18,
+   "usd": 0.006498,
+   "cached": 18992
+  },
+  {
+   "in": 21480,
+   "out": 15,
+   "usd": 0.006662,
+   "cached": 20249
+  },
+  {
+   "in": 22708,
+   "out": 31,
+   "usd": 0.007067,
+   "cached": 21477
+  },
+  {
+   "in": 23964,
+   "out": 15,
+   "usd": 0.007209,
+   "cached": 22705
+  },
+  {
+   "in": 25192,
+   "out": 38,
+   "usd": 0.007634,
+   "cached": 23961
+  },
+  {
+   "in": 26455,
+   "out": 29,
+   "usd": 0.00786,
+   "cached": 25189
+  }
+ ]
+}

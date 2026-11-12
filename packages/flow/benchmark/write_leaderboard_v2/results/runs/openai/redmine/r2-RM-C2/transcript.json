@@ -1,0 +1,496 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0ac120b9ccc59736016af4c6b3c4ec87d29dc3cf41ac149990",
+     "call_id": "call_jXcdwzD9SCQXF2Dh1smGHlWX",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0ac120b9ccc59736016af4c6b71d4087d2aa915aeae52a564b",
+     "call_id": "call_f1aZDBFzXXdqHqGeHJz2bStM",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 23,
+       "y": 94
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0ac120b9ccc59736016af4c6b9382487d29c24c0ae8fc3a00c",
+     "call_id": "call_VcoScAbRRB6feeg7QUs79bSg",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 51,
+       "y": 120
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0ac120b9ccc59736016af4c6bb7e1c87d2a8d6d23732ddcfe4",
+     "call_id": "call_DiOCo0Uezyawlsq7851h0PKE",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 242,
+       "y": 177
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0ac120b9ccc59736016af4c6bf29dc87d28ba5cc943db399ac",
+     "call_id": "call_P2SUVxMwOuNhqLcLxyu4LJgH",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 242,
+       "y": 183
+      },
+      {
+       "keys": [
+        "s"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ENTER"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0ac120b9ccc59736016af4c6c1bcb487d2a3eb4f93c4d85851",
+     "call_id": "call_G8UjdbGIqadSPKM80K3DgE1S",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 377,
+       "y": 280
+      },
+      {
+       "text": "New starter needs a laptop",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 390,
+       "y": 399
+      },
+      {
+       "text": "Starts on the first of the month.",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 855,
+       "y": 619
+      },
+      {
+       "text": "1.5",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 847,
+       "y": 585
+      },
+      {
+       "keys": [
+        "ARROWLEFT"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0ac120b9ccc59736016af4c6c5d6c487d2a7ff4a62670015c2",
+     "call_id": "call_d9QViByDMiUvue5A4w81UEX3",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "text": "2026",
+       "type": "type"
+      },
+      {
+       "keys": [
+        "ARROWRIGHT"
+       ],
+       "type": "keypress"
+      },
+      {
+       "text": "12",
+       "type": "type"
+      },
+      {
+       "keys": [
+        "ARROWRIGHT"
+       ],
+       "type": "keypress"
+      },
+      {
+       "text": "01",
+       "type": "type"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0ac120b9ccc59736016af4c6c93b4c87d29cddcb122df6f26d",
+     "call_id": "call_95vYc5I3V2atfnQ9ADtHJveD",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "ARROWLEFT"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "1"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "2"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "TAB"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0ac120b9ccc59736016af4c6cbeae887d296a69db7a487816a",
+     "call_id": "call_l7M2vYXta1I01gVuQLhUQjVJ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 41,
+       "y": 793
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0ac120b9ccc59736016af4c6cf0e3887d29f29957f5e13b04e",
+     "call_id": "call_5qnrsbCqJoosVgxOYuWQqvpp",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: DONE 62",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 23,
+   "y": 94,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 51,
+   "y": 120,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 242,
+   "y": 177,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 242,
+   "y": 183,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "s"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ENTER"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 377,
+   "y": 280,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "New starter needs a laptop"
+  },
+  {
+   "a": "click",
+   "x": 390,
+   "y": 399,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Starts on the first of the month."
+  },
+  {
+   "a": "click",
+   "x": 855,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "1.5"
+  },
+  {
+   "a": "click",
+   "x": 847,
+   "y": 585,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ARROWLEFT"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "2026"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ARROWRIGHT"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "12"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ARROWRIGHT"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "01"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ARROWLEFT"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "1"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "2"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "TAB"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 41,
+   "y": 793,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  }
+ ],
+ "usage": [
+  {
+   "in": 2219,
+   "out": 24,
+   "usd": 0.000689,
+   "cached": 2216
+  },
+  {
+   "in": 3436,
+   "out": 31,
+   "usd": 0.001003,
+   "cached": 3433
+  },
+  {
+   "in": 4692,
+   "out": 31,
+   "usd": 0.003515,
+   "cached": 3433
+  },
+  {
+   "in": 5948,
+   "out": 31,
+   "usd": 0.003766,
+   "cached": 4689
+  },
+  {
+   "in": 7204,
+   "out": 49,
+   "usd": 0.004197,
+   "cached": 5945
+  },
+  {
+   "in": 8486,
+   "out": 127,
+   "usd": 0.00528,
+   "cached": 7201
+  },
+  {
+   "in": 9877,
+   "out": 64,
+   "usd": 0.005125,
+   "cached": 8483
+  },
+  {
+   "in": 11178,
+   "out": 67,
+   "usd": 0.005253,
+   "cached": 9874
+  },
+  {
+   "in": 12478,
+   "out": 31,
+   "usd": 0.005151,
+   "cached": 11175
+  },
+  {
+   "in": 13734,
+   "out": 18,
+   "usd": 0.005193,
+   "cached": 12475
+  },
+  {
+   "in": 14962,
+   "out": 9,
+   "usd": 0.005298,
+   "cached": 13731
+  }
+ ]
+}

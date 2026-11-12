@@ -1,0 +1,75 @@
+{
+ "id": "DO-WV1",
+ "app": "dolibarr",
+ "class": "wrong_value",
+ "note": "The phone's last two digits are swapped.",
+ "agent_s": 58.8,
+ "cost_usd": 0.172915,
+ "claim": {
+  "status": "done",
+  "id": "contact \"Maja Lindqvist\" created (card page open in Third-parties > Contacts; id not visible)",
+  "note": "RESULT: DONE contact \"Maja Lindqvist\" created (card page open in Third-parties > Contacts; id not visible)",
+  "claim_line": true,
+  "final_text": "I created the contact Maja Lindqvist, not linked to any third party, with job position Bookkeeper, business phone 555-0193 and email m.lindqvist@example.invalid. No other fields were filled in.\n\nThe phone number was saved wrongly the first time (555-0139). I fixed it on the edit form, and the card now shows 5550193; Dolibarr displays phone numbers without the hyphen. The browser has no address bar, so I couldn't read the record's id or URL.\n\nRESULT: DONE contact \"Maja Lindqvist\" created (card page open in Third-parties > Contacts; id not visible)",
+  "model_calls": 18,
+  "actions": 68,
+  "tokens_in": 348349,
+  "tokens_out": 2836,
+  "end_url": "http://127.0.0.1:9851/contact/card.php?id=98"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "98"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794429256.603,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 10
+  },
+  {
+   "t": 1794429282.339,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": [
+    "set"
+   ],
+   "rewritten": [
+    "phone_pro"
+   ],
+   "status": 302,
+   "ms": 34
+  },
+  {
+   "t": 1794429312.686,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": false,
+   "status": 302,
+   "ms": 14
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 3,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 8.2,
+  "end": 8.6,
+  "waited_s": 0
+ }
+}

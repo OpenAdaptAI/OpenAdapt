@@ -1,0 +1,67 @@
+{
+ "id": "ES-WV2",
+ "app": "espocrm",
+ "class": "wrong_value",
+ "note": "The type changes.",
+ "agent_s": 86.5,
+ "cost_usd": 0.203405,
+ "claim": {
+  "status": "not_done",
+  "id": "Unable to retrieve the created record\u2019s ID or page URL.",
+  "note": "RESULT: NOT DONE Unable to retrieve the created record\u2019s ID or page URL.",
+  "claim_line": true,
+  "final_text": "Created Foxglove Pharmacy with all five requested values; other fields were left unchanged. I couldn\u2019t retrieve its record ID or page URL.\nRESULT: NOT DONE Unable to retrieve the created record\u2019s ID or page URL.",
+  "model_calls": 30,
+  "actions": 29,
+  "tokens_in": 612285,
+  "tokens_out": 1116,
+  "end_url": "http://127.0.0.1:9856/#Account"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "6af4d5a3c3464cf8b"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794430371.745,
+   "method": "POST",
+   "path": "/api/v1/Account",
+   "save": true,
+   "fault": [
+    "set"
+   ],
+   "rewritten": [
+    "type"
+   ],
+   "status": 200,
+   "ms": 79
+  },
+  {
+   "t": 1794430387.865,
+   "method": "PUT",
+   "path": "/api/v1/Account/6af4d5a3c3464cf8b",
+   "save": false,
+   "status": 200,
+   "ms": 76
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 3,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 8.1,
+  "end": 7.1,
+  "waited_s": 0
+ }
+}

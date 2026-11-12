@@ -1,0 +1,83 @@
+{
+ "id": "DO-WV2",
+ "app": "dolibarr",
+ "class": "wrong_value",
+ "note": "The email's domain changes.",
+ "agent_s": 87.6,
+ "cost_usd": 0.189403,
+ "claim": {
+  "status": "done",
+  "id": "4",
+  "note": "RESULT: DONE 4",
+  "claim_line": true,
+  "final_text": "RESULT: DONE 4",
+  "model_calls": 28,
+  "actions": 46,
+  "tokens_in": 545890,
+  "tokens_out": 1407,
+  "end_url": "http://127.0.0.1:9851/contact/list.php?restore_lastsearch_values=1"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "101"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794429443.356,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 7
+  },
+  {
+   "t": 1794429457.672,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": [
+    "set"
+   ],
+   "rewritten": [
+    "email"
+   ],
+   "status": 302,
+   "ms": 9
+  },
+  {
+   "t": 1794429467.517,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": false,
+   "status": 200,
+   "ms": 22
+  },
+  {
+   "t": 1794429513.93,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": false,
+   "status": 302,
+   "ms": 10
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 3,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 6.5,
+  "end": 6.5,
+  "waited_s": 0
+ }
+}

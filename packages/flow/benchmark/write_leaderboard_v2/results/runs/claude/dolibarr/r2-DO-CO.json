@@ -1,0 +1,77 @@
+{
+ "id": "DO-CO",
+ "app": "dolibarr",
+ "class": "collateral",
+ "note": "With the save",
+ "agent_s": 37.8,
+ "cost_usd": 0.079682,
+ "claim": {
+  "status": "done",
+  "id": "contact \"Jiwoo Kim\" created (id not captured)",
+  "note": "RESULT: DONE contact \"Jiwoo Kim\" created (id not captured)",
+  "claim_line": true,
+  "final_text": "I created the contact Jiwoo Kim, not linked to any third party. Job position is Logistics planner, professional phone is 555-0198, and email is j.kim@example.invalid. I left every other field at its default.\n\nThe contact page shows the phone as 5550198, but the edit form confirms the stored value is 555-0198. I opened Modify only to check this and cancelled without saving. I didn't capture the record's id or URL, so the line below doesn't include one.\n\nRESULT: DONE contact \"Jiwoo Kim\" created (id not captured)",
+  "model_calls": 9,
+  "actions": 27,
+  "tokens_in": 111915,
+  "tokens_out": 1429,
+  "end_url": "http://127.0.0.1:9851/contact/card.php?id=79"
+ },
+ "oracle": {
+  "verdict": "wrong",
+  "reasons": [
+   "other records changed: ['62']"
+  ],
+  "new": [
+   "79"
+  ],
+  "deleted": [],
+  "changed": [
+   "62"
+  ],
+  "collateral": true,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794428561.678,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 8
+  },
+  {
+   "t": 1794428585.033,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": [
+    "side_write"
+   ],
+   "status": 302,
+   "side_write": "done",
+   "ms": 150
+  },
+  {
+   "t": 1794428597.975,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": false,
+   "status": 302,
+   "ms": 8
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 2,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 8.1,
+  "end": 7.1,
+  "waited_s": 0
+ }
+}

@@ -1,0 +1,432 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      217,
+      95
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "No existing duplicate (only open shown, but fine).",
+   "actions": [
+    {
+     "coordinate": [
+      888,
+      133
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Tracker is already Bug. Priority is a select; I'll use keyboard.",
+   "actions": [
+    {
+     "coordinate": [
+      700,
+      213
+     ]
+    },
+    {
+     "text": "Door chime rings twice"
+    },
+    {
+     "coordinate": [
+      700,
+      340
+     ]
+    },
+    {
+     "text": "The front door chime repeats."
+    },
+    {
+     "coordinate": [
+      850,
+      518
+     ]
+    },
+    {
+     "text": "12092026"
+    },
+    {
+     "coordinate": [
+      855,
+      552
+     ]
+    },
+    {
+     "text": "0.5"
+    },
+    {
+     "coordinate": [
+      333,
+      484
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      841,
+      522
+     ]
+    },
+    {
+     "text": "20261209"
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": [
+      640,
+      430,
+      1000,
+      610
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Date is correct. Now priority.",
+   "actions": [
+    {
+     "coordinate": [
+      333,
+      488
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Dropdown may not render in screenshot; try keyboard.",
+   "actions": [
+    {
+     "text": "Low"
+    },
+    {
+     "text": "Return"
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      768,
+      184
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      701,
+      290
+     ]
+    },
+    {
+     "text": "0:30"
+    },
+    {
+     "region": [
+      500,
+      270,
+      960,
+      310
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      44,
+      714
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I created issue #88 in Synthetic Helpdesk with every requested value: Bug, subject \"Door chime rings twice\", description \"The front door chime repeats.\", priority Low, due date 2026-12-09 and estimated time 0:30 h (0.5 hours). All other fields were left at their defaults.\n\nThe first save stored the estimated time as 5:00 h. I edited the issue and corrected it to 0:30 h, so the issue's history shows one \"Estimated time changed from 5:00 h to 0:30 h\" entry.\n\nRESULT: DONE 88",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 217,
+   "y": 95,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 888,
+   "y": 133,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 213,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Door chime rings twice"
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 340,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "The front door chime repeats."
+  },
+  {
+   "a": "click",
+   "x": 850,
+   "y": 518,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "12092026"
+  },
+  {
+   "a": "click",
+   "x": 855,
+   "y": 552,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "0.5"
+  },
+  {
+   "a": "click",
+   "x": 333,
+   "y": 484,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 841,
+   "y": 522,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "20261209"
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 333,
+   "y": 488,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "type",
+   "text": "Low"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Return"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 768,
+   "y": 184,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 701,
+   "y": 290,
+   "button": "left",
+   "count": 3,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "0:30"
+  },
+  {
+   "a": "click",
+   "x": 44,
+   "y": 714,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6157,
+   "out": 92,
+   "usd": 0.01631,
+   "cached": 0
+  },
+  {
+   "in": 7653,
+   "out": 116,
+   "usd": 0.00614,
+   "cached": 6153
+  },
+  {
+   "in": 9167,
+   "out": 295,
+   "usd": 0.008269,
+   "cached": 7651
+  },
+  {
+   "in": 10956,
+   "out": 199,
+   "usd": 0.008299,
+   "cached": 9165
+  },
+  {
+   "in": 12563,
+   "out": 118,
+   "usd": 0.007392,
+   "cached": 10954
+  },
+  {
+   "in": 14071,
+   "out": 128,
+   "usd": 0.007566,
+   "cached": 12561
+  },
+  {
+   "in": 15606,
+   "out": 174,
+   "usd": 0.008395,
+   "cached": 14069
+  },
+  {
+   "in": 17170,
+   "out": 171,
+   "usd": 0.008745,
+   "cached": 15604
+  },
+  {
+   "in": 18738,
+   "out": 106,
+   "usd": 0.008418,
+   "cached": 17168
+  },
+  {
+   "in": 20234,
+   "out": 185,
+   "usd": 0.009341,
+   "cached": 18736
+  }
+ ]
+}

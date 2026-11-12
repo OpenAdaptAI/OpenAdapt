@@ -1,0 +1,746 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c6e95cf4fecf2e8016af4c554ad0087d2b18fa9202b3b4848",
+     "call_id": "call_ZaLawLQtQkTgLdRDCMKZa7gr",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c6e95cf4fecf2e8016af4c55750c487d29fccec8bc0ab45fa",
+     "call_id": "call_QLQ3DDLOAHT6olWSFlyLNqmy",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 802,
+       "y": 703
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 78,
+       "y": 169
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c6e95cf4fecf2e8016af4c559d90887d2a84f0496b3467f6b",
+     "call_id": "call_TY9aRafBMkGqBdfBsiGssbQu",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 405,
+       "y": 31
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c6e95cf4fecf2e8016af4c55d341487d29130b90b18049eef",
+     "call_id": "call_WNOWNPrn2MjFPDq097P5tByF",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 436,
+       "y": 66
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c6e95cf4fecf2e8016af4c560542887d2bdbbd73539b07c71",
+     "call_id": "call_pImnWAPdTgmnEkSTkz8OH3IX",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 439,
+       "y": 317
+      },
+      {
+       "text": "Amara",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 650,
+       "y": 317
+      },
+      {
+       "text": "Nwosu",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 421,
+       "y": 432
+      },
+      {
+       "text": "2001-08-14",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1010,
+       "y": 466
+      },
+      {
+       "keys": [
+        "f"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ENTER"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c6e95cf4fecf2e8016af4c5635c2487d2b33d57665e2c00f5",
+     "call_id": "call_uLDZ1kUshefgRWWUyHsKFNIZ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": 552,
+       "type": "scroll",
+       "x": 1149,
+       "y": 691
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c6e95cf4fecf2e8016af4c565ee3c87d2b9bfa338fea890c8",
+     "call_id": "call_dVnsoaAETYRDY4ry6l7DaI9E",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 209,
+       "y": 467
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c6e95cf4fecf2e8016af4c56854ec87d29710c2ea58b12ef1",
+     "call_id": "call_Z8nWpTWdbaSnvoqj9P9VLlgt",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      },
+      {
+       "scroll_x": 0,
+       "scroll_y": 303,
+       "type": "scroll",
+       "x": 1134,
+       "y": 647
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c6e95cf4fecf2e8016af4c56c4a6c87d28e28aa259acd5533",
+     "call_id": "call_YoGs6sPPupJ8TDbeX8Ompunj",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 461,
+       "y": 217
+      },
+      {
+       "text": "3 Willow Way",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 443,
+       "y": 253
+      },
+      {
+       "text": "Springfield",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 414,
+       "y": 291
+      },
+      {
+       "text": "01107",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1000,
+       "y": 254
+      },
+      {
+       "keys": [
+        "m"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c6e95cf4fecf2e8016af4c56eeda087d2a2396d82d4bda435",
+     "call_id": "call_scKbNmnpotCQO1GtuLML0pLe",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "m"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "m"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ENTER"
+       ],
+       "type": "keypress"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 452,
+       "y": 405
+      },
+      {
+       "text": "413-555-0177",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1010,
+       "y": 437
+      },
+      {
+       "text": "a.nwosu@example.invalid",
+       "type": "type"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c6e95cf4fecf2e8016af4c572b51087d2bc296a2c6782d1a4",
+     "call_id": "call_g8Sdi4zOCGoYr9lLOZliFCPF",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": 415,
+       "type": "scroll",
+       "x": 1149,
+       "y": 681
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c6e95cf4fecf2e8016af4c57566b887d2a0ffa481dc92a536",
+     "call_id": "call_OmsmQzuDv45deUP31YeKgxZq",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 278,
+       "y": 772
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c6e95cf4fecf2e8016af4c577cb0c87d28433b5e63cd8e8cd",
+     "call_id": "call_dhu5xJU2DOjL1AZJgYHdFNjL",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c6e95cf4fecf2e8016af4c57afc8c87d28e28d650e1ebf46d",
+     "call_id": "call_HAq0SZim7cYW5atRvi4ZXbwa",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c6e95cf4fecf2e8016af4c57e643487d2a18f3c2686841323",
+     "call_id": "call_NhvFc37dOvAiQYVjurL8c48W",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": -1600,
+       "type": "scroll",
+       "x": 1145,
+       "y": 370
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE OpenEMR requires Birth Sex to create the patient, but the task requires leaving that field unchanged.",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 802,
+   "y": 703,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 78,
+   "y": 169,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 405,
+   "y": 31,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 436,
+   "y": 66,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 439,
+   "y": 317,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Amara"
+  },
+  {
+   "a": "click",
+   "x": 650,
+   "y": 317,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Nwosu"
+  },
+  {
+   "a": "click",
+   "x": 421,
+   "y": 432,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "2001-08-14"
+  },
+  {
+   "a": "click",
+   "x": 1010,
+   "y": 466,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "f"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ENTER"
+   ]
+  },
+  {
+   "a": "scroll",
+   "x": 1149,
+   "y": 691,
+   "dx": 0,
+   "dy": 552
+  },
+  {
+   "a": "click",
+   "x": 209,
+   "y": 467,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "scroll",
+   "x": 1134,
+   "y": 647,
+   "dx": 0,
+   "dy": 303
+  },
+  {
+   "a": "click",
+   "x": 461,
+   "y": 217,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "3 Willow Way"
+  },
+  {
+   "a": "click",
+   "x": 443,
+   "y": 253,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Springfield"
+  },
+  {
+   "a": "click",
+   "x": 414,
+   "y": 291,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "01107"
+  },
+  {
+   "a": "click",
+   "x": 1000,
+   "y": 254,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "m"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "m"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "m"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ENTER"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 452,
+   "y": 405,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "413-555-0177"
+  },
+  {
+   "a": "click",
+   "x": 1010,
+   "y": 437,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "a.nwosu@example.invalid"
+  },
+  {
+   "a": "scroll",
+   "x": 1149,
+   "y": 681,
+   "dx": 0,
+   "dy": 415
+  },
+  {
+   "a": "click",
+   "x": 278,
+   "y": 772,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "scroll",
+   "x": 1145,
+   "y": 370,
+   "dx": 0,
+   "dy": -1600
+  }
+ ],
+ "usage": [
+  {
+   "in": 2250,
+   "out": 20,
+   "usd": 0.0047,
+   "cached": 0
+  },
+  {
+   "in": 3467,
+   "out": 47,
+   "usd": 0.003359,
+   "cached": 2247
+  },
+  {
+   "in": 4747,
+   "out": 35,
+   "usd": 0.003609,
+   "cached": 3464
+  },
+  {
+   "in": 6011,
+   "out": 31,
+   "usd": 0.003793,
+   "cached": 4744
+  },
+  {
+   "in": 7267,
+   "out": 130,
+   "usd": 0.00502,
+   "cached": 6008
+  },
+  {
+   "in": 8666,
+   "out": 38,
+   "usd": 0.004637,
+   "cached": 7264
+  },
+  {
+   "in": 9929,
+   "out": 31,
+   "usd": 0.004575,
+   "cached": 8663
+  },
+  {
+   "in": 11185,
+   "out": 42,
+   "usd": 0.004923,
+   "cached": 9926
+  },
+  {
+   "in": 12456,
+   "out": 117,
+   "usd": 0.005954,
+   "cached": 11182
+  },
+  {
+   "in": 13838,
+   "out": 101,
+   "usd": 0.006271,
+   "cached": 12453
+  },
+  {
+   "in": 15192,
+   "out": 49,
+   "usd": 0.005971,
+   "cached": 13835
+  },
+  {
+   "in": 16466,
+   "out": 31,
+   "usd": 0.005902,
+   "cached": 15189
+  },
+  {
+   "in": 17722,
+   "out": 19,
+   "usd": 0.006001,
+   "cached": 16463
+  },
+  {
+   "in": 18962,
+   "out": 20,
+   "usd": 0.00623,
+   "cached": 17719
+  },
+  {
+   "in": 20190,
+   "out": 53,
+   "usd": 0.006784,
+   "cached": 18959
+  },
+  {
+   "in": 21468,
+   "out": 50,
+   "usd": 0.007099,
+   "cached": 20187
+  }
+ ]
+}

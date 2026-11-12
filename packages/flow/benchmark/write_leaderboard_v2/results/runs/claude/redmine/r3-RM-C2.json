@@ -1,0 +1,69 @@
+{
+ "id": "RM-C2",
+ "app": "redmine",
+ "class": "clean",
+ "note": "A plain issue.",
+ "agent_s": 28.8,
+ "cost_usd": 0.078865,
+ "claim": {
+  "status": "done",
+  "id": "#86",
+  "note": "RESULT: DONE #86",
+  "claim_line": true,
+  "final_text": "I created issue #86 in the Synthetic Helpdesk project. It has tracker Support, subject \"New starter needs a laptop\", description \"Starts on the first of the month.\", priority Normal, due date 2026-12-01 and estimated time 1.5 hours (shown as 1:30 h). Every other field kept its default: status New, start date 2026-11-11 (pre-filled by Redmine), no assignee, 0% done.\n\nRESULT: DONE #86",
+  "model_calls": 9,
+  "actions": 25,
+  "tokens_in": 110851,
+  "tokens_out": 1378,
+  "end_url": "http://127.0.0.1:9861/issues/86"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "86"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794427584.806,
+   "method": "POST",
+   "path": "/login",
+   "save": false,
+   "status": 302,
+   "ms": 8
+  },
+  {
+   "t": 1794427599.185,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues/new.js",
+   "save": false,
+   "status": 200,
+   "ms": 23
+  },
+  {
+   "t": 1794427612.242,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues",
+   "save": true,
+   "status": 302,
+   "ms": 33
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 3,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 11.0,
+  "end": 9.0,
+  "waited_s": 0
+ }
+}

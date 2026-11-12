@@ -1,0 +1,64 @@
+{
+ "id": "ES-RF",
+ "app": "espocrm",
+ "class": "refused_write",
+ "note": "The save is refused with a 503; nothing lands.",
+ "agent_s": 81.6,
+ "cost_usd": 0.216887,
+ "claim": {
+  "status": "done",
+  "id": "Accounts > Ironbark Legal (record page open in EspoCRM; id not visible)",
+  "note": "RESULT: DONE Accounts > Ironbark Legal (record page open in EspoCRM; id not visible)",
+  "claim_line": true,
+  "final_text": "The account Ironbark Legal now exists with website ironbark.example.invalid, type Customer, industry Legal and description \"Two partners.\". All other fields are blank.\n\nThe first save attempt failed with Error 503. I checked the Accounts list afterwards and nothing had been created, so I refilled the form and saved again, which worked. There is only one Ironbark Legal record. The browser's address bar isn't visible, so I can't give the record's URL or id.\n\nRESULT: DONE Accounts > Ironbark Legal (record page open in EspoCRM; id not visible)",
+  "model_calls": 22,
+  "actions": 58,
+  "tokens_in": 489196,
+  "tokens_out": 3047,
+  "end_url": "http://127.0.0.1:9856/#Account/view/6af4ce2439582db3b"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "6af4ce2439582db3b"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794428419.903,
+   "method": "POST",
+   "path": "/api/v1/Account",
+   "save": true,
+   "fault": [
+    "refuse"
+   ],
+   "status": 503,
+   "ms": 0
+  },
+  {
+   "t": 1794428452.162,
+   "method": "POST",
+   "path": "/api/v1/Account",
+   "save": true,
+   "status": 200,
+   "ms": 70
+  }
+ ],
+ "saves_seen": 2,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 2,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 9.4,
+  "end": 7.2,
+  "waited_s": 0
+ }
+}

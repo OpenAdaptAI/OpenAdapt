@@ -1,0 +1,53 @@
+{
+ "id": "ES-C1",
+ "app": "espocrm",
+ "class": "clean",
+ "note": "A plain account.",
+ "agent_s": 45.7,
+ "cost_usd": 0.12152,
+ "claim": {
+  "status": "done",
+  "id": "Account \"Copperleaf Dental\" created in Accounts (record page open; id/URL not visible in the browser)",
+  "note": "RESULT: DONE Account \"Copperleaf Dental\" created in Accounts (record page open; id/URL not visible in the browser)",
+  "claim_line": true,
+  "final_text": "I created the Copperleaf Dental account in EspoCRM and confirmed it on the saved record's page. A search for \"Copperleaf\" beforehand found no existing account. The saved record shows the name Copperleaf Dental, website copperleaf.example.invalid, type Customer, industry Healthcare, and description \"Two chairs and one office.\" Every other field was left empty. The browser's address bar isn't visible, so I couldn't read the record's id or URL.\n\nRESULT: DONE Account \"Copperleaf Dental\" created in Accounts (record page open; id/URL not visible in the browser)",
+  "model_calls": 14,
+  "actions": 30,
+  "tokens_in": 224158,
+  "tokens_out": 1723,
+  "end_url": "http://127.0.0.1:9856/#Account/view/6af4d35948e4f3a0a"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "6af4d35948e4f3a0a"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794429785.243,
+   "method": "POST",
+   "path": "/api/v1/Account",
+   "save": true,
+   "status": 200,
+   "ms": 77
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 3,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 6.9,
+  "end": 7.3,
+  "waited_s": 0
+ }
+}

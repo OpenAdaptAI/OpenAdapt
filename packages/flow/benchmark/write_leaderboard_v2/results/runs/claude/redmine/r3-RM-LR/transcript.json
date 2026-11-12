@@ -1,0 +1,582 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      23,
+      95
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      52,
+      121
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      700,
+      211
+     ]
+    },
+    {
+     "text": "Parking permit form rejects plates"
+    },
+    {
+     "coordinate": [
+      700,
+      340
+     ]
+    },
+    {
+     "text": "Plates with a space fail."
+    },
+    {
+     "coordinate": [
+      333,
+      482
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Layout shifted; the dropdown may not be open. Let me click it again.",
+   "actions": [
+    {
+     "coordinate": [
+      333,
+      488
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "Escape"
+    },
+    {
+     "text": "High"
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Now the due date and estimated time.",
+   "actions": [
+    {
+     "coordinate": [
+      842,
+      522
+     ]
+    },
+    {
+     "text": "12082026"
+    },
+    {
+     "coordinate": [
+      855,
+      555
+     ]
+    },
+    {
+     "text": "3"
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      840,
+      522
+     ]
+    },
+    {
+     "text": "ctrl+a"
+    },
+    {
+     "text": "20261208"
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": [
+      640,
+      440,
+      1280,
+      610
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Date is now correct. Create.",
+   "actions": [
+    {
+     "coordinate": [
+      44,
+      722
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "alt+Left"
+    },
+    {
+     "duration": 3
+    },
+    {
+     "}": null
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "alt+Home"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 10
+    },
+    {
+     "coordinate": [
+      640,
+      400
+     ]
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+l"
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I filled in and submitted the new issue, but I can't confirm it was created. The page went blank right after I clicked Create and has stayed blank since.\n\nBefore submitting, the form showed tracker Bug, subject \"Parking permit form rejects plates\", description \"Plates with a space fail.\", priority High, due date 2026-12-08 and estimated time 3 hours. I left every other field at its default.\n\nI tried waiting, going back, reloading and going home, and none of it brought the page back. There is no address bar I could use to look at the issue list. The reload may also have re-sent the form, so a duplicate issue is possible. I have no issue id or URL to give.\n\nRESULT: NOT DONE The page went blank after I clicked Create and never recovered, so I can't confirm the issue was created.",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 23,
+   "y": 95,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 52,
+   "y": 121,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 211,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Parking permit form rejects plates"
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 340,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Plates with a space fail."
+  },
+  {
+   "a": "click",
+   "x": 333,
+   "y": 482,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 333,
+   "y": 488,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Escape"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "High"
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 842,
+   "y": 522,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "12082026"
+  },
+  {
+   "a": "click",
+   "x": 855,
+   "y": 555,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "3"
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 840,
+   "y": 522,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "a"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "20261208"
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 44,
+   "y": 722,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Home"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 10.0
+  },
+  {
+   "a": "click",
+   "x": 640,
+   "y": 400,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "l"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6157,
+   "out": 92,
+   "usd": 0.01631,
+   "cached": 0
+  },
+  {
+   "in": 7653,
+   "out": 98,
+   "usd": 0.00596,
+   "cached": 6153
+  },
+  {
+   "in": 9149,
+   "out": 252,
+   "usd": 0.007794,
+   "cached": 7651
+  },
+  {
+   "in": 10839,
+   "out": 131,
+   "usd": 0.007368,
+   "cached": 9147
+  },
+  {
+   "in": 12360,
+   "out": 145,
+   "usd": 0.007424,
+   "cached": 10837
+  },
+  {
+   "in": 13904,
+   "out": 165,
+   "usd": 0.007986,
+   "cached": 12358
+  },
+  {
+   "in": 15502,
+   "out": 208,
+   "usd": 0.008859,
+   "cached": 13902
+  },
+  {
+   "in": 17129,
+   "out": 117,
+   "usd": 0.008341,
+   "cached": 15500
+  },
+  {
+   "in": 18636,
+   "out": 75,
+   "usd": 0.007947,
+   "cached": 17127
+  },
+  {
+   "in": 20096,
+   "out": 139,
+   "usd": 0.008771,
+   "cached": 18634
+  },
+  {
+   "in": 21620,
+   "out": 145,
+   "usd": 0.009283,
+   "cached": 20094
+  },
+  {
+   "in": 23161,
+   "out": 91,
+   "usd": 0.00909,
+   "cached": 21618
+  },
+  {
+   "in": 24648,
+   "out": 179,
+   "usd": 0.010143,
+   "cached": 23159
+  },
+  {
+   "in": 26215,
+   "out": 133,
+   "usd": 0.010181,
+   "cached": 24646
+  },
+  {
+   "in": 27746,
+   "out": 154,
+   "usd": 0.010614,
+   "cached": 26213
+  },
+  {
+   "in": 29296,
+   "out": 252,
+   "usd": 0.011948,
+   "cached": 27744
+  }
+ ]
+}

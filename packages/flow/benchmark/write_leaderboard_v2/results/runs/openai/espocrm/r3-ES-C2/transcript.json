@@ -1,0 +1,725 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_02b3bc0b5252f36c016af4d428161887d2adcc5d1646ce166c",
+     "call_id": "call_smf95mcAnHFCdFG9RNft4tUW",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_02b3bc0b5252f36c016af4d42c351087d2918580633105e653",
+     "call_id": "call_jYPwwXF9Vy05NotauerOGy0s",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 21,
+       "y": 166
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_02b3bc0b5252f36c016af4d42e581c87d2b2fa40c50c373206",
+     "call_id": "call_Mngz7MzDJodUFzXa4qzKCtKi",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_02b3bc0b5252f36c016af4d430991487d2822f9d3adb1f11c7",
+     "call_id": "call_LjWFnX18mjCuLjACSle9BLla",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1189,
+       "y": 65
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_02b3bc0b5252f36c016af4d433003c87d294583a768b872820",
+     "call_id": "call_8hAcoaYcZM9iCh6JV0iugpJQ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_02b3bc0b5252f36c016af4d4354ae487d29165d4c2c6927979",
+     "call_id": "call_Fol5XwFSlFe18sfgauLkOQtP",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 205,
+       "y": 232
+      },
+      {
+       "text": "Driftwood Outfitters",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 570,
+       "y": 229
+      },
+      {
+       "text": "driftwood.example.invalid",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 231,
+       "y": 698
+      },
+      {
+       "text": "Outdoor gear in three towns.",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 430,
+       "y": 618
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_02b3bc0b5252f36c016af4d438db9887d281b4ffca8b17b753",
+     "call_id": "call_1DGV3zAMG1qxNdxN2LJIx1Az",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 122,
+       "y": 765
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 819,
+       "y": 620
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_02b3bc0b5252f36c016af4d43bdd4087d2ba6dfff61de65f8f",
+     "call_id": "call_tfCKoOqhHmwkjlwPiQx0ZbBg",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": 575,
+       "type": "scroll",
+       "x": 652,
+       "y": 516
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_02b3bc0b5252f36c016af4d43ef82c87d2b7e61de15e9696b9",
+     "call_id": "call_hYHlbIEuUwW8WNcAzC9JvHAR",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 672,
+       "y": 611
+      },
+      {
+       "keys": [
+        "R"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_02b3bc0b5252f36c016af4d4412d1c87d284c693a46e56b97d",
+     "call_id": "call_X2iVKhfckJHdeL8Io4iDUsil",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 497,
+       "y": 650
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 94,
+       "y": 107
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_02b3bc0b5252f36c016af4d4439be887d2be1a17dd77123342",
+     "call_id": "call_Rak99GhKLQePLsrXt6njRQUY",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_02b3bc0b5252f36c016af4d446354087d2a439fe2dc175c9ea",
+     "call_id": "call_X43oJz8nH0IxdbAjp4dSsJpw",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      },
+      {
+       "keys": [
+        "CTRL",
+        "L"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_02b3bc0b5252f36c016af4d44ab36c87d2b031865f2163d0e3",
+     "call_id": "call_OLv2e3eeWKvG6BXTG0MBR6yD",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "F11"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_02b3bc0b5252f36c016af4d44dc25087d281df87ac4654d515",
+     "call_id": "call_sBs8RkqJrhZV61vgQ8rg3ZQW",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 144,
+       "y": 112
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_02b3bc0b5252f36c016af4d450e65087d2ac066701e1537a54",
+     "call_id": "call_kWyceVNnu2F2YXhcXuYeFVIQ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 327,
+       "y": 111
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 120,
+       "y": 58
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_02b3bc0b5252f36c016af4d453710487d29c922e82981fea1e",
+     "call_id": "call_CJeOBGVFFcBAOOAJoSfy9fY8",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_02b3bc0b5252f36c016af4d456077087d2acc25102ab492e75",
+     "call_id": "call_9CAIJznqMbEMToBPNYVvRjhD",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "right",
+       "type": "click",
+       "x": 172,
+       "y": 251
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_02b3bc0b5252f36c016af4d45a4c0087d29d6e178eca93507a",
+     "call_id": "call_gxR2hw9dYLCCyjMctWu1uXXV",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 160,
+       "y": 251
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_02b3bc0b5252f36c016af4d460a11c87d2a91594af277d368d",
+     "call_id": "call_36AFVgaPtCM4FpOJaQYncfbM",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 155,
+       "y": 251
+      },
+      {
+       "keys": [
+        "CTRL",
+        "L"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "Created Driftwood Outfitters with all five requested values; other fields were left unchanged. I couldn\u2019t retrieve its record ID or page URL.\nRESULT: NOT DONE Unable to retrieve the created record\u2019s ID or page URL.",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 21,
+   "y": 166,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1189,
+   "y": 65,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 205,
+   "y": 232,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Driftwood Outfitters"
+  },
+  {
+   "a": "click",
+   "x": 570,
+   "y": 229,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "driftwood.example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 231,
+   "y": 698,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Outdoor gear in three towns."
+  },
+  {
+   "a": "click",
+   "x": 430,
+   "y": 618,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 122,
+   "y": 765,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 819,
+   "y": 620,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 652,
+   "y": 516,
+   "dx": 0,
+   "dy": 575
+  },
+  {
+   "a": "click",
+   "x": 672,
+   "y": 611,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "R"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 497,
+   "y": 650,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 94,
+   "y": 107,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "L"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "F11"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 144,
+   "y": 112,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 327,
+   "y": 111,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 120,
+   "y": 58,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 172,
+   "y": 251,
+   "button": "right",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "move",
+   "x": 160,
+   "y": 251
+  },
+  {
+   "a": "click",
+   "x": 155,
+   "y": 251,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "L"
+   ]
+  }
+ ],
+ "usage": [
+  {
+   "in": 2207,
+   "out": 32,
+   "usd": 0.004734,
+   "cached": 0
+  },
+  {
+   "in": 3424,
+   "out": 31,
+   "usd": 0.003191,
+   "cached": 2204
+  },
+  {
+   "in": 4680,
+   "out": 18,
+   "usd": 0.003382,
+   "cached": 3421
+  },
+  {
+   "in": 5908,
+   "out": 32,
+   "usd": 0.003717,
+   "cached": 4677
+  },
+  {
+   "in": 7165,
+   "out": 15,
+   "usd": 0.003851,
+   "cached": 5905
+  },
+  {
+   "in": 8393,
+   "out": 116,
+   "usd": 0.005054,
+   "cached": 7162
+  },
+  {
+   "in": 9769,
+   "out": 47,
+   "usd": 0.004906,
+   "cached": 8390
+  },
+  {
+   "in": 11049,
+   "out": 37,
+   "usd": 0.004889,
+   "cached": 9766
+  },
+  {
+   "in": 12311,
+   "out": 53,
+   "usd": 0.005269,
+   "cached": 11046
+  },
+  {
+   "in": 13593,
+   "out": 47,
+   "usd": 0.005502,
+   "cached": 12308
+  },
+  {
+   "in": 14873,
+   "out": 15,
+   "usd": 0.005434,
+   "cached": 13590
+  },
+  {
+   "in": 16101,
+   "out": 30,
+   "usd": 0.005736,
+   "cached": 14870
+  },
+  {
+   "in": 17356,
+   "out": 38,
+   "usd": 0.006116,
+   "cached": 16098
+  },
+  {
+   "in": 18615,
+   "out": 64,
+   "usd": 0.006635,
+   "cached": 17353
+  },
+  {
+   "in": 19904,
+   "out": 68,
+   "usd": 0.006986,
+   "cached": 18612
+  },
+  {
+   "in": 21205,
+   "out": 15,
+   "usd": 0.006738,
+   "cached": 19901
+  },
+  {
+   "in": 22433,
+   "out": 31,
+   "usd": 0.007012,
+   "cached": 21202
+  },
+  {
+   "in": 23689,
+   "out": 63,
+   "usd": 0.007634,
+   "cached": 22430
+  },
+  {
+   "in": 24977,
+   "out": 157,
+   "usd": 0.008889,
+   "cached": 23686
+  },
+  {
+   "in": 26363,
+   "out": 88,
+   "usd": 0.008653,
+   "cached": 24974
+  }
+ ]
+}

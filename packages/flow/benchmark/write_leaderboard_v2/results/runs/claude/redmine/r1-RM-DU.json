@@ -1,0 +1,80 @@
+{
+ "id": "RM-DU",
+ "app": "redmine",
+ "class": "duplicate",
+ "note": "The save is delivered twice.",
+ "agent_s": 36.4,
+ "cost_usd": 0.078444,
+ "claim": {
+  "status": "done",
+  "id": "#42",
+  "note": "RESULT: DONE #42",
+  "claim_line": true,
+  "final_text": "I created issue #42 in the Synthetic Helpdesk project. It has tracker Support, subject \"Reset the meeting room display\", description \"Room 2 display shows the wrong day.\", priority Normal, due date 2026-12-03 and estimated time 0:15 (0.25 hours). I left every other field at its default.\n\nOne misstep along the way: I pressed Enter while picking the tracker, which tried to submit the form with no subject. Redmine rejected it with \"Subject cannot be blank\", so nothing was created.\n\nRESULT: DONE #42",
+  "model_calls": 9,
+  "actions": 26,
+  "tokens_in": 110862,
+  "tokens_out": 1343,
+  "end_url": "http://127.0.0.1:9861/issues/42"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "42"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794425634.003,
+   "method": "POST",
+   "path": "/login",
+   "save": false,
+   "status": 302,
+   "ms": 9
+  },
+  {
+   "t": 1794425652.189,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues/new.js",
+   "save": false,
+   "status": 200,
+   "ms": 59
+  },
+  {
+   "t": 1794425654.222,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues",
+   "save": true,
+   "fault": [
+    "duplicate"
+   ],
+   "status": "200+200",
+   "ms": 175
+  },
+  {
+   "t": 1794425668.123,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues",
+   "save": true,
+   "status": 302,
+   "ms": 39
+  }
+ ],
+ "saves_seen": 2,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 1,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 6.6,
+  "end": 10.2,
+  "waited_s": 0
+ }
+}

@@ -1,0 +1,480 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      23,
+      95
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      52,
+      121
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      243,
+      177
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Layout shifted. Click tracker dropdown now.",
+   "actions": [
+    {
+     "coordinate": [
+      243,
+      183
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "Support"
+    },
+    {
+     "text": "Return"
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      700,
+      217
+     ]
+    },
+    {
+     "text": "Order toner for floor 3"
+    },
+    {
+     "coordinate": [
+      700,
+      350
+     ]
+    },
+    {
+     "text": "Two black cartridges."
+    },
+    {
+     "coordinate": [
+      333,
+      488
+     ]
+    },
+    {
+     "text": "Low"
+    },
+    {
+     "text": "Return"
+    },
+    {
+     "coordinate": [
+      843,
+      522
+     ]
+    },
+    {
+     "text": "12022026"
+    },
+    {
+     "coordinate": [
+      855,
+      556
+     ]
+    },
+    {
+     "text": "0.5"
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 5
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "alt+Left"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 5
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 30
+    },
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 5
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 60
+    },
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 5
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I couldn't confirm the issue was created. Redmine started returning \"Service Unavailable\" while I was filling in the new-issue form, and it hasn't recovered. I retried over about two minutes with reloads, and the page never came back.\n\nI had entered Support as the tracker, the subject, the description, Low priority, a due date of 2026-12-02 and 0.5 hours of estimated time. The error appeared before I could review the form or press Create. I don't know whether the issue was saved. Pressing Return in the Priority dropdown may have submitted the form early, or the form may have been lost.\n\nOnce Redmine is back, check the Synthetic Helpdesk issue list for \"Order toner for floor 3\". If it's missing, the form needs to be filled in again.\n\nRESULT: NOT DONE Redmine returned \"Service Unavailable\" during form entry and stayed down, so I couldn't confirm the issue was created.",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 23,
+   "y": 95,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 52,
+   "y": 121,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 243,
+   "y": 177,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 243,
+   "y": 183,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "type",
+   "text": "Support"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Return"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 217,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Order toner for floor 3"
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 350,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Two black cartridges."
+  },
+  {
+   "a": "click",
+   "x": 333,
+   "y": 488,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Low"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Return"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 843,
+   "y": 522,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "12022026"
+  },
+  {
+   "a": "click",
+   "x": 855,
+   "y": 556,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "0.5"
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "wait",
+   "s": 30.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "wait",
+   "s": 60.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6156,
+   "out": 92,
+   "usd": 0.016308,
+   "cached": 0
+  },
+  {
+   "in": 7652,
+   "out": 98,
+   "usd": 0.005959,
+   "cached": 6152
+  },
+  {
+   "in": 9148,
+   "out": 124,
+   "usd": 0.006514,
+   "cached": 7650
+  },
+  {
+   "in": 10662,
+   "out": 125,
+   "usd": 0.006868,
+   "cached": 9146
+  },
+  {
+   "in": 12177,
+   "out": 155,
+   "usd": 0.007474,
+   "cached": 10660
+  },
+  {
+   "in": 13739,
+   "out": 300,
+   "usd": 0.009344,
+   "cached": 12175
+  },
+  {
+   "in": 15555,
+   "out": 136,
+   "usd": 0.008651,
+   "cached": 13737
+  },
+  {
+   "in": 17068,
+   "out": 161,
+   "usd": 0.008507,
+   "cached": 15553
+  },
+  {
+   "in": 18617,
+   "out": 155,
+   "usd": 0.00884,
+   "cached": 17066
+  },
+  {
+   "in": 20160,
+   "out": 133,
+   "usd": 0.008914,
+   "cached": 18615
+  },
+  {
+   "in": 21693,
+   "out": 161,
+   "usd": 0.009478,
+   "cached": 20158
+  },
+  {
+   "in": 23262,
+   "out": 296,
+   "usd": 0.011225,
+   "cached": 21691
+  }
+ ]
+}

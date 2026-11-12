@@ -1,0 +1,83 @@
+{
+ "id": "DO-DU",
+ "app": "dolibarr",
+ "class": "duplicate",
+ "note": "The save is delivered twice.",
+ "agent_s": 54.4,
+ "cost_usd": 0.091364,
+ "claim": {
+  "status": "done",
+  "id": "48",
+  "note": "RESULT: DONE 48",
+  "claim_line": true,
+  "final_text": "RESULT: DONE 48",
+  "model_calls": 17,
+  "actions": 28,
+  "tokens_in": 211441,
+  "tokens_out": 823,
+  "end_url": "http://127.0.0.1:9851/contact/list.php"
+ },
+ "oracle": {
+  "verdict": "wrong",
+  "reasons": [
+   "2 new records"
+  ],
+  "new": [
+   "47",
+   "48"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": true,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794426339.321,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 7
+  },
+  {
+   "t": 1794426354.797,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": [
+    "duplicate"
+   ],
+   "status": "302+302",
+   "ms": 16
+  },
+  {
+   "t": 1794426379.674,
+   "method": "POST",
+   "path": "/contact/list.php",
+   "save": false,
+   "status": 200,
+   "ms": 18
+  },
+  {
+   "t": 1794426389.038,
+   "method": "POST",
+   "path": "/contact/list.php",
+   "save": false,
+   "status": 200,
+   "ms": 15
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 1,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 7.6,
+  "end": 6.9,
+  "waited_s": 0
+ }
+}

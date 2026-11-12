@@ -1,0 +1,66 @@
+{
+ "id": "RM-LR",
+ "app": "redmine",
+ "class": "lost_response",
+ "note": "The save lands; the page gets a 504.",
+ "agent_s": 28.9,
+ "cost_usd": 0.036593,
+ "claim": {
+  "status": "not_done",
+  "id": "The app became blank and unresponsive before I could finish creating and verify the issue.",
+  "note": "RESULT: NOT DONE The app became blank and unresponsive before I could finish creating and verify the issue.",
+  "claim_line": true,
+  "final_text": "RESULT: NOT DONE The app became blank and unresponsive before I could finish creating and verify the issue.",
+  "model_calls": 10,
+  "actions": 17,
+  "tokens_in": 79277,
+  "tokens_out": 452,
+  "end_url": "http://127.0.0.1:9861/projects/helpdesk/issues"
+ },
+ "oracle": {
+  "verdict": "wrong",
+  "reasons": [
+   "wrong value: 96 estimated_hours: want '3' got ''; 96 due_date: want '2026-12-08' got ''"
+  ],
+  "new": [
+   "96"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794428008.978,
+   "method": "POST",
+   "path": "/login",
+   "save": false,
+   "status": 302,
+   "ms": 9
+  },
+  {
+   "t": 1794428023.977,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues",
+   "save": true,
+   "fault": [
+    "drop_response"
+   ],
+   "status": "302->504",
+   "ms": 30
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 3,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 9.7,
+  "end": 10.1,
+  "waited_s": 0
+ }
+}

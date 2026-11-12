@@ -1,0 +1,396 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0e4e4f76e88ded6d016af4c3509f9c87d28ba5666954c1c2db",
+     "call_id": "call_8hMP5Ic5tg5e3FjqOF1Zy5H0",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0e4e4f76e88ded6d016af4c3538a6887d286f4ccde1df435ea",
+     "call_id": "call_3xYblsL9TY5KWlRKEUEaGyu0",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 24,
+       "y": 95
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0e4e4f76e88ded6d016af4c356293c87d2811b771d00dedefe",
+     "call_id": "call_nEgfuTr8L4AczgvdLQq1Rz5l",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 53,
+       "y": 120
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0e4e4f76e88ded6d016af4c358abb487d2b4ba0d212f773656",
+     "call_id": "call_zYutcGxGaVp8whqjp4FkLSMS",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 245,
+       "y": 175
+      },
+      {
+       "keys": [
+        "s"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ENTER"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0e4e4f76e88ded6d016af4c35bfc0c87d2a569fdcb48534e39",
+     "call_id": "call_OibtqUz84f4trDWQHILDBjD9",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "text": "Reset the meeting room display",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 378,
+       "y": 383
+      },
+      {
+       "text": "Room 2 display shows the wrong day.",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 855,
+       "y": 619
+      },
+      {
+       "text": "0.25",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 850,
+       "y": 584
+      },
+      {
+       "keys": [
+        "ARROWUP"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0e4e4f76e88ded6d016af4c35f6ce087d29d042a54dea5767a",
+     "call_id": "call_Ua4SJSLuMVmbo1ONCqt9ohD2",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "ARROWRIGHT"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "1"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "2"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ARROWRIGHT"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "0"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "3"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "TAB"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0e4e4f76e88ded6d016af4c361f4f887d2a5d6eed9ede8f9a3",
+     "call_id": "call_mPuVcDHwzhx0GK4DVeEjBSDK",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 42,
+       "y": 793
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: DONE #43",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 24,
+   "y": 95,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 53,
+   "y": 120,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 245,
+   "y": 175,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "s"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ENTER"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Reset the meeting room display"
+  },
+  {
+   "a": "click",
+   "x": 378,
+   "y": 383,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Room 2 display shows the wrong day."
+  },
+  {
+   "a": "click",
+   "x": 855,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "0.25"
+  },
+  {
+   "a": "click",
+   "x": 850,
+   "y": 584,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ARROWUP"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ARROWRIGHT"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "1"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "2"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ARROWRIGHT"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "0"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "3"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "TAB"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 42,
+   "y": 793,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  }
+ ],
+ "usage": [
+  {
+   "in": 2220,
+   "out": 22,
+   "usd": 0.00466,
+   "cached": 0
+  },
+  {
+   "in": 3437,
+   "out": 31,
+   "usd": 0.003193,
+   "cached": 2217
+  },
+  {
+   "in": 4693,
+   "out": 31,
+   "usd": 0.003515,
+   "cached": 3434
+  },
+  {
+   "in": 5949,
+   "out": 49,
+   "usd": 0.003946,
+   "cached": 4690
+  },
+  {
+   "in": 7231,
+   "out": 112,
+   "usd": 0.004879,
+   "cached": 5946
+  },
+  {
+   "in": 8599,
+   "out": 84,
+   "usd": 0.005028,
+   "cached": 7228
+  },
+  {
+   "in": 9928,
+   "out": 31,
+   "usd": 0.004693,
+   "cached": 8596
+  },
+  {
+   "in": 11184,
+   "out": 9,
+   "usd": 0.004593,
+   "cached": 9925
+  }
+ ]
+}

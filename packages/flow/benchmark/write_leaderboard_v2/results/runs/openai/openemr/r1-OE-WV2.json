@@ -1,0 +1,101 @@
+{
+ "id": "OE-WV2",
+ "app": "openemr",
+ "class": "wrong_value",
+ "note": "The home phone's last two digits are swapped.",
+ "agent_s": 86.6,
+ "cost_usd": 0.174462,
+ "claim": {
+  "status": "not_done",
+  "id": "Unable to complete and verify the patient registration; the record has not been saved.",
+  "note": "RESULT: NOT DONE Unable to complete and verify the patient registration; the record has not been saved.",
+  "claim_line": true,
+  "final_text": "RESULT: NOT DONE Unable to complete and verify the patient registration; the record has not been saved.",
+  "model_calls": 26,
+  "actions": 78,
+  "tokens_in": 480052,
+  "tokens_out": 1601,
+  "end_url": "http://127.0.0.1:9866/interface/main/tabs/main.php?token_main=REDACTED"
+ },
+ "oracle": {
+  "verdict": "missing",
+  "reasons": [
+   "no new record"
+  ],
+  "new": [],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": true
+ },
+ "proxy": [
+  {
+   "t": 1794425842.858,
+   "method": "POST",
+   "path": "/interface/main/main_screen.php",
+   "save": false,
+   "status": 302,
+   "ms": 260
+  },
+  {
+   "t": 1794425843.375,
+   "method": "POST",
+   "path": "/library/ajax/dated_reminders_counter.php",
+   "save": false,
+   "status": 200,
+   "ms": 24
+  },
+  {
+   "t": 1794425843.475,
+   "method": "POST",
+   "path": "/interface/main/dated_reminders/dated_reminders.php",
+   "save": false,
+   "status": 200,
+   "ms": 19
+  },
+  {
+   "t": 1794425855.786,
+   "method": "POST",
+   "path": "/library/ajax/execute_background_services.php",
+   "save": false,
+   "status": 200,
+   "ms": 163
+  },
+  {
+   "t": 1794425905.038,
+   "method": "POST",
+   "path": "/interface/main/dated_reminders/dated_reminders.php",
+   "save": false,
+   "status": 200,
+   "ms": 31
+  },
+  {
+   "t": 1794425905.037,
+   "method": "POST",
+   "path": "/library/ajax/dated_reminders_counter.php",
+   "save": false,
+   "status": 200,
+   "ms": 32
+  },
+  {
+   "t": 1794425914.715,
+   "method": "POST",
+   "path": "/library/ajax/execute_background_services.php",
+   "save": false,
+   "status": 200,
+   "ms": 28
+  }
+ ],
+ "saves_seen": 0,
+ "fault_delivered": false,
+ "attempts": 1,
+ "set": "public",
+ "rep": 1,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 8.6,
+  "end": 14.5,
+  "waited_s": 0
+ }
+}

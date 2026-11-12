@@ -1,0 +1,75 @@
+{
+ "id": "DO-WV1",
+ "app": "dolibarr",
+ "class": "wrong_value",
+ "note": "The phone's last two digits are swapped.",
+ "agent_s": 43.0,
+ "cost_usd": 0.11683,
+ "claim": {
+  "status": "done",
+  "id": "Contact \"Maja Lindqvist\" created in Contacts/Addresses (record id not visible)",
+  "note": "RESULT: DONE Contact \"Maja Lindqvist\" created in Contacts/Addresses (record id not visible)",
+  "claim_line": true,
+  "final_text": "I created the contact Maja Lindqvist, not linked to any third party. Her job position is Bookkeeper, her professional phone is 555-0193, and her email is m.lindqvist@example.invalid. All other fields are untouched.\n\nThe first save stored the phone as 555-0139, so I edited it and saved again. The card now shows 5550193 (Dolibarr drops the hyphen when it displays the number). I couldn't see the record's id or URL, because the browser shows no address bar.\n\nRESULT: DONE Contact \"Maja Lindqvist\" created in Contacts/Addresses (record id not visible)",
+  "model_calls": 13,
+  "actions": 30,
+  "tokens_in": 200833,
+  "tokens_out": 1986,
+  "end_url": "http://127.0.0.1:9851/contact/card.php?id=41"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "41"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794425439.723,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 7
+  },
+  {
+   "t": 1794425465.901,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": [
+    "set"
+   ],
+   "rewritten": [
+    "phone_pro"
+   ],
+   "status": 302,
+   "ms": 9
+  },
+  {
+   "t": 1794425480.585,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": false,
+   "status": 302,
+   "ms": 14
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 1,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 9.9,
+  "end": 7.9,
+  "waited_s": 0
+ }
+}

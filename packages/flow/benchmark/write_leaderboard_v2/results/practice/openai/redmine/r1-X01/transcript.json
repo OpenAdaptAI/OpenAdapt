@@ -1,0 +1,400 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0617ff8589fd3176016af4ba48937887d2b1f39b68a7e32a5c",
+     "call_id": "call_YyCfmjsiG6Wc02kEUphlheN2",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0617ff8589fd3176016af4ba4bacdc87d2b92b2eae94dc0a3a",
+     "call_id": "call_1rpJWZXt9jRmSSxYAGCuqxhS",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 24,
+       "y": 95
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0617ff8589fd3176016af4ba4ed03487d2a176ef7c7619005c",
+     "call_id": "call_CDwZIY7wIdLBx1A0CrvrH93A",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 54,
+       "y": 122
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0617ff8589fd3176016af4ba519bf487d2be14ca2b19f60d75",
+     "call_id": "call_JuK5Zusuqn7jROPGeEGWmkCv",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 245,
+       "y": 177
+      },
+      {
+       "keys": [
+        "s"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ENTER"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0617ff8589fd3176016af4ba5498d887d282821ca4d31e9a77",
+     "call_id": "call_njd8kZqQfmQQLmWM7R3AkAQm",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 386,
+       "y": 281
+      },
+      {
+       "text": "Projector in room 4 has no signal",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 390,
+       "y": 384
+      },
+      {
+       "text": "HDMI input shows nothing.",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 848,
+       "y": 619
+      },
+      {
+       "text": "1",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 845,
+       "y": 585
+      },
+      {
+       "keys": [
+        "ARROWUP"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0617ff8589fd3176016af4ba58569087d2a3c17a08d516c8c7",
+     "call_id": "call_NmsJXGtfYaBAgVVlmwom9u8x",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "ARROWRIGHT"
+       ],
+       "type": "keypress"
+      },
+      {
+       "text": "12",
+       "type": "type"
+      },
+      {
+       "keys": [
+        "ARROWRIGHT"
+       ],
+       "type": "keypress"
+      },
+      {
+       "text": "10",
+       "type": "type"
+      },
+      {
+       "keys": [
+        "TAB"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0617ff8589fd3176016af4ba5afd5c87d2b501d50ac2525012",
+     "call_id": "call_VWEbAui1MYIxlP6UoEyfzJU8",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 44,
+       "y": 792
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0617ff8589fd3176016af4ba5d4e6487d2b844830b32bdddde",
+     "call_id": "call_7j4VEWkb9xMebp436X1iIclT",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: DONE 14",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 24,
+   "y": 95,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 54,
+   "y": 122,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 245,
+   "y": 177,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "s"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ENTER"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 386,
+   "y": 281,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Projector in room 4 has no signal"
+  },
+  {
+   "a": "click",
+   "x": 390,
+   "y": 384,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "HDMI input shows nothing."
+  },
+  {
+   "a": "click",
+   "x": 848,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "1"
+  },
+  {
+   "a": "click",
+   "x": 845,
+   "y": 585,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ARROWUP"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ARROWRIGHT"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "12"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ARROWRIGHT"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "10"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "TAB"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 44,
+   "y": 792,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  }
+ ],
+ "usage": [
+  {
+   "in": 2219,
+   "out": 20,
+   "usd": 0.004638,
+   "cached": 0
+  },
+  {
+   "in": 3436,
+   "out": 31,
+   "usd": 0.003193,
+   "cached": 2216
+  },
+  {
+   "in": 4692,
+   "out": 31,
+   "usd": 0.003515,
+   "cached": 3433
+  },
+  {
+   "in": 5948,
+   "out": 49,
+   "usd": 0.003946,
+   "cached": 4689
+  },
+  {
+   "in": 7230,
+   "out": 127,
+   "usd": 0.005029,
+   "cached": 5945
+  },
+  {
+   "in": 8621,
+   "out": 64,
+   "usd": 0.004873,
+   "cached": 7227
+  },
+  {
+   "in": 9922,
+   "out": 31,
+   "usd": 0.004642,
+   "cached": 8618
+  },
+  {
+   "in": 11178,
+   "out": 18,
+   "usd": 0.004682,
+   "cached": 9919
+  },
+  {
+   "in": 12406,
+   "out": 9,
+   "usd": 0.004787,
+   "cached": 11175
+  }
+ ]
+}

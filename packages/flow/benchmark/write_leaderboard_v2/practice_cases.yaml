@@ -1,0 +1,33 @@
+# Practice tasks for building the harness, run before the protocol froze.
+# Their people, values and records appear in no scored case.
+set: practice
+apps:
+  medplum:
+    cases:
+      - id: X01
+        type: patient
+        class: clean
+        note: Practice registration.
+        task: {given: Noor, family: Haddad, birthDate: "1972-12-05", gender: female, line: 3 Quarry Road,
+               city: Springfield, state: MA, postalCode: "01109", phone: 413-555-0133, email: noor.haddad@example.org}
+        expect: create
+  dolibarr:
+    seed:
+      - {lastname: Pratt, firstname: Owen, poste: Driver, email: o.pratt@example.invalid, phone: 555-0150}
+    cases:
+      - {id: X01, class: clean, task: {lastname: Mbeki, firstname: Thandi, poste: Warehouse lead, phone: 555-0151, email: t.mbeki@example.invalid}}
+  espocrm:
+    seed:
+      - {name: Pinecrest Hardware, website: pinecrest.example.invalid, type: Customer, industry: Retail, description: Practice seed.}
+    cases:
+      - {id: X01, class: clean, task: {name: Saltmarsh Bakery, website: saltmarsh.example.invalid, type: Customer, industry: Retail, description: Bread for two cafes.}}
+  redmine:
+    seed:
+      - {tracker: Support, subject: Practice seed issue, description: Practice seed., priority: Normal}
+    cases:
+      - {id: X01, class: clean, task: {tracker: Support, subject: Projector in room 4 has no signal, description: HDMI input shows nothing., priority: Normal, due_date: "2026-12-10", estimated_hours: "1"}}
+  openemr:
+    seed:
+      - {fname: Iris, lname: Quaye, DOB: "1968-05-30", sex: Female, street: 2 Mill Lane, city: Springfield, state: MA, postal_code: "01107", phone_home: 413-555-0144, email: i.quaye@example.invalid}
+    cases:
+      - {id: X01, class: clean, task: {fname: Kofi, lname: Mensah, DOB: "1983-10-14", sex: Male, street: 77 Bay Road, city: Springfield, state: MA, state_name: Massachusetts, postal_code: "01108", phone_home: 413-555-0145, email: k.mensah@example.invalid}}

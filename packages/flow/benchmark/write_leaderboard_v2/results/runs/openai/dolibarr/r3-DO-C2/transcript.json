@@ -1,0 +1,483 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_01b32722df5dbf7d016af4d11f645887d2b894245222f89610",
+     "call_id": "call_ChEe5vXZkEV2tx7SykThZ01O",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_01b32722df5dbf7d016af4d122e91487d2883832add7ab2e91",
+     "call_id": "call_2t8vJa2b90ifX1K6j3cs8aNB",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 111,
+       "y": 28
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_01b32722df5dbf7d016af4d125020887d2b162bfe2f3c3a968",
+     "call_id": "call_UMq4asiLKiUNovnobBzskBno",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 106,
+       "y": 372
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_01b32722df5dbf7d016af4d127b84887d29922ad5b41cca707",
+     "call_id": "call_TUp0tarNhVNhfFMVn89TlH6O",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "text": "Osei",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 639,
+       "y": 198
+      },
+      {
+       "text": "Kwame",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 641,
+       "y": 297
+      },
+      {
+       "text": "Purchasing lead",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 672,
+       "y": 478
+      },
+      {
+       "text": "555-0192",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 672,
+       "y": 544
+      },
+      {
+       "text": "k.osei@example.invalid",
+       "type": "type"
+      },
+      {
+       "scroll_x": 0,
+       "scroll_y": 475,
+       "type": "scroll",
+       "x": 1168,
+       "y": 657
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_01b32722df5dbf7d016af4d12b6ff087d2998aa4b51ac5db15",
+     "call_id": "call_b2jwmuBAGKEY7NTw5BHtxFd6",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 723,
+       "y": 757
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_01b32722df5dbf7d016af4d12f157887d2ae8e5fee440fbef6",
+     "call_id": "call_eQkNiXcyelmAD0xBMnOdpw4s",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "L"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_01b32722df5dbf7d016af4d1325e1487d287502f4ef8fed05f",
+     "call_id": "call_rkkKAjldlrrg8nM5L3NqvxY2",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1128,
+       "y": 155
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_01b32722df5dbf7d016af4d1349d1087d2a384f8d4a535230e",
+     "call_id": "call_SUjBnAZ7uhd26GiHcGsCBjkt",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 458,
+       "y": 393
+      },
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_01b32722df5dbf7d016af4d13ac4cc87d2ab68045cb4ca21bd",
+     "call_id": "call_bOr9I8mkxl7rJL1WMT3vfcMY",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "right",
+       "type": "click",
+       "x": 452,
+       "y": 393
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_01b32722df5dbf7d016af4d13e9bfc87d291331913fa001b41",
+     "call_id": "call_Ui2iOOA1b9Aotd7yZAX1lca1",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 452,
+       "y": 393
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 731,
+       "y": 100
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_01b32722df5dbf7d016af4d141411c87d2a378a960483d9c2f",
+     "call_id": "call_Jfvzl95gDRPtcc6wABkNNekH",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 729,
+       "y": 100
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: DONE 4",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 111,
+   "y": 28,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 106,
+   "y": 372,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Osei"
+  },
+  {
+   "a": "click",
+   "x": 639,
+   "y": 198,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Kwame"
+  },
+  {
+   "a": "click",
+   "x": 641,
+   "y": 297,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Purchasing lead"
+  },
+  {
+   "a": "click",
+   "x": 672,
+   "y": 478,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "555-0192"
+  },
+  {
+   "a": "click",
+   "x": 672,
+   "y": 544,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "k.osei@example.invalid"
+  },
+  {
+   "a": "scroll",
+   "x": 1168,
+   "y": 657,
+   "dx": 0,
+   "dy": 475
+  },
+  {
+   "a": "click",
+   "x": 723,
+   "y": 757,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "L"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 1128,
+   "y": 155,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "move",
+   "x": 458,
+   "y": 393
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 452,
+   "y": 393,
+   "button": "right",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 452,
+   "y": 393,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 731,
+   "y": 100,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 729,
+   "y": 100,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  }
+ ],
+ "usage": [
+  {
+   "in": 2220,
+   "out": 28,
+   "usd": 0.00472,
+   "cached": 0
+  },
+  {
+   "in": 3437,
+   "out": 31,
+   "usd": 0.003193,
+   "cached": 2217
+  },
+  {
+   "in": 4693,
+   "out": 31,
+   "usd": 0.003515,
+   "cached": 3434
+  },
+  {
+   "in": 5949,
+   "out": 154,
+   "usd": 0.004996,
+   "cached": 4690
+  },
+  {
+   "in": 7380,
+   "out": 31,
+   "usd": 0.004367,
+   "cached": 5946
+  },
+  {
+   "in": 8636,
+   "out": 47,
+   "usd": 0.004463,
+   "cached": 7377
+  },
+  {
+   "in": 9904,
+   "out": 52,
+   "usd": 0.004789,
+   "cached": 8633
+  },
+  {
+   "in": 11181,
+   "out": 31,
+   "usd": 0.00485,
+   "cached": 9901
+  },
+  {
+   "in": 12441,
+   "out": 99,
+   "usd": 0.005752,
+   "cached": 11178
+  },
+  {
+   "in": 13765,
+   "out": 66,
+   "usd": 0.005802,
+   "cached": 12438
+  },
+  {
+   "in": 15064,
+   "out": 31,
+   "usd": 0.005666,
+   "cached": 13762
+  },
+  {
+   "in": 16320,
+   "out": 60,
+   "usd": 0.00613,
+   "cached": 15061
+  }
+ ]
+}

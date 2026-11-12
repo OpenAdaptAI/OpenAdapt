@@ -385,6 +385,7 @@ PUBLIC_ARTIFACT_APPROVED_DIRECTORIES = (
     "benchmark/scoreboard/",
     "benchmark/silent_saves/",
     "benchmark/verifier_baselines/results/",
+    "benchmark/write_leaderboard_v2/results/",
     "docs/showcase-encounter-loop/",
     "docs/showcase-loop/",
     "docs/showcase-openemr/",
