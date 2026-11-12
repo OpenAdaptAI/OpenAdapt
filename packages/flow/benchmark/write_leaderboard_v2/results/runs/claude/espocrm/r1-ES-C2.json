@@ -1,0 +1,53 @@
+{
+ "id": "ES-C2",
+ "app": "espocrm",
+ "class": "clean",
+ "note": "A plain account.",
+ "agent_s": 57.0,
+ "cost_usd": 0.142873,
+ "claim": {
+  "status": "done",
+  "id": "Accounts record \"Driftwood Outfitters\" (id and URL not visible in this browser)",
+  "note": "RESULT: DONE Accounts record \"Driftwood Outfitters\" (id and URL not visible in this browser)",
+  "claim_line": true,
+  "final_text": "I created the Driftwood Outfitters account, and its detail page now shows the values you asked for. A search for \"Driftwood\" beforehand found no existing account, so this isn't a duplicate.\n\n- **Website:** driftwood.example.invalid\n- **Type:** Reseller\n- **Industry:** Retail\n- **Description:** Outdoor gear in three towns.\n\nI left every other field blank. The browser shows no address bar, so I couldn't read the record's id or URL. It is the Accounts record named Driftwood Outfitters.\n\nRESULT: DONE Accounts record \"Driftwood Outfitters\" (id and URL not visible in this browser)",
+  "model_calls": 16,
+  "actions": 35,
+  "tokens_in": 281339,
+  "tokens_out": 2000,
+  "end_url": "http://127.0.0.1:9856/#Account/view/6af4c26484d2f9a32"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "6af4c26484d2f9a32"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794425444.414,
+   "method": "POST",
+   "path": "/api/v1/Account",
+   "save": true,
+   "status": 200,
+   "ms": 73
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 1,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 13.7,
+  "end": 9.1,
+  "waited_s": 0
+ }
+}

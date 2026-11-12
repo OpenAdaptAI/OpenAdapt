@@ -1,0 +1,301 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0dd895878c638f1b016af4d3f46b3887d2ba7d0087301ea689",
+     "call_id": "call_S7y2bEPyRpSiGsG8xAW8lwOq",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0dd895878c638f1b016af4d3f77c3087d2875bf06f0f131239",
+     "call_id": "call_NK0pb8EZLx25UUwVJLdSH8dU",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 117,
+       "y": 27
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0dd895878c638f1b016af4d3fa2f8c87d2b05d91f836e1c344",
+     "call_id": "call_MOuDigNHd61rJX6dMnuM2jfK",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 104,
+       "y": 372
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0dd895878c638f1b016af4d3fcf5e087d2aaaf51179bc70222",
+     "call_id": "call_4cpBv7hazPqUWHgN4ua0hvhh",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "text": "Silva",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 656,
+       "y": 198
+      },
+      {
+       "text": "Beatriz",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 652,
+       "y": 296
+      },
+      {
+       "text": "Sales assistant",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 669,
+       "y": 479
+      },
+      {
+       "text": "555-0197",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 680,
+       "y": 545
+      },
+      {
+       "text": "b.silva@example.invalid",
+       "type": "type"
+      },
+      {
+       "scroll_x": 0,
+       "scroll_y": 474,
+       "type": "scroll",
+       "x": 1181,
+       "y": 669
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0dd895878c638f1b016af4d4015f3887d2b7478c1e94ebdc06",
+     "call_id": "call_O2161M46QlSX2pSbWRPAwJc4",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 722,
+       "y": 757
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0dd895878c638f1b016af4d405af0c87d29a4fe443c0a81089",
+     "call_id": "call_ZzJr2I7cxyehXAljP1imQbbp",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "ALT",
+        "LEFT"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE The app returned \u201cService Unavailable\u201d after submitting; contact creation could not be verified.",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 117,
+   "y": 27,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 104,
+   "y": 372,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Silva"
+  },
+  {
+   "a": "click",
+   "x": 656,
+   "y": 198,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Beatriz"
+  },
+  {
+   "a": "click",
+   "x": 652,
+   "y": 296,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Sales assistant"
+  },
+  {
+   "a": "click",
+   "x": 669,
+   "y": 479,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "555-0197"
+  },
+  {
+   "a": "click",
+   "x": 680,
+   "y": 545,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "b.silva@example.invalid"
+  },
+  {
+   "a": "scroll",
+   "x": 1181,
+   "y": 669,
+   "dx": 0,
+   "dy": 474
+  },
+  {
+   "a": "click",
+   "x": 722,
+   "y": 757,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ALT",
+    "LEFT"
+   ]
+  }
+ ],
+ "usage": [
+  {
+   "in": 2219,
+   "out": 19,
+   "usd": 0.000639,
+   "cached": 2216
+  },
+  {
+   "in": 3436,
+   "out": 31,
+   "usd": 0.001003,
+   "cached": 3433
+  },
+  {
+   "in": 4692,
+   "out": 31,
+   "usd": 0.003515,
+   "cached": 3433
+  },
+  {
+   "in": 5948,
+   "out": 153,
+   "usd": 0.004986,
+   "cached": 4689
+  },
+  {
+   "in": 7378,
+   "out": 31,
+   "usd": 0.004365,
+   "cached": 5945
+  },
+  {
+   "in": 8634,
+   "out": 42,
+   "usd": 0.004413,
+   "cached": 7375
+  },
+  {
+   "in": 9897,
+   "out": 26,
+   "usd": 0.004518,
+   "cached": 8631
+  }
+ ]
+}

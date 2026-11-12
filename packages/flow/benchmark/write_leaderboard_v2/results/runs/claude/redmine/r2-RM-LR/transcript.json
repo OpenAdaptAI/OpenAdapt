@@ -1,0 +1,598 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      23,
+      95
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      52,
+      121
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Tracker is already Bug. Priority is a select; I'll use keyboard selection.",
+   "actions": [
+    {
+     "coordinate": [
+      703,
+      213
+     ]
+    },
+    {
+     "text": "Parking permit form rejects plates"
+    },
+    {
+     "coordinate": [
+      703,
+      345
+     ]
+    },
+    {
+     "text": "Plates with a space fail."
+    },
+    {
+     "coordinate": [
+      333,
+      484
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The layout shifted; the dropdown may not be open. Let me click it again.",
+   "actions": [
+    {
+     "coordinate": [
+      333,
+      488
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Dropdown popups may not render in screenshots. Focused; use keyboard.",
+   "actions": [
+    {
+     "text": "Escape"
+    },
+    {
+     "text": "High"
+    },
+    {
+     "coordinate": [
+      855,
+      522
+     ]
+    },
+    {
+     "text": "2026-12-08"
+    },
+    {
+     "coordinate": [
+      855,
+      555
+     ]
+    },
+    {
+     "text": "3"
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      44,
+      722
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {
+     "}": null
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "alt+Left"
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+l"
+    },
+    {
+     "text": "localhost:3000/issues\n"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 10
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      640,
+      400
+     ]
+    },
+    {
+     "text": "alt+Left"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 30
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "alt+Home"
+    },
+    {
+     "duration": 5
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+t"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I filled in the new issue form and clicked Create, but I can't confirm the issue was saved. The screen went blank after the click and stayed blank through every recovery attempt.\n\nThe form had these values:\n- **Tracker:** Bug (already selected)\n- **Subject:** \"Parking permit form rejects plates\"\n- **Description:** \"Plates with a space fail.\"\n- **Priority:** High\n- **Due date:** 2026-12-08\n- **Estimated time:** 3 hours\n\nI waited, pressed F5 (which may have resubmitted the form), went back, typed a URL, and tried Home and a new tab. None of it brought the page back, so I couldn't see the new issue's id or page. If F5 did resubmit, there could now be a duplicate issue, so someone should check the Synthetic Helpdesk issue list.\n\nRESULT: NOT DONE The page went blank after clicking Create, so I could not confirm the issue was saved.",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 23,
+   "y": 95,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 52,
+   "y": 121,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 703,
+   "y": 213,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Parking permit form rejects plates"
+  },
+  {
+   "a": "click",
+   "x": 703,
+   "y": 345,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Plates with a space fail."
+  },
+  {
+   "a": "click",
+   "x": 333,
+   "y": 484,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 333,
+   "y": 488,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Escape"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "High"
+  },
+  {
+   "a": "click",
+   "x": 855,
+   "y": 522,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "2026-12-08"
+  },
+  {
+   "a": "click",
+   "x": 855,
+   "y": 555,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "3"
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 44,
+   "y": 722,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "l"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "localhost:3000/issues\n"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 10.0
+  },
+  {
+   "a": "click",
+   "x": 640,
+   "y": 400,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 30.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Home"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "t"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6157,
+   "out": 92,
+   "usd": 0.01631,
+   "cached": 0
+  },
+  {
+   "in": 7653,
+   "out": 98,
+   "usd": 0.00596,
+   "cached": 6153
+  },
+  {
+   "in": 9149,
+   "out": 228,
+   "usd": 0.007554,
+   "cached": 7651
+  },
+  {
+   "in": 10815,
+   "out": 131,
+   "usd": 0.007308,
+   "cached": 9147
+  },
+  {
+   "in": 12336,
+   "out": 215,
+   "usd": 0.008119,
+   "cached": 10813
+  },
+  {
+   "in": 14006,
+   "out": 98,
+   "usd": 0.007626,
+   "cached": 12334
+  },
+  {
+   "in": 15502,
+   "out": 79,
+   "usd": 0.007335,
+   "cached": 14004
+  },
+  {
+   "in": 16966,
+   "out": 116,
+   "usd": 0.007924,
+   "cached": 15500
+  },
+  {
+   "in": 18467,
+   "out": 161,
+   "usd": 0.008759,
+   "cached": 16964
+  },
+  {
+   "in": 20016,
+   "out": 107,
+   "usd": 0.00864,
+   "cached": 18465
+  },
+  {
+   "in": 21531,
+   "out": 177,
+   "usd": 0.009564,
+   "cached": 20014
+  },
+  {
+   "in": 23107,
+   "out": 107,
+   "usd": 0.00932,
+   "cached": 21529
+  },
+  {
+   "in": 24599,
+   "out": 165,
+   "usd": 0.010005,
+   "cached": 23105
+  },
+  {
+   "in": 26173,
+   "out": 97,
+   "usd": 0.009828,
+   "cached": 24597
+  },
+  {
+   "in": 27655,
+   "out": 129,
+   "usd": 0.010233,
+   "cached": 26171
+  },
+  {
+   "in": 29180,
+   "out": 143,
+   "usd": 0.010777,
+   "cached": 27653
+  },
+  {
+   "in": 30719,
+   "out": 306,
+   "usd": 0.012747,
+   "cached": 29178
+  }
+ ]
+}

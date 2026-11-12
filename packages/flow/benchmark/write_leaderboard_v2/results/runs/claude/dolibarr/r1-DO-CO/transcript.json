@@ -1,0 +1,379 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+l"
+    },
+    {
+     "text": "localhost/contact/card.php?action=create\n"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      113,
+      28
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      85,
+      371
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      665,
+      164
+     ]
+    },
+    {
+     "text": "Kim"
+    },
+    {
+     "coordinate": [
+      665,
+      198
+     ]
+    },
+    {
+     "text": "Jiwoo"
+    },
+    {
+     "coordinate": [
+      665,
+      297
+     ]
+    },
+    {
+     "text": "Logistics planner"
+    },
+    {
+     "coordinate": [
+      685,
+      476
+     ]
+    },
+    {
+     "text": "555-0198"
+    },
+    {
+     "coordinate": [
+      685,
+      544
+     ]
+    },
+    {
+     "text": "j.kim@example.invalid"
+    },
+    {
+     "coordinate": [
+      770,
+      600
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 30
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      720,
+      756
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1004,
+      427
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      409,
+      100
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I created the contact Jiwoo Kim, not linked to any third party. Its card shows job position Logistics planner and email j.kim@example.invalid. The professional phone is stored as 555-0198 (I checked in the edit form), though the card displays it as 5550198. I left every other field at its default.\n\nI couldn't see the contact's id or URL because the browser shows no address bar.\n\nRESULT: DONE Contact \"Jiwoo Kim\" created in Contacts/Addresses (id not visible)",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "l"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "localhost/contact/card.php?action=create\n"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 113,
+   "y": 28,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 85,
+   "y": 371,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 665,
+   "y": 164,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Kim"
+  },
+  {
+   "a": "click",
+   "x": 665,
+   "y": 198,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Jiwoo"
+  },
+  {
+   "a": "click",
+   "x": 665,
+   "y": 297,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Logistics planner"
+  },
+  {
+   "a": "click",
+   "x": 685,
+   "y": 476,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "555-0198"
+  },
+  {
+   "a": "click",
+   "x": 685,
+   "y": 544,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "j.kim@example.invalid"
+  },
+  {
+   "a": "scroll",
+   "x": 770,
+   "y": 600,
+   "dx": 0,
+   "dy": 3600
+  },
+  {
+   "a": "click",
+   "x": 720,
+   "y": 756,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 1004,
+   "y": 427,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 409,
+   "y": 100,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6155,
+   "out": 118,
+   "usd": 0.016566,
+   "cached": 0
+  },
+  {
+   "in": 7687,
+   "out": 147,
+   "usd": 0.006539,
+   "cached": 6151
+  },
+  {
+   "in": 9224,
+   "out": 98,
+   "usd": 0.006363,
+   "cached": 7685
+  },
+  {
+   "in": 10720,
+   "out": 325,
+   "usd": 0.008838,
+   "cached": 9222
+  },
+  {
+   "in": 12543,
+   "out": 106,
+   "usd": 0.007765,
+   "cached": 10718
+  },
+  {
+   "in": 14039,
+   "out": 257,
+   "usd": 0.008822,
+   "cached": 12541
+  },
+  {
+   "in": 15686,
+   "out": 75,
+   "usd": 0.007679,
+   "cached": 14037
+  },
+  {
+   "in": 17146,
+   "out": 156,
+   "usd": 0.008351,
+   "cached": 15684
+  },
+  {
+   "in": 18692,
+   "out": 163,
+   "usd": 0.008928,
+   "cached": 17144
+  }
+ ]
+}

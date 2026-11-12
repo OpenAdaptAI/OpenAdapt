@@ -1,0 +1,916 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a6bd8befc7e9d9a016af4d08d5d7c87d2975f030b5c40d14f",
+     "call_id": "call_lMZ8DHcxsZPyBESD8AkwgjFC",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a6bd8befc7e9d9a016af4d090478087d29f71fafdf17adcfb",
+     "call_id": "call_gvOqbCWiAfwJRjmAubVFppNv",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 22,
+       "y": 166
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a6bd8befc7e9d9a016af4d09233a087d2bac30714e03a24bf",
+     "call_id": "call_f2ot6hx14ijWegMuSmivu8tq",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a6bd8befc7e9d9a016af4d09528e487d29e18fc4010c45217",
+     "call_id": "call_dl7znsTMase14fobBzpZHlv7",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1195,
+       "y": 62
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a6bd8befc7e9d9a016af4d09826c087d29348cd5903c36bc2",
+     "call_id": "call_kvB9n47SIyFOCQUHerxSIabK",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a6bd8befc7e9d9a016af4d09b8be487d2aa414455f6a664ca",
+     "call_id": "call_zmgTgk658iIUPJnmUW4N0yT8",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 215,
+       "y": 232
+      },
+      {
+       "text": "Ironbark Legal",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 566,
+       "y": 234
+      },
+      {
+       "text": "ironbark.example.invalid",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 245,
+       "y": 697
+      },
+      {
+       "text": "Two partners.",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 435,
+       "y": 616
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a6bd8befc7e9d9a016af4d09efd8487d2b166cd37b206edfc",
+     "call_id": "call_wyeUZJrmKY7060Wl7kMq8ckp",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a6bd8befc7e9d9a016af4d0a1531087d29facde643b6b4121",
+     "call_id": "call_gUepXqQSSyR8hIIu1oOeJOPW",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 125,
+       "y": 683
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 818,
+       "y": 619
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a6bd8befc7e9d9a016af4d0a3e00887d2959f79280cad2895",
+     "call_id": "call_Gc1jisMArAodOWmUs0QsZejq",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": 391,
+       "type": "scroll",
+       "x": 665,
+       "y": 512
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a6bd8befc7e9d9a016af4d0a6957087d290e2c0c4f8178c4b",
+     "call_id": "call_aGocABBBgKzU9CPAFhk6wjgP",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 720,
+       "y": 612
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a6bd8befc7e9d9a016af4d0a8de3087d29dd28f2921a1779a",
+     "call_id": "call_IEwgbyoi3TAfLJdfmryOkqlD",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": 293,
+       "type": "scroll",
+       "x": 600,
+       "y": 474
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a6bd8befc7e9d9a016af4d0ac705887d2b3d06005de4c64fd",
+     "call_id": "call_lPSYVzXeocfPIxkBOCps5Zci",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": 285,
+       "type": "scroll",
+       "x": 600,
+       "y": 474
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a6bd8befc7e9d9a016af4d0afac0087d29a4855290d255649",
+     "call_id": "call_4Ds4pvj9SluKjWPBYvLzTWbR",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 498,
+       "y": 537
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 94,
+       "y": 107
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a6bd8befc7e9d9a016af4d0b2112c87d2a82cff26c939ce6a",
+     "call_id": "call_bzNuJrOeNPFishVqBUUTabUs",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 94,
+       "y": 107
+      },
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a6bd8befc7e9d9a016af4d0b83df887d2b2b068e493e965dc",
+     "call_id": "call_OSa1ZaES5sZSM7gcT6ECzD4f",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a6bd8befc7e9d9a016af4d0bc5a5087d283f9994586dde42e",
+     "call_id": "call_4H7iR88WPn5Gzhhv5amhj1AB",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      },
+      {
+       "keys": [
+        "CTRL",
+        "l"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a6bd8befc7e9d9a016af4d0c0579887d2a066734924072167",
+     "call_id": "call_dsqfe0Hoa99OfaFgJHq1GrNa",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "F11"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "CTRL",
+        "l"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a6bd8befc7e9d9a016af4d0c3e55887d2956b0c41b2c8da2b",
+     "call_id": "call_vphyH27AGyZqQ3tYOR0tqFEi",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 122,
+       "y": 57
+      },
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a6bd8befc7e9d9a016af4d0c88a0087d295162b883d6cc7b4",
+     "call_id": "call_SjhgNR1Vd9wOYa8EvqH4OHzM",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a6bd8befc7e9d9a016af4d0cbacf087d2be4f6d57fbf7f472",
+     "call_id": "call_ZpILzbLU1WynSdo37Q39Gkwh",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 140,
+       "y": 250
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a6bd8befc7e9d9a016af4d0ce73cc87d2bd8037c3dab89c70",
+     "call_id": "call_KWqXoJsc7EWBXwXKX6H2yUSO",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "right",
+       "type": "click",
+       "x": 140,
+       "y": 250
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a6bd8befc7e9d9a016af4d0d22edc87d2aa94e5e92550c3a2",
+     "call_id": "call_90yNo1z0Po5vXEFvc74ofuWZ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 141,
+       "y": 250
+      },
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a6bd8befc7e9d9a016af4d0d6292487d2ac56f040ec6b8c70",
+     "call_id": "call_yYqWfdColP8Eyw4yjzoRINy7",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 144,
+       "y": 111
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a6bd8befc7e9d9a016af4d0db603487d2a10925f8ae2d8f51",
+     "call_id": "call_9zLRYRMtclMsFuSEByibhVyB",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "ESC"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "CTRL",
+        "L"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "Created Ironbark Legal with exactly the five requested values; all other fields were left unchanged.\n\nRESULT: NOT DONE Record created and verified, but its ID or page URL could not be retrieved from this browser interface.",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 22,
+   "y": 166,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 1195,
+   "y": 62,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 215,
+   "y": 232,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Ironbark Legal"
+  },
+  {
+   "a": "click",
+   "x": 566,
+   "y": 234,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "ironbark.example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 245,
+   "y": 697,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Two partners."
+  },
+  {
+   "a": "click",
+   "x": 435,
+   "y": 616,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 125,
+   "y": 683,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 818,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 665,
+   "y": 512,
+   "dx": 0,
+   "dy": 391
+  },
+  {
+   "a": "click",
+   "x": 720,
+   "y": 612,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 600,
+   "y": 474,
+   "dx": 0,
+   "dy": 293
+  },
+  {
+   "a": "scroll",
+   "x": 600,
+   "y": 474,
+   "dx": 0,
+   "dy": 285
+  },
+  {
+   "a": "click",
+   "x": 498,
+   "y": 537,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 94,
+   "y": 107,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 94,
+   "y": 107,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "l"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "F11"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "l"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 122,
+   "y": 57,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "move",
+   "x": 140,
+   "y": 250
+  },
+  {
+   "a": "click",
+   "x": 140,
+   "y": 250,
+   "button": "right",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 141,
+   "y": 250,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 144,
+   "y": 111,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ESC"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "L"
+   ]
+  }
+ ],
+ "usage": [
+  {
+   "in": 2204,
+   "out": 23,
+   "usd": 0.000676,
+   "cached": 2201
+  },
+  {
+   "in": 3421,
+   "out": 31,
+   "usd": 0.00319,
+   "cached": 2201
+  },
+  {
+   "in": 4677,
+   "out": 19,
+   "usd": 0.003392,
+   "cached": 3418
+  },
+  {
+   "in": 5917,
+   "out": 32,
+   "usd": 0.003741,
+   "cached": 4674
+  },
+  {
+   "in": 7174,
+   "out": 19,
+   "usd": 0.003893,
+   "cached": 5914
+  },
+  {
+   "in": 8414,
+   "out": 112,
+   "usd": 0.00504,
+   "cached": 7171
+  },
+  {
+   "in": 9786,
+   "out": 18,
+   "usd": 0.004612,
+   "cached": 8411
+  },
+  {
+   "in": 11014,
+   "out": 47,
+   "usd": 0.004889,
+   "cached": 9783
+  },
+  {
+   "in": 12294,
+   "out": 37,
+   "usd": 0.005138,
+   "cached": 11011
+  },
+  {
+   "in": 13556,
+   "out": 31,
+   "usd": 0.005298,
+   "cached": 12291
+  },
+  {
+   "in": 14812,
+   "out": 37,
+   "usd": 0.005599,
+   "cached": 13553
+  },
+  {
+   "in": 16074,
+   "out": 37,
+   "usd": 0.005862,
+   "cached": 14809
+  },
+  {
+   "in": 17336,
+   "out": 47,
+   "usd": 0.006214,
+   "cached": 16071
+  },
+  {
+   "in": 18616,
+   "out": 51,
+   "usd": 0.006543,
+   "cached": 17333
+  },
+  {
+   "in": 19900,
+   "out": 19,
+   "usd": 0.006487,
+   "cached": 18613
+  },
+  {
+   "in": 21140,
+   "out": 30,
+   "usd": 0.006765,
+   "cached": 19897
+  },
+  {
+   "in": 22395,
+   "out": 65,
+   "usd": 0.007393,
+   "cached": 21137
+  },
+  {
+   "in": 23685,
+   "out": 63,
+   "usd": 0.007694,
+   "cached": 22392
+  },
+  {
+   "in": 24977,
+   "out": 19,
+   "usd": 0.007516,
+   "cached": 23682
+  },
+  {
+   "in": 26217,
+   "out": 27,
+   "usd": 0.007751,
+   "cached": 24974
+  },
+  {
+   "in": 27469,
+   "out": 46,
+   "usd": 0.008213,
+   "cached": 26214
+  },
+  {
+   "in": 28740,
+   "out": 73,
+   "usd": 0.008771,
+   "cached": 27466
+  },
+  {
+   "in": 30042,
+   "out": 35,
+   "usd": 0.008707,
+   "cached": 28737
+  },
+  {
+   "in": 31306,
+   "out": 90,
+   "usd": 0.009442,
+   "cached": 30039
+  },
+  {
+   "in": 32621,
+   "out": 47,
+   "usd": 0.009367,
+   "cached": 31303
+  }
+ ]
+}

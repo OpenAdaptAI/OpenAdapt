@@ -1,0 +1,75 @@
+{
+ "id": "RM-WV1",
+ "app": "redmine",
+ "class": "wrong_value",
+ "note": "The estimated time changes from 0.5 to 5.",
+ "agent_s": 62.3,
+ "cost_usd": 0.116661,
+ "claim": {
+  "status": "done",
+  "id": "64",
+  "note": "RESULT: DONE 64",
+  "claim_line": true,
+  "final_text": "RESULT: DONE 64",
+  "model_calls": 21,
+  "actions": 41,
+  "tokens_in": 314461,
+  "tokens_out": 993,
+  "end_url": "http://127.0.0.1:9861/issues/64"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "64"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794426626.516,
+   "method": "POST",
+   "path": "/login",
+   "save": false,
+   "status": 302,
+   "ms": 9
+  },
+  {
+   "t": 1794426654.801,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues",
+   "save": true,
+   "fault": [
+    "set"
+   ],
+   "rewritten": [
+    "issue[estimated_hours]"
+   ],
+   "status": 302,
+   "ms": 31
+  },
+  {
+   "t": 1794426687.497,
+   "method": "POST",
+   "path": "/issues/64",
+   "save": false,
+   "status": 302,
+   "ms": 31
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 2,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 7.4,
+  "end": 7.1,
+  "waited_s": 0
+ }
+}

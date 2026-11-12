@@ -1,0 +1,53 @@
+{
+ "id": "ES-C2",
+ "app": "espocrm",
+ "class": "clean",
+ "note": "A plain account.",
+ "agent_s": 686.0,
+ "cost_usd": 0.189913,
+ "claim": {
+  "status": "not_done",
+  "id": "The record was created and verified, but its ID or page URL could not be retrieved.",
+  "note": "RESULT: NOT DONE The record was created and verified, but its ID or page URL could not be retrieved.",
+  "claim_line": true,
+  "final_text": "Created Driftwood Outfitters with exactly the five requested values; all other fields were left unchanged.\n\nRESULT: NOT DONE The record was created and verified, but its ID or page URL could not be retrieved.",
+  "model_calls": 29,
+  "actions": 30,
+  "tokens_in": 574885,
+  "tokens_out": 1123,
+  "end_url": "http://127.0.0.1:9856/#Account/view/6af4cb58192456bb5"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "6af4cb58192456bb5"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794427735.997,
+   "method": "POST",
+   "path": "/api/v1/Account",
+   "save": true,
+   "status": 200,
+   "ms": 100
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 2,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 7.0,
+  "end": 7.6,
+  "waited_s": 0
+ }
+}

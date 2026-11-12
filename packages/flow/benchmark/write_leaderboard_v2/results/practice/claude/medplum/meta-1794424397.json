@@ -1,0 +1,16 @@
+{
+ "schema": "openadapt.write-leaderboard-v2.run/v1",
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "app": "medplum",
+ "phase": "practice",
+ "commit": "4776eb6ad5cb255aae5cada30c256867a0f6a0b6",
+ "dirty": true,
+ "host": "Darwin arm64, Python 3.12.13",
+ "started": "2026-11-11T19:13:17Z",
+ "limits": {
+  "step_cap": 80,
+  "run_usd_cap": 2.5,
+  "wall_s_cap": 1800
+ }
+}

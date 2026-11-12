@@ -1,0 +1,1147 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07193c93c9b734f6016af4d4c36a5487d290146b190cbcde48",
+     "call_id": "call_RE39RWVx8ps2NMOBPABoqoe6",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07193c93c9b734f6016af4d4c69b3087d2b46ec1a8e72f8469",
+     "call_id": "call_u4hLhZDsdZLNygBkY7y3SGxn",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 23,
+       "y": 166
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07193c93c9b734f6016af4d4c9594887d288ccbf745a74b016",
+     "call_id": "call_h4NzBXFxOHFGtU3wDaMVQjvS",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07193c93c9b734f6016af4d4cbeedc87d2b40eb9223625318e",
+     "call_id": "call_DOntoo7r5WGdZpipPFWjjHZ3",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1197,
+       "y": 61
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07193c93c9b734f6016af4d4ce5a4487d2956af9a78c7166ac",
+     "call_id": "call_Mc1bWi6U7b2ZReXc6pRfkywx",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07193c93c9b734f6016af4d4d0cbc487d297988c46cd1e2db9",
+     "call_id": "call_bavw2nHzfD6oK2f0STIRdwhd",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 219,
+       "y": 230
+      },
+      {
+       "text": "Elmstead Bakery",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 612,
+       "y": 231
+      },
+      {
+       "text": "elmstead.example.invalid",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 283,
+       "y": 697
+      },
+      {
+       "text": "Bread for four cafes.",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 434,
+       "y": 618
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07193c93c9b734f6016af4d4d4a6c887d28f3349d16714ea96",
+     "call_id": "call_Oak7OuXUPvy7b7sQM94aH4r1",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 435,
+       "y": 620
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07193c93c9b734f6016af4d4d7470087d2ad26c2d1783e1acd",
+     "call_id": "call_xpm4G0gEOD1oMDDekE4Sdhr8",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07193c93c9b734f6016af4d4d99af887d29ec2ecfc12b54ad3",
+     "call_id": "call_89xyTlEiSSg99cAhbTsY9r8s",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 260,
+       "y": 618
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07193c93c9b734f6016af4d4dbf2ec87d2858eb596e76a1da4",
+     "call_id": "call_tN9Vp9fOKrlOlLfpRu9pr3le",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 135,
+       "y": 683
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 638,
+       "y": 617
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07193c93c9b734f6016af4d4de9f9c87d2957c6d1d59bce977",
+     "call_id": "call_Z8XEwxIErDmcsP3UpnBnpsgS",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": 360,
+       "type": "scroll",
+       "x": 671,
+       "y": 508
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07193c93c9b734f6016af4d4e2fc3c87d2bd9e65758e4d1aa8",
+     "call_id": "call_dLHHrUjKsu7Lp5nk8cSTszMi",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 635,
+       "y": 613
+      },
+      {
+       "keys": [
+        "h"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ENTER"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07193c93c9b734f6016af4d4e54eb087d2881bc6b241c209d9",
+     "call_id": "call_XNeSdxkzBGe6Kepm0tLDJFWy",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 635,
+       "y": 613
+      },
+      {
+       "keys": [
+        "h"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "h"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ENTER"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07193c93c9b734f6016af4d4e87a5087d282aa48418e498708",
+     "call_id": "call_crc1j7rOZnpJfYLjymMMmGF3",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "a"
+       ],
+       "type": "keypress"
+      },
+      {
+       "text": "Hospitality",
+       "type": "type"
+      },
+      {
+       "keys": [
+        "ENTER"
+       ],
+       "type": "keypress"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 864,
+       "y": 650
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07193c93c9b734f6016af4d4eb2bfc87d2accaab095b276375",
+     "call_id": "call_5gsTpHkfxaXWsnri0RJyvkrX",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 650,
+       "y": 614
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07193c93c9b734f6016af4d4ee54e087d2b6f6d3596c2c0411",
+     "call_id": "call_IbA7w1BldNde87f6ISfWhFJB",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "ARROWDOWN"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ENTER"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07193c93c9b734f6016af4d4f1df3487d2b8f9d5067e8cafa8",
+     "call_id": "call_wFBap5hag1lHIfMw1VpYDuRW",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 95,
+       "y": 105
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07193c93c9b734f6016af4d4f523d087d2b95824391177d13a",
+     "call_id": "call_0L7x5DRiCMH4CHmGTb8WwEMb",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07193c93c9b734f6016af4d4f81c3887d2be48690cd4af0f3f",
+     "call_id": "call_eXx3VUIjDKFmNoK4YOCujCYi",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07193c93c9b734f6016af4d4fb7c3887d2836744d78846ed8c",
+     "call_id": "call_27XK4By73ABugvAAyh1bZqLB",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 95,
+       "y": 113
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07193c93c9b734f6016af4d4fea88487d291771e22c7779550",
+     "call_id": "call_59XlVJLjdGty5t4u0B9aZxQb",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 631,
+       "y": 618
+      },
+      {
+       "keys": [
+        "h"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ENTER"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07193c93c9b734f6016af4d5020d5c87d2a34f647e2dd5283e",
+     "call_id": "call_PXSVipwUGGJtJLIk37okvqtG",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 530,
+       "y": 577
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07193c93c9b734f6016af4d50545a887d2a10d312da1223949",
+     "call_id": "call_x6hgrsUKYVWZweHJGMTUfnRi",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 95,
+       "y": 112
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07193c93c9b734f6016af4d50828bc87d29bdc19dc41d712b2",
+     "call_id": "call_g4gRqT7IeBY7CS6LvuwaYeK1",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "l"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07193c93c9b734f6016af4d50b446487d2bd2c99ef232b74fb",
+     "call_id": "call_x4EBDHPgE56DgHi5FrU2ctUF",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "F11"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07193c93c9b734f6016af4d50fee5087d2bd4013cb8abd47e2",
+     "call_id": "call_kZ1n7DQu4n3eaBalQGP3c465",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 144,
+       "y": 113
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07193c93c9b734f6016af4d5145aac87d2804ba22b4661f7da",
+     "call_id": "call_3viGpOWiXf382ywE9D93996k",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 285,
+       "y": 112
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 121,
+       "y": 56
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07193c93c9b734f6016af4d51a8bd087d296c7b7ed8bb69426",
+     "call_id": "call_uL6GyjSmqxb3yaSBSGGeDdz5",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07193c93c9b734f6016af4d51e5a7c87d2b9ff13610cbeae41",
+     "call_id": "call_5vI75jOmidxYsIifMHruUkvT",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 155,
+       "y": 251
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07193c93c9b734f6016af4d521e42487d295076b8d54b1c8e1",
+     "call_id": "call_BU0JTc2AH6H8RbS5zbmmtJ8u",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "right",
+       "type": "click",
+       "x": 155,
+       "y": 251
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "Created Elmstead Bakery with the requested values; all other fields were left unchanged.\nRESULT: DONE Elmstead Bakery",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 23,
+   "y": 166,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1197,
+   "y": 61,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 219,
+   "y": 230,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Elmstead Bakery"
+  },
+  {
+   "a": "click",
+   "x": 612,
+   "y": 231,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "elmstead.example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 283,
+   "y": 697,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Bread for four cafes."
+  },
+  {
+   "a": "click",
+   "x": 434,
+   "y": 618,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 435,
+   "y": 620,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 260,
+   "y": 618,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 135,
+   "y": 683,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 638,
+   "y": 617,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 671,
+   "y": 508,
+   "dx": 0,
+   "dy": 360
+  },
+  {
+   "a": "click",
+   "x": 635,
+   "y": 613,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "h"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ENTER"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 635,
+   "y": 613,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "h"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "h"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ENTER"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "a"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Hospitality"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ENTER"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 864,
+   "y": 650,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 650,
+   "y": 614,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ARROWDOWN"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ENTER"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 95,
+   "y": 105,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 95,
+   "y": 113,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 631,
+   "y": 618,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "h"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ENTER"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 530,
+   "y": 577,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 95,
+   "y": 112,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "l"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "F11"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 144,
+   "y": 113,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 285,
+   "y": 112,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 121,
+   "y": 56,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "move",
+   "x": 155,
+   "y": 251
+  },
+  {
+   "a": "click",
+   "x": 155,
+   "y": 251,
+   "button": "right",
+   "count": 1,
+   "mods": []
+  }
+ ],
+ "usage": [
+  {
+   "in": 2204,
+   "out": 37,
+   "usd": 0.004778,
+   "cached": 0
+  },
+  {
+   "in": 3421,
+   "out": 31,
+   "usd": 0.00319,
+   "cached": 2201
+  },
+  {
+   "in": 4677,
+   "out": 18,
+   "usd": 0.003382,
+   "cached": 3418
+  },
+  {
+   "in": 5905,
+   "out": 32,
+   "usd": 0.003717,
+   "cached": 4674
+  },
+  {
+   "in": 7162,
+   "out": 15,
+   "usd": 0.00385,
+   "cached": 5902
+  },
+  {
+   "in": 8390,
+   "out": 112,
+   "usd": 0.005014,
+   "cached": 7159
+  },
+  {
+   "in": 9762,
+   "out": 31,
+   "usd": 0.004737,
+   "cached": 8387
+  },
+  {
+   "in": 11018,
+   "out": 15,
+   "usd": 0.00462,
+   "cached": 9759
+  },
+  {
+   "in": 12246,
+   "out": 31,
+   "usd": 0.004975,
+   "cached": 11015
+  },
+  {
+   "in": 13502,
+   "out": 47,
+   "usd": 0.005437,
+   "cached": 12243
+  },
+  {
+   "in": 14782,
+   "out": 37,
+   "usd": 0.005636,
+   "cached": 13499
+  },
+  {
+   "in": 16044,
+   "out": 65,
+   "usd": 0.006136,
+   "cached": 14779
+  },
+  {
+   "in": 17342,
+   "out": 58,
+   "usd": 0.00639,
+   "cached": 16041
+  },
+  {
+   "in": 18637,
+   "out": 72,
+   "usd": 0.006784,
+   "cached": 17339
+  },
+  {
+   "in": 19946,
+   "out": 31,
+   "usd": 0.006661,
+   "cached": 18634
+  },
+  {
+   "in": 21202,
+   "out": 36,
+   "usd": 0.006867,
+   "cached": 19943
+  },
+  {
+   "in": 22463,
+   "out": 31,
+   "usd": 0.007078,
+   "cached": 21199
+  },
+  {
+   "in": 23719,
+   "out": 15,
+   "usd": 0.00716,
+   "cached": 22460
+  },
+  {
+   "in": 24947,
+   "out": 15,
+   "usd": 0.007355,
+   "cached": 23716
+  },
+  {
+   "in": 26175,
+   "out": 53,
+   "usd": 0.007981,
+   "cached": 24944
+  },
+  {
+   "in": 27453,
+   "out": 49,
+   "usd": 0.008286,
+   "cached": 26172
+  },
+  {
+   "in": 28735,
+   "out": 31,
+   "usd": 0.00837,
+   "cached": 27450
+  },
+  {
+   "in": 29991,
+   "out": 31,
+   "usd": 0.008574,
+   "cached": 28732
+  },
+  {
+   "in": 31247,
+   "out": 26,
+   "usd": 0.008776,
+   "cached": 29988
+  },
+  {
+   "in": 32494,
+   "out": 48,
+   "usd": 0.009229,
+   "cached": 31244
+  },
+  {
+   "in": 33763,
+   "out": 45,
+   "usd": 0.009492,
+   "cached": 32491
+  },
+  {
+   "in": 35033,
+   "out": 75,
+   "usd": 0.010048,
+   "cached": 33760
+  },
+  {
+   "in": 36341,
+   "out": 15,
+   "usd": 0.009778,
+   "cached": 35030
+  },
+  {
+   "in": 37569,
+   "out": 27,
+   "usd": 0.01,
+   "cached": 36338
+  },
+  {
+   "in": 38821,
+   "out": 52,
+   "usd": 0.010543,
+   "cached": 37566
+  },
+  {
+   "in": 40098,
+   "out": 132,
+   "usd": 0.011644,
+   "cached": 38818
+  }
+ ]
+}

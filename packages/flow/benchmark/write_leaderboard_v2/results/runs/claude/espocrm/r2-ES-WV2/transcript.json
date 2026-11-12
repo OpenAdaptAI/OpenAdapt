@@ -1,0 +1,712 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      23,
+      166
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I should check whether it already exists first.",
+   "actions": [
+    {
+     "coordinate": [
+      344,
+      112
+     ]
+    },
+    {
+     "text": "Foxglove\n"
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1195,
+      62
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      263,
+      232
+     ]
+    },
+    {
+     "text": "Foxglove Pharmacy"
+    },
+    {
+     "coordinate": [
+      651,
+      232
+     ]
+    },
+    {
+     "text": "foxglove.example.invalid"
+    },
+    {
+     "coordinate": [
+      457,
+      702
+     ]
+    },
+    {
+     "text": "Late hours on weekdays."
+    },
+    {
+     "coordinate": [
+      263,
+      618
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      121,
+      683
+     ]
+    },
+    {
+     "coordinate": [
+      651,
+      618
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1000,
+      500
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "coordinate": [
+      651,
+      618
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Type to search in the dropdown.",
+   "actions": [
+    {
+     "text": "Health"
+    },
+    {
+     "duration": 1
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      513,
+      656
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": [
+      0,
+      540,
+      860,
+      760
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      95,
+      112
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      95,
+      112
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      263,
+      618
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      121,
+      683
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      95,
+      112
+     ]
+    },
+    {
+     "duration": 4
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {
+     "text": "ctrl+l"
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I created the Foxglove Pharmacy account and it now has all five values you asked for: website foxglove.example.invalid, type Customer, industry Healthcare, and description \"Late hours on weekdays.\"\n\nThe first save came out with type Investor instead of Customer, so I edited the record and saved it again. Every other field was left blank. I couldn't see the browser's address bar, so I don't have the record's id or URL. The account is in the Accounts list under the name Foxglove Pharmacy.\n\nRESULT: DONE Account \"Foxglove Pharmacy\" in Accounts list (record URL/id not visible in the screenshots)",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 23,
+   "y": 166,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 344,
+   "y": 112,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Foxglove\n"
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 1195,
+   "y": 62,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 263,
+   "y": 232,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Foxglove Pharmacy"
+  },
+  {
+   "a": "click",
+   "x": 651,
+   "y": 232,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "foxglove.example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 457,
+   "y": 702,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Late hours on weekdays."
+  },
+  {
+   "a": "click",
+   "x": 263,
+   "y": 618,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 121,
+   "y": 683,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 651,
+   "y": 618,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 1000,
+   "y": 500,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 651,
+   "y": 618,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "type",
+   "text": "Health"
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 513,
+   "y": 656,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 95,
+   "y": 112,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 95,
+   "y": 112,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 263,
+   "y": 618,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 121,
+   "y": 683,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 95,
+   "y": 112,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 4.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "l"
+   ]
+  }
+ ],
+ "usage": [
+  {
+   "in": 6146,
+   "out": 92,
+   "usd": 0.016283,
+   "cached": 0
+  },
+  {
+   "in": 7642,
+   "out": 75,
+   "usd": 0.005727,
+   "cached": 6142
+  },
+  {
+   "in": 9102,
+   "out": 139,
+   "usd": 0.006572,
+   "cached": 7640
+  },
+  {
+   "in": 10642,
+   "out": 99,
+   "usd": 0.006664,
+   "cached": 9100
+  },
+  {
+   "in": 12139,
+   "out": 75,
+   "usd": 0.006625,
+   "cached": 10640
+  },
+  {
+   "in": 13599,
+   "out": 247,
+   "usd": 0.008551,
+   "cached": 12137
+  },
+  {
+   "in": 15308,
+   "out": 126,
+   "usd": 0.008256,
+   "cached": 13597
+  },
+  {
+   "in": 16845,
+   "out": 111,
+   "usd": 0.008018,
+   "cached": 15306
+  },
+  {
+   "in": 18333,
+   "out": 166,
+   "usd": 0.008753,
+   "cached": 16843
+  },
+  {
+   "in": 19922,
+   "out": 108,
+   "usd": 0.008723,
+   "cached": 18331
+  },
+  {
+   "in": 21426,
+   "out": 112,
+   "usd": 0.008868,
+   "cached": 19920
+  },
+  {
+   "in": 22935,
+   "out": 106,
+   "usd": 0.009121,
+   "cached": 21424
+  },
+  {
+   "in": 24431,
+   "out": 80,
+   "usd": 0.009131,
+   "cached": 22933
+  },
+  {
+   "in": 25896,
+   "out": 143,
+   "usd": 0.009982,
+   "cached": 24429
+  },
+  {
+   "in": 27424,
+   "out": 140,
+   "usd": 0.010403,
+   "cached": 25894
+  },
+  {
+   "in": 28962,
+   "out": 103,
+   "usd": 0.010363,
+   "cached": 27422
+  },
+  {
+   "in": 30463,
+   "out": 103,
+   "usd": 0.010578,
+   "cached": 28960
+  },
+  {
+   "in": 31964,
+   "out": 103,
+   "usd": 0.010879,
+   "cached": 30461
+  },
+  {
+   "in": 33465,
+   "out": 100,
+   "usd": 0.011149,
+   "cached": 31962
+  },
+  {
+   "in": 34961,
+   "out": 204,
+   "usd": 0.012477,
+   "cached": 33463
+  }
+ ]
+}

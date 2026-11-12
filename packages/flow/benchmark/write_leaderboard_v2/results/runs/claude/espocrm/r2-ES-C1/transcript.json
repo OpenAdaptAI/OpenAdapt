@@ -1,0 +1,491 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      23,
+      166
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Let me check for an existing record first.",
+   "actions": [
+    {
+     "coordinate": [
+      340,
+      112
+     ]
+    },
+    {
+     "text": "Copperleaf\n"
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1195,
+      62
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      263,
+      232
+     ]
+    },
+    {
+     "text": "Copperleaf Dental"
+    },
+    {
+     "coordinate": [
+      651,
+      232
+     ]
+    },
+    {
+     "text": "copperleaf.example.invalid"
+    },
+    {
+     "coordinate": [
+      457,
+      702
+     ]
+    },
+    {
+     "text": "Two chairs and one office."
+    },
+    {
+     "coordinate": [
+      263,
+      618
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      121,
+      683
+     ]
+    },
+    {
+     "coordinate": [
+      651,
+      618
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Industry dropdown didn't open visibly; click again.",
+   "actions": [
+    {
+     "coordinate": [
+      651,
+      618
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Try typing to jump to Healthcare.",
+   "actions": [
+    {
+     "text": "Health"
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      513,
+      656
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": [
+      64,
+      530,
+      852,
+      750
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      94,
+      113
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {
+     "}": null
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I created the Copperleaf Dental account. Its page shows website copperleaf.example.invalid, type Customer, industry Healthcare, and description \"Two chairs and one office.\" I left every other field at its default. A search for \"Copperleaf\" beforehand found no existing account. The browser's address bar isn't visible, so I can't read the record's id or URL. The record's page is Accounts \u203a Copperleaf Dental.\n\nRESULT: DONE Account \"Copperleaf Dental\" created (Accounts \u203a Copperleaf Dental; id/URL not visible in the browser)",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 23,
+   "y": 166,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 340,
+   "y": 112,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Copperleaf\n"
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 1195,
+   "y": 62,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 263,
+   "y": 232,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Copperleaf Dental"
+  },
+  {
+   "a": "click",
+   "x": 651,
+   "y": 232,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "copperleaf.example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 457,
+   "y": 702,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Two chairs and one office."
+  },
+  {
+   "a": "click",
+   "x": 263,
+   "y": 618,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 121,
+   "y": 683,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 651,
+   "y": 618,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 651,
+   "y": 618,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "type",
+   "text": "Health"
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 513,
+   "y": 656,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 94,
+   "y": 113,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6144,
+   "out": 92,
+   "usd": 0.016278,
+   "cached": 0
+  },
+  {
+   "in": 7640,
+   "out": 75,
+   "usd": 0.005727,
+   "cached": 6140
+  },
+  {
+   "in": 9100,
+   "out": 140,
+   "usd": 0.006582,
+   "cached": 7638
+  },
+  {
+   "in": 10641,
+   "out": 99,
+   "usd": 0.006666,
+   "cached": 9098
+  },
+  {
+   "in": 12138,
+   "out": 75,
+   "usd": 0.006624,
+   "cached": 10639
+  },
+  {
+   "in": 13598,
+   "out": 245,
+   "usd": 0.008531,
+   "cached": 12136
+  },
+  {
+   "in": 15305,
+   "out": 129,
+   "usd": 0.008281,
+   "cached": 13596
+  },
+  {
+   "in": 16837,
+   "out": 125,
+   "usd": 0.008145,
+   "cached": 15303
+  },
+  {
+   "in": 18352,
+   "out": 114,
+   "usd": 0.008299,
+   "cached": 16835
+  },
+  {
+   "in": 19854,
+   "out": 112,
+   "usd": 0.008549,
+   "cached": 18350
+  },
+  {
+   "in": 21363,
+   "out": 106,
+   "usd": 0.008807,
+   "cached": 19852
+  },
+  {
+   "in": 22859,
+   "out": 79,
+   "usd": 0.008806,
+   "cached": 21361
+  },
+  {
+   "in": 24323,
+   "out": 83,
+   "usd": 0.009065,
+   "cached": 22857
+  },
+  {
+   "in": 25783,
+   "out": 323,
+   "usd": 0.011748,
+   "cached": 24321
+  }
+ ]
+}

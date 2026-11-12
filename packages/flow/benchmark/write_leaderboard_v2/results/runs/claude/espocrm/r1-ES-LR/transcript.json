@@ -1,0 +1,657 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+l"
+    },
+    {
+     "text": "localhost/#Account/create\n"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The browser seems to be in kiosk mode with no URL bar. I'll use the app UI instead.",
+   "actions": [
+    {
+     "coordinate": [
+      23,
+      166
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Check for existing account first.",
+   "actions": [
+    {
+     "coordinate": [
+      340,
+      113
+     ]
+    },
+    {
+     "text": "Heron\n"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1194,
+      63
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      263,
+      233
+     ]
+    },
+    {
+     "text": "Heron Print Works"
+    },
+    {
+     "coordinate": [
+      651,
+      233
+     ]
+    },
+    {
+     "text": "heron.example.invalid"
+    },
+    {
+     "coordinate": [
+      457,
+      702
+     ]
+    },
+    {
+     "text": "Labels and packaging."
+    },
+    {
+     "coordinate": [
+      263,
+      619
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      121,
+      683
+     ]
+    },
+    {
+     "coordinate": [
+      651,
+      619
+     ]
+    },
+    {
+     "text": "Manuf"
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The dropdown didn't open visibly. Try clicking again.",
+   "actions": [
+    {
+     "coordinate": [
+      651,
+      619
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "Manuf"
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      525,
+      656
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": [
+      64,
+      540,
+      852,
+      750
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      95,
+      113
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The save returned a 504 error, so the account may or may not have been created. I'll check the list before trying again, so I don't create a duplicate.",
+   "actions": [
+    {
+     "coordinate": [
+      126,
+      58
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      418,
+      77
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "}": null
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The record was saved despite the error, and there is only one. I'll open it to confirm the fields and get its id.",
+   "actions": [
+    {
+     "coordinate": [
+      156,
+      251
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The account Heron Print Works now exists with the requested values: website heron.example.invalid, type Customer, industry Manufacturing, and description \"Labels and packaging.\" All other fields are empty. The first save showed a 504 error, but the record had been created anyway. I checked the list before retrying, so there is only one Heron Print Works. The browser shows no address bar, so I couldn't read the record's id or URL. It is the first row in the Accounts list.\n\nRESULT: DONE Account \"Heron Print Works\" exists in Accounts (record id not visible in this browser)",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "l"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "localhost/#Account/create\n"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 23,
+   "y": 166,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 340,
+   "y": 113,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Heron\n"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 1194,
+   "y": 63,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 263,
+   "y": 233,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Heron Print Works"
+  },
+  {
+   "a": "click",
+   "x": 651,
+   "y": 233,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "heron.example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 457,
+   "y": 702,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Labels and packaging."
+  },
+  {
+   "a": "click",
+   "x": 263,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 121,
+   "y": 683,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 651,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Manuf"
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 651,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "type",
+   "text": "Manuf"
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 525,
+   "y": 656,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 95,
+   "y": 113,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 126,
+   "y": 58,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 418,
+   "y": 77,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 156,
+   "y": 251,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6139,
+   "out": 113,
+   "usd": 0.016476,
+   "cached": 0
+  },
+  {
+   "in": 7666,
+   "out": 139,
+   "usd": 0.006443,
+   "cached": 6135
+  },
+  {
+   "in": 9195,
+   "out": 75,
+   "usd": 0.006109,
+   "cached": 7664
+  },
+  {
+   "in": 10655,
+   "out": 134,
+   "usd": 0.006833,
+   "cached": 9193
+  },
+  {
+   "in": 12190,
+   "out": 99,
+   "usd": 0.006962,
+   "cached": 10653
+  },
+  {
+   "in": 13687,
+   "out": 75,
+   "usd": 0.006934,
+   "cached": 12188
+  },
+  {
+   "in": 15147,
+   "out": 239,
+   "usd": 0.008781,
+   "cached": 13685
+  },
+  {
+   "in": 16848,
+   "out": 139,
+   "usd": 0.008675,
+   "cached": 15145
+  },
+  {
+   "in": 18409,
+   "out": 127,
+   "usd": 0.008546,
+   "cached": 16846
+  },
+  {
+   "in": 19926,
+   "out": 101,
+   "usd": 0.008488,
+   "cached": 18407
+  },
+  {
+   "in": 21415,
+   "out": 112,
+   "usd": 0.008831,
+   "cached": 19924
+  },
+  {
+   "in": 22924,
+   "out": 98,
+   "usd": 0.009039,
+   "cached": 21413
+  },
+  {
+   "in": 24420,
+   "out": 75,
+   "usd": 0.009078,
+   "cached": 22922
+  },
+  {
+   "in": 25880,
+   "out": 288,
+   "usd": 0.011418,
+   "cached": 24418
+  },
+  {
+   "in": 27558,
+   "out": 102,
+   "usd": 0.010395,
+   "cached": 25878
+  },
+  {
+   "in": 29058,
+   "out": 83,
+   "usd": 0.010095,
+   "cached": 27556
+  },
+  {
+   "in": 30518,
+   "out": 132,
+   "usd": 0.010785,
+   "cached": 29056
+  },
+  {
+   "in": 32048,
+   "out": 75,
+   "usd": 0.010682,
+   "cached": 30516
+  },
+  {
+   "in": 33508,
+   "out": 240,
+   "usd": 0.012463,
+   "cached": 32046
+  }
+ ]
+}

@@ -1,0 +1,407 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      217,
+      95
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "No existing issue with that subject (only open shown, though). Proceed.",
+   "actions": [
+    {
+     "coordinate": [
+      889,
+      131
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Changing the tracker reloads the form, so set it first.",
+   "actions": [
+    {
+     "coordinate": [
+      242,
+      177
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": [
+      0,
+      150,
+      640,
+      350
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The page seems to have re-rendered; the dropdown may not be open. Take a screenshot.",
+   "actions": [
+    {
+     "coordinate": [
+      242,
+      183
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": [
+      0,
+      150,
+      640,
+      350
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "Escape"
+    },
+    {
+     "text": "Feature"
+    },
+    {
+     "text": "Return"
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      700,
+      217
+     ]
+    },
+    {
+     "text": "Room booking reminders by email"
+    },
+    {
+     "coordinate": [
+      700,
+      350
+     ]
+    },
+    {
+     "text": "A reminder an hour before."
+    },
+    {
+     "coordinate": [
+      848,
+      521
+     ]
+    },
+    {
+     "text": "12122026"
+    },
+    {
+     "coordinate": [
+      855,
+      555
+     ]
+    },
+    {
+     "text": "6"
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      840,
+      521
+     ]
+    },
+    {
+     "text": "20261212"
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": [
+      640,
+      430,
+      1280,
+      610
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      44,
+      722
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      400
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I created Feature #46 in Synthetic Helpdesk with the subject \"Room booking reminders by email\" and the description \"A reminder an hour before.\" Its priority is Normal, the due date is 2026-12-12, and the estimated time is 6:00 hours. I left every other field at its default.\n\nBefore creating it I checked the open issues list, which showed no issue with that subject. I didn't check closed issues.\n\nRESULT: DONE #46",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 217,
+   "y": 95,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 889,
+   "y": 131,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 242,
+   "y": 177,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 242,
+   "y": 183,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Escape"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Feature"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Return"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 217,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Room booking reminders by email"
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 350,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "A reminder an hour before."
+  },
+  {
+   "a": "click",
+   "x": 848,
+   "y": 521,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "12122026"
+  },
+  {
+   "a": "click",
+   "x": 855,
+   "y": 555,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "6"
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 840,
+   "y": 521,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "20261212"
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 44,
+   "y": 722,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6157,
+   "out": 92,
+   "usd": 0.01631,
+   "cached": 0
+  },
+  {
+   "in": 7653,
+   "out": 121,
+   "usd": 0.00619,
+   "cached": 6153
+  },
+  {
+   "in": 9172,
+   "out": 132,
+   "usd": 0.006652,
+   "cached": 7651
+  },
+  {
+   "in": 10702,
+   "out": 144,
+   "usd": 0.007103,
+   "cached": 9170
+  },
+  {
+   "in": 12244,
+   "out": 181,
+   "usd": 0.007809,
+   "cached": 10700
+  },
+  {
+   "in": 13843,
+   "out": 244,
+   "usd": 0.00889,
+   "cached": 12242
+  },
+  {
+   "in": 15568,
+   "out": 188,
+   "usd": 0.008965,
+   "cached": 13841
+  },
+  {
+   "in": 17164,
+   "out": 114,
+   "usd": 0.008247,
+   "cached": 15566
+  },
+  {
+   "in": 18676,
+   "out": 142,
+   "usd": 0.008636,
+   "cached": 17162
+  }
+ ]
+}

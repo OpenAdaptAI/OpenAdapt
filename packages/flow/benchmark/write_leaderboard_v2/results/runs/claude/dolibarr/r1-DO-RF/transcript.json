@@ -1,0 +1,521 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+l"
+    },
+    {
+     "text": "localhost/contact/card.php?action=create\n"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      113,
+      27
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      25,
+      397
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "No Beatriz exists. Create new.",
+   "actions": [
+    {
+     "coordinate": [
+      85,
+      372
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      665,
+      164
+     ]
+    },
+    {
+     "text": "Silva"
+    },
+    {
+     "coordinate": [
+      665,
+      198
+     ]
+    },
+    {
+     "text": "Beatriz"
+    },
+    {
+     "coordinate": [
+      665,
+      297
+     ]
+    },
+    {
+     "text": "Sales assistant"
+    },
+    {
+     "coordinate": [
+      685,
+      476
+     ]
+    },
+    {
+     "text": "555-0197"
+    },
+    {
+     "coordinate": [
+      685,
+      544
+     ]
+    },
+    {
+     "text": "b.silva@example.invalid"
+    },
+    {
+     "coordinate": [
+      760,
+      600
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 30
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      720,
+      759
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 5
+    },
+    {
+     "text": "alt+Left"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 20
+    },
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 5
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 60
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "alt+Left"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "alt+Left"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 60
+    },
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 5
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I couldn't confirm that the contact was created, because Dolibarr stopped responding when I submitted the form.\n\nI filled in Beatriz Silva with job position Sales assistant, business phone 555-0197 and email b.silva@example.invalid, left the third party empty, and clicked Add. The server then returned \"Service Unavailable\". It was still returning that after several minutes of waiting, a page reload and backing out twice, so I couldn't check whether the contact was saved. I didn't resubmit the form, since that could have created a duplicate. Before the submit, the contact list had only three contacts (Brandt, Haddad, Novak), so Beatriz didn't exist already.\n\nRESULT: NOT DONE Dolibarr returned \"Service Unavailable\" after I submitted the form, so I couldn't confirm the contact was created.",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "l"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "localhost/contact/card.php?action=create\n"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 113,
+   "y": 27,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 25,
+   "y": 397,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 85,
+   "y": 372,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 665,
+   "y": 164,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Silva"
+  },
+  {
+   "a": "click",
+   "x": 665,
+   "y": 198,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Beatriz"
+  },
+  {
+   "a": "click",
+   "x": 665,
+   "y": 297,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Sales assistant"
+  },
+  {
+   "a": "click",
+   "x": 685,
+   "y": 476,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "555-0197"
+  },
+  {
+   "a": "click",
+   "x": 685,
+   "y": 544,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "b.silva@example.invalid"
+  },
+  {
+   "a": "scroll",
+   "x": 760,
+   "y": 600,
+   "dx": 0,
+   "dy": 3600
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 720,
+   "y": 759,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 20.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "wait",
+   "s": 60.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 60.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6154,
+   "out": 118,
+   "usd": 0.016563,
+   "cached": 0
+  },
+  {
+   "in": 7686,
+   "out": 137,
+   "usd": 0.006439,
+   "cached": 6150
+  },
+  {
+   "in": 9213,
+   "out": 147,
+   "usd": 0.006828,
+   "cached": 7684
+  },
+  {
+   "in": 10750,
+   "out": 112,
+   "usd": 0.006809,
+   "cached": 9211
+  },
+  {
+   "in": 12260,
+   "out": 340,
+   "usd": 0.009329,
+   "cached": 10748
+  },
+  {
+   "in": 14110,
+   "out": 98,
+   "usd": 0.008061,
+   "cached": 12258
+  },
+  {
+   "in": 15606,
+   "out": 160,
+   "usd": 0.008166,
+   "cached": 14108
+  },
+  {
+   "in": 17166,
+   "out": 173,
+   "usd": 0.008755,
+   "cached": 15604
+  },
+  {
+   "in": 18739,
+   "out": 116,
+   "usd": 0.008529,
+   "cached": 17164
+  },
+  {
+   "in": 20240,
+   "out": 157,
+   "usd": 0.009074,
+   "cached": 18737
+  },
+  {
+   "in": 21785,
+   "out": 94,
+   "usd": 0.008854,
+   "cached": 20238
+  },
+  {
+   "in": 23275,
+   "out": 148,
+   "usd": 0.009566,
+   "cached": 21783
+  },
+  {
+   "in": 24823,
+   "out": 271,
+   "usd": 0.011239,
+   "cached": 23273
+  }
+ ]
+}

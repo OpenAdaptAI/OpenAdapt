@@ -1,0 +1,262 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_03cb12405efd12e8016af4c438537c87d2b531d52311a4ea66",
+     "call_id": "call_Xdz9iZXWsOfsbz1E8HlvdsrR",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_03cb12405efd12e8016af4c43ba5b887d2bb0f4b091ff07f16",
+     "call_id": "call_qSbg0v9gzAQzqlOd5SQ3N8H5",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 24,
+       "y": 96
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_03cb12405efd12e8016af4c43e8b6487d28a04b3f078aa5773",
+     "call_id": "call_PbyofCMLuxhhyPgjKy9EMRyP",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 49,
+       "y": 121
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_03cb12405efd12e8016af4c44108b887d2ada610ec3eded315",
+     "call_id": "call_JrXgybmJBnu1qXjWAZHn9OCg",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 245,
+       "y": 175
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_03cb12405efd12e8016af4c4438bec87d2ae7de248aada1483",
+     "call_id": "call_5HPPi5y1RE5jT9k4jcC8zS69",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 247,
+       "y": 182
+      },
+      {
+       "keys": [
+        "s"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ENTER"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_03cb12405efd12e8016af4c446357887d2af05f784d1b3be86",
+     "call_id": "call_1zUMXJoClZjv0Tyx5xEk54vh",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "r"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_03cb12405efd12e8016af4c449372c87d2bc56d55f8087534b",
+     "call_id": "call_cCNXutmPevKYAkSnt9juuPxT",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "ALT",
+        "LEFT"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE Redmine returned \u201cService Unavailable,\u201d so the issue could not be created.",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 24,
+   "y": 96,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 49,
+   "y": 121,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 245,
+   "y": 175,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 247,
+   "y": 182,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "s"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ENTER"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "r"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ALT",
+    "LEFT"
+   ]
+  }
+ ],
+ "usage": [
+  {
+   "in": 2216,
+   "out": 38,
+   "usd": 0.004812,
+   "cached": 0
+  },
+  {
+   "in": 3433,
+   "out": 31,
+   "usd": 0.003193,
+   "cached": 2213
+  },
+  {
+   "in": 4689,
+   "out": 31,
+   "usd": 0.003514,
+   "cached": 3430
+  },
+  {
+   "in": 5945,
+   "out": 31,
+   "usd": 0.003765,
+   "cached": 4686
+  },
+  {
+   "in": 7201,
+   "out": 49,
+   "usd": 0.004196,
+   "cached": 5942
+  },
+  {
+   "in": 8483,
+   "out": 26,
+   "usd": 0.00427,
+   "cached": 7198
+  },
+  {
+   "in": 9730,
+   "out": 36,
+   "usd": 0.004556,
+   "cached": 8480
+  },
+  {
+   "in": 10987,
+   "out": 24,
+   "usd": 0.004705,
+   "cached": 9727
+  }
+ ]
+}

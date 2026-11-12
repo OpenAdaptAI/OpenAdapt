@@ -1,0 +1,101 @@
+{
+ "id": "OE-WV1",
+ "app": "openemr",
+ "class": "wrong_value",
+ "note": "The birth date's month and day are swapped.",
+ "agent_s": 110.0,
+ "cost_usd": 0.22724,
+ "claim": {
+  "status": "not_done",
+  "id": "The app requires Birth Sex, which the task instructs me to leave unchanged; the patient was not created.",
+  "note": "RESULT: NOT DONE The app requires Birth Sex, which the task instructs me to leave unchanged; the patient was not created.",
+  "claim_line": true,
+  "final_text": "RESULT: NOT DONE The app requires Birth Sex, which the task instructs me to leave unchanged; the patient was not created.",
+  "model_calls": 31,
+  "actions": 80,
+  "tokens_in": 672091,
+  "tokens_out": 1884,
+  "end_url": "http://127.0.0.1:9866/interface/main/tabs/main.php?token_main=REDACTED"
+ },
+ "oracle": {
+  "verdict": "missing",
+  "reasons": [
+   "no new record"
+  ],
+  "new": [],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": true
+ },
+ "proxy": [
+  {
+   "t": 1794425674.848,
+   "method": "POST",
+   "path": "/interface/main/main_screen.php",
+   "save": false,
+   "status": 302,
+   "ms": 289
+  },
+  {
+   "t": 1794425675.488,
+   "method": "POST",
+   "path": "/library/ajax/dated_reminders_counter.php",
+   "save": false,
+   "status": 200,
+   "ms": 40
+  },
+  {
+   "t": 1794425675.612,
+   "method": "POST",
+   "path": "/interface/main/dated_reminders/dated_reminders.php",
+   "save": false,
+   "status": 200,
+   "ms": 30
+  },
+  {
+   "t": 1794425687.33,
+   "method": "POST",
+   "path": "/library/ajax/execute_background_services.php",
+   "save": false,
+   "status": 200,
+   "ms": 31
+  },
+  {
+   "t": 1794425736.712,
+   "method": "POST",
+   "path": "/library/ajax/dated_reminders_counter.php",
+   "save": false,
+   "status": 200,
+   "ms": 34
+  },
+  {
+   "t": 1794425736.712,
+   "method": "POST",
+   "path": "/interface/main/dated_reminders/dated_reminders.php",
+   "save": false,
+   "status": 200,
+   "ms": 34
+  },
+  {
+   "t": 1794425747.835,
+   "method": "POST",
+   "path": "/library/ajax/execute_background_services.php",
+   "save": false,
+   "status": 200,
+   "ms": 28
+  }
+ ],
+ "saves_seen": 0,
+ "fault_delivered": false,
+ "attempts": 1,
+ "set": "public",
+ "rep": 1,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 10.2,
+  "end": 8.5,
+  "waited_s": 0
+ }
+}

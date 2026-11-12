@@ -1,0 +1,402 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0bba91ede781a942016af4cc6c829887d297c157d21cb51d66",
+     "call_id": "call_zn6DLZubG1B6BcsmyVJGkUUO",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0bba91ede781a942016af4cc6e874c87d2bbe8df2da2a5bb85",
+     "call_id": "call_tKbuxdLK5IxNrgXt2A1XhxiG",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 24,
+       "y": 95
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0bba91ede781a942016af4cc70c49887d2961af942e27e75dd",
+     "call_id": "call_ATSUCZheHkxwjKFYTL3W3NY3",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 51,
+       "y": 122
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0bba91ede781a942016af4cc73219087d28d06e600ddfd6454",
+     "call_id": "call_MQpJM9Q4QDocMRswPteoHYLv",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 369,
+       "y": 209
+      },
+      {
+       "text": "Parking permit form rejects plates",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 378,
+       "y": 305
+      },
+      {
+       "text": "Plates with a space fail.",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 317,
+       "y": 482
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0bba91ede781a942016af4cc76ea2487d2a98cd89c01ca2c1b",
+     "call_id": "call_GUpDMNgexEAywYuUl5idQv5T",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 329,
+       "y": 487
+      },
+      {
+       "keys": [
+        "h"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ENTER"
+       ],
+       "type": "keypress"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 855,
+       "y": 555
+      },
+      {
+       "text": "3",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 845,
+       "y": 520
+      },
+      {
+       "keys": [
+        "ARROWUP"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0bba91ede781a942016af4cc7a48ac87d28ef7dab757a2d42b",
+     "call_id": "call_Lc33yyItjWhwPcZQPm08VWU1",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0bba91ede781a942016af4cc7d89a887d2beba219a60899bc4",
+     "call_id": "call_Z6R7HBgGI6zASkuchUZoupHM",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0bba91ede781a942016af4cc810a2887d2be4df7acc35c0f2b",
+     "call_id": "call_TPfPr4vGeyVtcqCASCTLIHGg",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "ALT",
+        "LEFT"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0bba91ede781a942016af4cc83dc9487d2b81c9475fd78801a",
+     "call_id": "call_tGcFdvS7d2LaKszPFw813ZFH",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "r"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE The app became blank and unresponsive before I could finish creating and verify the issue.",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 24,
+   "y": 95,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 51,
+   "y": 122,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 369,
+   "y": 209,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Parking permit form rejects plates"
+  },
+  {
+   "a": "click",
+   "x": 378,
+   "y": 305,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Plates with a space fail."
+  },
+  {
+   "a": "click",
+   "x": 317,
+   "y": 482,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 329,
+   "y": 487,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "h"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ENTER"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 855,
+   "y": 555,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "3"
+  },
+  {
+   "a": "click",
+   "x": 845,
+   "y": 520,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ARROWUP"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ALT",
+    "LEFT"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "r"
+   ]
+  }
+ ],
+ "usage": [
+  {
+   "in": 2216,
+   "out": 19,
+   "usd": 0.000639,
+   "cached": 2213
+  },
+  {
+   "in": 3433,
+   "out": 31,
+   "usd": 0.001002,
+   "cached": 3430
+  },
+  {
+   "in": 4689,
+   "out": 31,
+   "usd": 0.001253,
+   "cached": 4686
+  },
+  {
+   "in": 5945,
+   "out": 89,
+   "usd": 0.004345,
+   "cached": 4686
+  },
+  {
+   "in": 7282,
+   "out": 100,
+   "usd": 0.004868,
+   "cached": 5942
+  },
+  {
+   "in": 8639,
+   "out": 18,
+   "usd": 0.004356,
+   "cached": 7279
+  },
+  {
+   "in": 9867,
+   "out": 47,
+   "usd": 0.004659,
+   "cached": 8636
+  },
+  {
+   "in": 11135,
+   "out": 46,
+   "usd": 0.004975,
+   "cached": 9864
+  },
+  {
+   "in": 12402,
+   "out": 46,
+   "usd": 0.005226,
+   "cached": 11132
+  },
+  {
+   "in": 13669,
+   "out": 25,
+   "usd": 0.00527,
+   "cached": 12399
+  }
+ ]
+}

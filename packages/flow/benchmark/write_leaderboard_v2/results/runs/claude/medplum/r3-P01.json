@@ -1,0 +1,207 @@
+{
+ "id": "P01",
+ "class": "clean",
+ "type": "patient",
+ "expect": "create",
+ "note": "A plain registration.",
+ "agent_s": 240.2,
+ "cost_usd": 0.644741,
+ "claim": {
+  "status": "done",
+  "id": "Patient/d819202b-a305-4132-b5d0-e83d4e584e22",
+  "note": "RESULT: DONE Patient/d819202b-a305-4132-b5d0-e83d4e584e22",
+  "claim_line": true,
+  "final_text": "Lena Okafor now has one Patient record, and it holds all the values you listed. The search for \"Okafor\" returns only that record.\n\nThe Patient list was empty when I started. The first save created a blank record with no data. I then filled in that same record through its Edit form rather than creating a second one. Its history now shows several versions, but it is a single record.\n\nIt holds name Lena Okafor, birth date 1988-04-22, gender female, and the address 14 Birch Lane, Springfield, MA 01103. It also holds the home phone 413-555-0187 and the email lena.okafor@example.org.\n\nRESULT: DONE Patient/d819202b-a305-4132-b5d0-e83d4e584e22",
+  "model_calls": 45,
+  "actions": 137,
+  "tokens_in": 1879564,
+  "tokens_out": 9108,
+  "end_url": "http://localhost:9841/Patient/d819202b-a305-4132-b5d0-e83d4e584e22/details"
+ },
+ "verifier": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "the agent changed or deleted the record after creating it, and a version in between was not the person"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 1,
+   "agent_writes": 1,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "Patient"
+   ],
+   "versions": [
+    {
+     "version": "f6312be6-62e3-438a-b684-9d4c7dab6bdb",
+     "author": "Practitioner/0b3375e6-7134-4baf-b11b-87a142cdd829"
+    },
+    {
+     "version": "ea670e16-fdd4-48c4-aa0f-4f06bc2f173e",
+     "author": "Practitioner/0b3375e6-7134-4baf-b11b-87a142cdd829"
+    },
+    {
+     "version": "f95bec83-ba95-4107-a93f-96513e16ad0e",
+     "author": "Practitioner/0b3375e6-7134-4baf-b11b-87a142cdd829"
+    }
+   ],
+   "window_until": "2026-11-11T22:07:18+00:00"
+  },
+  "unreadable": false
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "the agent changed or deleted the record after creating it"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 1,
+   "agent_writes": 1,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "Patient"
+   ],
+   "versions": [
+    {
+     "version": "f6312be6-62e3-438a-b684-9d4c7dab6bdb",
+     "author": "Practitioner/0b3375e6-7134-4baf-b11b-87a142cdd829"
+    },
+    {
+     "version": "ea670e16-fdd4-48c4-aa0f-4f06bc2f173e",
+     "author": "Practitioner/0b3375e6-7134-4baf-b11b-87a142cdd829"
+    },
+    {
+     "version": "f95bec83-ba95-4107-a93f-96513e16ad0e",
+     "author": "Practitioner/0b3375e6-7134-4baf-b11b-87a142cdd829"
+    }
+   ],
+   "window_until": "2026-11-11T22:07:21+00:00"
+  },
+  "unreadable": false
+ },
+ "verify_s": 4.5,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "Patient/d819202b-a305-4132-b5d0-e83d4e584e22"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "Patient/d819202b-a305-4132-b5d0-e83d4e584e22": "created"
+  },
+  "collateral": false
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "Patient",
+   "write": 1,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ServiceRequest",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "PUT",
+   "type": "Patient",
+   "write": 2,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ServiceRequest",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "PUT",
+   "type": "Patient",
+   "write": 3,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "app": "medplum",
+ "attempts": 1,
+ "set": "public",
+ "rep": 3,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 5.3,
+  "end": 6.0,
+  "waited_s": 0
+ }
+}

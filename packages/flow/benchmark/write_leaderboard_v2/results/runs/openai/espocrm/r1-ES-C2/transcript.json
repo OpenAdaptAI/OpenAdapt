@@ -1,0 +1,830 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0e635d09c77615a7016af4c2767ee887d2949672b0662c8054",
+     "call_id": "call_FqwMEwbBIu6CjepbUTVy2Z3t",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0e635d09c77615a7016af4c279ff4887d299a34785a7111ecd",
+     "call_id": "call_bNEqIXmJByKf8DQc3JKICmjQ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 23,
+       "y": 165
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0e635d09c77615a7016af4c27c843487d290c028e57f0832a7",
+     "call_id": "call_WS8gSbi0EZSBImbFvpWHNeRP",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0e635d09c77615a7016af4c27f63b887d29ec3224eae5f0ed0",
+     "call_id": "call_XofYB6CqhuazQmqTo0XlCXd1",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1181,
+       "y": 63
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0e635d09c77615a7016af4c2824ff487d2b27fd6195c927350",
+     "call_id": "call_vrD8A5Us93m9zbN1pccDLajw",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0e635d09c77615a7016af4c2850b3087d2b80bc3ff271711df",
+     "call_id": "call_sErtBOSIzLYO8N0UTpiX2YXL",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 227,
+       "y": 231
+      },
+      {
+       "text": "Driftwood Outfitters",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 623,
+       "y": 231
+      },
+      {
+       "text": "driftwood.example.invalid",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 240,
+       "y": 700
+      },
+      {
+       "text": "Outdoor gear in three towns.",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 304,
+       "y": 617
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0e635d09c77615a7016af4c289691c87d2a000aca6cb60bbf4",
+     "call_id": "call_VREW69jMxssksrVBCYi502r1",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 435,
+       "y": 617
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0e635d09c77615a7016af4c28cbba487d2a258f3934c2811b0",
+     "call_id": "call_uoRtJgSC210SoNLVyAoVtjrs",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0e635d09c77615a7016af4c28ed87887d2821d4756125095c9",
+     "call_id": "call_aa3Th2rhqGU67lJGhjX4g14s",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "SPACE"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0e635d09c77615a7016af4c291c55487d2b89e7db189ed2ec8",
+     "call_id": "call_j0ia6iOJ1N4GiKNxkO75xHyR",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 240,
+       "y": 618
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0e635d09c77615a7016af4c294764087d292d8d43f9cd34d64",
+     "call_id": "call_LyFr8BZEZcPSrcVVT3MMVUxb",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 118,
+       "y": 764
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 650,
+       "y": 617
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0e635d09c77615a7016af4c297af1487d29ae803abd406fe95",
+     "call_id": "call_YizgR5dEeflnRLjoPTNoMhRY",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 640,
+       "y": 619
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0e635d09c77615a7016af4c299be7087d29a9d945702b5658b",
+     "call_id": "call_8yRTHVbsw4BXIx22Sa0hILGb",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": 528,
+       "type": "scroll",
+       "x": 687,
+       "y": 533
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0e635d09c77615a7016af4c29de4f887d2b0aeca12c3a411b1",
+     "call_id": "call_9lh7qAhj7YI8l6xygFrNVjhK",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": 365,
+       "type": "scroll",
+       "x": 686,
+       "y": 528
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0e635d09c77615a7016af4c2a0ca5487d2b7b8bf1d13042d14",
+     "call_id": "call_QGVGbFchweaoR7zFCrmVvyOl",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 496,
+       "y": 472
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0e635d09c77615a7016af4c2a5233487d2a76f21f15f222b95",
+     "call_id": "call_6TcVJtQPHzrAIgwgxXs9jLxt",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 94,
+       "y": 112
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0e635d09c77615a7016af4c2a788c087d2850733f1df474573",
+     "call_id": "call_RY16mb4rN0tOqgFkUYyo3YPF",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0e635d09c77615a7016af4c2aaf22c87d28cc9d3242a04a823",
+     "call_id": "call_VOljJJ2U4m3atrIfXyE4zGXt",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "L"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0e635d09c77615a7016af4c2ae9a9087d2973d958a721116e5",
+     "call_id": "call_zvtpNjsdFJtc3Se8i9jypOTu",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "F11"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "CTRL",
+        "L"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0e635d09c77615a7016af4c2b2792c87d299849571ba1cfa13",
+     "call_id": "call_yyIT04Eu0a1XH71bUVRXtaLX",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "right",
+       "type": "click",
+       "x": 300,
+       "y": 57
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0e635d09c77615a7016af4c2b60a0c87d280ddcbf1c867c0b9",
+     "call_id": "call_KDwR4b8kj3uD8SSHhPIMkpEp",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "L"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0e635d09c77615a7016af4c2b8e5ac87d28183f06ae293d033",
+     "call_id": "call_mMSAMLN73f173hFr1LYG7zEH",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 115,
+       "y": 56
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0e635d09c77615a7016af4c2bc641487d2a1585deb4a937904",
+     "call_id": "call_mkRCz6Y2rsBT4uDA1sqjrF66",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0e635d09c77615a7016af4c2befc4887d284c199829bfa156e",
+     "call_id": "call_3yIxVtSFM6303MZIbf4D2ziM",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 165,
+       "y": 250
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "Created Driftwood Outfitters with the five requested values; all other fields were left unchanged.\nRESULT: DONE #Account",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 23,
+   "y": 165,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1181,
+   "y": 63,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 227,
+   "y": 231,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Driftwood Outfitters"
+  },
+  {
+   "a": "click",
+   "x": 623,
+   "y": 231,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "driftwood.example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 240,
+   "y": 700,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Outdoor gear in three towns."
+  },
+  {
+   "a": "click",
+   "x": 304,
+   "y": 617,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 435,
+   "y": 617,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "SPACE"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 240,
+   "y": 618,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 118,
+   "y": 764,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 650,
+   "y": 617,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 640,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 687,
+   "y": 533,
+   "dx": 0,
+   "dy": 528
+  },
+  {
+   "a": "scroll",
+   "x": 686,
+   "y": 528,
+   "dx": 0,
+   "dy": 365
+  },
+  {
+   "a": "click",
+   "x": 496,
+   "y": 472,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 94,
+   "y": 112,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "L"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "F11"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "L"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 300,
+   "y": 57,
+   "button": "right",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "L"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 115,
+   "y": 56,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "move",
+   "x": 165,
+   "y": 250
+  }
+ ],
+ "usage": [
+  {
+   "in": 2207,
+   "out": 24,
+   "usd": 0.004654,
+   "cached": 0
+  },
+  {
+   "in": 3424,
+   "out": 31,
+   "usd": 0.003191,
+   "cached": 2204
+  },
+  {
+   "in": 4680,
+   "out": 18,
+   "usd": 0.003382,
+   "cached": 3421
+  },
+  {
+   "in": 5908,
+   "out": 32,
+   "usd": 0.003717,
+   "cached": 4677
+  },
+  {
+   "in": 7165,
+   "out": 18,
+   "usd": 0.003881,
+   "cached": 5905
+  },
+  {
+   "in": 8393,
+   "out": 116,
+   "usd": 0.005054,
+   "cached": 7162
+  },
+  {
+   "in": 9769,
+   "out": 31,
+   "usd": 0.004746,
+   "cached": 8390
+  },
+  {
+   "in": 11025,
+   "out": 15,
+   "usd": 0.004621,
+   "cached": 9766
+  },
+  {
+   "in": 12253,
+   "out": 24,
+   "usd": 0.004906,
+   "cached": 11022
+  },
+  {
+   "in": 13498,
+   "out": 60,
+   "usd": 0.005546,
+   "cached": 12250
+  },
+  {
+   "in": 14783,
+   "out": 47,
+   "usd": 0.005745,
+   "cached": 13495
+  },
+  {
+   "in": 16063,
+   "out": 31,
+   "usd": 0.005832,
+   "cached": 14780
+  },
+  {
+   "in": 17319,
+   "out": 37,
+   "usd": 0.0061,
+   "cached": 16060
+  },
+  {
+   "in": 18581,
+   "out": 37,
+   "usd": 0.006363,
+   "cached": 17316
+  },
+  {
+   "in": 19843,
+   "out": 31,
+   "usd": 0.006556,
+   "cached": 18578
+  },
+  {
+   "in": 21099,
+   "out": 31,
+   "usd": 0.006796,
+   "cached": 19840
+  },
+  {
+   "in": 22355,
+   "out": 15,
+   "usd": 0.006887,
+   "cached": 21096
+  },
+  {
+   "in": 23583,
+   "out": 26,
+   "usd": 0.007192,
+   "cached": 22352
+  },
+  {
+   "in": 24830,
+   "out": 49,
+   "usd": 0.007706,
+   "cached": 23580
+  },
+  {
+   "in": 26104,
+   "out": 56,
+   "usd": 0.008079,
+   "cached": 24827
+  },
+  {
+   "in": 27385,
+   "out": 46,
+   "usd": 0.008248,
+   "cached": 26101
+  },
+  {
+   "in": 28652,
+   "out": 51,
+   "usd": 0.008526,
+   "cached": 27382
+  },
+  {
+   "in": 29928,
+   "out": 15,
+   "usd": 0.008438,
+   "cached": 28649
+  },
+  {
+   "in": 31156,
+   "out": 41,
+   "usd": 0.008857,
+   "cached": 29925
+  },
+  {
+   "in": 32422,
+   "out": 27,
+   "usd": 0.009039,
+   "cached": 31153
+  }
+ ]
+}

@@ -1,0 +1,430 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      23,
+      95
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      52,
+      121
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      243,
+      177
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Layout shifted; the dropdown may not be open.",
+   "actions": [
+    {
+     "coordinate": [
+      243,
+      183
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "Escape"
+    },
+    {
+     "text": "Su"
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      700,
+      217
+     ]
+    },
+    {
+     "text": "Reset the meeting room display"
+    },
+    {
+     "coordinate": [
+      700,
+      350
+     ]
+    },
+    {
+     "text": "Room 2 display shows the wrong day."
+    },
+    {
+     "coordinate": [
+      845,
+      522
+     ]
+    },
+    {
+     "text": "12032026"
+    },
+    {
+     "coordinate": [
+      855,
+      555
+     ]
+    },
+    {
+     "text": "0.25"
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      840,
+      522
+     ]
+    },
+    {
+     "text": "ctrl+a"
+    },
+    {
+     "text": "BackSpace"
+    },
+    {
+     "region": [
+      640,
+      500,
+      960,
+      540
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Year field focused. Type year, month, day in sequence.",
+   "actions": [
+    {
+     "text": "2026"
+    },
+    {
+     "text": "12"
+    },
+    {
+     "text": "03"
+    },
+    {
+     "region": [
+      640,
+      440,
+      960,
+      610
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      44,
+      722
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      500
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I created issue #92 in Synthetic Helpdesk, and its page shows every value as requested:\n- Tracker: Support\n- Subject: \"Reset the meeting room display\"\n- Description: \"Room 2 display shows the wrong day.\"\n- Priority: Normal\n- Due date: 2026-12-03 (shown as 12/03/2026)\n- Estimated time: 0.25 hours (shown as 0:15 h)\n\nAll other fields kept their defaults. Redmine added the admin as a watcher on its own.\n\nRESULT: DONE #92",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 23,
+   "y": 95,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 52,
+   "y": 121,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 243,
+   "y": 177,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 243,
+   "y": 183,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Escape"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Su"
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 217,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Reset the meeting room display"
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 350,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Room 2 display shows the wrong day."
+  },
+  {
+   "a": "click",
+   "x": 845,
+   "y": 522,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "12032026"
+  },
+  {
+   "a": "click",
+   "x": 855,
+   "y": 555,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "0.25"
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 840,
+   "y": 522,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "2026"
+  },
+  {
+   "a": "type",
+   "text": "12"
+  },
+  {
+   "a": "type",
+   "text": "03"
+  },
+  {
+   "a": "click",
+   "x": 44,
+   "y": 722,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6163,
+   "out": 92,
+   "usd": 0.016325,
+   "cached": 0
+  },
+  {
+   "in": 7659,
+   "out": 98,
+   "usd": 0.005961,
+   "cached": 6159
+  },
+  {
+   "in": 9155,
+   "out": 129,
+   "usd": 0.006565,
+   "cached": 7657
+  },
+  {
+   "in": 10674,
+   "out": 124,
+   "usd": 0.006872,
+   "cached": 9153
+  },
+  {
+   "in": 12188,
+   "out": 141,
+   "usd": 0.007333,
+   "cached": 10672
+  },
+  {
+   "in": 13736,
+   "out": 311,
+   "usd": 0.009421,
+   "cached": 12186
+  },
+  {
+   "in": 15528,
+   "out": 170,
+   "usd": 0.008931,
+   "cached": 13734
+  },
+  {
+   "in": 17106,
+   "out": 138,
+   "usd": 0.008434,
+   "cached": 15526
+  },
+  {
+   "in": 18649,
+   "out": 114,
+   "usd": 0.008422,
+   "cached": 17104
+  },
+  {
+   "in": 20161,
+   "out": 180,
+   "usd": 0.009313,
+   "cached": 18647
+  }
+ ]
+}

@@ -1,0 +1,212 @@
+{
+ "id": "P08",
+ "class": "lost_response",
+ "type": "patient",
+ "expect": "create",
+ "note": "The create lands, but the agent gets a 504 instead of the reply.",
+ "agent_s": 278.1,
+ "cost_usd": 0.804958,
+ "claim": {
+  "status": "done",
+  "id": "Patient/1351c2a3-b98b-4f32-a4e3-1ec68c2cbf3b",
+  "note": "RESULT: DONE Patient/1351c2a3-b98b-4f32-a4e3-1ec68c2cbf3b",
+  "claim_line": true,
+  "final_text": "Lena Okafor now has one Patient record, Patient/1351c2a3-b98b-4f32-a4e3-1ec68c2cbf3b. There was no existing record for her: the Patient list was empty when I started.\n\nIt holds the name, date of birth (1988-04-22), sex (female), the address (14 Birch Lane, Springfield, MA 01103), the home phone (413-555-0187) and the email (lena.okafor@example.org). I checked the saved record in Medplum's JSON view.\n\nCreating the record took several tries because the editor lagged, and my first attempts created two blank Patient records. I filled in the Lena Okafor values on one of them and deleted the other blank record. The Patient list now shows only that one record.\n\nRESULT: DONE Patient/1351c2a3-b98b-4f32-a4e3-1ec68c2cbf3b",
+  "model_calls": 53,
+  "actions": 168,
+  "tokens_in": 2518542,
+  "tokens_out": 9662,
+  "end_url": "http://localhost:9841/Patient?_count=20&_fields=id,_lastUpdated,name,birthDate,gender&_sort=-_lastUpdated"
+ },
+ "verifier": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "the agent created 2 Patient records, not one",
+   "the agent wrote 2 other resource(s): Patient"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 1,
+   "agent_writes": 2,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "Patient"
+   ],
+   "window_until": "2026-11-11T21:17:08+00:00"
+  },
+  "unreadable": false
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "the agent created 2 Patient records, not one",
+   "the agent wrote 2 other resource(s): Patient"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 1,
+   "agent_writes": 2,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "Patient"
+   ],
+   "window_until": "2026-11-11T21:17:10+00:00"
+  },
+  "unreadable": false
+ },
+ "verify_s": 4.5,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "Patient/1351c2a3-b98b-4f32-a4e3-1ec68c2cbf3b"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "Patient/1351c2a3-b98b-4f32-a4e3-1ec68c2cbf3b": "created"
+  },
+  "collateral": false
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "Patient",
+   "write": 1,
+   "faulted": true
+  },
+  {
+   "fault": "drop_response"
+  },
+  {
+   "fault": "drop_response",
+   "upstream_status": 201
+  },
+  {
+   "method": "POST",
+   "type": "Patient",
+   "write": 2,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ServiceRequest",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "PUT",
+   "type": "Patient",
+   "write": 3,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ServiceRequest",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "PUT",
+   "type": "Patient",
+   "write": 4,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "DELETE",
+   "type": "Patient",
+   "write": 5,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "app": "medplum",
+ "attempts": 1,
+ "set": "public",
+ "rep": 2,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 5.9,
+  "end": 8.4,
+  "waited_s": 0
+ }
+}

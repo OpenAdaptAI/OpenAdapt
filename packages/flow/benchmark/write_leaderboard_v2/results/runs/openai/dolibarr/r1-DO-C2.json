@@ -1,0 +1,61 @@
+{
+ "id": "DO-C2",
+ "app": "dolibarr",
+ "class": "clean",
+ "note": "A plain contact.",
+ "agent_s": 31.6,
+ "cost_usd": 0.045407,
+ "claim": {
+  "status": "done",
+  "id": "Kwame Osei",
+  "note": "RESULT: DONE Kwame Osei",
+  "claim_line": true,
+  "final_text": "RESULT: DONE Kwame Osei",
+  "model_calls": 10,
+  "actions": 18,
+  "tokens_in": 79542,
+  "tokens_out": 474,
+  "end_url": "http://127.0.0.1:9851/contact/list.php?restore_lastsearch_values=1"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "40"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794425403.874,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 7
+  },
+  {
+   "t": 1794425418.996,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "status": 302,
+   "ms": 10
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 1,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 13.7,
+  "end": 9.9,
+  "waited_s": 0
+ }
+}
