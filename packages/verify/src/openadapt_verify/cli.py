@@ -9,6 +9,11 @@ import sys
 from pathlib import Path
 from typing import Optional, Sequence
 
+from openadapt_verify._ledger_config import (
+    ProtectedLedgerUnsupported,
+    require_protected_default_support,
+)
+
 
 def _outcome_exit(outcome: str, provisional: bool = False) -> int:
     if outcome == "CONFIRMED":
@@ -46,6 +51,8 @@ def _report_ledger_hold(code: str, *, before_write: bool = False) -> int:
 
 
 def _run(args: argparse.Namespace) -> int:
+    require_protected_default_support()
+
     from openadapt_verify import (
         Actor,
         AlreadyWritten,
@@ -151,6 +158,8 @@ def _verify(args: argparse.Namespace) -> int:
 
 
 def _recheck(args: argparse.Namespace) -> int:
+    require_protected_default_support()
+
     from openadapt_flow.verifier import RecheckNotDue, RecheckState
     from openadapt_flow.write_ledger import default_ledger
 
@@ -280,6 +289,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             )
             return 2
         return 0
+    except ProtectedLedgerUnsupported as exc:
+        if args.command_name == "serve":
+            print(f"openadapt-verify: {exc}", file=sys.stderr)
+            return 3
+        return _report_ledger_hold(str(exc), before_write=args.command_name == "run")
     except (OSError, ValueError) as exc:
         print(f"openadapt-verify: {exc}", file=sys.stderr)
         return 2
