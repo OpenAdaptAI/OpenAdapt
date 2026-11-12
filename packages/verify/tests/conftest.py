@@ -16,6 +16,7 @@ import pytest
 def private_state(tmp_path, monkeypatch, request):
     for name in ("SEAL_HOME", "RECEIPT_HOME", "LEDGER_DIR", "VERIFIER_STATE_DIR"):
         monkeypatch.setenv("OPENADAPT_" + name, str(tmp_path / name.lower()))
+    monkeypatch.delenv("OPENADAPT_LEDGER_AUTHORITY_CONFIG", raising=False)
     for name in ("KEY", "KEY_FILE", "KEY_PASSPHRASE", "PKCS11_MODULE", "PKCS11_PIN"):
         monkeypatch.delenv("OPENADAPT_SEAL_" + name, raising=False)
     # Mirror the canonical verifier fixture: no ambient host secret or key

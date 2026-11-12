@@ -383,7 +383,7 @@ jobs:
           python - <<'PY'
           import xml.etree.ElementTree as ET
           cases = ET.parse("tests.xml").getroot().findall(".//testcase")
-          assert len(cases) == 52, "all independent-store controls must run"
+          assert len(cases) == 61, "all independent-store controls must run"
           assert not any(c.find("skipped") is not None for c in cases), "SDK/MCP controls must not skip"
           PY
       - name: MCP transport against the facade's own lock
@@ -396,11 +396,13 @@ jobs:
               --editable packages/types --editable packages/flow --editable packages/verify
           )
           .mcp-lock/bin/python -c 'import importlib.metadata as m; print("mcp==" + m.version("mcp"))'
-          .mcp-lock/bin/python -m pytest -q tests/test_cli_mcp.py::test_mcp_actual_transport_with_independent_store --junitxml=mcp-lock.xml
+          .mcp-lock/bin/python -m pytest -q \
+            tests/test_cli_mcp.py::test_mcp_actual_transport_with_independent_store \
+            tests/test_mcp_protected_ledger.py --junitxml=mcp-lock.xml
           .mcp-lock/bin/python - <<'PY'
           import xml.etree.ElementTree as ET
           cases = ET.parse("mcp-lock.xml").getroot().findall(".//testcase")
-          assert len(cases) == 1 and not any(c.find("skipped") is not None for c in cases)
+          assert len(cases) == 4 and not any(c.find("skipped") is not None for c in cases)
           PY
       - name: Build and verify the public distribution
         if: matrix.python-version == '3.12'
