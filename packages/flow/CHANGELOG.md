@@ -29,8 +29,13 @@
   `linux`, `rdp`, `native-ocr`, `local-grounding`, `openenv`) include
   `vision`, so `pip install 'openadapt-flow[browser]'` installs what it did in
   2.x. To record, compile or replay with none of those, install
-  `openadapt-flow[vision]`. Without it, `openadapt-flow` prints that install
-  command and exits 2.
+  `openadapt-flow[vision]`. Without it, those commands print that install
+  command and exit 2.
+- On the base install, `openadapt-flow --help`, `openadapt-flow receipt verify`
+  and `openadapt-flow verify-run` work. The perturbation harness, the repair
+  campaigns and `compile_recording` load Pillow and NumPy on first use instead
+  of when the CLI builds its parser. The `flow-base` CI smoke runs those
+  commands' help on the base install.
 - The on-prem release installs `openadapt-flow[privacy,vision]`.
 - `RemoteFrameContract` imports Pillow only when it hashes a frame, so loading
   a deployment config no longer needs it.

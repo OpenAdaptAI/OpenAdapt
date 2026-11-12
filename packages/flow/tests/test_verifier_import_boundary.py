@@ -15,6 +15,8 @@ import sys
 import textwrap
 from pathlib import Path
 
+import pytest
+
 try:
     import tomllib
 except ImportError:  # Python 3.10
@@ -116,29 +118,54 @@ def test_base_install_declares_no_vision_distribution() -> None:
     assert names(project["optional-dependencies"]["vision"]) == VISION_DISTRIBUTIONS
 
 
-def test_cli_names_the_vision_extra_when_it_is_missing(tmp_path: Path) -> None:
-    script = textwrap.dedent(
-        """
-        import sys
+_CLI_SCRIPT = textwrap.dedent(
+    """
+    import json, sys
 
-        class Refuse:
-            def find_spec(self, name, path=None, target=None):
-                if name.partition(".")[0] in {"numpy", "cv2", "PIL"}:
-                    raise ModuleNotFoundError(name=name.partition(".")[0])
-                return None
+    class Refuse:
+        def find_spec(self, name, path=None, target=None):
+            if name.partition(".")[0] in {"numpy", "cv2", "PIL"}:
+                raise ModuleNotFoundError(name=name.partition(".")[0])
+            return None
 
-        sys.meta_path.insert(0, Refuse())
-        from openadapt_flow.__main__ import main
+    sys.meta_path.insert(0, Refuse())
+    from openadapt_flow.__main__ import main
 
-        sys.exit(main(["--help"]))
-        """
-    )
-    run = subprocess.run(
-        [sys.executable, "-c", script],
+    try:
+        code = main(json.loads(sys.argv[1]))
+    except SystemExit as exc:
+        code = exc.code
+    sys.exit(code or 0)
+    """
+)
+
+
+def _cli(argv: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, "-c", _CLI_SCRIPT, json.dumps(argv)],
         capture_output=True,
         text=True,
-        cwd=tmp_path,
+        cwd=cwd,
         timeout=600,
     )
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [["--help"], ["receipt", "verify", "--help"], ["verify-run", "--help"]],
+    ids=["help", "receipt-verify-help", "verify-run-help"],
+)
+def test_cli_parser_builds_without_the_vision_stack(
+    argv: list[str], tmp_path: Path
+) -> None:
+    run = _cli(argv, tmp_path)
+    assert run.returncode == 0, run.stderr[-2000:]
+    assert "usage: openadapt-flow" in run.stdout
+    assert "vision" not in run.stderr
+
+
+def test_cli_names_the_vision_extra_when_it_is_missing(tmp_path: Path) -> None:
+    (tmp_path / "recording").mkdir()
+    run = _cli(["compile", "recording", "--out", "bundle", "--name", "probe"], tmp_path)
     assert run.returncode == 2, run.stderr[-2000:]
     assert "pip install 'openadapt-flow[vision]'" in run.stderr

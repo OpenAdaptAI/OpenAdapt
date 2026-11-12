@@ -1,4 +1,14 @@
-"""Compiler: recording directory -> workflow bundle."""
+"""Compiler: recording directory -> workflow bundle.
+
+Recording compilation reads frames with NumPy, OpenCV and Pillow, which are
+Flow's ``vision`` extra. ``compile_recording`` and ``lint_param_leakage`` load
+on first access, so the other compiler modules (the CLI parser imports them)
+work on the base install.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
 
 from openadapt_flow.compiler.annotate import (
     AnnotationResult,
@@ -20,7 +30,6 @@ from openadapt_flow.compiler.binding_admission import (
     propose_rest_binding,
 )
 from openadapt_flow.compiler.codegen import render_workflow_py
-from openadapt_flow.compiler.compile import compile_recording, lint_param_leakage
 from openadapt_flow.compiler.compose_authoring import author_composition
 from openadapt_flow.compiler.effect_mining import (
     StepEffectMining,
@@ -62,6 +71,24 @@ from openadapt_flow.compiler.qualification_proposer import (
     collect_suggestions,
     sanitize_recording_metadata,
 )
+
+if TYPE_CHECKING:
+    from openadapt_flow.compiler.compile import (  # noqa: F401
+        compile_recording,
+        lint_param_leakage,
+    )
+
+_COMPILE_NAMES = frozenset({"compile_recording", "lint_param_leakage"})
+
+
+def __getattr__(name: str) -> Any:
+    """Lazy re-exports (PEP 562): compilation loads the vision stack on use."""
+    if name in _COMPILE_NAMES:
+        from openadapt_flow.compiler import compile as compile_module
+
+        return getattr(compile_module, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "compile_recording",
