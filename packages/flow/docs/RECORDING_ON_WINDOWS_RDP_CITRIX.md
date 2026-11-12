@@ -51,7 +51,7 @@ blank and input goes nowhere.
 On the Windows computer, sign in, open a terminal on the desktop, and run:
 
 ```bat
-pip install openadapt-flow mss pyautogui uiautomation
+pip install "openadapt-flow[vision]" mss pyautogui uiautomation
 set OAFLOW_AGENT_TOKEN=<a long random secret>
 python -m openadapt_flow.backends.win_agent.server --port 5001
 ```

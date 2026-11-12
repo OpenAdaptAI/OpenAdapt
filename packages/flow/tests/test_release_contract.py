@@ -157,9 +157,16 @@ def test_release_versions_are_synchronized() -> None:
 
 def test_runtime_declares_one_opencv_distribution_provider() -> None:
     project = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]
-    opencv = [
+    # OpenCV is the vision extra; the base install (the verifier's dependency
+    # profile) carries no OpenCV provider at all.
+    assert not [
         requirement
         for requirement in project["dependencies"]
+        if requirement.lower().startswith("opencv-")
+    ]
+    opencv = [
+        requirement
+        for requirement in project["optional-dependencies"]["vision"]
         if requirement.lower().startswith("opencv-")
     ]
 

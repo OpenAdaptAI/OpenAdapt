@@ -6,6 +6,9 @@ to one package that breaks another's install or import fails before merge even
 when the other package's suite does not run. Each package syncs into its own
 environment with `uv sync --locked` (no extras, no dev tools), imports its
 top-level module, and runs its command-line entry point with `--help`.
+Flow's command line needs its `vision` extra, so `flow` syncs that extra, and
+`flow-base` checks that the base install (openadapt-verify's dependency
+profile) imports the verifier.
 
     python scripts/ci/smoke.py            # every package
     python scripts/ci/smoke.py flow tray  # some
@@ -21,8 +24,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
+# Extras a smoke syncs, by package name.
+EXTRAS: dict[str, list[str]] = {"flow": ["vision"]}
+
 # package -> (project directory, import, command and arguments)
 SMOKES: dict[str, tuple[str, str, list[str]]] = {
+    "flow-base": ("packages/flow", "openadapt_flow.verifier", []),
     "launcher": (".", "openadapt", ["openadapt", "--help"]),
     "types": ("packages/types", "openadapt_types", ["openadapt-vocab-lint", "--help"]),
     "flow": ("packages/flow", "openadapt_flow", ["openadapt-flow", "--help"]),
@@ -47,6 +54,8 @@ SMOKES: dict[str, tuple[str, str, list[str]]] = {
 def smoke(name: str) -> tuple[bool, str]:
     directory, module, command = SMOKES[name]
     project = ["--project", str(ROOT / directory)]
+    for extra in EXTRAS.get(name, []):
+        project += ["--extra", extra]
     env = {**os.environ, "UV_PROJECT_ENVIRONMENT": str(ROOT / ".smoke" / name)}
     steps = [
         ["uv", "sync", "--locked", "--no-dev", "--quiet", *project],

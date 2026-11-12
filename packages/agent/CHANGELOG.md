@@ -2,6 +2,11 @@
 
 Releases up to v2.2.0 are recorded in the [openadapt-agent repository](https://github.com/OpenAdaptAI/openadapt-agent/blob/main/CHANGELOG.md).
 
+## Unreleased (2.2.2)
+
+- Accept `openadapt-flow` 3.x. Flow 3 moved its vision stack to the `vision`
+  extra, so this package now requires `openadapt-flow[vision]>=2.2.0,<4`.
+
 ## v2.2.1 (2026-10-18)
 
 First release from the [OpenAdapt monorepo](https://github.com/OpenAdaptAI/OpenAdapt) (`packages/agent`). The MCP agent server now lives in `openadapt_flow.agent`; this package is a compatibility package over it, so `openadapt-agent` and `import openadapt_agent` keep working. It requires `openadapt-flow>=2.2.0,<3`.

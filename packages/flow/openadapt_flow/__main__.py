@@ -99,6 +99,8 @@ from typing import (
 from urllib.parse import urlsplit
 from uuid import UUID
 
+from openadapt_flow.vision_hint import vision_hint
+
 if TYPE_CHECKING:  # pragma: no cover
     from openadapt_flow.backend import Backend
     from openadapt_flow.ir import ExecutionTargetKind, RunReport
@@ -14376,6 +14378,7 @@ def _sealed_input_refusal(args: argparse.Namespace) -> Optional[str]:
     return None
 
 
+@vision_hint
 def main(
     argv: Sequence[str] | None = None,
     *,

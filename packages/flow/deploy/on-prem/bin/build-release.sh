@@ -68,8 +68,8 @@ cp "$FLOW_WHEEL" "$WORK/release/wheels/"
 VERSION="$(rel_wheelhouse_version "$WORK/release/wheels")"
 rel_validate_version "$VERSION"
 
-echo "== exporting the locked dependencies of openadapt-flow[privacy] $VERSION =="
-(cd "$FLOW_DIR" && uv export --frozen --no-dev --extra privacy --no-emit-project \
+echo "== exporting the locked dependencies of openadapt-flow[privacy,vision] $VERSION =="
+(cd "$FLOW_DIR" && uv export --frozen --no-dev --extra privacy --extra vision --no-emit-project \
   --format requirements-txt --no-header -o "$WORK/release/requirements.lock.txt" >/dev/null)
 
 echo "== downloading the locked wheels for $("$PYTHON" -c 'import platform, sys; print(sys.platform, platform.machine(), "py%d.%d" % sys.version_info[:2])') =="

@@ -2622,19 +2622,15 @@ wheels = [
 
 [[package]]
 name = "openadapt-flow"
-version = "2.7.1"
+version = "3.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },
     { name = "httpx" },
     { name = "idna" },
-    { name = "numpy" },
     { name = "openadapt-types" },
-    { name = "opencv-python" },
-    { name = "pillow" },
     { name = "pydantic" },
     { name = "pyyaml" },
-    { name = "rapidocr-onnxruntime" },
     { name = "tomli", marker = "python_full_version < '3.11'" },
 ]
 
@@ -2646,10 +2642,18 @@ agent = [
     { name = "mcp" },
 ]
 browser = [
+    { name = "numpy" },
+    { name = "opencv-python" },
+    { name = "pillow" },
     { name = "playwright" },
+    { name = "rapidocr-onnxruntime" },
 ]
 capture = [
+    { name = "numpy" },
     { name = "openadapt-capture" },
+    { name = "opencv-python" },
+    { name = "pillow" },
+    { name = "rapidocr-onnxruntime" },
 ]
 claude-agent-sdk = [
     { name = "claude-agent-sdk" },
@@ -2671,11 +2675,15 @@ dev = [
     { name = "jsonschema" },
     { name = "matplotlib" },
     { name = "mypy" },
+    { name = "numpy" },
+    { name = "opencv-python" },
+    { name = "pillow" },
     { name = "playwright" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-timeout" },
     { name = "pytest-xdist" },
+    { name = "rapidocr-onnxruntime" },
     { name = "requests" },
     { name = "ruff" },
     { name = "scikit-image" },
@@ -2704,20 +2712,36 @@ langgraph = [
     { name = "langgraph" },
 ]
 linux = [
+    { name = "numpy" },
+    { name = "opencv-python" },
+    { name = "pillow" },
     { name = "pygobject", marker = "sys_platform == 'linux'" },
+    { name = "rapidocr-onnxruntime" },
 ]
 local-grounding = [
+    { name = "numpy" },
     { name = "onnxruntime", version = "1.23.2", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and sys_platform == 'darwin') or (python_full_version < '3.11' and sys_platform == 'linux') or (python_full_version < '3.11' and sys_platform == 'win32')" },
     { name = "onnxruntime", version = "1.24.3", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and sys_platform == 'darwin') or (python_full_version >= '3.11' and sys_platform == 'linux') or (python_full_version >= '3.11' and sys_platform == 'win32') or (sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')" },
+    { name = "opencv-python" },
+    { name = "pillow" },
+    { name = "rapidocr-onnxruntime" },
 ]
 macos = [
+    { name = "numpy" },
+    { name = "opencv-python" },
+    { name = "pillow" },
     { name = "pyobjc-framework-applicationservices", marker = "sys_platform == 'darwin'" },
     { name = "pyobjc-framework-cocoa", marker = "sys_platform == 'darwin'" },
     { name = "pyobjc-framework-quartz", marker = "sys_platform == 'darwin'" },
+    { name = "rapidocr-onnxruntime" },
 ]
 native-ocr = [
+    { name = "numpy" },
+    { name = "opencv-python" },
+    { name = "pillow" },
     { name = "pyobjc-core", marker = "sys_platform == 'darwin'" },
     { name = "pyobjc-framework-cocoa", marker = "sys_platform == 'darwin'" },
+    { name = "rapidocr-onnxruntime" },
     { name = "winrt-runtime", marker = "sys_platform == 'win32'" },
     { name = "winrt-windows-foundation", marker = "sys_platform == 'win32'" },
     { name = "winrt-windows-foundation-collections", marker = "sys_platform == 'win32'" },
@@ -2731,8 +2755,12 @@ openai-agents = [
 ]
 openenv = [
     { name = "fastapi", marker = "python_full_version >= '3.11'" },
+    { name = "numpy" },
+    { name = "opencv-python" },
     { name = "openenv", marker = "python_full_version >= '3.11'" },
+    { name = "pillow" },
     { name = "playwright", marker = "python_full_version >= '3.11'" },
+    { name = "rapidocr-onnxruntime" },
     { name = "uvicorn", marker = "python_full_version >= '3.11'" },
 ]
 pkcs11 = [
@@ -2744,6 +2772,10 @@ privacy = [
 ]
 rdp = [
     { name = "aardwolf" },
+    { name = "numpy" },
+    { name = "opencv-python" },
+    { name = "pillow" },
+    { name = "rapidocr-onnxruntime" },
 ]
 receipts = [
     { name = "cbor2" },
@@ -2767,8 +2799,18 @@ service-mlx = [
     { name = "transformers" },
     { name = "uvicorn", extra = ["standard"] },
 ]
+vision = [
+    { name = "numpy" },
+    { name = "opencv-python" },
+    { name = "pillow" },
+    { name = "rapidocr-onnxruntime" },
+]
 windows = [
+    { name = "numpy" },
+    { name = "opencv-python" },
+    { name = "pillow" },
     { name = "pywin32", marker = "sys_platform == 'win32'" },
+    { name = "rapidocr-onnxruntime" },
     { name = "requests" },
 ]
 
@@ -2809,16 +2851,28 @@ requires-dist = [
     { name = "mcp", marker = "extra == 'agent'", specifier = ">=1.28,<3" },
     { name = "mlx-vlm", marker = "extra == 'service-mlx'", specifier = ">=0.6.17,<0.8" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.11" },
-    { name = "numpy", specifier = ">=1.26" },
+    { name = "numpy", marker = "extra == 'dev'", specifier = ">=1.26" },
+    { name = "numpy", marker = "extra == 'vision'", specifier = ">=1.26" },
     { name = "onnxruntime", marker = "extra == 'local-grounding'", specifier = ">=1.17" },
     { name = "openadapt-capture", marker = "extra == 'capture'", specifier = ">=1.2.0" },
+    { name = "openadapt-flow", extras = ["vision"], marker = "extra == 'browser'" },
+    { name = "openadapt-flow", extras = ["vision"], marker = "extra == 'capture'" },
+    { name = "openadapt-flow", extras = ["vision"], marker = "extra == 'linux'" },
+    { name = "openadapt-flow", extras = ["vision"], marker = "extra == 'local-grounding'" },
+    { name = "openadapt-flow", extras = ["vision"], marker = "extra == 'macos'" },
+    { name = "openadapt-flow", extras = ["vision"], marker = "extra == 'native-ocr'" },
+    { name = "openadapt-flow", extras = ["vision"], marker = "extra == 'openenv'" },
+    { name = "openadapt-flow", extras = ["vision"], marker = "extra == 'rdp'" },
+    { name = "openadapt-flow", extras = ["vision"], marker = "extra == 'windows'" },
     { name = "openadapt-grounding", marker = "extra == 'grounding'", specifier = ">=0.1.0" },
     { name = "openadapt-privacy", extras = ["presidio"], marker = "extra == 'privacy'", specifier = ">=1.0.0" },
     { name = "openadapt-types", specifier = ">=0.24.0,<0.25.0" },
     { name = "openai-agents", marker = "extra == 'openai-agents'", specifier = ">=0.24,<0.25" },
-    { name = "opencv-python", specifier = ">=4.9" },
+    { name = "opencv-python", marker = "extra == 'dev'", specifier = ">=4.9" },
+    { name = "opencv-python", marker = "extra == 'vision'", specifier = ">=4.9" },
     { name = "openenv", marker = "python_full_version >= '3.11' and extra == 'openenv'", specifier = ">=0.11,<0.12" },
-    { name = "pillow", specifier = ">=10.0" },
+    { name = "pillow", marker = "extra == 'dev'", specifier = ">=10.0" },
+    { name = "pillow", marker = "extra == 'vision'", specifier = ">=10.0" },
     { name = "playwright", marker = "python_full_version >= '3.11' and extra == 'openenv'", specifier = ">=1.44" },
     { name = "playwright", marker = "extra == 'browser'", specifier = ">=1.44" },
     { name = "playwright", marker = "extra == 'dev'", specifier = ">=1.44" },
@@ -2836,7 +2890,8 @@ requires-dist = [
     { name = "python-pkcs11", marker = "extra == 'pkcs11'", specifier = ">=0.7" },
     { name = "pywin32", marker = "sys_platform == 'win32' and extra == 'windows'", specifier = ">=312" },
     { name = "pyyaml", specifier = ">=6.0" },
-    { name = "rapidocr-onnxruntime", specifier = ">=1.3" },
+    { name = "rapidocr-onnxruntime", marker = "extra == 'dev'", specifier = ">=1.3" },
+    { name = "rapidocr-onnxruntime", marker = "extra == 'vision'", specifier = ">=1.3" },
     { name = "requests", marker = "extra == 'dev'", specifier = ">=2.31" },
     { name = "requests", marker = "extra == 'windows'", specifier = ">=2.31" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.17.0" },
@@ -2861,7 +2916,7 @@ requires-dist = [
     { name = "winrt-windows-media-ocr", marker = "sys_platform == 'win32' and extra == 'native-ocr'", specifier = ">=2.0" },
     { name = "winrt-windows-storage-streams", marker = "sys_platform == 'win32' and extra == 'native-ocr'", specifier = ">=2.0" },
 ]
-provides-extras = ["native-ocr", "browser", "dev", "grounder", "grounding", "local-grounding", "console", "countersign", "receipts", "keychain", "pkcs11", "execute", "windows", "reward", "openenv", "macos", "linux", "rdp", "registry", "privacy", "hosted", "service", "service-mlx", "capture", "interop", "agent", "claude-agent-sdk", "openai-agents", "langgraph"]
+provides-extras = ["vision", "native-ocr", "browser", "dev", "grounder", "grounding", "local-grounding", "console", "countersign", "receipts", "keychain", "pkcs11", "execute", "windows", "reward", "openenv", "macos", "linux", "rdp", "registry", "privacy", "hosted", "service", "service-mlx", "capture", "interop", "agent", "claude-agent-sdk", "openai-agents", "langgraph"]
 
 [[package]]
 name = "openadapt-grounding"

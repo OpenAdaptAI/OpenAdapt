@@ -34,7 +34,12 @@ def test_playwright_is_browser_extra_not_base_dependency():
         "project"
     ]
     assert not any(item.startswith("playwright") for item in project["dependencies"])
-    assert project["optional-dependencies"]["browser"] == ["playwright>=1.44"]
+    # Since 3.0.0 the browser extra also carries the vision extra, so it
+    # installs what it did when the vision stack was a base dependency.
+    assert project["optional-dependencies"]["browser"] == [
+        "openadapt-flow[vision]",
+        "playwright>=1.44",
+    ]
 
 
 @pytest.fixture(autouse=True)

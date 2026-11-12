@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## Unreleased (1.22.0)
+
+### Requirements
+
+- Accept `openadapt-flow` 3.x as well as 2.7 or later: every Flow requirement
+  is now `>=2.7.0,<4.0.0`, and `openadapt doctor` accepts Flow 3. Flow 3 moved
+  its vision stack to the `vision` extra; the launcher's `browser` and other
+  surface extras include it, and `openadapt[flow]` now names it.
+
 ## v1.21.0 (2026-11-09)
 
 ### Requirements
