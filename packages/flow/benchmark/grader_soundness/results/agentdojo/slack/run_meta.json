@@ -1,0 +1,31 @@
+{
+  "target": "agentdojo/v1.2.2/slack",
+  "tasks": [
+    "user_task_0",
+    "user_task_1",
+    "user_task_10",
+    "user_task_11",
+    "user_task_12",
+    "user_task_13",
+    "user_task_14",
+    "user_task_15",
+    "user_task_16",
+    "user_task_17",
+    "user_task_18",
+    "user_task_19",
+    "user_task_2",
+    "user_task_20",
+    "user_task_3",
+    "user_task_4",
+    "user_task_5",
+    "user_task_6",
+    "user_task_7",
+    "user_task_8",
+    "user_task_9"
+  ],
+  "excluded": [
+    "user_task_0"
+  ],
+  "redact": false,
+  "wall_seconds_this_invocation": 1.3
+}
