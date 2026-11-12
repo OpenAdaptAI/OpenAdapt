@@ -1,0 +1,22 @@
+# Verifier audit: refinery-mockmed/effect_at_claim
+
+Kit `verifier-audit/1`, families `openadapt.verifier-audit.families/v1`. 3 tasks; 0 excluded before any fault (the scorer rejected the unedited reference, or the reference effect was not reproducible).
+
+A false accept is a cell where the replayed end state differs from the reference effect in the named way and the environment's own scorer still returned PASS. Degenerate edits (no effect change) and refusals are listed, never counted. Intervals are Wilson 95%. Rates are per family and are not pooled.
+
+| Family | Polarity | Hits / scored | Rate | Wilson 95% | Degenerate | Refused |
+|---|---|---|---|---|---|---|
+| unauthorized_side_effect | harmful | 0 / 3 | 0.0% | 0.0–56.1% | 0 | 0 |
+| wrong_record | harmful | 0 / 3 | 0.0% | 0.0–56.1% | 0 | 0 |
+| wrong_value | harmful | 0 / 3 | 0.0% | 0.0–56.1% | 0 | 0 |
+| duplicate | harmful | 0 / 3 | 0.0% | 0.0–56.1% | 0 | 0 |
+| partial_write | harmful | 0 / 0 | n/a | 0.0–100.0% | 0 | 3 |
+| late_write | harmful | 0 / 3 | 0.0% | 0.0–56.1% | 0 | 0 |
+| optimistic_success | harmful | 0 / 3 | 0.0% | 0.0–56.1% | 0 | 0 |
+| incidental_change | legitimate | 0 / 3 | 0.0% | 0.0–56.1% | 0 | 0 |
+
+Tasks with at least one false accept: 0 / 3 (0.0%, Wilson 95% 0.0–56.1%).
+
+## Counterexamples
+
+None.

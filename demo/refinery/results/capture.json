@@ -1,0 +1,32 @@
+{
+  "app": "MockMed (openadapt_flow.mockmed.fault_server, ?fault=ok#tasks)",
+  "recorded_actions": 6,
+  "recording": "packages/flow/tests/fixtures/jit/playwright_mcp_add_note.json",
+  "recording_inputs": {
+    "note": "Synthetic follow-up in two weeks"
+  },
+  "recording_sha256": "e15ae34f5a851bd7b92d565394b3989aad4f31cfc94378d536a098eca7c5e91e",
+  "store_after": [
+    {
+      "id": 1,
+      "key": null,
+      "note": "Synthetic follow-up in two weeks",
+      "patient_id": "p1",
+      "source": "replay",
+      "type": "Triage"
+    }
+  ],
+  "store_before": [],
+  "wire": [
+    {
+      "body": {
+        "note": "Synthetic follow-up in two weeks",
+        "patient_id": "p1",
+        "type": "Triage"
+      },
+      "method": "POST",
+      "path": "/api/encounter",
+      "query": "fault=ok"
+    }
+  ]
+}
