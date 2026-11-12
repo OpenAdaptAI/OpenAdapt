@@ -18,7 +18,10 @@ from benchmark.write_leaderboard_v2.proxy import Save, rewrite
 
 def test_claim_is_the_last_result_line() -> None:
     assert parse_claim("working\nRESULT: DONE 42\n")["status"] == "done"
-    assert parse_claim("RESULT: DONE\nRESULT: NOT DONE the save failed")["status"] == "not_done"
+    assert (
+        parse_claim("RESULT: DONE\nRESULT: NOT DONE the save failed")["status"]
+        == "not_done"
+    )
     assert parse_claim("I saved it.")["status"] == "not_done"
 
 
@@ -31,12 +34,18 @@ def test_wilson_matches_known_values() -> None:
 
 
 def test_rewrite_form_json_multipart() -> None:
-    assert rewrite(b"a=1&phone_pro=555-0191&b=", "application/x-www-form-urlencoded", {"phone_pro": "555-0119"}) == (
-        b"a=1&phone_pro=555-0119&b="
-    )
-    assert json.loads(rewrite(b'{"industry": "Retail"}', "application/json", {"industry": "Legal"})) == {"industry": "Legal"}
+    assert rewrite(
+        b"a=1&phone_pro=555-0191&b=",
+        "application/x-www-form-urlencoded",
+        {"phone_pro": "555-0119"},
+    ) == (b"a=1&phone_pro=555-0119&b=")
+    assert json.loads(
+        rewrite(b'{"industry": "Retail"}', "application/json", {"industry": "Legal"})
+    ) == {"industry": "Legal"}
     body = b'--X\r\nContent-Disposition: form-data; name="issue[estimated_hours]"\r\n\r\n2.5\r\n--X--\r\n'
-    out = rewrite(body, "multipart/form-data; boundary=X", {"issue[estimated_hours]": "25"})
+    out = rewrite(
+        body, "multipart/form-data; boundary=X", {"issue[estimated_hours]": "25"}
+    )
     assert b"\r\n\r\n25\r\n--X--" in out
     with pytest.raises(KeyError):
         rewrite(b"a=1", "application/x-www-form-urlencoded", {"missing": "x"})
@@ -83,7 +92,11 @@ def test_save_accepted_reads_logged_statuses() -> None:
     from benchmark.write_leaderboard_v2.apps.espocrm import EspoCRM
 
     doli = Dolibarr("t", 1, 2)
-    assert doli.save_accepted(302) and doli.save_accepted("302+302") and doli.save_accepted("302->504")
+    assert (
+        doli.save_accepted(302)
+        and doli.save_accepted("302+302")
+        and doli.save_accepted("302->504")
+    )
     assert not doli.save_accepted(200) and not doli.save_accepted("200+200")
     espo = EspoCRM("t", 1, 2)
     assert espo.save_accepted("200->504") and not espo.save_accepted(409)
@@ -114,7 +127,9 @@ def _serve(status: int) -> tuple[Any, int]:
 
 
 @pytest.mark.parametrize("status,delivered", [(302, True), (200, False)])
-def test_proxy_counts_a_fault_only_on_an_accepted_save(status: int, delivered: bool) -> None:
+def test_proxy_counts_a_fault_only_on_an_accepted_save(
+    status: int, delivered: bool
+) -> None:
     import http.client
     import socket
 
@@ -131,7 +146,12 @@ def test_proxy_counts_a_fault_only_on_an_accepted_save(status: int, delivered: b
     door.arm(Save(r"^/save$"), [{"side_write": True}])
     try:
         c = http.client.HTTPConnection("127.0.0.1", listen, timeout=10)
-        c.request("POST", "/save", body=b"a=1", headers={"Content-Type": "application/x-www-form-urlencoded"})
+        c.request(
+            "POST",
+            "/save",
+            body=b"a=1",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
         c.getresponse().read()
     finally:
         door.stop()
@@ -145,8 +165,24 @@ def test_oracle_treats_soft_deleted_rows_as_absent() -> None:
     from benchmark.write_leaderboard_v2.apps.espocrm import EspoCRM
 
     app = EspoCRM("t", 1, 2)
-    seed = [{"id": "a", "name": "Seed", "website": "", "type": "", "industry": "", "description": "", "deleted": "0"}]
-    task = {"name": "New Co", "website": "new.example.invalid", "type": "Customer", "industry": "Retail", "description": "x"}
+    seed = [
+        {
+            "id": "a",
+            "name": "Seed",
+            "website": "",
+            "type": "",
+            "industry": "",
+            "description": "",
+            "deleted": "0",
+        }
+    ]
+    task = {
+        "name": "New Co",
+        "website": "new.example.invalid",
+        "type": "Customer",
+        "industry": "Retail",
+        "description": "x",
+    }
     rec = {"id": "b", **task, "deleted": "0"}
     extra = {**rec, "id": "c", "deleted": "1"}
     assert app.judge(seed, seed + [rec, extra], task)["verdict"] == "correct"
@@ -159,19 +195,35 @@ def test_redact_url_drops_session_tokens() -> None:
     from benchmark.write_leaderboard_v2.run import redact_url
 
     url = "http://127.0.0.1:9866/interface/main/tabs/main.php?token_main=abc123XYZ&x=1"
-    assert redact_url(url) == "http://127.0.0.1:9866/interface/main/tabs/main.php?token_main=REDACTED&x=1"
+    assert (
+        redact_url(url)
+        == "http://127.0.0.1:9866/interface/main/tabs/main.php?token_main=REDACTED&x=1"
+    )
 
 
 def test_rejected_save_and_fault_reached() -> None:
     from benchmark.write_leaderboard_v2 import score
 
-    row = {"app": "redmine", "class": "duplicate", "proxy": [{"fault": ["duplicate"], "status": "200+200", "save": True}]}
+    row = {
+        "app": "redmine",
+        "class": "duplicate",
+        "proxy": [{"fault": ["duplicate"], "status": "200+200", "save": True}],
+    }
     assert score.rejected_save(row) and score.fault_reached(row) is False
     ok = {**row, "proxy": [{"fault": ["duplicate"], "status": "302+302", "save": True}]}
     assert not score.rejected_save(ok) and score.fault_reached(ok) is True
-    refused = {"app": "redmine", "class": "refused_write", "proxy": [{"fault": ["refuse"], "status": 503}]}
+    refused = {
+        "app": "redmine",
+        "class": "refused_write",
+        "proxy": [{"fault": ["refuse"], "status": 503}],
+    }
     assert score.fault_reached(refused) is True and not score.rejected_save(refused)
     never = {"app": "openemr", "class": "wrong_value", "proxy": []}
     assert score.fault_reached(never) is False
     assert score.fault_reached({"app": "dolibarr", "class": "clean"}) is None
-    assert score.fault_reached({"app": "medplum", "class": "duplicate", "fault_delivered": False}) is False
+    assert (
+        score.fault_reached(
+            {"app": "medplum", "class": "duplicate", "fault_delivered": False}
+        )
+        is False
+    )
