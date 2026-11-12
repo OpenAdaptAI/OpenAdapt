@@ -316,6 +316,13 @@ _PLAIN_CHOICES: tuple[tuple[str, str], ...] = (
         "If reconciliation proves a retry is necessary",
         "If it didn't land, approve one more try of the save.",
     ),
+    # A durable local run pauses before its first save is sent
+    # (``FIRST_LOCAL_RECONCILE_OPTION``). If that save then fails its check, the
+    # pause stays as written: the save is never sent again, so no retry is offered.
+    (
+        "reconcile without repeating delivery",
+        "Check in the app whether the save landed. OpenAdapt won't send it again.",
+    ),
     ("Abort the run", "Cancel the run."),
 )
 
