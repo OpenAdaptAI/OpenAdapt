@@ -53,7 +53,6 @@ from openadapt_flow.repair.standard_change import (
     daily_digest,
     revert,
 )
-
 from tests._rest_read_contract_fixtures import mockmed_rest_read_kwargs
 
 pytest.importorskip("playwright.sync_api")
@@ -518,7 +517,9 @@ def test_a_changed_save_template_goes_to_a_person(mockmed, tmp_path) -> None:
 
     def edit(workflow: Workflow) -> None:
         _relabel(workflow)
-        (out / template).write_bytes((out / template).read_bytes() + b"\0")
+        workflow.stage_verified_template_replacement(
+            template, (out / template).read_bytes() + b"\0"
+        )
 
     patched = _copy(bundle, out, edit)
     verdict = classify_change(
@@ -901,7 +902,9 @@ def test_a_changed_file_of_another_step_goes_to_a_person(mockmed, tmp_path) -> N
 
     def edit(workflow: Workflow) -> None:
         _relabel(workflow)
-        (out / template).write_bytes((out / template).read_bytes() + b"\0")
+        workflow.stage_verified_template_replacement(
+            template, (out / template).read_bytes() + b"\0"
+        )
 
     patched = _copy(bundle, out, edit)
     verdict = classify_change(

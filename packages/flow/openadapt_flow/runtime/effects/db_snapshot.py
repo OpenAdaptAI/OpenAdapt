@@ -69,10 +69,16 @@ import re
 import secrets
 import struct
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from decimal import Context, Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Literal, Optional
+
+from openadapt_flow.runtime.effects._mysql_read import (
+    MySQLResultCharsetRefused,
+    mysql_utf8mb4_cursor,
+)
 
 Dialect = Literal["sqlite", "mysql", "postgresql"]
 TableMode = Literal["compare", "append_only", "skip"]
@@ -602,14 +608,26 @@ class _Session:
     def __init__(self, connect: Callable[[], Any], dialect: Dialect) -> None:
         self.dialect = dialect
         self.con = connect()
-        if dialect == "postgresql":
-            # psycopg opens a transaction on the first statement unless told
-            # not to; the snapshot's own BEGIN must be the one that counts.
-            self.con.autocommit = True
-        self.cur = self.con.cursor()
-        if dialect == "postgresql":
-            for sql in _PG_SESSION:
-                self.cur.execute(sql)
+        try:
+            if dialect == "postgresql":
+                # psycopg opens a transaction on the first statement unless told
+                # not to; the snapshot's own BEGIN must be the one that counts.
+                self.con.autocommit = True
+            self.cur = (
+                mysql_utf8mb4_cursor(self.con)
+                if dialect == "mysql"
+                else self.con.cursor()
+            )
+            if dialect == "postgresql":
+                for sql in _PG_SESSION:
+                    self.cur.execute(sql)
+        except BaseException as exc:
+            # Setup did not finish. Close without issuing transaction SQL.
+            with suppress(Exception):
+                self.con.close()
+            if isinstance(exc, MySQLResultCharsetRefused):
+                raise SnapshotError(str(exc)) from None
+            raise
 
     def begin(self) -> None:
         if self.dialect == "postgresql":
@@ -1757,6 +1775,8 @@ def take_snapshot(
             )
     try:
         s = _Session(connect, dialect)
+    except SnapshotError:
+        raise
     except Exception as exc:  # noqa: BLE001
         raise SnapshotError(f"could not open a connection: {exc}") from exc
     try:

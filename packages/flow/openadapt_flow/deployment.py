@@ -406,6 +406,14 @@ class EffectsConfig(BaseModel):
     #: number of returned records. Prefer ``records_next_path`` or
     #: ``records_total_path`` when the endpoint exposes pagination metadata.
     records_complete: Optional[StrictBool] = None
+    #: ``rest`` only: the top-level keys whose value is a list, for a
+    #: whole-store read with one list per collection, as it was reviewed. A
+    #: body without a list under one of these reads as unreadable.
+    records_list_keys: Optional[list[StrictStr]] = None
+    #: ``rest`` only, with ``records_list_keys`` and no ``records_key``: the
+    #: read returns the records of every list under any OTHER key, so a row
+    #: written to a collection that appeared after review is seen.
+    records_other_lists: Optional[StrictBool] = None
     #: ``rest`` / ``fhir``: response-body path to a token whose reviewed
     #: endpoint semantics bind every page to one immutable result snapshot.
     #: A next link or total alone is not a consistent multi-page read.
@@ -500,6 +508,9 @@ class EffectsConfig(BaseModel):
     #: Alternatively: an importable DB-API driver module name (``pymysql``,
     #: ``mariadb``, ``psycopg``) ...
     sql_driver: Optional[str] = None
+    #: Explicit dialect for an opaque DB-API adapter. Its connections must
+    #: retain the same session across statements.
+    sql_dialect: Optional[Literal["sqlite", "mysql", "postgresql"]] = None
     #: ... plus its non-secret ``connect(**kwargs)`` arguments ...
     sql_connect_args: dict[str, Any] = Field(default_factory=dict)
     #: ... and the env var holding the database password (injected as the
@@ -641,7 +652,7 @@ class EffectsConfig(BaseModel):
 
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
-        """Keep configs without a desktop read-back byte-identical."""
+        """Keep configs without newly added read options byte-identical."""
 
         data: dict[str, Any] = handler(self)
         for added in (
@@ -650,11 +661,14 @@ class EffectsConfig(BaseModel):
             "records_next_path",
             "records_total_path",
             "records_complete",
+            "records_list_keys",
+            "records_other_lists",
             "records_snapshot_path",
             "records_read_context",
             "records_consistency",
             "records_path",
             "resource_type",
+            "sql_dialect",
         ):
             if data.get(added, "") is None:
                 data.pop(added, None)
@@ -679,6 +693,14 @@ class EffectsConfig(BaseModel):
             )
         if self.records_complete is not None and kind != "rest":
             raise ValueError("effects.records_complete applies only to kind rest")
+        if self.records_list_keys is not None and kind != "rest":
+            raise ValueError("effects.records_list_keys applies only to kind rest")
+        if self.records_other_lists and (
+            self.records_list_keys is None or self.records_key is not None
+        ):
+            raise ValueError(
+                "effects.records_other_lists needs records_list_keys and no records_key"
+            )
         if self.records_snapshot_path is not None and kind not in ("rest", "fhir"):
             raise ValueError(
                 "effects.records_snapshot_path applies only to kinds rest and fhir"
@@ -839,6 +861,12 @@ class RuntimeSection(BaseModel):
     #: ``known_ids_max_age_hours``. See :mod:`openadapt_flow.runtime.known_ids`.
     #: None (default) keeps the halt.
     known_ids_path: Optional[str] = None
+    #: Per-app interruption classes (YAML; :mod:`openadapt_flow.interruptions`):
+    #: session warnings, banners, tours and toasts the run may clear itself,
+    #: each only when the dismissal is proven read-only. A file with any entry
+    #: that fails that policy stops the run before it starts. None (default)
+    #: halts on every interruption.
+    interruptions_path: Optional[str] = None
     #: Identifier column when ``known_ids_path`` is a CSV/TSV export.
     known_ids_column: Optional[str] = None
     #: Confirmation record; default ``<known_ids_path>.confirmation.json``.
@@ -1884,6 +1912,11 @@ def build_replayer(
             confirmation_path=runtime_config.known_ids_confirmation_path,
             max_age_s=runtime_config.known_ids_max_age_hours * 3600.0,
         )
+    interruptions = None
+    if runtime_config is not None and runtime_config.interruptions_path:
+        from openadapt_flow.interruptions import load_interruption_classes
+
+        interruptions = load_interruption_classes(runtime_config.interruptions_path)
     identity_copy = None
     read_clipboard = None
     copy_cfg = runtime_config.identity_copy_look if runtime_config is not None else None
@@ -1924,6 +1957,7 @@ def build_replayer(
         qualification_environment_observer=qualification_environment_observer,
         approval_gate=approval_gate,
         deployment_surface=deployment_surface,
+        interstitials=interruptions,
     )
 
 
@@ -2240,6 +2274,8 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
         "records_next_path",
         "records_total_path",
         "records_complete",
+        "records_list_keys",
+        "records_other_lists",
         "records_snapshot_path",
         "records_read_context",
         "records_consistency",
@@ -2259,8 +2295,17 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
     # The same rule one level down: ``ui_readback.reference`` came later.
     for holder in [config, *(config.get("candidates") or [])]:
         section = holder.get("ui_readback") if isinstance(holder, dict) else None
-        if isinstance(section, dict) and section.get("reference") is None:
-            section.pop("reference", None)
+        if isinstance(section, dict):
+            for added in ("reference", "history", "final"):
+                if section.get(added) is None:
+                    section.pop(added, None)
+            # Unset keeps the earlier identity; an explicit 0 (a primary
+            # view) is a declaration that changes how a final read settles.
+            if section.get("index_lag_s") is None:
+                section.pop("index_lag_s", None)
+            sign_in = section.get("sign_in")
+            if isinstance(sign_in, dict) and sign_in.get("post_url") is None:
+                sign_in.pop("post_url", None)
     payload = {
         "schema": "openadapt.effect-verifier-identity/v1",
         "implementation": (
@@ -2417,6 +2462,10 @@ def _build_effect_verifier_unredacted(
             snapshot_path=cfg.records_snapshot_path,
             consistency=cfg.records_consistency,
             quiescence=quiescence,
+            list_keys=(
+                None if cfg.records_list_keys is None else tuple(cfg.records_list_keys)
+            ),
+            other_lists=bool(cfg.records_other_lists),
         )
 
     if kind == "fhir":
@@ -2516,6 +2565,8 @@ def _build_effect_verifier_unredacted(
             poll_interval_s=cfg.poll_interval_s,
             drop_fields=tuple(cfg.records_drop_fields),
             source_metadata=True,
+            sql_driver=cfg.sql_driver if not cfg.sqlite_database else None,
+            sql_dialect=cfg.sql_dialect,
         )
 
     if kind == "file":

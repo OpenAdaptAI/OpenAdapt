@@ -623,6 +623,90 @@ def test_a_surface_task_spec_keeps_no_credentials(tmp_path: Path) -> None:
     assert again.backend_kind == "windows"
 
 
+def test_confirm_checks_drops_idempotency_key_when_key_in_drop_fields(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import yaml
+
+    from openadapt_flow.compile_agent import FirstRunCompiler
+    from openadapt_flow.compile_agent.pipeline import PROPOSED_FILE
+
+    config = tmp_path / "deployment.yaml"
+    config.write_text(
+        "backend:\n  kind: windows\n  agent_url: https://10.0.0.5:5000\n"
+        "  agent_token: s3cret-token\n"
+    )
+    verify = tmp_path / "verify.yaml"
+    verify.write_text(
+        "verifier:\n  kind: rest\n  base_url: http://127.0.0.1:1\n"
+        "  records_path: /records\n  records_key: records\n"
+    )
+    compiler = FirstRunCompiler(
+        "Save {note}",
+        params=["note"],
+        surface_config=config,
+        verify=verify,
+        expect={"patient_id": "p1"},
+        on_screen=["MRN P1"],
+        cache_dir=tmp_path / "cache",
+    )
+    compiler.out_dir.mkdir(parents=True, exist_ok=True)
+    proposed_doc = {
+        "schema_version": "openadapt.verify/v1",
+        "verifier": {
+            "kind": "rest",
+            "base_url": "http://127.0.0.1:1",
+            "records_path": "/records",
+            "records_key": "records",
+        },
+        "effects": [
+            {
+                "kind": "record_written",
+                "match": {
+                    "patient_id": {"literal": "p1"},
+                    "note": {"param": "note"},
+                    "key": {"literal": "run-abc"},
+                },
+                "idempotency_key": {"literal": "run-abc"},
+                "key_field": "key",
+                "count_new_only": True,
+                "expected_count": 1,
+                "needs_operator_confirmation": True,
+            }
+        ],
+    }
+    (compiler.out_dir / PROPOSED_FILE).write_text(yaml.safe_dump(proposed_doc))
+
+    monkeypatch.setattr(
+        "openadapt_flow.jit.lifecycle.check_principal",
+        lambda principal_id, *args, **kw: str(principal_id),
+    )
+    monkeypatch.setattr(
+        "openadapt_flow.jit.lifecycle.confirm_params",
+        lambda *args, **kw: None,
+    )
+    monkeypatch.setattr(
+        "openadapt_flow.jit.lifecycle._event",
+        lambda *args, **kw: None,
+    )
+
+    # When confirmed without drop_fields, idempotency_key is preserved
+    preserved_path = compiler.confirm_checks(principal_id="dana.reviewer")
+    preserved_doc = yaml.safe_load(preserved_path.read_text())
+    [preserved_effect] = preserved_doc["effects"]
+    assert preserved_effect.get("idempotency_key") == {"literal": "run-abc"}
+
+    # When confirmed with drop_fields containing "key", idempotency_key is dropped
+    confirmed_path = compiler.confirm_checks(
+        principal_id="dana.reviewer", drop_fields=["key"]
+    )
+    confirmed_doc = yaml.safe_load(confirmed_path.read_text())
+    [effect] = confirmed_doc["effects"]
+    assert "key" not in effect["match"]
+    assert "idempotency_key" not in effect
+    assert "key_field" not in effect
+
+
 def test_a_non_http_url_is_refused(capsys) -> None:
     from openadapt_flow.__main__ import build_parser
     from openadapt_flow.compile_agent.cli import cmd_compile_agent
@@ -704,3 +788,96 @@ def test_a_click_on_a_text_field_is_not_a_commit() -> None:
     harness = Harness(computer, SaveGate(["MRN P1"]))  # type: ignore[arg-type]
     harness.act({"action": "left_click", "coordinate": [1, 2]})
     assert len(computer.executed) == 1 and harness.stats.gate_checks == 0
+
+
+def test_server_needs_reemit_identifies_pre_2154_server(tmp_path: Path) -> None:
+    from openadapt_flow.compile_agent import FirstRunCompiler
+
+    verify = tmp_path / "verify.yaml"
+    verify.write_text(
+        "verifier:\n  kind: rest\n  base_url: http://127.0.0.1:1\n"
+        "  records_path: /records\n  records_key: records\n"
+    )
+    compiler = FirstRunCompiler(
+        "Save {note}",
+        params=["note"],
+        url="http://app.test",
+        verify=verify,
+        expect={"patient_id": "p1"},
+        on_screen=["MRN P1"],
+        cache_dir=tmp_path / "cache",
+    )
+    # 1. No server exists yet -> needs re-emit
+    assert compiler.server_needs_reemit() is True
+
+    # 2. Server emitted before #2154 (no mcp_request_scope) -> needs re-emit
+    server_dir = compiler.out_dir / "mcp"
+    server_dir.mkdir(parents=True, exist_ok=True)
+    server_path = server_dir / "server.py"
+    server_path.write_text(
+        '"""Legacy server emitted before #2154."""\n'
+        "from mcp.server.fastmcp import FastMCP\n"
+        'mcp = FastMCP("demo")\n'
+    )
+    assert compiler.server_needs_reemit() is True
+
+    # 3. Modern server emitted with mcp_request_scope -> up to date
+    server_path.write_text(
+        '"""Modern server with request-context scope."""\n'
+        "from openadapt_flow.request_binding import mcp_request_scope\n"
+        'mcp = FastMCP("demo")\n'
+    )
+    assert compiler.server_needs_reemit() is False
+
+
+def test_cmd_compile_agent_emit_subcommand(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import argparse
+
+    from openadapt_flow.compile_agent import FirstRunCompiler
+    from openadapt_flow.compile_agent.cli import cmd_compile_agent
+
+    task_dir = tmp_path / "task"
+    task_dir.mkdir()
+    verify = tmp_path / "verify.yaml"
+    verify.write_text(
+        "verifier:\n  kind: rest\n  base_url: http://127.0.0.1:1\n"
+        "  records_path: /records\n  records_key: records\n"
+    )
+
+    compiler = FirstRunCompiler(
+        "Save {note}",
+        params=["note"],
+        url="http://app.test",
+        verify=verify,
+        expect={"patient_id": "p1"},
+        on_screen=["MRN P1"],
+        cache_dir=tmp_path / "cache",
+        task_id="task",
+    )
+    compiler.save_spec()
+
+    # Unadmitted task directory raises SystemExit
+    args = argparse.Namespace(prompt="emit", task_dir=str(compiler.dir), json=False)
+    with pytest.raises(SystemExit, match="has no admitted program"):
+        cmd_compile_agent(args)
+
+    # Missing task_dir raises SystemExit
+    args_no_dir = argparse.Namespace(prompt="re-emit", task_dir=None, json=False)
+    with pytest.raises(SystemExit, match="needs the compiled task directory"):
+        cmd_compile_agent(args_no_dir)
+
+    # When admitted, emit succeeds and returns 0
+    monkeypatch.setattr(compiler, "_jit", lambda: SimpleNamespace(admitted=True))
+    emitted_calls = []
+    monkeypatch.setattr(
+        FirstRunCompiler,
+        "load",
+        lambda _path: SimpleNamespace(
+            _jit=lambda: SimpleNamespace(admitted=True),
+            emit=lambda: emitted_calls.append(True) or {"mcp_server": "server.py"},
+        ),
+    )
+    assert cmd_compile_agent(args) == 0
+    assert len(emitted_calls) == 1

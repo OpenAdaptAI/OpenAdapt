@@ -94,11 +94,14 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         "prompt",
         help=(
             'the task, with {name} for each --param; "run" to run a compiled '
-            'task; or "admit" to confirm and admit a waiting draft'
+            'task; "admit" to confirm and admit a waiting draft; or "emit" / '
+            '"re-emit" to re-emit mcp/server.py and skills for an admitted task'
         ),
     )
     p.add_argument(
-        "task_dir", nargs="?", help="with run or admit: the compiled task directory"
+        "task_dir",
+        nargs="?",
+        help="with run, admit, emit, or re-emit: the compiled task directory",
     )
     p.add_argument("--param", action="append", metavar="NAME=VALUE")
     p.add_argument(
@@ -260,7 +263,7 @@ def _agent(args: argparse.Namespace) -> Any:
             effort=args.effort,
             max_cost_usd=args.max_cost,
         )
-    raw = json.loads(Path(args.agent).read_text())
+    raw = json.loads(Path(args.agent).read_text(encoding="utf-8"))
     if "scripts" in raw:
         from openadapt_flow.compile_agent.code_action import ScriptedCodeAgent
 
@@ -369,7 +372,7 @@ def cmd_compile_agent(
         compile_first_run,
     )
 
-    params = _pairs(args.param, "--param")
+    params = _pairs(getattr(args, "param", None), "--param")
     if args.prompt == "admit":
         return _cmd_admit(args, ask=ask, interactive=interactive)
     if args.prompt == "run":
@@ -378,6 +381,20 @@ def cmd_compile_agent(
         replay = FirstRunCompiler.load(args.task_dir).run(**params)
         _print(replay.to_dict(), args.json)
         return 0 if replay.verified else 1
+    if args.prompt in ("emit", "re-emit"):
+        if not args.task_dir:
+            raise SystemExit(
+                f"compile-agent {args.prompt} needs the compiled task directory"
+            )
+        compiler = FirstRunCompiler.load(args.task_dir)
+        jit = compiler._jit()
+        if not jit.admitted:
+            raise SystemExit(
+                f"{args.task_dir} has no admitted program; compile and admit first"
+            )
+        emitted = compiler.emit()
+        _print(emitted, args.json)
+        return 0
     from openadapt_flow.compile_agent.pipeline import UnsupportedTarget, check_target
 
     backend = args.backend

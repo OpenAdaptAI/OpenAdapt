@@ -48,7 +48,7 @@ from openadapt_flow.runtime.authorization import (
     GovernedRunAuthorization,
     RuntimeParamScalar,
 )
-from openadapt_flow.runtime.durable.approval import StateDiverged
+from openadapt_flow.runtime.durable.approval import StateDiverged, approval_pause_digest
 from openadapt_flow.runtime.durable.checkpoint import (
     CheckpointStore,
     DeferredReadback,
@@ -57,6 +57,13 @@ from openadapt_flow.runtime.durable.checkpoint import (
     RunManifest,
     _now_after,
     _now_not_before,
+)
+from openadapt_flow.runtime.durable.first_local_delivery import (
+    FIRST_LOCAL_DELIVERY,
+    FIRST_LOCAL_DELIVERY_CAUSE,
+    FirstLocalDeliveryHeld,
+    is_first_local_delivery,
+    require_current_local_delivery_owner,
 )
 from openadapt_flow.runtime.durable.program_checkpoint import (
     GraphFrame,
@@ -699,6 +706,100 @@ class DurableRun:
             update={"created_at": _now_after(checkpoint.created_at, active.created_at)}
         )
 
+    def arm_first_local_delivery(
+        self,
+        step_index: int,
+        step: Step,
+        params: dict[str, RuntimeParamScalar],
+        *,
+        actuation: Literal["gui", "api"],
+    ) -> str:
+        """Commit the exact linear cursor before its first consequential edge."""
+
+        from openadapt_flow.runtime.durable.continuation import (
+            current_continuation_token,
+        )
+
+        try:
+            require_current_local_delivery_owner(self.store.run_dir)
+            if (
+                self._manifest.delivery_authority_kind != "customer_local"
+                or current_continuation_token() is not None
+                or params != self._manifest.params
+                or self.store.read_pending() is not None
+                or self._active_pause_digest != self.store.model_digest(None)
+            ):
+                raise FirstLocalDeliveryHeld(
+                    "the exact first-leg cursor is unavailable"
+                )
+            checkpoints = self.store.checkpoints()
+            last = checkpoints[-1] if checkpoints else None
+            if len(checkpoints) != step_index or (
+                last is not None
+                and (
+                    last.next_step_index != step_index
+                    or last.run_id != self.run_id
+                    or last.bundle_version != self.bundle_version
+                    or last.params != params
+                )
+            ):
+                raise FirstLocalDeliveryHeld(
+                    "verified progress does not match this edge"
+                )
+            authority = self._authority.validate(self._manifest)
+            if authority.progress_digest != self._authority_digest:
+                raise FirstLocalDeliveryHeld("the durable run progress changed")
+            pending = PendingEscalation(
+                run_id=self.run_id,
+                workflow_name=self.workflow_name,
+                step_index=step_index,
+                step_id=step.id,
+                intent=step.intent,
+                category="delivery_uncertain",
+                reason="the first local delivery may have started; never resend it",
+                proposed_options=["reconcile without repeating delivery"],
+                resume_from_index=step_index,
+                resume_from_step_id=last.step_id if last is not None else None,
+                params=dict(params),
+                delivery_uncertainty=ActionDeliveryUncertainty(
+                    operation=FIRST_LOCAL_DELIVERY,
+                    native=actuation == "gui",
+                    observed_at=_utc_now(),
+                    cause_type=FIRST_LOCAL_DELIVERY_CAUSE,
+                ),
+                created_at=_now_not_before(*(c.created_at for c in checkpoints)),
+            )
+            self.store.cas_pending(self._active_pause_digest, pending)
+            self._active_pause_digest = self.store.model_digest(pending)
+            self._sync_authority()
+            return self._active_pause_digest
+        except (OSError, StateDiverged, ValueError) as exc:
+            raise FirstLocalDeliveryHeld(
+                "the write-ahead pause was not committed"
+            ) from exc
+
+    def _first_local_pause(
+        self,
+        step_index: int,
+        step: Step,
+        params: dict[str, RuntimeParamScalar],
+        digest: str,
+    ) -> PendingEscalation:
+        pending = self.store.read_pending()
+        if (
+            pending is None
+            or not is_first_local_delivery(pending.delivery_uncertainty)
+            or pending.program
+            or pending.run_id != self.run_id
+            or pending.step_index != step_index
+            or pending.step_id != step.id
+            or pending.params != params
+            or digest != self._active_pause_digest
+            or self.store.model_digest(pending) != digest
+        ):
+            raise FirstLocalDeliveryHeld("the exact write-ahead pause changed")
+        return pending
+
     def record(
         self,
         step_index: int,
@@ -710,6 +811,7 @@ class DurableRun:
         transition_observation: Optional["TransitionObservation"] = None,
         active_surface: Optional[str] = None,
         surface_observations: Optional[dict[str, Any]] = None,
+        first_local_pause_digest: str = "",
     ) -> None:
         """Persist the durable artifact for one completed step.
 
@@ -718,21 +820,53 @@ class DurableRun:
         resume that re-verifies a step overwrites its checkpoint rather than
         duplicating it.
         """
-        if result.ok:
-            checkpoint = verified_checkpoint(
-                run_id=self.run_id,
-                workflow_name=self.workflow_name,
-                bundle_version=self.bundle_version,
-                step_index=step_index,
-                step=step,
-                result=result,
-                params=params,
-                governed_authorization=self.governed_authorization,
-                active_surface=active_surface,
-                surface_observations=surface_observations,
+        first_local = None
+        if first_local_pause_digest:
+            first_local = self._first_local_pause(
+                step_index, step, params, first_local_pause_digest
             )
-            self.store.write_checkpoint(self._after_active_pause(checkpoint))
-            self._sync_authority()
+            if not result.ok:
+                return  # Keep the exact uncertain pause; no retry is authorized.
+            uncertainty = first_local.delivery_uncertainty
+            assert uncertainty is not None
+            if (
+                result.effect_verified is not True
+                or result.effect_approved_unverified
+                or result.skipped
+                or result.delivery_attempted is not True
+                or (result.actuation == "api") == uncertainty.native
+            ):
+                raise FirstLocalDeliveryHeld("the delivered effect was not verified")
+        if result.ok:
+            try:
+                checkpoint = verified_checkpoint(
+                    run_id=self.run_id,
+                    workflow_name=self.workflow_name,
+                    bundle_version=self.bundle_version,
+                    step_index=step_index,
+                    step=step,
+                    result=result,
+                    params=params,
+                    governed_authorization=self.governed_authorization,
+                    active_surface=active_surface,
+                    surface_observations=surface_observations,
+                )
+                if first_local is not None:
+                    checkpoint = checkpoint.model_copy(
+                        update={
+                            "first_local_pause_sha256": approval_pause_digest(
+                                first_local
+                            )
+                        }
+                    )
+                self.store.write_checkpoint(self._after_active_pause(checkpoint))
+                self._sync_authority()
+            except (OSError, StateDiverged, ValueError) as exc:
+                if first_local is not None:
+                    raise FirstLocalDeliveryHeld(
+                        "the exact result checkpoint was not committed"
+                    ) from exc
+                raise
             # Keep an approved/continuing pause as the crash-restart anchor.
             # Terminal completion or a later halt consumes/replaces it by CAS.
             return
@@ -811,6 +945,7 @@ class DurableRun:
         before: dict[str, Any],
         active_surface: Optional[str] = None,
         surface_observations: Optional[dict[str, Any]] = None,
+        first_local_pause_digest: str = "",
     ) -> None:
         """Persist a sent save whose record check runs alongside the next item.
 
@@ -821,6 +956,11 @@ class DurableRun:
         replaces the pause with the verdict.
         """
 
+        first_local = (
+            self._first_local_pause(step_index, step, params, first_local_pause_digest)
+            if first_local_pause_digest
+            else None
+        )
         if self.store.key is None:
             raise StateDiverged(
                 "a deferred record check holds record rows, so the durable "
@@ -839,6 +979,12 @@ class DurableRun:
             observed_at=_utc_now(),
             cause_type="DeferredReadback",
         )
+        if first_local is not None:
+            marked = first_local.delivery_uncertainty
+            assert marked is not None
+            if marked.native != (actuation == "gui"):
+                raise FirstLocalDeliveryHeld("the deferred effect uses another route")
+            uncertainty = marked
         pending = PendingEscalation(
             run_id=self.run_id,
             workflow_name=self.workflow_name,
@@ -868,9 +1014,16 @@ class DurableRun:
             ),
             created_at=_now_not_before(*(c.created_at for c in checkpoints)),
         )
-        self.store.cas_pending(self._active_pause_digest, pending)
-        self._active_pause_digest = self.store.model_digest(pending)
-        self._sync_authority()
+        try:
+            self.store.cas_pending(self._active_pause_digest, pending)
+            self._active_pause_digest = self.store.model_digest(pending)
+            self._sync_authority()
+        except (OSError, StateDiverged, ValueError) as exc:
+            if first_local is not None:
+                raise FirstLocalDeliveryHeld(
+                    "the deferred effect was not committed"
+                ) from exc
+            raise
 
     def settle_deferred_readback(
         self,
@@ -900,6 +1053,11 @@ class DurableRun:
             raise StateDiverged(
                 "the deferred record check's durable pause changed before it settled"
             )
+        first_local_digest = (
+            self._active_pause_digest
+            if is_first_local_delivery(current.delivery_uncertainty)
+            else ""
+        )
         if result.ok:
             self.record(
                 step_index,
@@ -909,6 +1067,7 @@ class DurableRun:
                 workflow=workflow,
                 active_surface=active_surface,
                 surface_observations=surface_observations,
+                first_local_pause_digest=first_local_digest,
             )
             self.complete()
             self._sync_authority()
@@ -923,6 +1082,7 @@ class DurableRun:
             workflow=workflow,
             active_surface=active_surface,
             surface_observations=surface_observations,
+            first_local_pause_digest=first_local_digest,
         )
 
     # -- Phase-2 program (state-machine) durability --------------------------

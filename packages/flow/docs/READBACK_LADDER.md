@@ -67,6 +67,13 @@ Learned checks confirm nothing until a person admits them
 A separate browser session (`ui_readback`) can also open the record by the
 number the save assigned: `ui_readback.reference` reads it from the run's
 page URL or screen and fills it into `record_url`.
+The acting browser must expose a readable URL that establishes a different
+view. An unavailable URL leaves independence unknown and cannot confirm the save.
+
+With `ui_readback.final`, an unreadable or refused document keeps the entry
+waiting. Restarting a fixed-target workflow with no parameters also stops
+while its final check is owed. Older entries without an input digest require
+reconciliation when their configuration or record identity cannot be established.
 
 ## A fresh session on desktop and RDP/Citrix
 
@@ -119,3 +126,10 @@ Limits:
 - Citrix: a second published-app session from the same broker may share a
   server-side cache. Qualify it before relying on it.
 - A second concurrent session may use a license seat.
+
+The browser read-back requires `ui_readback.sign_in.post_url`: the deployment's
+explicit authentication POST endpoint on the sign-in page's origin. The selected
+native form, including submitter overrides, must match that endpoint and POST
+method. One navigation POST is allowed immediately at submit, in the selected
+frame; the allowance is consumed before the request continues. Unknown or
+unconfigured authentication requests are refused.

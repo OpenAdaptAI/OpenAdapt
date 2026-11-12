@@ -8,6 +8,7 @@ deviceScaleFactor=1 so CSS pixels equal screenshot pixels.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import hmac
 import json
@@ -18,7 +19,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
-from typing import TYPE_CHECKING, Any, Callable, Literal, Optional
+from typing import TYPE_CHECKING, Any, Callable, Iterator, Literal, Optional, Sequence
 from urllib.parse import urlsplit
 
 from openadapt_flow.backends._page_quiescence import PageQuiescence
@@ -653,6 +654,70 @@ _INSTALL_GUARD_BODY_JS = (
 # True when the element is fully transparent. Such a control is laid over its
 # own visible box on purpose, so the bind guard refusing it is not occlusion.
 _TRANSPARENT_JS = "el => Number(window.getComputedStyle(el).opacity || '1') === 0"
+
+#: Records, from the first moment the window sees it, which element each
+#: trusted pointer event of a click reached. Read back right after the click
+#: (:meth:`PlaywrightBackend.act_structural`): input that reached anything but
+#: the verified element (a toast or modal that appeared between the check and
+#: the click) is reported, never retried.
+_ARM_DISPATCH_WITNESS_JS = """(el, key) => {
+  const w = el.ownerDocument.defaultView;
+  const seen = [];
+  const types = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
+  const f = e => {
+    if (!e.isTrusted) return;
+    const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
+    seen.push({type: e.type, hit: path.includes(el) || el.contains(e.target)});
+  };
+  for (const t of types) w.addEventListener(t, f, true);
+  Object.defineProperty(w, key, {configurable: true, value: () => {
+    for (const t of types) w.removeEventListener(t, f, true);
+    delete w[key];
+    return seen;
+  }});
+}"""
+
+#: The whole interruption a dismiss control belongs to: its container's full
+#: text, accessible title and the page's title, so a class is matched on the
+#: whole dialog, never on its button word (openadapt_flow.interruptions).
+_INTERRUPTION_TEXT_JS = """(el, texts) => {
+  const DIALOG = '[role=dialog],[role=alertdialog],[role=alert],[role=status],' +
+                 '[aria-modal=true],dialog';
+  const visible = n => {
+    const r = n.getBoundingClientRect();
+    const cs = n.ownerDocument.defaultView.getComputedStyle(n);
+    return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' &&
+           cs.display !== 'none';
+  };
+  const floating = n => {
+    for (let a = n; a && a.nodeType === 1; a = a.parentElement) {
+      if (a.matches(DIALOG)) return a;
+      const pos = a.ownerDocument.defaultView.getComputedStyle(a).position;
+      if (pos === 'fixed' || pos === 'sticky') return a;
+    }
+    return null;
+  };
+  let box = null;
+  if (el) {
+    box = floating(el);
+  } else {
+    const all = [...document.querySelectorAll(DIALOG)].filter(visible)
+      .filter(n => texts.every(t => (n.innerText || '').includes(t)));
+    const outer = all.filter(n => !all.some(m => m !== n && m.contains(n)));
+    if (outer.length === 1) box = outer[0];
+  }
+  if (!box) return null;
+  let title = box.getAttribute('aria-label') || '';
+  const by = box.getAttribute('aria-labelledby');
+  if (!title && by) {
+    title = by.split(/\\s+/).map(i => {
+      const t = box.ownerDocument.getElementById(i);
+      return t ? t.innerText : '';
+    }).join(' ');
+  }
+  return {text: box.innerText || '', title: title.trim(),
+          window: box.ownerDocument.title || ''};
+}"""
 
 _BIND_STRUCTURAL_TARGET_JS = (
     "(el, args) => { const describe = "
@@ -2106,6 +2171,395 @@ def _normalize_chord(key: str) -> str:
     return "+".join(normalized)
 
 
+#: The click guard (:meth:`PlaywrightBackend.structural_label_guard`),
+#: installed by an init script at the start of every document, so its
+#: capture-phase listeners on ``window`` run ahead of every page listener.
+#: Dormant until armed for one click on one element; armed, it blocks the
+#: press and the click whenever the element's label inputs changed since it
+#: was armed (a MutationObserver, flushed with ``takeRecords`` in every
+#: listener, and a fresh snapshot compared with the armed one: attributes,
+#: text, and the computed ``::before``/``::after`` and own ``content``,
+#: ``display`` and ``visibility`` of the element, its label nodes and their
+#: first descendants, so a CSSOM relabel counts), or the input
+#: is not on the element. A page that erases window listeners
+#: (``document.open``) fails the guard's heartbeat. Formatted with the key.
+#: The most nodes (the node itself included) the click guard observes in the
+#: control and in each node that labels it. A larger label can't be observed
+#: whole, so the guard refuses to arm and nothing is clicked.
+LABEL_GUARD_MAX_NODES = 64
+
+#: The click guard script's name in a stack trace (``//# sourceURL``), so a
+#: test can tell the guard's own frames from page code.
+CLICK_GUARD_SOURCE_URL = "oaflow-click-guard.js"
+
+_CLICK_GUARD_JS = r"""
+((key) => {
+  if (Object.prototype.hasOwnProperty.call(window, key)) return;
+  // Every read goes through a built-in captured here, before any page
+  // script, and called with Reflect.apply: a getter or method the page
+  // defines later (on a node, a prototype, Array or Object) never runs.
+  // Lists are walked by index and results are built as strings, so a
+  // patched iterator, push or toJSON can't change them either. Every
+  // dictionary handed to a built-in (a property descriptor, observer
+  // options) has a null prototype and only own data properties, and a list
+  // a built-in iterates is a closed iterable, so converting them never
+  // reads an inherited property the page may have defined. Entry points are
+  // named oaflowClickGuard* so their frames can be told apart in a trace.
+  const R = Reflect.apply;
+  const defProp = Reflect.defineProperty;
+  const getOwn = Object.getOwnPropertyDescriptor;
+  const getter = (proto, name) => {
+    const d = proto ? getOwn(proto, name) : undefined;
+    return d && d.get ? d.get : null;
+  };
+  const getAttr = Element.prototype.getAttribute;
+  const tagOf = getter(Element.prototype, 'tagName');
+  const textOf = getter(Node.prototype, 'textContent');
+  const connected = getter(Node.prototype, 'isConnected');
+  const nameOf = getter(Node.prototype, 'nodeName');
+  const parentOf = getter(Node.prototype, 'parentNode');
+  const rootOf = Node.prototype.getRootNode;
+  const qsa = Document.prototype.querySelectorAll;
+  const elQsa = Element.prototype.querySelectorAll;
+  const docById = Document.prototype.getElementById;
+  const fragById = DocumentFragment.prototype.getElementById;
+  const listLen = getter(NodeList.prototype, 'length');
+  const listItem = NodeList.prototype.item;
+  const recType = getter(MutationRecord.prototype, 'type');
+  const recTarget = getter(MutationRecord.prototype, 'target');
+  const recAdded = getter(MutationRecord.prototype, 'addedNodes');
+  const recRemoved = getter(MutationRecord.prototype, 'removedNodes');
+  const evType = getter(Event.prototype, 'type');
+  const path = Event.prototype.composedPath;
+  const prevent = Event.prototype.preventDefault;
+  const stopNow = Event.prototype.stopImmediatePropagation;
+  const MO = window.MutationObserver;
+  const observe = MO.prototype.observe;
+  const take = MO.prototype.takeRecords;
+  const disconnect = MO.prototype.disconnect;
+  const add = EventTarget.prototype.addEventListener;
+  const dispatch = EventTarget.prototype.dispatchEvent;
+  const Ev = window.Event;
+  const stringify = JSON.stringify;
+  const computed = window.getComputedStyle;
+  const propOf = CSSStyleDeclaration.prototype.getPropertyValue;
+  const freeze = Object.freeze;
+  const ITER = Symbol.iterator;
+  // A property descriptor with no prototype: ToPropertyDescriptor reads only
+  // what is set here.
+  const dataDesc = v => ({__proto__: null, value: v, writable: true,
+    enumerable: true, configurable: true});
+  // A list a built-in converts as a sequence, iterated without
+  // Array.prototype: its own iterator, own next, and null-prototype results.
+  const seq = arr => {
+    const o = {__proto__: null};
+    defProp(o, ITER, {__proto__: null, value: () => {
+      let i = 0;
+      return {__proto__: null, next: () => (i < arr.length
+        ? {__proto__: null, done: false, value: arr[i++]}
+        : {__proto__: null, done: true, value: undefined})};
+    }});
+    return o;
+  };
+  // Brand-checked getters: a built-in getter throws on the wrong kind of
+  // object, so trying each one reads the element's own built-in value.
+  const VALUE_TYPES = ['HTMLInputElement', 'HTMLTextAreaElement',
+    'HTMLSelectElement', 'HTMLButtonElement', 'HTMLOptionElement',
+    'HTMLOutputElement', 'HTMLDataElement', 'HTMLMeterElement',
+    'HTMLProgressElement', 'HTMLLIElement'];
+  const LABEL_TYPES = ['HTMLInputElement', 'HTMLTextAreaElement',
+    'HTMLSelectElement', 'HTMLButtonElement', 'HTMLOutputElement',
+    'HTMLMeterElement', 'HTMLProgressElement'];
+  const collect = (types, name) => {
+    const out = [];
+    for (let i = 0; i < types.length; i += 1) {
+      const ctor = window[types[i]];
+      const g = ctor ? getter(ctor.prototype, name) : null;
+      if (g) defProp(out, out.length, dataDesc(g));
+    }
+    return out;
+  };
+  const valueGetters = collect(VALUE_TYPES, 'value');
+  const labelGetters = collect(LABEL_TYPES, 'labels');
+  const branded = (getters, node) => {
+    for (let i = 0; i < getters.length; i += 1) {
+      let v;
+      let ok = true;
+      try { v = R(getters[i], node, []); } catch (err) { ok = false; }
+      if (ok) return {__proto__: null, found: true, v};
+    }
+    return {__proto__: null, found: false, v: null};
+  };
+  const put = (list, v) => { defProp(list, list.length, dataDesc(v)); };
+  const nodes = list => {
+    const out = [];
+    if (!list) return out;
+    const n = R(listLen, list, []);
+    for (let i = 0; i < n; i += 1) put(out, R(listItem, list, [i]));
+    return out;
+  };
+  const isEl = n => {
+    if (!n) return false;
+    try { R(tagOf, n, []); return true; } catch (err) { return false; }
+  };
+  const enc = v => stringify(v === undefined ? null : v) + '\u0001';
+  const attr = (el, a) => R(getAttr, el, [a]);
+  const text = n => R(textOf, n, []);
+  const words = s => {
+    const out = [];
+    let cur = '';
+    const str = s === null ? '' : '' + s;
+    for (let i = 0; i < str.length; i += 1) {
+      const c = str[i];
+      if (c === ' ' || c === '\t' || c === '\n' || c === '\r' || c === '\f') {
+        if (cur) put(out, cur);
+        cur = '';
+      } else {
+        cur += c;
+      }
+    }
+    if (cur) put(out, cur);
+    return out;
+  };
+  const byId = (root, id) => {
+    try { return R(docById, root, [id]); } catch (err) { /* not a document */ }
+    try { return R(fragById, root, [id]); } catch (err) { return null; }
+  };
+  const LOOK = ['content', 'display', 'visibility', 'content-visibility'];
+  const PSEUDO = ['::before', '::after'];
+  const MAX_LOOK = %(max_look)d;
+  // How a node renders its label, for the node and every node under it:
+  // generated ::before/::after text, its own computed content, and whether
+  // it is shown. More than MAX_LOOK nodes (the node included) can't be
+  // observed whole: the snapshot is then null.
+  const look = node => {
+    if (!isEl(node)) return '';
+    const all = nodes(R(elQsa, node, ['*']));
+    if (all.length + 1 > MAX_LOOK) return null;
+    let out = enc(all.length + 1);
+    for (let i = -1; i < all.length; i += 1) {
+      const n = i < 0 ? node : all[i];
+      const own = R(computed, window, [n]);
+      for (let j = 0; j < LOOK.length; j += 1) out += enc(R(propOf, own, [LOOK[j]]));
+      for (let k = 0; k < PSEUDO.length; k += 1) {
+        const ps = R(computed, window, [n, PSEUDO[k]]);
+        for (let j = 0; j < LOOK.length; j += 1) out += enc(R(propOf, ps, [LOOK[j]]));
+      }
+    }
+    return out;
+  };
+  const ATTRS = ['role', 'aria-label', 'aria-labelledby', 'aria-describedby',
+    'title', 'alt', 'value', 'hidden', 'aria-hidden', 'class', 'style', 'id',
+    'type', 'disabled'];
+  const EVENTS = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click',
+    'auxclick', 'dblclick', 'contextmenu', 'keydown', 'keypress', 'keyup',
+    'touchstart', 'touchend'];
+  const attrs = n => {
+    let out = '';
+    for (let i = 0; i < ATTRS.length; i += 1) out += enc(attr(n, ATTRS[i]));
+    return out;
+  };
+  // The nodes that label the control: [id, node] pairs, then its labels.
+  const refs = el => {
+    const out = [];
+    const root = R(rootOf, el, []);
+    const kinds = ['aria-labelledby', 'aria-describedby'];
+    for (let k = 0; k < kinds.length; k += 1) {
+      const ids = words(attr(el, kinds[k]));
+      for (let i = 0; i < ids.length; i += 1) put(out, [ids[i], byId(root, ids[i])]);
+    }
+    return out;
+  };
+  const labels = el => {
+    const b = branded(labelGetters, el);
+    return b.found ? nodes(b.v) : [];
+  };
+  // The whole evidence as one string, or null when it can't be read whole.
+  // Throws on anything unreadable; callers treat a throw as null.
+  const snapshot = el => {
+    let out = enc(R(connected, el, [])) + enc(R(tagOf, el, [])) + attrs(el)
+      + enc(text(el));
+    const value = branded(valueGetters, el);
+    out += enc(value.found) + enc(value.found ? '' + value.v : null);
+    const own = look(el);
+    if (own === null) return null;
+    out += own;
+    const rs = refs(el);
+    for (let i = 0; i < rs.length; i += 1) {
+      const n = rs[i][1];
+      out += enc(rs[i][0]) + enc(n ? text(n) : null);
+      if (n) {
+        out += attrs(n);
+        const seen = look(n);
+        if (seen === null) return null;
+        out += seen;
+      }
+    }
+    const ls = labels(el);
+    for (let i = 0; i < ls.length; i += 1) {
+      out += enc(text(ls[i])) + enc(attr(ls[i], 'class')) + enc(attr(ls[i], 'style'));
+      const seen = look(ls[i]);
+      if (seen === null) return null;
+      out += seen;
+    }
+    return out;
+  };
+  const styledNode = n => {
+    const name = R(nameOf, n, []);
+    return name === 'STYLE' || name === 'LINK';
+  };
+  const styled = records => {
+    for (let i = 0; i < records.length; i += 1) {
+      const r = records[i];
+      const t = R(recTarget, r, []);
+      if (R(recType, r, []) === 'characterData') {
+        const p = R(parentOf, t, []);
+        if (p && styledNode(p)) return true;
+        continue;
+      }
+      if (t && styledNode(t)) return true;
+      const moved = [R(recAdded, r, []), R(recRemoved, r, [])];
+      for (let j = 0; j < 2; j += 1) {
+        const ns = nodes(moved[j]);
+        for (let k = 0; k < ns.length; k += 1) if (styledNode(ns[k])) return true;
+      }
+    }
+    return false;
+  };
+  // A random event type no page code can know, for the heartbeat.
+  const probe = 'oaflow' + Math.random() + Math.random();
+  let beat = 0;
+  let st = null;
+  // Why the evidence no longer holds, or null. Throws when it can't tell.
+  const changed = () => {
+    if (st.tainted) return st.tainted;
+    if (R(take, st.mo, []).length) st.tainted = 'the control or its label changed';
+    else if (styled(R(take, st.docMo, []))) st.tainted = 'a stylesheet changed';
+    else {
+      const now = snapshot(st.el);
+      if (now === null) st.tainted = 'the label grew too large to observe whole';
+      else if (now !== st.snap) st.tainted = 'the control or its label changed';
+    }
+    return st.tainted;
+  };
+  const onControl = e => {
+    const p = R(path, e, []);
+    for (let i = 0; i < p.length; i += 1) if (p[i] === st.el) return true;
+    return false;
+  };
+  const alive = () => {
+    const before = beat;
+    try { R(dispatch, window, [new Ev(probe)]); } catch (e) { return false; }
+    return beat === before + 1;
+  };
+  const oaflowClickGuardBeat = () => { beat += 1; };
+  R(add, window, [probe, oaflowClickGuardBeat, true]);
+  const oaflowClickGuardListener = e => {
+    if (!st) return;
+    // Blocked unless the whole check finishes and passes: an exception
+    // anywhere in it (a page getter, an unreadable node) blocks the input.
+    let why = 'the label evidence could not be read';
+    let type = '?';
+    try {
+      type = '' + R(evType, e, []);
+      const c = changed();
+      why = c ? c : (onControl(e) ? null : 'the input is not on the control');
+    } catch (err) {
+      why = 'the label evidence could not be read';
+      st.tainted = st.tainted || why;
+    } finally {
+      // Block first: nothing recorded after the decision can undo it.
+      if (why !== null) {
+        R(prevent, e, []);
+        R(stopNow, e, []);
+      }
+      try {
+        put(st.events, type);
+        if (why !== null) put(st.violations, type + ': ' + why);
+      } catch (err) {
+        st.tainted = st.tainted || 'the label evidence could not be read';
+      }
+    }
+  };
+  for (let i = 0; i < EVENTS.length; i += 1) {
+    R(add, window, [EVENTS[i], oaflowClickGuardListener, true]);
+  }
+  const answer = (ok, reason) => (ok ? 'ok' : 'refused: ' + reason);
+  const oaflowClickGuardArm = (tokenAttr, secret) => {
+    if (st) {
+      put(st.violations, 'armed twice');
+      return answer(false, 'the guard is already armed');
+    }
+    if (!alive()) return answer(false, "the guard's listeners are not in this document");
+    let mo = null;
+    let docMo = null;
+    try {
+      const found = nodes(R(qsa, document, ['[' + tokenAttr + ']']));
+      if (found.length !== 1) return answer(false, 'the control is not in this document');
+      const el = found[0];
+      const opts = {__proto__: null, attributes: true, characterData: true,
+        childList: true, subtree: true};
+      const oaflowClickGuardObserved = () => {
+        if (st) st.tainted = 'the control or its label changed';
+      };
+      mo = new MO(oaflowClickGuardObserved);
+      docMo = new MO(function oaflowClickGuardStyled(rs) {
+        if (!st) return;
+        try {
+          if (styled(rs)) st.tainted = 'a stylesheet changed';
+        } catch (err) {
+          st.tainted = 'the label evidence could not be read';
+        }
+      });
+      R(observe, mo, [el, opts]);
+      const rs = refs(el);
+      for (let i = 0; i < rs.length; i += 1) if (rs[i][1]) R(observe, mo, [rs[i][1], opts]);
+      const ls = labels(el);
+      for (let i = 0; i < ls.length; i += 1) R(observe, mo, [ls[i], opts]);
+      R(observe, docMo, [document, {__proto__: null, characterData: true,
+        childList: true, subtree: true, attributes: true,
+        attributeFilter: seq(['href', 'media', 'disabled'])}]);
+      const snap = snapshot(el);
+      if (snap !== null) {
+        st = {__proto__: null, el, secret, snap, tainted: null, violations: [],
+          events: [], mo, docMo};
+        return answer(true);
+      }
+    } catch (err) {
+      /* refused below */
+    }
+    try { if (mo) R(disconnect, mo, []); if (docMo) R(disconnect, docMo, []); } catch (e2) { /* gone */ }
+    return answer(false, 'the control or its label has more than ' + MAX_LOOK
+      + " nodes in one part, or could not be read, so the whole label can't be observed");
+  };
+  const list = xs => {
+    let out = '[';
+    for (let i = 0; i < xs.length; i += 1) out += (i ? ',' : '') + stringify('' + xs[i]);
+    return out + ']';
+  };
+  const oaflowClickGuardFinish = secret => {
+    if (!st || st.secret !== secret) {
+      return '{"ok":false,"violations":["the guard was not armed by this click"],"events":[]}';
+    }
+    // A change after the last input is the click's own effect (the dialog
+    // closing); only an input judged after a change is a violation.
+    const violations = st.violations;
+    if (!alive()) put(violations, "the guard's listeners were removed during the click");
+    const out = '{"ok":true,"violations":' + list(violations) + ',"events":' + list(st.events) + '}';
+    try { R(disconnect, st.mo, []); R(disconnect, st.docMo, []); } catch (err) { /* gone */ }
+    st = null;
+    return out;
+  };
+  defProp(window, key, {
+    __proto__: null,
+    value: freeze({__proto__: null, arm: oaflowClickGuardArm,
+      finish: oaflowClickGuardFinish}),
+    enumerable: false, configurable: false, writable: false,
+  });
+})(%(key)s);
+"""
+
+
 class PlaywrightBackend:
     """`Backend` implementation over a Playwright sync-API `Page`.
 
@@ -3045,7 +3499,9 @@ class PlaywrightBackend:
 
     # -- the wire check (openadapt_flow.wire_check) --------------------------
 
-    def _arm_wire_check(self, submission: ExpectedSubmission) -> Optional[str]:
+    def _arm_wire_check(
+        self, submission: Optional[ExpectedSubmission], *, check: Any = None
+    ) -> Optional[str]:
         """Hold the save's request at the network to the checked form.
 
         Until it is disarmed, every write request from any page of this
@@ -3097,7 +3553,8 @@ class PlaywrightBackend:
         if workers:
             # A worker's WebSockets skip the page's guard and its routes.
             return "a worker runs on this page, and its WebSockets can't be held"
-        check = WireCheck(submission=submission)
+        if check is None:
+            check = WireCheck(submission=submission)
 
         def handler(route: Any) -> None:
             check.handle(route, proceed=route.fallback)
@@ -3359,6 +3816,238 @@ class PlaywrightBackend:
             pass
         self._form_wire = None
         return reasons
+
+    def _check_dispatch_witness(
+        self, scope: Any, witness: str, fingerprint: str, *, double: bool
+    ) -> None:
+        """Raise when the click's input reached anything but its target.
+
+        A toast or modal can appear between the last check and the click, so
+        the input lands on it. That is a possible unintended action: it is
+        reported as delivery uncertainty (the runtime reconciles, never
+        retries). When the page navigated away on the click, the witness is
+        gone with it; the pre-dispatch checks then stand alone, as before.
+        """
+
+        try:
+            seen = scope.evaluate(
+                "key => { const r = window[key]; return r ? r() : null; }", witness
+            )
+        except Exception:  # noqa: BLE001 - the document went away on the click
+            return
+        if seen is None:
+            return  # a new document: the click navigated
+        if not seen or not all(bool(e.get("hit")) for e in seen):
+            raise ActionDeliveryUncertain(
+                operation="dom_double_click" if double else "dom_click",
+                native=False,
+                target_fingerprint=fingerprint,
+                cause_type="InputLandedElsewhere",
+            )
+
+    def interruption_text(
+        self, locator: Optional[StructuralLocator], texts: Sequence[str]
+    ) -> Optional[dict[str, str]]:
+        """The whole interruption: ``{text, title, window}`` of the dialog,
+        banner or toast that holds ``locator``'s control, or, with no
+        locator, of the one visible dialog that shows every one of
+        ``texts``. None when there is no such single container."""
+
+        try:
+            if locator is None:
+                found = self.page.evaluate(
+                    f"texts => ({_INTERRUPTION_TEXT_JS})(null, texts)", list(texts)
+                )
+            else:
+                resolved = self._locator_with_scope(locator)
+                if resolved is None:
+                    return None
+                _scope, loc = resolved
+                if loc.count() != 1:
+                    return None
+                found = loc.evaluate(_INTERRUPTION_TEXT_JS, list(texts))
+        except Exception:  # noqa: BLE001 - unreadable means unproven
+            return None
+        if not isinstance(found, dict):
+            return None
+        return {k: str(found.get(k) or "") for k in ("text", "title", "window")}
+
+    def structural_control_is(
+        self,
+        locator: StructuralLocator,
+        handle: StructuralHandle,
+        *,
+        role: str,
+        name: str,
+    ) -> bool:
+        """Whether the element ``handle`` is bound to is the one control in
+        its scope with ARIA ``role`` and exact accessible ``name``.
+
+        Uses the browser's own accessible-name computation (Playwright's
+        ``get_by_role(..., exact=True)``), so a selector that resolves to a
+        control named something else is told apart from the declared one.
+        Does not consume the handle. Any doubt (a stale handle, no match, more
+        than one, a different element, an error) is False.
+        """
+
+        try:
+            guard = self._structural_tokens.get(handle.target_fingerprint or "")
+            if guard is None or tuple(locator.frame_path or ()) != guard.frame_path:
+                return False
+            bound = self._token_locator(guard.token, guard.scope)
+            named = guard.scope.get_by_role(role, name=name, exact=True)
+            if bound.count() != 1 or named.count() != 1:
+                return False
+            other = named.element_handle(timeout=1000)
+            if other is None:
+                return False
+            try:
+                return bool(bound.evaluate("(el, other) => el === other", other))
+            finally:
+                other.dispose()
+        except Exception:  # noqa: BLE001 - unreadable means unproven
+            return False
+
+    @contextlib.contextmanager
+    def structural_label_guard(
+        self,
+        locator: StructuralLocator,
+        handle: StructuralHandle,
+        *,
+        role: str,
+        name: str,
+    ) -> Iterator["LabelGuardReport"]:
+        """Keep the control's checked label for the whole click.
+
+        Arms the document's click guard (:data:`_CLICK_GUARD_JS`) on the
+        element ``handle`` is bound to, after checking once more that it is
+        the one control with ``role`` and ``name``
+        (:meth:`structural_control_is`). While the ``with`` body clicks, any
+        change to the element, the nodes its ``aria-labelledby`` and
+        ``aria-describedby`` name, its labels, or a stylesheet, and any input
+        that is not on the element, blocks the press and the click before a
+        page listener sees them, and is recorded. A guard that can't arm
+        sets ``refusal`` and the body must not act. After the body,
+        ``violations`` lists what was blocked; a guard that can't be read
+        afterwards counts as a violation.
+        """
+
+        report = LabelGuardReport()
+        guard = self._structural_tokens.get(handle.target_fingerprint or "")
+        key = _click_guard_key(self.page.context)
+        if guard is None or key is None:
+            report.refusal = "the click guard can't be armed for this control"
+            yield report
+            return
+        if not self.structural_control_is(locator, handle, role=role, name=name):
+            report.refusal = f"the control is no longer the {role} {name!r}"
+            yield report
+            return
+        secret = uuid.uuid4().hex
+        try:
+            armed = guard.scope.evaluate(
+                "(x) => { const g = window[x[0]];"
+                " return g ? g.arm(x[1], x[2]) : 'refused: this document has no click"
+                " guard (it loaded before the guard was installed)'; }",
+                [key, self._token_attribute(guard.token), secret],
+            )
+        except Exception as exc:  # noqa: BLE001 - no guard, no click
+            armed = f"refused: arming failed ({type(exc).__name__})"
+        if armed != "ok":
+            reason = (
+                armed[len("refused: ") :]
+                if isinstance(armed, str) and armed.startswith("refused: ")
+                else None
+            )
+            report.refusal = f"the click guard did not arm: {reason or 'unknown'}"
+            yield report
+            return
+        try:
+            yield report
+        finally:
+            try:
+                seen = guard.scope.evaluate(
+                    "(x) => { const g = window[x[0]];"
+                    " return g ? g.finish(x[1]) : null; }",
+                    [key, secret],
+                )
+            except Exception:  # noqa: BLE001 - the document went away
+                seen = None
+            # The guard answers with a string it built itself, so nothing the
+            # page patched (toJSON, Array methods) can shape the answer.
+            try:
+                seen = json.loads(seen) if isinstance(seen, str) else None
+            except ValueError:
+                seen = None
+            if (
+                not isinstance(seen, dict)
+                or seen.get("ok") is not True
+                or not isinstance(seen.get("violations"), list)
+            ):
+                report.violations.append(
+                    "the click guard could not be read after the click"
+                )
+            else:
+                report.violations.extend(str(v) for v in seen.get("violations") or ())
+                report.events = [str(e) for e in seen.get("events") or ()]
+
+    @contextlib.contextmanager
+    def write_fence(self) -> Iterator["WriteFenceReport"]:
+        """Run the ``with`` body while nothing on the page can write.
+
+        The same hold as a checked save (:meth:`_arm_wire_check`), with no
+        submission allowed: every write request from any page of the context
+        is aborted before it leaves, and a WebSocket, worker or message sent
+        meanwhile is refused in the page. Each is reported. A fence that
+        can't go up sets ``refusal`` and the body must not act. Used around
+        the dismissal of an interruption
+        (:mod:`openadapt_flow.runtime.effect_watch`).
+        """
+
+        report = WriteFenceReport()
+        if self._form_wire is not None:
+            report.refusal = "a save is already held on this page"
+            yield report
+            return
+        check = WireCheck()
+        context = self.page.context
+
+        def on_request(request: Any) -> None:
+            try:
+                parts = urlsplit(request.url)
+                report.requests.append(
+                    f"{str(request.method).upper()} {parts.path or '/'}"
+                )
+            except Exception:  # noqa: BLE001 - a request this can't read
+                report.requests.append("? (a request that could not be read)")
+
+        try:
+            context.on("request", on_request)
+        except Exception:  # noqa: BLE001 - no request log, no proof
+            report.refusal = "the fence could not log the page's requests"
+            yield report
+            return
+        refusal = self._arm_wire_check(None, check=check)
+        if refusal is not None:
+            report.refusal = refusal
+            try:
+                context.remove_listener("request", on_request)
+            except Exception:  # noqa: BLE001
+                pass
+            yield report
+            return
+        try:
+            yield report
+            # Let anything the action queued reach the hold while it is up.
+            self.wait_form_submit_guard(WRITE_FENCE_TAIL_MS)
+        finally:
+            report.attempts.extend(self._disarm_wire_check())
+            # A write the check let through is still a write.
+            report.attempts.extend(f"{sent} left the page" for sent in check.sent)
+            try:
+                context.remove_listener("request", on_request)
+            except Exception:  # noqa: BLE001 - the context is gone
+                pass
 
     def wait_form_submit_guard(self, ms: int) -> None:
         """Let the page and the wire check run for ``ms`` milliseconds."""
@@ -4318,6 +5007,20 @@ class PlaywrightBackend:
             self._assert_qualification_environment_current()
             close_expected = self._take_page_close_expectation()
             open_before = not self._page_is_closed()
+            witness = "__oaflow_witness_" + uuid.uuid4().hex
+            try:
+                armed = guard.scope.evaluate(
+                    "([sel, key]) => { const el = document.querySelector(sel); "
+                    f"if (!el) return false; ({_ARM_DISPATCH_WITNESS_JS})(el, key); "
+                    "return true; }",
+                    [f"[{self._token_attribute(guard.token)}]", witness],
+                )
+                if armed is not True:
+                    raise RuntimeError("the guarded target is gone")
+            except Exception as exc:
+                raise StructuralResolutionRefused(
+                    "could not arm the check of where the click lands"
+                ) from exc
             try:
                 if double:
                     token_locator.dblclick(timeout=1000)
@@ -4340,6 +5043,7 @@ class PlaywrightBackend:
                         target_fingerprint=fingerprint,
                         cause_type=type(exc).__name__,
                     ) from exc
+            self._check_dispatch_witness(scope, witness, fingerprint, double=double)
         except ActionDeliveryUncertain:
             raise
         except StructuralResolutionRefused:
@@ -5985,7 +6689,67 @@ def _ws_guard_secrets(target: Any) -> tuple[str, str, str]:
         context._oaflow_ws_guard = secrets
     except Exception:  # noqa: BLE001 - a stand-in context; holding refuses
         pass
+    _click_guard_key(context)
     return secrets
+
+
+def _click_guard_key(context: Any) -> Optional[str]:
+    """The context's click-guard key (:data:`_CLICK_GUARD_JS`), installing
+    the guard's init script on first use. None when it can't be installed;
+    a guarded click then refuses. Documents opened before it have no guard,
+    so a guarded click in one refuses too."""
+
+    known = getattr(context, "_oaflow_click_guard", None)
+    if isinstance(known, str):
+        return known
+    key = f"__oaflow_click_{uuid.uuid4().hex}"
+    try:
+        context.add_init_script(
+            _CLICK_GUARD_JS
+            % {"key": json.dumps(key), "max_look": LABEL_GUARD_MAX_NODES}
+            # Names the guard's frames in a stack trace, for audits.
+            + "\n//# sourceURL="
+            + CLICK_GUARD_SOURCE_URL
+            + "\n"
+        )
+        context._oaflow_click_guard = key
+    except Exception:  # noqa: BLE001 - a stand-in context; guarding refuses
+        return None
+    return key
+
+
+#: How long a write fence stays up after its action, so a request the action
+#: queued just before the fence comes down is still caught.
+WRITE_FENCE_TAIL_MS = 500
+
+
+@dataclass
+class LabelGuardReport:
+    """What the click guard saw. ``refusal`` set means it never armed."""
+
+    refusal: Optional[str] = None
+    #: Each input the guard blocked, and why.
+    violations: list[str] = field(default_factory=list)
+    #: The input events that reached the guard.
+    events: list[str] = field(default_factory=list)
+
+
+@dataclass
+class WriteFenceReport:
+    """What a write fence saw. ``refusal`` set means it never went up."""
+
+    refusal: Optional[str] = None
+    #: Each write the fence stopped, and how.
+    attempts: list[str] = field(default_factory=list)
+    #: Every request the page made while the fence was up (``METHOD /path``),
+    #: reads included, so a report can be reconciled with what was sent.
+    requests: list[str] = field(default_factory=list)
+
+    @property
+    def held(self) -> bool:
+        """The fence was up for the whole action and nothing tried to write."""
+
+        return self.refusal is None and not self.attempts
 
 
 def _wire_reasons(check: WireCheck, notes: list[str]) -> list[str]:

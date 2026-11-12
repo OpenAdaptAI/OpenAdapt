@@ -815,7 +815,9 @@ def test_sql_complete_read_requires_successful_lossless_dbapi_result(service, fa
             raise sqlite3.OperationalError("synthetic connect failure")
         return Connection()
 
-    reader = SqlRecordVerifier(connect, "SELECT row_id, external_key FROM objects")
+    reader = SqlRecordVerifier(
+        connect, "SELECT row_id, external_key FROM objects", sql_dialect="sqlite"
+    )
     before = reader.capture_pre_state()
     assert before.reachable and before.readback_complete is True
     assert len(before.records) == 2

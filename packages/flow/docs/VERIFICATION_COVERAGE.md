@@ -352,6 +352,49 @@ attribution, which lets a concurrent edit by another user stop counting as
 collateral. That exception is confined to edits an audit log or a
 modified-by field attributes to a named actor other than the bot.
 
+### Owned write attempts
+
+Import `begin_owned_write` explicitly from `openadapt_flow.verifier` to
+ask the verifier to confirm that this attempt committed the change. The baseline and ledger record the
+purpose before dispatch. A matching read without independent commit evidence
+leaves the write uncertain and held for reconciliation. An earlier write by
+the same actor, a fast read, and a transport acknowledgment cannot establish
+which attempt committed. A later matching read cannot supply missing proof.
+
+The controlled SQLite insert is the first supported writer. Set
+`owned_sqlite_insert` in the operator's verification contract with `table`
+and `identity_field`. Use a local database under the operator's control,
+with a built-in, unfiltered `SELECT * FROM <table>` reader. The one
+`record_written` effect must declare the full typed row, including its
+integer primary key. The operator provisions this bookkeeping table separately:
+
+```sql
+CREATE TABLE openadapt_owned_insert_events (
+    attempt TEXT PRIMARY KEY NOT NULL,
+    witness TEXT NOT NULL
+) STRICT;
+```
+
+For a ledger-backed attempt, call `commit_pending_sqlite_insert(pending)`.
+It holds the attempt's existing lease through the native commit. The
+lower-level writer accepts a private standalone baseline only. The writer
+claims one dispatch and commits the declared insert and its witness together.
+Verification can close that claim before dispatch. If the writer has already
+claimed it, an absent read stays uncertain because the commit may still land.
+A separate read-only connection checks the witness and exact row. The normal
+read-back, frame, source, and approval checks still apply. A whole-database frame must account
+for the bookkeeping table in its existing declared scope. Keep the database
+and private baseline under operator control. This proof covers one controlled
+insert. Update, delete, external writers, and other providers need their own
+supported proof before they can confirm an owned attempt.
+
+Standalone verification and the legacy snapshot API retain observation
+semantics. The evidence identifies that purpose, and the receipt binds the
+evidence digest using its existing fields. `begin_write` and `verified_write`
+retain observation semantics for legacy contracts and refuse a contract that
+requires the controlled SQLite writer. Use `begin_owned_write` for that
+contract. An owned baseline cannot be verified or rechecked as an observation.
+
 ## Measurement
 
 The benchmark lives in `benchmark/verification_coverage/`. It reruns the

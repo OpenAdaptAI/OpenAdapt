@@ -423,3 +423,14 @@ def test_public_legacy_help_keeps_intentionally_hidden_leaf_options_hidden(parse
     assert "--admitted-bundle-sha256" not in root_help
     assert "--managed-dispatch-file" not in root_help
     assert "--execute-token" not in root_help
+
+
+@pytest.mark.parametrize("width", [80, 100, 120])
+def test_root_help_lines_do_not_exceed_terminal_width(parsers, width, monkeypatch):
+    parser, _ = parsers
+    monkeypatch.setenv("COLUMNS", str(width))
+    help_text = parser.format_help()
+    exceeded = [
+        (len(line), line) for line in help_text.splitlines() if len(line) > width
+    ]
+    assert not exceeded, f"Lines exceeded terminal width {width}: {exceeded}"

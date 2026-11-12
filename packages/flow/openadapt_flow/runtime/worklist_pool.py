@@ -590,9 +590,11 @@ class PoolReport:
         _at_rest.unsealed_write("a worklist report", run_dir, refuse=False)
         path = run_dir / POOL_REPORT_FILENAME
         tmp = path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(self.to_json(), indent=1, default=str))
+        tmp.write_text(
+            json.dumps(self.to_json(), indent=1, default=str), encoding="utf-8"
+        )
         tmp.replace(path)
-        (run_dir / POOL_REPORT_MD).write_text(self.render_md())
+        (run_dir / POOL_REPORT_MD).write_text(self.render_md(), encoding="utf-8")
         return path
 
 

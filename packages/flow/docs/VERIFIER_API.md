@@ -342,15 +342,106 @@ two intended writes with the same values need distinct `write_key`s. With a
 **Storage.** `FileLedger` is the default, in `~/.openadapt/ledger/`
 (`OPENADAPT_LEDGER_DIR` overrides it). It keeps one append-only JSON Lines
 file per key. Events are `begun`, `resolved`, `delivered` and `released`.
-Nothing is rewritten or deleted. A `LedgerBackend` protocol lets a
-deployment keep it elsewhere, such as a shared database for workers on
-several hosts. In addition to `events`, `append` and `lease`, a backend must
+The legacy ledger does not authenticate on-disk changes. A legacy journal
+directory writable by the checked agent provides no tamper evidence. A
+`LedgerBackend` protocol lets a deployment keep it elsewhere, such as a
+shared database for workers on several hosts. In addition to `events`, `append` and `lease`, a backend must
 provide `transaction(key)`: a short exclusive journal transaction whose
 `events()` read and durable `append(event)` use the same lock. All appends
 must participate in that lock. It must be separate from the lifecycle lease,
 which a write holds while a late recheck may settle its journal. A backend
 without this primitive refuses mutations; a separate read and append is not
 an atomic substitute. `MemoryLedger` is for tests.
+
+**Protected file journals.** On a single host, an application may pass
+`FileLedger(root, authority=authority)` to `Ledger`. The `SQLiteJournalAuthority`
+uses a separate database bound to the expected journal root, ledger identity,
+and generation. Protect that database, its locks and its backups independently
+of the journal directory. Two paths writable by the same untrusted process
+do not establish that boundary. This adapter does not provide cross-host
+fencing or authority recovery.
+
+The authority holds the latest committed revision and the complete key inventory.
+Before writing, the adapter records a protected pending marker. It then appends
+and syncs the file, verifies the resulting inventory, and commits the new head
+through the authority. A missing authority, an interrupted append, or a mismatch
+raises `LedgerIntegrityHeld` with a fixed reason code. The adapter does not
+repair a mismatch, authorize dispatch, promote an outcome, or remove evidence
+while the journal is held. A matching older copy of both the authority and the
+journal is outside this trust model; the authority must retain its current state.
+
+Only the operator who controls the separate authority should enroll, with all
+old workers stopped. Use the Python API to enroll a new or existing legacy
+journal. The external authority directory must already be controlled by the
+verifier:
+
+```python
+from openadapt_flow.write_ledger import FileLedger, SQLiteJournalAuthority
+
+root = "/absolute/path/to/journal"
+authority = SQLiteJournalAuthority(
+    "/absolute/path/to/authority.sqlite",
+    root=root,
+    ledger_id="example-ledger",
+    generation="1",
+)
+FileLedger(root).enroll(authority, authorized=True)
+```
+
+Enrollment writes a durable marker in the journal before initializing the
+external authority and anchors the inventory. It does not authenticate older
+events or settle earlier attempts. Use
+`FileLedger(root, authority=authority).inspect_legacy(key)` to read older events
+as unauthenticated history. Older keys may still block workflows until an
+operator reconciles them. Interrupted enrollment is held; opening a ledger
+never enrolls, removes a marker, or repairs it automatically.
+
+### Use the protected journal from installed tools
+
+For a journal enrolled by the API above, set
+`OPENADAPT_LEDGER_AUTHORITY_CONFIG` in the verifier's launch environment to
+the absolute path of an operator-owned JSON file. Use the same file for
+`openadapt-verify run`, `openadapt-verify recheck`, and the MCP server, including
+after a restart. The file contains exactly these fields:
+
+```json
+{
+  "journal_root": "/absolute/path/to/journal",
+  "authority_path": "/absolute/path/to/authority.sqlite",
+  "ledger_id": "example-ledger",
+  "generation": "1"
+}
+```
+
+Both paths must be absolute and must not name symlinks. Keep the descriptor
+outside the journal and use the identity and generation recorded at enrollment. If set,
+`OPENADAPT_LEDGER_DIR` and the operator's `--ledger` must match the descriptor.
+Without the descriptor setting, installed tools keep the legacy default for
+unmarked journals. An enrolled, marked journal refuses without its authority
+with `ledger_protected_requires_authority`. The marker catches configuration
+mistakes; it is not a tamper witness. Keep the journal root and marker outside
+the checked agent's write access. Journals enrolled by older versions without
+a marker can still use an explicit authority through the Python API; the
+installed protected default does not adopt them automatically.
+
+The verifier needs write access to the authority database and its directory
+to maintain the lock and lease files. A process that can only read the
+authority and cannot open the lock for writing gets
+`ledger_authority_unavailable`. If a writer holds the lock for ten seconds,
+the verifier returns `ledger_authority_lock_timeout` without changing journal
+or authority state. Keep the descriptor, authority, locks, and backups outside
+the checked agent's write access, including their parent directories. A command
+launched by `openadapt-verify run` inherits the verifier's OS permissions. Use
+only a trusted command there, or isolate it under a different OS identity that
+cannot write to the authority.
+
+Configured mode holds when the descriptor, authority, or required marker is
+missing (`ledger_authority_absent`), the descriptor is invalid
+(`ledger_authority_config_invalid`), or the authority and journal do not
+match (`ledger_authority_wrong_scope`). Use a Flow version that supports the
+configured default. The Verify facade refuses older versions in configured
+mode with `ledger_authority_unsupported`. Offline receipt verification does
+not consult the journal.
 
 Ledger mutations record the target attempt and journal revision. Settlements
 derived from a read supply the revision they observed before that read.

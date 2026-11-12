@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import functools
 import json
+from importlib import import_module
 from typing import Any
 
 from openadapt_flow.wrap import TaskArgumentsError, WrappedTask
@@ -12,9 +13,23 @@ from openadapt_flow.wrap import TaskArgumentsError, WrappedTask
 def build_server(task: WrappedTask) -> Any:
     """Adapt the existing task/cache/ledger to MCP 1 and MCP 2."""
     import anyio
-    import mcp.types as types
     from jsonschema import ValidationError, validate
     from mcp.server.lowlevel import Server
+
+    types: Any
+    try:
+        types = import_module("mcp.types")
+    except ModuleNotFoundError as error:
+        if error.name != "mcp.types":
+            raise
+        types = import_module("mcp_types")
+
+    if types.__name__ not in {"mcp.types", "mcp_types"}:
+        raise RuntimeError("Unsupported MCP protocol types")
+    modern = types.__name__ == "mcp_types"
+    input_schema_field = "input_schema" if modern else "inputSchema"
+    error_field = "is_error" if modern else "isError"
+    structured_field = "structured_content" if modern else "structuredContent"
 
     schema = {
         "type": "object",
@@ -35,7 +50,7 @@ def build_server(task: WrappedTask) -> Any:
                     "read its original result. Only verified=true confirms a read-back. "
                     "A halt or reconciliation result requires review, not another ID."
                 ),
-                inputSchema=schema,
+                **{input_schema_field: schema},
             )
         ]
 
@@ -56,7 +71,7 @@ def build_server(task: WrappedTask) -> Any:
                 content=[
                     types.TextContent(type="text", text='{"error":"invalid task call"}')
                 ],
-                isError=True,
+                **{error_field: True},
             )
         except Exception:  # noqa: BLE001 - no raw exception values on the protocol
             return types.CallToolResult(
@@ -66,11 +81,11 @@ def build_server(task: WrappedTask) -> Any:
                         text='{"error":"local execution unavailable; retain request_id and check the run"}',
                     )
                 ],
-                isError=True,
+                **{error_field: True},
             )
         return types.CallToolResult(
             content=[types.TextContent(type="text", text=json.dumps(result))],
-            structuredContent=result,
+            **{structured_field: result},
         )
 
     instructions = (

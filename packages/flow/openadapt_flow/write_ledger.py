@@ -36,6 +36,7 @@ import hmac
 import json
 import os
 import secrets
+import stat
 import threading
 import time
 from contextlib import contextmanager
@@ -47,10 +48,19 @@ from typing import (
     Callable,
     ContextManager,
     Iterator,
+    Literal,
     Mapping,
     Optional,
     Protocol,
     Sequence,
+)
+
+from openadapt_flow.write_journal_authority import (
+    JournalCommit,
+    JournalHead,
+    LedgerError,
+    LedgerIntegrityHeld,
+    SQLiteJournalAuthority,
 )
 
 __all__ = [
@@ -60,18 +70,21 @@ __all__ = [
     "Ledger",
     "LedgerBackend",
     "LedgerError",
+    "LedgerIntegrityHeld",
     "Journal",
     "MemoryLedger",
+    "PROTECTED_LEDGER_CONFIG_ENV",
+    "SQLiteJournalAuthority",
     "default_ledger",
 ]
 
 #: ``OPENADAPT_LEDGER_DIR`` overrides it.
 DEFAULT_DIR = "~/.openadapt/ledger"
+PROTECTED_LEDGER_CONFIG_ENV = "OPENADAPT_LEDGER_AUTHORITY_CONFIG"
+_AUTHORITY_CONFIG_MAX_BYTES = 8192
+_PROTECTED_MARKER = ".protected-ledger"
+_PROTECTED_MARKER_PREFIX = b"openadapt.protected-ledger/v1 "
 _KEY = 64  # hex chars of an HMAC-SHA256
-
-
-class LedgerError(RuntimeError):
-    """The ledger can't be read or written. Nothing may be sent."""
 
 
 class Lease(Protocol):
@@ -135,12 +148,13 @@ class LedgerBackend(Protocol):
         """A new private folder for one attempt's baseline and values."""
 
 
-def _private_dir(path: Path) -> Path:
-    try:
-        path.mkdir(mode=0o700, parents=True, exist_ok=True)
-        path.chmod(0o700)
-    except OSError as exc:
-        raise LedgerError(f"can't keep the write ledger: {exc}") from exc
+def _private_dir(path: Path, *, create: bool = True) -> Path:
+    if create:
+        try:
+            path.mkdir(mode=0o700, parents=True, exist_ok=True)
+            path.chmod(0o700)
+        except OSError as exc:
+            raise LedgerError(f"can't keep the write ledger: {exc}") from exc
     info = os.lstat(path)
     if (
         not os.path.isdir(path)
@@ -153,6 +167,16 @@ def _private_dir(path: Path) -> Path:
     return path
 
 
+def _require_unprotected(root: Path) -> None:
+    try:
+        (root / _PROTECTED_MARKER).lstat()
+    except FileNotFoundError:
+        return
+    except OSError:
+        raise LedgerIntegrityHeld("ledger_authority_unavailable") from None
+    raise LedgerIntegrityHeld("ledger_protected_requires_authority")
+
+
 def _check_key(key: str) -> str:
     if len(key) != _KEY or any(c not in "0123456789abcdef" for c in key):
         raise LedgerError("a ledger key is 64 lowercase hex characters")
@@ -160,14 +184,30 @@ def _check_key(key: str) -> str:
 
 
 class _FileLease:
-    def __init__(self, handle: Any) -> None:
+    def __init__(self, handle: Any, gate: Any = None) -> None:
         self._handle = handle
+        self._gate = gate
 
     def release(self) -> None:
         handle, self._handle = self._handle, None
-        if handle is not None:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
-            handle.close()
+        gate, self._gate = self._gate, None
+        try:
+            if handle is not None:
+                try:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+                finally:
+                    handle.close()
+        finally:
+            if gate is not None:
+                gate.close()
+
+
+@dataclass(frozen=True)
+class LegacyJournalInspection:
+    """Historical observations only; they cannot authorize a write."""
+
+    events: tuple[dict[str, Any], ...]
+    authenticated: bool = field(default=False, init=False)
 
 
 class FileLedger:
@@ -181,13 +221,102 @@ class FileLedger:
     don't hold across hosts or on network file systems.
     """
 
-    def __init__(self, root: str | Path) -> None:
-        self.root = _private_dir(Path(root).expanduser())
-        self._entries = _private_dir(self.root / "entries")
-        self._locks = _private_dir(self.root / "locks")
-        self._attempts = _private_dir(self.root / "attempts")
+    def __init__(
+        self,
+        root: str | Path,
+        *,
+        authority: SQLiteJournalAuthority | None = None,
+        _create_layout: bool = True,
+        _require_marker: bool = False,
+    ) -> None:
+        self.root = Path(root).expanduser()
+        self._authority = authority
+        self._require_marker = _require_marker
+        if authority is None:
+            _require_unprotected(self.root)
+        elif self.root.resolve() != authority.root:
+            raise LedgerIntegrityHeld("ledger_authority_wrong_scope")
+        _private_dir(self.root, create=_create_layout)
+        self._entries = _private_dir(self.root / "entries", create=_create_layout)
+        self._locks = _private_dir(self.root / "locks", create=_create_layout)
+        self._attempts = _private_dir(self.root / "attempts", create=_create_layout)
+        if authority is not None and self._require_marker:
+            self._check_protected_marker(authority)
+
+    def _check_protected_marker(self, authority: SQLiteJournalAuthority) -> None:
+        expected = authority.protection_scope_sha256().encode("ascii")
+        size = len(_PROTECTED_MARKER_PREFIX) + len(expected) + 1
+        try:
+            fd = os.open(
+                self.root / _PROTECTED_MARKER,
+                os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW,
+            )
+            with os.fdopen(fd, "rb") as marker:
+                if not stat.S_ISREG(os.fstat(marker.fileno()).st_mode):
+                    raise LedgerIntegrityHeld("ledger_authority_interrupted")
+                wire = marker.read(size + 1)
+        except FileNotFoundError:
+            if self._require_marker:
+                raise LedgerIntegrityHeld("ledger_authority_absent") from None
+            return
+        except OSError:
+            raise LedgerIntegrityHeld("ledger_authority_unavailable") from None
+        digest = wire[len(_PROTECTED_MARKER_PREFIX) : -1]
+        if (
+            not wire.startswith(_PROTECTED_MARKER_PREFIX)
+            or not wire.endswith(b"\n")
+            or len(wire) != size
+            or any(byte not in b"0123456789abcdef" for byte in digest)
+        ):
+            raise LedgerIntegrityHeld("ledger_authority_interrupted")
+        if not hmac.compare_digest(digest, expected):
+            raise LedgerIntegrityHeld("ledger_authority_wrong_scope")
+
+    def _write_protected_marker(self, authority: SQLiteJournalAuthority) -> None:
+        wire = (
+            _PROTECTED_MARKER_PREFIX
+            + authority.protection_scope_sha256().encode("ascii")
+            + b"\n"
+        )
+        try:
+            fd = os.open(
+                self.root / _PROTECTED_MARKER,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                0o600,
+            )
+            with os.fdopen(fd, "wb") as marker:
+                marker.write(wire)
+                marker.flush()
+                os.fsync(marker.fileno())
+            directory = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+        except FileExistsError:
+            raise LedgerIntegrityHeld("ledger_protected_requires_authority") from None
+        except OSError:
+            raise LedgerIntegrityHeld("ledger_authority_interrupted") from None
+
+    def _checked_authority(self) -> SQLiteJournalAuthority | None:
+        authority = self._authority
+        if authority is not None:
+            authority.require_existing()
+            self._check_protected_marker(authority)
+        return authority
+
+    @property
+    def integrity_protected(self) -> bool:
+        return self._authority is not None
 
     def secret(self) -> bytes:
+        authority = self._checked_authority()
+        if authority is not None:
+            return authority.lookup_key()
+        with self._legacy_gate():
+            return self._legacy_secret()
+
+    def _legacy_secret(self) -> bytes:
         path = self.root / "ledger.key"
         try:
             fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -201,7 +330,7 @@ class FileLedger:
         # Another worker may be writing it: wait for the whole key.
         for _ in range(50):
             try:
-                text = path.read_text().strip()
+                text = path.read_text(encoding="utf-8").strip()
             except OSError as exc:
                 raise LedgerError(f"can't read the ledger key: {exc}") from exc
             if len(text) == 64:
@@ -250,9 +379,13 @@ class FileLedger:
 
     @contextmanager
     def transaction(self, key: str) -> Iterator[Journal]:
+        if self._authority is not None:
+            with self._protected_transaction(_check_key(key)) as journal:
+                yield journal
+            return
         path = self._locks / f"{_check_key(key)}.events.lock"
         try:
-            with open(path, "a") as handle:
+            with self._legacy_gate(), open(path, "a", encoding="utf-8") as handle:
                 os.chmod(path, 0o600)
                 fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
                 try:
@@ -264,19 +397,27 @@ class FileLedger:
         except OSError as exc:
             raise LedgerError(f"can't update the write ledger: {exc}") from exc
 
+    @staticmethod
+    def _event_wire(event: Mapping[str, Any]) -> bytes:
+        line = json.dumps(dict(event), sort_keys=True, separators=(",", ":"))
+        return (line + "\n").encode("utf-8")
+
     def _append(self, key: str, event: Mapping[str, Any]) -> None:
         path = self._entries / f"{_check_key(key)}.jsonl"
-        line = json.dumps(dict(event), sort_keys=True, separators=(",", ":"))
         try:
-            fd = os.open(path, os.O_RDWR | os.O_APPEND | os.O_CREAT, 0o600)
+            flags = os.O_RDWR | os.O_APPEND | os.O_CREAT
+            if self._authority is not None:
+                flags |= os.O_NOFOLLOW | os.O_NONBLOCK
+            fd = os.open(path, flags, 0o600)
             try:
-                size = os.fstat(fd).st_size
+                info = os.fstat(fd)
+                if self._authority is not None and not stat.S_ISREG(info.st_mode):
+                    raise LedgerIntegrityHeld("ledger_journal_mismatch")
+                size = info.st_size
                 torn = size > 0 and os.pread(fd, 1, size - 1) != b"\n"
                 # Preserve a torn tail without making a previously complete
                 # but unterminated JSON object effective on the next append.
-                data = ((" [incomplete]\n" if torn else "") + line + "\n").encode(
-                    "utf-8"
-                )
+                data = (b" [incomplete]\n" if torn else b"") + self._event_wire(event)
                 while data:
                     written = os.write(fd, data)
                     if written <= 0:
@@ -288,27 +429,196 @@ class FileLedger:
         except OSError as exc:
             raise LedgerError(f"can't write the write ledger: {exc}") from exc
 
+    def _legacy_gate(self, *, exclusive: bool = False) -> Any:
+        _require_unprotected(self.root)
+        fd = os.open(
+            self._locks / ".enrollment.lock",
+            os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW,
+            0o600,
+        )
+        handle = os.fdopen(fd, "rb+")
+        try:
+            mode = fcntl.LOCK_EX | fcntl.LOCK_NB if exclusive else fcntl.LOCK_SH
+            fcntl.flock(handle.fileno(), mode)
+            # An enrollment may have won after the first check.
+            _require_unprotected(self.root)
+            return handle
+        except BaseException:
+            handle.close()
+            raise
+
     def lease(self, key: str) -> Optional[Lease]:
-        path = self._locks / f"{_check_key(key)}.lock"
+        key = _check_key(key)
+        authority = self._checked_authority()
+        if authority is None:
+            path = self._locks / f"{key}.lock"
+        else:
+            current = authority.snapshot()
+            if key in current.legacy_keys:
+                raise LedgerIntegrityHeld("ledger_legacy_unauthenticated")
+            path = authority.path.with_name(f"{authority.path.name}.{key}.lease")
+        gate = None
+        handle = None
         try:
-            handle = open(path, "a")  # noqa: SIM115 - the lease owns it
-        except OSError as exc:
-            raise LedgerError(f"can't lease a write ledger key: {exc}") from exc
-        try:
+            if authority is None:
+                gate = self._legacy_gate()
+            fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+            handle = os.fdopen(fd, "rb+")
             os.chmod(path, 0o600)
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            lease = _FileLease(handle, gate)
+            handle = gate = None
+            return lease
         except BlockingIOError:
-            handle.close()
             return None
         except OSError as exc:
-            handle.close()
+            if authority is not None:
+                raise LedgerIntegrityHeld("ledger_authority_unavailable") from exc
             raise LedgerError(f"can't lease a write ledger key: {exc}") from exc
-        return _FileLease(handle)
+        finally:
+            if handle is not None:
+                handle.close()
+            if gate is not None:
+                gate.close()
 
     def keys(self) -> list[str]:
-        return sorted(p.stem for p in self._entries.glob("*.jsonl"))
+        authority = self._checked_authority()
+        if authority is not None:
+            with authority.committed_snapshot() as current:
+                self._verify_inventory(current)
+                return sorted(current.heads)
+        with self._legacy_gate():
+            return sorted(p.stem for p in self._entries.glob("*.jsonl"))
+
+    def inspect_legacy(self, key: str) -> LegacyJournalInspection:
+        """Read the original file format without making a trust claim."""
+
+        authority = self._checked_authority()
+        if authority is not None:
+            with authority.committed_snapshot() as current:
+                events, _ = self._verify_inventory(current, _check_key(key))
+                return LegacyJournalInspection(tuple(events))
+        with self._legacy_gate():
+            return LegacyJournalInspection(tuple(self._events(key)))
+
+    def enroll(self, authority: SQLiteJournalAuthority, *, authorized: bool) -> None:
+        """Anchor an offline journal; existing histories remain inspection only.
+
+        The trusted operator must stop old processes that do not honor the
+        enrollment gate. The gate refuses enrollment while a current worker
+        has a lease or an open journal transaction. This does not clear an
+        earlier unresolved attempt or attest to any old observation.
+        """
+        if authorized is not True or self._authority is not None:
+            raise LedgerIntegrityHeld("ledger_legacy_unauthenticated")
+        if authority.root != self.root.resolve():
+            raise LedgerIntegrityHeld("ledger_authority_wrong_scope")
+        try:
+            with self._legacy_gate(exclusive=True):
+                try:
+                    authority.path.lstat()
+                except FileNotFoundError:
+                    pass
+                else:
+                    raise LedgerIntegrityHeld("ledger_authority_stale")
+                heads, _, _ = self._file_inventory()
+                if heads and not (self.root / "ledger.key").is_file():
+                    raise LedgerIntegrityHeld("ledger_legacy_unauthenticated")
+                try:
+                    lookup_key = (
+                        self._legacy_secret() if heads else secrets.token_bytes(32)
+                    )
+                except LedgerError as exc:
+                    raise LedgerIntegrityHeld("ledger_legacy_unauthenticated") from exc
+                self._write_protected_marker(authority)
+                authority.initialize(heads, lookup_key)
+        except BlockingIOError as exc:
+            raise LedgerIntegrityHeld("ledger_legacy_unauthenticated") from exc
+        except OSError as exc:
+            raise LedgerIntegrityHeld("ledger_authority_unavailable") from exc
+
+    def _file_inventory(
+        self, selected: str | None = None
+    ) -> tuple[dict[str, JournalHead], list[dict[str, Any]], bytes]:
+        heads: dict[str, JournalHead] = {}
+        selected_events: list[dict[str, Any]] = []
+        selected_wire = b""
+        try:
+            for path in self._entries.iterdir():
+                if path.suffix != ".jsonl":
+                    continue
+                key = _check_key(path.stem)
+                fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+                with os.fdopen(fd, "rb") as source:
+                    if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
+                        raise ValueError
+                    wire = source.read()
+                if not wire or not wire.endswith(b"\n"):
+                    raise ValueError
+                events = [
+                    json.loads(line.decode("utf-8")) for line in wire[:-1].split(b"\n")
+                ]
+                if not all(isinstance(event, dict) for event in events):
+                    raise ValueError
+                heads[key] = JournalHead(len(events), hashlib.sha256(wire).hexdigest())
+                if selected == key:
+                    selected_events, selected_wire = events, wire
+        except (LedgerError, OSError, ValueError) as exc:
+            raise LedgerIntegrityHeld("ledger_journal_mismatch") from exc
+        return heads, selected_events, selected_wire
+
+    def _verify_inventory(
+        self, current: JournalCommit, key: str | None = None
+    ) -> tuple[list[dict[str, Any]], bytes]:
+        heads, events, wire = self._file_inventory(key)
+        if heads != current.heads:
+            raise LedgerIntegrityHeld("ledger_journal_mismatch")
+        return events, wire
+
+    @contextmanager
+    def _protected_transaction(self, key: str) -> Iterator[Journal]:
+        authority = self._checked_authority()
+        assert authority is not None
+        with authority.committed_snapshot() as current:
+            events, wire = self._verify_inventory(current, key)
+            if key in current.legacy_keys:
+                raise LedgerIntegrityHeld("ledger_legacy_unauthenticated")
+
+            def append(event: Mapping[str, Any]) -> None:
+                nonlocal current, events, wire
+                next_wire = wire + self._event_wire(event)
+                head = JournalHead(
+                    len(events) + 1, hashlib.sha256(next_wire).hexdigest()
+                )
+                next_commit = JournalCommit(
+                    current.revision + 1,
+                    {**current.heads, key: head},
+                    current.legacy_keys,
+                )
+                token = authority.prepare(current)
+                try:
+                    self._append(key, event)
+                    fd = os.open(self._entries, os.O_RDONLY | os.O_DIRECTORY)
+                    try:
+                        os.fsync(fd)
+                    finally:
+                        os.close(fd)
+                    next_events, _ = self._verify_inventory(next_commit, key)
+                except (LedgerError, OSError) as exc:
+                    # Preserve the pending marker after an indeterminate append.
+                    raise LedgerIntegrityHeld("ledger_authority_interrupted") from exc
+                authority.commit(current, token, key, head)
+                current, events, wire = next_commit, next_events, next_wire
+
+            yield _Journal(lambda: deepcopy(events), append)
 
     def attempt_dir(self, attempt_id: str) -> Path:
+        if self._checked_authority() is not None:
+            return self._create_attempt_dir(attempt_id)
+        with self._legacy_gate():
+            return self._create_attempt_dir(attempt_id)
+
+    def _create_attempt_dir(self, attempt_id: str) -> Path:
         path = self._attempts / attempt_id
         try:
             path.mkdir(mode=0o700)
@@ -429,6 +739,22 @@ class Attempt:
                 return "undelivered"
             return "free" if _age(r.get("at")) >= repeat_s else "undelivered"
         return "uncertain"
+
+    def recheck_hold(
+        self,
+    ) -> Optional[Literal["prior_refutation", "person_decision", "released_attempt"]]:
+        """The terminal history that a native reread cannot supersede."""
+
+        for event in reversed(self.events):
+            if event.get("applied") is False:
+                continue
+            if event.get("event") == "released":
+                return "released_attempt"
+            if event.get("event") == "resolved" and event.get("via") == "person":
+                return "person_decision"
+            if event.get("event") == "resolved" and event.get("outcome") == "REFUTED":
+                return "prior_refutation"
+        return None
 
     @property
     def review(self) -> bool:
@@ -610,6 +936,7 @@ class Ledger:
         cleanup: Optional[Path] = None,
         require_applied: bool = False,
         person_decision: bool = False,
+        _after_commit: Optional[Callable[[Attempt], None]] = None,
     ) -> Attempt:
         """Append an observation and project it under one journal lock.
 
@@ -651,6 +978,21 @@ class Ledger:
                     applied = False
                 if refuted and not tightening and not person and not positive_recheck:
                     applied = False
+                # Protect the settlement and any projected recheck. A fresh
+                # positive audit row on a non-confirmed settlement does neither.
+                if (
+                    current
+                    and prior is not None
+                    and (
+                        (kind == "resolved" and event.get("via") == "recheck")
+                        or (
+                            kind == "rechecked"
+                            and (prior.resolved or {}).get("outcome") == "CONFIRMED"
+                        )
+                    )
+                    and prior.recheck_hold() is not None
+                ):
+                    applied = False
                 if kind == "rechecked" and (
                     prior is None
                     or (
@@ -673,6 +1015,10 @@ class Ledger:
             after = fold([*events, stored])
             if after is None:
                 raise LedgerError("the journal has no current attempt")
+            if _after_commit is not None and applied and current:
+                # The durable append is accepted. Publish any required proof
+                # before deleting its inputs, while the revision is still fenced.
+                _after_commit(after)
             if cleanup is not None and applied and current and fresh:
                 # Keep the short lock through cleanup: a newer hold cannot
                 # interleave after permission was checked but before unlink.
@@ -748,6 +1094,7 @@ class Ledger:
         *,
         expected_revision: Optional[int] = None,
         cleanup: Optional[Path] = None,
+        _after_commit: Optional[Callable[[Attempt], None]] = None,
         **fields: Any,
     ) -> Attempt:
         return self._update(
@@ -761,6 +1108,7 @@ class Ledger:
             },
             expected_revision=expected_revision,
             cleanup=cleanup,
+            _after_commit=_after_commit,
         )
 
     def rechecked(
@@ -917,8 +1265,104 @@ def _now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
-def default_ledger() -> Ledger:
-    """The :class:`FileLedger` in ``OPENADAPT_LEDGER_DIR`` or
-    ``~/.openadapt/ledger``."""
+def _unique_config_fields(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    fields = dict(pairs)
+    if len(fields) != len(pairs):
+        raise ValueError
+    return fields
 
-    return Ledger(FileLedger(os.environ.get("OPENADAPT_LEDGER_DIR") or DEFAULT_DIR))
+
+def _read_authority_config(path: Path) -> tuple[Path, Path, str, str]:
+    if not path.is_absolute():
+        raise LedgerIntegrityHeld("ledger_authority_config_invalid")
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(fd, "rb") as stream:
+            if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                raise LedgerIntegrityHeld("ledger_authority_config_invalid")
+            data = stream.read(_AUTHORITY_CONFIG_MAX_BYTES + 1)
+    except FileNotFoundError:
+        raise LedgerIntegrityHeld("ledger_authority_absent") from None
+    except OSError:
+        raise LedgerIntegrityHeld("ledger_authority_unavailable") from None
+
+    if len(data) > _AUTHORITY_CONFIG_MAX_BYTES:
+        raise LedgerIntegrityHeld("ledger_authority_config_invalid")
+    try:
+        fields = json.loads(
+            data.decode("utf-8"), object_pairs_hook=_unique_config_fields
+        )
+    except (ValueError, RecursionError):
+        raise LedgerIntegrityHeld("ledger_authority_config_invalid") from None
+    if (
+        not isinstance(fields, dict)
+        or fields.keys()
+        != {"journal_root", "authority_path", "ledger_id", "generation"}
+        or any(
+            not isinstance(value, str) or not value.strip() or "\x00" in value
+            for value in fields.values()
+        )
+    ):
+        raise LedgerIntegrityHeld("ledger_authority_config_invalid")
+    try:
+        for value in fields.values():
+            value.encode("utf-8")
+    except UnicodeEncodeError:
+        raise LedgerIntegrityHeld("ledger_authority_config_invalid") from None
+    journal_root = Path(fields["journal_root"])
+    authority_path = Path(fields["authority_path"])
+    if not journal_root.is_absolute() or not authority_path.is_absolute():
+        raise LedgerIntegrityHeld("ledger_authority_config_invalid")
+    return journal_root, authority_path, fields["ledger_id"], fields["generation"]
+
+
+def default_ledger(root: str | Path | None = None) -> Ledger:
+    """Open the operator-selected ledger at the point of use.
+
+    A protected descriptor binds an existing authority to one journal root.
+    An explicit root and OPENADAPT_LEDGER_DIR must both agree with that binding.
+    """
+
+    configured_root = os.environ.get("OPENADAPT_LEDGER_DIR")
+    config = os.environ.get(PROTECTED_LEDGER_CONFIG_ENV)
+    if config is None:
+        legacy_root = root if root is not None else configured_root or DEFAULT_DIR
+        return Ledger(FileLedger(legacy_root))
+
+    config_path = Path(config)
+    journal_root, authority_path, ledger_id, generation = _read_authority_config(
+        config_path
+    )
+    try:
+        if journal_root.is_symlink() or authority_path.is_symlink():
+            raise LedgerIntegrityHeld("ledger_authority_wrong_scope")
+        authority = SQLiteJournalAuthority(
+            authority_path,
+            root=journal_root,
+            ledger_id=ledger_id,
+            generation=generation,
+        )
+        resolved_config = config_path.resolve()
+        if (
+            resolved_config.is_relative_to(authority.root)
+            or Path(os.path.abspath(config_path)).is_relative_to(authority.root)
+            or any(
+                Path(candidate).expanduser().resolve() != authority.root
+                for candidate in (root, configured_root or None)
+                if candidate is not None
+            )
+        ):
+            raise LedgerIntegrityHeld("ledger_authority_wrong_scope")
+        authority.require_existing()
+        return Ledger(
+            FileLedger(
+                authority.root,
+                authority=authority,
+                _create_layout=False,
+                _require_marker=True,
+            )
+        )
+    except LedgerIntegrityHeld:
+        raise
+    except (OSError, RuntimeError, ValueError):
+        raise LedgerIntegrityHeld("ledger_authority_unavailable") from None

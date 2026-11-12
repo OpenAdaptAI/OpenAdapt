@@ -453,7 +453,7 @@ def _pidfd_target(fd: int) -> Optional[int]:
     """The pid a pidfd refers to, from /proc/self/fdinfo; None if ``fd`` is
     not a pidfd."""
     try:
-        with open(f"/proc/self/fdinfo/{fd}") as handle:
+        with open(f"/proc/self/fdinfo/{fd}", encoding="utf-8") as handle:
             for line in handle:
                 if line.startswith("Pid:"):
                     return int(line.split()[1])
@@ -582,7 +582,7 @@ def _read_verdict(launch: SupervisedLaunch) -> Optional[str]:
     not this launch's (nonce, pid or start identity differ). The report is
     deleted once read."""
     try:
-        with open(launch.report) as handle:
+        with open(launch.report, encoding="utf-8") as handle:
             data = json.load(handle)
     except (OSError, ValueError):
         return None

@@ -724,7 +724,121 @@ and it isn't a system-of-record read: the adapter sets
 halt message names the read as a record page read in a separate session. Under
 the Standard and Regulated profiles a tier-2 confirmation can end `VERIFIED`,
 as before. The `regulated` policy pack needs tier 1, so this check doesn't
-qualify a workflow for it.
+qualify a workflow for it, and no pack relaxes that. A UI read is a second
+read through the same interface: it can refute a save or add evidence, but
+it is never the record check of last resort, and its grade stays
+`screen_readback` whatever rules it passed.
+
+### When a UI read counts
+
+A read through the application's own screens confirms a save only when it is
+independent of the save. Each read records three rules in the receipt
+(`read_evidence.independence` on the effect evidence), with how each was
+established and the seconds the read took:
+
+| Rule | Holds when | Fails when |
+|---|---|---|
+| `separate_session` | its own browser, a new empty context, its own sign-in | the session shares a context or never signed in |
+| `requery` | the record page's document came from the server, in a context with no client-side store (Web Storage, IndexedDB, CacheStorage, service worker) a client cache could answer from | a cached, revalidated (304) or service-worker page, or a reused profile |
+| `distinct_view` | the view isn't the page the save left on the acting session's screen | the read opens that same page (same path; a different query is the same page), even re-fetched |
+
+A read that fails a rule can still refute a save, but it can't confirm one:
+the verdict is INDETERMINATE and the run halts. Reading the page the save just
+showed never counts. When no acting session is bound (the verifier called
+outside a run), `distinct_view` is recorded as `unknown` and doesn't block. An
+acting session with no URL (desktop, RDP, Citrix) is a different view by
+construction.
+
+Search and list views often read a replica or an index that lags the save.
+Every UI read-back needs `index_lag_s`: the lag measured in the application's
+sandbox (never from evaluation data), or `0` for a primary view that never
+lags. The read polls with backoff for at least that long before a missing
+record counts. Left unset, the view's freshness is unknown, and a `final`
+read never settles a record `VERIFIED` (see below). Once a read has shown the record, a later
+read that doesn't show it is INDETERMINATE, never "not saved".
+
+Cardinality comes from the view, not a separate rule: point `record_url` at
+a search or list view (search by the record's name and birth date, say), and a
+`record_written` effect counts the matching rows, so a second copy of the
+record is REFUTED.
+
+### History view (`history`)
+
+Where the application has an audit, history or activity screen, declare it.
+The separate session reads it before the save and again after it, and judges
+the new entries:
+
+- an entry about another record: REFUTED (a collateral change);
+- an entry on this record that none of the `explained` patterns match (taken
+  from the demonstration's own history entries): REFUTED;
+- no entry for the save, with `expect_entry` (the default): INDETERMINATE;
+- entries by other users are excused when `entry.user` and `acting_user_env`
+  are set, as the database frame excuses changes the audit trail attributes
+  to someone else.
+
+```yaml
+    history:
+      url: "https://app.example.org/audit?patient={patient}"
+      ready_selector: "#audit"
+      row_selector: "tr.entry"
+      entry: { record: "td.pid", what: "td.event", user: "td.user" }
+      explained: ["^patient-record update$"]
+      acting_user_env: APP_ACTING_USERNAME
+```
+
+### Provisional, then final (`final`)
+
+A payer portal shows a confirmation number and a "pending review" queue; a
+record can also change after the save. With `final`, the read right after the
+save is provisional: it confirms the record and its values, then writes a
+waiting entry to the deferred-check ledger (the record's URL and identifier,
+and a keyed digest of the values read, never the values). The run ends
+`SAVED_AWAITING_CHECK`. Later,
+`openadapt-flow deferred settle --config deployment.yaml` opens one fresh
+session and re-reads every due record in it, so a batch costs one sign-in:
+
+| The final read shows | Settles |
+|---|---|
+| a `final_values` status and the same values | `VERIFIED` |
+| a `pending_values` status, or a page it can't read | still waiting |
+| a `rejected_values` or undeclared status, changed values, or no record | `RECONCILIATION_REQUIRED` |
+| nothing before `deadline_hours` | `RECONCILIATION_REQUIRED` |
+
+`after_s` is the quiet window: the final read doesn't run before it, so a
+late change has to land before the read that settles the save. A view that
+lags the record (a replica or an index) can serve a copy older than a late
+change, with an ordinary HTTP 200, that still matches the provisional read.
+With `index_lag_s` set, a record settles `VERIFIED` only from a second read
+that starts at least that long after the settle session opened; a change seen
+on either read reconciles. With `index_lag_s: 0` (a primary view) one read
+settles. With `index_lag_s` unset, a stale copy can't be told from a fresh
+one, so the final read never settles `VERIFIED`: the entry stays waiting
+(`freshness_undeclared` in the provisional read's reason) until its deadline
+reconciles it, and the run counts only its other record checks. A changed
+value, a rejected status or a missing record still reconciles, because a UI
+read may add evidence against a save but never for one it can't date. Set it from the
+application's observed behavior. A rejected status at the provisional read is
+REFUTED at once. `openadapt-flow deferred status RUN` gives the run's settled
+outcome. A save a UI read settles is still checked at `screen_readback`
+grade, and `deferred settle` prints it as `VERIFIED (screen_readback)`.
+
+The ledger is on disk, so the provisional state survives a restart or a
+laptop that slept. While an item's entry waits, a new run of the same item
+(same inputs) refuses before input: it is never sent twice. With
+`alert_hours`, `deferred settle` reports every entry still provisional after
+that long ("provisional for over 48 h") until it settles or its deadline
+passes.
+
+```yaml
+    final:
+      ledger: /var/lib/openadapt/pending
+      after_s: 900
+      deadline_hours: 72
+      status_field: status
+      final_values: [Approved, Paid]
+      pending_values: [Pending review, Received]
+      rejected_values: [Denied, Returned]
+```
 
 **Pilot: with per-entry approval only.** While a person approves each entry
 (`approval_mode: each_item`, the default), a confirmed UI read-back is record
@@ -742,6 +856,7 @@ effects:
     url_params: { patient: { param: patient_id } }
     sign_in:
       url: https://app.example.org/login
+      post_url: "https://app.example.org/login"  # declared auth POST, never inferred
       username_selector: "#username"
       password_selector: "#password"
       submit_selector: "button[type=submit]"
@@ -750,6 +865,7 @@ effects:
       password_env: APP_READER_PASSWORD
     ready_selector: "#encounters"
     empty_selector: "#no-encounters"
+    index_lag_s: 0          # a primary view; a replica or index: its measured lag
     row_selector: "tr.encounter"
     fields:
       id: { attribute: data-id }
@@ -770,6 +886,17 @@ effects:
 Values are compared after collapsing whitespace, because HTML rendering
 collapses it. `date_format` parses a displayed date into ISO 8601 and
 `casefold` compares case-insensitively; both apply to the expected value too.
+
+**Measured on real apps.** [`benchmark/ui_second_read/RESULTS.md`](../benchmark/ui_second_read/RESULTS.md)
+runs a pre-registered fault list on OpenEMR and Dolibarr with their API and
+database reads switched off, direct and behind a bad-VPN chaos proxy (latency,
+gateway errors, a lagging search view). No planted fault ended CONFIRMED.
+Correct saves confirmed 10 of 10 direct and 8 of 10 behind the proxy; the two
+OpenEMR stops were a timed-out read and an unreadable audit log. A collateral
+edit to another record passes without a history view, as expected, and was
+refuted with OpenEMR's audit log as the history view. A separate session costs
+1 to 2 s per item on Dolibarr and 13 to 15 s on OpenEMR with its audit log
+(direct); a batch settle reads five records in one session.
 
 **Measured.** [`benchmark/ui_readback/RESULTS.md`](../benchmark/ui_readback/RESULTS.md)
 runs the repository's fault list (`benchmark/effect_e2e` and
@@ -802,8 +929,10 @@ fixtures, not production rates.
   `empty_selector`.
 - A whitespace-only difference is invisible, because both sides are compared
   with whitespace collapsed.
-- The record needs a URL that an identifier the run already knows can fill. A
-  record whose identifier is assigned at save can't be opened this way yet.
+- The record needs a URL that an identifier the run already knows can fill,
+  or a `reference` the save shows (a confirmation number).
+- A collateral change to a record the view doesn't list is invisible without a
+  `history` view, and the history view sees only what the application logs.
 - It needs its own account. Signing in as the account the workflow types with
   can end the acting session in applications that allow one session per user.
   Single sign-on and multi-factor sign-in aren't supported.
@@ -1096,7 +1225,7 @@ Per-kind required fields:
 | `ui_readback` | `ui_readback` section: `record_url`, `sign_in` (env-var names for the read-back account), `ready_selector`, `row_selector`, `fields`, `identity` | `url_params`, `empty_selector`, `not_found_selector`, `read_post_paths`, per-field `attribute` / `date_format` / `casefold`, `truncation_markers`, `navigation_timeout_s` |
 | `desktop_readback` | `desktop_readback` section: `session` (a `backend:`-style config for the read-back session), `search` (`box`, `query`), `ready`, `identity`, `fields` | `credentials` (env-var names), `sign_in`, `search.submit`, `open.results`, `not_found`, per-control `shows` / `region` / `at`, per-field `date_format` / `casefold`, `min_ocr_confidence`, `navigation_timeout_s`, `settle_s` |
 | `deferred_report` | `deferred_report` section: `report` (`format`, and for csv/text its columns or pattern and `accept`), `key`, `deadline_hours`, `ledger` | `report.reject`, `describe` |
-| `rest` | `base_url` | `records_path` (may contain `{placeholder}`s), `records_key`, `records_next_path`, `records_total_path`, `records_complete`, `records_snapshot_path`, `path_params`, `auth`, `records_drop_fields` |
+| `rest` | `base_url` | `records_path` (may contain `{placeholder}`s), `records_key`, `records_next_path`, `records_total_path`, `records_complete`, `records_list_keys`, `records_other_lists`, `records_snapshot_path`, `path_params`, `auth`, `records_drop_fields` |
 | `graphql` | `base_url` + `graphql_query` | `graphql_variables` (`{param: ...}` entity binding), `graphql_records_path`, `graphql_freshness_field` + `graphql_freshness_window_s`, `auth` |
 | `fhir` | `base_url` | `resource_type`, `search_params`, `search_param_exprs`, `field_paths`, `access_token_env` or `smart_backend`, `verify_tls`, `records_drop_fields`, `records_snapshot_path` |
 | `sql` | `sql_query` + (`sqlite_database` or `sql_driver`) | `sql_query_params`, `sql_connect_args`, `sql_password_env`, `records_drop_fields` |
@@ -1148,6 +1277,16 @@ response body, such as `meta.total`), a read whose distinct record count differs
 whose pages disagree on the total, or whose body omits it is unreadable. Without a total, a configured
 next-page chain must reach its declared terminal marker; an unpaged read
 requires a validated `records_complete: true` declaration.
+
+`records_list_keys` names the top-level keys whose value is a list, for a
+whole-store read that returns one list per collection. A body without a list
+under one of them, or with an object value (which may hold records no
+reviewed read sees), is unreadable. A read with `records_other_lists: true` (and
+no `records_key`) returns the records of every list under any other key, so a
+row written to a collection that appeared after review is seen. `scaffold-verifier
+--probe-reads` sets both on a prefix-root read it uses in place of a collection
+read (only when every top-level value is a list of objects or a scalar): one read per list it saw (empty lists included), plus one for any other
+list, where the save may add no row.
 
 A redirect is a failed read: the configured auth headers never follow it to
 another host. Why a read was unreadable is in the verdict's reason and the

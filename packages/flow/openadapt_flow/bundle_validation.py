@@ -18,9 +18,8 @@ bundle's semantics):
   a certified bundle -- the policy it was certified against, its certification
   status, and an optional expiry.
 * **Migration** (:func:`migrate_bundle_dict`): a v1 bundle (or one with no
-  ``schema_version``) migrates cleanly to v2 in memory on read. v2 is a strict
-  superset of v1, so migration only stamps the new version and back-fills the
-  manifest if it is absent -- an existing bundle keeps replaying byte-for-byte.
+  ``schema_version``) migrates cleanly to v2 in memory when a caller explicitly
+  opts into unsealed legacy migration. Ordinary loads require a persisted seal.
 * **Load-time structural validation** (:func:`validate_workflow`): reject a
   malformed or uncertifiable graph with clear, per-issue errors BEFORE the
   replayer touches it. Rules span graph well-formedness (entry exists, every
@@ -39,10 +38,12 @@ OCR / cv2 / model dependencies, so it is safe to call on every load.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
+import weakref
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any, Iterable, Iterator, Literal, Optional
 
 from pydantic import BaseModel, Field
@@ -86,6 +87,34 @@ def _sha256_file(path: Path) -> str:
         for chunk in iter(lambda: fh.read(65536), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def bundle_asset_relative(rel: str) -> PurePosixPath:
+    """Validate the lexical bundle-relative asset name before filesystem access."""
+    if not isinstance(rel, str):
+        raise BundleIntegrityError("bundle asset path must be text")
+    posix = PurePosixPath(rel)
+    if (
+        not rel
+        or "\x00" in rel
+        or "\\" in rel
+        or posix.is_absolute()
+        or posix.as_posix() != rel
+        or any(part in {"", ".", ".."} for part in posix.parts)
+    ):
+        raise BundleIntegrityError(f"unsafe bundle asset path {rel!r}")
+    return posix
+
+
+def bundle_asset_path(bundle_dir: Path | str, rel: str) -> Path:
+    """Resolve a manifest asset only when it stays inside the bundle."""
+    posix = bundle_asset_relative(rel)
+    root = Path(bundle_dir).resolve()
+    candidate = root.joinpath(*posix.parts)
+    resolved = candidate.resolve()
+    if not resolved.is_relative_to(root) or candidate.is_symlink():
+        raise BundleIntegrityError(f"bundle asset path escapes its directory: {rel!r}")
+    return candidate
 
 
 @dataclass(frozen=True)
@@ -385,6 +414,352 @@ def _apply_sealed_canonical_omissions(
             )
 
 
+# Schema-2 ownership is a format rule, not a recursive key-name filter. Only
+# these typed IR positions can own a compatibility omission; arbitrary mapping
+# values (for example an API request body) remain byte-semantically sealed.
+_SOURCE_V2_CHILDREN = {
+    "Workflow": {
+        "steps": ("Step", "list"),
+        "program": ("ProgramGraph", "one"),
+        "subflows": ("ProgramGraph", "map"),
+        "undo_steps": ("UndoStep", "list"),
+        "interstitials": ("Interstitial", "list"),
+        "halt_cleanup": ("HaltCleanup", "one"),
+    },
+    "ProgramGraph": {"states": ("State", "map")},
+    "State": {
+        "step": ("Step", "one"),
+        "transitions": ("Transition", "list"),
+        "decision": ("BusinessDecisionSpec", "one"),
+    },
+    "BusinessDecisionSpec": {"revalidation": ("Predicate", "list")},
+    "Transition": {"guard": ("Predicate", "one")},
+    "UndoStep": {"steps": ("Step", "list")},
+    "HaltCleanup": {"steps": ("Step", "list"), "start_state": ("Predicate", "one")},
+    "Interstitial": {
+        "detect": ("Predicate", "one"),
+        "clearance": ("Predicate", "one"),
+        "dismiss_anchor": ("Anchor", "one"),
+    },
+    "Step": {
+        "anchor": ("Anchor", "one"),
+        "drag_end_anchor": ("Anchor", "one"),
+        "effects": ("Effect", "list"),
+        "api_binding": ("ApiBinding", "one"),
+        "wait_until": ("Predicate", "one"),
+        "guard": ("Guard", "one"),
+    },
+    "Guard": {"predicate": ("Predicate", "one")},
+    "Predicate": {"anchor": ("Anchor", "one"), "operands": ("Predicate", "list")},
+    "Anchor": {
+        "structural": ("StructuralLocator", "one"),
+        "identity_template": ("IdentityTemplate", "one"),
+    },
+    "IdentityTemplate": {
+        "tokens": ("TokenTemplate", "list"),
+        "ocr_noise": ("IdentityTemplate", "one"),
+    },
+    "ApiBinding": {"effects": ("Effect", "list")},
+}
+
+
+def _source_v2_reachable_owners() -> set[str]:
+    seen, pending = set(), ["Workflow"]
+    while pending:
+        owner = pending.pop()
+        if owner not in seen:
+            seen.add(owner)
+            pending.extend(
+                child for child, _ in _SOURCE_V2_CHILDREN.get(owner, {}).values()
+            )
+    return seen
+
+
+# Every v2 omission rule must be reachable from the source walk, or a field the
+# current serializer emits (and compute_content_digest omits) would stay in the
+# source projection and every re-save of an upgraded bundle would refuse.
+_unreachable_v2_owners = {
+    rule.owner.__name__ for rule in _SEALED_CANONICAL_OMISSIONS_BY_VERSION[2]
+} - _source_v2_reachable_owners()
+if _unreachable_v2_owners:  # pragma: no cover - import-time format guard
+    raise RuntimeError(
+        "schema-2 omission owners missing from _SOURCE_V2_CHILDREN: "
+        + ", ".join(sorted(_unreachable_v2_owners))
+    )
+
+
+def _source_v2_omissions(content: object, owner: str = "Workflow") -> None:
+    if not isinstance(content, dict):
+        return
+    for rule in _SEALED_CANONICAL_OMISSIONS_BY_VERSION.get(2, ()):
+        if (
+            rule.owner.__name__ == owner
+            and rule.field_name in content
+            and any(content[rule.field_name] == value for value in rule.omitted_values)
+        ):
+            content.pop(rule.field_name)
+    for field_name, (child_owner, shape) in _SOURCE_V2_CHILDREN.get(owner, {}).items():
+        child = content.get(field_name)
+        if shape == "one":
+            _source_v2_omissions(child, child_owner)
+        elif shape == "list" and isinstance(child, list):
+            for value in child:
+                _source_v2_omissions(value, child_owner)
+        elif shape == "map" and isinstance(child, dict):
+            for value in child.values():
+                _source_v2_omissions(value, child_owner)
+
+
+def source_canonical_payload(raw: dict, file_hashes: dict[str, str]) -> bytes:
+    """The original format's canonical payload, before parsing or migration.
+
+    No current Workflow is constructed or serialized here. Every format has
+    exactly one canonical projection; a mismatch never tries another digest.
+    """
+    version = bundle_schema_version(raw)
+    content = copy.deepcopy(raw)
+    content.pop("manifest", None)
+    if version == 2:
+        _source_v2_omissions(content)
+    elif version != 1:
+        raise BundleSchemaError(f"no canonical format rule for schema {version}")
+    return json.dumps(
+        {"workflow": content, "files": dict(sorted(file_hashes.items()))},
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+
+
+@dataclass(frozen=True)
+class _LoadedSeal:
+    original_payload: bytes
+    runtime_digest: str
+    content_digest: str
+    file_hashes: tuple[tuple[str, str], ...]
+    schema_version: int
+    encrypted: bool
+    source_bundle_dir: Path
+
+
+# Load authority is process-local and bound to the exact object. Pydantic
+# private attributes are omitted from dumps but copied by model_copy, so the
+# registry prevents a clone or model_validate(model_dump()) from inheriting it.
+_verified_loads: dict[int, tuple[weakref.ReferenceType, object]] = {}
+
+
+def has_verified_load_capability(workflow: "Workflow") -> bool:
+    entry = _verified_loads.get(id(workflow))
+    return (
+        entry is not None
+        and entry[0]() is workflow
+        and getattr(workflow, "_verification_capability", None) is entry[1]
+    )
+
+
+def _grant_verified_load_capability(workflow: "Workflow") -> None:
+    identity = id(workflow)
+
+    def discard(reference: weakref.ReferenceType, *, identity: int = identity) -> None:
+        current = _verified_loads.get(identity)
+        if current is not None and current[0] is reference:
+            _verified_loads.pop(identity, None)
+
+    reference = weakref.ref(workflow, discard)
+    token = object()
+    workflow._verification_capability = token
+    _verified_loads[identity] = (reference, token)
+
+
+def transfer_verified_load_capability(source: "Workflow", target: "Workflow") -> None:
+    """Preserve complete source context across an explicit verified derivation."""
+    if has_verified_load_capability(source) and not source._unverified_load:
+        target._loaded_seal = source._loaded_seal
+        target._decrypted_templates = dict(source._decrypted_templates)
+        target._pending_template_replacements = dict(
+            source._pending_template_replacements
+        )
+        target._pending_derived_assets = dict(source._pending_derived_assets)
+        target._unverified_load = False
+        _grant_verified_load_capability(target)
+
+
+def derive_verified_workflow(
+    source: "Workflow", *, update: dict[str, Any]
+) -> "Workflow":
+    """Validate an intentional edit while retaining its verified source binding."""
+    if (
+        source._unverified_load
+        or source.manifest is None
+        or source._loaded_seal is None
+    ):
+        raise BundleIntegrityError("derivation requires a verified loaded source")
+    verify_loaded_source_integrity(
+        source,
+        source._loaded_seal.source_bundle_dir,
+        source.manifest,
+        decrypted_assets=source._decrypted_templates
+        if source._loaded_seal.encrypted
+        else None,
+    )
+    if type(update) is not dict or any(
+        type(name) is not str
+        or name not in type(source).model_fields
+        or name in {"manifest", "encrypted", "schema_version"}
+        for name in update
+    ):
+        raise BundleIntegrityError("derivation cannot replace source authority fields")
+    payload = source.model_dump(mode="python")
+    payload.update(update)
+    target = type(source).model_validate(payload)
+    transfer_verified_load_capability(source, target)
+    if target.model_dump(exclude={"manifest"}) != source.model_dump(
+        exclude={"manifest"}
+    ):
+        invalidate_derivative_certification(target)
+    return target
+
+
+def invalidate_derivative_certification(workflow: "Workflow") -> None:
+    """Source integrity does not carry an old production decision to new content."""
+    from openadapt_flow.bundle_sealing import _invalidate_prior_certification
+
+    _invalidate_prior_certification(
+        workflow, reason="an authored derivative changed the workflow contract"
+    )
+    if workflow.manifest is not None:
+        workflow.manifest.provenance.governed_authorization_template = None
+
+
+def authorize_sanitized_derivative(
+    workflow: "Workflow", verified_source: "Workflow", source_bundle_dir: Path | str
+) -> str:
+    """Authorize the sanitizer's verified-source → scrub → reseal transition."""
+    source_manifest = verified_source.manifest
+    if (
+        source_manifest is None
+        or not source_manifest.content_digest
+        or verified_source._loaded_seal is None
+        or not has_verified_load_capability(verified_source)
+    ):
+        raise BundleIntegrityError(
+            "sanitized bundle reseal requires a verified sealed source bundle"
+        )
+    verify_loaded_source_integrity(
+        verified_source,
+        source_bundle_dir,
+        source_manifest,
+        decrypted_assets=(
+            verified_source.decrypted_templates() if verified_source.encrypted else None
+        ),
+    )
+    if workflow.manifest is None:
+        raise BundleIntegrityError(
+            "sanitized bundle reseal requires the source manifest"
+        )
+    workflow.manifest.provenance.sanitized_from_digest = source_manifest.content_digest
+    workflow._loaded_seal = None
+    workflow._unverified_load = False
+    _grant_verified_load_capability(workflow)
+    return source_manifest.content_digest
+
+
+def verify_original_content(raw: dict, stored: BundleManifest) -> bytes:
+    payload = source_canonical_payload(raw, stored.file_hashes)
+    if stored.content_digest and _sha256_bytes(payload) != stored.content_digest:
+        raise BundleIntegrityError(
+            "bundle original content digest mismatch before migration"
+        )
+    return payload
+
+
+def remember_original_content(
+    workflow: "Workflow",
+    payload: bytes,
+    stored: BundleManifest,
+    *,
+    source_bundle_dir: Path | str,
+) -> None:
+    # The original payload is immutable; this second fingerprint detects later
+    # mutation of the upgraded runtime object without reserializing the source.
+    workflow._loaded_seal = _LoadedSeal(
+        payload,
+        compute_content_digest(workflow, stored.file_hashes),
+        stored.content_digest,
+        tuple(sorted(stored.file_hashes.items())),
+        stored.schema_version,
+        stored.encrypted,
+        Path(source_bundle_dir).resolve(),
+    )
+    _grant_verified_load_capability(workflow)
+
+
+def _verify_workflow_content(workflow: "Workflow", stored: BundleManifest) -> None:
+    loaded = workflow._loaded_seal
+    expected = stored.content_digest
+    if loaded is not None:
+        if (
+            stored.content_digest != loaded.content_digest
+            or tuple(sorted(stored.file_hashes.items())) != loaded.file_hashes
+            or stored.schema_version != loaded.schema_version
+            or stored.encrypted != loaded.encrypted
+            or _sha256_bytes(loaded.original_payload) != stored.content_digest
+        ):
+            raise BundleIntegrityError(
+                "bundle original manifest integrity changed after loading"
+            )
+        expected = loaded.runtime_digest
+    recomputed = compute_content_digest(workflow, stored.file_hashes)
+    if recomputed != expected:
+        raise BundleIntegrityError(
+            "bundle content digest mismatch: the workflow was modified after the manifest was sealed"
+        )
+
+
+def verify_loaded_source_integrity(
+    workflow: "Workflow",
+    bundle_dir: Path | str,
+    stored: BundleManifest,
+    *,
+    decrypted_assets: Optional[dict[str, bytes]] = None,
+) -> None:
+    """Verify the immutable source seal before a loaded workflow is resealed.
+
+    Unlike :func:`verify_integrity`, this intentionally does not compare the
+    current runtime model fingerprint. A caller may have deliberately edited a
+    previously verified workflow in memory and then save that as new content.
+    The original payload, manifest identity, and original assets must still
+    verify first, so an unchecked or tampered load cannot be laundered by that
+    new seal.
+    """
+    loaded = workflow._loaded_seal
+    if loaded is None or not loaded.content_digest:
+        raise BundleIntegrityError(
+            "cannot reseal a loaded bundle without a persisted integrity seal"
+        )
+    if (
+        stored.content_digest != loaded.content_digest
+        or tuple(sorted(stored.file_hashes.items())) != loaded.file_hashes
+        or stored.schema_version != loaded.schema_version
+        or stored.encrypted != loaded.encrypted
+        or _sha256_bytes(loaded.original_payload) != stored.content_digest
+    ):
+        raise BundleIntegrityError(
+            "bundle original manifest integrity changed after loading"
+        )
+    if not has_verified_load_capability(workflow):
+        raise BundleIntegrityError(
+            "loaded bundle verification capability is missing or was not preserved"
+        )
+    _verify_asset_hashes(
+        loaded.source_bundle_dir, stored, decrypted_assets=decrypted_assets
+    )
+    cached_names = set(workflow._decrypted_templates)
+    if decrypted_assets is not None:
+        cached_names.update(decrypted_assets)
+    _verify_decrypted_asset_membership(stored, cached_names)
+
+
 def omit_unset_sealed_defaults(
     model: object,
     rendered: object,
@@ -447,18 +822,23 @@ def _referenced_asset_paths(workflow: "Workflow") -> set[str]:
     # Declared undo steps are not part of the run, but their crops are bundle
     # content a person may later approve running, so they are hashed too.
     undo_steps = [step for undo in workflow.undo_steps for step in undo.steps]
-    for step in [*iter_workflow_steps(workflow), *undo_steps]:
-        anchor = step.anchor
-        if anchor is not None:
-            if anchor.template:
-                refs.add(anchor.template)
-            if anchor.identifier_crop:
-                refs.add(anchor.identifier_crop)
-            for lm_anchor in _predicate_anchor_templates(step):
-                refs.add(lm_anchor)
+    cleanup_steps = (
+        workflow.halt_cleanup.steps if workflow.halt_cleanup is not None else []
+    )
+    for step in [*iter_workflow_steps(workflow), *undo_steps, *cleanup_steps]:
+        for anchor in (step.anchor, step.drag_end_anchor):
+            if anchor is not None:
+                if anchor.template:
+                    refs.add(anchor.template)
+                if anchor.identifier_crop:
+                    refs.add(anchor.identifier_crop)
+        for lm_anchor in _predicate_anchor_templates(step):
+            refs.add(lm_anchor)
         for pc in step.expect:
             if pc.template:
                 refs.add(pc.template)
+    if workflow.halt_cleanup is not None:
+        refs.update(_predicate_templates(workflow.halt_cleanup.start_state))
     refs.update(interstitial_asset_paths(workflow.interstitials))
     return refs
 
@@ -479,8 +859,11 @@ def _predicate_templates(*predicates: Optional[Predicate]) -> Iterator[str]:
     preds = [predicate for predicate in predicates if predicate is not None]
     while preds:
         p = preds.pop()
-        if p.anchor is not None and p.anchor.template:
-            yield p.anchor.template
+        if p.anchor is not None:
+            if p.anchor.template:
+                yield p.anchor.template
+            if p.anchor.identifier_crop:
+                yield p.anchor.identifier_crop
         preds.extend(p.operands)
 
 
@@ -497,8 +880,11 @@ def interstitial_asset_paths(interstitials: Iterable[Interstitial]) -> set[str]:
     refs: set[str] = set()
     for interstitial in interstitials:
         anchor = interstitial.dismiss_anchor
-        if anchor is not None and anchor.template.strip():
-            refs.add(anchor.template)
+        if anchor is not None:
+            if anchor.template.strip():
+                refs.add(anchor.template)
+            if anchor.identifier_crop:
+                refs.add(anchor.identifier_crop)
         refs.update(_predicate_templates(interstitial.detect, interstitial.clearance))
     return refs
 
@@ -532,11 +918,11 @@ def compute_file_hashes(
                 paths.add(f.relative_to(bundle).as_posix())
 
     for rel in _referenced_asset_paths(workflow):
-        candidate = bundle / rel
+        candidate = bundle_asset_path(bundle, rel)
         if candidate.is_file():
-            paths.add(Path(rel).as_posix())
+            paths.add(rel)
 
-    return {rel: _sha256_file(bundle / rel) for rel in sorted(paths)}
+    return {rel: _sha256_file(bundle_asset_path(bundle, rel)) for rel in sorted(paths)}
 
 
 def _workflow_content(workflow: "Workflow") -> dict:
@@ -566,6 +952,32 @@ def compute_content_digest(workflow: "Workflow", file_hashes: dict[str, str]) ->
         payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
     )
     return _sha256_bytes(canonical.encode("utf-8"))
+
+
+def content_identity_digest(workflow: "Workflow", file_hashes: dict[str, str]) -> str:
+    """Return current content identity or an unchanged loaded seal's identity.
+
+    A loaded original seal is reusable only while its original payload, upgraded
+    model, integrity manifest and supplied asset hashes still verify. This does
+    not read assets: callers that need a disk check supply freshly hashed files
+    or separately call verify_integrity. New serialization/build_manifest always
+    uses compute_content_digest instead, so a new seal covers its new format.
+    """
+    if workflow._unverified_load:
+        raise BundleIntegrityError(
+            "an unchecked bundle load has no verified content identity"
+        )
+    loaded = workflow._loaded_seal
+    if loaded is None:
+        return compute_content_digest(workflow, file_hashes)
+    if workflow.manifest is None:
+        raise BundleIntegrityError("loaded bundle lost its original manifest")
+    _verify_workflow_content(workflow, workflow.manifest)
+    if tuple(sorted(file_hashes.items())) != loaded.file_hashes:
+        raise BundleIntegrityError(
+            "bundle asset hashes changed since the original seal"
+        )
+    return loaded.content_digest
 
 
 def build_runtime_parameter_schema(workflow: "Workflow") -> list[dict]:
@@ -650,6 +1062,9 @@ def build_manifest(
         governed_authorization_template=(
             prior_prov.governed_authorization_template if prior_prov else None
         ),
+        sanitized_from_digest=(
+            prior_prov.sanitized_from_digest if prior_prov else None
+        ),
     )
     return BundleManifest(
         content_digest=digest,
@@ -668,23 +1083,44 @@ def build_manifest(
 from openadapt_flow.ir import SCHEMA_VERSION  # noqa: E402
 
 
-def migrate_bundle_dict(data: dict) -> dict:
-    """Migrate a raw ``workflow.json`` dict to the current schema version.
+class BundleSchemaError(ValueError):
+    """The bundle format is unsupported or lacks a deterministic upgrade step."""
 
-    v2 is a strict, ADDITIVE superset of v1 (typed params, program graph,
-    manifest, ... all default-empty), so migrating a v1 bundle needs no field
-    transforms -- it only stamps the current ``schema_version`` so downstream
-    code can rely on it. A bundle with no ``schema_version`` key is treated as
-    the original v1 shape. Returns the SAME dict, mutated in place, for
-    convenience. Forward-compatible: a bundle already at (or above) the current
-    version is left untouched."""
+
+def bundle_schema_version(data: dict) -> int:
+    if not isinstance(data, dict):
+        raise BundleSchemaError("workflow.json must contain an object")
     version = data.get("schema_version", 1)
-    if not isinstance(version, int):
-        version = 1
-    if version < SCHEMA_VERSION:
-        # --- future field transforms would live here, gated on `version` ---
-        data["schema_version"] = SCHEMA_VERSION
+    if type(version) is not int or not 1 <= version <= SCHEMA_VERSION:
+        raise BundleSchemaError(f"unsupported bundle schema version: {version!r}")
+    return version
+
+
+def _upgrade_v1_to_v2(data: dict) -> dict:
+    # Schema 1 has no integrity manifest. Schema 2 is additive, so the only
+    # representation change is the explicit version stamp, on a copy.
+    data["schema_version"] = 2
     return data
+
+
+_BUNDLE_UPGRADERS = {1: _upgrade_v1_to_v2}
+
+
+def migrate_bundle_dict(data: dict) -> dict:
+    """Upgrade one explicit format step at a time without changing the source."""
+    version = bundle_schema_version(data)
+    upgraded = copy.deepcopy(data)
+    while version < SCHEMA_VERSION:
+        upgrader = _BUNDLE_UPGRADERS.get(version)
+        if upgrader is None:
+            raise BundleSchemaError(f"no upgrader from bundle schema {version}")
+        upgraded = upgrader(upgraded)
+        if bundle_schema_version(upgraded) != version + 1:
+            raise BundleSchemaError(
+                f"upgrader from schema {version} did not advance one step"
+            )
+        version += 1
+    return upgraded
 
 
 # ---------------------------------------------------------------------------
@@ -696,6 +1132,46 @@ class BundleIntegrityError(Exception):
     """A bundle's recomputed digest does not match its sealed manifest -- the
     ``workflow.json`` or a template asset was altered after the manifest was
     written."""
+
+
+def _verify_decrypted_asset_membership(
+    stored: BundleManifest, names: Iterable[str]
+) -> None:
+    """Encryption authenticates bytes, not membership in the workflow seal."""
+    if any(rel not in stored.file_hashes for rel in names):
+        raise BundleIntegrityError("decrypted asset is outside the verified manifest")
+
+
+def _verify_asset_hashes(
+    bundle_dir: Path | str,
+    stored: BundleManifest,
+    *,
+    decrypted_assets: Optional[dict[str, bytes]] = None,
+) -> None:
+    bundle = Path(bundle_dir)
+    for rel, expected in stored.file_hashes.items():
+        path = bundle_asset_path(bundle, rel)
+        if decrypted_assets is not None:
+            data = decrypted_assets.get(rel)
+            if data is None:
+                raise BundleIntegrityError(
+                    f"manifest lists sealed asset {rel!r} but its authenticated "
+                    "plaintext is unavailable"
+                )
+            if _sha256_bytes(data) != expected:
+                raise BundleIntegrityError(
+                    f"sealed asset {rel!r} plaintext hash mismatch "
+                    "(tampered or corrupted)"
+                )
+            continue
+        if not path.is_file():
+            raise BundleIntegrityError(
+                f"manifest lists asset {rel!r} but it is missing from the bundle"
+            )
+        if _sha256_file(path) != expected:
+            raise BundleIntegrityError(
+                f"asset {rel!r} hash mismatch (tampered or corrupted)"
+            )
 
 
 def verify_integrity(
@@ -722,46 +1198,16 @@ def verify_integrity(
        (re-saving reseals them).
 
     Only meaningful for a bundle that carries a persisted manifest with a
-    non-empty digest; legacy (pre-v2) bundles have no sealed digest to compare
-    against, and the caller skips this check for them."""
-    if not stored.content_digest:
+    non-empty digest. Verified loads refuse a missing persisted seal."""
+    if not stored.content_digest and workflow._loaded_seal is None:
         return
     # 1. Recompute the digest over the loaded workflow content using the SEALED
     #    file-hash list (NOT re-hashed from disk), so post-seal template
     #    additions do not move it -- only a workflow.json edit (or a change to
     #    the sealed asset set) breaks this.
-    recomputed = compute_content_digest(workflow, stored.file_hashes)
-    if recomputed != stored.content_digest:
-        raise BundleIntegrityError(
-            "bundle content digest mismatch: expected "
-            f"{stored.content_digest[:16]}..., recomputed {recomputed[:16]}... "
-            "-- the workflow.json was modified after the manifest was sealed"
-        )
+    _verify_workflow_content(workflow, stored)
     # 2. Each sealed asset must still hash to its recorded value.
-    bundle = Path(bundle_dir)
-    for rel, expected in stored.file_hashes.items():
-        if decrypted_assets is not None:
-            data = decrypted_assets.get(rel)
-            if data is None:
-                raise BundleIntegrityError(
-                    f"manifest lists sealed asset {rel!r} but its authenticated "
-                    "plaintext is unavailable"
-                )
-            if _sha256_bytes(data) != expected:
-                raise BundleIntegrityError(
-                    f"sealed asset {rel!r} plaintext hash mismatch "
-                    "(tampered or corrupted)"
-                )
-            continue
-        path = bundle / rel
-        if not path.is_file():
-            raise BundleIntegrityError(
-                f"manifest lists asset {rel!r} but it is missing from the bundle"
-            )
-        if _sha256_file(path) != expected:
-            raise BundleIntegrityError(
-                f"asset {rel!r} hash mismatch (tampered or corrupted)"
-            )
+    _verify_asset_hashes(bundle_dir, stored, decrypted_assets=decrypted_assets)
 
 
 # ---------------------------------------------------------------------------
@@ -1386,3 +1832,30 @@ def validate_workflow(workflow: "Workflow") -> ValidationReport:
             )
 
     return ValidationReport(workflow_name=workflow.name, issues=issues)
+
+
+def validate_verified_derivative(
+    workflow: Workflow,
+    workflow_type: type[Workflow],
+    error_type: type[ValueError],
+    authoring_context: str,
+) -> Workflow:
+    """Validate an authored derivative, then preserve its verified source authority."""
+    try:
+        validated = workflow_type.model_validate(workflow.model_dump(mode="python"))
+    except ValueError as exc:
+        raise error_type(
+            f"{authoring_context} makes the workflow invalid: {exc}"
+        ) from exc
+    # Arbitrary model_validate(model_dump()) callers remain unverified. Only the
+    # deliberate authoring path transfers the process-local source capability.
+    transfer_verified_load_capability(workflow, validated)
+    validation = validate_workflow(validated)
+    if not validation.structural_ok:
+        details = "; ".join(
+            issue.render() for issue in validation.by_category("structure")
+        )
+        raise error_type(
+            f"{authoring_context} makes the workflow structurally invalid: {details}"
+        )
+    return validated

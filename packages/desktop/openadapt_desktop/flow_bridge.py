@@ -161,9 +161,7 @@ def _sign_refusal(code: str, message: str) -> dict:
     return {"schema": _SIGN_RESPONSE_SCHEMA, "refused": code, "message": message}
 
 
-def _is_this_answer(
-    message: bytes, *, decision: str, request_id: str, request_sha256: str
-) -> bool:
+def _is_this_answer(message: bytes, *, decision: str, request_id: str, request_sha256: str) -> bool:
     """Whether ``message`` is exactly a person's answer to this request.
 
     Flow signs the answer domain, then the answer as canonical JSON. Desktop
@@ -191,7 +189,6 @@ def _is_this_answer(
         and payload.get("decided_by") == "human"
         and payload.get("route") == ITEM_APPROVAL_ROUTE
     )
-
 
 
 def _contract_counts(value: object) -> dict[str, int] | None:
@@ -624,6 +621,7 @@ class FlowBridge:
         self._push_json_support: bool | None = None
         self._approval_gate_support: bool | None = None
         self._local_drill_support: bool | None = None
+        self._dry_run_support: bool | None = None
 
     @property
     def approver_keychain(self):
@@ -847,10 +845,7 @@ class FlowBridge:
                 raise FlowNotAvailableError(
                     "openadapt-flow is not importable by the Desktop runtime"
                 )
-            if (
-                _flow_override() is None
-                and _installed_flow_version() != REQUIRED_FLOW_VERSION
-            ):
+            if _flow_override() is None and _installed_flow_version() != REQUIRED_FLOW_VERSION:
                 raise FlowNotAvailableError(f"openadapt-flow isn't available: {flow_problem()}")
             command = [
                 sys.executable,
@@ -959,11 +954,18 @@ class FlowBridge:
         timeout: float | None = None,
         *,
         config: Path | None = None,
+        stop_before_effect: bool = False,
         params_file: Path | None = None,
         env_overrides: dict[str, str] | None = None,
     ) -> FlowResult:
         """Replay a bundle; returns the run directory in ``out_dir`` if given."""
         args = ["replay", str(bundle_dir)]
+        if stop_before_effect:
+            if not self.supports_dry_run():
+                raise FlowNotAvailableError(
+                    "This Flow cannot stop before all input; dry-run refused"
+                )
+            args.append("--stop-before-effect")
         if out_dir:
             args += ["--run-dir", str(out_dir)]
         if config:
@@ -1420,6 +1422,18 @@ class FlowBridge:
                 self._approval_gate_support = False
         return self._approval_gate_support
 
+    def supports_dry_run(self) -> bool:
+        """Whether Flow explicitly refuses every input in Check-it dry mode."""
+        if self._dry_run_support is None:
+            try:
+                result = self._run(["replay", "--help"], timeout=30)
+                self._dry_run_support = result.ok and "--stop-before-effect" in (
+                    result.stdout or ""
+                )
+            except Exception:
+                self._dry_run_support = False
+        return self._dry_run_support
+
     def supports_local_drills(self) -> bool:
         """Probe (once) whether Flow can set up this computer's drill campaign."""
 
@@ -1441,9 +1455,7 @@ class FlowBridge:
         if self._attached_browser_support is None:
             try:
                 result = self._run(["run", "--help"])
-                self._attached_browser_support = "--browser-cdp-endpoint" in (
-                    result.stdout or ""
-                )
+                self._attached_browser_support = "--browser-cdp-endpoint" in (result.stdout or "")
             except Exception:
                 self._attached_browser_support = False
         return self._attached_browser_support

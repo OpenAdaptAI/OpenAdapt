@@ -1170,7 +1170,24 @@ def test_program_ledger_never_promotes_approved_write_to_confirmed(tmp_path):
     assert all(checkpoint.new_effect_keys == [] for checkpoint in checkpoints)
 
 
-def test_durable_resume_restores_governed_authorization(tmp_path):
+def _durable_governed_write_vision() -> FakeVision:
+    vision = resolving_vision()
+    vision.ocr_lines = [
+        OcrLine("Jane Sample 1980-01-15 MRN 123"),
+        OcrLine("Jane Sample 1980-01-15 MRN 123"),
+    ]
+    vision.ocr_results = [
+        [OcrLine("Jane Sample 1980-01-15 MRN 123")],
+        [],
+    ]
+    vision.text_results = {
+        "Saved": Match(point=(1, 1), region=(0, 0, 2, 2), confidence=0.99)
+    }
+    return vision
+
+
+@pytest.fixture
+def durable_governed_first_leg(tmp_path):
     effect = Effect(
         kind=EffectKind.RECORD_WRITTEN,
         match={"patient": "A"},
@@ -1198,33 +1215,68 @@ def test_durable_resume_restores_governed_authorization(tmp_path):
         ),
     )
     run_dir = tmp_path / "run"
-    first_vision = resolving_vision()
-    first_vision.ocr_lines = [
-        OcrLine("Jane Sample 1980-01-15 MRN 123"),
-        OcrLine("Jane Sample 1980-01-15 MRN 123"),
-    ]
-    first_vision.ocr_results = [
-        [OcrLine("Jane Sample 1980-01-15 MRN 123")],
-        [],
-    ]
-    first_vision.text_results = {
-        "Saved": Match(point=(1, 1), region=(0, 0, 2, 2), confidence=0.99)
-    }
     initial_backend = FakeBackend()
     initial = Replayer(
         initial_backend,
-        vision=first_vision,
+        vision=_durable_governed_write_vision(),
         governed_authorization=authorization,
         durable=True,
         poll_interval_s=0.0,
     ).run(workflow, bundle_dir=bundle, run_dir=run_dir)
+    return bundle, run_dir, authorization, initial_backend, initial
+
+
+def test_first_durable_leg_refuses_approved_unverified_write(
+    durable_governed_first_leg,
+):
+    _, run_dir, _, backend, initial = durable_governed_first_leg
 
     assert initial.success is False
+    assert backend.actions == []
+    assert CheckpointStore(run_dir).checkpoints() == []
+    (result,) = initial.results
+    assert result.step_id == "write"
+    assert result.safety_halt is True
+    assert result.effect_approved_unverified is False
+    assert result.safety_refusal_evidence is not None
+    assert result.safety_refusal_evidence.code == "effect_verifier_missing"
+
+
+def test_durable_resume_restores_governed_authorization(durable_governed_first_leg):
+    bundle, run_dir, authorization, initial_backend, initial = (
+        durable_governed_first_leg
+    )
+    assert initial.success is False
+    assert initial_backend.actions == []
     store = CheckpointStore(run_dir)
     manifest = store.read_manifest()
     assert manifest is not None
     assert manifest.governed_authorization == authorization
-    assert store.checkpoints()[0].effect_approved_unverified is True
+    pending = store.read_pending()
+    assert pending is not None and pending.step_index == 0
+    assert pending.delivery_uncertainty is None
+    assert store.checkpoints() == []
+
+    # Resume only a proven no-input pause. The retained authorization still
+    # permits the unverified write on a resumed leg, without calling it verified.
+    write_backend = FakeBackend()
+    after_write = resume(
+        run_dir,
+        Replayer(
+            write_backend,
+            vision=_durable_governed_write_vision(),
+            poll_interval_s=0.0,
+        ),
+        approval=_resume_approval(run_dir, bundle, "continue the no-input pause"),
+    )
+    assert after_write.success is False
+    assert after_write.governed_authorization_id == authorization.authorization_id
+    assert [action[0] for action in write_backend.actions] == ["click"]
+    (checkpoint,) = store.checkpoints()
+    assert checkpoint.step_id == "write"
+    assert checkpoint.effect_approved_unverified is True
+    pending = store.read_pending()
+    assert pending is not None and pending.step_id == "guarded"
 
     resumed_backend = FakeBackend()
     resumed_vision = resolving_vision()

@@ -40,6 +40,7 @@ from typing import Annotated as {annotated_type}
 from pydantic import Field as {field_type}
 
 {sdk_import}
+from openadapt_flow.request_binding import mcp_request_scope as {scoped_server_type}
 
 {task_symbol} = {task_dir!r}
 
@@ -59,8 +60,21 @@ def {func}({signature}) -> dict:
     """
     from openadapt_flow.compile_agent import run_compiled_params as {dispatch_symbol}
 
+    if {generation_symbol} == 1:
+        with {scoped_server_type}({server_symbol}.get_context()):
+            return {dispatch_symbol}({task_symbol}, {values}).to_dict()
     return {dispatch_symbol}({task_symbol}, {values}).to_dict()
 
+
+async def {bound_call_symbol}(self, name, arguments, context=None):
+    with {scoped_server_type}(context):
+        return await {server_type}.call_tool(self, name, arguments, context)
+
+
+if {generation_symbol} == 2:
+    from types import MethodType as {method_type_symbol}
+
+    {server_symbol}.call_tool = {method_type_symbol}({bound_call_symbol}, {server_symbol})
 
 if __name__ == "__main__":
     {server_symbol}.run()
@@ -86,6 +100,13 @@ def emit_mcp(compiler: "FirstRunCompiler", out_path: Path) -> Path:
     field_type = symbols.allocate("Field")
     server_type = symbols.allocate("FastMCP")
     import_error = symbols.allocate("mcp_import_error")
+    scoped_server_type = symbols.allocate("request_scope_for_context")
+    bound_call_symbol = symbols.allocate("call_tool_with_request_context")
+    method_type_symbol = symbols.allocate("MethodType")
+    generation_symbol = symbols.allocate("mcp_generation")
+    parse_context_symbol = symbols.allocate("parse_request_context")
+    request_scope_symbol = symbols.allocate("request_scope")
+    meta_symbol = symbols.allocate("request_meta")
     task_symbol = symbols.allocate("TASK_DIR")
     server_symbol = symbols.allocate("mcp")
     dispatch_symbol = symbols.allocate("run_compiled_params")
@@ -102,7 +123,11 @@ def emit_mcp(compiler: "FirstRunCompiler", out_path: Path) -> Path:
         annotated_type=annotated_type,
         field_type=field_type,
         server_type=server_type,
-        sdk_import=server_import(server_type, import_error),
+        sdk_import=server_import(server_type, import_error, generation_symbol),
+        scoped_server_type=scoped_server_type,
+        bound_call_symbol=bound_call_symbol,
+        method_type_symbol=method_type_symbol,
+        generation_symbol=generation_symbol,
         task_symbol=task_symbol,
         server_symbol=server_symbol,
         dispatch_symbol=dispatch_symbol,
@@ -110,6 +135,9 @@ def emit_mcp(compiler: "FirstRunCompiler", out_path: Path) -> Path:
             f"{binding}: {annotated_type}[str, {field_type}(validation_alias={name!r})]"
             for name, binding in bindings.items()
         ),
+        parse_context_symbol=parse_context_symbol,
+        request_scope_symbol=request_scope_symbol,
+        meta_symbol=meta_symbol,
         doc=" ".join(instruction.split()),
         values="{"
         + ", ".join(f"{name!r}: {binding}" for name, binding in bindings.items())

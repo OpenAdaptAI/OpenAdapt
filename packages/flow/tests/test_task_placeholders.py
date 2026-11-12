@@ -104,6 +104,43 @@ def test_short_values_bind_in_task_text_but_not_on_page_text() -> None:
     )
 
 
+def test_task_value_cannot_rewrite_another_placeholder() -> None:
+    # Issue #2130: a short value that is also a word inside a placeholder name
+    # must not match inside placeholders inserted in the same or earlier pass.
+    bindings = privacy.task_bindings(identity=["Jane Sample"], params={"kind": "task"})
+    kind = privacy.placeholder("kind")
+    out = privacy.bind_text("Do the task for Jane Sample", bindings)
+    assert out == f"Do the {kind} for {NAME}"
+    assert f"\u27e6{kind}." not in (out or "")
+
+
+def test_bind_text_preserves_preexisting_placeholders() -> None:
+    bindings = privacy.task_bindings(identity=["Jane Sample"], params={"kind": "task"})
+    kind = privacy.placeholder("kind")
+    text = f"Do the task for {NAME}"
+    assert privacy.bind_text(text, bindings) == f"Do the {kind} for {NAME}"
+
+
+def test_raw_value_inside_brackets_is_bound() -> None:
+    # A bracketed span containing a raw value (e.g. ⟦Jane Sample⟧) must not
+    # be left unmasked; it must be replaced by its bound placeholder.
+    bindings = privacy.task_bindings(identity=["Jane Sample"])
+    raw_bracketed = "\u27e6Jane Sample\u27e7"
+    out = privacy.bind_text(raw_bracketed, bindings)
+    assert out == f"\u27e6{NAME}\u27e7"
+    assert "Jane Sample" not in (out or "")
+
+
+def test_short_value_overbinding_in_task_text_is_pinned() -> None:
+    # Issue #2130: task_text binds every non-empty value, so a value under 3
+    # characters (like "M") replaces whole-word occurrences in task text.
+    bindings = privacy.task_bindings(params={"sex": "M"})
+    sex = privacy.placeholder("sex")
+    assert privacy.bind_text("sex M ... Mark M done", bindings) == (
+        f"sex {sex} ... Mark {sex} done"
+    )
+
+
 def test_inputs_are_bound_under_their_own_names() -> None:
     bindings = privacy.task_bindings(
         identity=IDENTITY, params={"note": "Follow up in two weeks"}

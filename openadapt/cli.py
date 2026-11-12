@@ -65,7 +65,7 @@ class _FlowFirstGroup(click.Group):
         legacy = [
             (name, command.get_short_help_str())
             for name, command in sorted(self.commands.items())
-            if not command.hidden
+            if not command.hidden and name not in TASKS
         ]
         if legacy:
             with formatter.section("Legacy commands"):
@@ -1360,21 +1360,63 @@ FIRST_TOOL_GUIDE = "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/
     type=click.Choice(["claude", "cursor", "codex", "gemini"]),
     help="Set up only this client (repeat for more). Default: every one found.",
 )
-def setup(dry_run: bool, undo: bool, only: tuple[str, ...]) -> None:
+@click.option(
+    "--app",
+    "app_config",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help=(
+        "deploy.yaml naming one app (web, desktop, RDP or Citrix). The agent "
+        "then teaches saves in that app, each read back with --verify."
+    ),
+)
+@click.option(
+    "--verify",
+    "verify_config",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="With --app: the verify.yaml that reads the app's system of record.",
+)
+@click.option(
+    "--authorization",
+    "authorization",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help=(
+        "With --app: a person's signed teach authorization (openadapt-flow "
+        "teach-authorization). Without one, nothing the agent teaches is admitted."
+    ),
+)
+def setup(
+    dry_run: bool,
+    undo: bool,
+    only: tuple[str, ...],
+    app_config: Optional[Path],
+    verify_config: Optional[Path],
+    authorization: Optional[Path],
+) -> None:
     """Add OpenAdapt to Claude Code, Cursor, Codex and Gemini CLI.
 
     For each one installed, register the OpenAdapt MCP server and install a
-    skill that tells the agent how to turn a browser task into a tool it can
-    call again. Prints every change. Running it again changes nothing that is
-    already set up.
+    skill that tells the agent how to turn an app task into a tool it can call
+    again. By default the agent teaches read-only tasks in web apps. With
+    --app and --verify it teaches saves in that one app, on the web, the
+    desktop, or over RDP or Citrix. Prints every change. Running it again
+    changes nothing that is already set up.
     """
-    from openadapt.setup_clients import CLIENTS, Setup, server_command
+    from openadapt.setup_clients import CLIENTS, Setup, app_serve_args, server_command
 
     _require_supported_python()
+    if (app_config is None) != (verify_config is None):
+        raise click.UsageError("--app and --verify go together")
+    if authorization is not None and app_config is None:
+        raise click.UsageError("--authorization needs --app and --verify")
     clients = [c for c in CLIENTS if not only or c.key in only]
-    run = Setup(
-        home=Path.home(), command=server_command(), say=click.echo, dry_run=dry_run
+    command = (
+        server_command(
+            serve_args=app_serve_args(app_config, verify_config, authorization)
+        )
+        if app_config is not None and verify_config is not None
+        else server_command()
     )
+    run = Setup(home=Path.home(), command=command, say=click.echo, dry_run=dry_run)
     if undo:
         run.undo()
         sys.exit(1 if run.failures else 0)
@@ -1486,10 +1528,36 @@ def verify_serve(contracts: str, state: Optional[str]) -> None:
         click.echo("Error: the OpenAdapt engine is not installed.", err=True)
         click.echo("Reinstall with: pip install --upgrade openadapt", err=True)
         sys.exit(1)
+    _protected_ledger_requested()
     argv = ["serve", "--verify", contracts]
     if state:
         argv += ["--verify-state", state]
     sys.exit(int(agent_main(argv) or 0))
+
+
+def _protected_ledger_requested() -> bool:
+    name = "OPENADAPT_LEDGER_AUTHORITY_CONFIG"
+    if name not in os.environ:
+        return False
+    from openadapt_flow import write_ledger
+
+    if getattr(write_ledger, "PROTECTED_LEDGER_CONFIG_ENV", None) != name:
+        raise click.ClickException("ledger_authority_unsupported")
+    return True
+
+
+@contextmanager
+def _ledger_hold_error():
+    """Report a named integrity hold without an operator traceback."""
+    try:
+        yield
+    except RuntimeError as exc:
+        from openadapt_flow import write_ledger
+
+        held = getattr(write_ledger, "LedgerIntegrityHeld", None)
+        if isinstance(held, type) and isinstance(exc, held):
+            raise click.ClickException(str(exc)) from None
+        raise
 
 
 def _write_ledger(folder: Optional[str]):
@@ -1500,7 +1568,10 @@ def _write_ledger(folder: Optional[str]):
     except ImportError:
         click.echo("Error: the OpenAdapt engine is not installed.", err=True)
         sys.exit(1)
-    return Ledger(FileLedger(folder)) if folder else default_ledger()
+    with _ledger_hold_error():
+        if _protected_ledger_requested():
+            return default_ledger(root=folder)
+        return Ledger(FileLedger(folder)) if folder else default_ledger()
 
 
 _LEDGER_OPTION = click.option(
@@ -1508,7 +1579,7 @@ _LEDGER_OPTION = click.option(
     "ledger_dir",
     default=None,
     type=click.Path(file_okay=False),
-    help="Ledger folder (default: OPENADAPT_LEDGER_DIR or ~/.openadapt/ledger).",
+    help="Ledger folder (must match the configured protected journal, if set).",
 )
 
 
@@ -1532,8 +1603,9 @@ def verify_ledger_list(ledger_dir: Optional[str]) -> None:
     time, so a recheck isn't lost when the server that holds it restarts.
     """
     ledger = _write_ledger(ledger_dir)
-    rows = ledger.unresolved()
-    owed = ledger.rechecks_owed()
+    with _ledger_hold_error():
+        rows = ledger.unresolved()
+        owed = ledger.rechecks_owed()
     if not rows and not owed:
         click.echo("No held or open writes. No rechecks owed.")
         return
@@ -1578,7 +1650,8 @@ def verify_ledger_reconcile(
             click.echo(f"Error: contract {path.name}: {exc}", err=True)
             sys.exit(2)
         by_digest[contract.identity] = contract
-    rows = [(k, a) for k, a in ledger.unresolved() if key is None or k == key]
+    with _ledger_hold_error():
+        rows = [(k, a) for k, a in ledger.unresolved() if key is None or k == key]
     if key is not None and not rows:
         click.echo(f"Error: no held or open write with key {key}", err=True)
         sys.exit(2)
@@ -1588,7 +1661,8 @@ def verify_ledger_reconcile(
             click.echo(f"{k}  skipped: its contract isn't in {contracts}")
             continue
         try:
-            state = reconcile(held_contract, k, ledger=ledger)
+            with _ledger_hold_error():
+                state = reconcile(held_contract, k, ledger=ledger)
         except VerifierError as exc:
             click.echo(f"{k}  skipped: {exc}")
             continue

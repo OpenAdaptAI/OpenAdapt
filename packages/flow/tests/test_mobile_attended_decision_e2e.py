@@ -59,6 +59,7 @@ from openadapt_flow.runtime.durable.attended import (
 )
 from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
 from openadapt_flow.runtime.replayer import Replayer
+from tests.test_durable_runtime import _resume_after_proven_no_input
 from tests.test_replayer import FakeBackend, FakeVision, Match
 
 # Protected values that exist in the run but must never reach the phone.
@@ -1464,9 +1465,23 @@ def test_rejecting_a_run_that_already_wrote_stays_reconciliation_required(
     delivery of the earlier step is not in doubt; what is unknown is its
     effect, and the operator can still legitimately end the run.
     """
-    _wf, bundles, runs, _bundle, run, capability = _halt(
-        tmp_path, name="wrote", workflow=_workflow_with_an_earlier_write()
+    workflow = _workflow_with_an_earlier_write()
+    bundles, runs = tmp_path / "bundles", tmp_path / "runs"
+    bundle, run = bundles / "wrote", runs / "wrote"
+    workflow.save(bundle)
+    backend = FakeBackend()
+    # The fixture proves the first leg stopped before input, then uses the
+    # exact pause's approval to run the existing continuation on a fake backend.
+    resumed = _resume_after_proven_no_input(
+        workflow, bundle, run, backend, None, vision=FakeVision()
     )
+    assert resumed.success is False
+    assert backend.actions.count(("press", "C")) == 1
+    assert ("press", "B") not in backend.actions
+    pending = CheckpointStore(run).read_pending()
+    assert pending is not None and pending.step_id == "human"
+    assert pending.delivery_uncertainty is None
+    capability = AttendedActionStore(run).read()
     before = data._load_report(run)[0]
     assert before.execution_outcome == "HALTED"
     # The precondition this test exists for: a consequential step actuated and

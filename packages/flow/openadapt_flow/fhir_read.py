@@ -135,7 +135,7 @@ def check_collection_search(
                 raise ValueError("a collection search entry is not a matching resource")
 
 
-def _check_collection_url(url: str) -> None:
+def check_collection_url(url: str) -> None:
     """The same empty-query rule covers sent, effective and self-link URLs."""
     try:
         query = urlsplit(url).query
@@ -143,6 +143,9 @@ def _check_collection_url(url: str) -> None:
         raise ValueError("a collection search has a malformed URL") from error
     if query:
         raise ValueError("collection searches require an unrestricted empty query")
+
+
+_check_collection_url = check_collection_url
 
 
 def check_search_coverage(total: Optional[int], matches: int) -> None:

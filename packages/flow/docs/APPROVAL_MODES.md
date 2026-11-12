@@ -74,8 +74,14 @@ openadapt-flow item-approval decline RUN_DIR ... --reason wrong_values
 - After an approval the step takes a fresh frame and resolves its target
   and right-record check again. At the last point before the input, the run
   reads the form again; a field that changed while waiting stops the item
-  before the save. In a browser the run reads the page's form controls;
-  elsewhere it reads the words on the screen. An API step prepares its
+  before the save. In a browser the run reads the page's form controls.
+  On Windows it reads the words in the app window the item's verified steps
+  were in, with the window's frame in the digest, so a moved window also
+  stops the save; when the steps were in more than one window, the window
+  is gone, another of the app's windows reaches outside that frame, or a
+  monitor sits left of or above the primary one (the window's frame and the
+  screenshot's pixels would then be offset), it reads the whole screen.
+  Elsewhere it reads the words on the screen. An API step prepares its
   request again instead; a request whose digest changed stops the item
   before the save, and the GUI steps don't run in its place.
 - A decline stops the item before that save. Earlier saves of the same
@@ -497,3 +503,19 @@ grant's digest. See [`APPROVAL_AND_VERIFICATION.md`](APPROVAL_AND_VERIFICATION.m
 - A Desktop list queue for batch review.
   [`DECISION_TRIAGE.md`](DECISION_TRIAGE.md) describes the engine part that
   orders a list's verified saves for review.
+
+
+## Check without application input
+
+`openadapt-flow replay BUNDLE --stop-before-effect` runs an observational prefix
+on a prefilled screen, checks the save target's identity and declared
+preconditions, and stops before input at the declared final save. An unproved
+input prefix or interstitial dismissal refuses before delivery. Web checks
+attach to an already-open page through `backend.browser_cdp_endpoint`; they do
+not launch or navigate a browser. Network desktop-session creation refuses
+before backend construction.
+
+The ordinary run report retains the bound effect-contract hashes and the checks
+that actually passed. It uses the existing redacted/sealed evidence path and
+ends `HALTED`, never a qualification success. The separate qualification
+practice case still needs a person's approval and saves for real.

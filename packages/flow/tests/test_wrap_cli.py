@@ -229,7 +229,11 @@ def test_max_input_bytes_reaches_the_factory(monkeypatch, tmp_path):
     assert observed["max_input_bytes"] == 1048576
 
 
-@pytest.mark.parametrize("value", ["0", str(providers.MAX_INPUT_BYTES_CEILING + 1)])
+@pytest.mark.parametrize(
+    "value",
+    ["0", str(providers.MAX_INPUT_BYTES_CEILING + 1)],
+    ids=("zero-bound", "over-ceiling"),
+)
 def test_max_input_bytes_outside_the_hard_cap_is_refused(monkeypatch, tmp_path, value):
     setup = SimpleNamespace(
         cache=SimpleNamespace(server=lambda *_: None, held=lambda *_: False),
