@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from base64 import b64encode
 from pathlib import Path
 
@@ -472,7 +473,8 @@ def test_desktop_binds_canonical_inputs_and_action_scope_before_case_run(
     project = Workflow.load(bundle).qualification
     assert project is not None
     case = next(item for item in project.cases if item.id == "representative-1")
-    assert inputs_path.stat().st_mode & 0o777 == 0o600
+    if os.name != "nt":  # Windows has no POSIX owner-only mode bits
+        assert inputs_path.stat().st_mode & 0o777 == 0o600
     assert case.runtime_input_sha256 == hashlib.sha256(inputs).hexdigest()
     assert [(target.step_id, target.actuation_path) for target in case.action_targets] == [
         ("save", "gui")

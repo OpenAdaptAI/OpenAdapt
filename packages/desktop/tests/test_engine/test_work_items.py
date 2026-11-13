@@ -13,6 +13,7 @@ The safety contract these tests pin:
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -290,7 +291,8 @@ def test_item_values_reach_flow_only_through_a_private_file(task) -> None:
     assert result["item"]["status"] == "done"
     staged = bridge.calls[0]["params_file"]
     assert staged["values"] == {"member_id": "M-4821", "note": "Reviewed"}
-    assert staged["mode"] == "0o600"
+    if os.name != "nt":  # Windows has no POSIX owner-only mode bits
+        assert staged["mode"] == "0o600"
     assert not staged["path"].exists()
     assert "M-4821" not in json.dumps(events)
     assert "M-4821" not in repr(bridge.calls[0]["config"])
