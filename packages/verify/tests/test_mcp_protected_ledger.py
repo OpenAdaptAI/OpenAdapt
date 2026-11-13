@@ -7,7 +7,7 @@ import os
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
-import anyio
+import pytest
 from test_cli_protected_ledger import (
     _AUTHORITY_ENV,
     _assert_no_new_evidence,
@@ -19,6 +19,10 @@ from test_cli_protected_ledger import (
 )
 from test_cli_verdicts import _files
 from test_verification import VALUES
+
+# The mcp extra; anyio comes with it. The base install skips these controls.
+pytest.importorskip("mcp")
+anyio = pytest.importorskip("anyio")
 
 
 @asynccontextmanager

@@ -6,9 +6,10 @@ to one package that breaks another's install or import fails before merge even
 when the other package's suite does not run. Each package syncs into its own
 environment with `uv sync --locked` (no extras, no dev tools), imports its
 top-level module, and runs its command-line entry point with `--help`.
-Flow's command line needs its `vision` extra, so `flow` syncs that extra, and
-`flow-base` checks that the base install (openadapt-verify's dependency
-profile) imports the verifier.
+`flow` syncs Flow's `vision` extra. `flow-base` checks that the base install
+(openadapt-verify's dependency profile, no vision extra) imports the verifier
+and that Flow's command line builds its parser and prints help, including the
+receipt and verify-run commands.
 
     python scripts/ci/smoke.py            # every package
     python scripts/ci/smoke.py flow tray  # some
@@ -27,9 +28,21 @@ ROOT = Path(__file__).resolve().parents[2]
 # Extras a smoke syncs, by package name.
 EXTRAS: dict[str, list[str]] = {"flow": ["vision"]}
 
+# Commands a smoke runs after its entry point, by package name.
+MORE_COMMANDS: dict[str, list[list[str]]] = {
+    "flow-base": [
+        ["openadapt-flow", "receipt", "verify", "--help"],
+        ["openadapt-flow", "verify-run", "--help"],
+    ],
+}
+
 # package -> (project directory, import, command and arguments)
 SMOKES: dict[str, tuple[str, str, list[str]]] = {
-    "flow-base": ("packages/flow", "openadapt_flow.verifier", []),
+    "flow-base": (
+        "packages/flow",
+        "openadapt_flow.verifier",
+        ["openadapt-flow", "--help"],
+    ),
     "launcher": (".", "openadapt", ["openadapt", "--help"]),
     "types": ("packages/types", "openadapt_types", ["openadapt-vocab-lint", "--help"]),
     "flow": ("packages/flow", "openadapt_flow", ["openadapt-flow", "--help"]),
@@ -70,8 +83,8 @@ def smoke(name: str) -> tuple[bool, str]:
             f"import {module}",
         ],
     ]
-    if command:
-        steps.append(["uv", "run", "--locked", "--no-dev", *project, *command])
+    for argv in ([command] if command else []) + MORE_COMMANDS.get(name, []):
+        steps.append(["uv", "run", "--locked", "--no-dev", *project, *argv])
     for step in steps:
         result = subprocess.run(
             step, env=env, capture_output=True, text=True, timeout=600
