@@ -15,7 +15,7 @@
 
 <!-- version list -->
 
-## Unreleased
+## v3.0.0 (2026-11-13)
 
 ### Breaking: the vision stack is the `vision` extra (3.0.0)
 
