@@ -103,6 +103,44 @@ def test_the_changelog_top_entry_is_read_exactly() -> None:
     assert PLAN.changelog_top("## Unreleased\n") is None
 
 
+def test_a_package_waits_until_pypi_serves_its_dependency_floors() -> None:
+    # verify 0.2.0 needs openadapt-flow 3.0.0, which may release in the same
+    # run; it then waits for the next run.
+    floors = PLAN.dependency_floors(
+        [
+            "openadapt-flow[receipts]>=3.0.0,<4",
+            "cryptography>=50.0.0",
+            "openadapt-types>=0.24.0; python_version >= '3.10'",
+        ]
+    )
+    assert floors == {"openadapt-flow": "3.0.0", "openadapt-types": "0.24.0"}
+    served = {"openadapt-flow": ["2.7.1"], "openadapt-types": ["0.24.0"]}
+    unmet = PLAN.unmet_floors(floors, served)
+    assert unmet == ["openadapt-flow>=3.0.0"]
+    assert _decide(unmet=unmet) == "wait"
+    served["openadapt-flow"].append("3.0.0")
+    assert PLAN.unmet_floors(floors, served) == []
+    assert _decide(unmet=[]) == "release"
+
+
+def test_every_package_the_plan_releases_is_a_dispatch_choice() -> None:
+    inputs = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))[True][
+        "workflow_dispatch"
+    ]["inputs"]
+    assert set(inputs["package"]["options"]) == {"all", *PLAN.PACKAGES}
+    for package, project in PLAN.PACKAGES.items():
+        meta = PLAN._toml(
+            (ROOT / "packages" / package / "pyproject.toml").read_text(encoding="utf-8")
+        )
+        assert meta["project"]["name"] == project
+
+
+def test_an_undated_changelog_waits() -> None:
+    # verify's CHANGELOG starts "## Unreleased (0.2.0)" until it is dated.
+    assert PLAN.changelog_top("# CHANGELOG\n\n## Unreleased (0.2.0)\n") is None
+    assert _decide(version="0.2.0", changelog=None, pypi_versions=[]) == "wait"
+
+
 def test_pypi_bytes_must_match_exactly() -> None:
     local = {"a.whl": "1", "a.tar.gz": "2"}
     assert DIST.compare(local, dict(local)) == []

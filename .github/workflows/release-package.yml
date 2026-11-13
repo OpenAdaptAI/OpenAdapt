@@ -1,5 +1,5 @@
 # Publish the packages under packages/ to PyPI: types, flow, agent, capture,
-# privacy and tray. Each publishes through its own GitHub environment and PyPI
+# privacy, tray and verify. Each publishes through its own GitHub environment and PyPI
 # Trusted Publisher:
 #
 #   package  PyPI project       environment
@@ -9,6 +9,7 @@
 #   capture  openadapt-capture  pypi-capture
 #   privacy  openadapt-privacy  pypi-privacy
 #   tray     openadapt-tray     pypi-tray
+#   verify   openadapt-verify   pypi-verify
 #
 # One release pattern, Desktop's (desktop-release.yml): merging a reviewed
 # version bump is the authorization. A run starts after each Packages run on
@@ -17,7 +18,8 @@
 # when the newest commit on main that changed it has a green push run with the
 # package's jobs run and passed, its version is new on PyPI and higher than
 # every version there, no tag names it yet, and its CHANGELOG.md starts with
-# exactly that version. Each package's environment protection still gates its
+# exactly that version, and PyPI already serves the lower bound of every
+# package here it depends on (verify waits for flow 3). Each package's environment protection still gates its
 # upload. The release builds main's tip, where the package is unchanged since
 # that commit. openadapt-desktop is not here: desktop-release.yml publishes its
 # wheel, sdist and native installers as one release.
@@ -58,7 +60,7 @@ on:
         required: true
         default: all
         type: choice
-        options: [all, flow, types, agent, capture, privacy, tray]
+        options: [all, flow, types, agent, capture, privacy, tray, verify]
       resume:
         description: "Publish the GitHub release of a version PyPI serves and a tag names"
         required: false
