@@ -261,6 +261,67 @@ def _quickstart(args: argparse.Namespace) -> int:
     return 0 if rows and all(row.ok for row in rows) else 1
 
 
+def _audit(args: argparse.Namespace) -> int:
+    from openadapt_verify import audit
+
+    faults = args.fault or list(audit.DEFAULT_FAULTS)
+    wrong_record = None
+    if args.wrong_record:
+        name, sep, value = args.wrong_record.partition("=")
+        if not sep or not name:
+            raise ValueError("--wrong-record takes FIELD=VALUE")
+        wrong_record = (name, value)
+        if "wrong_record" not in faults:
+            faults.append("wrong_record")
+    if args.demo:
+        from openadapt_verify import audit_demo
+
+        report = audit_demo.run(args.demo, runs=args.runs)
+    else:
+        import yaml
+
+        command = list(args.command)
+        if command[:1] == ["--"]:
+            command.pop(0)
+        missing = [
+            flag
+            for flag, value in (
+                ("--upstream", args.upstream),
+                ("--contract", args.contract),
+                ("--params", args.params),
+            )
+            if not value
+        ]
+        if missing:
+            raise ValueError("audit needs " + ", ".join(missing) + " (or --demo)")
+        contract = yaml.safe_load(Path(args.contract).read_text(encoding="utf-8"))
+        if not isinstance(contract, dict):
+            raise ValueError("the contract must be a mapping")
+        host, _, port = args.listen.rpartition(":")
+        report = audit.audit(
+            contract,
+            _params(args.params),
+            command,
+            upstream=args.upstream,
+            listen=(host or "127.0.0.1", int(port)),
+            runs=args.runs,
+            faults=faults,
+            success_regex=args.success_regex,
+            write_methods=args.write_method or audit.WRITE_METHODS,
+            write_path=args.write_path,
+            wrong_record=wrong_record,
+            command_timeout_s=args.command_timeout,
+            progress=audit.print_progress,
+        )
+    print(audit.render(report))
+    if args.report:
+        Path(args.report).write_text(
+            json.dumps(report.to_dict(), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+    return audit.exit_code(report)
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(prog="openadapt-verify")
     sub = parser.add_subparsers(dest="command_name", required=True)
@@ -312,10 +373,55 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         help="PyMySQL connect arguments for a disposable MySQL database",
     )
     quick.add_argument("--json", action="store_true", help="print JSON rows")
+    aud = sub.add_parser(
+        "audit",
+        help="Count the wrong saves your automation's own success check passes",
+    )
+    aud.add_argument("--upstream", help="the app's base URL, e.g. http://app:8080")
+    aud.add_argument(
+        "--listen", default="127.0.0.1:9000", help="proxy address (default %(default)s)"
+    )
+    aud.add_argument("--contract", help="verify.yaml whose read path is the truth")
+    aud.add_argument(
+        "--params", help="JSON values each run saves; {run} becomes the run number"
+    )
+    aud.add_argument("--runs", type=int, help="default: two per fault kind and clean")
+    aud.add_argument(
+        "--fault",
+        action="append",
+        help="fault kind to inject (repeatable; default: every HTTP-only kind)",
+    )
+    aud.add_argument(
+        "--success-regex",
+        help="call a run successful when its output matches (default: exit 0)",
+    )
+    aud.add_argument(
+        "--write-method",
+        action="append",
+        help="HTTP method that counts as the write (default: POST PUT PATCH DELETE)",
+    )
+    aud.add_argument("--write-path", help="regex the write's path must match")
+    aud.add_argument(
+        "--wrong-record",
+        metavar="FIELD=VALUE",
+        help="also run wrong_record: rewrite FIELD in the write's body to VALUE",
+    )
+    aud.add_argument("--command-timeout", type=float, default=300.0)
+    aud.add_argument("--report", help="write the JSON report here")
+    aud.add_argument(
+        "--demo",
+        nargs="?",
+        const="naive",
+        choices=("naive", "readback"),
+        help="audit a bundled script against a synthetic local store",
+    )
+    aud.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     try:
         if args.command_name == "quickstart":
             return _quickstart(args)
+        if args.command_name == "audit":
+            return _audit(args)
         if args.command_name == "run":
             return _run(args)
         if args.command_name == "verify":
