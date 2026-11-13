@@ -21,7 +21,9 @@
   proxy and count the wrong saves its success check reports as success
   (`no_persist`, `rejected`, `partial`, `wrong_value`, `duplicate`,
   `extra_write`, `lost_response`, and `wrong_record` when given a field),
-  judged by the contract's independent read path. Prints a table and writes a
+  judged by the contract's independent read path. The fault goes to the
+  first write whose body carries a declared value, or that matches
+  `--write-path`. Prints a table and writes a
   JSON report. `--demo` audits two bundled scripts against a synthetic store.
 - `openadapt-verify quickstart`: three scripted agent writes (correct, wrong
   value, claimed but not saved) against REST, SQLite and FHIR R4, and

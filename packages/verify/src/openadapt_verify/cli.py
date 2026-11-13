@@ -298,6 +298,13 @@ def _audit(args: argparse.Namespace) -> int:
         if not isinstance(contract, dict):
             raise ValueError("the contract must be a mapping")
         host, _, port = args.listen.rpartition(":")
+        host = host.strip("[]")
+        if host in ("0.0.0.0", "::"):
+            print(
+                "openadapt-verify: warning: the audit proxy listens on every "
+                "interface; anyone who can reach it can write to the app",
+                file=sys.stderr,
+            )
         report = audit.audit(
             contract,
             _params(args.params),

@@ -62,8 +62,7 @@ copy one and point it at your store.
 
 `openadapt-verify audit` tells you how many wrong saves your own automation
 reports as success. It puts an HTTP proxy in front of your app, runs your
-command (a Playwright test, a browser-agent script, any program) through it
-several times, and on each run changes one write. It then reads the store
+command through it several times, and on each run changes one write. It then reads the store
 through your contract's read path, never through the proxy, and counts the
 runs where your command said it succeeded but the store disagrees.
 
@@ -86,6 +85,7 @@ extra_write        2          2              2       0             0
 lost_response      2          0              0       0             2
 
 Your check (exit code 0) reported success on 10 of 12 bad saves.
+False alarms: 0 of 2 clean runs, 2 on faulted runs whose write still landed correctly.
 ```
 
 `--demo readback` audits a script that also lists the items through the app
@@ -112,9 +112,12 @@ openadapt-verify audit \
   refused.
 - A run succeeds when the command exits 0, or with `--success-regex` when its
   output matches.
-- The first `POST`, `PUT`, `PATCH` or `DELETE` of each run is the write that
-  gets the fault; narrow it with `--write-method` and `--write-path REGEX`.
-  Later requests in the run, retries included, pass through unchanged.
+- The fault goes to the run's first save: the first `POST`, `PUT`, `PATCH`
+  or `DELETE` whose JSON or form body carries one of the declared values. A
+  sign-in or other write before it passes through unchanged. With
+  `--write-path REGEX`, the first write whose path matches is the save
+  instead, body or not. `--write-method` narrows the methods. Later requests
+  in the run, retries included, pass through unchanged.
 
 | Fault | What the proxy does to the run's first write |
 |---|---|
@@ -141,6 +144,20 @@ report says so: `stale` (overwriting another user's concurrent change) and
 `collateral_unaudited` (a change to a table the read path doesn't cover).
 The faults are a fixed, hand-written set: the counts say which of these kinds
 your check misses, not how often they happen in production.
+
+Tested with two scripted HTTP clients against the quickstart's synthetic REST
+store; it has not been run with a browser. The proxy's limits:
+
+- Plain HTTP/1.x between your command and the proxy, one request per
+  connection. Each response is read in full before it is sent on, so
+  streamed responses arrive at once.
+- No `Upgrade`: WebSocket and server-sent events don't pass through.
+- Only `Location` headers that point at `--upstream` are rewritten to the
+  proxy. Absolute URLs in page bodies and cookie domains are left as they are.
+- With an `https` upstream, the proxy itself serves plain HTTP, so a browser
+  drops the app's `Secure` cookies.
+- `--listen 0.0.0.0` lets anyone who can reach the proxy write to the app;
+  the command warns. `--listen [::1]:9000` listens on IPv6 loopback.
 
 ## One line per write
 

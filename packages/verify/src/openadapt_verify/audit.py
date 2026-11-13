@@ -23,6 +23,7 @@ import http.client
 import json
 import os
 import re
+import socket
 import subprocess
 import sys
 import tempfile
@@ -179,6 +180,10 @@ class _Reply:
     body: bytes
 
 
+class _Server6(ThreadingHTTPServer):
+    address_family = socket.AF_INET6
+
+
 class FaultProxy:
     """A loopback HTTP proxy that changes one write per armed run."""
 
@@ -206,10 +211,12 @@ class FaultProxy:
         self.injection: Optional[Injection] = None
         self.declared: list[str] = []
         self.last_success: dict[tuple[str, str], _Reply] = {}
-        self.httpd = ThreadingHTTPServer(listen, self._handler())
+        server = _Server6 if ":" in listen[0] else ThreadingHTTPServer
+        self.httpd = server(listen, self._handler())
         self.httpd.daemon_threads = True
         host, port = self.httpd.server_address[:2]
-        self.base = f"http://{host!s}:{port}"
+        host = f"[{host!s}]" if ":" in str(host) else str(host)
+        self.base = f"http://{host}:{port}"
         self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
         self.thread.start()
 
@@ -230,12 +237,28 @@ class FaultProxy:
 
     # -- forwarding
 
-    def _is_write(self, method: str, path: str) -> bool:
+    def _is_write(
+        self,
+        method: str,
+        path: str,
+        headers: list[tuple[str, str]],
+        body: bytes,
+        declared: Sequence[str],
+    ) -> bool:
+        """Whether this request is the save under audit.
+
+        With ``--write-path``, a matching request of a write method is. Without
+        it, the body must also carry a declared value, so a sign-in or other
+        write the command makes first is never mistaken for the save.
+        """
+
         if method not in self.write_methods:
             return False
-        return self.write_path is None or bool(
-            self.write_path.search(urlsplit(path).path)
-        )
+        if self.write_path is not None:
+            return bool(self.write_path.search(urlsplit(path).path))
+        content_type = dict((k.lower(), v) for k, v in headers).get("content-type", "")
+        kind, parsed = _parse(body, content_type)
+        return bool(kind) and _edit(kind, parsed, declared, lambda v: v)[1]
 
     def _forward(
         self, method: str, path: str, headers: list[tuple[str, str]], body: bytes
@@ -269,19 +292,21 @@ class FaultProxy:
 
         with self.lock:
             injection = self.injection
+            declared = list(self.declared)
+        target = self._is_write(method, path, headers, body, declared)
+        with self.lock:
             fire = False
-            if injection is not None and self._is_write(method, path):
+            if injection is not None and target:
                 injection.writes_seen += 1
-                # Only the run's first write: a retry always passes through.
+                # Only the run's first save: a retry always passes through.
                 fire = injection.kind != "clean" and injection.writes_seen == 1
                 if fire:
                     injection.applied = True
                     injection.request = f"{method} {urlsplit(path).path}"
-            declared = list(self.declared)
         key = (method, urlsplit(path).path)
         if not fire:
             reply = self._forward(method, path, headers, body)
-            if self._is_write(method, path) and 200 <= reply.status < 300:
+            if target and 200 <= reply.status < 300:
                 with self.lock:
                     self.last_success[key] = reply
             return reply
@@ -374,8 +399,11 @@ class FaultProxy:
                 for key, value in reply.headers:
                     if key.lower() in _HOP_BY_HOP:
                         continue
-                    if key.lower() == "location" and value.startswith(origin):
-                        value = proxy.base + value[len(origin) + len(proxy.prefix) :]
+                    mount = origin + proxy.prefix
+                    if key.lower() == "location" and (
+                        value == mount or value.startswith(mount + "/")
+                    ):
+                        value = proxy.base + value[len(mount) :]
                     self.send_header(key, value)
                 self.send_header("Content-Length", str(len(reply.body)))
                 self.send_header("Connection", "close")
@@ -621,7 +649,7 @@ def audit(
                 success = returncode == 0
             detail = injection.detail
             if fault != "clean" and not injection.applied and not detail:
-                detail = "the command sent no write through the proxy"
+                detail = "no write carrying a declared value went through the proxy"
             run = Run(
                 index=index,
                 fault=fault,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import http.client
 import json
 import socket
@@ -165,7 +166,7 @@ def test_form_bodies_wrong_record_and_write_path(upstream):
     ]
 
 
-def test_a_body_without_declared_values_is_not_measured(upstream):
+def test_a_body_without_declared_values_is_not_the_save(upstream):
     proxy = audit.FaultProxy(upstream.base)
     try:
         proxy.arm("wrong_value", VALUES)
@@ -173,9 +174,36 @@ def test_a_body_without_declared_values_is_not_measured(upstream):
         injection = proxy.disarm()
     finally:
         proxy.close()
-    assert not injection.applied
-    assert "no declared value" in injection.detail
+    assert not injection.applied and injection.writes_seen == 0
     assert upstream.writes() == [("/api/items", b'{"other": "z"}')]
+
+
+LOGIN = b'{"user": "a", "password": "synthetic"}'
+
+
+@pytest.mark.parametrize(
+    "kind", ["no_persist", "rejected", "duplicate", "lost_response"]
+)
+def test_a_sign_in_before_the_save_never_gets_the_fault(upstream, kind):
+    proxy = audit.FaultProxy(upstream.base)
+    try:
+        # A clean run caches the save's reply, never the sign-in's.
+        proxy.arm(None, VALUES)
+        _send(proxy, "POST", "/login", LOGIN)
+        _send(proxy, "POST", "/api/items", BODY)
+        proxy.disarm()
+        proxy.arm(kind, VALUES)
+        status, _, reply = _send(proxy, "POST", "/login", LOGIN)
+        with contextlib.suppress(http.client.HTTPException, ConnectionError):
+            _send(proxy, "POST", "/api/items", BODY)
+        injection = proxy.disarm()
+    finally:
+        proxy.close()
+    assert status == 201 and json.loads(reply) == {"n": 3}
+    assert injection.applied and injection.request == "POST /api/items"
+    saves = {"no_persist": 1, "rejected": 1, "duplicate": 3, "lost_response": 2}
+    assert [p for p, _b in upstream.writes()].count("/api/items") == saves[kind]
+    assert [p for p, _b in upstream.writes()].count("/login") == 2
 
 
 def test_reads_and_redirects_pass_through(upstream):
@@ -307,6 +335,71 @@ def test_cli_with_a_contract_success_regex_and_wrong_record(tmp_path):
     assert run.returncode == 1, run.stderr
     assert "output matches '^saved'" in run.stdout
     assert "reported success on 2 of 2 bad saves" in run.stdout
+
+
+SIGN_IN_THEN_SAVE = """
+import json, os, urllib.error, urllib.request
+url = os.environ["OPENADAPT_AUDIT_URL"]
+request = urllib.request.Request(url + "/login", data=b'{"user": "a"}',
+                                 headers={"Content-Type": "application/json"})
+try:
+    urllib.request.urlopen(request, timeout=10)
+except urllib.error.HTTPError:
+    pass  # the synthetic store has no sign-in; the request still goes out
+from openadapt_verify.audit_demo import naive
+raise SystemExit(naive())
+"""
+
+
+def test_cli_faults_the_save_not_a_sign_in_before_it(tmp_path):
+    store = quickstart.RestReadPath(tmp_path)
+    try:
+        contract = tmp_path / "verify.yaml"
+        contract.write_text(yaml.safe_dump(store.contract()))
+        params = tmp_path / "values.json"
+        params.write_text(json.dumps(audit_demo.PARAMS))
+        report = tmp_path / "report.json"
+        run = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "openadapt_verify",
+                "audit",
+                "--upstream",
+                store.server.base,
+                "--listen",
+                f"127.0.0.1:{_free_port()}",
+                "--contract",
+                str(contract),
+                "--params",
+                str(params),
+                "--fault",
+                "rejected",
+                "--fault",
+                "no_persist",
+                "--runs",
+                "3",
+                "--report",
+                str(report),
+                "--",
+                sys.executable,
+                "-c",
+                SIGN_IN_THEN_SAVE,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+    finally:
+        store.close()
+    assert run.returncode == 1, run.stderr
+    runs = json.loads(report.read_text())["runs"]
+    assert [(r["fault"], r["applied"], r["request"]) for r in runs] == [
+        ("clean", False, ""),
+        ("rejected", True, "POST /items"),
+        ("no_persist", True, "POST /items"),
+    ]
+    assert [r["reported_success"] for r in runs] == [True, False, True]
 
 
 def test_a_contract_that_reads_through_the_proxy_is_refused(tmp_path):
