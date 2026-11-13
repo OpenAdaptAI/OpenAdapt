@@ -177,6 +177,13 @@ jobs:
             python packages/capture/scripts/check_changelog.py --skip-tags
             python packages/capture/scripts/verify_distribution.py dist/*
           fi
+          if [ "$PACKAGE" = verify ]; then
+            # The distribution and source-boundary checks packages.yml runs on
+            # a uv build, here on the archives the publish job uploads.
+            (cd packages/verify \
+              && python scripts/check_distribution.py --dist ../../dist \
+              && python ../../scripts/check_source_boundary.py --repo OpenAdapt --root ../.. --dist ../../dist)
+          fi
           ls -l dist
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
