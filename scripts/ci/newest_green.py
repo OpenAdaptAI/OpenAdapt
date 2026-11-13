@@ -42,6 +42,11 @@ PACKAGES: dict[str, tuple[list[str], str, list[str]]] = {
     ),
     "privacy": (["packages/privacy"], "packages.yml", ["privacy (", "privacy lint"]),
     "tray": (["packages/tray"], "packages.yml", ["tray (", "tray lint"]),
+    "verify": (
+        ["packages/verify"],
+        "packages.yml",
+        ["verify facade (", "verify clean install"],
+    ),
     "program-graph": (["packages/program-graph"], "packages.yml", ["program-graph"]),
     "desktop": (
         ["packages/desktop"],
