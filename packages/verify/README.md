@@ -58,6 +58,107 @@ The contracts the quickstart uses are in
 [`openadapt.verify/v1` contract](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/VERIFIER_API.md);
 copy one and point it at your store.
 
+## Audit your automation's success check
+
+`openadapt-verify audit` tells you how many wrong saves your own automation
+reports as success. It puts an HTTP proxy in front of your app, runs your
+command through it several times, and on each run changes one write. It then reads the store
+through your contract's read path, never through the proxy, and counts the
+runs where your command said it succeeded but the store disagrees.
+
+```sh
+openadapt-verify audit --demo
+```
+
+The demo audits a script that trusts the save's 2xx reply, against the
+quickstart's synthetic REST store (16 runs, about 20 seconds):
+
+```text
+fault           runs  bad saves  check said OK  caught  false alarms
+clean              2          0              0       0             0
+no_persist         2          2              2       0             0
+rejected           2          2              0       2             0
+partial            2          2              2       0             0
+wrong_value        2          2              2       0             0
+duplicate          2          2              2       0             0
+extra_write        2          2              2       0             0
+lost_response      2          0              0       0             2
+
+Your check (exit code 0) reported success on 10 of 12 bad saves.
+False alarms: 0 of 2 clean runs, 2 on faulted runs whose write still landed correctly.
+```
+
+`--demo readback` audits a script that also lists the items through the app
+and looks for its own. It catches everything except `duplicate` and
+`extra_write`: it finds its record and never asks what else was saved.
+
+Point it at your own app:
+
+```sh
+openadapt-verify audit \
+  --upstream http://staging-app:8080 --listen 127.0.0.1:9000 \
+  --contract verify.yaml --params values.json --runs 16 \
+  --report audit.json -- npx playwright test save-order.spec.ts
+```
+
+- Run your command against `--listen` (the proxy) instead of the app. The
+  command gets `OPENADAPT_AUDIT_URL` (the proxy), `OPENADAPT_AUDIT_VALUES`
+  (the values this run should save, as JSON) and `OPENADAPT_AUDIT_RUN`. It is
+  never told which fault a run carries.
+- `values.json` holds the values the command saves; `{run}` in a value becomes
+  the run number, so each run's record is distinct.
+- The contract's read path must reach the store directly (the app's own API
+  at `--upstream`, or SQL). A contract that reads through the proxy is
+  refused.
+- A run succeeds when the command exits 0, or with `--success-regex` when its
+  output matches.
+- The fault goes to the run's first save: the first `POST`, `PUT`, `PATCH`
+  or `DELETE` whose JSON or form body carries one of the declared values. A
+  sign-in or other write before it passes through unchanged. With
+  `--write-path REGEX`, the first write whose path matches is the save
+  instead, body or not. `--write-method` narrows the methods. Later requests
+  in the run, retries included, pass through unchanged.
+
+| Fault | What the proxy does to the run's first write |
+|---|---|
+| `no_persist` | Doesn't forward it; answers with the app's last real success reply |
+| `rejected` | Doesn't forward it; answers 409 |
+| `partial` | Blanks one declared value in the JSON or form body |
+| `wrong_value` | Changes one declared value |
+| `duplicate` | Forwards it twice; your command sees the first reply |
+| `extra_write` | Forwards it, then a copy with one value changed |
+| `lost_response` | Forwards it, then closes the connection without a reply |
+| `wrong_record` | Rewrites a field naming the record (`--wrong-record FIELD=VALUE`) |
+
+A bad save is any run whose store result isn't `CONFIRMED`. A false alarm is
+a run whose write landed correctly but your command reported failure, such as
+`lost_response` above. A run whose fault couldn't be applied (no write went
+through the proxy, or no declared value was in the body) or whose store
+couldn't be read is reported as not measured. The audit exits 0 when every bad
+save was caught with no false alarms, 1 otherwise, and 2 when nothing was
+measured.
+
+Every fault is applied at the HTTP layer, so the audit needs no access to the
+app's code. Two kinds from the verifier's fault set are not run, and the
+report says so: `stale` (overwriting another user's concurrent change) and
+`collateral_unaudited` (a change to a table the read path doesn't cover).
+The faults are a fixed, hand-written set: the counts say which of these kinds
+your check misses, not how often they happen in production.
+
+Tested with two scripted HTTP clients against the quickstart's synthetic REST
+store; it has not been run with a browser. The proxy's limits:
+
+- Plain HTTP/1.x between your command and the proxy, one request per
+  connection. Each response is read in full before it is sent on, so
+  streamed responses arrive at once.
+- No `Upgrade`: WebSocket and server-sent events don't pass through.
+- Only `Location` headers that point at `--upstream` are rewritten to the
+  proxy. Absolute URLs in page bodies and cookie domains are left as they are.
+- With an `https` upstream, the proxy itself serves plain HTTP, so a browser
+  drops the app's `Secure` cookies.
+- `--listen 0.0.0.0` lets anyone who can reach the proxy write to the app;
+  the command warns. `--listen [::1]:9000` listens on IPv6 loopback.
+
 ## One line per write
 
 Plain Python, as a decorator. The function's arguments are the contract's
