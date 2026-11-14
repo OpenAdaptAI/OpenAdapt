@@ -7,8 +7,10 @@ import importlib.util
 import json
 import re
 import shutil
+import signal
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 import pytest
@@ -46,10 +48,92 @@ check_release_intent = _load("check_release_intent")
 check_release_consistency = _load("check_release_consistency")
 
 
+# These tests start thousands of real git processes, many of them from the
+# release scripts under test. Each git call gets no terminal input, no editor,
+# pager, prompt or signing, and none of the machine's global or system Git
+# configuration, so a call either finishes or fails; it never waits for input.
+GIT_TIMEOUT = 120
+# The slowest test here takes under 20 seconds on a hosted macOS runner. A test
+# that runs much longer is stuck, so it fails with a traceback that shows where
+# instead of using up the CI job's time limit.
+TEST_DEADLINE = 300
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_git(monkeypatch: pytest.MonkeyPatch, tmp_path_factory) -> None:
+    """Isolate every git process in this module, including the scripts' own calls."""
+
+    empty = tmp_path_factory.getbasetemp() / "empty.gitconfig"
+    empty.touch()
+    for name, value in {
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": str(empty),
+        "GIT_EDITOR": "true",
+        "GIT_SEQUENCE_EDITOR": "true",
+        "GIT_PAGER": "cat",
+        "PAGER": "cat",
+        "GIT_TERMINAL_PROMPT": "0",
+        "GIT_ASKPASS": "true",
+        "SSH_ASKPASS": "true",
+        "GIT_OPTIONAL_LOCKS": "0",
+    }.items():
+        monkeypatch.setenv(name, value)
+
+
+class DeadlineExceeded(Exception):
+    """A test in this module ran far longer than any of them should."""
+
+
+@pytest.fixture(autouse=True)
+def _test_deadline():
+    """Fail a stuck test instead of letting it hang the whole job.
+
+    A subprocess timeout cannot cover a child that never reaches exec (the
+    parent then waits inside Popen itself), so the deadline is a signal that
+    interrupts the main thread wherever it waits.
+    """
+
+    main = threading.current_thread() is threading.main_thread()
+    if not hasattr(signal, "setitimer") or not main:
+        yield
+        return
+
+    def expire(_signum, _frame):
+        raise DeadlineExceeded(
+            f"test still running after {TEST_DEADLINE}s; a git process is probably stuck "
+            "(see the traceback for the call it is waiting on)"
+        )
+
+    previous = signal.signal(signal.SIGALRM, expire)
+    signal.setitimer(signal.ITIMER_REAL, TEST_DEADLINE)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
+
+
+def _run_git(
+    root: Path, *args: str, check: bool = False, text: bool = False
+) -> subprocess.CompletedProcess:
+    try:
+        return subprocess.run(
+            ["git", *args],
+            cwd=root,
+            check=check,
+            capture_output=True,
+            text=text,
+            stdin=subprocess.DEVNULL,
+            timeout=GIT_TIMEOUT,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise AssertionError(
+            f"git {' '.join(args)} did not finish within {GIT_TIMEOUT}s in {root}"
+        ) from exc
+
+
 def _git(root: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", *args], cwd=root, check=True, capture_output=True, text=True
-    ).stdout.strip()
+    return _run_git(root, *args, check=True, text=True).stdout.strip()
 
 
 def _commit(root: Path, message: str, touch: str | None = None) -> str:
@@ -74,6 +158,15 @@ def repo(tmp_path: Path) -> Path:
     _git(tmp_path, "config", "user.name", "Test")
     _git(tmp_path, "config", "user.email", "test@example.com")
     _git(tmp_path, "config", "core.autocrlf", "false")
+    for key, value in (
+        ("commit.gpgsign", "false"),
+        ("tag.gpgsign", "false"),
+        ("core.pager", "cat"),
+        ("core.fsmonitor", "false"),
+        ("gc.auto", "0"),
+        ("maintenance.auto", "false"),
+    ):
+        _git(tmp_path, "config", key, value)
     _commit(tmp_path, "chore: start from the current release")
     return tmp_path
 
@@ -588,12 +681,7 @@ def _merge_independent_release(repo: Path, main: str, feature: str, number: int)
     package.write_text(json.dumps(data) + "\n")
     base = _commit(repo, f"chore: independently prepare main {number}")
     _git(repo, "checkout", "-q", feature)
-    merged = subprocess.run(
-        ["git", "merge", "--no-ff", "--no-commit", main],
-        cwd=repo,
-        capture_output=True,
-        text=True,
-    )
+    merged = _run_git(repo, "merge", "--no-ff", "--no-commit", main, text=True)
     assert merged.returncode in {0, 1}, merged.stderr
     if merged.returncode:
         assert _git(repo, "diff", "--name-only", "--diff-filter=U") == "package.json"
@@ -704,9 +792,7 @@ def _two_sided_history(repo: Path, subject: str, reverse: bool, *, conflict: boo
     host.write_text("".join(ambient))
     base = _commit(repo, "feat: independently change main host")
     _git(repo, "checkout", "-q", "two-sided-feature")
-    merged = subprocess.run(
-        ["git", "merge", "--no-ff", "--no-commit", main], cwd=repo, capture_output=True, text=True
-    )
+    merged = _run_git(repo, "merge", "--no-ff", "--no-commit", main, text=True)
     assert merged.returncode == int(conflict), merged.stderr
     if not conflict:
         text = host.read_text()
@@ -1332,22 +1418,12 @@ def _resolve_version_merge(
         repo, "checkout", "-q", "-B", "release-resolution", feature if first == "feature" else main
     )
     other = main if first == "feature" else feature
-    result = subprocess.run(
-        ["git", "merge", "--no-ff", "--no-commit", other],
-        cwd=repo,
-        capture_output=True,
-        text=True,
-    )
+    result = _run_git(repo, "merge", "--no-ff", "--no-commit", other, text=True)
     assert result.returncode in {0, 1}, result.stderr
     # Resolve only the generated version files. The independent runtime files
     # are the ordinary merge result; no source code is fabricated by the helper.
     for relative in VERSION_FILES:
-        text = subprocess.run(
-            ["git", "show", f"{main}:./{relative}"],
-            cwd=repo,
-            capture_output=True,
-            check=True,
-        ).stdout.decode("utf-8")
+        text = _run_git(repo, "show", f"{main}:./{relative}", check=True).stdout.decode("utf-8")
         if relative == "pyproject.toml":
             feature_text = _git(repo, "show", f"{feature}:./{relative}")
             if "The synthetic desktop app" in feature_text:
@@ -1578,16 +1654,14 @@ def _boundary_patch(version: str) -> str:
 
 
 def _boundary_merge(repo: Path, other: str, published: str, name: str) -> str:
-    result = subprocess.run(
-        ["git", "merge", "--no-ff", "--no-commit", other], cwd=repo, capture_output=True
-    )
+    result = _run_git(repo, "merge", "--no-ff", "--no-commit", other)
     assert result.returncode in {0, 1}, result.stderr
     assert set(_git(repo, "diff", "--name-only", "--diff-filter=U").splitlines()) <= {
         "CHANGELOG.md"
     }
     # Both sides prepared the same version. Keep the declared comparison
     # side's existing notes; the next normal preparation creates new notes.
-    notes = subprocess.check_output(["git", "show", f"{published}:./CHANGELOG.md"], cwd=repo)
+    notes = _run_git(repo, "show", f"{published}:./CHANGELOG.md", check=True).stdout
     (repo / "CHANGELOG.md").write_bytes(notes)
     return _commit(repo, name)
 
@@ -1770,9 +1844,7 @@ def test_release_boundary_preserves_ordinary_calls_and_lineage_guards(
         left = _git(repo, "rev-parse", "HEAD")
         _git(repo, "checkout", "-q", "-b", "unexplained-right", start)
         base = _commit(repo, "fix: right change", touch="src/shared.txt")
-        result = subprocess.run(
-            ["git", "merge", "--no-ff", "--no-commit", left], cwd=repo, capture_output=True
-        )
+        result = _run_git(repo, "merge", "--no-ff", "--no-commit", left)
         assert result.returncode == 1
         (repo / "src/shared.txt").write_text("unexplained manual bytes\n")
         _commit(repo, "merge: invent an unexplained resolution")
