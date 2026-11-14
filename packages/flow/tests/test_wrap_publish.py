@@ -213,6 +213,20 @@ def test_stage_ships_bundle_with_readback_and_manifest(cache: FakeCache) -> None
     assert source_tree_sha256(again.staged) == first
 
 
+def test_stage_keeps_the_teach_authorization_local(cache: FakeCache) -> None:
+    from openadapt_flow.jit.lifecycle import TEACH_AUTHORIZATION_DIR
+
+    kept = cache.bundle / TEACH_AUTHORIZATION_DIR
+    kept.mkdir()
+    (kept / "teach-authorization.json").write_text('{"inputs": {"note": "x"}}')
+    (kept / "teach-authorization.json.sig").write_bytes(b"signature")
+    staged = publish.stage(cache, "Save {note}", ["note"])
+    assert not (staged.staged / TEACH_AUTHORIZATION_DIR).exists()
+    assert (staged.staged / "workflow.json").is_file()
+    # The cached admitted bundle keeps it for later repairs.
+    assert (kept / "teach-authorization.json.sig").is_file()
+
+
 def test_refuses_a_policy_with_no_run_shape(cache: FakeCache) -> None:
     with pytest.raises(publish.PublishError) as err:
         publish.stage(cache, "Save {note}", ["note"], policy="no-such-policy")
@@ -1070,6 +1084,8 @@ def test_skill_cache_admitted_program_follows_server(
 
     compiler = SimpleNamespace(
         dir=tmp_path / "task",
+        # FirstRunCompiler.out_dir: where the confirmed verify.yaml is written.
+        out_dir=tmp_path / "task" / "compiled",
         _jit=lambda: SimpleNamespace(
             bundle_dir=tmp_path / "task" / "program" / "bundle"
         ),
@@ -1083,7 +1099,7 @@ def test_skill_cache_admitted_program_follows_server(
     program = cache.admitted_program("Save {note}", {"note": ""})
     assert program == {
         "bundle": tmp_path / "task" / "program" / "bundle",
-        "checks": tmp_path / "task" / "verify.yaml",
+        "checks": tmp_path / "task" / "compiled" / "verify.yaml",
         "task_dir": tmp_path / "task",
     }
 

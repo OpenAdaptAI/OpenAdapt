@@ -109,6 +109,20 @@ def install_hit(
     monkeypatch.setattr(skills, "_call_skill", hit)
 
 
+def test_admitted_program_names_the_confirmed_checks(model) -> None:
+    """wrap publish ships these exact files; the checks are a compile output."""
+
+    from openadapt_flow.compile_agent.pipeline import CONFIRMED_FILE
+
+    checks = model.compiler.out_dir / CONFIRMED_FILE
+    checks.write_text("verifier: {}\n")
+    program = model.cache.admitted_program(PROMPT, {"value": "one"})
+    assert program is not None
+    assert program["checks"] == checks and program["checks"].is_file()
+    assert program["bundle"] == model.jit.bundle_dir
+    assert program["task_dir"] == model.compiler.dir
+
+
 def test_new_parameter_values_reuse_the_key_and_checked_hit(model, monkeypatch) -> None:
     install_hit(model, monkeypatch)
     assert model.cache.key(PROMPT, {"value": "one"}) == model.cache.key(

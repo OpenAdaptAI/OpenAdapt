@@ -493,7 +493,8 @@ class SkillCache:
             return None
         return {
             "bundle": Path(compiler._jit().bundle_dir),
-            "checks": compiler.dir / CONFIRMED_FILE,
+            # The confirmed checks sit beside the other compile outputs.
+            "checks": compiler.out_dir / CONFIRMED_FILE,
             "task_dir": compiler.dir,
         }
 

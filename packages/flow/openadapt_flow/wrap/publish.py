@@ -203,7 +203,11 @@ def stage(
     the policy the attestation certifies. The cloud builds each hosted run's
     authorization from it; the runner re-derives it and refuses a mismatch.
     """
-    from openadapt_flow.jit.lifecycle import AdmissionError, verify_admission
+    from openadapt_flow.jit.lifecycle import (
+        TEACH_AUTHORIZATION_DIR,
+        AdmissionError,
+        verify_admission,
+    )
 
     names = dict.fromkeys(parameters, "")
     held = getattr(cache, "held", None)
@@ -247,7 +251,16 @@ def stage(
     record_dir.mkdir(parents=True, exist_ok=True)
     if staged.exists():
         shutil.rmtree(staged)
-    shutil.copytree(bundle, staged, symlinks=True)
+
+    def local_only(directory: str, names: list[str]) -> list[str]:
+        # The person-signed teach authorization spells out the demonstrated
+        # values and is checked only at local admission and repair. A hosted
+        # run never reads it, so it stays on this machine.
+        if Path(directory) == bundle and TEACH_AUTHORIZATION_DIR in names:
+            return [TEACH_AUTHORIZATION_DIR]
+        return []
+
+    shutil.copytree(bundle, staged, symlinks=True, ignore=local_only)
     (staged / READBACK_PATH).parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(checks, staged / READBACK_PATH)
     manifest = {

@@ -30,6 +30,11 @@
 - `openadapt wrap publish` writes the program's value-free Standard run shape
   into `openadapt-wrap-publish.json` (`run_authorization`). The new refusal
   `RUN_SHAPE_UNAVAILABLE` covers an unknown policy.
+- `openadapt wrap publish` now finds the confirmed read-back checks where
+  the first run writes them (`compiled/verify.yaml`). Before, every real
+  task was refused with `NO_READ_BACK`. The person-signed teach
+  authorization stays local and is no longer staged for upload; the
+  sanitizer refused its `.sig` file.
 
 ## v3.0.0 (2026-11-13)
 
