@@ -469,6 +469,34 @@ class SkillCache:
         stop = compiler.dir / _STOP_FILE
         return stop.exists() or stop.is_symlink()
 
+    def admitted_program(
+        self, prompt: str, params: Mapping[str, Any]
+    ) -> Optional[dict[str, Path]]:
+        """The files of this task's admitted program, or None.
+
+        None when the task is held, has only a draft, or its stored key names
+        another task or record: the same cases in which :meth:`server` serves
+        nothing. ``bundle`` is the admitted bundle, ``checks`` the confirmed
+        ``verify.yaml`` that reads the system of record, ``task_dir`` the
+        task's cache directory. Nothing here re-verifies the admission
+        signature; a caller that ships the bundle must do that.
+        """
+
+        from openadapt_flow.compile_agent.pipeline import CONFIRMED_FILE
+        from openadapt_flow.compile_agent.repair_selection import RepairSelectionError
+
+        compiler, key = self._compiler(prompt, params)
+        try:
+            if self._server(compiler, key) is None:
+                return None
+        except RepairSelectionError:
+            return None
+        return {
+            "bundle": Path(compiler._jit().bundle_dir),
+            "checks": compiler.dir / CONFIRMED_FILE,
+            "task_dir": compiler.dir,
+        }
+
     def evict(self, prompt: str, params: Mapping[str, Any]) -> Optional[Path]:
         """Set the task's skill aside (kept as evidence); None if it had none."""
 

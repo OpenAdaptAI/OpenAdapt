@@ -13,7 +13,14 @@ from openadapt_flow.wrap import TaskArgumentsError, WrappedTask
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="openadapt wrap", allow_abbrev=False)
+    parser = argparse.ArgumentParser(
+        prog="openadapt wrap",
+        allow_abbrev=False,
+        epilog=(
+            "openadapt wrap publish --task TASK publishes the task's admitted "
+            "program as an OpenAdapt Cloud endpoint (see its --help)."
+        ),
+    )
     parser.add_argument(
         "--task", required=True, help="Generated task and read-back configuration"
     )
@@ -189,8 +196,13 @@ def _task(args: argparse.Namespace, parser: argparse.ArgumentParser) -> WrappedT
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    rows = list(sys.argv[1:] if argv is None else argv)
+    if rows[:1] == ["publish"]:
+        from openadapt_flow.wrap.publish import main as publish_main
+
+        return publish_main(rows[1:])
     parser = build_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args(rows)
     if args.serve and (args.param or args.request_id):
         parser.error("--serve takes request IDs and parameters from MCP calls")
     if not args.serve and not args.request_id:
