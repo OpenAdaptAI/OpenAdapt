@@ -35,6 +35,9 @@ export OPENADAPT_API_KEY=...      # publish and call the endpoint
 export ANTHROPIC_API_KEY=...      # first wrap run only
 ```
 
+`publish` asks the cloud which organization the key belongs to. To name it
+yourself, pass `--org <org id>` or set `OPENADAPT_ORG_ID`.
+
 ## 3. Describe the task
 
 Save this as `task.json`, with your app's address:
@@ -82,19 +85,38 @@ will be uploaded:
 
 ```text
 Ready to publish to https://app.openadapt.ai:
+  org         <org id>
   workflow    skill-1a2b3c4d5e6f7a8b (new workflow)
   program     1 saving step(s), each read back by the task's verify.yaml; inputs: note
   upload      the sanitized program: 9 files, 41 KB, 0 changed by the scrubber, 0 unresolved findings
   recording   stays on this machine; only the hash of its sanitized copy is sent
   validation  the attended canary (VERIFIED) on https://notes.example.com/
+  admission   this machine's admission public key is registered with the organization (once), so the cloud can check the signature
   inspect     ~/.openadapt/skills/publish/skill-1a2b3c4d5e6f7a8b/sanitized-bundle
 Upload it? [y/N]
 ```
 
-Answer `y`. `publish` then attests the program from the wrap run's own
-recording and canary, uploads it, and prints the endpoint and a `curl` example.
-In a script, pass `--yes`; the summary is still printed. `--json` prints one
-object.
+Answer `y`. With the same key, `publish` then:
+
+1. registers this machine's admission public key (`keys/ed25519.pub`) with the
+   organization, if the cloud does not already list it;
+2. gets a validation challenge for the organization and attests the program
+   from the wrap run's own recording and canary;
+3. uploads the program as a new workflow, or as a new version of the workflow
+   named by `--workflow-id`;
+4. prints the endpoint and a `curl` example from the path and qualification
+   the cloud returned.
+
+Nothing about the program leaves the machine before you answer. In a script,
+pass `--yes`; the summary is still printed. `--json` prints one object.
+
+| Step | Request |
+| --- | --- |
+| Organization | `GET /api/v1/whoami` (skipped with `--org` or `OPENADAPT_ORG_ID`) |
+| Admission key | `GET`, then if missing `POST /api/v1/org/{org}/admission-keys` |
+| Challenge | `POST /api/v1/org/{org}/validation-challenges` |
+| Upload | `POST /api/v1/org/{org}/workflow`, or `PUT /api/v1/org/{org}/workflow/{id}/definition` |
+| Check | `GET /api/v1/org/{org}/workflow/{id}/definition?qualification_id=...` |
 
 ## 6. Call it
 
@@ -124,9 +146,14 @@ uploaded.
 | --- | --- |
 | `NO_API_KEY` | `OPENADAPT_API_KEY` is not set. |
 | `API_KEY_REJECTED` | The cloud did not accept the key. |
+| `ORG_UNKNOWN` | The cloud did not report the key's organization. Pass `--org`. |
+| `ORG_INVALID` | `--org` or `OPENADAPT_ORG_ID` is not an organization id. |
+| `WORKFLOW_API_UNAVAILABLE` | The workflow API is not enabled for the organization. |
+| `ADMISSION_KEY_UNREGISTERED` | The cloud did not list or register the admission key. |
+| `ADMISSION_KEY_REVOKED` | The organization revoked this admission key. Admit the program again with a new `--key-dir`. |
 | `NOT_ADMITTED` | The task has no admitted program yet. Run step 4. |
 | `TASK_HELD` | The last run failed or was interrupted. Reconcile it first. |
-| `ADMISSION_INVALID` | The admission signature does not verify with the local key. |
+| `ADMISSION_INVALID` | The admission signature does not verify with the local key, or `keys/ed25519.pub` is missing. |
 | `NO_READ_BACK` | The program has no save, a save with no effect contract, or no confirmed `verify.yaml`. |
 | `NO_WRAP_EVIDENCE` | The signed recording or passing canary from the wrap run is missing. |
 | `TARGET_NOT_PUBLIC` | The task's app URL is not public HTTPS. |
@@ -134,6 +161,7 @@ uploaded.
 | `SANITIZATION_CHANGED_PROGRAM` | The scrubber had to change the program's own files. |
 | `VALIDATION_FAILED` | Strict lint, certification or the canary report did not pass. |
 | `VALIDATION_REJECTED` | The cloud refused the runtime validation. |
+| `CLOUD_RESPONSE_INVALID` | The upload's acknowledgment did not name this organization's endpoint and qualification. |
 | `DELIVERY_UNCERTAIN` | The upload may have arrived. Don't run `publish` again; check the dashboard. |
 
 Exit codes: 0 published, 1 refused, 2 setup missing, 3 waiting (the upload was

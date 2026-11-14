@@ -127,6 +127,52 @@ class FakeHttp:
         return httpx.Response(self.status, json=self.body)
 
 
+class FakeCloud:
+    """The cloud's API-key routes (#430) at the HTTP boundary.
+
+    ``routes`` maps ``(method, path)`` to ``(status, body)``; the definition
+    route is the ``FakeHttp`` the tests already tune. Every call is recorded.
+    """
+
+    def __init__(self, definition: FakeHttp, fingerprint: str) -> None:
+        self.definition = definition
+        self.calls: list[tuple[str, str, dict[str, Any]]] = []
+        base = f"/api/v1/org/{ORG}"
+        self.routes: dict[tuple[str, str], tuple[int, Any]] = {
+            ("GET", "/api/v1/whoami"): (200, {"org_id": ORG}),
+            ("GET", f"{base}/admission-keys"): (200, {"admission_keys": []}),
+            ("POST", f"{base}/admission-keys"): (201, {"fingerprint": fingerprint}),
+            ("POST", f"{base}/validation-challenges"): (
+                201,
+                {
+                    "challenge_id": "challenge-1",
+                    "nonce": "n" * 32,
+                    "expires_at": "2999-01-01T00:00:00Z",
+                },
+            ),
+        }
+
+    def _answer(self, method: str, url: str, kwargs: dict[str, Any]) -> httpx.Response:
+        assert url.startswith(HOST), url
+        path = url[len(HOST) :]
+        self.calls.append((method, path, kwargs))
+        assert kwargs["headers"]["Authorization"] == f"Bearer {SECRET}"
+        assert kwargs["follow_redirects"] is False
+        if method == "GET" and path.endswith("/definition"):
+            return self.definition.get(url, **kwargs)
+        status, body = self.routes.get((method, path), (404, {"error": "not_found"}))
+        return httpx.Response(status, json=body)
+
+    def get(self, url: str, **kwargs: Any) -> httpx.Response:
+        return self._answer("GET", url, kwargs)
+
+    def post(self, url: str, **kwargs: Any) -> httpx.Response:
+        return self._answer("POST", url, kwargs)
+
+    def paths(self, method: str | None = None) -> list[str]:
+        return [path for m, path, _ in self.calls if method in (None, m)]
+
+
 # -- local gates -----------------------------------------------------------------
 
 
@@ -283,6 +329,17 @@ def command(
         raise AssertionError("publish must not look for an ingest token")
 
     monkeypatch.setattr(hosted, "resolve_token", no_ingest_token)
+    monkeypatch.setattr(runtime_validation, "resolve_host", lambda host=None: HOST)
+    monkeypatch.setattr(
+        runtime_validation, "resolve_destination_policy", lambda *_a, **_k: None
+    )
+    monkeypatch.setattr(runtime_validation, "resolve_token", lambda token, **_k: token)
+    from openadapt_flow.execute.keys import load_or_create_private_key
+
+    keys = tmp_path / "jit-keys"
+    monkeypatch.setenv(lifecycle.KEY_DIR_ENV, str(keys))
+    load_or_create_private_key(keys)  # writes keys/ed25519.pub
+    public_key, fingerprint = publish.admission_public_key(None)
     recording_dir = cache.task_dir / "program" / "recording"
     run_dir = cache.task_dir / "runs" / "canary-1"
     state: dict[str, Any] = {
@@ -335,6 +392,8 @@ def command(
                 "runtime_validation_id": QUALIFICATION,
                 "version": 1,
             },
+            "execute_path": f"/api/v1/org/{ORG}/workflow/{WORKFLOW}",
+            "qualification_id": QUALIFICATION,
             **state["result"],
         }
 
@@ -350,9 +409,13 @@ def command(
     monkeypatch.setattr(publish.sys.stdin, "isatty", lambda: False, raising=False)
     for name in publish.API_KEY_ENVS:
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.delenv(publish.ORG_ENV, raising=False)
     monkeypatch.setenv("OPENADAPT_API_KEY", SECRET)
     state["http"] = FakeHttp(200, _definition())
-    monkeypatch.setattr(httpx, "get", state["http"].get)
+    state["cloud"] = FakeCloud(state["http"], fingerprint)
+    state["public_key"], state["fingerprint"] = public_key, fingerprint
+    monkeypatch.setattr(httpx, "get", state["cloud"].get)
+    monkeypatch.setattr(httpx, "post", state["cloud"].post)
     state["record"] = (
         cache.task_dir.parent / "publish" / cache.task_dir.name / "published.json"
     )
@@ -381,11 +444,24 @@ def test_yes_publishes_with_one_key_and_automatic_validation(
     assert attested["recording_source"] == command["evidence"].recording
     assert attested["target_url"] == "https://app.example.com/"
     assert attested["policy_source"] == "clinical-write"
+    # The challenge came from the org's API-key route and is passed through.
+    assert attested["challenge"]["challenge_id"] == "challenge-1"
+    cloud = command["cloud"]
+    assert cloud.paths() == [
+        "/api/v1/whoami",
+        f"/api/v1/org/{ORG}/admission-keys",
+        f"/api/v1/org/{ORG}/admission-keys",
+        f"/api/v1/org/{ORG}/validation-challenges",
+        f"/api/v1/org/{ORG}/workflow/{WORKFLOW}/definition",
+    ]
+    registered = [kw for m, path, kw in cloud.calls if m == "POST"][0]
+    assert registered["json"] == {"public_key": command["public_key"]}
     # The upload is the governed push of the approved sanitized bundle, with
     # the same key, never an ingest token.
     ((path, kwargs),) = command["pushes"]
     assert path.name == "sanitized-bundle" and path in command["approved"]
     assert kwargs["token"] == SECRET and kwargs["kind"] == "bundle"
+    assert kwargs["route"] == ("POST", f"/api/v1/org/{ORG}/workflow")
     assert kwargs["validation_attestation"] == {
         "schema": "openadapt.runtime-validation/v2"
     }
@@ -399,9 +475,11 @@ def test_without_a_terminal_it_shows_the_summary_and_uploads_nothing(
     assert _publish() == publish.EXIT_WAITING
     out = capsys.readouterr().out
     assert "Ready to publish to" in out and "--yes" in out
-    assert "Nothing was uploaded" in out
+    assert "Nothing was uploaded" in out and ORG in out
     assert command["pushes"] == [] and command["attested"] == []
     assert command["approved"] == set()
+    # Only the read-only whoami ran before the confirmation.
+    assert command["cloud"].paths() == ["/api/v1/whoami"]
 
 
 @pytest.mark.parametrize("answer,code", [("y", 0), ("n", publish.EXIT_WAITING)])
@@ -497,6 +575,10 @@ def test_failed_validation_uploads_nothing(
             "VALIDATION_REJECTED",
         ),
         ("Ingest returned 413 (expected 201): too large", "UPLOAD_REFUSED"),
+        (
+            'Ingest returned 404 (expected 201): {"error":"not_found"}',
+            "WORKFLOW_API_UNAVAILABLE",
+        ),
     ],
 )
 def test_upload_refusals_name_what_is_wrong(
@@ -522,19 +604,19 @@ def test_uncertain_delivery_is_never_retried(
 def test_ingest_acknowledgment_names_qualification_and_endpoint(
     command: dict[str, Any], capsys: pytest.CaptureFixture[str]
 ) -> None:
-    other = "66666666-6666-4666-8666-666666666666"
-    command["result"] = {
-        "qualification_id": other,
-        "execute_path": f"/api/v1/org/{ORG}/workflow/{WORKFLOW}",
-    }
-    command["http"].body = _definition(
-        binding={**_definition()["binding"], "qualification_id": other}
-    )
     assert _publish("--yes") == 0
-    assert command["http"].calls[0]["params"] == {"qualification_id": other}
-    command["result"] = {"execute_path": f"/api/v1/org/{ORG}/workflow/{VERSION}"}
-    assert _publish("--yes") == publish.EXIT_REFUSED
-    assert "[CLOUD_RESPONSE_INVALID]" in capsys.readouterr().err
+    assert command["http"].calls[0]["params"] == {"qualification_id": QUALIFICATION}
+    other = "66666666-6666-4666-8666-666666666666"
+    for bad in (
+        {"execute_path": f"/api/v1/org/{ORG}/workflow/{VERSION}"},
+        {"execute_path": None},
+        {"qualification_id": None},
+        {"qualification_id": other},  # differs from the retained version
+        {"version": {"id": VERSION, "org_id": other, "workflow_id": WORKFLOW}},
+    ):
+        command["result"] = bad
+        assert _publish("--yes") == publish.EXIT_REFUSED
+        assert "[CLOUD_RESPONSE_INVALID]" in capsys.readouterr().err
 
 
 def test_command_reports_not_callable_yet(
@@ -557,6 +639,135 @@ def test_explicit_attestation_skips_the_wrap_evidence(
     assert _publish("--yes", "--validation-attestation", "att.json") == 0
     assert command["attested"] == []
     assert command["pushes"][0][1]["validation_attestation"] == "att.json"
+
+
+def test_new_version_goes_to_the_definition_route(
+    command: dict[str, Any],
+) -> None:
+    assert _publish("--yes", "--workflow-id", WORKFLOW) == 0
+    ((_path, kwargs),) = command["pushes"]
+    assert kwargs["route"] == (
+        "PUT",
+        f"/api/v1/org/{ORG}/workflow/{WORKFLOW}/definition",
+    )
+    assert kwargs["workflow_id"] == WORKFLOW
+
+
+def test_org_override_skips_whoami_and_is_validated(
+    command: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv(publish.ORG_ENV, ORG)
+    assert _publish("--yes") == 0
+    assert "/api/v1/whoami" not in command["cloud"].paths()
+    capsys.readouterr()
+    assert _publish("--yes", "--org", "not-an-org") == publish.EXIT_SETUP
+    assert "[ORG_INVALID]" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "status,body,code",
+    [
+        (404, {"error": "not_found"}, "ORG_UNKNOWN"),
+        (200, {"org": "x"}, "ORG_UNKNOWN"),
+        (401, {"error": "unauthorized"}, "API_KEY_REJECTED"),
+    ],
+)
+def test_unknown_org_stops_before_anything_is_sent(
+    command: dict[str, Any],
+    capsys: pytest.CaptureFixture[str],
+    status: int,
+    body: Any,
+    code: str,
+) -> None:
+    command["cloud"].routes[("GET", "/api/v1/whoami")] = (status, body)
+    assert _publish("--yes") == publish.EXIT_SETUP
+    err = capsys.readouterr().err
+    assert f"[{code}]" in err and SECRET not in err
+    assert command["pushes"] == [] and command["approved"] == set()
+    assert command["cloud"].paths() == ["/api/v1/whoami"]
+
+
+def test_admission_key_is_registered_once(command: dict[str, Any]) -> None:
+    keys = f"/api/v1/org/{ORG}/admission-keys"
+    command["cloud"].routes[("GET", keys)] = (
+        200,
+        {"admission_keys": [{"fingerprint": command["fingerprint"]}]},
+    )
+    assert _publish("--yes") == 0
+    assert keys not in command["cloud"].paths("POST")
+
+
+@pytest.mark.parametrize(
+    "route,status,body,code",
+    [
+        ("GET", 404, {"error": "not_found"}, "WORKFLOW_API_UNAVAILABLE"),
+        ("GET", 503, {"error": "x"}, "ADMISSION_KEY_UNREGISTERED"),
+        ("POST", 409, {"error": "admission_key_revoked"}, "ADMISSION_KEY_REVOKED"),
+        (
+            "POST",
+            201,
+            {"fingerprint": "sha256:" + "0" * 64},
+            "ADMISSION_KEY_UNREGISTERED",
+        ),
+        ("POST", 401, {"error": "unauthorized"}, "API_KEY_REJECTED"),
+    ],
+)
+def test_admission_key_refusals_upload_nothing(
+    command: dict[str, Any],
+    capsys: pytest.CaptureFixture[str],
+    route: str,
+    status: int,
+    body: Any,
+    code: str,
+) -> None:
+    command["cloud"].routes[(route, f"/api/v1/org/{ORG}/admission-keys")] = (
+        status,
+        body,
+    )
+    assert _publish("--yes") != 0
+    assert f"[{code}]" in capsys.readouterr().err
+    assert command["pushes"] == [] and command["attested"] == []
+
+
+@pytest.mark.parametrize(
+    "status,code", [(401, "API_KEY_REJECTED"), (404, "WORKFLOW_API_UNAVAILABLE")]
+)
+def test_challenge_refusals_upload_nothing(
+    command: dict[str, Any],
+    capsys: pytest.CaptureFixture[str],
+    status: int,
+    code: str,
+) -> None:
+    command["cloud"].routes[("POST", f"/api/v1/org/{ORG}/validation-challenges")] = (
+        status,
+        {"error": "x"},
+    )
+    assert _publish("--yes") == publish.EXIT_SETUP
+    assert f"[{code}]" in capsys.readouterr().err
+    assert command["pushes"] == [] and command["attested"] == []
+
+
+def test_missing_admission_public_key_is_refused_locally(
+    command: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv(lifecycle.KEY_DIR_ENV, str(tmp_path / "no-keys"))
+    assert _publish("--yes") == publish.EXIT_REFUSED
+    assert "[ADMISSION_INVALID]" in capsys.readouterr().err
+    assert command["cloud"].calls == [] and command["pushes"] == []
+
+
+def test_real_push_uses_the_given_route(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with pytest.raises(hosted.HostedError, match="route is invalid"):
+        hosted.push(tmp_path, kind="bundle", route=("DELETE", "/api/ingest"))
+    with pytest.raises(hosted.HostedError, match="route is invalid"):
+        hosted.push(tmp_path, kind="bundle", route=("PUT", "/api/../ingest"))
 
 
 # -- the wrap run's evidence, with real signatures -------------------------------

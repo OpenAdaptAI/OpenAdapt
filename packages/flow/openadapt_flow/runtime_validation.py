@@ -310,8 +310,16 @@ def request_validation_challenge(
     token: Optional[str] = None,
     destination_kind: Optional[str] = None,
     trusted_hosts: Optional[list[str]] = None,
+    path: str = "/api/validation-challenges",
 ) -> dict[str, str]:
-    """Acquire a one-time, expiring validation challenge from Cloud."""
+    """Acquire a one-time, expiring validation challenge from Cloud.
+
+    ``path`` is the challenge route: the ingest-token route by default, or an
+    organization's API-key route (``/api/v1/org/{org}/validation-challenges``)
+    whose challenge is answered with an attestation MAC'd with that API key.
+    """
+    if not path.startswith("/") or "//" in path or "?" in path or "#" in path:
+        raise RuntimeValidationError("Validation challenge route is invalid")
     resolved_host = resolve_host(host)
     resolve_destination_policy(
         resolved_host,
@@ -321,7 +329,7 @@ def request_validation_challenge(
     resolved_token = resolve_token(token, host=resolved_host)
     try:
         response = httpx.post(
-            f"{resolved_host}/api/validation-challenges",
+            f"{resolved_host}{path}",
             headers=_auth_headers(resolved_token),
             timeout=_API_TIMEOUT,
             follow_redirects=False,

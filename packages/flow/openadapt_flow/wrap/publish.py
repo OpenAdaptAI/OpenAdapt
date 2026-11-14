@@ -2,11 +2,11 @@
 
 ``openadapt wrap publish --task TASK.json`` ships the program that
 ``openadapt wrap`` already compiled, checked and admitted for that task, with
-one credential, ``OPENADAPT_API_KEY``. It adds no new way to reach the cloud:
-the upload is the governed bundle ``push`` (local sanitization, a person's
-approval, a runtime-validation attestation, exact-hash archive), and the
-endpoint is the cloud's existing workflow Execute API. What this module adds
-is the part between them:
+one credential, ``OPENADAPT_API_KEY``. The upload is the governed bundle
+``push`` (local sanitization, a person's approval, a runtime-validation
+attestation, exact-hash archive) sent to the organization's API-key workflow
+route, and the endpoint is the cloud's workflow Execute API. What this module
+adds is the part between them:
 
 * it finds the task's admitted program from the task file alone,
 * it refuses a program the cloud could not read back: no saving step, a
@@ -15,10 +15,17 @@ is the part between them:
 * it stages the bundle with its read-back configuration and a small manifest,
 * it sanitizes the bundle and the recording it was compiled from, shows one
   short summary and asks once (``--yes`` answers for a script),
+* it finds the key's organization (``GET /api/v1/whoami``, or ``--org``),
+* it registers this machine's admission public key with that organization
+  once, so the cloud can check the program's admission signature,
 * it attests the program from the wrap run's own evidence (its recording and
-  its attended canary run), so no separate validation command is needed,
-* after the upload it reads the endpoint's current definition with the same
-  key and prints the URL and a ``curl`` example.
+  its attended canary run) against a challenge bound to the same key, so no
+  separate validation command is needed,
+* it uploads to ``POST /api/v1/org/{org}/workflow`` (or ``PUT
+  .../workflow/{id}/definition`` for a new version), then reads the
+  endpoint's current definition with the same key and prints the URL and a
+  ``curl`` example from the acknowledgment's ``execute_path`` and
+  ``qualification_id``.
 
 No credential is printed, logged or written to the publish record.
 """
@@ -41,6 +48,9 @@ from typing import Any, Optional
 #: The caller's OpenAdapt Execute API key. The older name used by
 #: ``cloud_seal`` is read when the new one is unset.
 API_KEY_ENVS = ("OPENADAPT_API_KEY", "OPENADAPT_EXECUTE_API_KEY")
+#: Overrides the organization the API key reports through ``WHOAMI_PATH``.
+ORG_ENV = "OPENADAPT_ORG_ID"
+WHOAMI_PATH = "/api/v1/whoami"
 PUBLISH_SCHEMA = "openadapt.wrap-publish/v1"
 MANIFEST_NAME = "openadapt-wrap-publish.json"
 READBACK_PATH = "readback/verify.yaml"
@@ -57,6 +67,7 @@ _UUID = re.compile(
 #: Server values embedded in a printed shell command must be inert there.
 _SHELL_SAFE = re.compile(r"[A-Za-z0-9._:/+=-]{1,256}\Z")
 _CODE = re.compile(r"[a-z0-9_]{1,64}\Z")
+_PUBLIC_KEY_HEX = re.compile(r"[0-9a-f]{64}\Z")
 _API_TIMEOUT = 15.0
 
 
@@ -261,6 +272,180 @@ def endpoint_url(host: str, org_id: str, workflow_id: str) -> str:
             "CLOUD_RESPONSE_INVALID", "the cloud returned an invalid workflow identity"
         )
     return f"{host.rstrip('/')}/api/v1/org/{org_id}/workflow/{workflow_id}"
+
+
+def org_route(host: str, org_id: str, suffix: str) -> str:
+    if not _UUID.fullmatch(org_id):
+        raise PublishError("ORG_INVALID", "the organization id is not a UUID")
+    return f"{host.rstrip('/')}/api/v1/org/{org_id}/{suffix}"
+
+
+def upload_route(org_id: str, workflow_id: Optional[str]) -> tuple[str, str]:
+    """The API-key workflow route: create, or a new version of ``workflow_id``."""
+    if not _UUID.fullmatch(org_id):
+        raise PublishError("ORG_INVALID", "the organization id is not a UUID")
+    if workflow_id is None:
+        return "POST", f"/api/v1/org/{org_id}/workflow"
+    normalized = str(workflow_id).strip().lower()
+    if not _UUID.fullmatch(normalized):
+        raise PublishError(
+            "WORKFLOW_ID_INVALID",
+            "--workflow-id must be the workflow's id (a UUID)",
+            exit_code=EXIT_SETUP,
+        )
+    return "PUT", f"/api/v1/org/{org_id}/workflow/{normalized}/definition"
+
+
+def _call(
+    method: str,
+    url: str,
+    key: str,
+    *,
+    body: Optional[Mapping[str, Any]] = None,
+    http: Any = None,
+) -> tuple[Optional[int], Any]:
+    """One JSON request with the key as a Bearer header; never raises on HTTP."""
+    import httpx
+
+    client = http if http is not None else httpx
+    headers = {"Authorization": f"Bearer {key}", "Accept": "application/json"}
+    try:
+        if method == "GET":
+            response = client.get(
+                url, headers=headers, timeout=_API_TIMEOUT, follow_redirects=False
+            )
+        else:
+            response = client.post(
+                url,
+                headers=headers,
+                json=dict(body or {}),
+                timeout=_API_TIMEOUT,
+                follow_redirects=False,
+            )
+    except httpx.HTTPError:
+        return None, None
+    try:
+        parsed = response.json()
+    except ValueError:
+        parsed = None
+    return response.status_code, parsed
+
+
+def _workflow_api_unavailable(host: str) -> PublishError:
+    return PublishError(
+        "WORKFLOW_API_UNAVAILABLE",
+        f"the workflow API is not enabled for this organization on {host}",
+        exit_code=EXIT_SETUP,
+    )
+
+
+def resolve_org(
+    host: str,
+    key: str,
+    override: Optional[str] = None,
+    *,
+    environ: Mapping[str, str] | None = None,
+    http: Any = None,
+) -> str:
+    """The organization the API key belongs to.
+
+    ``--org`` or ``$OPENADAPT_ORG_ID`` wins; otherwise the cloud says, with
+    the same key (``GET /api/v1/whoami`` -> ``{"org_id": ...}``).
+    """
+    env = os.environ if environ is None else environ
+    value = (override or env.get(ORG_ENV, "")).strip().lower()
+    if value:
+        if not _UUID.fullmatch(value):
+            raise PublishError(
+                "ORG_INVALID",
+                "--org / OPENADAPT_ORG_ID must be the organization's id (a UUID)",
+                exit_code=EXIT_SETUP,
+            )
+        return value
+    status, body = _call("GET", f"{host.rstrip('/')}{WHOAMI_PATH}", key, http=http)
+    if status == 401:
+        raise _key_rejected()
+    org = body.get("org_id") if status == 200 and isinstance(body, dict) else None
+    if isinstance(org, str) and _UUID.fullmatch(org):
+        return org
+    raise PublishError(
+        "ORG_UNKNOWN",
+        "the cloud did not say which organization OPENADAPT_API_KEY belongs to. "
+        "Pass --org ORG_ID or set OPENADAPT_ORG_ID",
+        exit_code=EXIT_SETUP,
+    )
+
+
+def admission_public_key(key_dir: Optional[Path]) -> tuple[str, str]:
+    """This machine's admission public key (hex) and its fingerprint."""
+    from openadapt_flow.jit.lifecycle import default_key_dir
+
+    keys = Path(key_dir) if key_dir is not None else default_key_dir()
+    pub = keys / "keys" / "ed25519.pub"
+    text = ""
+    if pub.is_file() and not pub.is_symlink():
+        try:
+            text = pub.read_text(encoding="utf-8").strip()
+        except (OSError, UnicodeError):
+            text = ""
+    if not _PUBLIC_KEY_HEX.fullmatch(text):
+        raise PublishError(
+            "ADMISSION_INVALID",
+            "the local admission public key (keys/ed25519.pub) is missing or not "
+            "64 hex characters. Pass the --key-dir that admitted the program",
+        )
+    return text, "sha256:" + hashlib.sha256(bytes.fromhex(text)).hexdigest()
+
+
+def register_admission_key(
+    host: str,
+    key: str,
+    org_id: str,
+    public_key: str,
+    fingerprint: str,
+    *,
+    http: Any = None,
+) -> bool:
+    """Make the organization trust this admission key. Idempotent.
+
+    Lists the organization's keys first and registers only when this one is
+    missing. Returns True when it was registered by this call.
+    """
+    url = org_route(host, org_id, "admission-keys")
+    status, body = _call("GET", url, key, http=http)
+    if status == 401:
+        raise _key_rejected()
+    if status == 404:
+        raise _workflow_api_unavailable(host)
+    rows = body.get("admission_keys") if isinstance(body, dict) else None
+    if status != 200 or not isinstance(rows, list):
+        raise PublishError(
+            "ADMISSION_KEY_UNREGISTERED",
+            "the organization's admission keys could not be read. Nothing was uploaded",
+        )
+    if any(
+        isinstance(row, dict) and row.get("fingerprint") == fingerprint for row in rows
+    ):
+        return False
+    status, body = _call("POST", url, key, body={"public_key": public_key}, http=http)
+    if status == 401:
+        raise _key_rejected()
+    if status == 409:
+        raise PublishError(
+            "ADMISSION_KEY_REVOKED",
+            "this machine's admission key was revoked for the organization. "
+            "Admit the program again with a new --key-dir, then publish",
+        )
+    if (
+        status in (200, 201)
+        and isinstance(body, dict)
+        and body.get("fingerprint") == fingerprint
+    ):
+        return status == 201
+    raise PublishError(
+        "ADMISSION_KEY_UNREGISTERED",
+        "the cloud did not register this machine's admission key. Nothing was uploaded",
+    )
 
 
 def fetch_definition(
@@ -585,6 +770,7 @@ def review_summary(
     parameters: Sequence[str],
     target: Optional[str],
     canary: Optional[Mapping[str, Any]],
+    org_id: Optional[str] = None,
 ) -> list[str]:
     """A short summary of exactly what will leave the machine."""
     files = list(bundle_manifest.get("files") or [])
@@ -594,6 +780,7 @@ def review_summary(
     destination = f"new version of {workflow_id}" if workflow_id else "new workflow"
     lines = [
         f"Ready to publish to {host}:",
+        *([f"  org         {org_id}"] if org_id else []),
         f"  workflow    {name} ({destination})",
         f"  program     {program.manifest['saves']} saving step(s), each read back "
         "by the task's verify.yaml; inputs: " + ", ".join(parameters),
@@ -608,7 +795,11 @@ def review_summary(
             f"  validation  the attended canary ({canary.get('outcome')}) on "
             f"{target or 'the task app'}",
         ]
-    lines.append(f"  inspect     {bundle_dir}")
+    lines += [
+        "  admission   this machine's admission public key is registered with "
+        "the organization (once), so the cloud can check the signature",
+        f"  inspect     {bundle_dir}",
+    ]
     return lines
 
 
@@ -664,6 +855,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--workflow-id", help="Publish a new version of this existing workflow"
+    )
+    parser.add_argument(
+        "--org",
+        help="Organization id (default: $OPENADAPT_ORG_ID, else the API key's "
+        "organization as the cloud reports it)",
     )
     parser.add_argument(
         "--validation-attestation",
@@ -729,6 +925,13 @@ def _upload_error(exc: Exception) -> PublishError:
     text = safe_errors.message(exc)
     if "(401)" in text:
         return _key_rejected()
+    if re.search(r"returned 404\b", text):
+        return PublishError(
+            "WORKFLOW_API_UNAVAILABLE",
+            "the workflow publish route was not found (404). Check that the "
+            "workflow API is enabled for the organization and the workflow id",
+            exit_code=EXIT_SETUP,
+        )
     if "runtime_validation_rejected" in text:
         return PublishError(
             "VALIDATION_REJECTED",
@@ -748,14 +951,23 @@ def _attest(
     target: Optional[str],
     host: str,
     key: str,
+    org_id: str,
 ) -> dict[str, Any]:
     from openadapt_flow import safe_errors
     from openadapt_flow.runtime_validation import (
         RuntimeValidationError,
         create_admitted_program_attestation,
+        request_validation_challenge,
     )
 
     try:
+        # The challenge comes from the organization's API-key route, so the
+        # attestation MAC'd with the same key is accepted by its publish route.
+        challenge = request_validation_challenge(
+            host=host,
+            token=key,
+            path=f"/api/v1/org/{org_id}/validation-challenges",
+        )
         return create_admitted_program_attestation(
             recording_source=evidence.recording,
             recording_derivative=recording_derivative,
@@ -766,11 +978,14 @@ def _attest(
             target_url=target,
             host=host,
             token=key,
+            challenge=challenge,
         )
     except RuntimeValidationError as exc:
         text = safe_errors.message(exc)
         if "(401)" in text:
             raise _key_rejected() from None
+        if re.search(r"returned 404\b", text):
+            raise _workflow_api_unavailable(host) from None
         raise PublishError(
             "VALIDATION_FAILED",
             "the program did not pass runtime validation, so nothing was "
@@ -810,6 +1025,11 @@ def run(args: argparse.Namespace) -> int:
             evidence = wrap_evidence(program, key_dir=key_dir)
             if _report_kind(evidence.run_dir) == "web":
                 target = _check_public_target(str(common.get("url", "")))
+        public_key, fingerprint = admission_public_key(key_dir)
+        # Read-only: which organization this key publishes to. Nothing about
+        # the program is sent before the confirmation below.
+        org_id = resolve_org(host, key, args.org)
+        route = upload_route(org_id, args.workflow_id)
 
         bundle_derivative = program.record_dir / "sanitized-bundle"
         bundle_manifest = _derive(program.staged, bundle_derivative, "bundle")
@@ -836,6 +1056,7 @@ def run(args: argparse.Namespace) -> int:
             parameters=setup.parameters,
             target=target,
             canary=evidence.canary if evidence is not None else None,
+            org_id=org_id,
         )
         if not all(_approved(path) for path, _source in derivatives):
             answer: Optional[bool]
@@ -851,6 +1072,7 @@ def run(args: argparse.Namespace) -> int:
             for line in summary:
                 print(line)
 
+        register_admission_key(host, key, org_id, public_key, fingerprint)
         attestation: Any = args.validation_attestation
         if evidence is not None:
             attestation = _attest(
@@ -866,6 +1088,7 @@ def run(args: argparse.Namespace) -> int:
                 target=target,
                 host=host,
                 key=key,
+                org_id=org_id,
             )
         result = hosted.push(
             bundle_derivative,
@@ -875,6 +1098,7 @@ def run(args: argparse.Namespace) -> int:
             token=key,
             workflow_id=args.workflow_id,
             validation_attestation=attestation,
+            route=route,
         )
     except PublishError as error:
         return _refuse(args, error)
@@ -890,7 +1114,7 @@ def run(args: argparse.Namespace) -> int:
     except hosted.HostedError as exc:
         return _refuse(args, _upload_error(exc))
     try:
-        return _finish(args, program, result, host, key)
+        return _finish(args, program, result, host, key, org_id)
     finally:
         del key
 
@@ -948,6 +1172,7 @@ def _finish(
     result: Mapping[str, Any],
     host: str,
     key: Optional[str],
+    expected_org: str,
 ) -> int:
     version = result.get("version")
     workflow_id = result.get("workflow_id")
@@ -960,17 +1185,35 @@ def _finish(
             ),
         )
     org_id = str(version.get("org_id", ""))
-    # The ingest acknowledgment names the qualification and the endpoint path
-    # when the cloud supports it; both must agree with the retained version.
+    # The acknowledgment names the endpoint path and the qualification the
+    # definition and Execute requests bind to; both must agree with the
+    # retained version, in the organization the upload went to.
     qualification_id = result.get("qualification_id")
-    if not isinstance(qualification_id, str) or not _UUID.fullmatch(qualification_id):
-        qualification_id = str(version.get("runtime_validation_id", ""))
+    execute_path = result.get("execute_path")
+    retained_qualification = version.get("runtime_validation_id")
+    if (
+        org_id != expected_org
+        or not isinstance(qualification_id, str)
+        or not _UUID.fullmatch(qualification_id)
+        or (
+            retained_qualification is not None
+            and retained_qualification != qualification_id
+        )
+        or not isinstance(execute_path, str)
+    ):
+        return _refuse(
+            args,
+            PublishError(
+                "CLOUD_RESPONSE_INVALID",
+                "the cloud's acknowledgment does not name this organization's "
+                "endpoint and qualification",
+            ),
+        )
     try:
         endpoint = endpoint_url(host, org_id, workflow_id)
     except PublishError as error:
         return _refuse(args, error)
-    execute_path = result.get("execute_path")
-    if execute_path is not None and execute_path != endpoint[len(host.rstrip("/")) :]:
+    if execute_path != endpoint[len(host.rstrip("/")) :]:
         return _refuse(
             args,
             PublishError(
