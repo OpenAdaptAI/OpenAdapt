@@ -74,6 +74,14 @@ The agent does the task once. Confirm the proposed read-back checks, review
 the steps and attend the canary when the terminal asks. The program is then
 admitted, and later calls run it with no model calls.
 
+`--person` needs an interactive terminal: the person's typed confirmations are
+the admission evidence, so `wrap` refuses `--person` when input is piped or
+the run is a script. To admit without a person at the terminal, pass
+`--admit-key` with the encrypted key of a registered admitter instead.
+
+If the model key for `--provider` is not set, `wrap` stops before the agent
+starts with `[MISSING_MODEL_KEY]` and the variable to set. Nothing is recorded.
+
 ## 5. Publish
 
 ```bash
@@ -117,6 +125,14 @@ The key goes only to a destination the upload policy trusts:
 `https://app.openadapt.ai`, a loopback host for local development, or a
 customer-managed HTTPS origin that is classified and in the trusted-host
 allowlist. Any other `--host` is refused before the first request.
+
+For local development against a cloud on this machine, classify the
+destination as local. Only `localhost`, `127.0.0.1` and `::1` are accepted:
+
+```bash
+export OPENADAPT_FLOW_DESTINATION_KIND=local
+openadapt wrap publish --task task.json --host http://127.0.0.1:3000
+```
 
 The program is attested as `openadapt.runtime-validation/v2` when it has no
 governed authorization template. That is allowed only for a Standard canary;

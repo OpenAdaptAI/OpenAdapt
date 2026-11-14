@@ -391,7 +391,8 @@ def cloud_client(
             f"{host} is not a trusted OpenAdapt Cloud destination, so the API key "
             "was not sent. Use https://app.openadapt.ai, or classify a "
             "customer-managed HTTPS origin and add it to the trusted-host "
-            "allowlist",
+            "allowlist. For a loopback development server, set "
+            "OPENADAPT_FLOW_DESTINATION_KIND=local",
             exit_code=EXIT_SETUP,
         ) from None
     return CloudClient(destination=destination, key=key, http=http)

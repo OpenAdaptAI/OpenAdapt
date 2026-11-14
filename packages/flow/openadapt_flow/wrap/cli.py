@@ -121,7 +121,12 @@ def _task(args: argparse.Namespace, parser: argparse.ArgumentParser) -> WrappedT
         options["admitter"] = _admitter(args)
     if args.person:
         if args.serve or not (sys.stdin.isatty() and sys.stderr.isatty()):
-            parser.error("--person requires an attended terminal run")
+            # A person's typed confirmation is the admission evidence, so it
+            # must come from a terminal. Unattended admission uses --admit-key.
+            parser.error(
+                "--person requires an interactive terminal (a person types the "
+                "confirmations); for an unattended run use --admit-key"
+            )
         from openadapt_flow.compile_agent.cli import (
             _terminal_confirm,
             _terminal_hold,
@@ -207,6 +212,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--serve takes request IDs and parameters from MCP calls")
     if not args.serve and not args.request_id:
         parser.error("a run requires --request-id")
+    from openadapt_flow.jit.keys import PROVIDER_ENV, MissingModelKey
+
     try:
         values = _params(args.param)
         task = _task(args, parser)
@@ -218,6 +225,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = task.call(args.request_id, values)
     except TaskArgumentsError as exc:
         parser.error(str(exc))
+    except MissingModelKey:
+        # Raised before the agent runs, so no run record exists yet. Name the
+        # variable only; the message never carries a key value.
+        provider = "anthropic" if args.provider == "claude" else "openai"
+        print(
+            f"openadapt wrap: no model key; set {PROVIDER_ENV[provider]} "
+            f"(--provider {args.provider}) for the first run [MISSING_MODEL_KEY]",
+            file=sys.stderr,
+        )
+        return 2
     except Exception:  # noqa: BLE001 - do not reflect provider or verifier values
         # Provider, storage and verifier exceptions can contain values or
         # credentials. Do not reflect their messages to a calling agent.

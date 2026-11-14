@@ -1113,3 +1113,20 @@ def test_real_governed_push_sanitizes_the_staged_bundle_and_pauses(
     assert (derivative / publish.READBACK_PATH).is_file()
     assert (derivative / publish.MANIFEST_NAME).is_file()
     assert publish._approved(derivative) is False
+
+
+def test_loopback_publish_needs_the_local_classification(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("OPENADAPT_HOME", str(tmp_path))
+    for name in (hosted.DESTINATION_KIND_ENV, hosted.TRUSTED_HOSTS_ENV):
+        monkeypatch.delenv(name, raising=False)
+    with pytest.raises(publish.PublishError) as refused:
+        publish.cloud_client("http://127.0.0.1:3917", "k")
+    assert "OPENADAPT_FLOW_DESTINATION_KIND=local" in str(refused.value)
+    monkeypatch.setenv(hosted.DESTINATION_KIND_ENV, "local")
+    assert publish.cloud_client("http://127.0.0.1:3917", "k").host.startswith(
+        "http://127.0.0.1"
+    )
+    with pytest.raises(publish.PublishError):
+        publish.cloud_client("http://notes.example.test", "k")
