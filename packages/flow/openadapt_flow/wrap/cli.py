@@ -13,7 +13,14 @@ from openadapt_flow.wrap import TaskArgumentsError, WrappedTask
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="openadapt wrap", allow_abbrev=False)
+    parser = argparse.ArgumentParser(
+        prog="openadapt wrap",
+        allow_abbrev=False,
+        epilog=(
+            "openadapt wrap publish --task TASK publishes the task's admitted "
+            "program as an OpenAdapt Cloud endpoint (see its --help)."
+        ),
+    )
     parser.add_argument(
         "--task", required=True, help="Generated task and read-back configuration"
     )
@@ -114,7 +121,12 @@ def _task(args: argparse.Namespace, parser: argparse.ArgumentParser) -> WrappedT
         options["admitter"] = _admitter(args)
     if args.person:
         if args.serve or not (sys.stdin.isatty() and sys.stderr.isatty()):
-            parser.error("--person requires an attended terminal run")
+            # A person's typed confirmation is the admission evidence, so it
+            # must come from a terminal. Unattended admission uses --admit-key.
+            parser.error(
+                "--person requires an interactive terminal (a person types the "
+                "confirmations); for an unattended run use --admit-key"
+            )
         from openadapt_flow.compile_agent.cli import (
             _terminal_confirm,
             _terminal_hold,
@@ -189,12 +201,19 @@ def _task(args: argparse.Namespace, parser: argparse.ArgumentParser) -> WrappedT
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    rows = list(sys.argv[1:] if argv is None else argv)
+    if rows[:1] == ["publish"]:
+        from openadapt_flow.wrap.publish import main as publish_main
+
+        return publish_main(rows[1:])
     parser = build_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args(rows)
     if args.serve and (args.param or args.request_id):
         parser.error("--serve takes request IDs and parameters from MCP calls")
     if not args.serve and not args.request_id:
         parser.error("a run requires --request-id")
+    from openadapt_flow.jit.keys import PROVIDER_ENV, MissingModelKey
+
     try:
         values = _params(args.param)
         task = _task(args, parser)
@@ -206,6 +225,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = task.call(args.request_id, values)
     except TaskArgumentsError as exc:
         parser.error(str(exc))
+    except MissingModelKey:
+        # Raised before the agent runs, so no run record exists yet. Name the
+        # variable only; the message never carries a key value.
+        provider = "anthropic" if args.provider == "claude" else "openai"
+        print(
+            f"openadapt wrap: no model key; set {PROVIDER_ENV[provider]} "
+            f"(--provider {args.provider}) for the first run [MISSING_MODEL_KEY]",
+            file=sys.stderr,
+        )
+        return 2
     except Exception:  # noqa: BLE001 - do not reflect provider or verifier values
         # Provider, storage and verifier exceptions can contain values or
         # credentials. Do not reflect their messages to a calling agent.

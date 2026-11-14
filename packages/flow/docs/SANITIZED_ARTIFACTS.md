@@ -173,6 +173,20 @@ marked `requires-parameterization-validation`: replace patient-specific values
 with runtime parameters and revalidate the compiled program. A changed compiled
 bundle is marked `not-preserved` and cannot upload as an executable bundle.
 
+The files Flow generates beside a wrap program's `workflow.json`
+(`admission.json`, `openadapt-wrap-publish.json`, `readback/verify.yaml`,
+`sections.json`, `templates/layout_fingerprint.json` and `jit_draft.json`)
+declare every field they carry. Content fields (titles, field and parameter
+names, demonstrated literals, comments) are always scrubbed. Structural fields
+(schema ids, step ids, digests, signatures, timestamps, enumerations, operator
+handles, origins) keep their exact bytes only while the value has the declared
+machine shape; free text in one, such as a person's name with a space, is
+scrubbed. A confirmed check's `probe` is kept only while it is the exact
+rendering of a match that the scrubber leaves unchanged. A field the
+declaration does not name, or a file with another schema id, is scrubbed. So
+the scrubber does not rewrite `v1` or `step_002`, and the signed admission
+and the bundle's digests still verify after scrubbing.
+
 Sanitization covers the design-time derivative only. Live values, screenshots,
 identity crops, model requests, and system-of-record checks can reintroduce PHI.
 They must remain inside the deployment's declared trusted runtime boundary.
@@ -194,7 +208,8 @@ with runtime parameters in the customer/BYOC boundary. Changed compiled bundles
 remain `not-preserved` and are refused by `push`.
 
 `validate-hosted` is deliberately later than privacy approval. It recomputes
-strict lint and policy certification, requires a successful non-halted report
+strict lint (no `warn` or `error` finding; `info` is advice, as in
+`openadapt-flow lint --strict`) and policy certification, requires a successful non-halted report
 bound to the same bundle/source recording/parameter schema, derives the
 bundle's `low` or `consequential` risk class, and signs the report's resolved
 target kind (`web`, `windows`, `macos`, `linux`, `rdp`, or `citrix`) against a

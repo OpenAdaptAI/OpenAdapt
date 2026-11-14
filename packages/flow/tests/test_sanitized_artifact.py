@@ -7,6 +7,7 @@ import json
 import re
 import zipfile
 from pathlib import Path
+from typing import Optional
 
 import httpx
 import jsonschema
@@ -1252,3 +1253,502 @@ def test_materialize_approved_cli_round_trips(tmp_path, capsys):
     assert code == 0
     assert "alice" in capsys.readouterr().out
     assert load_valid_approval(out)["reviewer"] == "alice"
+
+
+# -- wrap programs: declared generated files -----------------------------------
+
+
+class PresidioLikeScrubber:
+    """The false positives the real NER scrub produced on a wrap program.
+
+    Seen on 2026-11-14 with ``en_core_web_sm``: version tokens, step ids,
+    hex digests, operator handles, dotted names and loopback addresses were
+    all rewritten. Real PHI is replaced too. Placeholders are left alone, so a
+    second pass is stable.
+    """
+
+    def scrub_text(self, text: str, is_separated: bool = False) -> str:
+        text = text.replace("Jane Doe", "<PERSON>").replace("MRN-123", "<MRN>")
+        text = text.replace("DOM/UIA/AX", "<ORGANIZATION>")
+        text = re.sub(r"\b[0-9]{1,3}(?:\.[0-9]{1,3}){3}\b", "<IP_ADDRESS>", text)
+        text = re.sub(r"\bv[0-9]+\b", "<US_DRIVER_LICENSE>", text)
+        text = re.sub(r"\bstep_[0-9]+\b", "<LOCATION>", text)
+        text = re.sub(r"\b[0-9a-f]{16,}\b", "<PERSON>", text)
+        text = re.sub(r"\b[a-z]+:[a-z][a-z-]*\b", "<PERSON>", text)
+        text = re.sub(r"\b[a-z]+\.[a-z]+\b", "<URL>", text)
+        return text
+
+    def scrub_image(self, image, fill_color=None):
+        return image
+
+
+# What ``openadapt wrap publish`` stages for a person: the keyed HMAC of the
+# name (openadapt_flow.jit.principal_ids).
+_REVIEWER = "hmac:" + "1f" * 32
+
+
+def _wrap_files(
+    bundle: Path,
+    *,
+    keys: Path,
+    title: str = "Notes",
+    literal: str = "demo",
+    reviewer: str = _REVIEWER,
+    admitter: str = "ci:rehearsal",
+    probe: Optional[str] = None,
+    extra_admission: Optional[dict] = None,
+) -> None:
+    """Write the generated files ``openadapt wrap publish`` stages."""
+    from openadapt_flow.compiler.compile import IDCROP_REASON_STRUCTURED
+    from openadapt_flow.execute.keys import (
+        fingerprint_of,
+        load_or_create_private_key,
+        sign_bytes,
+    )
+    from openadapt_flow.identity_signals import signal_hash_key
+    from openadapt_flow.ir import IdentityTemplate
+    from openadapt_flow.jit import lifecycle
+    from openadapt_flow.verify_run import new_record_probe
+    from openadapt_flow.wrap import publish
+
+    template = bundle / "templates" / "step_002.png"
+    template.parent.mkdir(parents=True)
+    template.write_bytes(_png())
+    identity = IdentityTemplate(
+        salt="646cd87caf2a01a84eda161c4aa63a40",
+        punctuation_policy="strict-lexeme-punctuation-v2",
+        structured="cde5be965c7069e69e1bd3306c35f998ad39af9df99c6fbdd7e14bf51c012fff",
+        signal_hashes={
+            signal_hash_key("structured", "exact"): "a" * 64,
+            signal_hash_key(
+                "captured_context",
+                "normalized",
+                ("unicode_nfkc", "casefold", "collapse_whitespace"),
+            ): "b" * 64,
+        },
+    )
+    workflow = Workflow(
+        name="save-note",
+        recording_id="c770c8bdbb6c4864a5e29eec19f4bafd",
+        viewport=(8, 8),
+        steps=[
+            Step(
+                id="step_000",
+                intent="type the note",
+                action=ActionKind.TYPE,
+                text="{note}",
+            ),
+            Step(
+                id="step_002",
+                intent="click Save",
+                action=ActionKind.CLICK,
+                identifier_crop_missing_reason=IDCROP_REASON_STRUCTURED,
+                anchor=Anchor(
+                    template="templates/step_002.png",
+                    region=(0, 0, 8, 8),
+                    click_point=(4, 4),
+                    identity_template=identity,
+                ),
+            ),
+        ],
+    )
+    workflow.save(bundle)
+    (bundle / "workflow.py").write_text(render_workflow_py(workflow), encoding="utf-8")
+    sealed = Workflow.load(bundle).manifest
+    assert sealed is not None
+    digest = sealed.content_digest
+
+    private = load_or_create_private_key(keys)
+    body = {
+        "schema": lifecycle.ADMISSION_SCHEMA,
+        "admission_mode": "admitter_key",
+        "state": "ADMITTED",
+        "workflow_id": "wf_d6611004c69b4376aea0636278e48e74",
+        "digest": digest,
+        "task": {
+            "key": "skill-48a0f397cb2a242d-f3a612c83abd",  # gitleaks:allow (synthetic task key)
+            "task_id": "skill-48a0f397cb2a242d",
+            "params": {"note": "string"},
+        },
+        "params": ["note"],
+        "policy": "clinical-write",
+        "admitted_by_principal_id": admitter,
+        "admitted_at": "2026-11-14T07:57:00Z",
+        "reviewed_by_principal_id": None,
+        "reviewed_at": None,
+        "reviewed_steps": None,
+        "canary": {
+            "principal_id": admitter,
+            "ran_at": "2026-11-14T07:57:00Z",
+            "target_origin": "https://127-0-0-1.nip.io:8443",
+            "outcome": "VERIFIED",
+            "model_calls": 0,
+            "environment": "https://127-0-0-1.nip.io:8443",
+        },
+        "record_check_digest": "e" * 64,
+        "readback": [
+            {
+                "step_id": "step_002",
+                "ok": True,
+                "effects": [
+                    {
+                        "kind": "record_written",
+                        "tier": "INDEPENDENT_SYSTEM",
+                        "evidence": "independent_readback",
+                    }
+                ],
+            }
+        ],
+        "recorded_by": "agent:generic",
+        "agent_principal_id": "agent:scripted-rehearsal",
+        "dialect": "generic",
+        "model_key": {
+            "provider": "anthropic",
+            "held_by": "customer",
+            "source": "env:TEST_ONLY",
+            "fingerprint": "sha256:fa77d7bdb2ae64fb",
+        },
+        "signing_key": fingerprint_of(private.public_key()),
+        **(extra_admission or {}),
+    }
+    admission = {**body, "signature": sign_bytes(private, lifecycle._canonical(body))}
+    (bundle / lifecycle.ADMISSION_FILE).write_text(
+        json.dumps(admission, indent=2), encoding="utf-8"
+    )
+    (bundle / lifecycle.DRAFT_MARKER).write_text(
+        json.dumps(
+            {"note": "compiled from a computer-use agent run", "state": "DRAFT"}
+        ),
+        encoding="utf-8",
+    )
+    section = {
+        "id": "fields-step_000",
+        "title": title,
+        "title_source": "ui",
+        "kind": "fields",
+        "steps": ["step_000"],
+        "fields": ["note"],
+        "params": ["note"],
+    }
+    (bundle / "sections.json").write_text(
+        json.dumps(
+            {
+                "schema": "openadapt.flow.sections/v1",
+                "note": "Display metadata: named groups of steps for program maps.",
+                "workflow_contract_sha256": "c" * 64,
+                "sections": [section],
+                "compiled": [section],
+                "edits": [],
+                "context": {
+                    "step_002": {"container": title, "kind": "legend", "header": False}
+                },
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    (bundle / "templates" / "layout_fingerprint.json").write_text(
+        json.dumps(
+            {
+                "schema": "openadapt.layout-fingerprints/v1",
+                "scale_landmarks": {
+                    "salt": "646cd87caf2a01a84eda161c4aa63a40",
+                    "steps": {"step_002": [["35009404e49e6eb9", 52.0, 122.0, 40, 24]]},
+                },
+                "steps": {
+                    "step_002": {
+                        "char_width": 8.4,
+                        "landmarks": {},
+                        "lines": 7,
+                        "profile_sha256": None,
+                        "text_height": 19,
+                        "viewport": [1280, 800],
+                    }
+                },
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    match = {"list": {"literal": literal}, "note": {"param": "note"}}
+    import yaml
+
+    checks = {
+        "schema_version": "openadapt.verify/v1",
+        "verifier": {
+            "kind": "rest",
+            "base_url": "http://127.0.0.1:8917",
+            "records_path": "/api/notes",
+            "records_key": "records",
+            "records_complete": True,
+        },
+        "effects": [
+            {
+                "kind": "record_written",
+                "match": match,
+                "composite_key": match,
+                "count_new_only": True,
+                "probe": probe
+                if probe is not None
+                else new_record_probe(match, reviewer),
+            }
+        ],
+    }
+    readback = bundle / publish.READBACK_PATH
+    readback.parent.mkdir(parents=True)
+    readback.write_text(
+        f"# Confirmed by {reviewer} at 2026-11-14T07:56:48Z from verify.proposed.yaml.\n"
+        + yaml.safe_dump(checks, sort_keys=False, allow_unicode=True),
+        encoding="utf-8",
+    )
+    (bundle / publish.MANIFEST_NAME).write_text(
+        json.dumps(
+            {
+                "schema": publish.PUBLISH_SCHEMA,
+                "parameters": ["note"],
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"note": {"type": "string"}},
+                    "required": ["note"],
+                    "additionalProperties": False,
+                },
+                "workflow_digest": digest,
+                "record_check_sha256": "e" * 64,
+                "saves": 1,
+                "readback": {
+                    "path": publish.READBACK_PATH,
+                    "sha256": hashlib.sha256(readback.read_bytes()).hexdigest(),
+                },
+                "run_authorization": {
+                    "schema_version": "openadapt.admitted-program-run-shape/v1",
+                    "admission_sha256": "f" * 64,
+                    "admitted_policy_name": "clinical-write",
+                    "bundle_content_digest": digest,
+                    "execution_profile": "standard",
+                    "minimum_effect_tier": 3,
+                    "qualified_effect_requirements": [],
+                    "required_identity_step_ids": ["step_000", "step_002"],
+                },
+            },
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+
+
+def _tree(root: Path) -> dict[str, bytes]:
+    return {
+        path.relative_to(root).as_posix(): path.read_bytes()
+        for path in root.rglob("*")
+        if path.is_file() and path.name != MANIFEST_NAME
+    }
+
+
+def _admission_verifies(bundle: Path, keys: Path) -> bool:
+    from openadapt_flow.execute.keys import load_or_create_private_key, verify_signature
+    from openadapt_flow.jit import lifecycle
+
+    admission = json.loads((bundle / lifecycle.ADMISSION_FILE).read_text())
+    body = {k: v for k, v in admission.items() if k != "signature"}
+    public = load_or_create_private_key(keys).public_key()
+    return verify_signature(
+        public, lifecycle._canonical(body), admission["signature"]
+    ) and body["digest"] == lifecycle._digest(Workflow.load(bundle))
+
+
+def test_wrap_program_structure_survives_scrubbing_byte_for_byte(tmp_path):
+    """Schema ids, step ids, digests, signatures and handles are not PHI."""
+    from openadapt_flow.wrap import publish
+
+    privacy.set_text_scrubber(PresidioLikeScrubber())
+    bundle, keys = tmp_path / "bundle", tmp_path / "keys"
+    _wrap_files(bundle, keys=keys)
+    source = _tree(bundle)
+
+    destination = tmp_path / "sanitized"
+    manifest = sanitize_artifact(bundle, destination, kind="bundle")
+
+    assert manifest["execution_semantics"] == "preserved"
+    assert _tree(destination) == source
+    # The signed admission and the bundle's own integrity manifest still verify.
+    assert _admission_verifies(destination, keys)
+    Workflow.load(destination)
+    published = json.loads((destination / publish.MANIFEST_NAME).read_text())
+    readback = (destination / publish.READBACK_PATH).read_bytes()
+    assert published["readback"]["sha256"] == hashlib.sha256(readback).hexdigest()
+    assert (
+        published["workflow_digest"]
+        == Workflow.load(destination).manifest.content_digest
+    )
+    # The approval rescan reads the same declarations and agrees.
+    approve_derivative(destination, source=bundle, reviewer="privacy-reviewer")
+
+
+def test_wrap_program_content_fields_are_still_scrubbed(tmp_path):
+    privacy.set_text_scrubber(PresidioLikeScrubber())
+    bundle, keys = tmp_path / "bundle", tmp_path / "keys"
+    _wrap_files(bundle, keys=keys, title="Jane Doe", literal="MRN-123")
+
+    destination = tmp_path / "sanitized"
+    manifest = sanitize_artifact(bundle, destination, kind="bundle")
+
+    assert manifest["execution_semantics"] == "not-preserved"
+    for rel, data in _tree(destination).items():
+        if rel.endswith((".json", ".yaml", ".py")):
+            assert b"Jane Doe" not in data, rel
+            assert b"MRN-123" not in data, rel
+    sections = json.loads((destination / "sections.json").read_text())
+    assert sections["sections"][0]["title"] == "<PERSON>"
+    assert sections["context"]["step_002"]["container"] == "<PERSON>"
+    # Structure around the scrubbed content is untouched.
+    assert sections["schema"] == "openadapt.flow.sections/v1"
+    assert sections["sections"][0]["steps"] == ["step_000"]
+    import yaml
+
+    checks = yaml.safe_load((destination / "readback" / "verify.yaml").read_text())
+    effect = checks["effects"][0]
+    assert effect["match"]["list"] == {"literal": "<MRN>"}
+    # The probe spelled out the literal, so it is no longer the rendering of a
+    # scrub-stable match and is scrubbed with it.
+    assert "MRN-123" not in effect["probe"]
+    assert checks["schema_version"] == "openadapt.verify/v1"
+    assert checks["verifier"]["base_url"] == "http://127.0.0.1:8917"
+    approve_derivative(destination, source=bundle, reviewer="privacy-reviewer")
+
+
+@pytest.mark.parametrize(
+    "case",
+    ["free_text_principal", "undeclared_field", "hand_written_probe", "free_comment"],
+)
+def test_free_text_in_a_wrap_structural_or_unknown_field_is_scrubbed(tmp_path, case):
+    """A structural field keeps only machine-shaped values; unknown fields scrub."""
+    privacy.set_text_scrubber(PresidioLikeScrubber())
+    bundle, keys = tmp_path / "bundle", tmp_path / "keys"
+    options: dict = {}
+    if case == "free_text_principal":
+        options["admitter"] = "Jane Doe"
+    elif case == "undeclared_field":
+        options["extra_admission"] = {"operator_note": "called Jane Doe"}
+    elif case == "hand_written_probe":
+        options["probe"] = "new note for Jane Doe (confirmed by rehearsal.reviewer)"
+    else:
+        options["reviewer"] = "Jane Doe"
+    _wrap_files(bundle, keys=keys, **options)
+
+    destination = tmp_path / "sanitized"
+    manifest = sanitize_artifact(bundle, destination, kind="bundle")
+
+    assert manifest["execution_semantics"] == "not-preserved"
+    for rel, data in _tree(destination).items():
+        if rel.endswith((".json", ".yaml", ".py")):
+            assert b"Jane Doe" not in data, rel
+
+
+@pytest.mark.parametrize(
+    "value", ["jane.doe", "user:jane.doe", "4165550123", "MRN-0012345"]
+)
+def test_a_principal_that_is_not_a_machine_handle_never_leaves(tmp_path, value):
+    """Names and record numbers pass a scrubber; the principal shape stops them."""
+    privacy.set_text_scrubber(PresidioLikeScrubber())
+    bundle, keys = tmp_path / "bundle", tmp_path / "keys"
+    _wrap_files(bundle, keys=keys, admitter=value, reviewer=value)
+
+    destination = tmp_path / "sanitized"
+    manifest = sanitize_artifact(bundle, destination, kind="bundle")
+
+    assert manifest["execution_semantics"] == "not-preserved"
+    for rel, data in _tree(destination).items():
+        if rel.endswith((".json", ".yaml", ".py")):
+            assert value.encode() not in data, rel
+    from openadapt_flow.jit import lifecycle
+
+    admission = json.loads((destination / lifecycle.ADMISSION_FILE).read_text())
+    assert admission["admitted_by_principal_id"] == "<PRINCIPAL>"
+    assert admission["canary"]["principal_id"] == "<PRINCIPAL>"
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "ci:rehearsal",
+        "agent:scripted-rehearsal",
+        "service:intake",
+        "sha256:fa77d7bdb2ae64fb",
+        "hmac:" + "ab" * 32,
+    ],
+)
+def test_machine_handles_and_hmacs_stay_plaintext(tmp_path, value):
+    privacy.set_text_scrubber(PresidioLikeScrubber())
+    bundle, keys = tmp_path / "bundle", tmp_path / "keys"
+    _wrap_files(bundle, keys=keys, admitter=value, reviewer=value)
+
+    manifest = sanitize_artifact(bundle, tmp_path / "sanitized", kind="bundle")
+
+    assert manifest["execution_semantics"] == "preserved"
+    assert _admission_verifies(tmp_path / "sanitized", keys)
+
+
+def test_the_principal_shape_matches_the_publish_allowlist():
+    from openadapt_flow.jit.principal_ids import DISCLOSABLE_PRINCIPAL
+    from openadapt_flow.sanitized_artifact import _SHAPES
+
+    for value in (
+        "ci:rehearsal",
+        "agent:x",
+        "service:a.b-c_d",
+        "ed25519:" + "0" * 64,
+        "standard-change:" + "a" * 64,
+        "self-repair:probe",
+        "hmac:" + "f" * 64,
+        "jane.doe",
+        "user:jane.doe",
+        "CI:Release",
+        "4165550123",
+        "MRN-0012345",
+        "hmac:abc",
+    ):
+        assert bool(_SHAPES["principal"].fullmatch(value)) == bool(
+            DISCLOSABLE_PRINCIPAL.fullmatch(value)
+        ), value
+
+
+def test_a_wrap_file_with_another_schema_falls_back_to_general_scrubbing(tmp_path):
+    privacy.set_text_scrubber(PresidioLikeScrubber())
+    bundle, keys = tmp_path / "bundle", tmp_path / "keys"
+    _wrap_files(bundle, keys=keys)
+    sections = json.loads((bundle / "sections.json").read_text())
+    sections["schema"] = "openadapt.flow.sections/v9"
+    (bundle / "sections.json").write_text(json.dumps(sections), encoding="utf-8")
+
+    manifest = sanitize_artifact(bundle, tmp_path / "sanitized", kind="bundle")
+
+    assert manifest["execution_semantics"] == "not-preserved"
+
+
+def test_declared_wrap_file_names_and_schemas_match_their_owners():
+    from openadapt_flow.jit import lifecycle
+    from openadapt_flow.runtime.layout_drift import (
+        FINGERPRINT_ASSET,
+        FINGERPRINT_SCHEMA,
+    )
+    from openadapt_flow.sanitized_artifact import _declared_bundle_files
+    from openadapt_flow.sections import ProgramSections
+    from openadapt_flow.verify_run import VERIFY_CONFIG_SCHEMA
+    from openadapt_flow.wrap import publish
+
+    declared = _declared_bundle_files()
+    expected = {
+        lifecycle.ADMISSION_FILE: lifecycle.ADMISSION_SCHEMA,
+        publish.MANIFEST_NAME: publish.PUBLISH_SCHEMA,
+        publish.READBACK_PATH: VERIFY_CONFIG_SCHEMA,
+        "sections.json": ProgramSections.model_fields["schema_"].default,
+        FINGERPRINT_ASSET: FINGERPRINT_SCHEMA,
+        lifecycle.DRAFT_MARKER: None,
+    }
+    assert set(declared) == set(expected)
+    for rel, schema in expected.items():
+        rule = declared[rel].schema
+        assert (rule[1] if rule else None) == (
+            frozenset({schema}) if schema else None
+        ), rel

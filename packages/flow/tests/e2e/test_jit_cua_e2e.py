@@ -109,6 +109,26 @@ def _ci_key(key_dir: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
     return authority.principal_from_key(authority.load_encrypted_key(pem), key_dir)
 
 
+def _assert_bundle_names_its_surface(bundle_dir: Path) -> None:
+    import argparse
+    import json
+    from types import SimpleNamespace
+
+    from openadapt_flow.__main__ import _surface_selection_gate
+
+    workflow = json.loads((bundle_dir / "workflow.json").read_text(encoding="utf-8"))
+    assert workflow["surface"] == "web"
+    assert workflow["execution_mode"] == "in_session"
+    cfg = SimpleNamespace(backend=SimpleNamespace(model_fields_set=set()))
+    bound = SimpleNamespace(surface=workflow["surface"], backend_hints=None)
+    args = argparse.Namespace(_execution_profile="standard", backend=None)
+    assert _surface_selection_gate(args, cfg, bound, operation="run") is None
+    # Control: the same Standard run of a bundle without a surface is refused.
+    unbound = SimpleNamespace(surface=None, backend_hints=None)
+    args = argparse.Namespace(_execution_profile="standard", backend=None)
+    assert _surface_selection_gate(args, cfg, unbound, operation="run") == 2
+
+
 def test_anthropic_trajectory_miss_admit_hit_and_halt(
     mockmed: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -174,6 +194,9 @@ def test_anthropic_trajectory_miss_admit_hit_and_halt(
     assert {e["evidence"] for row in record["readback"] for e in row["effects"]} == {
         "independent_readback"
     }
+    # A hosted Standard `run` passes no --backend, so the admitted bundle must
+    # name its execution surface itself, or the surface gate refuses it.
+    _assert_bundle_names_its_surface(jit.bundle_dir)
 
     # Cache hit with a new value: the governed program, no model calls, VERIFIED.
     hit = jit.run(note=NEW_NOTE)

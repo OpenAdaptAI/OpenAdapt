@@ -1728,6 +1728,12 @@ def verify_admission(
     """Return the admission manifest if it is signed by the local admission
     key and pins the bundle's current digest.
 
+    Trust contract: the one key at ``<key_dir>/keys/ed25519.pub`` is the
+    trust root, and any admission it signed verifies. On a managed runner
+    only the public key the tenant registered with the organization may be
+    staged there; staging any other key lets that key's holder admit
+    programs for the tenant.
+
     Raises:
         AdmissionError: no manifest, a bad signature, an unknown key, or a
             bundle that changed after admission.
@@ -1789,7 +1795,9 @@ def _verify_mode(body: Mapping[str, Any], keys: Path) -> None:
         if is_not_a_person_name(name):
             raise AdmissionError(f"{name!r} is not a person; a model never authorizes")
         return
-    inner = {k: v for k, v in body.items() if k != "admitter_signature"}
+    # ``hosted`` is the block a hosted copy adds after the admitter signed
+    # (jit/hosted_authority.hosted_admission); the local signature covers it.
+    inner = {k: v for k, v in body.items() if k not in ("admitter_signature", "hosted")}
     try:
         role, _ = authority.verify_admitter(
             inner, str(body.get("admitter_signature") or ""), keys

@@ -98,6 +98,9 @@ ALLOWED_FIELDS = {
     "provenance",
     "receipt_builder_version",
     "external_network_calls",
+    # Closed enum, derived from the approval source; absent for a
+    # qualification admission or production authority.
+    "authority_basis",
     # Closed: a change class, a policy digest and an opaque candidate id.
     "standard_change",
     "bundle_digest",
@@ -569,6 +572,54 @@ def _api_verified_report() -> RunReport:
 
 def test_receipt_field_set_is_exactly_the_allow_list() -> None:
     assert set(RunReceipt.model_fields) == ALLOWED_FIELDS
+
+
+def test_a_program_admission_run_discloses_its_authority_basis() -> None:
+    from openadapt_flow.receipt import _receipt_rows
+    from openadapt_flow.terminal_verification_v2 import (
+        project_production_run_receipt,
+    )
+
+    plain = build_receipt(_report(governed_approval_source="qualification-campaign"))
+    assert plain.authority_basis is None
+    assert "authority_basis" not in json.loads(plain.canonical_json())
+    assert "authority basis" not in render_receipt_markdown(plain)
+    signed_plain = project_production_run_receipt(plain)
+    assert "authority_basis" not in signed_plain.model_dump(mode="json")
+
+    receipt = build_receipt(
+        _report(governed_approval_source="hosted:program-admission:" + "a" * 64)
+    )
+    assert receipt.authority_basis == "customer-attested-program-admission"
+    payload = json.loads(receipt.canonical_json())
+    assert payload["authority_basis"] == "customer-attested-program-admission"
+    # The receipt digest binds it.
+    assert receipt.receipt_digest != plain.receipt_digest
+    assert "| authority basis | `customer-attested-program-admission` |" in (
+        render_receipt_markdown(receipt)
+    )
+    assert ("authority basis", "customer-attested-program-admission") in (
+        _receipt_rows(receipt)
+    )
+    signed = project_production_run_receipt(receipt)
+    assert signed.authority_basis == "customer-attested-program-admission"
+    assert signed.model_dump(mode="json")["authority_basis"] == (
+        "customer-attested-program-admission"
+    )
+
+
+def test_a_malformed_program_admission_source_is_not_a_basis() -> None:
+    from openadapt_flow.receipt import authority_basis
+
+    assert authority_basis("hosted:program-admission:xyz") is None
+    assert authority_basis(None) is None
+
+
+def test_an_older_receipt_without_authority_basis_still_validates() -> None:
+    receipt = build_receipt(_report())
+    payload = json.loads(receipt.canonical_json())
+    assert "authority_basis" not in payload
+    assert RunReceipt.model_validate(payload) == receipt
 
 
 def test_a_standard_change_adds_only_closed_fields() -> None:

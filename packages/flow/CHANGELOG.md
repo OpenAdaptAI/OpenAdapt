@@ -15,6 +15,66 @@
 
 <!-- version list -->
 
+## Unreleased
+
+### Wrap publish: the scrubber keeps a program's structure, and info lint is advice
+
+- The outbound scrubber no longer rewrites the generated files of a wrap
+  program. `admission.json`, `openadapt-wrap-publish.json`,
+  `readback/verify.yaml`, `sections.json`, `templates/layout_fingerprint.json`
+  and `jit_draft.json` declare each field as content (always scrubbed) or
+  structural (kept only with its declared machine shape); undeclared fields
+  are scrubbed. `workflow.json` keeps identity signal slots, the punctuation
+  policy and the compiler's identifier-crop reasons. Before, the NER scrub
+  turned `v1` and `step_002` into placeholders, and every wrap publish was
+  refused with `SANITIZATION_CHANGED_PROGRAM`.
+- Strict lint for hosted validation now fails on `warn` and `error` findings,
+  as `openadapt-flow lint --strict` does. An `info` finding such as
+  `missing_identifier_crop` on a step whose structured identity owns the check
+  no longer refuses every web program with `VALIDATION_FAILED`.
+
+### A hosted Standard run of an admitted program rests on its admission
+
+- `openadapt-flow run --managed-dispatch-file` under the Standard profile now
+  accepts a dispatch without a qualification admission for an admitted
+  agent-compiled program (`openadapt wrap`, `jit`). Its bundle must carry an
+  `admission.json` that verifies against the trusted admission key directory,
+  plus a valid `readback/verify.yaml`. The authorization's `approval_source`
+  must name that exact admission (`hosted:program-admission:<sha256>`). The
+  run reads back through the bundled `verify.yaml`. Regulated is refused.
+  See `openadapt_flow/jit/hosted_authority.py`.
+- `openadapt wrap publish` writes the program's value-free Standard run shape
+  into `openadapt-wrap-publish.json` (`run_authorization`). The new refusal
+  `RUN_SHAPE_UNAVAILABLE` covers an unknown policy.
+- `openadapt wrap publish` now finds the confirmed read-back checks where
+  the first run writes them (`compiled/verify.yaml`). Before, every real
+  task was refused with `NO_READ_BACK`. The person-signed teach
+  authorization stays local and is no longer staged for upload; the
+  sanitizer refused its `.sig` file.
+
+### Wrap publish: review fixes for hosted admitted-program runs
+
+- The bundled `readback/verify.yaml` replaces the deployment's effects
+  verifier only after the run's authority is decided: a managed dispatch
+  that rests on the program's own admission, with no production authority
+  file and no qualification admission. Before, any managed run of a bundle
+  with an `admission.json` and a `verify.yaml` used the bundled file, signed
+  or not.
+- The uploaded admission binds the SHA-256 of the bundled `verify.yaml`
+  (`hosted.readback_sha256`). The runner refuses a different file.
+- Person and record identifiers no longer reach the cloud. In the uploaded
+  `admission.json` and `verify.yaml`, a principal stays in plaintext only as
+  a `ci:`, `agent:` or `service:` handle or a key fingerprint. Anything else
+  becomes `hmac:<hex>`, keyed with a per-install key in
+  `<key_dir>/keys/principal-hmac.key`. The sanitizer replaces any other
+  principal with `<PRINCIPAL>`.
+- A run receipt, and its signed production projection, carry
+  `authority_basis: customer-attested-program-admission` when the run rested
+  on a program admission. Other receipts are unchanged.
+- Hosted strict lint keeps `missing_identifier_crop` blocking on an RDP or
+  Citrix target, where the crop is the only pixel identity evidence.
+- Removed the unused `shape_matches_authorization`.
+
 ## v3.0.0 (2026-11-13)
 
 ### Breaking: the vision stack is the `vision` extra (3.0.0)
