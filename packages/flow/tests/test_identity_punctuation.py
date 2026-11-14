@@ -111,3 +111,79 @@ def test_legacy_band_refusal_preserves_independent_exact_structured_identity() -
     assert same is not None and changed is not None
     assert same.status == "verified"
     assert changed.status != "verified"
+
+
+@pytest.mark.parametrize("api", ["plaintext", "template"])
+@pytest.mark.parametrize(
+    "identifier",
+    [
+        "RC79 . . 284",
+        "RC79 . - . - . 284",
+    ],
+)
+def test_exact_raw_token_sequence_verifies_standalone_punctuation_between_numbers(
+    api: str, identifier: str
+) -> None:
+    band = _row(identifier)
+    diff_id_band = _row(identifier.replace("284", "285"))
+    diff_punct_band = _row(identifier.replace(". .", ".").replace(". - . - .", ". - ."))
+
+    if api == "plaintext":
+        same = I.verify_target_identity(band, band)
+        diff_id = I.verify_target_identity(band, diff_id_band)
+        diff_punct = I.verify_target_identity(band, diff_punct_band)
+    else:
+        template = _template(band)
+        same = verify_template_identity(template, band)
+        diff_id = verify_template_identity(template, diff_id_band)
+        diff_punct = verify_template_identity(template, diff_punct_band)
+
+    assert same.status == "verified"
+    assert diff_id.status == "mismatch"
+    assert diff_punct.status == "abstain"
+
+
+def test_exact_raw_token_sequence_parameterized_template_with_standalone_punctuation() -> (
+    None
+):
+    template = build_identity_template(
+        _row("RC79 . . 284"), param_examples={"patient": "Ashford Jane"}
+    )
+    assert template is not None
+    assert template.schema_version == 2
+
+    # Matching parameter and identical identifier sequence verifies
+    same = verify_template_identity(
+        template,
+        "Barnes Mike 02/23/1975 RC79 . . 284 Active",
+        params={"patient": "Barnes Mike"},
+        param_examples={"patient": "Ashford Jane"},
+    )
+    assert same.status == "verified"
+
+    # Changed identifier fragment mismatches
+    wrong_id = verify_template_identity(
+        template,
+        "Barnes Mike 02/23/1975 RC79 . . 999 Active",
+        params={"patient": "Barnes Mike"},
+        param_examples={"patient": "Ashford Jane"},
+    )
+    assert wrong_id.status == "mismatch"
+
+    # Changed punctuation abstains
+    wrong_punct = verify_template_identity(
+        template,
+        "Barnes Mike 02/23/1975 RC79 . 284 Active",
+        params={"patient": "Barnes Mike"},
+        param_examples={"patient": "Ashford Jane"},
+    )
+    assert wrong_punct.status == "abstain"
+
+    # Mismatched parameter mismatches
+    wrong_patient = verify_template_identity(
+        template,
+        "Smith John 02/23/1975 RC79 . . 284 Active",
+        params={"patient": "Barnes Mike"},
+        param_examples={"patient": "Ashford Jane"},
+    )
+    assert wrong_patient.status == "mismatch"

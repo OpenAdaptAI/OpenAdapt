@@ -96,7 +96,8 @@ def test_known_separator_ownership_and_count_siblings(api, reverse, expected, ob
 @pytest.mark.parametrize("separator", [".", ",", "-", "/", ":", ";"])
 def test_unchanged_standalone_span_is_explicitly_uncertain(api, separator):
     row = _row(f"RC79 {separator} {separator} 284")
-    assert _result(api, row, row).status == "abstain"
+    assert _result(api, row, row).status == "verified"
+    assert _result(api, row, _row(f"RC79 {separator} 284")).status == "abstain"
 
 
 @pytest.mark.parametrize("api", ["plaintext", "template"])
