@@ -13,9 +13,9 @@ from __future__ import annotations
 import json
 import os
 import shutil
-import subprocess
 import threading
 import time
+from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
@@ -30,7 +30,7 @@ from openadapt_flow.__main__ import (
 )
 from openadapt_flow.backends.factory import build_backend
 from openadapt_flow.deployment import BackendConfig, DeploymentConfig
-from tests._attached_chromium import resize_tab_viewport
+from tests._attached_chromium import owned_chromium, resize_tab_viewport
 
 _SESSION_COOKIE = "oa_test_session=signed-in-clerk"
 
@@ -142,13 +142,14 @@ def _signed_in_bundle(app: str, tmp_path: Path) -> Path:
     return bundle
 
 
+@contextmanager
 def _start_signed_in_chromium(executable: Path, app: str, profile: Path):
     """Start a person's signed-in browser with a loopback DevTools endpoint."""
 
     profile.mkdir()
-    process = subprocess.Popen(
+    with owned_chromium(
+        executable,
         [
-            str(executable),
             "--headless=new",
             "--no-sandbox",
             "--no-first-run",
@@ -160,26 +161,24 @@ def _start_signed_in_chromium(executable: Path, app: str, profile: Path):
             "--window-size=1280,800",
             # Pin the monitor scale so CSS and device pixels agree on any host.
             "--force-device-scale-factor=1",
-            f"{app}/login",
         ],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    port_file = profile / "DevToolsActivePort"
-    deadline = time.monotonic() + 20
-    port_line = ""
-    while time.monotonic() < deadline:
-        if process.poll() is not None:
-            pytest.fail("Chromium exited before its DevTools endpoint was ready")
-        try:
-            port_line = port_file.read_text().splitlines()[0].strip()
-        except (OSError, IndexError):
-            port_line = ""
-        if port_line:
-            break
-        time.sleep(0.05)
-    assert port_line, "Chromium DevTools endpoint did not become ready"
-    return process, f"http://127.0.0.1:{int(port_line)}"
+        f"{app}/login",
+    ) as process:
+        port_file = profile / "DevToolsActivePort"
+        deadline = time.monotonic() + 20
+        port_line = ""
+        while time.monotonic() < deadline:
+            if process.poll() is not None:
+                pytest.fail("Chromium exited before its DevTools endpoint was ready")
+            try:
+                port_line = port_file.read_text().splitlines()[0].strip()
+            except (OSError, IndexError):
+                port_line = ""
+            if port_line:
+                break
+            time.sleep(0.05)
+        assert port_line, "Chromium DevTools endpoint did not become ready"
+        yield process, f"http://127.0.0.1:{int(port_line)}"
 
 
 def _size_signed_in_tab(endpoint: str, width: int, height: int) -> None:
@@ -253,10 +252,10 @@ def test_practice_run_starts_from_the_signed_in_session_it_was_recorded_in(
 
     # The fix: the same program attached to the signed-in browser passes
     # step 1 and finishes, and the person's browser stays open and signed in.
-    process, endpoint = _start_signed_in_chromium(
-        executable, signed_in_app, tmp_path / "profile"
-    )
-    try:
+    with _start_signed_in_chromium(executable, signed_in_app, tmp_path / "profile") as (
+        process,
+        endpoint,
+    ):
         # A window that shows the application at another size is refused
         # before any input, so the run never acts on unproven geometry.
         _size_signed_in_tab(endpoint, recorded_width, recorded_height - 100)
@@ -311,12 +310,6 @@ def test_practice_run_starts_from_the_signed_in_session_it_was_recorded_in(
         assert "Referral opened for review" in texts[0]
         # Nothing in the program or the run's config carries the session.
         assert "signed-in-clerk" not in (bundle / "workflow.json").read_text()
-    finally:
-        process.terminate()
-        try:
-            process.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            process.kill()
 
 
 def test_cli_flags_and_config_select_the_attached_session() -> None:

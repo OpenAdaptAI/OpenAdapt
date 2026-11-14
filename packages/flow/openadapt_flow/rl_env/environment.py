@@ -27,6 +27,7 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeout
+from contextlib import suppress
 from pathlib import Path
 from typing import Any, Callable, Literal, Optional
 from urllib.parse import urlsplit, urlunsplit
@@ -547,26 +548,23 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
     def _ensure_page(self) -> Any:
         if self._page is not None:
             return self._page
+        if self._pw is not None:
+            raise ProcessNotReaped("a failed browser acquisition could not be stopped")
         from playwright.sync_api import sync_playwright
 
         _driver_in_own_session()
-        self._pw = sync_playwright().start()
-        self._driver_pid = _driver_pid(self._pw)
-        from openadapt_flow._browser_readiness import launch_rendering_ready
-
+        pw = self._pw = sync_playwright().start()
         try:
-            self._browser = launch_rendering_ready(self._pw.chromium, headless=True)
+            self._driver_pid = _driver_pid(pw)
+            from openadapt_flow._browser_readiness import launch_rendering_ready
+
+            self._browser = launch_rendering_ready(pw.chromium, headless=True)
         except BaseException:
-            self._pw.stop()
-            self._pw = None
+            self._close_failed_browser(pw)
             raise
         return self._new_context()
 
     def _new_context(self) -> Any:
-        if self._context is not None:
-            self._context.close()
-        self._context = self._browser.new_context(viewport=VIEWPORT)
-
         def route(route: Any) -> None:
             request = route.request
             if self._allowed(request.url, request.method):
@@ -578,10 +576,50 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
             else:
                 route.abort("blockedbyclient")
 
-        self._context.route("**/*", route)
-        self._page = self._context.new_page()
-        self._page.set_default_timeout(10_000)
-        return self._page
+        pw = self._pw
+        self._page = None
+        try:
+            if self._context is not None:
+                self._context.close()
+                self._context = None
+            self._context = self._browser.new_context(viewport=VIEWPORT)
+            self._context.route("**/*", route)
+            page = self._context.new_page()
+            page.set_default_timeout(10_000)
+        except BaseException:
+            self._close_failed_browser(pw)
+            raise
+        self._page = page
+        return page
+
+    def _close_failed_browser(self, pw: Any) -> None:
+        # The timeout path may already have taken ownership of this driver.
+        if self._pw is not pw:
+            return
+        context, browser = self._context, self._browser
+        self._context = self._browser = self._page = None
+        for resource in (context, browser):
+            if resource is not None:
+                with suppress(BaseException):
+                    resource.close()
+        if pw is None:
+            return
+        try:
+            pw.stop()
+        except BaseException:
+            # Keep the driver's owned identity for teardown. A later episode
+            # must not use this browser or replace its supervision handle.
+            self._unproven = (
+                self._unproven or "a failed browser acquisition may still be running"
+            )
+            return
+        if self._pw is pw:
+            driver, self._driver_pid = self._driver_pid, None
+            self._pw = None
+            launch = _SUPERVISED.pop(driver, None) if driver is not None else None
+            if launch is not None:
+                with suppress(BaseException):
+                    launch.close()
 
     # -- OpenEnv API --------------------------------------------------------
     def reset(self, *args: Any, **kwargs: Any) -> WebObservation:
@@ -673,14 +711,19 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
         )
         episode = episode_id or uuid.uuid4().hex
         judge = EpisodeJudge(cfg, task.params, episode_id=episode)
+        pw = None
         try:
             self._ensure_page()
             page = self._new_context()
+            pw = self._pw
             page.goto(app_url + task.start_path, wait_until="load")
             if self.env.manifest.app.prepare:
                 _import(self.env.manifest.app.prepare)(page, app_url)
         except BaseException:
-            judge.close()
+            if pw is not None:
+                self._close_failed_browser(pw)
+            with suppress(BaseException):
+                judge.close()
             raise
         self._task = task
         self._judge = judge

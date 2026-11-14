@@ -192,21 +192,22 @@ def chrome(tmp_path):
         except Exception as exc:  # noqa: BLE001 - no browser on this machine
             pytest.skip(f"chromium unavailable: {exc}")
         try:
-            workers = context.service_workers
-            worker = (
-                workers[0]
-                if workers
-                else context.wait_for_event("serviceworker", timeout=15000)
-            )
-        except Exception as exc:  # noqa: BLE001
-            # Chromium itself started, so a missing service worker is an
-            # extension regression, not a missing prerequisite: fail, never skip.
+            try:
+                workers = context.service_workers
+                worker = (
+                    workers[0]
+                    if workers
+                    else context.wait_for_event("serviceworker", timeout=15000)
+                )
+            except Exception as exc:  # noqa: BLE001
+                # Chromium itself started, so a missing service worker is an
+                # extension regression, not a missing prerequisite: fail, never skip.
+                pytest.fail(f"extension service worker did not start: {exc}")
+            extension_id = worker.url.split("/")[2]
+            assert install_host.EXTENSION_ID.fullmatch(extension_id), worker.url
+            yield context, worker, profile, extension_id
+        finally:
             context.close()
-            pytest.fail(f"extension service worker did not start: {exc}")
-        extension_id = worker.url.split("/")[2]
-        assert install_host.EXTENSION_ID.fullmatch(extension_id), worker.url
-        yield context, worker, profile, extension_id
-        context.close()
 
 
 def _rows(recording: Path) -> list[dict]:

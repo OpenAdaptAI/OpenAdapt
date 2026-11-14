@@ -36,12 +36,18 @@ def portal() -> Iterator[str]:
 def browser(portal: str, tmp_path: Path) -> Iterator[bt._Browser]:
     thread = bt._BrowserThread()
     box: dict = {}
-    thread.call(lambda: box.update(b=bt._Browser(bt._origin(portal), tmp_path, True)))
-    browser = box["b"]
-    browser.thread = thread  # type: ignore[attr-defined]
-    yield browser
-    thread.call(browser.close)
-    thread.stop()
+    try:
+        thread.call(
+            lambda: box.update(b=bt._Browser(bt._origin(portal), tmp_path, True))
+        )
+        browser = box["b"]
+        try:
+            browser.thread = thread  # type: ignore[attr-defined]
+            yield browser
+        finally:
+            thread.call(browser.close)
+    finally:
+        thread.stop()
 
 
 def _on(browser: bt._Browser, fn):

@@ -8,11 +8,13 @@ import re
 import subprocess
 import threading
 import time
+from contextlib import ExitStack
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
 from openadapt_flow.interactive_recorder import BrowserAttachError, InteractiveRecorder
+from tests._attached_chromium import owned_chromium
 from tests.test_browser_attach import _chromium_executable
 
 
@@ -35,54 +37,68 @@ def document_browser(tmp_path):
         def log_message(self, *_args):
             pass
 
-    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-    worker = threading.Thread(target=server.serve_forever, daemon=True)
-    worker.start()
-    url = f"http://127.0.0.1:{server.server_address[1]}/"
-    executable = _chromium_executable()
-    assert executable is not None, (
-        "cached Chromium is required; no install is permitted"
-    )
-    profile = tmp_path / "owned-document-browser"
-    profile.mkdir()
-    process = subprocess.Popen(
-        [
-            str(executable),
-            "--headless=new",
-            "--no-sandbox",
-            "--no-first-run",
-            "--no-default-browser-check",
-            "--disable-background-networking",
-            "--remote-debugging-address=127.0.0.1",
-            "--remote-debugging-port=0",
-            f"--user-data-dir={profile}",
-            "--window-size=1280,800",
-            "--force-device-scale-factor=1",
-            url,
-        ],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-    )
-    endpoints = queue.Queue()
-    startup_tail = bytearray()
-    startup_lock = threading.Lock()
+    with ExitStack() as cleanup:
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        cleanup.callback(server.server_close)
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        cleanup.callback(worker.join, timeout=1)
+        cleanup.callback(server.shutdown)
+        url = f"http://127.0.0.1:{server.server_address[1]}/"
+        executable = _chromium_executable()
+        assert executable is not None, (
+            "cached Chromium is required; no install is permitted"
+        )
+        profile = tmp_path / "owned-document-browser"
+        profile.mkdir()
+        reader = None
 
-    def read_endpoint():
-        assert process.stderr is not None
-        for raw in iter(lambda: process.stderr.readline(4096), b""):
-            with startup_lock:
-                startup_tail.extend(raw)
-                del startup_tail[:-8192]
-            found = re.search(
-                rb"DevTools listening on (ws://127\.0\.0\.1:[0-9]+/devtools/browser/[A-Za-z0-9-]+)",
-                raw,
+        def join_reader():
+            if reader is not None and reader.ident is not None:
+                reader.join(timeout=1)
+
+        # Reap the browser and close its pipe before joining the pipe reader.
+        cleanup.callback(join_reader)
+        process = cleanup.enter_context(
+            owned_chromium(
+                executable,
+                [
+                    "--headless=new",
+                    "--no-sandbox",
+                    "--no-first-run",
+                    "--no-default-browser-check",
+                    "--disable-background-networking",
+                    "--remote-debugging-address=127.0.0.1",
+                    "--remote-debugging-port=0",
+                    f"--user-data-dir={profile}",
+                    "--window-size=1280,800",
+                    "--force-device-scale-factor=1",
+                ],
+                url,
+                stderr=subprocess.PIPE,
+                wait_s=5,
             )
-            if found:
-                endpoints.put(found.group(1).decode("ascii"))
+        )
+        endpoints = queue.Queue()
+        startup_tail = bytearray()
+        startup_lock = threading.Lock()
 
-    reader = threading.Thread(target=read_endpoint, daemon=True)
-    reader.start()
-    try:
+        def read_endpoint():
+            assert process.stderr is not None
+            for raw in iter(lambda: process.stderr.readline(4096), b""):
+                with startup_lock:
+                    startup_tail.extend(raw)
+                    del startup_tail[:-8192]
+                found = re.search(
+                    rb"DevTools listening on "
+                    rb"(ws://127\.0\.0\.1:[0-9]+/devtools/browser/[A-Za-z0-9-]+)",
+                    raw,
+                )
+                if found:
+                    endpoints.put(found.group(1).decode("ascii"))
+
+        reader = threading.Thread(target=read_endpoint, daemon=True)
+        reader.start()
         try:
             endpoint = endpoints.get(timeout=10)
         except queue.Empty:
@@ -93,19 +109,6 @@ def document_browser(tmp_path):
                 f"exit={process.poll()}; bounded startup stderr:\n{detail}"
             ) from None
         yield url, endpoint, process
-    finally:
-        process.terminate()
-        try:
-            process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait(timeout=5)
-        if process.stderr is not None:
-            process.stderr.close()
-        reader.join(timeout=1)
-        server.shutdown()
-        server.server_close()
-        worker.join(timeout=1)
 
 
 def _perform(session, kind, value, *, pump=True):

@@ -12,7 +12,6 @@ opens by hand is still refused.
 
 from __future__ import annotations
 
-import subprocess
 import time
 from pathlib import Path
 from typing import Iterator
@@ -30,7 +29,7 @@ from openadapt_flow.interactive_recorder import (  # noqa: E402
 )
 from openadapt_flow.ir import ActionKind, Workflow  # noqa: E402
 from openadapt_flow.runtime.replayer import Replayer  # noqa: E402
-from tests._attached_chromium import resize_tab_viewport  # noqa: E402
+from tests._attached_chromium import owned_chromium, resize_tab_viewport  # noqa: E402
 from tests.test_browser_attach import _chromium_executable  # noqa: E402
 
 pytestmark = pytest.mark.timeout(600)
@@ -56,9 +55,9 @@ def endpoint(app_url, tmp_path_factory) -> Iterator[str]:
     if executable is None:
         pytest.skip("no Chromium executable is installed")
     profile = tmp_path_factory.mktemp("attach-profile")
-    process = subprocess.Popen(
+    with owned_chromium(
+        executable,
         [
-            str(executable),
             "--headless=new",
             "--no-sandbox",
             "--no-first-run",
@@ -70,12 +69,9 @@ def endpoint(app_url, tmp_path_factory) -> Iterator[str]:
             f"--user-data-dir={profile}",
             "--window-size=1280,800",
             "--force-device-scale-factor=1",
-            "about:blank",
         ],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    try:
+        "about:blank",
+    ) as process:
         port_file = profile / "DevToolsActivePort"
         deadline = time.monotonic() + 20
         port_line = ""
@@ -88,12 +84,6 @@ def endpoint(app_url, tmp_path_factory) -> Iterator[str]:
                 time.sleep(0.05)
         assert port_line, "Chromium CDP endpoint did not become ready"
         yield f"http://127.0.0.1:{int(port_line)}"
-    finally:
-        process.terminate()
-        try:
-            process.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            process.kill()
 
 
 def _reset_person_browser(endpoint: str, url: str) -> None:

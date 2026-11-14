@@ -39,7 +39,10 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from openadapt_flow._browser_readiness import require_rendering_ready
+from openadapt_flow._browser_readiness import (
+    chromium_launch_args,
+    require_rendering_ready,
+)
 
 #: Environment variable that disables the auto-install (air-gapped / CI that
 #: pre-provisions the browser itself). Any non-empty value opts out.
@@ -407,27 +410,28 @@ def ensure_bundled_chromium(*, headless: bool) -> None:
         _bundled_ready.add(headless)
 
 
-def chromium_launch_options(*, headless: bool) -> dict[str, str]:
+def chromium_launch_options(*, headless: bool) -> dict[str, str | list[str]]:
     """Return the extra ``chromium.launch`` options for this machine.
 
     Default order: an installed Chrome, then an installed Edge, then
-    Playwright's own build (downloaded once when missing). ``{}`` means
-    Playwright's own build, which this call has already made available.
+    Playwright's own build (downloaded once when missing). The bundled
+    options omit ``channel`` and include the same keychain flags.
     """
     require_browser_support()
+    options: dict[str, str | list[str]] = {"args": chromium_launch_args()}
     choice = (os.environ.get(BROWSER_ENV) or "auto").strip().lower()
     if choice in ("chrome", "msedge"):
-        return {"channel": choice}
+        return {**options, "channel": choice}
     if choice == "auto":
         channel = installed_browser_channel()
         if channel is not None:
-            return {"channel": channel}
+            return {**options, "channel": channel}
     elif choice != "bundled":
         raise RuntimeError(
             f"{BROWSER_ENV}={choice!r} is not one of auto, chrome, msedge, bundled"
         )
     ensure_bundled_chromium(headless=headless)
-    return {}
+    return options
 
 
 def launch_chromium(chromium: Any, *, headless: bool) -> Any:
@@ -438,22 +442,23 @@ def launch_chromium(chromium: Any, *, headless: bool) -> Any:
     fallback for ``auto``.
     """
     options = chromium_launch_options(headless=headless)
-    if not options:
-        browser = chromium.launch(headless=headless)
-    else:
-        try:
-            browser = chromium.launch(headless=headless, **options)
-        except Exception as exc:
-            if (os.environ.get(BROWSER_ENV) or "auto").strip().lower() != "auto":
-                raise
-            print(
-                f"openadapt-flow: {options['channel']} did not start ({exc}); "
-                "using Playwright's own Chromium instead.",
-                file=sys.stderr,
-                flush=True,
-            )
-            ensure_bundled_chromium(headless=headless)
-            browser = chromium.launch(headless=headless)
+    try:
+        browser = chromium.launch(headless=headless, **options)
+    except Exception as exc:
+        if (
+            "channel" not in options
+            or (os.environ.get(BROWSER_ENV) or "auto").strip().lower() != "auto"
+        ):
+            raise
+        channel = options.pop("channel")
+        print(
+            f"openadapt-flow: {channel} did not start ({exc}); "
+            "using Playwright's own Chromium instead.",
+            file=sys.stderr,
+            flush=True,
+        )
+        ensure_bundled_chromium(headless=headless)
+        browser = chromium.launch(headless=headless, **options)
     # Readiness failure is not a launch error and never triggers a fallback.
     require_rendering_ready(browser)
     return browser

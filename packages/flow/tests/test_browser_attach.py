@@ -37,7 +37,7 @@ from openadapt_flow.interactive_recorder import (
     select_attached_page,
     validate_browser_cdp_endpoint,
 )
-from tests._attached_chromium import resize_tab_viewport
+from tests._attached_chromium import owned_chromium, resize_tab_viewport
 
 
 class _Page:
@@ -1668,9 +1668,9 @@ def test_live_cdp_attach_records_compiles_and_leaves_browser_running_three_trial
 
     profile = tmp_path / "chrome-profile"
     profile.mkdir()
-    process = subprocess.Popen(
+    with owned_chromium(
+        executable,
         [
-            str(executable),
             "--headless=new",
             "--no-sandbox",
             "--no-first-run",
@@ -1682,12 +1682,9 @@ def test_live_cdp_attach_records_compiles_and_leaves_browser_running_three_trial
             "--window-size=1280,800",
             # Pin the monitor scale so CSS and device pixels agree on any host.
             "--force-device-scale-factor=1",
-            attach_app_url,
         ],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    try:
+        attach_app_url,
+    ) as process:
         port_file = profile / "DevToolsActivePort"
         deadline = time.monotonic() + 20
         port_line = ""
@@ -3225,13 +3222,6 @@ def test_live_cdp_attach_records_compiles_and_leaves_browser_running_three_trial
         assert process.poll() is None
         with urlopen(f"{endpoint}/json/version", timeout=2) as response:
             assert response.status == 200
-    finally:
-        process.terminate()
-        try:
-            process.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait(timeout=10)
 
 
 # ---------------------------------------------------------------------------

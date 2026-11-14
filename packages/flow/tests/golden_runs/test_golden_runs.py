@@ -76,8 +76,10 @@ def browser(bundle_dir: Path) -> Iterator[object]:
 
     with sync_playwright() as playwright:
         chromium = playwright.chromium.launch(headless=True)
-        yield chromium
-        chromium.close()
+        try:
+            yield chromium
+        finally:
+            chromium.close()
 
 
 @pytest.fixture(scope="module")

@@ -198,8 +198,10 @@ def browser() -> Iterator[object]:
 
     with sync_playwright() as pw:
         chromium = pw.chromium.launch(headless=True)
-        yield chromium
-        chromium.close()
+        try:
+            yield chromium
+        finally:
+            chromium.close()
 
 
 def _record(app_url, browser, root: Path, layout: str, order: str, chart: str) -> Path:
