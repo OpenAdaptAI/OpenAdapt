@@ -2,7 +2,7 @@
 
 <!-- version list -->
 
-## Unreleased (1.22.0)
+## v1.22.0 (2026-11-14)
 
 ### Requirements
 
@@ -10,6 +10,9 @@
   is now `>=2.7.0,<4.0.0`, and `openadapt doctor` accepts Flow 3. Flow 3 moved
   its vision stack to the `vision` extra; the launcher's `browser` and other
   surface extras include it, and `openadapt[flow]` now names it.
+- With `openadapt-agent` 2.2.2, which also accepts Flow 3, `pip install
+  openadapt` installs Flow 3, and `openadapt` and `openadapt-verify` install
+  together.
 
 ## v1.21.0 (2026-11-09)
 
