@@ -59,6 +59,11 @@ def _bundle(path: Path, *, effects: bool = True, saves: bool = True) -> Path:
 class FakeCache:
     def __init__(self, root: Path, *, held: bool = False, admitted: bool = True):
         self.root = root
+        self.common: dict[str, Any] = {
+            "url": "https://app.example.com/",
+            "policy": "clinical-write",
+        }
+        self.environment = ""
         self._held = held
         self._admitted = admitted
         self.task_dir = root / "cache" / "skill-abc"
@@ -265,23 +270,59 @@ def test_curl_example_uses_variable_not_key_and_refuses_unsafe_values() -> None:
 def command(
     cache: FakeCache, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> dict[str, Any]:
+    from openadapt_flow import runtime_validation
+
     setup = SimpleNamespace(
         cache=cache, instruction="Save {note}", parameters=("note",)
     )
     monkeypatch.setattr(recording, "load_task", lambda *_a, **_k: setup)
     monkeypatch.setattr(hosted, "resolve_host", lambda host=None: HOST)
-    monkeypatch.setattr(hosted, "resolve_token", lambda *a, **k: "ingest")
-    state: dict[str, Any] = {"pushes": [], "approved": False}
-    derivative = tmp_path / "sanitized" / "artifact-1"
+    monkeypatch.setattr(hosted, "_auto_approve_enabled", lambda _explicit: False)
+
+    def no_ingest_token(*_a: Any, **_k: Any) -> str:
+        raise AssertionError("publish must not look for an ingest token")
+
+    monkeypatch.setattr(hosted, "resolve_token", no_ingest_token)
+    recording_dir = cache.task_dir / "program" / "recording"
+    run_dir = cache.task_dir / "runs" / "canary-1"
+    state: dict[str, Any] = {
+        "pushes": [],
+        "approved": set(),
+        "attested": [],
+        "result": {},
+        "evidence": publish.WrapEvidence(
+            recording=recording_dir,
+            run_dir=run_dir,
+            canary={"outcome": "VERIFIED", "environment": "synthetic"},
+        ),
+        "semantics": "preserved",
+        "kind": "web",
+    }
+
+    def derive(source: Path, destination: Path, kind: str) -> dict[str, Any]:
+        destination.mkdir(parents=True, exist_ok=True)
+        (destination / "workflow.json").write_text("{}")
+        return {
+            "kind": kind,
+            "execution_semantics": state["semantics"],
+            "files": [{"path": "workflow.json", "changed": False}],
+            "residual_findings": [],
+        }
+
+    def approve(derivatives: Any, args: Any, *, automatic: bool) -> None:
+        state["approved"].update(path for path, _source in derivatives)
+        state["reviewer"] = publish._reviewer(args)
+
+    def attest(**kwargs: Any) -> dict[str, Any]:
+        state["attested"].append(kwargs)
+        if state.get("attest_error"):
+            raise runtime_validation.RuntimeValidationError(state["attest_error"])
+        return {"schema": runtime_validation.V2_SCHEMA}
 
     def push(path: Any, **kwargs: Any) -> dict[str, Any]:
         state["pushes"].append((Path(path), kwargs))
-        if Path(path) != derivative:
-            return {
-                "uploaded": False,
-                "pending_review": True,
-                "sanitized_path": str(derivative),
-            }
+        if state.get("push_error"):
+            raise state["push_error"]
         return {
             "uploaded": True,
             "status": "accepted",
@@ -294,121 +335,369 @@ def command(
                 "runtime_validation_id": QUALIFICATION,
                 "version": 1,
             },
+            **state["result"],
         }
 
+    monkeypatch.setattr(publish, "wrap_evidence", lambda *_a, **_k: state["evidence"])
+    monkeypatch.setattr(publish, "_report_kind", lambda _run: state["kind"])
+    monkeypatch.setattr(publish, "_derive", derive)
+    monkeypatch.setattr(publish, "_approved", lambda path: path in state["approved"])
+    monkeypatch.setattr(publish, "_approve", approve)
+    monkeypatch.setattr(
+        runtime_validation, "create_admitted_program_attestation", attest
+    )
     monkeypatch.setattr(hosted, "push", push)
-    monkeypatch.setattr(publish, "_approved", lambda _path: state["approved"])
+    monkeypatch.setattr(publish.sys.stdin, "isatty", lambda: False, raising=False)
     for name in publish.API_KEY_ENVS:
         monkeypatch.delenv(name, raising=False)
-    state["derivative"] = derivative
+    monkeypatch.setenv("OPENADAPT_API_KEY", SECRET)
+    state["http"] = FakeHttp(200, _definition())
+    monkeypatch.setattr(httpx, "get", state["http"].get)
+    state["record"] = (
+        cache.task_dir.parent / "publish" / cache.task_dir.name / "published.json"
+    )
     return state
 
 
-def test_command_walks_review_then_validation_then_publishes(
+def _publish(*extra: str) -> int:
+    return wrap_cli.main(["publish", "--task", "task.json", *extra])
+
+
+def test_yes_publishes_with_one_key_and_automatic_validation(
+    command: dict[str, Any], capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert _publish("--yes", "--reviewer", "pat") == 0
+    captured = capsys.readouterr()
+    # One summary of what will be uploaded, then the endpoint and a call.
+    assert "Ready to publish to" in captured.out and "1 saving step" in captured.out
+    assert f"{HOST}/api/v1/org/{ORG}/workflow/{WORKFLOW}" in captured.out
+    assert "curl -sS -X POST" in captured.out
+    assert SECRET not in captured.out + captured.err
+    assert command["reviewer"] == "pat"
+    # Validation ran inside publish, from the wrap run's own evidence.
+    (attested,) = command["attested"]
+    assert attested["token"] == SECRET
+    assert attested["run_dir"] == command["evidence"].run_dir
+    assert attested["recording_source"] == command["evidence"].recording
+    assert attested["target_url"] == "https://app.example.com/"
+    assert attested["policy_source"] == "clinical-write"
+    # The upload is the governed push of the approved sanitized bundle, with
+    # the same key, never an ingest token.
+    ((path, kwargs),) = command["pushes"]
+    assert path.name == "sanitized-bundle" and path in command["approved"]
+    assert kwargs["token"] == SECRET and kwargs["kind"] == "bundle"
+    assert kwargs["validation_attestation"] == {
+        "schema": "openadapt.runtime-validation/v2"
+    }
+    text = command["record"].read_text()
+    assert SECRET not in text and json.loads(text)["callable"] is True
+
+
+def test_without_a_terminal_it_shows_the_summary_and_uploads_nothing(
+    command: dict[str, Any], capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert _publish() == publish.EXIT_WAITING
+    out = capsys.readouterr().out
+    assert "Ready to publish to" in out and "--yes" in out
+    assert "Nothing was uploaded" in out
+    assert command["pushes"] == [] and command["attested"] == []
+    assert command["approved"] == set()
+
+
+@pytest.mark.parametrize("answer,code", [("y", 0), ("n", publish.EXIT_WAITING)])
+def test_one_confirm_prompt_at_a_terminal(
+    command: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    answer: str,
+    code: int,
+) -> None:
+    monkeypatch.setattr(publish.sys.stdin, "isatty", lambda: True, raising=False)
+    prompts: list[str] = []
+
+    def ask(prompt: str) -> str:
+        prompts.append(prompt)
+        return answer
+
+    monkeypatch.setattr("builtins.input", ask)
+    assert _publish() == code
+    assert prompts == ["Upload it? [y/N] "]
+    assert len(command["pushes"]) == (1 if answer == "y" else 0)
+    # A second run after approval does not ask again.
+    if answer == "y":
+        prompts.clear()
+        assert _publish() == 0
+        assert prompts == []
+
+
+def test_json_needs_yes_and_prints_one_object(
+    command: dict[str, Any], capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert _publish("--json") == publish.EXIT_WAITING
+    document = json.loads(capsys.readouterr().out)
+    assert document["step"] == "confirm_upload" and document["summary"]
+    assert _publish("--json", "--yes") == 0
+    document = json.loads(capsys.readouterr().out)
+    assert document["status"] == "published" and document["callable"] is True
+
+
+def test_missing_key_is_one_line_naming_it_before_anything_is_staged(
     command: dict[str, Any],
     cache: FakeCache,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    task = ["publish", "--task", "task.json"]
-    assert wrap_cli.main(task) == publish.EXIT_WAITING
-    out = capsys.readouterr().out
-    assert "approve-sanitized" in out and "Nothing has been uploaded" in out
-
-    command["approved"] = True
-    assert wrap_cli.main(task) == publish.EXIT_WAITING
-    assert "validate-hosted" in capsys.readouterr().out
-    assert len(command["pushes"]) == 2  # both stopped before any upload
-
-    monkeypatch.setenv("OPENADAPT_API_KEY", SECRET)
-    http = FakeHttp(200, _definition())
-    monkeypatch.setattr(httpx, "get", http.get)
-    code = wrap_cli.main(task + ["--validation-attestation", "att.json"])
-    captured = capsys.readouterr()
-    assert code == 0
-    assert f"{HOST}/api/v1/org/{ORG}/workflow/{WORKFLOW}" in captured.out
-    assert "curl -sS -X POST" in captured.out
-    assert SECRET not in captured.out + captured.err
-    path, kwargs = command["pushes"][-1]
-    assert path == command["derivative"]
-    assert kwargs["kind"] == "bundle"
-    assert kwargs["validation_attestation"] == "att.json"
-    record = cache.task_dir.parent / "publish" / cache.task_dir.name / "published.json"
-    text = record.read_text()
-    assert SECRET not in text
-    assert json.loads(text)["callable"] is True
+    monkeypatch.delenv("OPENADAPT_API_KEY")
+    assert _publish("--yes") == publish.EXIT_SETUP
+    err = capsys.readouterr().err.strip()
+    assert len(err.splitlines()) == 1
+    assert (
+        "OPENADAPT_API_KEY is not set" in err and "/dashboard/settings/api-keys" in err
+    )
+    assert command["pushes"] == []
+    assert not (cache.task_dir.parent / "publish").exists()
 
 
-def test_command_without_api_key_publishes_and_says_how_to_check(
+def test_local_app_url_is_refused_before_any_upload(
+    command: dict[str, Any],
+    cache: FakeCache,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    cache.common["url"] = "http://localhost:8080/"
+    assert _publish("--yes") == publish.EXIT_SETUP
+    assert "[TARGET_NOT_PUBLIC]" in capsys.readouterr().err
+    assert command["pushes"] == [] and command["attested"] == []
+
+
+def test_a_scrub_that_changes_the_program_is_refused(
     command: dict[str, Any], capsys: pytest.CaptureFixture[str]
 ) -> None:
-    command["approved"] = True
-    code = wrap_cli.main(
-        ["publish", "--task", "t.json", "--validation-attestation", "a.json", "--json"]
-    )
-    document = json.loads(capsys.readouterr().out)
-    assert code == 0
-    assert document["status"] == "published"
-    assert document["callable"] is None
-    assert "OPENADAPT_API_KEY" in document["reason"]
-    assert "$OPENADAPT_API_KEY" in document["examples"][0]
+    command["semantics"] = "not-preserved"
+    assert _publish("--yes") == publish.EXIT_REFUSED
+    assert "[SANITIZATION_CHANGED_PROGRAM]" in capsys.readouterr().err
+    assert command["pushes"] == [] and command["approved"] == set()
 
 
-def test_command_reports_not_callable_yet(
-    command: dict[str, Any],
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+def test_failed_validation_uploads_nothing(
+    command: dict[str, Any], capsys: pytest.CaptureFixture[str]
 ) -> None:
-    command["approved"] = True
-    monkeypatch.setenv("OPENADAPT_API_KEY", SECRET)
-    monkeypatch.setattr(
-        httpx,
-        "get",
-        FakeHttp(
-            409, {"error": "workflow_not_ready", "code": "first_run_approval"}
-        ).get,
-    )
-    code = wrap_cli.main(
-        ["publish", "--task", "t.json", "--validation-attestation", "a.json"]
-    )
-    out = capsys.readouterr().out
-    assert code == publish.EXIT_WAITING
-    assert "Not callable yet" in out and "first_run_approval" in out
-
-
-def test_command_refuses_without_ingest_token_before_upload(
-    command: dict[str, Any],
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    def missing(*_a: Any, **_k: Any) -> str:
-        raise hosted.HostedError("no token")
-
-    monkeypatch.setattr(hosted, "resolve_token", missing)
-    assert wrap_cli.main(["publish", "--task", "t.json"]) == publish.EXIT_SETUP
-    assert "OPENADAPT_INGEST_TOKEN" in capsys.readouterr().err
+    command["attest_error"] = "Strict lint failed: 1 error, 0 warn, 0 info"
+    assert _publish("--yes") == publish.EXIT_REFUSED
+    err = capsys.readouterr().err
+    assert "[VALIDATION_FAILED]" in err and "Strict lint failed" in err
     assert command["pushes"] == []
 
 
-def test_uncertain_delivery_is_never_retried(
+@pytest.mark.parametrize(
+    "message,code",
+    [
+        ("Ingest token was rejected (401).", "API_KEY_REJECTED"),
+        (
+            'Ingest returned 422 (expected 201): {"code":"runtime_validation_rejected"}',
+            "VALIDATION_REJECTED",
+        ),
+        ("Ingest returned 413 (expected 201): too large", "UPLOAD_REFUSED"),
+    ],
+)
+def test_upload_refusals_name_what_is_wrong(
     command: dict[str, Any],
-    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    message: str,
+    code: str,
 ) -> None:
-    command["approved"] = True
-    real = hosted.push
+    command["push_error"] = hosted.HostedError(message)
+    assert _publish("--yes") != 0
+    err = capsys.readouterr().err
+    assert f"[{code}]" in err and SECRET not in err
 
-    def uncertain(path: Any, **kwargs: Any) -> Any:
-        if Path(path) == command["derivative"]:
-            raise hosted.HostedDeliveryUncertain("timeout", context={})
-        return real(path, **kwargs)
 
-    monkeypatch.setattr(hosted, "push", uncertain)
-    code = wrap_cli.main(
-        ["publish", "--task", "t.json", "--validation-attestation", "a.json"]
-    )
-    assert code == publish.EXIT_REFUSED
+def test_uncertain_delivery_is_never_retried(
+    command: dict[str, Any], capsys: pytest.CaptureFixture[str]
+) -> None:
+    command["push_error"] = hosted.HostedDeliveryUncertain("timeout", context={})
+    assert _publish("--yes") == publish.EXIT_REFUSED
     assert "Do not run publish again" in capsys.readouterr().err
+
+
+def test_ingest_acknowledgment_names_qualification_and_endpoint(
+    command: dict[str, Any], capsys: pytest.CaptureFixture[str]
+) -> None:
+    other = "66666666-6666-4666-8666-666666666666"
+    command["result"] = {
+        "qualification_id": other,
+        "execute_path": f"/api/v1/org/{ORG}/workflow/{WORKFLOW}",
+    }
+    command["http"].body = _definition(
+        binding={**_definition()["binding"], "qualification_id": other}
+    )
+    assert _publish("--yes") == 0
+    assert command["http"].calls[0]["params"] == {"qualification_id": other}
+    command["result"] = {"execute_path": f"/api/v1/org/{ORG}/workflow/{VERSION}"}
+    assert _publish("--yes") == publish.EXIT_REFUSED
+    assert "[CLOUD_RESPONSE_INVALID]" in capsys.readouterr().err
+
+
+def test_command_reports_not_callable_yet(
+    command: dict[str, Any], capsys: pytest.CaptureFixture[str]
+) -> None:
+    command["http"].status = 409
+    command["http"].body = {"error": "workflow_not_ready", "code": "first_run_approval"}
+    assert _publish("--yes") == publish.EXIT_WAITING
+    out = capsys.readouterr().out
+    assert "Not callable yet" in out and "first_run_approval" in out
+
+
+def test_explicit_attestation_skips_the_wrap_evidence(
+    command: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def no_evidence(*_a: Any, **_k: Any) -> Any:
+        raise AssertionError("an explicit attestation needs no wrap evidence")
+
+    monkeypatch.setattr(publish, "wrap_evidence", no_evidence)
+    assert _publish("--yes", "--validation-attestation", "att.json") == 0
+    assert command["attested"] == []
+    assert command["pushes"][0][1]["validation_attestation"] == "att.json"
+
+
+# -- the wrap run's evidence, with real signatures -------------------------------
+
+
+@pytest.fixture
+def evidence_program(
+    cache: FakeCache, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> dict[str, Any]:
+    keys = tmp_path / "keys"
+    monkeypatch.setenv(lifecycle.KEY_DIR_ENV, str(keys))
+    from openadapt_flow.execute.keys import load_or_create_private_key
+
+    load_or_create_private_key(keys)  # also writes keys/ed25519.pub
+    program_dir = cache.task_dir / "program"
+    rec = program_dir / "recording" / "rec-1"
+    rec.mkdir(parents=True)
+    (rec / "events.json").write_text("[]")
+    run_dir = cache.task_dir / "runs" / "canary-1"
+    run_dir.mkdir(parents=True)
+    (run_dir / "report.json").write_text(json.dumps({"execution_target_kind": "web"}))
+    digest = "d" * 64
+    recorder = {"digest": digest, "task_key": "k"}
+    recorder["signature"] = lifecycle._sign_record(recorder, keys)
+    (program_dir / lifecycle.CANDIDATE_FILE).write_text(
+        json.dumps({"recorder": recorder, "recording": str(rec)})
+    )
+    canary = {
+        "digest": digest,
+        "passed": True,
+        "outcome": "VERIFIED",
+        "ran_at": "2026-11-13T00:00:00Z",
+        "run_dir": str(run_dir),
+    }
+    canary["signature"] = lifecycle._sign_record(canary, keys)
+    (program_dir / lifecycle.CANARY_FILE).write_text(json.dumps(canary))
+    staged = publish.StagedProgram(
+        staged=tmp_path / "staged",
+        manifest={},
+        record_dir=tmp_path / "record",
+        admission={"digest": digest, "canary": {"ran_at": canary["ran_at"]}},
+        task_dir=cache.task_dir,
+    )
+    return {"staged": staged, "keys": keys, "rec": rec, "run_dir": run_dir}
+
+
+def test_wrap_evidence_finds_the_signed_recording_and_canary(
+    evidence_program: dict[str, Any],
+) -> None:
+    found = publish.wrap_evidence(evidence_program["staged"], key_dir=None)
+    assert found.recording == evidence_program["rec"]
+    assert found.run_dir == evidence_program["run_dir"]
+    assert publish._report_kind(found.run_dir) == "web"
+
+
+@pytest.mark.parametrize(
+    "tamper", ["other_digest", "unsigned_canary", "run_outside", "linked_recording"]
+)
+def test_wrap_evidence_refuses_unsigned_or_foreign_evidence(
+    evidence_program: dict[str, Any], tmp_path: Path, tamper: str
+) -> None:
+    staged = evidence_program["staged"]
+    program_dir = staged.task_dir / "program"
+    canary_file = program_dir / lifecycle.CANARY_FILE
+    canary = json.loads(canary_file.read_text())
+    if tamper == "other_digest":
+        staged = publish.StagedProgram(
+            **{**staged.__dict__, "admission": {"digest": "e" * 64}}
+        )
+    elif tamper == "unsigned_canary":
+        canary["outcome"] = "HALTED"
+        canary_file.write_text(json.dumps(canary))
+    elif tamper == "run_outside":
+        outside = tmp_path / "elsewhere"
+        outside.mkdir()
+        (outside / "report.json").write_text("{}")
+        canary["run_dir"] = str(outside)
+        canary.pop("signature")
+        canary["signature"] = lifecycle._sign_record(canary, evidence_program["keys"])
+        canary_file.write_text(json.dumps(canary))
+    else:
+        (evidence_program["rec"] / "linked").symlink_to(tmp_path)
+    with pytest.raises(publish.PublishError) as err:
+        publish.wrap_evidence(staged, key_dir=None)
+    assert err.value.code == "NO_WRAP_EVIDENCE"
+
+
+# -- the admitted-program attestation keeps its bindings -------------------------
+
+
+def test_admitted_program_attestation_binds_the_compiled_recording(
+    cache: FakeCache, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openadapt_flow import privacy, runtime_validation
+    from openadapt_flow.sanitized_artifact import approve_derivative, sanitize_artifact
+
+    class IdentityScrubber:
+        def scrub_text(self, text: str, is_separated: bool = False) -> str:
+            return text
+
+        def scrub_image(self, image: Any, fill_color: Any = None) -> Any:
+            return image
+
+    monkeypatch.setattr(runtime_validation, "resolve_host", lambda host=None: HOST)
+    monkeypatch.setattr(
+        runtime_validation, "resolve_destination_policy", lambda *_a, **_k: None
+    )
+
+    def no_network(*_a: Any, **_k: Any) -> Any:
+        raise AssertionError("a local refusal must not reach the network")
+
+    monkeypatch.setattr(httpx, "post", no_network)
+    compiled = tmp_path / "compiled"
+    compiled.mkdir()
+    (compiled / "events.json").write_text("[]")
+    other = tmp_path / "other"
+    other.mkdir()
+    (other / "events.json").write_text('[{"i": 1}]')
+    privacy.set_text_scrubber(IdentityScrubber())
+    try:
+        staged = publish.stage(cache, "Save {note}", ["note"])
+        bundle = tmp_path / "bundle-d"
+        sanitize_artifact(staged.staged, bundle, kind="bundle")
+        approve_derivative(bundle, source=staged.staged, reviewer="pat")
+        rec = tmp_path / "rec-d"
+        sanitize_artifact(other, rec, kind="recording")
+        approve_derivative(rec, source=other, reviewer="pat")
+        with pytest.raises(runtime_validation.RuntimeValidationError) as err:
+            runtime_validation.create_admitted_program_attestation(
+                recording_source=compiled,
+                recording_derivative=rec,
+                bundle_derivative=bundle,
+                run_dir=tmp_path,
+                policy_source="clinical-write",
+                environment="synthetic",
+                target_url="https://app.example.com/",
+                token="t",
+            )
+    finally:
+        privacy.reset_scrubbers()
+    assert "not a copy of the recording" in str(err.value)
 
 
 def test_wrap_run_parser_is_unchanged_for_non_publish_argv() -> None:

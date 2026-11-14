@@ -1,28 +1,32 @@
 """Publish a wrapped task's admitted program as an OpenAdapt Cloud endpoint.
 
 ``openadapt wrap publish --task TASK.json`` ships the program that
-``openadapt wrap`` already compiled, checked and admitted for that task. It
-adds no new way to reach the cloud: the upload is the governed bundle
-``push`` (local sanitization, a person's review, a runtime-validation
-attestation, exact-hash archive), and the endpoint is the cloud's existing
-workflow Execute API. What this module adds is the part between them:
+``openadapt wrap`` already compiled, checked and admitted for that task, with
+one credential, ``OPENADAPT_API_KEY``. It adds no new way to reach the cloud:
+the upload is the governed bundle ``push`` (local sanitization, a person's
+approval, a runtime-validation attestation, exact-hash archive), and the
+endpoint is the cloud's existing workflow Execute API. What this module adds
+is the part between them:
 
 * it finds the task's admitted program from the task file alone,
 * it refuses a program the cloud could not read back: no saving step, a
   saving step with no effect contract, or no confirmed ``verify.yaml``,
 * it re-verifies the admission signature before anything leaves the machine,
 * it stages the bundle with its read-back configuration and a small manifest,
-* after the upload it asks the cloud for the endpoint's current definition
-  with the caller's API key, and prints the URL and a ``curl`` example.
+* it sanitizes the bundle and the recording it was compiled from, shows one
+  short summary and asks once (``--yes`` answers for a script),
+* it attests the program from the wrap run's own evidence (its recording and
+  its attended canary run), so no separate validation command is needed,
+* after the upload it reads the endpoint's current definition with the same
+  key and prints the URL and a ``curl`` example.
 
-Every step that needs a person or a credential stops with the exact next
-command. Running the same command again resumes from where it stopped. No
-credential is printed, logged or written to the publish record.
+No credential is printed, logged or written to the publish record.
 """
 
 from __future__ import annotations
 
 import argparse
+import getpass
 import hashlib
 import json
 import os
@@ -76,6 +80,10 @@ class StagedProgram:
     staged: Path
     manifest: dict[str, Any]
     record_dir: Path
+    #: The verified admission manifest (its digest pins the evidence).
+    admission: Mapping[str, Any]
+    #: The task's cache directory (``program/`` and ``runs/`` live there).
+    task_dir: Path
 
 
 # -- local: find, check and stage -----------------------------------------------
@@ -179,7 +187,7 @@ def stage(
     bundle = Path(program["bundle"])
     checks = Path(program["checks"])
     try:
-        verify_admission(bundle, key_dir=key_dir)
+        admission = verify_admission(bundle, key_dir=key_dir)
     except AdmissionError:
         raise PublishError(
             "ADMISSION_INVALID",
@@ -225,7 +233,13 @@ def stage(
     (staged / MANIFEST_NAME).write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
-    return StagedProgram(staged=staged, manifest=manifest, record_dir=record_dir)
+    return StagedProgram(
+        staged=staged,
+        manifest=manifest,
+        record_dir=record_dir,
+        admission=admission if isinstance(admission, Mapping) else {},
+        task_dir=Path(program["task_dir"]),
+    )
 
 
 # -- cloud: endpoint and definition ---------------------------------------------
@@ -380,27 +394,281 @@ def curl_examples(endpoint: str, definition: Optional[Mapping[str, Any]]) -> lis
 # -- the command -----------------------------------------------------------------
 
 
+# -- the wrap run's own validation evidence -------------------------------------
+
+
+@dataclass(frozen=True)
+class WrapEvidence:
+    """What the wrap run already produced that runtime validation needs."""
+
+    #: The recording the program was compiled from (kept on this machine).
+    recording: Path
+    #: The attended canary run of the admitted program (``report.json``).
+    run_dir: Path
+    canary: Mapping[str, Any]
+
+
+def _read_json(path: Path) -> Optional[dict[str, Any]]:
+    if path.is_symlink() or not path.is_file():
+        return None
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _inside(path: Path, root: Path) -> bool:
+    try:
+        return path.resolve(strict=True).is_relative_to(root.resolve(strict=True))
+    except OSError:
+        return False
+
+
+def _no_links(root: Path) -> bool:
+    return not root.is_symlink() and not any(p.is_symlink() for p in root.rglob("*"))
+
+
+def wrap_evidence(program: StagedProgram, *, key_dir: Optional[Path]) -> WrapEvidence:
+    """Find the admitted program's recording and its signed, passing canary.
+
+    Both are written by the wrap first run. Each is accepted only when it is
+    signed with the local admission key for the admitted program's digest and
+    lies inside the task's own cache directory.
+    """
+    from openadapt_flow.jit import lifecycle
+
+    digest = program.admission.get("digest")
+    program_dir = program.task_dir / "program"
+    candidate = _read_json(program_dir / lifecycle.CANDIDATE_FILE)
+    recorder = (candidate or {}).get("recorder")
+    if (
+        not digest
+        or not isinstance(recorder, dict)
+        or recorder.get("digest") != digest
+        or not lifecycle._record_signed(recorder, key_dir)
+    ):
+        raise PublishError(
+            "NO_WRAP_EVIDENCE",
+            "the admitted program has no signed draft record (program/"
+            "candidate.json) from its wrap run, so its recording is unknown. "
+            "Run the task again with `openadapt wrap`",
+        )
+    recording: Optional[Path] = None
+    for field in ("compiled_recording", "recording"):
+        value = (candidate or {}).get(field)
+        if isinstance(value, str) and value not in ("", "None"):
+            path = Path(value)
+            if path.is_dir() and _inside(path, program_dir) and _no_links(path):
+                recording = path
+                break
+    if recording is None:
+        raise PublishError(
+            "NO_WRAP_EVIDENCE",
+            "the recording this program was compiled from is missing from the "
+            "task's cache directory. Run the task again with `openadapt wrap`",
+        )
+
+    ran_at = (program.admission.get("canary") or {}).get("ran_at")
+    rows: list[dict[str, Any]] = []
+    latest = _read_json(program_dir / lifecycle.CANARY_FILE)
+    if latest is not None:
+        rows.append(latest)
+    history = program_dir / lifecycle.CANARIES_FILE
+    if history.is_file() and not history.is_symlink():
+        for line in reversed(history.read_text(encoding="utf-8").splitlines()):
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(row, dict):
+                rows.append(row)
+    runs = program.task_dir / "runs"
+    for row in rows:
+        run_dir = row.get("run_dir")
+        if (
+            row.get("digest") != digest
+            or row.get("passed") is not True
+            or (ran_at is not None and row.get("ran_at") != ran_at)
+            or not isinstance(run_dir, str)
+            or not lifecycle._record_signed(row, key_dir)
+        ):
+            continue
+        path = Path(run_dir)
+        report = path / "report.json"
+        if _inside(path, runs) and report.is_file() and not report.is_symlink():
+            return WrapEvidence(recording=recording, run_dir=path, canary=row)
+    raise PublishError(
+        "NO_WRAP_EVIDENCE",
+        "the admitted program has no signed, passing canary run in the task's "
+        "cache directory. Run the task again with `openadapt wrap` and attend "
+        "its canary",
+    )
+
+
+def _report_kind(run_dir: Path) -> Optional[str]:
+    report = _read_json(run_dir / "report.json") or {}
+    kind = report.get("execution_target_kind")
+    return kind if isinstance(kind, str) else None
+
+
+def _check_public_target(url: str) -> str:
+    """The cloud runner opens the app itself: it must be public HTTPS."""
+    from openadapt_flow.runtime_validation import (
+        RuntimeValidationError,
+        normalize_execution_scope,
+    )
+
+    try:
+        return str(normalize_execution_scope(url, None)["entry_url"])
+    except RuntimeValidationError:
+        raise PublishError(
+            "TARGET_NOT_PUBLIC",
+            "the task's app URL is not a public HTTPS address, so OpenAdapt Cloud "
+            "cannot open it (local, private and plain-HTTP addresses are refused). "
+            "Wrap the task against a public HTTPS deployment of the app",
+            exit_code=EXIT_SETUP,
+        ) from None
+
+
+# -- one review of what will be uploaded ----------------------------------------
+
+
+def _derive(source: Path, destination: Path, kind: str) -> dict[str, Any]:
+    """The sanitized derivative of ``source``, reused while ``source`` is unchanged."""
+    from openadapt_flow import safe_errors
+    from openadapt_flow.sanitized_artifact import (
+        SanitizationError,
+        load_and_verify_derivative,
+        sanitize_artifact,
+        source_tree_sha256,
+    )
+
+    if destination.is_symlink():
+        raise PublishError("BUNDLE_UNSAFE", "the publish directory is a symbolic link")
+    label = "program" if kind == "bundle" else "recording"
+    try:
+        if destination.exists():
+            try:
+                manifest = load_and_verify_derivative(destination)
+                if manifest.get("source_tree_sha256") == source_tree_sha256(source):
+                    return manifest
+            except SanitizationError:
+                pass
+            shutil.rmtree(destination)
+        return sanitize_artifact(source, destination, kind=kind)
+    except SanitizationError as exc:
+        raise PublishError(
+            "SANITIZATION_FAILED",
+            f"the {label} could not be sanitized: {safe_errors.message(exc)}",
+        ) from None
+
+
+def _approved(derivative: Path) -> bool:
+    from openadapt_flow.sanitized_artifact import SanitizationError, load_valid_approval
+
+    try:
+        load_valid_approval(derivative)
+    except (SanitizationError, OSError, ValueError):
+        return False
+    return True
+
+
+def review_summary(
+    program: StagedProgram,
+    bundle_manifest: Mapping[str, Any],
+    bundle_dir: Path,
+    *,
+    host: str,
+    name: str,
+    workflow_id: Optional[str],
+    parameters: Sequence[str],
+    target: Optional[str],
+    canary: Optional[Mapping[str, Any]],
+) -> list[str]:
+    """A short summary of exactly what will leave the machine."""
+    files = list(bundle_manifest.get("files") or [])
+    changed = sum(1 for row in files if isinstance(row, dict) and row.get("changed"))
+    unresolved = len(bundle_manifest.get("residual_findings") or [])
+    size = sum(p.stat().st_size for p in bundle_dir.rglob("*") if p.is_file())
+    destination = f"new version of {workflow_id}" if workflow_id else "new workflow"
+    lines = [
+        f"Ready to publish to {host}:",
+        f"  workflow    {name} ({destination})",
+        f"  program     {program.manifest['saves']} saving step(s), each read back "
+        "by the task's verify.yaml; inputs: " + ", ".join(parameters),
+        f"  upload      the sanitized program: {len(files)} files, "
+        f"{max(1, round(size / 1024))} KB, {changed} changed by the scrubber, "
+        f"{unresolved} unresolved findings",
+    ]
+    if canary is not None:
+        lines += [
+            "  recording   stays on this machine; only the hash of its sanitized "
+            "copy is sent",
+            f"  validation  the attended canary ({canary.get('outcome')}) on "
+            f"{target or 'the task app'}",
+        ]
+    lines.append(f"  inspect     {bundle_dir}")
+    return lines
+
+
+def _reviewer(args: argparse.Namespace) -> str:
+    if args.reviewer:
+        return str(args.reviewer)
+    try:
+        return f"{getpass.getuser()} (openadapt wrap publish)"
+    except Exception:  # noqa: BLE001 - no login name in this environment
+        return "local operator (openadapt wrap publish)"
+
+
+def _confirm(args: argparse.Namespace, lines: Sequence[str]) -> Optional[bool]:
+    """True to upload, False when declined, None when nobody can be asked."""
+    if args.yes:
+        return True
+    if args.json or not sys.stdin.isatty():
+        return None
+    for line in lines:
+        print(line)
+    try:
+        answer = input("Upload it? [y/N] ")
+    except EOFError:
+        return False
+    return answer.strip().lower() in ("y", "yes")
+
+
+# -- the command -----------------------------------------------------------------
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="openadapt wrap publish",
         allow_abbrev=False,
         description=(
             "Publish this task's admitted program as an OpenAdapt Cloud "
-            "endpoint. Run it again after each step it asks for."
+            "endpoint. Needs OPENADAPT_API_KEY. Shows what will be uploaded "
+            "and asks once."
         ),
     )
     parser.add_argument("--task", required=True, help="The task file used by wrap")
+    parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="Confirm the upload without asking (for scripts; the summary is "
+        "still printed)",
+    )
+    parser.add_argument("--reviewer", help="Who confirmed the upload (default: you)")
     parser.add_argument("--key-dir", help="Admission key directory (default: local)")
     parser.add_argument("--name", help="Workflow name in the dashboard")
     parser.add_argument(
         "--host", help="Cloud base URL (default: configured host or app.openadapt.ai)"
     )
     parser.add_argument(
-        "--validation-attestation",
-        help="Runtime-validation attestation from `openadapt-flow validate-hosted`",
+        "--workflow-id", help="Publish a new version of this existing workflow"
     )
     parser.add_argument(
-        "--workflow-id", help="Publish a new version of this existing workflow"
+        "--validation-attestation",
+        help="Use this `openadapt-flow validate-hosted` attestation instead of "
+        "attesting the wrap run's canary",
     )
     parser.add_argument("--json", action="store_true", help="Print one JSON object")
     return parser
@@ -428,16 +696,6 @@ def _refuse(args: argparse.Namespace, error: PublishError) -> int:
     return error.exit_code
 
 
-def _approved(derivative: Path) -> bool:
-    from openadapt_flow.sanitized_artifact import SanitizationError, load_valid_approval
-
-    try:
-        load_valid_approval(derivative)
-    except (SanitizationError, OSError, ValueError):
-        return False
-    return True
-
-
 def _write_record(record_dir: Path, document: Mapping[str, Any]) -> None:
     from openadapt_flow.record_sor import _write_private
 
@@ -447,10 +705,84 @@ def _write_record(record_dir: Path, document: Mapping[str, Any]) -> None:
     _write_private(target, json.dumps(document, indent=2, sort_keys=True) + "\n")
 
 
+def _no_key(host: str) -> PublishError:
+    return PublishError(
+        "NO_API_KEY",
+        "OPENADAPT_API_KEY is not set. Create a key at "
+        f"{host}/dashboard/settings/api-keys and export it",
+        exit_code=EXIT_SETUP,
+    )
+
+
+def _key_rejected() -> PublishError:
+    return PublishError(
+        "API_KEY_REJECTED",
+        "the cloud rejected OPENADAPT_API_KEY. Check that the key is current and "
+        "belongs to the organization you are publishing to",
+        exit_code=EXIT_SETUP,
+    )
+
+
+def _upload_error(exc: Exception) -> PublishError:
+    from openadapt_flow import safe_errors
+
+    text = safe_errors.message(exc)
+    if "(401)" in text:
+        return _key_rejected()
+    if "runtime_validation_rejected" in text:
+        return PublishError(
+            "VALIDATION_REJECTED",
+            "the cloud refused the program's runtime validation "
+            "(runtime_validation_rejected). Nothing was published",
+        )
+    return PublishError("UPLOAD_REFUSED", "the governed upload was refused: " + text)
+
+
+def _attest(
+    evidence: WrapEvidence,
+    recording_derivative: Path,
+    bundle_derivative: Path,
+    *,
+    policy: str,
+    environment: str,
+    target: Optional[str],
+    host: str,
+    key: str,
+) -> dict[str, Any]:
+    from openadapt_flow import safe_errors
+    from openadapt_flow.runtime_validation import (
+        RuntimeValidationError,
+        create_admitted_program_attestation,
+    )
+
+    try:
+        return create_admitted_program_attestation(
+            recording_source=evidence.recording,
+            recording_derivative=recording_derivative,
+            bundle_derivative=bundle_derivative,
+            run_dir=evidence.run_dir,
+            policy_source=policy,
+            environment=environment,
+            target_url=target,
+            host=host,
+            token=key,
+        )
+    except RuntimeValidationError as exc:
+        text = safe_errors.message(exc)
+        if "(401)" in text:
+            raise _key_rejected() from None
+        raise PublishError(
+            "VALIDATION_FAILED",
+            "the program did not pass runtime validation, so nothing was "
+            f"uploaded: {text}",
+        ) from None
+
+
 def run(args: argparse.Namespace) -> int:
     from openadapt_flow import hosted
     from openadapt_flow.integrations.agents.recording import TaskSetupError, load_task
 
+    key: Optional[str] = None
     try:
         try:
             setup = load_task(args.task, key_dir=args.key_dir)
@@ -460,42 +792,90 @@ def run(args: argparse.Namespace) -> int:
                 f"the task file is not a valid wrap task ({exc})",
                 exit_code=EXIT_SETUP,
             ) from None
+        host = hosted.resolve_host(args.host)
+        key = api_key()
+        if key is None:
+            raise _no_key(host)
         key_dir = Path(args.key_dir).expanduser() if args.key_dir else None
         program = stage(
             setup.cache, setup.instruction, setup.parameters, key_dir=key_dir
         )
-        try:
-            host = hosted.resolve_host(args.host)
-            hosted.resolve_token(host=host)
-        except hosted.HostedError:
-            raise PublishError(
-                "NO_INGEST_TOKEN",
-                "no OpenAdapt ingest token for the upload. Set "
-                "OPENADAPT_INGEST_TOKEN or run `openadapt-flow login` (mint one at "
-                "<host>/dashboard/settings/ingest)",
-                exit_code=EXIT_SETUP,
-            ) from None
+        common = getattr(setup.cache, "common", {}) or {}
         name = args.name or setup.cache.task_id(
             setup.instruction, dict.fromkeys(setup.parameters, "")
         )
-        common: dict[str, Any] = dict(
+        evidence: Optional[WrapEvidence] = None
+        target: Optional[str] = None
+        if not args.validation_attestation:
+            evidence = wrap_evidence(program, key_dir=key_dir)
+            if _report_kind(evidence.run_dir) == "web":
+                target = _check_public_target(str(common.get("url", "")))
+
+        bundle_derivative = program.record_dir / "sanitized-bundle"
+        bundle_manifest = _derive(program.staged, bundle_derivative, "bundle")
+        if bundle_manifest.get("execution_semantics") != "preserved":
+            raise PublishError(
+                "SANITIZATION_CHANGED_PROGRAM",
+                "the scrubber had to change the program's own files, so the upload "
+                "would not be the admitted program. Keep sensitive values out of "
+                "the task's constants and on-screen text, then run wrap again",
+            )
+        derivatives = [(bundle_derivative, program.staged)]
+        recording_derivative = program.record_dir / "sanitized-recording"
+        if evidence is not None:
+            _derive(evidence.recording, recording_derivative, "recording")
+            derivatives.append((recording_derivative, evidence.recording))
+
+        summary = review_summary(
+            program,
+            bundle_manifest,
+            bundle_derivative,
+            host=host,
+            name=name,
+            workflow_id=args.workflow_id,
+            parameters=setup.parameters,
+            target=target,
+            canary=evidence.canary if evidence is not None else None,
+        )
+        if not all(_approved(path) for path, _source in derivatives):
+            answer: Optional[bool]
+            automatic = hosted._auto_approve_enabled(None)
+            answer = True if automatic else _confirm(args, summary)
+            if not answer:
+                return _waiting_confirm(args, program, summary, asked=answer is False)
+            _approve(derivatives, args, automatic=automatic and not args.yes)
+            summary_shown = automatic or args.yes or args.json
+        else:
+            summary_shown = False
+        if summary_shown and not args.json:
+            for line in summary:
+                print(line)
+
+        attestation: Any = args.validation_attestation
+        if evidence is not None:
+            attestation = _attest(
+                evidence,
+                recording_derivative,
+                bundle_derivative,
+                policy=str(common.get("policy", "clinical-write")),
+                environment=str(
+                    getattr(setup.cache, "environment", "")
+                    or (evidence.canary.get("environment") or "")
+                    or (target or "wrap")
+                ),
+                target=target,
+                host=host,
+                key=key,
+            )
+        result = hosted.push(
+            bundle_derivative,
             kind="bundle",
             name=name,
             host=host,
+            token=key,
             workflow_id=args.workflow_id,
-            validation_attestation=args.validation_attestation,
+            validation_attestation=attestation,
         )
-        # A raw staged bundle is sanitized locally and pauses for review
-        # before push reads the attestation or opens a connection. Under an
-        # administrator's auto-approval policy push continues on its own.
-        result = hosted.push(program.staged, **common)
-        if result.get("pending_review"):
-            derivative = Path(result["sanitized_path"])
-            if not _approved(derivative):
-                return _waiting_review(args, program, derivative)
-            if not args.validation_attestation:
-                return _waiting_validation(args, program, derivative)
-            result = hosted.push(derivative, **common)
     except PublishError as error:
         return _refuse(args, error)
     except hosted.HostedDeliveryUncertain:
@@ -508,83 +888,57 @@ def run(args: argparse.Namespace) -> int:
             ),
         )
     except hosted.HostedError as exc:
-        from openadapt_flow import safe_errors
-
-        if not args.validation_attestation and "runtime-validation attestation" in str(
-            exc
-        ):
-            return _waiting_validation(args, program, None)
-        return _refuse(
-            args,
-            PublishError(
-                "UPLOAD_REFUSED",
-                "the governed upload was refused: " + safe_errors.message(exc),
-            ),
-        )
-    return _finish(args, program, result, host)
+        return _refuse(args, _upload_error(exc))
+    try:
+        return _finish(args, program, result, host, key)
+    finally:
+        del key
 
 
-def _waiting_review(
+def _approve(
+    derivatives: Sequence[tuple[Path, Path]],
+    args: argparse.Namespace,
+    *,
+    automatic: bool,
+) -> None:
+    from openadapt_flow import safe_errors
+    from openadapt_flow.sanitized_artifact import SanitizationError, approve_derivative
+
+    reviewer = "policy:complete-type-coverage" if automatic else _reviewer(args)
+    try:
+        for derivative, source in derivatives:
+            if not _approved(derivative):
+                approve_derivative(
+                    derivative, source=source, reviewer=reviewer, automatic=automatic
+                )
+    except SanitizationError as exc:
+        raise PublishError(
+            "SANITIZATION_FAILED",
+            f"the sanitized copy could not be approved: {safe_errors.message(exc)}",
+        ) from None
+
+
+def _waiting_confirm(
     args: argparse.Namespace,
     program: StagedProgram,
-    derivative: Path,
+    summary: list[str],
+    *,
+    asked: bool,
 ) -> int:
-    review = f"openadapt-flow review-sanitized {derivative} --original {program.staged}"
-    approve = (
-        f"openadapt-flow approve-sanitized {derivative} --original {program.staged} "
-        "--reviewer <you>"
+    hint = (
+        "Nothing was uploaded."
+        if asked
+        else "Nothing was uploaded. Run this command again with --yes to confirm "
+        "the upload, or run it at a terminal to be asked."
     )
     document = {
         "status": "waiting",
-        "step": "review_sanitized",
+        "step": "confirm_upload",
         "staged": str(program.staged),
-        "sanitized_path": str(derivative),
-        "next": [review, approve],
+        "summary": summary,
+        "next": "rerun with --yes",
     }
-    _emit(
-        args,
-        document,
-        [
-            "Program checked: admitted, with a read-back check on every save.",
-            f"Staged for upload at {program.staged}.",
-            f"A sanitized copy is waiting for your review at {derivative}.",
-            "Nothing has been uploaded. Next:",
-            f"  {review}",
-            f"  {approve}",
-            "Then run this publish command again.",
-        ],
-    )
-    return EXIT_WAITING
-
-
-def _waiting_validation(
-    args: argparse.Namespace, program: StagedProgram, derivative: Optional[Path]
-) -> int:
-    bundle = derivative if derivative is not None else "<approved bundle derivative>"
-    out = program.record_dir / "validation-attestation.json"
-    command = (
-        f"openadapt-flow validate-hosted --bundle {bundle} "
-        "--recording <approved recording derivative> --run-dir <governed replay run> "
-        "--policy <policy> --risk-class <low|consequential> --environment <name> "
-        f"--target-url <https entry url> --out {out}"
-    )
-    document = {
-        "status": "waiting",
-        "step": "validate_hosted",
-        "staged": str(program.staged),
-        "sanitized_path": str(derivative) if derivative is not None else None,
-        "next": [command],
-    }
-    _emit(
-        args,
-        document,
-        [
-            "The sanitized program is approved. The cloud also needs a "
-            "runtime-validation attestation before it will run it:",
-            f"  {command}",
-            f"Then run this publish command again with --validation-attestation {out}.",
-        ],
-    )
+    _emit(args, document, ([] if asked else summary) + [hint])
     return EXIT_WAITING
 
 
@@ -593,6 +947,7 @@ def _finish(
     program: StagedProgram,
     result: Mapping[str, Any],
     host: str,
+    key: Optional[str],
 ) -> int:
     version = result.get("version")
     workflow_id = result.get("workflow_id")
@@ -605,12 +960,24 @@ def _finish(
             ),
         )
     org_id = str(version.get("org_id", ""))
-    qualification_id = str(version.get("runtime_validation_id", ""))
+    # The ingest acknowledgment names the qualification and the endpoint path
+    # when the cloud supports it; both must agree with the retained version.
+    qualification_id = result.get("qualification_id")
+    if not isinstance(qualification_id, str) or not _UUID.fullmatch(qualification_id):
+        qualification_id = str(version.get("runtime_validation_id", ""))
     try:
         endpoint = endpoint_url(host, org_id, workflow_id)
     except PublishError as error:
         return _refuse(args, error)
-    key = api_key()
+    execute_path = result.get("execute_path")
+    if execute_path is not None and execute_path != endpoint[len(host.rstrip("/")) :]:
+        return _refuse(
+            args,
+            PublishError(
+                "CLOUD_RESPONSE_INVALID",
+                "the cloud's endpoint path does not match the uploaded workflow",
+            ),
+        )
     if key is None:
         check: dict[str, Any] = {
             "callable": None,
@@ -625,7 +992,6 @@ def _finish(
             workflow_id=workflow_id,
             qualification_id=qualification_id,
         )
-    del key
     definition = check.get("definition") if check.get("callable") else None
     examples = curl_examples(endpoint, definition)
     definition_curl = (
