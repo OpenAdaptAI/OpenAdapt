@@ -15,7 +15,7 @@
 
 <!-- version list -->
 
-## Unreleased
+## v3.1.0 (2026-11-14)
 
 ### Wrap publish: the scrubber keeps a program's structure, and info lint is advice
 
