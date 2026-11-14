@@ -3248,7 +3248,7 @@ all = [
     { name = "openadapt-agent", marker = "python_full_version < '3.13'" },
     { name = "openadapt-capture" },
     { name = "openadapt-evals" },
-    { name = "openadapt-flow", extra = ["browser", "capture", "privacy", "rdp", "windows"], marker = "python_full_version < '3.13'" },
+    { name = "openadapt-flow", extra = ["browser", "capture", "privacy", "rdp", "vision", "windows"], marker = "python_full_version < '3.13'" },
     { name = "openadapt-flow", extra = ["linux"], marker = "python_full_version < '3.13' and sys_platform == 'linux'" },
     { name = "openadapt-flow", extra = ["macos"], marker = "python_full_version < '3.13' and sys_platform == 'darwin'" },
     { name = "openadapt-grounding" },
@@ -3279,7 +3279,7 @@ evals = [
     { name = "openadapt-evals" },
 ]
 flow = [
-    { name = "openadapt-flow", marker = "python_full_version < '3.13'" },
+    { name = "openadapt-flow", extra = ["vision"], marker = "python_full_version < '3.13'" },
 ]
 grounding = [
     { name = "openadapt-grounding" },
@@ -3342,18 +3342,18 @@ provides-extras = ["browser", "capture", "windows", "macos", "linux", "rdp", "ml
 
 [[package]]
 name = "openadapt-agent"
-version = "2.2.1"
+version = "2.2.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
     { name = "cryptography" },
     { name = "jsonschema" },
     { name = "mcp" },
-    { name = "openadapt-flow" },
+    { name = "openadapt-flow", extra = ["vision"] },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6b/e0/0929a2988a191fe873faddb6a527f175f5c21adfed04ff356c4b14f77cc6/openadapt_agent-2.2.1.tar.gz", hash = "sha256:859e6b7d464ab813aba85af7f1f227ac9afcdb60112bc564719a82d3766fb733", size = 286603, upload-time = "2026-10-18T15:58:53.698Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/42/16/1b663f7f56f0808f28651f80ccca5674f813aa7ef7adab361e72f39e794e/openadapt_agent-2.2.2.tar.gz", hash = "sha256:52e94b6f8a30cbb8a78ae363a7a9e224136b045ac8a3f68ec42a93d30daa3cfa", size = 321018, upload-time = "2026-11-14T14:29:56.571Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0b/0c/5b1e5fa74a78a179f1a8ba3e022f93b1638654238c81056c532cf2f4b6ea/openadapt_agent-2.2.1-py3-none-any.whl", hash = "sha256:847499c4091144cb0c1bb1d2731ef064ae9cd844867c2b603acf573c6e12928a", size = 17386, upload-time = "2026-10-18T15:58:52.443Z" },
+    { url = "https://files.pythonhosted.org/packages/85/40/0b19d42a4254a7f1ad7f74f4eddd97522130f92999e7ae579c961c307e59/openadapt_agent-2.2.2-py3-none-any.whl", hash = "sha256:a75b7e27cb05559202bcd70529b9a69e5ef787663fa05e4204e26104c0ea697d", size = 22903, upload-time = "2026-11-14T14:29:54.876Z" },
 ]
 
 [[package]]
@@ -3423,43 +3423,55 @@ wheels = [
 
 [[package]]
 name = "openadapt-flow"
-version = "2.7.0"
+version = "3.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
     { name = "httpx" },
     { name = "idna" },
-    { name = "numpy" },
     { name = "openadapt-types" },
-    { name = "opencv-python" },
-    { name = "pillow" },
     { name = "pydantic" },
     { name = "pyyaml" },
-    { name = "rapidocr-onnxruntime" },
     { name = "tomli", marker = "python_full_version < '3.11' or python_full_version >= '3.13'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/cc/73/2e7aa84631e1526dfb7d3506e0cbcd2f96ff92ce66a67845005e47e3c61b/openadapt_flow-2.7.0.tar.gz", hash = "sha256:f564565ed5a1008e486be823f68ba307d6d3d1846c57cb14a2ae07ac081a624c", size = 35105953, upload-time = "2026-11-09T19:08:52.826Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/10/0a/609f1cf52dadc23aabdcd8e774fa0f1630c0e265e0d4b6ab48d8b0c2d2d0/openadapt_flow-3.0.0.tar.gz", hash = "sha256:222f638334ec6de7b42cbd6eaa6a1967aaabc2c31284b967f6575cfa741182b2", size = 61964382, upload-time = "2026-11-13T17:17:37.14Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d6/8a/dde0cbf1c5133c9cfff9033c28e5532498ede2632fb4b218e4526d0725f0/openadapt_flow-2.7.0-py3-none-any.whl", hash = "sha256:e6461cb46e8db6a54a0b0ba025d4cd6644d08933c7c05b05120437b3415632ac", size = 4880853, upload-time = "2026-11-09T19:08:47.17Z" },
+    { url = "https://files.pythonhosted.org/packages/a1/a2/621dd7a0004560f6a4a12ec303718d6cf64e2eb1a6eba22a906d9649f016/openadapt_flow-3.0.0-py3-none-any.whl", hash = "sha256:7028028bbd8fe736e1df355bc7a74ea273666ee849099acfca275f400fa961b3", size = 5150508, upload-time = "2026-11-13T17:17:34.164Z" },
 ]
 
 [package.optional-dependencies]
 browser = [
+    { name = "numpy" },
+    { name = "opencv-python" },
+    { name = "pillow" },
     { name = "playwright" },
+    { name = "rapidocr-onnxruntime" },
 ]
 capture = [
+    { name = "numpy" },
     { name = "openadapt-capture" },
+    { name = "opencv-python" },
+    { name = "pillow" },
+    { name = "rapidocr-onnxruntime" },
 ]
 hosted = [
     { name = "keyring" },
 ]
 linux = [
+    { name = "numpy" },
+    { name = "opencv-python" },
+    { name = "pillow" },
     { name = "pygobject" },
+    { name = "rapidocr-onnxruntime" },
 ]
 macos = [
+    { name = "numpy" },
+    { name = "opencv-python" },
+    { name = "pillow" },
     { name = "pyobjc-framework-applicationservices" },
     { name = "pyobjc-framework-cocoa" },
     { name = "pyobjc-framework-quartz" },
+    { name = "rapidocr-onnxruntime" },
 ]
 privacy = [
     { name = "click" },
@@ -3467,9 +3479,23 @@ privacy = [
 ]
 rdp = [
     { name = "aardwolf" },
+    { name = "numpy" },
+    { name = "opencv-python" },
+    { name = "pillow" },
+    { name = "rapidocr-onnxruntime" },
+]
+vision = [
+    { name = "numpy" },
+    { name = "opencv-python" },
+    { name = "pillow" },
+    { name = "rapidocr-onnxruntime" },
 ]
 windows = [
+    { name = "numpy" },
+    { name = "opencv-python" },
+    { name = "pillow" },
     { name = "pywin32", marker = "sys_platform == 'win32'" },
+    { name = "rapidocr-onnxruntime" },
     { name = "requests" },
 ]
 
