@@ -1366,7 +1366,7 @@ def _wrap_files(
         "workflow_id": "wf_d6611004c69b4376aea0636278e48e74",
         "digest": digest,
         "task": {
-            "key": "skill-48a0f397cb2a242d-f3a612c83abd",
+            "key": "skill-48a0f397cb2a242d-f3a612c83abd",  # gitleaks:allow (synthetic task key)
             "task_id": "skill-48a0f397cb2a242d",
             "params": {"note": "string"},
         },
