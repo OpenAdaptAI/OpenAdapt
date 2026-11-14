@@ -1,6 +1,6 @@
 # CHANGELOG
 
-## Unreleased (0.2.0)
+## v0.2.0 (2026-11-14)
 
 ### Install without the vision stack
 
