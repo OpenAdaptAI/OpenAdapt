@@ -1182,16 +1182,26 @@ class LintReport(BaseModel):
             return "info"
         return max(self.findings, key=lambda f: SEVERITY_ORDER[f.severity]).severity
 
-    def blocking_findings(self, *, strict: bool) -> list[Finding]:
+    def blocking_findings(
+        self, *, strict: bool, pixel_replay: bool = False
+    ) -> list[Finding]:
         """The findings that fail lint at this strictness.
 
         The one place lint's severity model becomes a gate: ``error`` always
-        fails, and ``strict`` also fails on ``warn``. ``info`` is advice by
-        definition (for example ``missing_identifier_crop`` on a step whose
-        structured identity owns the check) and never fails lint, strict or not.
+        fails, and ``strict`` also fails on ``warn``. ``info`` is advice (for
+        example ``missing_identifier_crop`` on a step whose structured
+        identity owns the check) and does not fail lint, with one exception:
+        ``pixel_replay`` (a remote-display target such as RDP or Citrix) keeps
+        ``missing_identifier_crop`` blocking, because there the crop is the
+        only pixel identity evidence.
         """
         threshold = SEVERITY_ORDER["warn" if strict else "error"]
-        return [f for f in self.findings if SEVERITY_ORDER[f.severity] >= threshold]
+        return [
+            f
+            for f in self.findings
+            if SEVERITY_ORDER[f.severity] >= threshold
+            or (pixel_replay and f.code == "missing_identifier_crop")
+        ]
 
     def counts(self) -> dict[str, int]:
         out = {"info": 0, "warn": 0, "error": 0}

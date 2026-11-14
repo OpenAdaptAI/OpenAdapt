@@ -26,30 +26,46 @@ inventing a second envelope:
   organization registered), and an ``approval_source`` that names this exact
   admission.
 * :func:`readback_effects` is the read-back verifier the run uses: the
-  ``verify.yaml`` bundled at publish, which the cloud also bound.
+  ``verify.yaml`` bundled at publish. :func:`hosted_admission` binds its
+  SHA-256 into the signed admission, so a swapped file is refused.
+* :func:`hosted_admission` writes the copy of the admission that goes to the
+  cloud: person and record identifiers become keyed HMACs
+  (:mod:`openadapt_flow.jit.principal_ids`), and the copy is signed again with
+  the same local admission key after the original verified.
+
+The bundled read-back replaces the deployment's effects verifier only on
+this path: a managed run with no production authority file and no
+qualification admission, whose admission and read-back verify. Any other run
+ignores the bundled file and reads back through its own deployment config.
 
 Regulated runs are refused: they need the qualification campaign.
 """
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import re
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
+import yaml
+
 __all__ = [
     "APPROVAL_PREFIX",
+    "HOSTED_FIELD",
     "READBACK_PATH",
     "RUN_SHAPE_SCHEMA",
     "HostedAuthorityError",
     "admission_sha256",
     "approval_source",
+    "hosted_admission",
+    "hosted_readback",
     "is_admitted_program",
     "managed_admission_refusal",
     "readback_effects",
+    "readback_sha256",
     "run_shape",
-    "shape_matches_authorization",
 ]
 
 RUN_SHAPE_SCHEMA = "openadapt.admitted-program-run-shape/v1"
@@ -57,7 +73,20 @@ RUN_SHAPE_SCHEMA = "openadapt.admitted-program-run-shape/v1"
 APPROVAL_PREFIX = "hosted:program-admission:"
 #: Where the publish step puts the confirmed read-back check in the bundle.
 READBACK_PATH = "readback/verify.yaml"
+#: The block :func:`hosted_admission` adds to the admission it signs again.
+HOSTED_FIELD = "hosted"
 _SHA256 = re.compile(r"[a-f0-9]{64}\Z")
+#: Where an admission names a principal (person, recorder, agent, reviewer).
+_PRINCIPAL_PATHS: tuple[tuple[str, ...], ...] = (
+    ("admitted_by_principal_id",),
+    ("reviewed_by_principal_id",),
+    ("canary", "principal_id"),
+    ("recorded_by",),
+    ("agent_principal_id",),
+    ("teach_authorization", "authorizer"),
+)
+_CONFIRMED_COMMENT = re.compile(r"# Confirmed by (.+) at (\S+) from (\S+)\.\n")
+_CONFIRMED_PROBE = " (confirmed by "
 
 
 class HostedAuthorityError(ValueError):
@@ -102,6 +131,15 @@ def approval_source(admission_digest: str) -> str:
     if not _SHA256.fullmatch(admission_digest):
         raise HostedAuthorityError("the admission digest is invalid")
     return APPROVAL_PREFIX + admission_digest
+
+
+def readback_sha256(bundle_dir: Path | str) -> str:
+    """SHA-256 of the bundled ``readback/verify.yaml`` bytes."""
+
+    path = Path(bundle_dir) / READBACK_PATH
+    if path.is_symlink() or not path.is_file():
+        raise HostedAuthorityError("the bundle carries no read-back check")
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def readback_effects(bundle_dir: Path | str) -> Any:
@@ -193,8 +231,13 @@ def managed_admission_refusal(
     """Why a managed dispatch cannot rest on the program's admission, or None.
 
     ``key_dir`` is the trusted admission key directory (default
-    :func:`openadapt_flow.jit.lifecycle.default_key_dir`); on a managed runner
-    it holds only the public key the organization registered.
+    :func:`openadapt_flow.jit.lifecycle.default_key_dir`). On a managed runner
+    it must hold only the public key the organization registered, at
+    ``<key_dir>/keys/ed25519.pub``: :func:`~openadapt_flow.jit.lifecycle.verify_admission`
+    trusts whatever key is staged there.
+
+    The caller applies the bundled read-back (:func:`readback_effects`) only
+    when this returns None.
     """
 
     from openadapt_flow.jit.lifecycle import (
@@ -215,39 +258,146 @@ def managed_admission_refusal(
     if not is_jit_bundle(bundle, workflow) or not is_admitted_program(bundle):
         return "the bundle is not an admitted program with a read-back check"
     try:
-        verify_admission(bundle, key_dir=key_dir)
+        manifest = verify_admission(bundle, key_dir=key_dir)
         digest = admission_sha256(bundle)
         readback_effects(bundle)
+        bound = readback_sha256(bundle)
     except (AdmissionError, HostedAuthorityError):
         return "the program's admission or read-back check does not verify"
+    hosted = manifest.get(HOSTED_FIELD)
+    if not isinstance(hosted, Mapping) or hosted.get("readback_sha256") != bound:
+        return "the bundled read-back check is not the one the admission binds"
     if getattr(authorization, "approval_source", None) != approval_source(digest):
         return "the run authorization does not name this program's admission"
     return None
 
 
-def shape_matches_authorization(shape: Mapping[str, Any], authorization: Any) -> bool:
-    """Whether a published run shape agrees with a run authorization."""
+# -- the copy of the admission that goes to the cloud ---------------------------
 
-    requirements = [
-        item.model_dump(mode="json")
-        for item in getattr(authorization, "qualified_effect_requirements", ())
-    ]
-    return bool(
-        shape.get("schema_version") == RUN_SHAPE_SCHEMA
-        and shape.get("bundle_content_digest")
-        == getattr(authorization, "bundle_content_digest", None)
-        and shape.get("admitted_policy_name")
-        == getattr(authorization, "admitted_policy_name", None)
-        and shape.get("admitted_policy_contract_sha256")
-        == getattr(authorization, "admitted_policy_contract_sha256", None)
-        and shape.get("execution_profile")
-        == getattr(authorization, "execution_profile", None)
-        and shape.get("minimum_effect_tier")
-        == getattr(authorization, "minimum_effect_tier", None)
-        and shape.get("qualified_effect_requirements") == requirements
-        and list(shape.get("required_identity_step_ids") or [])
-        == list(getattr(authorization, "required_identity_step_ids", ()))
-        and isinstance(shape.get("admission_sha256"), str)
-        and getattr(authorization, "approval_source", None)
-        == APPROVAL_PREFIX + str(shape.get("admission_sha256"))
-    )
+
+def _pseudonymized(manifest: Mapping[str, Any], keys: Path) -> dict[str, Any]:
+    """``manifest`` with every principal a keyed HMAC unless it may be shown.
+
+    Returns the manifest unchanged when nothing needed replacing. Otherwise
+    the body is signed again with the local admission key. An embedded prior
+    admission (a repair) is treated the same way first.
+    """
+
+    from openadapt_flow.jit.principal_ids import pseudonym
+
+    body = copy.deepcopy({k: v for k, v in manifest.items() if k != "signature"})
+    changed = False
+    for path in _PRINCIPAL_PATHS:
+        node: Any = body
+        for part in path[:-1]:
+            node = node.get(part) if isinstance(node, dict) else None
+        if not isinstance(node, dict) or not isinstance(node.get(path[-1]), str):
+            continue
+        value = pseudonym(node[path[-1]], keys)
+        if value != node[path[-1]]:
+            node[path[-1]] = value
+            changed = True
+    repair = body.get("repair_of")
+    if isinstance(repair, dict) and isinstance(repair.get("prior_manifest"), Mapping):
+        prior = repair["prior_manifest"]
+        replaced = _pseudonymized(prior, keys)
+        if replaced != prior:
+            repair["prior_manifest"] = replaced
+            changed = True
+    if not changed:
+        return dict(manifest)
+    if body.get("admitter_signature"):
+        # The registered admitter signed the plaintext names; a changed body
+        # would no longer carry that signature.
+        raise HostedAuthorityError(
+            "the admission names a person or record identifier and was signed "
+            "by a registered admitter key, so its hosted copy cannot replace "
+            "the identifier. Use machine handles (ci:, agent:, service:) for "
+            "the admitter and the recorder"
+        )
+    return {**body, "signature": _sign(body, keys)}
+
+
+def _sign(body: Mapping[str, Any], keys: Path) -> str:
+    """Sign with the existing local admission key; never create one."""
+
+    from openadapt_flow.jit.lifecycle import _sign_record
+
+    if not (Path(keys) / "keys" / "ed25519.pem").is_file():
+        raise HostedAuthorityError("the local admission signing key is missing")
+    return _sign_record(body, keys)
+
+
+def hosted_readback(text: str, key_dir: Path) -> str:
+    """The confirmed ``verify.yaml`` text with its confirmer pseudonymized.
+
+    ``openadapt wrap`` writes a ``# Confirmed by NAME at ...`` line and puts
+    the name in each new-record probe. Both become the principal's HMAC
+    unless the name may be shown. Text that names no such principal is
+    returned unchanged.
+    """
+
+    from openadapt_flow.jit.principal_ids import pseudonym
+
+    header = _CONFIRMED_COMMENT.match(text)
+    try:
+        document = yaml.safe_load(text[header.end() :] if header else text)
+    except yaml.YAMLError as exc:
+        raise HostedAuthorityError("the read-back check is not valid YAML") from exc
+    changed = False
+    if header and pseudonym(header.group(1), key_dir) != header.group(1):
+        changed = True
+    effects = document.get("effects") if isinstance(document, dict) else None
+    for effect in effects if isinstance(effects, list) else []:
+        probe = effect.get("probe") if isinstance(effect, dict) else None
+        if not isinstance(probe, str) or not probe.endswith(")"):
+            continue
+        head, marker, name = probe.rpartition(_CONFIRMED_PROBE)
+        if not marker:
+            continue
+        value = pseudonym(name[:-1], key_dir)
+        if value != name[:-1]:
+            effect["probe"] = f"{head}{marker}{value})"
+            changed = True
+    if not changed:
+        return text
+    prefix = ""
+    if header:
+        prefix = (
+            f"# Confirmed by {pseudonym(header.group(1), key_dir)} at "
+            f"{header.group(2)} from {header.group(3)}.\n"
+        )
+    return prefix + yaml.safe_dump(document, sort_keys=False, allow_unicode=True)
+
+
+def hosted_admission(
+    manifest: Mapping[str, Any],
+    *,
+    key_dir: Path,
+    readback_digest: str,
+) -> dict[str, Any]:
+    """The admission copy the cloud receives, signed with the local key.
+
+    The caller has already verified ``manifest`` with
+    :func:`~openadapt_flow.jit.lifecycle.verify_admission`. The copy keeps
+    every field, replaces each principal that may not be shown with its
+    keyed HMAC (:mod:`openadapt_flow.jit.principal_ids`), and adds a
+    ``hosted`` block binding the SHA-256 of the bundled ``verify.yaml``.
+    The managed runner refuses a read-back file with another digest.
+    """
+
+    if not _SHA256.fullmatch(readback_digest):
+        raise HostedAuthorityError("the read-back digest is invalid")
+    original = {k: v for k, v in manifest.items() if k != HOSTED_FIELD}
+    if HOSTED_FIELD in manifest:
+        # Only an original admission is copied; its signature excludes no
+        # field, so a manifest that already has the block is a hosted copy.
+        raise HostedAuthorityError("the admission is already a hosted copy")
+    body = {
+        k: v for k, v in _pseudonymized(original, key_dir).items() if k != "signature"
+    }
+    body[HOSTED_FIELD] = {
+        "readback_sha256": readback_digest,
+        "principals": "hmac-sha256",
+    }
+    return {**body, "signature": _sign(body, key_dir)}

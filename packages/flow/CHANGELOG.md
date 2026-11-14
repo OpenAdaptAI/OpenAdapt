@@ -52,6 +52,29 @@
   authorization stays local and is no longer staged for upload; the
   sanitizer refused its `.sig` file.
 
+### Wrap publish: review fixes for hosted admitted-program runs
+
+- The bundled `readback/verify.yaml` replaces the deployment's effects
+  verifier only after the run's authority is decided: a managed dispatch
+  that rests on the program's own admission, with no production authority
+  file and no qualification admission. Before, any managed run of a bundle
+  with an `admission.json` and a `verify.yaml` used the bundled file, signed
+  or not.
+- The uploaded admission binds the SHA-256 of the bundled `verify.yaml`
+  (`hosted.readback_sha256`). The runner refuses a different file.
+- Person and record identifiers no longer reach the cloud. In the uploaded
+  `admission.json` and `verify.yaml`, a principal stays in plaintext only as
+  a `ci:`, `agent:` or `service:` handle or a key fingerprint. Anything else
+  becomes `hmac:<hex>`, keyed with a per-install key in
+  `<key_dir>/keys/principal-hmac.key`. The sanitizer replaces any other
+  principal with `<PRINCIPAL>`.
+- A run receipt, and its signed production projection, carry
+  `authority_basis: customer-attested-program-admission` when the run rested
+  on a program admission. Other receipts are unchanged.
+- Hosted strict lint keeps `missing_identifier_crop` blocking on an RDP or
+  Citrix target, where the crop is the only pixel identity evidence.
+- Removed the unused `shape_matches_authorization`.
+
 ## v3.0.0 (2026-11-13)
 
 ### Breaking: the vision stack is the `vision` extra (3.0.0)

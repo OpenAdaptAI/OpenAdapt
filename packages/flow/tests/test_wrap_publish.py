@@ -8,6 +8,7 @@ the cloud definition API is a mocked HTTP client. No network, browser or model.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -97,9 +98,15 @@ class FakeCache:
 
 @pytest.fixture
 def cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FakeCache:
+    from openadapt_flow.execute.keys import load_or_create_private_key
+
     fake = FakeCache(tmp_path)
     _bundle(fake.bundle)
     fake.checks.write_text(VALID_CHECKS)
+    # The hosted admission copy is signed with this install's key; never the
+    # developer's own ~/.openadapt/jit.
+    load_or_create_private_key(tmp_path / "jit-keys")
+    monkeypatch.setenv(lifecycle.KEY_DIR_ENV, str(tmp_path / "jit-keys"))
     monkeypatch.setattr(lifecycle, "verify_admission", lambda *_a, **_k: {})
     return fake
 
@@ -211,6 +218,49 @@ def test_stage_ships_bundle_with_readback_and_manifest(cache: FakeCache) -> None
     first = source_tree_sha256(staged.staged)
     again = publish.stage(cache, "Save {note}", ["note"])
     assert source_tree_sha256(again.staged) == first
+
+
+def test_stage_writes_the_hosted_admission_copy(
+    cache: FakeCache, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import yaml
+
+    from openadapt_flow.jit import hosted_authority as ha
+    from openadapt_flow.verify_run import new_record_probe
+
+    admission = {
+        "schema": lifecycle.ADMISSION_SCHEMA,
+        "admitted_by_principal_id": "jane.doe",
+        "canary": {"principal_id": "MRN-0012345"},
+        "recorded_by": "agent:generic",
+        "digest": "d" * 64,
+    }
+    monkeypatch.setattr(lifecycle, "verify_admission", lambda *_a, **_k: admission)
+    config = yaml.safe_load(VALID_CHECKS)
+    config["effects"][0]["match"] = {"type": {"literal": "note"}}
+    config["effects"][0]["probe"] = new_record_probe(
+        config["effects"][0]["match"], "jane.doe"
+    )
+    cache.checks.write_text(
+        "# Confirmed by jane.doe at 2026-11-14T07:56:48Z from verify.proposed.yaml.\n"
+        + yaml.safe_dump(config, sort_keys=False)
+    )
+    staged = publish.stage(cache, "Save {note}", ["note"])
+    copy = json.loads((staged.staged / lifecycle.ADMISSION_FILE).read_text())
+    readback = (staged.staged / publish.READBACK_PATH).read_bytes()
+    assert b"jane.doe" not in readback
+    assert "jane.doe" not in json.dumps(copy) and "MRN-0012345" not in json.dumps(copy)
+    assert copy["admitted_by_principal_id"].startswith("hmac:")
+    assert copy["recorded_by"] == "agent:generic"
+    # The copy binds the staged read-back, as does the publish manifest.
+    digest = hashlib.sha256(readback).hexdigest()
+    assert copy["hosted"]["readback_sha256"] == digest
+    assert staged.manifest["readback"]["sha256"] == digest
+    assert staged.manifest["run_authorization"]["admission_sha256"] == (
+        ha.admission_sha256(staged.staged)
+    )
+    # The cached original keeps the plaintext name locally.
+    assert staged.admission["admitted_by_principal_id"] == "jane.doe"
 
 
 def test_stage_keeps_the_teach_authorization_local(cache: FakeCache) -> None:

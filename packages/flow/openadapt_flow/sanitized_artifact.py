@@ -500,6 +500,16 @@ def _bundle_string_is_structural(path: tuple[str | int, ...], value: str) -> boo
 # tests/test_sanitized_artifact.py checks them against their owners.
 
 _CONTENT = "content"
+_PRINCIPAL_REDACTED = "<PRINCIPAL>"
+#: Kept in step with ``openadapt_flow.jit.principal_ids.DISCLOSABLE_PRINCIPAL``
+#: (tests/test_sanitized_artifact.py checks it).
+_PRINCIPAL_PATTERN = (
+    r"(?:(?:ci|agent|service):[a-z0-9._-]{1,120}"
+    r"|(?:sha256|ed25519):[0-9a-f]{16,256}"
+    r"|standard-change:[0-9a-f]{16,128}"
+    r"|self-repair:probe"
+    r"|hmac:[0-9a-f]{64})"
+)
 _SHAPES: dict[str, re.Pattern[str]] = {
     name: re.compile(pattern)
     for name, pattern in {
@@ -514,10 +524,14 @@ _SHAPES: dict[str, re.Pattern[str]] = {
         "section_id": r"[a-z]+-step_[0-9]+(?:[_.][0-9]+)*",
         # A code-defined enumeration value: state, tier, policy, kind.
         "enum": r"[A-Za-z][A-Za-z0-9_-]{0,63}",
-        # An operator handle (``ci:release``, ``agent:generic``, ``teach-lead``).
-        # Whitespace and ``@`` are outside the shape, so a free-text person
-        # name or an email address is scrubbed and the program is refused.
-        "principal": r"[A-Za-z0-9][A-Za-z0-9._:+-]{0,127}",
+        # A principal that may leave the machine: a namespaced machine handle
+        # (``ci:release``, ``agent:generic``, ``service:intake``), a key
+        # fingerprint, a repair's policy or probe approver, or the keyed HMAC
+        # ``hmac:<hex>`` publish writes for anyone else
+        # (openadapt_flow.jit.principal_ids). A person name, ``user:jane.doe``,
+        # a phone number or a record number is scrubbed, and the program is
+        # refused.
+        "principal": _PRINCIPAL_PATTERN,
         "origin": r"https?://[A-Za-z0-9.-]+(?::[0-9]{1,5})?",
         # A base URL with a path of named segments: no query, no fragment, no
         # all-digit segment that could be a record number.
@@ -645,6 +659,17 @@ class _DeclaredFields:
                 return shape != _CONTENT and bool(_SHAPES[shape].fullmatch(value))
         return False
 
+    def shape_at(self, path: tuple[str | int, ...]) -> Optional[str]:
+        """The declared shape (or derived name) of the value at ``path``."""
+        local = self._local(path)
+        for pattern, name in self.derived:
+            if self._match(pattern, local):
+                return name
+        for pattern, shape in self.fields:
+            if self._match(pattern, local):
+                return shape
+        return None
+
     def keeps_key(self, parent: tuple[str | int, ...], key: str) -> bool:
         local = self._local((*parent, key))
         parent, key = local[:-1], str(local[-1])
@@ -737,6 +762,9 @@ def _declared_bundle_files() -> dict[str, _DeclaredFields]:
             "repair_of.candidate_id": "opaque_id",
             "repair_of.route": "enum",
             "repair_of.prior_digest": "hex",
+            # The block a hosted copy adds (jit/hosted_authority.py).
+            "hosted.readback_sha256": "hex",
+            "hosted.principals": "enum",
         },
         keys={"task.params": _CONTENT},
         recurse=("repair_of.prior_manifest",),
@@ -791,7 +819,7 @@ def _declared_bundle_files() -> dict[str, _DeclaredFields]:
         # The attribution line ``openadapt wrap`` writes when a person
         # confirms the checks (compile_agent.pipeline).
         comments=(
-            r" Confirmed by [A-Za-z0-9][A-Za-z0-9._:+-]{0,127} at "
+            r" Confirmed by " + _PRINCIPAL_PATTERN + r" at "
             r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?"
             r"(?:Z|[+-][0-9]{2}:[0-9]{2}) from [A-Za-z0-9_.-]+\.yaml\.",
         ),
@@ -950,8 +978,21 @@ def _scrub_json_value(
         keep = mapped in known_paths or (
             kind == "bundle" and _bundle_string_is_structural(path, mapped)
         )
+    shape = fields.shape_at(path) if fields is not None and not keep else None
     if keep:
         scrubbed = mapped
+    elif shape == "principal":
+        # A principal is a machine handle, a fingerprint or ``hmac:<hex>``.
+        # Anything else is replaced whether or not the scrubber recognizes
+        # it: ``jane.doe`` or a record number reads as plain text to it.
+        scrubbed = _PRINCIPAL_REDACTED
+    elif shape == "new_record_probe":
+        # A probe that is not the rendering of a scrub-stable match is
+        # scrubbed, and its confirmer is replaced like any principal.
+        head, marker, confirmer = mapped.rpartition(" (confirmed by ")
+        if marker and confirmer.endswith(")"):
+            mapped = f"{head}{marker}{_PRINCIPAL_REDACTED})"
+        scrubbed = scrubber.scrub_text(mapped)
     else:
         scrubbed = scrubber.scrub_text(mapped)
     scrubbed, applied = _apply_text_redactions(scrubbed, redactions, rel)
@@ -1069,6 +1110,11 @@ def _scrub_declared_yaml_text(
     _merge_applied_redactions(aggregate, applied)
     for comment in _yaml_comments(raw):
         if fields.keeps_comment(comment):
+            continue
+        if comment.startswith(" Confirmed by "):
+            # An attribution line whose principal may not be shown: the file is
+            # re-serialized without its comments.
+            comments_clean = False
             continue
         scrubbed = scrubber.scrub_text(comment)
         scrubbed, comment_applied = _apply_text_redactions(scrubbed, redactions, rel)

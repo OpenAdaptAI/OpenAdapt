@@ -1282,7 +1282,9 @@ class PresidioLikeScrubber:
         return image
 
 
-_REVIEWER = "rehearsal.reviewer"
+# What ``openadapt wrap publish`` stages for a person: the keyed HMAC of the
+# name (openadapt_flow.jit.principal_ids).
+_REVIEWER = "hmac:" + "1f" * 32
 
 
 def _wrap_files(
@@ -1641,6 +1643,74 @@ def test_free_text_in_a_wrap_structural_or_unknown_field_is_scrubbed(tmp_path, c
     for rel, data in _tree(destination).items():
         if rel.endswith((".json", ".yaml", ".py")):
             assert b"Jane Doe" not in data, rel
+
+
+@pytest.mark.parametrize(
+    "value", ["jane.doe", "user:jane.doe", "4165550123", "MRN-0012345"]
+)
+def test_a_principal_that_is_not_a_machine_handle_never_leaves(tmp_path, value):
+    """Names and record numbers pass a scrubber; the principal shape stops them."""
+    privacy.set_text_scrubber(PresidioLikeScrubber())
+    bundle, keys = tmp_path / "bundle", tmp_path / "keys"
+    _wrap_files(bundle, keys=keys, admitter=value, reviewer=value)
+
+    destination = tmp_path / "sanitized"
+    manifest = sanitize_artifact(bundle, destination, kind="bundle")
+
+    assert manifest["execution_semantics"] == "not-preserved"
+    for rel, data in _tree(destination).items():
+        if rel.endswith((".json", ".yaml", ".py")):
+            assert value.encode() not in data, rel
+    from openadapt_flow.jit import lifecycle
+
+    admission = json.loads((destination / lifecycle.ADMISSION_FILE).read_text())
+    assert admission["admitted_by_principal_id"] == "<PRINCIPAL>"
+    assert admission["canary"]["principal_id"] == "<PRINCIPAL>"
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "ci:rehearsal",
+        "agent:scripted-rehearsal",
+        "service:intake",
+        "sha256:fa77d7bdb2ae64fb",
+        "hmac:" + "ab" * 32,
+    ],
+)
+def test_machine_handles_and_hmacs_stay_plaintext(tmp_path, value):
+    privacy.set_text_scrubber(PresidioLikeScrubber())
+    bundle, keys = tmp_path / "bundle", tmp_path / "keys"
+    _wrap_files(bundle, keys=keys, admitter=value, reviewer=value)
+
+    manifest = sanitize_artifact(bundle, tmp_path / "sanitized", kind="bundle")
+
+    assert manifest["execution_semantics"] == "preserved"
+    assert _admission_verifies(tmp_path / "sanitized", keys)
+
+
+def test_the_principal_shape_matches_the_publish_allowlist():
+    from openadapt_flow.jit.principal_ids import DISCLOSABLE_PRINCIPAL
+    from openadapt_flow.sanitized_artifact import _SHAPES
+
+    for value in (
+        "ci:rehearsal",
+        "agent:x",
+        "service:a.b-c_d",
+        "ed25519:" + "0" * 64,
+        "standard-change:" + "a" * 64,
+        "self-repair:probe",
+        "hmac:" + "f" * 64,
+        "jane.doe",
+        "user:jane.doe",
+        "CI:Release",
+        "4165550123",
+        "MRN-0012345",
+        "hmac:abc",
+    ):
+        assert bool(_SHAPES["principal"].fullmatch(value)) == bool(
+            DISCLOSABLE_PRINCIPAL.fullmatch(value)
+        ), value
 
 
 def test_a_wrap_file_with_another_schema_falls_back_to_general_scrubbing(tmp_path):

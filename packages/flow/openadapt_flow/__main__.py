@@ -4197,10 +4197,11 @@ def _stage_admitted_program_readback(
 ) -> Optional[int]:
     """Use the bundled read-back check for a managed admitted-program run.
 
-    Only with ``--managed-dispatch-file`` and a bundle that carries an
-    admission and ``readback/verify.yaml`` (jit/hosted_authority.py). Whether
-    the dispatch may rest on that admission is decided later, with the
-    authorization; this only wires the verifier both gates and the replay use.
+    Call only after the run's authority is decided: the dispatch rests on
+    the program's own admission (``managed_admission_refusal`` returned
+    None) and no production authority file or qualification admission is in
+    play. Every other run ignores ``readback/verify.yaml`` and reads back
+    through its deployment config (jit/hosted_authority.py).
     """
 
     if not getattr(args, "managed_dispatch_file", None):
@@ -4353,9 +4354,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
     refused_admission = _admitted_bundle_refusal(args, bundle, workflow)
     if refused_admission is not None:
         return refused_admission
-    refused_admission = _stage_admitted_program_readback(args, bundle)
-    if refused_admission is not None:
-        return refused_admission
+    # Only the program-admission path below may swap in the bundled read-back.
+    args._admitted_program_effects = None
 
     qualification_case = getattr(args, "_qualification_case_execution", None)
     gate_params = (
@@ -4478,6 +4478,15 @@ def _cmd_run(args: argparse.Namespace) -> int:
                 )
                 return 2
             admitted_program = reason is None
+        if admitted_program:
+            # Authority is the program's own admission, so its bundled,
+            # admission-bound read-back replaces the deployment's verifier.
+            refused = _stage_admitted_program_readback(args, bundle)
+            if refused is not None:
+                return refused
+            _cfg, effect_verifier, _api, _durable, _egress = _deployment_runtime(
+                args, params=gate_params
+            )
         if not authority_file and dispatch_admission is None and not admitted_program:
             print(
                 "run REFUSED: Standard and Regulated actuation requires a signed "

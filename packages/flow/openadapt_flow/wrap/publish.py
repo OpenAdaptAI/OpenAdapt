@@ -184,6 +184,59 @@ def _run_shape(staged: Path, policy: str) -> dict[str, Any]:
         ) from None
 
 
+def _stage_hosted_admission(
+    staged: Path,
+    checks: Path,
+    admission: Mapping[str, Any],
+    key_dir: Optional[Path],
+) -> None:
+    """Write the read-back check and the admission copy the cloud receives.
+
+    Person and record identifiers in both become keyed HMACs
+    (:mod:`openadapt_flow.jit.principal_ids`). The admission copy binds the
+    staged ``verify.yaml``'s SHA-256 and is signed again with the local
+    admission key, then verified like the runner will verify it.
+    """
+    from openadapt_flow.jit.hosted_authority import (
+        HostedAuthorityError,
+        hosted_admission,
+        hosted_readback,
+    )
+    from openadapt_flow.jit.lifecycle import (
+        ADMISSION_FILE,
+        AdmissionError,
+        default_key_dir,
+        verify_admission,
+    )
+
+    keys = Path(key_dir) if key_dir is not None else default_key_dir()
+    if not (keys / "keys" / "ed25519.pem").is_file():
+        raise PublishError(
+            "ADMISSION_INVALID",
+            "the local admission signing key (keys/ed25519.pem) is missing. "
+            "Pass the --key-dir that admitted the program",
+        )
+    readback = staged / READBACK_PATH
+    try:
+        readback.write_text(
+            hosted_readback(checks.read_text(encoding="utf-8"), keys),
+            encoding="utf-8",
+        )
+        _readback_config(readback)
+        copy = hosted_admission(
+            admission, key_dir=keys, readback_digest=_sha256_file(readback)
+        )
+        (staged / ADMISSION_FILE).write_text(
+            json.dumps(copy, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        verify_admission(staged, key_dir=keys)
+    except (HostedAuthorityError, AdmissionError, ValueError) as exc:
+        raise PublishError(
+            "ADMISSION_INVALID",
+            f"the program's admission cannot be prepared for the cloud: {exc}",
+        ) from None
+
+
 def stage(
     cache: Any,
     instruction: str,
@@ -262,7 +315,7 @@ def stage(
 
     shutil.copytree(bundle, staged, symlinks=True, ignore=local_only)
     (staged / READBACK_PATH).parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(checks, staged / READBACK_PATH)
+    _stage_hosted_admission(staged, checks, admission, key_dir)
     manifest = {
         "schema": PUBLISH_SCHEMA,
         "parameters": list(parameters),

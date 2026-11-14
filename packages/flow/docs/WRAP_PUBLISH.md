@@ -153,13 +153,41 @@ it and names the admission in `approval_source`. The managed runner refuses the
 run before any action unless all of these hold:
 
 - the admission verifies against the admission key registered with the
-  organization;
+  organization. The runner stages only that key, at
+  `<key_dir>/keys/ed25519.pub`, because it trusts whatever key is there;
 - the authorization names that exact admission;
+- the bundled `verify.yaml` has the SHA-256 the admission binds;
 - the run shape matches what the runner derives itself;
 - the profile is Standard. Regulated needs the qualification campaign.
 
-The run reads back through the bundled `verify.yaml`, and it is VERIFIED only
-when that read-back confirms the write.
+Only then does the run read back through the bundled `verify.yaml`, and it is
+VERIFIED only when that read-back confirms the write. A run that rests on a
+qualification admission or a production authority file ignores the bundled
+file and reads back through its own deployment config.
+
+The run's receipt says what its authority was:
+`authority basis: customer-attested-program-admission`. Receipts of runs
+under a qualification admission or a production authority leave the field
+out, as receipts did before it existed.
+
+### What the cloud learns about people
+
+The uploaded `admission.json` and `verify.yaml` are copies that `publish`
+writes. A principal stays in plaintext only when it is a machine handle
+(`ci:`, `agent:` or `service:` followed by `[a-z0-9._-]`) or a key
+fingerprint. Any other name, such as `jane.doe`, `user:jane.doe` or a record
+number, becomes `hmac:<hex>`: an HMAC-SHA256 of the name keyed with a random
+per-install key at `<key_dir>/keys/principal-hmac.key`. That key never leaves
+the machine. The same name gives the same value on one machine, so the cloud
+can still see when two roles are the same principal.
+
+`publish` signs the copy again with the same admission key, after the
+original admission verifies, and adds the read-back digest to it. The local
+admission keeps the plaintext names. An admission signed by a registered
+admitter key cannot be rewritten that way, so `publish` refuses it with
+`ADMISSION_INVALID` unless its admitter and recorder are machine handles.
+The scrubber replaces any other principal it finds in these files with
+`<PRINCIPAL>`, and the upload is then refused.
 
 | Step | Request |
 | --- | --- |
@@ -205,14 +233,14 @@ uploaded.
 | `ADMISSION_KEY_REVOKED` | The organization revoked this admission key. Admit the program again with a new `--key-dir`. |
 | `NOT_ADMITTED` | The task has no admitted program yet. Run step 4. |
 | `TASK_HELD` | The last run failed or was interrupted. Reconcile it first. |
-| `ADMISSION_INVALID` | The admission signature does not verify with the local key, or `keys/ed25519.pub` is missing. |
+| `ADMISSION_INVALID` | The admission signature does not verify with the local key, `keys/ed25519.pub` or `keys/ed25519.pem` is missing, or the cloud copy of the admission cannot be written (see "What the cloud learns about people"). |
 | `NO_READ_BACK` | The program has no save, a save with no effect contract, or no confirmed `verify.yaml` that verify-run accepts. |
 | `RUN_SHAPE_UNAVAILABLE` | The task's policy is unknown, or the program has no Standard run shape under it. |
 | `NO_WRAP_EVIDENCE` | The signed recording or passing canary from the wrap run is missing. |
 | `TARGET_NOT_PUBLIC` | The task's app URL is not public HTTPS. |
 | `BUNDLE_UNSAFE` | The program contains a symbolic link. |
 | `SANITIZATION_CHANGED_PROGRAM` | The scrubber had to change the program's own files. |
-| `VALIDATION_FAILED` | Strict lint, certification or the canary report did not pass. |
+| `VALIDATION_FAILED` | Strict lint, certification or the canary report did not pass. On an RDP or Citrix target, a missing identifier crop also fails strict lint. |
 | `VALIDATION_REJECTED` | The cloud refused the runtime validation. |
 | `CLOUD_RESPONSE_INVALID` | The upload's acknowledgment did not name this organization's endpoint and qualification. |
 | `DELIVERY_UNCERTAIN` | The upload may have arrived. Don't run `publish` again; check the dashboard. |

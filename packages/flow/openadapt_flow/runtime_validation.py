@@ -58,6 +58,8 @@ SCHEMA = "openadapt.runtime-validation/v3"
 V2_SCHEMA = "openadapt.runtime-validation/v2"
 LEGACY_SCHEMA = "openadapt.runtime-validation/v1"
 TARGET_KINDS = ("web", "windows", "macos", "linux", "rdp", "citrix")
+#: Remote-display targets, replayed from pixels only.
+PIXEL_TARGET_KINDS = ("rdp", "citrix")
 RISK_CLASSES = ("low", "consequential")
 _DNS_LABEL_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 _NON_PUBLIC_SUFFIXES = (
@@ -396,7 +398,8 @@ def create_runtime_validation_attestation(
     ``recording_derivative`` and ``bundle_derivative`` must both be reviewed,
     approved sanitized artifacts. The bundle scrub must preserve its
     load-bearing bytes. Strict lint means no warn or error finding (info is
-    advice, as in ``openadapt-flow lint --strict``); certification must
+    advice, as in ``openadapt-flow lint --strict``, except that
+    ``missing_identifier_crop`` blocks on an RDP or Citrix target); certification must
     pass the named policy; and ``run_dir/report.json`` must record a successful,
     non-halted replay of the same workflow.
     """
@@ -634,6 +637,15 @@ def _replay_attestation(
             f"run report target kind {report_target_kind!r}"
         )
     target_kind = report_target_kind
+    if target_kind in PIXEL_TARGET_KINDS and lint_report.blocking_findings(
+        strict=True, pixel_replay=True
+    ):
+        # On a remote display the identifier crop is the only pixel identity
+        # evidence, so its absence blocks even where it is advice elsewhere.
+        raise RuntimeValidationError(
+            "Strict lint failed: an identity-armed step has no pixel identifier "
+            f"crop, which a {target_kind} target needs (missing_identifier_crop)"
+        )
     execution = normalize_target_execution(target_kind, target_url, allowed_hosts)
     if target_kind == "web":
         if report.execution_origin != execution["target_origin"]:

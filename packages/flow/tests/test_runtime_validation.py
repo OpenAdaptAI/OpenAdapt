@@ -214,6 +214,54 @@ def test_strict_lint_fails_on_warn_and_error_but_not_on_info(
             _attestation(tmp_path)
 
 
+@pytest.mark.parametrize(
+    ("target_kind", "attests"),
+    [("rdp", False), ("citrix", False), ("windows", True), ("linux", True)],
+)
+def test_a_missing_identifier_crop_blocks_on_a_remote_display(
+    tmp_path, monkeypatch, target_kind, attests
+):
+    """On RDP or Citrix the crop is the only pixel identity evidence."""
+    from openadapt_flow import policy, runtime_validation
+
+    real_lint = policy.lint_workflow
+
+    def lint_with_finding(workflow, **kwargs):
+        report = real_lint(workflow, **kwargs)
+        report.findings.append(
+            policy.Finding(
+                severity="info",
+                code="missing_identifier_crop",
+                step_id="step_000",
+                message="injected finding",
+            )
+        )
+        return report
+
+    monkeypatch.setattr(runtime_validation, "lint_workflow", lint_with_finding)
+    recording, bundle, run_dir = _approved_artifacts(tmp_path, target_kind=target_kind)
+
+    def attest():
+        return create_runtime_validation_attestation(
+            recording_derivative=recording,
+            bundle_derivative=bundle,
+            run_dir=run_dir,
+            policy_source="permissive",
+            risk_class="low",
+            environment=f"qualified-{target_kind}-environment",
+            target_kind=target_kind,
+            host=hosted.DEFAULT_HOST,
+            token="oai_ingest_test",
+            challenge=_challenge(),
+        )
+
+    if attests:
+        assert attest()["lint"]["passed"] is True
+    else:
+        with pytest.raises(RuntimeValidationError, match="missing_identifier_crop"):
+            attest()
+
+
 def test_lint_blocking_findings_match_the_cli_thresholds():
     from openadapt_flow.policy import Finding, LintReport
 
@@ -236,6 +284,17 @@ def test_lint_blocking_findings_match_the_cli_thresholds():
         findings=[Finding(severity="info", code="i", message="i")],
     )
     assert info_only.blocking_findings(strict=True) == []
+    crop = LintReport(
+        workflow_name="w",
+        n_steps=1,
+        findings=[
+            Finding(severity="info", code="missing_identifier_crop", message="c")
+        ],
+    )
+    assert crop.blocking_findings(strict=True) == []
+    assert [f.code for f in crop.blocking_findings(strict=True, pixel_replay=True)] == [
+        "missing_identifier_crop"
+    ]
 
 
 def test_cross_language_canonicalization_golden_vector():

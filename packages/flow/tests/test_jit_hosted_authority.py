@@ -57,6 +57,41 @@ def _admit(bundle: Path, keys: Path, **overrides: Any) -> None:
     (bundle / lifecycle.ADMISSION_FILE).write_text(json.dumps(body))
 
 
+def _host(bundle: Path, keys: Path) -> dict[str, Any]:
+    """Replace the admission with the copy publish uploads (hosted_admission)."""
+
+    path = bundle / lifecycle.ADMISSION_FILE
+    copy = ha.hosted_admission(
+        json.loads(path.read_text()),
+        key_dir=keys,
+        readback_digest=ha.readback_sha256(bundle),
+    )
+    path.write_text(json.dumps(copy))
+    return copy
+
+
+def _matches(shape: dict[str, Any], authorization: Any) -> bool:
+    """Whether a published run shape agrees with a run authorization."""
+
+    requirements = [
+        item.model_dump(mode="json")
+        for item in authorization.qualified_effect_requirements
+    ]
+    return bool(
+        shape["bundle_content_digest"] == authorization.bundle_content_digest
+        and shape["admitted_policy_name"] == authorization.admitted_policy_name
+        and shape["admitted_policy_contract_sha256"]
+        == authorization.admitted_policy_contract_sha256
+        and shape["execution_profile"] == authorization.execution_profile
+        and shape["minimum_effect_tier"] == authorization.minimum_effect_tier
+        and shape["qualified_effect_requirements"] == requirements
+        and shape["required_identity_step_ids"]
+        == list(authorization.required_identity_step_ids)
+        and authorization.approval_source
+        == ha.approval_source(shape["admission_sha256"])
+    )
+
+
 @pytest.fixture
 def program(tmp_path: Path) -> dict[str, Any]:
     bundle = tmp_path / "bundle"
@@ -78,6 +113,7 @@ def program(tmp_path: Path) -> dict[str, Any]:
     (bundle / ha.READBACK_PATH).write_text(CHECKS)
     keys = _keys(tmp_path / "keys")
     _admit(bundle, keys)
+    _host(bundle, keys)
     workflow = Workflow.load(bundle)
     shape = ha.run_shape(bundle, workflow, policy_source="clinical-write")
     return {"bundle": bundle, "keys": keys, "workflow": workflow, "shape": shape}
@@ -119,12 +155,10 @@ def test_an_authorization_built_from_the_shape_matches_it(
     program: dict[str, Any],
 ) -> None:
     shape = program["shape"]
-    assert ha.shape_matches_authorization(shape, _authorization(shape))
+    assert _matches(shape, _authorization(shape))
     other = _authorization(shape, approval_source=ha.approval_source("e" * 64))
-    assert not ha.shape_matches_authorization(shape, other)
-    assert not ha.shape_matches_authorization(
-        shape, _authorization(shape, minimum_effect_tier=4)
-    )
+    assert not _matches(shape, other)
+    assert not _matches(shape, _authorization(shape, minimum_effect_tier=4))
 
 
 def test_a_signed_admission_authorizes_a_standard_managed_run(
@@ -186,6 +220,7 @@ def test_a_re_signed_admission_does_not_match_the_authorization(
     # first one, so the run is refused.
     authorization = _authorization(program["shape"])
     _admit(program["bundle"], program["keys"], admitted_by_principal_id="Grace Hopper")
+    _host(program["bundle"], program["keys"])
     refusal = ha.managed_admission_refusal(
         program["bundle"],
         program["workflow"],
@@ -351,7 +386,7 @@ def test_cli_admits_the_published_shape_through_the_managed_gate(
     assert authorization.approval_source == ha.approval_source(
         program["shape"]["admission_sha256"]
     )
-    assert ha.shape_matches_authorization(program["shape"], authorization)
+    assert _matches(program["shape"], authorization)
     # The replay reads back through the bundled verify.yaml.
     assert runner["effects"].kind == "rest"
 
@@ -392,3 +427,254 @@ def test_cli_refuses_a_managed_admitted_program_that_does_not_bind(
         "shape_mismatch": "managed dispatch does not match this exact run",
     }[case]
     assert expected in out
+
+
+# -- the bundled read-back applies only on the program-admission path ----------
+
+SQLITE_CHECKS = (
+    "schema_version: openadapt.verify/v1\n"
+    "verifier:\n  kind: sql\n  sqlite_database: /tmp/anything.db\n"
+    "  sql_query: SELECT * FROM notes\n"
+    "effects:\n  - kind: record_written\n    match: {type: note}\n    field: note\n"
+)
+
+
+@pytest.fixture
+def effects_seen(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Every effects verifier kind the run resolves, in order."""
+
+    seen: list[str] = []
+    real = cli._deployment_sections
+
+    def sections(args: argparse.Namespace) -> Any:
+        result = real(args)
+        seen.append(result[1].kind)
+        return result
+
+    monkeypatch.setattr(cli, "_deployment_sections", sections)
+    return seen
+
+
+def test_an_unsigned_admission_never_swaps_the_verifier(
+    program: dict[str, Any],
+    runner: dict[str, Any],
+    effects_seen: list[str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Grok's repro: an unsigned admission.json and a verify.yaml that points
+    # the read-back at an arbitrary SQLite file.
+    monkeypatch.setenv(lifecycle.KEY_DIR_ENV, str(program["keys"]))
+    bundle = program["bundle"]
+    admission = json.loads((bundle / lifecycle.ADMISSION_FILE).read_text())
+    admission.pop("signature")
+    (bundle / lifecycle.ADMISSION_FILE).write_text(json.dumps(admission))
+    (bundle / ha.READBACK_PATH).write_text(SQLITE_CHECKS)
+    rc = _run(tmp_path, program, _dispatch(tmp_path, program), "standard")
+    out = capsys.readouterr().out
+    assert rc == 2, out
+    assert "Nothing was executed" in out
+    assert effects_seen and set(effects_seen) == {"none"}
+    assert "authorization" not in runner
+
+
+def test_a_swapped_read_back_check_is_refused(
+    program: dict[str, Any],
+    runner: dict[str, Any],
+    effects_seen: list[str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv(lifecycle.KEY_DIR_ENV, str(program["keys"]))
+    (program["bundle"] / ha.READBACK_PATH).write_text(SQLITE_CHECKS)
+    assert ha.managed_admission_refusal(
+        program["bundle"],
+        program["workflow"],
+        _authorization(program["shape"]),
+        profile="standard",
+        key_dir=program["keys"],
+    ) == ("the bundled read-back check is not the one the admission binds")
+    rc = _run(tmp_path, program, _dispatch(tmp_path, program), "standard")
+    out = capsys.readouterr().out
+    assert rc == 2, out
+    assert "not the one the admission binds" in out
+    assert "sql" not in effects_seen
+
+
+def test_an_admission_without_the_hosted_binding_is_refused(
+    program: dict[str, Any],
+) -> None:
+    _admit(program["bundle"], program["keys"])  # the original, never hosted
+    shape = ha.run_shape(
+        program["bundle"], program["workflow"], policy_source="clinical-write"
+    )
+    assert ha.managed_admission_refusal(
+        program["bundle"],
+        program["workflow"],
+        _authorization(shape),
+        profile="standard",
+        key_dir=program["keys"],
+    ) == ("the bundled read-back check is not the one the admission binds")
+
+
+def test_a_production_authority_file_ignores_the_bundled_check(
+    program: dict[str, Any],
+    runner: dict[str, Any],
+    effects_seen: list[str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv(lifecycle.KEY_DIR_ENV, str(program["keys"]))
+    authority = tmp_path / "authority.json"
+    authority.write_text("{}")
+    params = tmp_path / "params.json"
+    params.write_text("{}")
+    rc = cli.main(
+        [
+            "run",
+            str(program["bundle"]),
+            "--profile",
+            "standard",
+            "--policy",
+            "clinical-write",
+            "--params-file",
+            str(params),
+            "--allow-unencrypted",
+            "--managed-dispatch-file",
+            str(_dispatch(tmp_path, program)),
+            "--qualification-authority-file",
+            str(authority),
+            "--backend",
+            "web",
+            "--url",
+            "https://app.example.com/",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert rc == 2, out
+    assert "rest" not in effects_seen
+
+
+def test_a_qualification_admission_ignores_the_bundled_check(
+    program: dict[str, Any],
+    runner: dict[str, Any],
+    effects_seen: list[str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from openadapt_flow.runner import dispatch_envelope
+
+    monkeypatch.setenv(lifecycle.KEY_DIR_ENV, str(program["keys"]))
+    dispatch = _dispatch(tmp_path, program)
+    real = dispatch_envelope.read_managed_dispatch_envelope
+
+    def with_qualification(path: Path) -> Any:
+        envelope = real(path)
+        authorization = SimpleNamespace(
+            **{
+                name: getattr(envelope.authorization, name)
+                for name in type(envelope.authorization).model_fields
+            },
+        )
+        authorization.qualification_admission = object()
+        return SimpleNamespace(authorization=authorization)
+
+    monkeypatch.setattr(
+        dispatch_envelope, "read_managed_dispatch_envelope", with_qualification
+    )
+    monkeypatch.setattr(
+        cli,
+        "_refuse_unverified_managed_qualification_admission",
+        lambda *_a, **_k: 2,
+    )
+    rc = _run(tmp_path, program, dispatch, "standard")
+    assert rc == 2, capsys.readouterr().out
+    assert "rest" not in effects_seen
+
+
+# -- the copy that goes to the cloud --------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "name", ["jane.doe", "user:jane.doe", "4165550123", "MRN-0012345"]
+)
+def test_the_hosted_copy_names_a_person_only_by_hmac(
+    program: dict[str, Any], name: str
+) -> None:
+    bundle, keys = program["bundle"], program["keys"]
+    _admit(
+        bundle,
+        keys,
+        admitted_by_principal_id=name,
+        canary={"principal_id": name},
+        recorded_by="agent:generic",
+    )
+    copy = _host(bundle, keys)
+    text = json.dumps(copy)
+    assert name not in text
+    assert copy["admitted_by_principal_id"].startswith("hmac:")
+    assert copy["canary"]["principal_id"] == copy["admitted_by_principal_id"]
+    assert copy["recorded_by"] == "agent:generic"
+    assert copy["hosted"]["readback_sha256"] == ha.readback_sha256(bundle)
+    # Signed again with the same key, so the runner verifies it.
+    lifecycle.verify_admission(bundle, key_dir=keys)
+
+
+def test_a_machine_handle_stays_plaintext_in_the_hosted_copy(
+    program: dict[str, Any],
+) -> None:
+    _admit(program["bundle"], program["keys"], admitted_by_principal_id="ci:rehearsal")
+    copy = _host(program["bundle"], program["keys"])
+    assert copy["admitted_by_principal_id"] == "ci:rehearsal"
+
+
+def test_the_hmac_key_is_per_install_and_stable(tmp_path: Path) -> None:
+    from openadapt_flow.jit.principal_ids import HMAC_KEY_NAME, pseudonym
+
+    one, two = tmp_path / "one", tmp_path / "two"
+    first = pseudonym("Jane.Doe ", one)
+    assert first == pseudonym("jane.doe", one)
+    assert first != pseudonym("jane.doe", two)
+    key = one / "keys" / HMAC_KEY_NAME
+    assert key.stat().st_mode & 0o077 == 0
+
+
+def test_the_hosted_read_back_names_its_confirmer_only_by_hmac(
+    tmp_path: Path,
+) -> None:
+    import yaml
+
+    from openadapt_flow.verify_run import load_verify_config, new_record_probe
+
+    match = {"type": {"literal": "note"}}
+    config = {
+        "schema_version": "openadapt.verify/v1",
+        "verifier": {
+            "kind": "rest",
+            "base_url": "https://app.example.com",
+            "records_path": "/api/notes",
+        },
+        "effects": [
+            {
+                "kind": "record_written",
+                "match": match,
+                "probe": new_record_probe(match, "jane.doe"),
+            }
+        ],
+    }
+    text = (
+        "# Confirmed by jane.doe at 2026-11-14T07:56:48Z from verify.proposed.yaml.\n"
+        + yaml.safe_dump(config, sort_keys=False)
+    )
+    hosted = ha.hosted_readback(text, tmp_path)
+    assert "jane.doe" not in hosted
+    assert hosted.startswith("# Confirmed by hmac:")
+    path = tmp_path / "verify.yaml"
+    path.write_text(hosted)
+    load_verify_config(path)
+    # A file that names no person is copied byte for byte.
+    assert ha.hosted_readback(CHECKS, tmp_path) == CHECKS

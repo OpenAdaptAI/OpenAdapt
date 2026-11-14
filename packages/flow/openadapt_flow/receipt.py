@@ -113,6 +113,28 @@ _TIER_NAMES: dict[int, ReceiptEffectTier] = {
 }
 
 ReceiptProfile = Literal["standard", "regulated"]
+#: What the run's authority rests on, when it is not a qualification
+#: admission or a production qualification authority (the default, shown by
+#: leaving the field out). ``customer-attested-program-admission``: a hosted
+#: run of an agent-compiled program authorized only by the customer's own
+#: signed program admission (``hosted:program-admission:<sha256>``).
+ReceiptAuthorityBasis = Literal["customer-attested-program-admission"]
+_PROGRAM_ADMISSION_SOURCE = re.compile(r"hosted:program-admission:[a-f0-9]{64}\Z")
+
+
+def authority_basis(approval_source: Optional[str]) -> Optional[ReceiptAuthorityBasis]:
+    """The receipt's authority basis for a run's ``approval_source``.
+
+    None means the run rests on a qualification admission or a production
+    qualification authority, and the receipt leaves the field out, so
+    receipts written before the field existed keep their bytes.
+    """
+
+    if approval_source and _PROGRAM_ADMISSION_SOURCE.fullmatch(approval_source):
+        return "customer-attested-program-admission"
+    return None
+
+
 ReceiptNetworkObservation = Literal["none", "observed"]
 ReceiptCount = Annotated[int, Field(ge=0)]
 
@@ -244,6 +266,10 @@ class RunReceipt(BaseModel):
     provenance: ReceiptProvenance
     receipt_builder_version: str = Field(pattern=_FLOW_VERSION_RE.pattern)
     external_network_calls: ReceiptNetworkObservation
+    #: Set when the run's authority is not a qualification admission or a
+    #: production authority (:func:`authority_basis`). Left out otherwise, so
+    #: older receipts keep their bytes and still verify.
+    authority_basis: Optional[ReceiptAuthorityBasis] = None
     #: Set when the run's bundle came from a repair a signed policy applied
     #: without a person. Left out otherwise, so older receipts keep their bytes.
     standard_change: Optional[ReceiptStandardChange] = None
@@ -338,6 +364,8 @@ class RunReceipt(BaseModel):
             data.pop("standard_change", None)
         if self.variant is None:
             data.pop("variant", None)
+        if self.authority_basis is None:
+            data.pop("authority_basis", None)
         return data
 
     def canonical_json(self, *, include_digest: bool = True) -> bytes:
@@ -953,6 +981,9 @@ def _build_receipt(
             payload["standard_change"] = standard_change
         if variant is not None:
             payload["variant"] = variant
+        basis = authority_basis(getattr(report, "governed_approval_source", None))
+        if basis is not None:
+            payload["authority_basis"] = basis
     except ValueError as exc:
         raise ReceiptError(f"run cannot produce a VERIFIED receipt: {exc}") from exc
     digest = hashlib.sha256(
@@ -1022,6 +1053,11 @@ def render_receipt_markdown(receipt: RunReceipt) -> str:
         f"| resolution ladder | {ladder} |",
         f"| substrate | `{receipt.substrate}` |",
         f"| provenance | `{receipt.provenance}` |",
+        *(
+            [f"| authority basis | `{receipt.authority_basis}` |"]
+            if receipt.authority_basis
+            else []
+        ),
         f"| receipt builder version | {receipt.receipt_builder_version} |",
         f"| external network calls | `{receipt.external_network_calls}` |",
     ]
@@ -1116,6 +1152,11 @@ def _receipt_rows(receipt: RunReceipt) -> list[tuple[str, str]]:
         ("ladder", ladder),
         ("substrate", str(receipt.substrate)),
         ("provenance", receipt.provenance),
+        *(
+            [("authority basis", receipt.authority_basis)]
+            if receipt.authority_basis
+            else []
+        ),
         ("receipt builder", receipt.receipt_builder_version),
     ]
     if receipt.variant is not None:
