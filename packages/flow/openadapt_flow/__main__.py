@@ -6227,8 +6227,7 @@ def _cmd_lint(args: argparse.Namespace) -> int:
     # Exit code by max severity: nonzero once anything reaches `error`
     # (an unarmed or vacuous IRREVERSIBLE step). `--strict` also fails on warn.
     threshold = "warn" if args.strict else "error"
-    fail = SEVERITY_ORDER[report.max_severity] >= SEVERITY_ORDER[threshold]
-    if report.findings and fail:
+    if report.blocking_findings(strict=args.strict):
         _print_lint_epilogue(
             args.bundle,
             threshold,

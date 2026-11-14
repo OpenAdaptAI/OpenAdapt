@@ -177,6 +177,67 @@ def test_attestation_binds_real_evidence_and_matches_schema(tmp_path):
     assert value["replay"]["success"] is True
 
 
+@pytest.mark.parametrize(
+    ("severity", "attests"), [("info", True), ("warn", False), ("error", False)]
+)
+def test_strict_lint_fails_on_warn_and_error_but_not_on_info(
+    tmp_path, monkeypatch, severity, attests
+):
+    """Strict lint follows lint's own severity model (``lint --strict``).
+
+    An info finding such as ``missing_identifier_crop`` on a step whose
+    structured identity owns the check is advice; it must not refuse the
+    attestation. A warn or an error finding still must.
+    """
+    from openadapt_flow import policy, runtime_validation
+
+    real_lint = policy.lint_workflow
+
+    def lint_with_finding(workflow, **kwargs):
+        report = real_lint(workflow, **kwargs)
+        report.findings.append(
+            policy.Finding(
+                severity=severity,
+                code="missing_identifier_crop",
+                step_id="step_000",
+                message="injected finding",
+            )
+        )
+        return report
+
+    monkeypatch.setattr(runtime_validation, "lint_workflow", lint_with_finding)
+    if attests:
+        value, _ = _attestation(tmp_path)
+        assert value["lint"]["strict"] is True and value["lint"]["passed"] is True
+    else:
+        with pytest.raises(RuntimeValidationError, match="Strict lint failed"):
+            _attestation(tmp_path)
+
+
+def test_lint_blocking_findings_match_the_cli_thresholds():
+    from openadapt_flow.policy import Finding, LintReport
+
+    report = LintReport(
+        workflow_name="w",
+        n_steps=1,
+        findings=[
+            Finding(severity=level, code=level, message=level)
+            for level in ("info", "warn", "error")
+        ],
+    )
+    assert [f.severity for f in report.blocking_findings(strict=True)] == [
+        "warn",
+        "error",
+    ]
+    assert [f.severity for f in report.blocking_findings(strict=False)] == ["error"]
+    info_only = LintReport(
+        workflow_name="w",
+        n_steps=1,
+        findings=[Finding(severity="info", code="i", message="i")],
+    )
+    assert info_only.blocking_findings(strict=True) == []
+
+
 def test_cross_language_canonicalization_golden_vector():
     fixture = json.loads(
         (

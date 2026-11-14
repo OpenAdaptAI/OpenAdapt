@@ -1182,6 +1182,17 @@ class LintReport(BaseModel):
             return "info"
         return max(self.findings, key=lambda f: SEVERITY_ORDER[f.severity]).severity
 
+    def blocking_findings(self, *, strict: bool) -> list[Finding]:
+        """The findings that fail lint at this strictness.
+
+        The one place lint's severity model becomes a gate: ``error`` always
+        fails, and ``strict`` also fails on ``warn``. ``info`` is advice by
+        definition (for example ``missing_identifier_crop`` on a step whose
+        structured identity owns the check) and never fails lint, strict or not.
+        """
+        threshold = SEVERITY_ORDER["warn" if strict else "error"]
+        return [f for f in self.findings if SEVERITY_ORDER[f.severity] >= threshold]
+
     def counts(self) -> dict[str, int]:
         out = {"info": 0, "warn": 0, "error": 0}
         for f in self.findings:

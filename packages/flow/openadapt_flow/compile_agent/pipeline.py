@@ -965,7 +965,11 @@ class FirstRunCompiler:
 
         from openadapt_flow.record_sor import _write_private
         from openadapt_flow.runtime.effects.effect import DEFAULT_IDEMPOTENCY_KEY_FIELD
-        from openadapt_flow.verify_run import parse_verify_config, sha256_tagged
+        from openadapt_flow.verify_run import (
+            new_record_probe,
+            parse_verify_config,
+            sha256_tagged,
+        )
 
         jit = self._jit()
         name = lifecycle.check_principal(
@@ -1022,19 +1026,7 @@ class FirstRunCompiler:
                     if route.startswith(_SURFACE_ROUTE)
                     else ""
                 )
-                effect["probe"] = route + (
-                    "exactly one new record with "
-                    + ", ".join(
-                        f"{k}="
-                        + (
-                            f"parameter {v['param']!r}"
-                            if v.get("param")
-                            else repr(v.get("literal"))
-                        )
-                        for k, v in effect["match"].items()
-                    )
-                    + f" (confirmed by {name})"
-                )
+                effect["probe"] = route + new_record_probe(effect["match"], name)
             effects.append(effect)
         # One effect claims the new record. A check built from several reads
         # (scaffold-verifier's) claims it once per read, routed to that read;

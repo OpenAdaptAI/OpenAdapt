@@ -17,6 +17,22 @@
 
 ## Unreleased
 
+### Wrap publish: the scrubber keeps a program's structure, and info lint is advice
+
+- The outbound scrubber no longer rewrites the generated files of a wrap
+  program. `admission.json`, `openadapt-wrap-publish.json`,
+  `readback/verify.yaml`, `sections.json`, `templates/layout_fingerprint.json`
+  and `jit_draft.json` declare each field as content (always scrubbed) or
+  structural (kept only with its declared machine shape); undeclared fields
+  are scrubbed. `workflow.json` keeps identity signal slots, the punctuation
+  policy and the compiler's identifier-crop reasons. Before, the NER scrub
+  turned `v1` and `step_002` into placeholders, and every wrap publish was
+  refused with `SANITIZATION_CHANGED_PROGRAM`.
+- Strict lint for hosted validation now fails on `warn` and `error` findings,
+  as `openadapt-flow lint --strict` does. An `info` finding such as
+  `missing_identifier_crop` on a step whose structured identity owns the check
+  no longer refuses every web program with `VALIDATION_FAILED`.
+
 ### A hosted Standard run of an admitted program rests on its admission
 
 - `openadapt-flow run --managed-dispatch-file` under the Standard profile now

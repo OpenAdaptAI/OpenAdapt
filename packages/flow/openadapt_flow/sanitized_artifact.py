@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import copy
 import csv
 import hashlib
 import hmac
@@ -363,12 +364,51 @@ def _bundle_structural_json_keys() -> frozenset[str]:
     return frozenset(found)
 
 
-def _json_key_is_structural(kind: str, key: str) -> bool:
+def _json_key_is_structural(
+    kind: str, key: str, parent: tuple[str | int, ...] = ()
+) -> bool:
     if kind == "recording":
         return key in _RECORDING_STRUCTURAL_JSON_KEYS
     if kind == "bundle":
+        if parent and parent[-1] == "signal_hashes":
+            # Identity signal slots are named by identity_signals.signal_hash_key
+            # from a fixed grammar; the captured text is only ever hashed.
+            return bool(_signal_hash_key_shape().fullmatch(key))
         return key in _bundle_structural_json_keys()
     return False
+
+
+@lru_cache(maxsize=1)
+def _signal_hash_key_shape() -> re.Pattern[str]:
+    from openadapt_flow.identity_signals import NORMALIZER_ORDER
+    from openadapt_flow.qualification import IdentityEvidenceSource
+
+    sources = "|".join(re.escape(item.value) for item in IdentityEvidenceSource)
+    normalizer = "|".join(re.escape(item) for item in NORMALIZER_ORDER)
+    return re.compile(
+        rf"(?:{sources})\|(?:exact|normalized)\|(?:(?:{normalizer})"
+        rf"(?:,(?:{normalizer}))*)?"
+        r"(?:\|extract-sha256:[0-9a-f]{64}\|params-sha256:[0-9a-f]{64})?"
+    )
+
+
+@lru_cache(maxsize=1)
+def _identifier_crop_missing_reasons() -> frozenset[str]:
+    from openadapt_flow.compiler.compile import (
+        IDCROP_REASON_MARKED_INVALID,
+        IDCROP_REASON_NO_BAND_REGION,
+        IDCROP_REASON_STRUCTURED,
+        IDCROP_REASON_UNARMED,
+    )
+
+    return frozenset(
+        {
+            IDCROP_REASON_MARKED_INVALID,
+            IDCROP_REASON_NO_BAND_REGION,
+            IDCROP_REASON_STRUCTURED,
+            IDCROP_REASON_UNARMED,
+        }
+    )
 
 
 def _bundle_string_is_structural(path: tuple[str | int, ...], value: str) -> bool:
@@ -399,6 +439,22 @@ def _bundle_string_is_structural(path: tuple[str | int, ...], value: str) -> boo
         return True
     if key == "relation" and value in {"left_of", "right_of", "above", "below"}:
         return True
+    if key == "punctuation_policy" and re.fullmatch(
+        r"[a-z]+(?:-[a-z]+)*-v[0-9]+", value
+    ):
+        return True
+    if (
+        len(path) >= 2
+        and path[-2] == "signal_hashes"
+        and re.fullmatch(r"[0-9a-f]{64}", value)
+    ):
+        return True
+    if (
+        key == "identifier_crop_missing_reason"
+        and value in _identifier_crop_missing_reasons()
+    ):
+        # The compiler's own degrade taxonomy, never app text.
+        return True
     if key in {"c", "r", "phash", "salt", "structured"} and re.fullmatch(
         r"[0-9a-f]{16,}", value
     ):
@@ -410,6 +466,389 @@ def _bundle_string_is_structural(path: tuple[str | int, ...], value: str) -> boo
     ):
         return True
     return False
+
+
+# -- declared fields of the generated files a wrap program carries -------------
+#
+# A wrap program uploads files Flow writes itself next to ``workflow.json``:
+# its signed admission, the publish manifest, the confirmed read-back checks,
+# the program map and the layout fingerprints. Their schemas are fixed, so the
+# scrubber does not guess from token shapes which strings are syntax. Each
+# file declares every field it carries:
+#
+# * a *content* field holds text from the app or the person (titles, field
+#   names, parameter names, demonstrated literals, probe text, comments) and
+#   is always scrubbed;
+# * a *structural* field holds generated syntax (schema ids, step ids,
+#   digests, signatures, timestamps, enumerations, origins). It is kept
+#   byte-for-byte only while its value has the declared machine shape; any
+#   other value is scrubbed like content, so free text placed in a structural
+#   field is never let through;
+# * a *derived* field holds text Flow renders from other fields of the same
+#   file (a confirmed check's ``probe``). It is kept only while it equals that
+#   rendering and every value it is rendered from is unchanged by the scrubber,
+#   so it can never carry text its scrubbed sources do not;
+# * a field the declaration does not name is scrubbed (fail closed).
+#
+# Comments in a declared YAML file are content unless they have one of the
+# file's declared generated forms.
+#
+# A declared file is recognized by its bundle-relative path and, where it has
+# one, its schema id; a file whose schema id differs is scrubbed under the
+# general bundle rules. The paths and schema ids are spelled out here, not
+# imported, so the sanitizer does not depend on the wrap or JIT packages;
+# tests/test_sanitized_artifact.py checks them against their owners.
+
+_CONTENT = "content"
+_SHAPES: dict[str, re.Pattern[str]] = {
+    name: re.compile(pattern)
+    for name, pattern in {
+        "hex": r"[0-9a-f]{16,128}",
+        "prefixed_digest": r"(?:sha256|ed25519):[0-9a-f]{16,256}",
+        "schema": r"[a-z][a-z0-9_.-]*(?:/[a-z0-9_.-]+)*/v[0-9]+",
+        "timestamp": (
+            r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?"
+            r"(?:Z|[+-][0-9]{2}:[0-9]{2})"
+        ),
+        "step_id": r"step_[0-9]+(?:[_.][0-9]+)*",
+        "section_id": r"[a-z]+-step_[0-9]+(?:[_.][0-9]+)*",
+        # A code-defined enumeration value: state, tier, policy, kind.
+        "enum": r"[A-Za-z][A-Za-z0-9_-]{0,63}",
+        # An operator handle (``ci:release``, ``agent:generic``, ``teach-lead``).
+        # Whitespace and ``@`` are outside the shape, so a free-text person
+        # name or an email address is scrubbed and the program is refused.
+        "principal": r"[A-Za-z0-9][A-Za-z0-9._:+-]{0,127}",
+        "origin": r"https?://[A-Za-z0-9.-]+(?::[0-9]{1,5})?",
+        # A base URL with a path of named segments: no query, no fragment, no
+        # all-digit segment that could be a record number.
+        "base_url": (
+            r"https?://[A-Za-z0-9.-]+(?::[0-9]{1,5})?"
+            r"(?:/(?![0-9]+(?:/|$))[A-Za-z0-9._~-]+)*/?"
+        ),
+        "url_path": r"(?:/(?![0-9]+(?:/|$))[A-Za-z0-9._~-]+)+/?",
+        "bundle_path": r"[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*\.[a-z]{1,5}",
+        "env_source": r"env:[A-Z][A-Z0-9_]{0,63}",
+        "task_key": r"skill-[0-9a-f]{8,64}(?:-[0-9a-f]{8,64})?",
+        "workflow_id": r"wf_[0-9a-f]{16,64}",
+        "opaque_id": r"[A-Za-z0-9_-]{1,128}",
+        "surface_route": r"surface=[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}",
+    }.items()
+}
+
+
+class _DeclaredFields:
+    """The field declaration of one generated file (see the comment above)."""
+
+    def __init__(
+        self,
+        fields: dict[str, str],
+        *,
+        keys: Optional[dict[str, str]] = None,
+        recurse: tuple[str, ...] = (),
+        schema: Optional[tuple[str, frozenset[str]]] = None,
+        derived: Optional[dict[str, str]] = None,
+        comments: tuple[str, ...] = (),
+    ) -> None:
+        self.fields = [(tuple(p.split(".")), shape) for p, shape in fields.items()]
+        self.keys = [(tuple(p.split(".")), shape) for p, shape in (keys or {}).items()]
+        #: A dotted path under which the same declaration applies again (a
+        #: repaired admission embeds the admission it replaced).
+        self.recurse = tuple(tuple(p.split(".")) for p in recurse)
+        self.schema = schema
+        self.derived = [
+            (tuple(p.split(".")), name) for p, name in (derived or {}).items()
+        ]
+        self.comments = tuple(re.compile(pattern) for pattern in comments)
+        self.document: Any = None
+        self.scrubber: Any = None
+
+    def bind(self, document: Any, scrubber: Any) -> "_DeclaredFields":
+        """This declaration applied to one parsed ``document``."""
+        bound = copy.copy(self)
+        bound.document = document
+        bound.scrubber = scrubber
+        return bound
+
+    def keeps_comment(self, comment: str) -> bool:
+        return any(pattern.fullmatch(comment) for pattern in self.comments)
+
+    def _scrub_stable(self, value: Any) -> bool:
+        if isinstance(value, dict):
+            return all(
+                self._scrub_stable(key) and self._scrub_stable(child)
+                for key, child in value.items()
+            )
+        if isinstance(value, list):
+            return all(self._scrub_stable(child) for child in value)
+        if isinstance(value, str):
+            return bool(self.scrubber.scrub_text(value) == value)
+        return True
+
+    def _derived_ok(self, name: str, path: tuple[str | int, ...], value: str) -> bool:
+        node = self.document
+        for part in path[:-1]:
+            try:
+                node = node[part]
+            except (KeyError, IndexError, TypeError):
+                return False
+        if name != "new_record_probe" or not isinstance(node, dict):
+            return False
+        match = node.get("match")
+        if not isinstance(match, dict) or not all(
+            isinstance(item, dict) for item in match.values()
+        ):
+            return False
+        from openadapt_flow.verify_run import new_record_probe
+
+        route, sep, rest = value.partition("|")
+        if sep and _SHAPES["surface_route"].fullmatch(route):
+            value = rest
+        _, marker, confirmer = value.rpartition(" (confirmed by ")
+        if not marker or not confirmer.endswith(")"):
+            return False
+        confirmer = confirmer[:-1]
+        return (
+            bool(_SHAPES["principal"].fullmatch(confirmer))
+            and new_record_probe(match, confirmer) == value
+            and self._scrub_stable(match)
+        )
+
+    def applies_to(self, document: Any) -> bool:
+        if self.schema is None:
+            return isinstance(document, dict)
+        key, values = self.schema
+        return isinstance(document, dict) and document.get(key) in values
+
+    @staticmethod
+    def _match(pattern: tuple[str, ...], path: tuple[str | int, ...]) -> bool:
+        return len(pattern) == len(path) and all(
+            want == "*" or want == got for want, got in zip(pattern, path)
+        )
+
+    def _local(self, path: tuple[str | int, ...]) -> tuple[str | int, ...]:
+        changed = True
+        while changed:
+            changed = False
+            for prefix in self.recurse:
+                if len(path) > len(prefix) and self._match(prefix, path[: len(prefix)]):
+                    path = path[len(prefix) :]
+                    changed = True
+        return path
+
+    def keeps_value(self, path: tuple[str | int, ...], value: str) -> bool:
+        local = self._local(path)
+        for pattern, name in self.derived:
+            if self._match(pattern, local):
+                return self.document is not None and self._derived_ok(name, path, value)
+        for pattern, shape in self.fields:
+            if self._match(pattern, local):
+                return shape != _CONTENT and bool(_SHAPES[shape].fullmatch(value))
+        return False
+
+    def keeps_key(self, parent: tuple[str | int, ...], key: str) -> bool:
+        local = self._local((*parent, key))
+        parent, key = local[:-1], str(local[-1])
+        for pattern, shape in self.keys:
+            if self._match(pattern, parent):
+                return shape != _CONTENT and bool(_SHAPES[shape].fullmatch(key))
+        depth = len(parent)
+        if any(
+            len(pattern) > depth
+            and pattern[depth] == key
+            and self._match(pattern[:depth], parent)
+            for pattern, _ in (*self.fields, *self.derived)
+        ) or any(
+            len(prefix) > depth
+            and prefix[depth] == key
+            and self._match(prefix[:depth], parent)
+            for prefix in self.recurse
+        ):
+            # A field name the declaration spells out is schema syntax.
+            return True
+        return False
+
+
+def _section_fields(prefix: str) -> dict[str, str]:
+    return {
+        f"{prefix}.*.id": "section_id",
+        f"{prefix}.*.title": _CONTENT,
+        f"{prefix}.*.title_source": "enum",
+        f"{prefix}.*.kind": "enum",
+        f"{prefix}.*.steps.*": "step_id",
+        f"{prefix}.*.fields.*": _CONTENT,
+        f"{prefix}.*.params.*": _CONTENT,
+    }
+
+
+@lru_cache(maxsize=1)
+def _declared_bundle_files() -> dict[str, _DeclaredFields]:
+    admission = _DeclaredFields(
+        {
+            "schema": "schema",
+            "admission_mode": "enum",
+            "state": "enum",
+            "workflow_id": "workflow_id",
+            "digest": "hex",
+            "task.key": "task_key",
+            "task.task_id": "task_key",
+            "task.params.*": "enum",
+            "params.*": _CONTENT,
+            "policy": "enum",
+            "admitted_by_principal_id": "principal",
+            "admitted_at": "timestamp",
+            "reviewed_by_principal_id": "principal",
+            "reviewed_at": "timestamp",
+            "reviewed_steps.*": "step_id",
+            "canary.principal_id": "principal",
+            "canary.ran_at": "timestamp",
+            "canary.target_origin": "origin",
+            "canary.outcome": "enum",
+            "canary.model_calls": "enum",
+            "canary.environment": "origin",
+            "record_check_digest": "hex",
+            "readback.*.step_id": "step_id",
+            "readback.*.ok": "enum",
+            "readback.*.effects.*.kind": "enum",
+            "readback.*.effects.*.tier": "enum",
+            "readback.*.effects.*.evidence": "enum",
+            "recorded_by": "principal",
+            "agent_principal_id": "principal",
+            "dialect": "enum",
+            "model_key.provider": "enum",
+            "model_key.held_by": "enum",
+            "model_key.source": "env_source",
+            "model_key.fingerprint": "prefixed_digest",
+            "signing_key": "prefixed_digest",
+            "signature": "prefixed_digest",
+            "admitter_public_key": "hex",
+            "admitter_signature": "prefixed_digest",
+            "require_distinct_reviewer_and_admitter": "enum",
+            "teach_authorization.schema": "schema",
+            "teach_authorization.method": "enum",
+            "teach_authorization.authorizer": "principal",
+            "teach_authorization.authorizer_public_key": "hex",
+            "teach_authorization.approver_root": "hex",
+            "teach_authorization.expires_at": "timestamp",
+            "teach_authorization.purposes.*": "enum",
+            "teach_authorization.record_kind": _CONTENT,
+            "teach_authorization.sha256": "hex",
+            "teach_authorization.signature_sha256": "hex",
+            "teach_authorization.task_id": "task_key",
+            "repair_of.candidate_id": "opaque_id",
+            "repair_of.route": "enum",
+            "repair_of.prior_digest": "hex",
+        },
+        keys={"task.params": _CONTENT},
+        recurse=("repair_of.prior_manifest",),
+        schema=("schema", frozenset({"openadapt-flow/jit-admission/v1"})),
+    )
+    publish = _DeclaredFields(
+        {
+            "schema": "schema",
+            "parameters.*": _CONTENT,
+            "input_schema.type": "enum",
+            "input_schema.properties.*.type": "enum",
+            "input_schema.required.*": _CONTENT,
+            "input_schema.additionalProperties": "enum",
+            "workflow_digest": "hex",
+            "record_check_sha256": "hex",
+            "saves": "enum",
+            "readback.path": "bundle_path",
+            "readback.sha256": "hex",
+            "run_authorization.schema_version": "schema",
+            "run_authorization.admission_sha256": "hex",
+            "run_authorization.admitted_policy_contract_sha256": "hex",
+            "run_authorization.admitted_policy_name": "enum",
+            "run_authorization.bundle_content_digest": "hex",
+            "run_authorization.execution_profile": "enum",
+            "run_authorization.minimum_effect_tier": "enum",
+            "run_authorization.qualified_effect_requirements.*": _CONTENT,
+            "run_authorization.required_identity_step_ids.*": "step_id",
+        },
+        keys={"input_schema.properties": _CONTENT},
+        schema=("schema", frozenset({"openadapt.wrap-publish/v1"})),
+    )
+    readback = _DeclaredFields(
+        {
+            "schema_version": "schema",
+            "verifier.kind": "enum",
+            "verifier.base_url": "base_url",
+            "verifier.records_path": "url_path",
+            "verifier.records_key": _CONTENT,
+            "verifier.records_complete": "enum",
+            "effects.*.kind": "enum",
+            "effects.*.match.*.literal": _CONTENT,
+            "effects.*.match.*.param": _CONTENT,
+            "effects.*.composite_key.*.literal": _CONTENT,
+            "effects.*.composite_key.*.param": _CONTENT,
+            "effects.*.count_new_only": "enum",
+            "effects.*.expected_count": "enum",
+            "effects.*.key_field": _CONTENT,
+        },
+        keys={"effects.*.match": _CONTENT, "effects.*.composite_key": _CONTENT},
+        schema=("schema_version", frozenset({"openadapt.verify/v1"})),
+        derived={"effects.*.probe": "new_record_probe"},
+        # The attribution line ``openadapt wrap`` writes when a person
+        # confirms the checks (compile_agent.pipeline).
+        comments=(
+            r" Confirmed by [A-Za-z0-9][A-Za-z0-9._:+-]{0,127} at "
+            r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?"
+            r"(?:Z|[+-][0-9]{2}:[0-9]{2}) from [A-Za-z0-9_.-]+\.yaml\.",
+        ),
+    )
+    sections = _DeclaredFields(
+        {
+            "schema": "schema",
+            "note": _CONTENT,
+            "workflow_contract_sha256": "hex",
+            **_section_fields("sections"),
+            **_section_fields("compiled"),
+            "edits.*.op": "enum",
+            "edits.*.section": "section_id",
+            "edits.*.title": _CONTENT,
+            "edits.*.other": "section_id",
+            "edits.*.at": "step_id",
+            "context.*.container": _CONTENT,
+            "context.*.kind": "enum",
+            "context.*.header": "enum",
+        },
+        keys={"context": "step_id"},
+        schema=("schema", frozenset({"openadapt.flow.sections/v1"})),
+    )
+    layout = _DeclaredFields(
+        {
+            "schema": "schema",
+            "scale_landmarks.salt": "hex",
+            "scale_landmarks.steps.*.*.*": "hex",
+            "steps.*.char_width": "enum",
+            "steps.*.lines": "enum",
+            "steps.*.text_height": "enum",
+            "steps.*.profile_sha256": "hex",
+            "steps.*.viewport.*": "enum",
+        },
+        keys={"scale_landmarks.steps": "step_id", "steps": "step_id"},
+        schema=("schema", frozenset({"openadapt.layout-fingerprints/v1"})),
+    )
+    draft = _DeclaredFields({"note": _CONTENT, "state": "enum"})
+    return {
+        "admission.json": admission,
+        "openadapt-wrap-publish.json": publish,
+        "readback/verify.yaml": readback,
+        "sections.json": sections,
+        "templates/layout_fingerprint.json": layout,
+        "jit_draft.json": draft,
+    }
+
+
+def _declared_fields(
+    kind: str, rel: str, document: Any, scrubber: Any
+) -> Optional[_DeclaredFields]:
+    if kind != "bundle":
+        return None
+    declared = _declared_bundle_files().get(rel)
+    if declared is None or not declared.applies_to(document):
+        return None
+    return declared.bind(document, scrubber)
 
 
 def _merge_applied_redactions(
@@ -436,6 +875,7 @@ def _scrub_json_value(
     path_map: dict[str, str],
     known_paths: set[str],
     path: tuple[str | int, ...] = (),
+    fields: Optional[_DeclaredFields] = None,
 ) -> tuple[Any, list[dict[str, Any]]]:
     """Scrub JSON string values without exposing keys or non-string scalars.
 
@@ -453,9 +893,13 @@ def _scrub_json_value(
                 raise SanitizationError(f"JSON object key is not a string in {rel}")
             key = raw_key
             safe_key = path_map.get(key, key)
-            if safe_key not in known_paths and not _json_key_is_structural(
-                kind, safe_key
-            ):
+            if fields is not None:
+                keep_key = fields.keeps_key(path, safe_key)
+            else:
+                keep_key = safe_key in known_paths or _json_key_is_structural(
+                    kind, safe_key, path
+                )
+            if not keep_key:
                 safe_key = scrubber.scrub_text(safe_key)
                 safe_key, key_applied = _apply_text_redactions(
                     safe_key, redactions, rel
@@ -474,6 +918,7 @@ def _scrub_json_value(
                 path_map=path_map,
                 known_paths=known_paths,
                 path=(*path, safe_key),
+                fields=fields,
             )
             transformed[safe_key] = updated
             _merge_applied_redactions(aggregate, applied)
@@ -490,6 +935,7 @@ def _scrub_json_value(
                 path_map=path_map,
                 known_paths=known_paths,
                 path=(*path, index),
+                fields=fields,
             )
             transformed_list.append(updated)
             _merge_applied_redactions(aggregate, applied)
@@ -498,9 +944,13 @@ def _scrub_json_value(
         return value, []
 
     mapped = path_map.get(value, value)
-    if mapped in known_paths or (
-        kind == "bundle" and _bundle_string_is_structural(path, mapped)
-    ):
+    if fields is not None:
+        keep = fields.keeps_value(path, mapped)
+    else:
+        keep = mapped in known_paths or (
+            kind == "bundle" and _bundle_string_is_structural(path, mapped)
+        )
+    if keep:
         scrubbed = mapped
     else:
         scrubbed = scrubber.scrub_text(mapped)
@@ -531,6 +981,7 @@ def _scrub_json_text(
             kind=kind,
             path_map=path_map,
             known_paths=known_paths,
+            fields=_declared_fields(kind, rel, parsed, scrubber),
         )
         if transformed == parsed:
             return raw, applied
@@ -563,6 +1014,117 @@ def _scrub_json_text(
         output.append(ending)
         _merge_applied_redactions(aggregate, applied)
     return "".join(output), list(aggregate.values())
+
+
+def _yaml_comments(raw: str) -> list[str]:
+    """Every comment in ``raw``: the text YAML scalars do not cover."""
+    import yaml
+
+    spans: list[tuple[int, int]] = []
+    for token in yaml.scan(raw, Loader=yaml.SafeLoader):
+        if isinstance(token, yaml.ScalarToken):
+            spans.append((token.start_mark.index, token.end_mark.index))
+    residue: list[str] = []
+    cursor = 0
+    for start, end in sorted(spans):
+        residue.append(raw[cursor:start])
+        residue.append(" " * (end - start))
+        cursor = max(cursor, end)
+    residue.append(raw[cursor:])
+    rest = "".join(residue)
+    return [line[line.index("#") + 1 :] for line in rest.splitlines() if "#" in line]
+
+
+def _scrub_declared_yaml_text(
+    raw: str,
+    *,
+    fields: _DeclaredFields,
+    scrubber: Any,
+    redactions: list[dict[str, Any]],
+    rel: str,
+    kind: str,
+    known_paths: set[str],
+) -> tuple[str, list[dict[str, Any]]]:
+    """Scrub a declared YAML file field by field, keeping its exact bytes.
+
+    The comments are content too. When neither a field nor a comment changes
+    the original text is kept; otherwise the file is re-serialized from the
+    scrubbed values without its comments.
+    """
+    import yaml
+
+    parsed = yaml.safe_load(raw)
+    transformed, applied = _scrub_json_value(
+        parsed,
+        scrubber=scrubber,
+        redactions=redactions,
+        rel=rel,
+        kind=kind,
+        path_map={},
+        known_paths=known_paths,
+        fields=fields,
+    )
+    comments_clean = True
+    aggregate: dict[tuple[str, str, str], dict[str, Any]] = {}
+    _merge_applied_redactions(aggregate, applied)
+    for comment in _yaml_comments(raw):
+        if fields.keeps_comment(comment):
+            continue
+        scrubbed = scrubber.scrub_text(comment)
+        scrubbed, comment_applied = _apply_text_redactions(scrubbed, redactions, rel)
+        _merge_applied_redactions(aggregate, comment_applied)
+        if scrubbed != comment:
+            comments_clean = False
+    if transformed == parsed and comments_clean:
+        return raw, list(aggregate.values())
+    return (
+        yaml.safe_dump(transformed, sort_keys=False, allow_unicode=True),
+        list(aggregate.values()),
+    )
+
+
+def _scrub_structured_text(
+    raw: str,
+    *,
+    suffix: str,
+    scrubber: Any,
+    redactions: list[dict[str, Any]],
+    rel: str,
+    kind: str,
+    path_map: dict[str, str],
+    known_paths: set[str],
+) -> Optional[tuple[str, list[dict[str, Any]]]]:
+    """Scrub JSON, JSONL or a declared YAML file; ``None`` for plain text."""
+    if suffix in {".json", ".jsonl"}:
+        return _scrub_json_text(
+            raw,
+            suffix=suffix,
+            scrubber=scrubber,
+            redactions=redactions,
+            rel=rel,
+            kind=kind,
+            path_map=path_map,
+            known_paths=known_paths,
+        )
+    if suffix in {".yaml", ".yml"} and kind == "bundle":
+        import yaml
+
+        try:
+            document = yaml.safe_load(raw)
+        except yaml.YAMLError:
+            return None
+        fields = _declared_fields(kind, rel, document, scrubber)
+        if fields is not None:
+            return _scrub_declared_yaml_text(
+                raw,
+                fields=fields,
+                scrubber=scrubber,
+                redactions=redactions,
+                rel=rel,
+                kind=kind,
+                known_paths=known_paths,
+            )
+    return None
 
 
 def _redact_image_rectangles(
@@ -625,18 +1187,19 @@ def _scrub_text_file(
         raise SanitizationError(f"Text artifact contains NUL/binary data: {rel}")
     suffix = source.suffix.lower()
     _validate_structured_text(suffix, raw, rel)
-    if suffix in {".json", ".jsonl"}:
-        scrubbed, applied = _scrub_json_text(
-            raw,
-            suffix=suffix,
-            scrubber=scrubber,
-            redactions=redactions,
-            rel=rel,
-            kind=kind,
-            path_map=path_map,
-            known_paths=known_paths,
-        )
-        rescanned, _ = _scrub_json_text(
+    structured = _scrub_structured_text(
+        raw,
+        suffix=suffix,
+        scrubber=scrubber,
+        redactions=redactions,
+        rel=rel,
+        kind=kind,
+        path_map=path_map,
+        known_paths=known_paths,
+    )
+    if structured is not None:
+        scrubbed, applied = structured
+        second = _scrub_structured_text(
             scrubbed,
             suffix=suffix,
             scrubber=scrubber,
@@ -646,6 +1209,11 @@ def _scrub_text_file(
             path_map={},
             known_paths=known_paths,
         )
+        if second is None:
+            raise SanitizationError(
+                f"Scrubbing changed how {rel} is read; refusing the derivative"
+            )
+        rescanned = second[0]
     else:
         scrubbed = scrubber.scrub_text(raw)
         scrubbed, applied = _apply_text_redactions(scrubbed, redactions, rel)
@@ -1152,17 +1720,18 @@ def _rescan_derivative(destination: Path) -> dict[str, Any]:
                 continue
             suffix = path.suffix.lower()
             _validate_structured_text(suffix, current_text, entry["path"])
-            if suffix in {".json", ".jsonl"}:
-                rescanned_text, _ = _scrub_json_text(
-                    current_text,
-                    suffix=suffix,
-                    scrubber=scrubber,
-                    redactions=[],
-                    rel=entry["path"],
-                    kind=manifest["kind"],
-                    path_map={},
-                    known_paths=known_paths,
-                )
+            structured = _scrub_structured_text(
+                current_text,
+                suffix=suffix,
+                scrubber=scrubber,
+                redactions=[],
+                rel=entry["path"],
+                kind=manifest["kind"],
+                path_map={},
+                known_paths=known_paths,
+            )
+            if structured is not None:
+                rescanned_text = structured[0]
             else:
                 rescanned_text = scrubber.scrub_text(current_text)
             if rescanned_text != current_text:

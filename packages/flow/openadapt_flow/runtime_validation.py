@@ -395,7 +395,8 @@ def create_runtime_validation_attestation(
 
     ``recording_derivative`` and ``bundle_derivative`` must both be reviewed,
     approved sanitized artifacts. The bundle scrub must preserve its
-    load-bearing bytes. Strict lint means zero findings; certification must
+    load-bearing bytes. Strict lint means no warn or error finding (info is
+    advice, as in ``openadapt-flow lint --strict``); certification must
     pass the named policy; and ``run_dir/report.json`` must record a successful,
     non-halted replay of the same workflow.
     """
@@ -542,7 +543,7 @@ def _replay_attestation(
         require_current_risk_certification=True,
         certifying_policy=policy,
     )
-    if lint_report.findings:
+    if lint_report.blocking_findings(strict=True):
         counts = lint_report.counts()
         raise RuntimeValidationError(
             "Strict lint failed: "
