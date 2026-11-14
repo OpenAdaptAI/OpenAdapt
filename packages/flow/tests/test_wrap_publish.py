@@ -196,6 +196,13 @@ def test_stage_ships_bundle_with_readback_and_manifest(cache: FakeCache) -> None
     assert manifest["saves"] == 1
     assert manifest["input_schema"]["required"] == ["note"]
     assert len(manifest["record_check_sha256"]) == 64
+    # The Standard run shape the cloud builds each hosted run's authority from.
+    shape = manifest["run_authorization"]
+    assert shape["schema_version"] == "openadapt.admitted-program-run-shape/v1"
+    assert shape["execution_profile"] == "standard"
+    assert shape["admitted_policy_name"] == "clinical-write"
+    assert shape["bundle_content_digest"] == manifest["workflow_digest"]
+    assert len(shape["admission_sha256"]) == 64
     # The cached admitted bundle itself is never modified.
     assert not (cache.bundle / publish.MANIFEST_NAME).exists()
     # Staging twice yields the same tree, so the sanitized derivative is reused.
@@ -204,6 +211,12 @@ def test_stage_ships_bundle_with_readback_and_manifest(cache: FakeCache) -> None
     first = source_tree_sha256(staged.staged)
     again = publish.stage(cache, "Save {note}", ["note"])
     assert source_tree_sha256(again.staged) == first
+
+
+def test_refuses_a_policy_with_no_run_shape(cache: FakeCache) -> None:
+    with pytest.raises(publish.PublishError) as err:
+        publish.stage(cache, "Save {note}", ["note"], policy="no-such-policy")
+    assert err.value.code == "RUN_SHAPE_UNAVAILABLE"
 
 
 def test_refuses_a_held_task(tmp_path: Path) -> None:

@@ -427,6 +427,11 @@ def _deployment_sections(args: argparse.Namespace):
         effects = effects.model_copy(update={"records_path": args.effects_records_path})
     if getattr(args, "effects_root", None):
         effects = effects.model_copy(update={"root": args.effects_root})
+    admitted_effects = getattr(args, "_admitted_program_effects", None)
+    if admitted_effects is not None:
+        # A managed run of an admitted program reads back through the
+        # verify.yaml bundled and bound at publish (jit/hosted_authority.py).
+        effects = admitted_effects
 
     actuation = cfg.actuation
     if getattr(args, "api_base_url", None):
@@ -4187,6 +4192,38 @@ def _cmd_verify_run(args: argparse.Namespace) -> int:
     return 0 if receipt["outcome"] == "verified" else 1
 
 
+def _stage_admitted_program_readback(
+    args: argparse.Namespace, bundle: Path
+) -> Optional[int]:
+    """Use the bundled read-back check for a managed admitted-program run.
+
+    Only with ``--managed-dispatch-file`` and a bundle that carries an
+    admission and ``readback/verify.yaml`` (jit/hosted_authority.py). Whether
+    the dispatch may rest on that admission is decided later, with the
+    authorization; this only wires the verifier both gates and the replay use.
+    """
+
+    if not getattr(args, "managed_dispatch_file", None):
+        return None
+    from openadapt_flow.jit.hosted_authority import (
+        HostedAuthorityError,
+        is_admitted_program,
+        readback_effects,
+    )
+
+    if not is_admitted_program(bundle):
+        return None
+    try:
+        args._admitted_program_effects = readback_effects(bundle)
+    except HostedAuthorityError:
+        print(
+            "run REFUSED: the admitted program's bundled read-back check is "
+            "invalid. Nothing was executed."
+        )
+        return 2
+    return None
+
+
 def _admitted_bundle_refusal(
     args: argparse.Namespace,
     bundle: Path,
@@ -4316,6 +4353,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
     refused_admission = _admitted_bundle_refusal(args, bundle, workflow)
     if refused_admission is not None:
         return refused_admission
+    refused_admission = _stage_admitted_program_readback(args, bundle)
+    if refused_admission is not None:
+        return refused_admission
 
     qualification_case = getattr(args, "_qualification_case_execution", None)
     gate_params = (
@@ -4415,7 +4455,30 @@ def _cmd_run(args: argparse.Namespace) -> int:
         dispatch_admission = (
             None if authorization is None else authorization.qualification_admission
         )
-        if not authority_file and dispatch_admission is None:
+        admitted_program = False
+        if not authority_file and dispatch_admission is None and dispatch_file:
+            # No qualification campaign: an admitted agent-compiled program
+            # can rest on its own signed admission (Standard only).
+            from openadapt_flow.jit.hosted_authority import (
+                managed_admission_refusal,
+            )
+            from openadapt_flow.jit.lifecycle import is_jit_bundle
+
+            reason = managed_admission_refusal(
+                bundle,
+                workflow,
+                authorization,
+                profile=selected_profile.value if selected_profile else None,
+            )
+            if reason is not None and is_jit_bundle(bundle, workflow):
+                print(
+                    f"run REFUSED: {reason}. A hosted admitted program needs its "
+                    "signed admission, the Standard profile and its read-back "
+                    "check. Nothing was executed."
+                )
+                return 2
+            admitted_program = reason is None
+        if not authority_file and dispatch_admission is None and not admitted_program:
             print(
                 "run REFUSED: Standard and Regulated actuation requires a signed "
                 "qualification admission. Nothing was executed."

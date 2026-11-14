@@ -140,6 +140,27 @@ a Regulated canary needs the template. A v2 attestation does not state the
 execution profile, so the cloud cannot tell a Standard canary from a demo one
 by the attestation alone; the profile is in the canary's run report.
 
+### What authorizes a hosted run
+
+A wrap program has no qualification campaign, so it has no governed
+authorization template. Its authority is its signed admission
+(`admission.json`), the same one every local run of it already checks. The
+upload's `openadapt-wrap-publish.json` carries the program's Standard run
+shape (`run_authorization`): the policy and its digest, the profile, the
+effect tier and requirements, the identity steps, and the admission's
+SHA-256. It carries no values. Cloud builds each call's run authorization from
+it and names the admission in `approval_source`. The managed runner refuses the
+run before any action unless all of these hold:
+
+- the admission verifies against the admission key registered with the
+  organization;
+- the authorization names that exact admission;
+- the run shape matches what the runner derives itself;
+- the profile is Standard. Regulated needs the qualification campaign.
+
+The run reads back through the bundled `verify.yaml`, and it is VERIFIED only
+when that read-back confirms the write.
+
 | Step | Request |
 | --- | --- |
 | Organization | `GET /api/v1/whoami` (skipped with `--org` or `OPENADAPT_ORG_ID`) |
@@ -186,6 +207,7 @@ uploaded.
 | `TASK_HELD` | The last run failed or was interrupted. Reconcile it first. |
 | `ADMISSION_INVALID` | The admission signature does not verify with the local key, or `keys/ed25519.pub` is missing. |
 | `NO_READ_BACK` | The program has no save, a save with no effect contract, or no confirmed `verify.yaml` that verify-run accepts. |
+| `RUN_SHAPE_UNAVAILABLE` | The task's policy is unknown, or the program has no Standard run shape under it. |
 | `NO_WRAP_EVIDENCE` | The signed recording or passing canary from the wrap run is missing. |
 | `TARGET_NOT_PUBLIC` | The task's app URL is not public HTTPS. |
 | `BUNDLE_UNSAFE` | The program contains a symbolic link. |

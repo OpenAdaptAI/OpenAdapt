@@ -15,6 +15,22 @@
 
 <!-- version list -->
 
+## Unreleased
+
+### A hosted Standard run of an admitted program rests on its admission
+
+- `openadapt-flow run --managed-dispatch-file` under the Standard profile now
+  accepts a dispatch without a qualification admission for an admitted
+  agent-compiled program (`openadapt wrap`, `jit`). Its bundle must carry an
+  `admission.json` that verifies against the trusted admission key directory,
+  plus a valid `readback/verify.yaml`. The authorization's `approval_source`
+  must name that exact admission (`hosted:program-admission:<sha256>`). The
+  run reads back through the bundled `verify.yaml`. Regulated is refused.
+  See `openadapt_flow/jit/hosted_authority.py`.
+- `openadapt wrap publish` writes the program's value-free Standard run shape
+  into `openadapt-wrap-publish.json` (`run_authorization`). The new refusal
+  `RUN_SHAPE_UNAVAILABLE` covers an unknown policy.
+
 ## v3.0.0 (2026-11-13)
 
 ### Breaking: the vision stack is the `vision` extra (3.0.0)

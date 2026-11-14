@@ -56,6 +56,8 @@ PUBLISH_SCHEMA = "openadapt.wrap-publish/v1"
 MANIFEST_NAME = "openadapt-wrap-publish.json"
 READBACK_PATH = "readback/verify.yaml"
 EXECUTE_REQUEST_SCHEMA = "openadapt.execute-request/v1"
+#: The policy a task certifies under when its task file names none.
+DEFAULT_POLICY = "clinical-write"
 
 #: Exit codes. 0: published and callable (or published with no key to check).
 EXIT_REFUSED = 1
@@ -165,18 +167,41 @@ def _record_check(bundle: Path) -> tuple[dict[str, Any], str, str]:
     return check, record_check_digest(workflow), str(digest)
 
 
+def _run_shape(staged: Path, policy: str) -> dict[str, Any]:
+    """The staged program's Standard run shape, or a refusal."""
+    from openadapt_flow.ir import Workflow
+    from openadapt_flow.jit.hosted_authority import HostedAuthorityError, run_shape
+
+    try:
+        return run_shape(staged, Workflow.load(staged), policy_source=policy)
+    except (HostedAuthorityError, FileNotFoundError, ValueError):
+        raise PublishError(
+            "RUN_SHAPE_UNAVAILABLE",
+            "the program has no Standard run shape under its policy, so the "
+            "cloud could not authorize a hosted run of it. Check that the "
+            "task's policy exists and that the program passes the Standard "
+            "run gate",
+        ) from None
+
+
 def stage(
     cache: Any,
     instruction: str,
     parameters: Sequence[str],
     *,
     key_dir: Optional[Path] = None,
+    policy: str = DEFAULT_POLICY,
 ) -> StagedProgram:
     """Check the task's admitted program and stage it for the governed push.
 
     Refuses, with nothing written, a held task, a task without an admitted
     program, an admission whose signature does not verify, and a program
     without a read-back check.
+
+    The manifest carries the program's Standard run shape
+    (:func:`openadapt_flow.jit.hosted_authority.run_shape`) under ``policy``,
+    the policy the attestation certifies. The cloud builds each hosted run's
+    authorization from it; the runner re-derives it and refuses a mismatch.
     """
     from openadapt_flow.jit.lifecycle import AdmissionError, verify_admission
 
@@ -241,6 +266,7 @@ def stage(
             "path": READBACK_PATH,
             "sha256": _sha256_file(staged / READBACK_PATH),
         },
+        "run_authorization": _run_shape(staged, policy),
     }
     (staged / MANIFEST_NAME).write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
@@ -1063,10 +1089,15 @@ def run(args: argparse.Namespace) -> int:
         client = cloud_client(host, key)
         host = client.host
         key_dir = Path(args.key_dir).expanduser() if args.key_dir else None
-        program = stage(
-            setup.cache, setup.instruction, setup.parameters, key_dir=key_dir
-        )
         common = getattr(setup.cache, "common", {}) or {}
+        policy = str(common.get("policy", DEFAULT_POLICY))
+        program = stage(
+            setup.cache,
+            setup.instruction,
+            setup.parameters,
+            key_dir=key_dir,
+            policy=policy,
+        )
         name = args.name or setup.cache.task_id(
             setup.instruction, dict.fromkeys(setup.parameters, "")
         )
@@ -1130,7 +1161,7 @@ def run(args: argparse.Namespace) -> int:
                 evidence,
                 recording_derivative,
                 bundle_derivative,
-                policy=str(common.get("policy", "clinical-write")),
+                policy=policy,
                 environment=str(
                     getattr(setup.cache, "environment", "")
                     or (evidence.canary.get("environment") or "")
