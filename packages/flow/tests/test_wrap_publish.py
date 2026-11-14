@@ -30,6 +30,19 @@ VERSION = "33333333-3333-4333-8333-333333333333"
 QUALIFICATION = "44444444-4444-4444-8444-444444444444"
 HOST = "https://cloud.example.test"
 SECRET = "oa_test_key_value_never_printed_0123456789"
+#: The real host and destination-policy functions, before any fixture patches.
+REAL_RESOLVE_HOST = hosted.resolve_host
+REAL_DESTINATION_POLICY = hosted.resolve_destination_policy
+VALID_CHECKS = (
+    "schema_version: openadapt.verify/v1\n"
+    "verifier:\n  kind: sql\n  sqlite_database: /srv/app.db\n"
+    "effects:\n  - kind: record_written\n    match: {type: note}\n    field: note\n"
+)
+
+
+def _client(http: Any) -> publish.CloudClient:
+    destination = hosted.DestinationPolicy("customer-managed", HOST, True, "test")
+    return publish.CloudClient(destination=destination, key=SECRET, http=http)
 
 
 def _bundle(path: Path, *, effects: bool = True, saves: bool = True) -> Path:
@@ -86,11 +99,7 @@ class FakeCache:
 def cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FakeCache:
     fake = FakeCache(tmp_path)
     _bundle(fake.bundle)
-    fake.checks.write_text(
-        "schema_version: openadapt.verify/v1\n"
-        "verifier:\n  kind: sqlite\n  path: /srv/app.db\n"
-        "effects: []\n"
-    )
+    fake.checks.write_text(VALID_CHECKS)
     monkeypatch.setattr(lifecycle, "verify_admission", lambda *_a, **_k: {})
     return fake
 
@@ -224,15 +233,34 @@ def test_refuses_an_admission_that_does_not_verify(
 
 
 @pytest.mark.parametrize(
-    "case", ["no_checks_file", "no_verifier", "no_save", "save_without_effect"]
+    "case",
+    [
+        "no_checks_file",
+        "no_verifier",
+        "unknown_verifier_field",
+        "no_effects",
+        "not_yaml",
+        "no_save",
+        "save_without_effect",
+    ],
 )
 def test_refuses_a_program_without_a_read_back_check(
     cache: FakeCache, case: str
 ) -> None:
+    effects = VALID_CHECKS.split("effects:", 1)[1]
     if case == "no_checks_file":
         cache.checks.unlink()
     elif case == "no_verifier":
-        cache.checks.write_text("schema_version: openadapt.verify/v1\neffects: []\n")
+        cache.checks.write_text(
+            f"schema_version: openadapt.verify/v1\neffects:{effects}"
+        )
+    elif case == "unknown_verifier_field":
+        # Non-empty but not a verifier verify-run accepts.
+        cache.checks.write_text(f"verifier: {{foo: bar}}\neffects:{effects}")
+    elif case == "no_effects":
+        cache.checks.write_text(VALID_CHECKS.split("effects:", 1)[0] + "effects: []\n")
+    elif case == "not_yaml":
+        cache.checks.write_text("verifier: [unclosed\n")
     else:
         import shutil
 
@@ -250,12 +278,10 @@ def test_refuses_a_program_without_a_read_back_check(
 def test_definition_is_read_with_bearer_key_and_matched() -> None:
     http = FakeHttp(200, _definition())
     check = publish.fetch_definition(
-        HOST,
-        SECRET,
+        _client(http),
         org_id=ORG,
         workflow_id=WORKFLOW,
         qualification_id=QUALIFICATION,
-        http=http,
     )
     assert check["callable"] is True
     (call,) = http.calls
@@ -284,12 +310,10 @@ def test_definition_refusals_never_claim_callable(
     status: int, body: Any, code: Any
 ) -> None:
     check = publish.fetch_definition(
-        HOST,
-        SECRET,
+        _client(FakeHttp(status, body)),
         org_id=ORG,
         workflow_id=WORKFLOW,
         qualification_id=QUALIFICATION,
-        http=FakeHttp(status, body),
     )
     assert check["callable"] is False
     assert check["code"] == code
@@ -323,6 +347,13 @@ def command(
     )
     monkeypatch.setattr(recording, "load_task", lambda *_a, **_k: setup)
     monkeypatch.setattr(hosted, "resolve_host", lambda host=None: HOST)
+    monkeypatch.setattr(
+        hosted,
+        "resolve_destination_policy",
+        lambda host, **_k: hosted.DestinationPolicy(
+            "customer-managed", host, True, "test allowlist"
+        ),
+    )
     monkeypatch.setattr(hosted, "_auto_approve_enabled", lambda _explicit: False)
 
     def no_ingest_token(*_a: Any, **_k: Any) -> str:
@@ -501,11 +532,114 @@ def test_one_confirm_prompt_at_a_terminal(
     assert _publish() == code
     assert prompts == ["Upload it? [y/N] "]
     assert len(command["pushes"]) == (1 if answer == "y" else 0)
-    # A second run after approval does not ask again.
+    # An earlier approval is not consent to the next upload: it asks again.
     if answer == "y":
         prompts.clear()
         assert _publish() == 0
-        assert prompts == []
+        assert prompts == ["Upload it? [y/N] "]
+        assert len(command["pushes"]) == 2
+
+
+def test_a_prior_approval_never_uploads_without_a_new_confirmation(
+    command: dict[str, Any], capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert _publish("--yes") == 0
+    assert len(command["pushes"]) == 1 and command["approved"]
+    capsys.readouterr()
+    # Another organization, no --yes, no terminal: the summary, nothing sent.
+    other = "77777777-7777-4777-8777-777777777777"
+    calls = len(command["cloud"].calls)
+    assert _publish("--org", other) == publish.EXIT_WAITING
+    out = capsys.readouterr().out
+    assert (
+        "Ready to publish to" in out and other in out and "Nothing was uploaded" in out
+    )
+    assert len(command["pushes"]) == 1
+    assert command["cloud"].calls[calls:] == []
+    # --json without --yes refuses to upload even after the earlier approval.
+    assert _publish("--json") == publish.EXIT_WAITING
+    assert json.loads(capsys.readouterr().out)["step"] == "confirm_upload"
+    assert len(command["pushes"]) == 1
+
+
+@pytest.mark.parametrize(
+    "host,env",
+    [
+        ("http://attacker.example.test", {}),
+        ("https://not-allowlisted.example.test", {}),
+        (
+            "https://not-allowlisted.example.test",
+            {hosted.DESTINATION_KIND_ENV: "customer-managed"},
+        ),
+        (
+            "http://cloud.example.test",
+            {hosted.DESTINATION_KIND_ENV: "customer-managed"},
+        ),
+    ],
+)
+def test_a_refused_destination_never_receives_the_key(
+    command: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    host: str,
+    env: dict[str, str],
+) -> None:
+    """The real host resolution and destination policy run before any request."""
+    monkeypatch.setenv("OPENADAPT_HOME", str(tmp_path / "home"))
+    for name in (hosted.DESTINATION_KIND_ENV, hosted.TRUSTED_HOSTS_ENV):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setattr(hosted, "resolve_host", REAL_RESOLVE_HOST)
+    monkeypatch.setattr(hosted, "resolve_destination_policy", REAL_DESTINATION_POLICY)
+    sent: list[Any] = []
+
+    def record(*args: Any, **kwargs: Any) -> Any:
+        sent.append((args, kwargs))
+        raise AssertionError("no request may leave for a refused destination")
+
+    for method in ("get", "post", "put", "request", "stream"):
+        monkeypatch.setattr(httpx, method, record)
+    for flags in (("--yes",), ("--yes", "--org", ORG), ()):
+        assert _publish("--host", host, *flags) == publish.EXIT_SETUP
+        captured = capsys.readouterr()
+        assert "[DESTINATION_REFUSED]" in captured.err
+        assert SECRET not in captured.out + captured.err
+    assert sent == [] and command["cloud"].calls == []
+    assert command["pushes"] == [] and command["attested"] == []
+
+
+def test_a_configured_untrusted_host_never_receives_the_key(
+    command: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / "config.toml").write_text(
+        '[hosted]\nhost = "http://attacker.example.test"\n'
+    )
+    monkeypatch.setenv("OPENADAPT_HOME", str(home))
+    for name in (hosted.DESTINATION_KIND_ENV, hosted.TRUSTED_HOSTS_ENV):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(hosted, "resolve_host", REAL_RESOLVE_HOST)
+    monkeypatch.setattr(hosted, "resolve_destination_policy", REAL_DESTINATION_POLICY)
+    assert _publish("--yes", "--org", ORG) == publish.EXIT_SETUP
+    assert "[DESTINATION_REFUSED]" in capsys.readouterr().err
+    assert command["cloud"].calls == [] and command["pushes"] == []
+
+
+def test_every_key_bearing_request_goes_to_the_policy_origin(
+    command: dict[str, Any],
+) -> None:
+    assert _publish("--yes") == 0
+    assert command["cloud"].calls  # FakeCloud asserts each URL starts with HOST
+    with pytest.raises(publish.PublishError, match="route"):
+        _client(FakeHttp(200, {})).request("GET", "//attacker.example.test/x")
+    with pytest.raises(publish.PublishError, match="route"):
+        _client(FakeHttp(200, {})).request("GET", "/api/../x")
 
 
 def test_json_needs_yes_and_prints_one_object(

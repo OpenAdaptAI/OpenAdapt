@@ -532,9 +532,10 @@ def _replay_attestation(
 
     Shared by both attestation sources. ``template_required`` keeps the
     production rule of :func:`create_runtime_validation_attestation`: a
-    standard or regulated replay needs a governed authorization template. An
-    admitted program without one is attested as v2, and Cloud's own legacy
-    policy decides whether it accepts that.
+    standard or regulated replay needs a governed authorization template.
+    With ``template_required=False`` only a Standard replay without one is
+    attested as v2, and Cloud's own legacy policy decides whether it accepts
+    that; a Regulated replay is always refused without its template.
     """
     lint_report = lint_workflow(
         workflow,
@@ -650,13 +651,16 @@ def _replay_attestation(
     # A production hosted activation must bind the sealed, independently
     # reproducible qualification authority.  ``Workflow.load`` already rejects
     # a template that does not reproduce from the exact sealed certification.
-    # Demo validation remains v2 so existing local tutorial workflows retain a
-    # compatible, explicitly non-production path.
+    # Without a template the attestation is v2: a demo replay, or (only when
+    # ``template_required`` is False, the admitted-program path) a Standard
+    # replay. A Regulated replay always needs the template. v2 does not state
+    # the execution profile (Cloud's v2 contract admits no extra field); the
+    # profile is in the replay report that ``replay.report_sha256`` binds.
     execution_profile = report.execution_profile
     template = provenance.governed_authorization_template
     governed_template_sha256: Optional[str] = None
     if execution_profile in ("standard", "regulated") and (
-        template is not None or template_required
+        template is not None or template_required or execution_profile == "regulated"
     ):
         if template is None:
             raise RuntimeValidationError(

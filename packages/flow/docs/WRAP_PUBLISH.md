@@ -107,8 +107,22 @@ Answer `y`. With the same key, `publish` then:
 4. prints the endpoint and a `curl` example from the path and qualification
    the cloud returned.
 
-Nothing about the program leaves the machine before you answer. In a script,
-pass `--yes`; the summary is still printed. `--json` prints one object.
+Nothing about the program leaves the machine before you answer. Every run
+asks again, even after an earlier upload, because the answer covers this
+run's host and organization. In a script, pass `--yes`; the summary is still
+printed. `--json` prints one object and needs `--yes` to upload; without it
+`publish` stops and uploads nothing.
+
+The key goes only to a destination the upload policy trusts:
+`https://app.openadapt.ai`, a loopback host for local development, or a
+customer-managed HTTPS origin that is classified and in the trusted-host
+allowlist. Any other `--host` is refused before the first request.
+
+The program is attested as `openadapt.runtime-validation/v2` when it has no
+governed authorization template. That is allowed only for a Standard canary;
+a Regulated canary needs the template. A v2 attestation does not state the
+execution profile, so the cloud cannot tell a Standard canary from a demo one
+by the attestation alone; the profile is in the canary's run report.
 
 | Step | Request |
 | --- | --- |
@@ -145,6 +159,7 @@ uploaded.
 | Code | Meaning |
 | --- | --- |
 | `NO_API_KEY` | `OPENADAPT_API_KEY` is not set. |
+| `DESTINATION_REFUSED` | `--host` is not a trusted destination. The key was not sent. |
 | `API_KEY_REJECTED` | The cloud did not accept the key. |
 | `ORG_UNKNOWN` | The cloud did not report the key's organization. Pass `--org`. |
 | `ORG_INVALID` | `--org` or `OPENADAPT_ORG_ID` is not an organization id. |
@@ -154,7 +169,7 @@ uploaded.
 | `NOT_ADMITTED` | The task has no admitted program yet. Run step 4. |
 | `TASK_HELD` | The last run failed or was interrupted. Reconcile it first. |
 | `ADMISSION_INVALID` | The admission signature does not verify with the local key, or `keys/ed25519.pub` is missing. |
-| `NO_READ_BACK` | The program has no save, a save with no effect contract, or no confirmed `verify.yaml`. |
+| `NO_READ_BACK` | The program has no save, a save with no effect contract, or no confirmed `verify.yaml` that verify-run accepts. |
 | `NO_WRAP_EVIDENCE` | The signed recording or passing canary from the wrap run is missing. |
 | `TARGET_NOT_PUBLIC` | The task's app URL is not public HTTPS. |
 | `BUNDLE_UNSAFE` | The program contains a symbolic link. |

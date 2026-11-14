@@ -262,6 +262,54 @@ def test_standard_attestation_refuses_missing_governed_template(tmp_path):
         )
 
 
+@pytest.mark.parametrize("profile", ["standard", "regulated"])
+def test_template_optional_v2_is_standard_only(tmp_path, monkeypatch, profile):
+    """The admitted-program relaxation never covers a Regulated replay."""
+    from openadapt_flow import runtime_validation
+
+    real = runtime_validation._replay_attestation
+    monkeypatch.setattr(
+        runtime_validation,
+        "_replay_attestation",
+        lambda **kwargs: real(**{**kwargs, "template_required": False}),
+    )
+    recording, bundle, run_dir = _approved_artifacts(
+        tmp_path, execution_profile="standard"
+    )
+    if profile == "regulated":
+        # The fixture's runtime cannot complete a Regulated replay, so the
+        # VERIFIED Standard report is read as Regulated: only the profile
+        # differs.
+        parse = runtime_validation.RunReport.model_validate_json
+
+        def as_regulated(data, *args, **kwargs):
+            report = parse(data, *args, **kwargs)
+            return report.model_copy(update={"execution_profile": "regulated"})
+
+        monkeypatch.setattr(
+            runtime_validation.RunReport, "model_validate_json", as_regulated
+        )
+    kwargs = dict(
+        recording_derivative=recording,
+        bundle_derivative=bundle,
+        run_dir=run_dir,
+        policy_source="permissive",
+        risk_class="low",
+        environment=f"qualified-{profile}-web",
+        target_url=_TARGET_URL,
+        host=hosted.DEFAULT_HOST,
+        token="oai_ingest_test",
+        challenge=_challenge(),
+    )
+    if profile == "regulated":
+        with pytest.raises(RuntimeValidationError, match="requires an exact governed"):
+            create_runtime_validation_attestation(**kwargs)
+    else:
+        value = create_runtime_validation_attestation(**kwargs)
+        assert value["schema"] == "openadapt.runtime-validation/v2"
+        assert "governed_authorization_template_sha256" not in value
+
+
 @pytest.mark.parametrize("target_kind", ["windows", "macos", "linux", "rdp", "citrix"])
 def test_native_and_remote_attestation_is_substrate_bound_without_target_phi(
     tmp_path, target_kind

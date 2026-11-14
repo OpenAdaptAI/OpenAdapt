@@ -33,6 +33,7 @@ No credential is printed, logged or written to the publish record.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import getpass
 import hashlib
 import json
@@ -105,8 +106,13 @@ def _sha256_file(path: Path) -> str:
 
 
 def _readback_config(checks: Path) -> None:
-    """Require a confirmed ``verify.yaml`` with a system-of-record reader."""
-    import yaml
+    """Require a confirmed ``verify.yaml`` that verify-run itself accepts.
+
+    The file is parsed with :func:`openadapt_flow.verify_run.load_verify_config`,
+    the loader the read-back runner uses, so a verifier the runner would
+    reject (an unknown kind or field, no effects) is refused here too.
+    """
+    from openadapt_flow.verify_run import load_verify_config
 
     if checks.is_symlink() or not checks.is_file():
         raise PublishError(
@@ -116,20 +122,15 @@ def _readback_config(checks: Path) -> None:
             "then admit the program",
         )
     try:
-        document = yaml.safe_load(checks.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, yaml.YAMLError):
-        raise PublishError(
-            "NO_READ_BACK", "the confirmed read-back checks cannot be parsed"
-        ) from None
-    if (
-        not isinstance(document, dict)
-        or not isinstance(document.get("verifier"), dict)
-        or not document["verifier"]
-    ):
+        load_verify_config(checks)
+    except Exception:  # noqa: BLE001 - any loader refusal is a refusal here
         raise PublishError(
             "NO_READ_BACK",
-            "the confirmed checks name no verifier that reads the system of record",
-        )
+            "the confirmed read-back checks (verify.yaml) are not a valid "
+            "verify-run configuration: they need a verifier that reads the "
+            "system of record and at least one effect. Check the file with "
+            "`openadapt-flow verify-run`",
+        ) from None
 
 
 def _record_check(bundle: Path) -> tuple[dict[str, Any], str, str]:
@@ -296,39 +297,104 @@ def upload_route(org_id: str, workflow_id: Optional[str]) -> tuple[str, str]:
     return "PUT", f"/api/v1/org/{org_id}/workflow/{normalized}/definition"
 
 
-def _call(
-    method: str,
-    url: str,
+@dataclass(frozen=True)
+class CloudClient:
+    """The only way a request carrying the API key leaves the machine.
+
+    Built by :func:`cloud_client` after the destination policy accepted the
+    host, so every key-bearing request goes to that exact origin. Requests
+    take a path, never a URL.
+    """
+
+    destination: Any  # hosted.DestinationPolicy
+    key: str = dataclasses.field(repr=False)
+    http: Any = None
+
+    @property
+    def host(self) -> str:
+        return str(self.destination.host)
+
+    def request(
+        self,
+        method: str,
+        path: str,
+        *,
+        body: Optional[Mapping[str, Any]] = None,
+        params: Optional[Mapping[str, str]] = None,
+    ) -> tuple[Optional[int], Any]:
+        """One JSON request with the key as a Bearer header; never raises on HTTP.
+
+        Returns ``(None, None)`` when the cloud could not be reached.
+        """
+        import httpx
+
+        if (
+            method not in ("GET", "POST")
+            or not path.startswith("/")
+            or any(part in path for part in ("//", "?", "#", "..", "\\"))
+        ):
+            raise PublishError("ROUTE_INVALID", "an internal API route is invalid")
+        client = self.http if self.http is not None else httpx
+        headers = {"Authorization": f"Bearer {self.key}", "Accept": "application/json"}
+        url = f"{self.host}{path}"
+        try:
+            if method == "GET":
+                response = client.get(
+                    url,
+                    params=dict(params or {}),
+                    headers=headers,
+                    timeout=_API_TIMEOUT,
+                    follow_redirects=False,
+                )
+            else:
+                response = client.post(
+                    url,
+                    headers=headers,
+                    json=dict(body or {}),
+                    timeout=_API_TIMEOUT,
+                    follow_redirects=False,
+                )
+        except httpx.HTTPError:
+            return None, None
+        try:
+            parsed = response.json()
+        except ValueError:
+            parsed = None
+        return response.status_code, parsed
+
+
+def cloud_client(
+    host: str,
     key: str,
     *,
-    body: Optional[Mapping[str, Any]] = None,
     http: Any = None,
-) -> tuple[Optional[int], Any]:
-    """One JSON request with the key as a Bearer header; never raises on HTTP."""
-    import httpx
+    destination_kind: Optional[str] = None,
+    trusted_hosts: Optional[list[str]] = None,
+) -> CloudClient:
+    """Resolve the destination policy for ``host``, then bind the key to it.
 
-    client = http if http is not None else httpx
-    headers = {"Authorization": f"Bearer {key}", "Accept": "application/json"}
+    Refuses, before any request, a host the governed upload would refuse:
+    plain HTTP to a remote host, an unclassified origin, or a customer origin
+    outside the exact-origin allowlist.
+    """
+    from openadapt_flow import hosted
+
     try:
-        if method == "GET":
-            response = client.get(
-                url, headers=headers, timeout=_API_TIMEOUT, follow_redirects=False
-            )
-        else:
-            response = client.post(
-                url,
-                headers=headers,
-                json=dict(body or {}),
-                timeout=_API_TIMEOUT,
-                follow_redirects=False,
-            )
-    except httpx.HTTPError:
-        return None, None
-    try:
-        parsed = response.json()
-    except ValueError:
-        parsed = None
-    return response.status_code, parsed
+        destination = hosted.resolve_destination_policy(
+            hosted.resolve_host(host),
+            destination_kind=destination_kind,
+            trusted_hosts=trusted_hosts,
+        )
+    except hosted.HostedError:
+        raise PublishError(
+            "DESTINATION_REFUSED",
+            f"{host} is not a trusted OpenAdapt Cloud destination, so the API key "
+            "was not sent. Use https://app.openadapt.ai, or classify a "
+            "customer-managed HTTPS origin and add it to the trusted-host "
+            "allowlist",
+            exit_code=EXIT_SETUP,
+        ) from None
+    return CloudClient(destination=destination, key=key, http=http)
 
 
 def _workflow_api_unavailable(host: str) -> PublishError:
@@ -340,12 +406,10 @@ def _workflow_api_unavailable(host: str) -> PublishError:
 
 
 def resolve_org(
-    host: str,
-    key: str,
+    client: CloudClient,
     override: Optional[str] = None,
     *,
     environ: Mapping[str, str] | None = None,
-    http: Any = None,
 ) -> str:
     """The organization the API key belongs to.
 
@@ -362,7 +426,7 @@ def resolve_org(
                 exit_code=EXIT_SETUP,
             )
         return value
-    status, body = _call("GET", f"{host.rstrip('/')}{WHOAMI_PATH}", key, http=http)
+    status, body = client.request("GET", WHOAMI_PATH)
     if status == 401:
         raise _key_rejected()
     org = body.get("org_id") if status == 200 and isinstance(body, dict) else None
@@ -398,25 +462,22 @@ def admission_public_key(key_dir: Optional[Path]) -> tuple[str, str]:
 
 
 def register_admission_key(
-    host: str,
-    key: str,
+    client: CloudClient,
     org_id: str,
     public_key: str,
     fingerprint: str,
-    *,
-    http: Any = None,
 ) -> bool:
     """Make the organization trust this admission key. Idempotent.
 
     Lists the organization's keys first and registers only when this one is
     missing. Returns True when it was registered by this call.
     """
-    url = org_route(host, org_id, "admission-keys")
-    status, body = _call("GET", url, key, http=http)
+    path = org_route("", org_id, "admission-keys")
+    status, body = client.request("GET", path)
     if status == 401:
         raise _key_rejected()
     if status == 404:
-        raise _workflow_api_unavailable(host)
+        raise _workflow_api_unavailable(client.host)
     rows = body.get("admission_keys") if isinstance(body, dict) else None
     if status != 200 or not isinstance(rows, list):
         raise PublishError(
@@ -427,7 +488,7 @@ def register_admission_key(
         isinstance(row, dict) and row.get("fingerprint") == fingerprint for row in rows
     ):
         return False
-    status, body = _call("POST", url, key, body={"public_key": public_key}, http=http)
+    status, body = client.request("POST", path, body={"public_key": public_key})
     if status == 401:
         raise _key_rejected()
     if status == 409:
@@ -449,44 +510,29 @@ def register_admission_key(
 
 
 def fetch_definition(
-    host: str,
-    key: str,
+    client: CloudClient,
     *,
     org_id: str,
     workflow_id: str,
     qualification_id: str,
-    http: Any = None,
 ) -> dict[str, Any]:
     """Read the endpoint's current callable definition. Never dispatches a run.
 
     Returns ``{"callable": True, "definition": ...}`` or
     ``{"callable": False, "reason": <fixed text>, "code": <server code|None>}``.
     """
-    import httpx
-
-    client = http if http is not None else httpx
-    url = endpoint_url(host, org_id, workflow_id) + "/definition"
-    try:
-        response = client.get(
-            url,
-            params={"qualification_id": qualification_id},
-            headers={"Authorization": f"Bearer {key}", "Accept": "application/json"},
-            timeout=_API_TIMEOUT,
-            follow_redirects=False,
-        )
-    except httpx.HTTPError:
+    path = endpoint_url("", org_id, workflow_id) + "/definition"
+    status, body = client.request(
+        "GET", path, params={"qualification_id": qualification_id}
+    )
+    if status is None:
         return {
             "callable": False,
             "reason": "the cloud could not be reached",
             "code": None,
         }
-    try:
-        body = response.json()
-    except ValueError:
-        body = None
     code = body.get("code") if isinstance(body, dict) else None
     code = code if isinstance(code, str) and _CODE.fullmatch(code) else None
-    status = response.status_code
     if status == 401:
         return {"callable": False, "reason": "the API key was rejected", "code": None}
     if status == 404:
@@ -949,8 +995,7 @@ def _attest(
     policy: str,
     environment: str,
     target: Optional[str],
-    host: str,
-    key: str,
+    client: CloudClient,
     org_id: str,
 ) -> dict[str, Any]:
     from openadapt_flow import safe_errors
@@ -963,9 +1008,10 @@ def _attest(
     try:
         # The challenge comes from the organization's API-key route, so the
         # attestation MAC'd with the same key is accepted by its publish route.
+        host = client.host
         challenge = request_validation_challenge(
             host=host,
-            token=key,
+            token=client.key,
             path=f"/api/v1/org/{org_id}/validation-challenges",
         )
         return create_admitted_program_attestation(
@@ -977,7 +1023,7 @@ def _attest(
             environment=environment,
             target_url=target,
             host=host,
-            token=key,
+            token=client.key,
             challenge=challenge,
         )
     except RuntimeValidationError as exc:
@@ -985,7 +1031,7 @@ def _attest(
         if "(401)" in text:
             raise _key_rejected() from None
         if re.search(r"returned 404\b", text):
-            raise _workflow_api_unavailable(host) from None
+            raise _workflow_api_unavailable(client.host) from None
         raise PublishError(
             "VALIDATION_FAILED",
             "the program did not pass runtime validation, so nothing was "
@@ -1011,6 +1057,10 @@ def run(args: argparse.Namespace) -> int:
         key = api_key()
         if key is None:
             raise _no_key(host)
+        # The destination policy runs before anything carries the key; every
+        # key-bearing request below goes through this client.
+        client = cloud_client(host, key)
+        host = client.host
         key_dir = Path(args.key_dir).expanduser() if args.key_dir else None
         program = stage(
             setup.cache, setup.instruction, setup.parameters, key_dir=key_dir
@@ -1028,7 +1078,7 @@ def run(args: argparse.Namespace) -> int:
         public_key, fingerprint = admission_public_key(key_dir)
         # Read-only: which organization this key publishes to. Nothing about
         # the program is sent before the confirmation below.
-        org_id = resolve_org(host, key, args.org)
+        org_id = resolve_org(client, args.org)
         route = upload_route(org_id, args.workflow_id)
 
         bundle_derivative = program.record_dir / "sanitized-bundle"
@@ -1058,21 +1108,21 @@ def run(args: argparse.Namespace) -> int:
             canary=evidence.canary if evidence is not None else None,
             org_id=org_id,
         )
-        if not all(_approved(path) for path, _source in derivatives):
-            answer: Optional[bool]
-            automatic = hosted._auto_approve_enabled(None)
-            answer = True if automatic else _confirm(args, summary)
-            if not answer:
-                return _waiting_confirm(args, program, summary, asked=answer is False)
-            _approve(derivatives, args, automatic=automatic and not args.yes)
-            summary_shown = automatic or args.yes or args.json
-        else:
-            summary_shown = False
-        if summary_shown and not args.json:
+        # Every upload is confirmed for this run's destination: --yes or one
+        # prompt at a terminal. An earlier approval of the sanitized copy says
+        # what may leave the machine, not where it goes, so it is not reused
+        # as consent to upload, and --json never answers for a person.
+        answer = _confirm(args, summary)
+        if not answer:
+            return _waiting_confirm(args, program, summary, asked=answer is False)
+        if args.yes and not args.json:
             for line in summary:
                 print(line)
+        if not all(_approved(path) for path, _source in derivatives):
+            automatic = hosted._auto_approve_enabled(None)
+            _approve(derivatives, args, automatic=automatic and not args.yes)
 
-        register_admission_key(host, key, org_id, public_key, fingerprint)
+        register_admission_key(client, org_id, public_key, fingerprint)
         attestation: Any = args.validation_attestation
         if evidence is not None:
             attestation = _attest(
@@ -1086,8 +1136,7 @@ def run(args: argparse.Namespace) -> int:
                     or (target or "wrap")
                 ),
                 target=target,
-                host=host,
-                key=key,
+                client=client,
                 org_id=org_id,
             )
         result = hosted.push(
@@ -1114,9 +1163,9 @@ def run(args: argparse.Namespace) -> int:
     except hosted.HostedError as exc:
         return _refuse(args, _upload_error(exc))
     try:
-        return _finish(args, program, result, host, key, org_id)
+        return _finish(args, program, result, client, org_id)
     finally:
-        del key
+        del key, client
 
 
 def _approve(
@@ -1170,10 +1219,10 @@ def _finish(
     args: argparse.Namespace,
     program: StagedProgram,
     result: Mapping[str, Any],
-    host: str,
-    key: Optional[str],
+    client: CloudClient,
     expected_org: str,
 ) -> int:
+    host = client.host
     version = result.get("version")
     workflow_id = result.get("workflow_id")
     if not isinstance(version, dict) or not isinstance(workflow_id, str):
@@ -1221,20 +1270,12 @@ def _finish(
                 "the cloud's endpoint path does not match the uploaded workflow",
             ),
         )
-    if key is None:
-        check: dict[str, Any] = {
-            "callable": None,
-            "reason": "set OPENADAPT_API_KEY to check that the endpoint is callable",
-            "code": None,
-        }
-    else:
-        check = fetch_definition(
-            host,
-            key,
-            org_id=org_id,
-            workflow_id=workflow_id,
-            qualification_id=qualification_id,
-        )
+    check = fetch_definition(
+        client,
+        org_id=org_id,
+        workflow_id=workflow_id,
+        qualification_id=qualification_id,
+    )
     definition = check.get("definition") if check.get("callable") else None
     examples = curl_examples(endpoint, definition)
     definition_curl = (
