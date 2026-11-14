@@ -674,13 +674,31 @@ def test_cli_writes_a_working_check_and_its_proof(tmp_path, e2e_service, capsys)
     assert (tmp_path / "out" / PROPOSED_NAME).is_file()
 
 
-def test_cli_exits_nonzero_for_a_draft(tmp_path, e2e_service, capsys):
+def test_cli_refuses_an_observed_partial_read_with_an_open_collateral_miss(
+    tmp_path, e2e_service, capsys
+):
     rec = effect_e2e_recording(tmp_path / "rec", e2e_service.base_url)
     code = main(["scaffold-verifier", str(rec), "--prove", "effect-e2e"])
     out = capsys.readouterr().out
+    assert code == 0, out
+    assert "Record check: REFUSED" in out
+    assert "collateral_unaudited" in out
+    assert not (rec / PROPOSED_NAME).exists()
+    assert (rec / "effect_contract.yaml").is_file()
+    proof = json.loads((rec / PROOF_NAME).read_text())
+    assert proof["status"] == "refused"
+    assert "collateral_unaudited" in proof["refusal_reason"]
+
+
+def test_cli_exits_nonzero_for_a_draft(tmp_path, e2e_service, capsys):
+    rec = effect_e2e_recording(tmp_path / "rec", e2e_service.base_url)
+    code = main(
+        ["scaffold-verifier", str(rec), "--complete-read", "--prove", "effect-e2e"]
+    )
+    out = capsys.readouterr().out
     assert code == 1
     assert "DRAFT (not working)" in out
-    assert "MISS: collateral_unaudited" in out
+    assert "Live fault suite (effect-e2e): FAILED" in out
 
 
 def test_cli_falls_back_to_the_todo_draft_without_reads(tmp_path, capsys):
