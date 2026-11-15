@@ -680,14 +680,17 @@ def test_cli_refuses_an_observed_partial_read_with_an_open_collateral_miss(
     rec = effect_e2e_recording(tmp_path / "rec", e2e_service.base_url)
     code = main(["scaffold-verifier", str(rec), "--prove", "effect-e2e"])
     out = capsys.readouterr().out
-    assert code == 0, out
+    assert code == 2, out
     assert "Record check: REFUSED" in out
+    assert "This is a TODO draft." in out
+    assert "No read in the recording" not in out
     assert "collateral_unaudited" in out
     assert not (rec / PROPOSED_NAME).exists()
     assert (rec / "effect_contract.yaml").is_file()
     proof = json.loads((rec / PROOF_NAME).read_text())
     assert proof["status"] == "refused"
     assert "collateral_unaudited" in proof["refusal_reason"]
+    assert f"Recorded read REFUSED: {proof['refusal_reason']}" in out
 
 
 def test_cli_exits_nonzero_for_a_draft(tmp_path, e2e_service, capsys):
@@ -706,7 +709,11 @@ def test_cli_falls_back_to_the_todo_draft_without_reads(tmp_path, capsys):
     code = main(["scaffold-verifier", str(rec)])
     out = capsys.readouterr().out
     assert code == 0
-    assert "TODO draft" in out
+    assert (
+        "No read in the recording returns the saved record (no network capture, "
+        "--db or --verifier), so this is a TODO draft."
+    ) in out
+    assert "REFUSED" not in out
     assert (rec / "effect_contract.yaml").is_file()
 
 

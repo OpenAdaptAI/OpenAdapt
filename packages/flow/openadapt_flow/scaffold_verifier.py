@@ -841,8 +841,8 @@ def build_record_check(
 
 def report_draft_fallback(
     source: Path, out_dir: Optional[Path], *, probe_reads: bool = False
-) -> None:
-    """Print why build_record_check fell back to the TODO draft."""
+) -> Optional[str]:
+    """Print the fallback explanation and return any recorded-read refusal."""
     destination = out_dir or source
     if probe_reads:
         import json as _json
@@ -880,8 +880,11 @@ def report_draft_fallback(
                     "Record check: REFUSED. A recorded read can't see the "
                     f"whole save, so no check was written: {reason} ({proof_path})."
                 )
+                return reason
         except (OSError, ValueError, _sealed.SealedSetError):
             pass
+
+    return None
 
 
 # ---------------------------------------------------------------------------

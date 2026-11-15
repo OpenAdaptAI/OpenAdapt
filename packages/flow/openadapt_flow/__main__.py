@@ -6232,18 +6232,21 @@ def _cmd_scaffold_verifier(args: argparse.Namespace) -> int:
     if built is not None:
         print(built.summary)
         return 0 if built.working else 1
-    report_draft_fallback(
+    refusal_reason = report_draft_fallback(
         Path(args.source),
         out_dir,
         probe_reads=bool(getattr(args, "probe_reads", False)),
     )
     out, count = write_draft(Path(args.source), out_dir)
-    print(
-        "No read in the recording returns the saved record (no network capture, "
-        "--db or --verifier), so this is a TODO draft."
-    )
+    if refusal_reason is not None:
+        print(f"Recorded read REFUSED: {refusal_reason}. This is a TODO draft.")
+    else:
+        print(
+            "No read in the recording returns the saved record (no network capture, "
+            "--db or --verifier), so this is a TODO draft."
+        )
     print(NEXT_COMMANDS_TEMPLATE.format(out=out, count=count))
-    return 0
+    return 2 if refusal_reason is not None else 0
 
 
 def _cmd_explain(args: argparse.Namespace) -> int:
