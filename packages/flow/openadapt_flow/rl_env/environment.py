@@ -65,7 +65,16 @@ from openadapt_flow.rl_env.tasks import (
 )
 
 ActionKind = Literal[
-    "click", "fill", "type", "press", "select", "scroll", "goto", "wait", "done", "hover"
+    "click",
+    "fill",
+    "type",
+    "press",
+    "select",
+    "scroll",
+    "goto",
+    "wait",
+    "done",
+    "hover",
 ]
 
 #: Interactive elements listed in each observation, and the text budget.
@@ -135,7 +144,9 @@ class WebAction(Action):
     dy: Optional[int] = Field(default=None, description="scroll: pixels")
     dx: Optional[int] = Field(default=None, description="scroll: horizontal pixels")
     count: Optional[int] = Field(
-        default=None, description="click: 2 for a double click, 3 for a triple click"
+        default=None,
+        description="click: 2 for a double click, 3 for a triple click; "
+        "press: how many times to press the key (up to 50)",
     )
     seconds: Optional[float] = Field(default=None, description="wait: <= 5")
     claim: Optional[Literal["success", "failure"]] = Field(
@@ -819,7 +830,8 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
             elif action.kind == "type":
                 page.keyboard.type(action.text or "")
             elif action.kind == "press":
-                page.keyboard.press(action.text or "Enter")
+                for _ in range(min(max(action.count or 1, 1), 50)):
+                    page.keyboard.press(action.text or "Enter")
             elif action.kind == "select":
                 if not action.selector:
                     return "select needs a selector"
@@ -827,7 +839,9 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
             elif action.kind == "scroll":
                 if action.x is not None and action.y is not None:
                     page.mouse.move(action.x, action.y)
-                page.mouse.wheel(action.dx or 0, action.dy if action.dy is not None else 400)
+                page.mouse.wheel(
+                    action.dx or 0, action.dy if action.dy is not None else 400
+                )
             elif action.kind == "hover":
                 if action.selector:
                     self._locator(action.selector).hover()

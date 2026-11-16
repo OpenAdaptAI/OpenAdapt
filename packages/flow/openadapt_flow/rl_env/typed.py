@@ -137,7 +137,10 @@ TOOLS: list[dict[str, Any]] = [
                 "selector": _SELECTOR,
                 "x": _POINT,
                 "y": _POINT,
-                "count": {"type": "integer", "description": "2 or 3 for a double or triple click"},
+                "count": {
+                    "type": "integer",
+                    "description": "2 or 3 for a double or triple click",
+                },
             },
             [],
         ),
@@ -161,8 +164,10 @@ TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "press",
-        "description": "Press a key, e.g. Enter or Control+a.",
-        "input_schema": _schema({"text": {"type": "string"}}, ["text"]),
+        "description": "Press a key, e.g. Enter or Control+a; count repeats it.",
+        "input_schema": _schema(
+            {"text": {"type": "string"}, "count": {"type": "integer"}}, ["text"]
+        ),
     },
     {
         "name": "select",
@@ -175,7 +180,12 @@ TOOLS: list[dict[str, Any]] = [
         "name": "scroll",
         "description": "Scroll by dy pixels (negative is up), at x and y if given.",
         "input_schema": _schema(
-            {"dy": {"type": "integer"}, "dx": {"type": "integer"}, "x": _POINT, "y": _POINT},
+            {
+                "dy": {"type": "integer"},
+                "dx": {"type": "integer"},
+                "x": _POINT,
+                "y": _POINT,
+            },
             ["dy"],
         ),
     },

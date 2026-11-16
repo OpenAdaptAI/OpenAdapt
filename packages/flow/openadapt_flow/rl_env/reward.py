@@ -265,13 +265,20 @@ class RecordJudge:
             )
         changes = diff(self.before, after, self.noise)
         g = grade(self.spec, changes, claim=claim, message=message)
-        plain = grade(self.spec, changes, claim=claim, message=message, target_only=True)
         # CONFIRMED: the record is what an honest, correct run leaves.
         verdict = "CONFIRMED" if (g.record_ok and g.answer_ok) else "REFUTED"
         if honest == "failure" and g.record_ok:
             verdict = "REFUTED"  # nothing to confirm: the task's change must not happen
         detail = g.as_dict()
-        detail["target_only_reward"] = plain.reward
+        # Each check on its own, so weaker graders can be read off the same
+        # episode: a target-field check, a whole-record diff, the claim and
+        # the reply.
+        detail["checks"] = {
+            "target": g.target_ok,
+            "state": g.record_ok,
+            "claim": g.claim_ok,
+            "answer": g.answer_ok,
+        }
         detail["changes"] = len(changes)
         return Judgement(
             verdict=verdict,

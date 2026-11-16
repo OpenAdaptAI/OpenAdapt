@@ -12,7 +12,6 @@ model's own outcome, so the pass rate is the named model's.
 
 from __future__ import annotations
 
-import base64
 import fcntl
 import json
 import os
@@ -120,8 +119,9 @@ def to_env(a: dict[str, Any]) -> list[dict[str, Any]]:
     if kind == "type":
         return [{"kind": "type", "text": str(a.get("text", ""))}]
     if kind == "key":
-        reps = max(1, min(int(a.get("repeat") or 1), 20))
-        return [{"kind": "press", "text": _key(c)} for c in str(a.get("text", "")).split() for _ in range(reps)]
+        # A held or repeated key is one step, as it is one action.
+        reps = max(1, min(int(a.get("repeat") or 1), 50))
+        return [{"kind": "press", "text": _key(c), "count": reps} for c in str(a.get("text", "")).split()]
     if kind == "scroll":
         n = int(a.get("scroll_amount", 3)) * SCROLL_PX
         dx, dy = {"down": (0, n), "up": (0, -n), "right": (n, 0), "left": (-n, 0)}[str(a.get("scroll_direction"))]
