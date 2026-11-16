@@ -210,10 +210,13 @@ def claude_policy(model: str, effort: str, *, ledger: Path, max_usd: float) -> C
                     results.append(res)
                     break
                 if obs.last_action_error:
-                    res.update(content=[{"type": "text", "text": f"Error: {obs.last_action_error}"[:300]},
-                                        _img(obs.screenshot_png_b64)], is_error=True)
-                else:
+                    shot = [_img(obs.screenshot_png_b64)] if obs.screenshot_png_b64 else []
+                    res.update(content=[{"type": "text", "text": f"Error: {obs.last_action_error}"[:300]}, *shot],
+                               is_error=True)
+                elif obs.screenshot_png_b64:
                     res["content"] = [_img(obs.screenshot_png_b64)]
+                else:  # a step that produced no screenshot (the page was still loading)
+                    res["content"] = "No screenshot was available after this action; take one."
                 results.append(res)
             if obs.done:
                 break
