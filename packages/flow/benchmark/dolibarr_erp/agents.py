@@ -100,7 +100,9 @@ def _img(b64: str) -> dict[str, Any]:
 def _key(text: str) -> str:
     from benchmark.fhir_medplum.leaderboard.browser import chord
 
-    return chord(text.split("+"))
+    # Chromium on macOS treats Control+A as "start of line", not select-all,
+    # so a model's ctrl shortcut uses Meta there and Control elsewhere.
+    return chord(text.split("+")).replace("Control+", "ControlOrMeta+")
 
 
 def to_env(a: dict[str, Any]) -> list[dict[str, Any]]:
