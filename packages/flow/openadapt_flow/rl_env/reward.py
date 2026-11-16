@@ -280,6 +280,8 @@ class RecordJudge:
             "answer": g.answer_ok,
         }
         detail["changes"] = len(changes)
+        # Every change, for the trajectory and for re-grading later.
+        detail["change_list"] = [c.as_dict() for c in changes[:300]]
         return Judgement(
             verdict=verdict,
             claim=claim,

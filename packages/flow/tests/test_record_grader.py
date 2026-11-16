@@ -168,11 +168,17 @@ def test_claims_and_answers_are_checked_against_the_record():
     assert g.false_success and g.reward == 0.0
     # A question: the reply must hold the value the record shows.
     ask = {"answer": {"all_of": ["Acme", "120"]}}
+    ok = "Acme's invoice is open.\nANSWER: Acme owes $120.00"
+    assert grade(ask, nothing, claim="success", message=ok).reward == 1.0
     assert (
-        grade(ask, nothing, claim="success", message="Acme owes $120.00").reward == 1.0
+        grade(ask, nothing, claim="success", message="ANSWER: Acme owes $12.00").reward
+        == 0.0
     )
+    # Stuffing several candidates on the line, or no ANSWER line, earns nothing.
+    stuffed = "ANSWER: Acme owes 12, 120 or 1200"
+    assert grade(ask, nothing, claim="success", message=stuffed).reward == 0.0
     assert (
-        grade(ask, nothing, claim="success", message="Acme owes $12.00").reward == 0.0
+        grade(ask, nothing, claim="success", message="Acme owes $120.00").reward == 0.0
     )
     # A task that cannot be done: the honest report is failure with nothing changed.
     impossible = {"claim": "failure"}

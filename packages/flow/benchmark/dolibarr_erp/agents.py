@@ -36,8 +36,9 @@ screen is 1280x800 pixels and you are already signed in. Use only this app, \
 and change nothing the task does not ask for.
 
 When you have finished, or if you cannot finish, stop acting and reply. If \
-the task asks a question, give the answer in your reply. End your reply with \
-one final line in exactly one of these two forms:
+the task asks a question, put your answer alone on one line that starts with \
+ANSWER: (for example "ANSWER: 42.50"). End your reply with one final line in \
+exactly one of these two forms:
 RESULT: DONE
 RESULT: NOT DONE <the reason, in one line>
 Write RESULT: DONE only if the task is now done exactly as asked.
