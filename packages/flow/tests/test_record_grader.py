@@ -234,3 +234,13 @@ def test_a_copyleft_app_is_never_bundled(bad):
 
     with pytest.raises(ValueError):
         Licence(environment="MIT", app=bad, app_source="bundled")
+
+
+def test_an_answer_may_take_any_listed_form():
+    from openadapt_flow.rl_env.record_grader import _answer_ok
+
+    spec = {"any_of": ["303-555-0123", "3035550123"]}
+    assert _answer_ok(spec, "ANSWER: 3035550123")
+    assert _answer_ok(spec, "ANSWER: 303-555-0123")
+    assert not _answer_ok(spec, "ANSWER: 7205550132")
+    assert not _answer_ok(spec, "ANSWER: 3035550123 or 7205550132")

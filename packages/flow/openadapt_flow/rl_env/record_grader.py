@@ -214,9 +214,13 @@ def _answer_ok(spec: dict[str, Any], message: str) -> bool:
 
     Numbers on the line must be exactly the expected ones (a reply that lists
     several candidates fails); each expected text must appear on the line;
-    ``forbid`` texts must not.
+    ``forbid`` texts must not. ``any_of`` lists equivalent forms of one
+    value (a phone number with or without dashes); any one of them passes.
     """
 
+    if spec.get("any_of"):
+        rest = {k: v for k, v in spec.items() if k not in ("any_of", "value", "all_of")}
+        return any(_answer_ok({**rest, "value": v}, message) for v in spec["any_of"])
     line = answer_line(message)
     if line is None:
         return False
