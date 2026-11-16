@@ -368,3 +368,18 @@ finally:
         timeout=30,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_a_task_can_set_its_own_step_limit() -> None:
+    pytest.importorskip("openenv")
+    from openadapt_flow.rl_env import environment as E
+    from openadapt_flow.rl_env.tasks import Task
+
+    env = E.OpenAdaptWebEnvironment(ENVS / "mockmed")
+    default = env.env.manifest.agent.max_steps
+    env._task = env.env.tasks[0]
+    assert env._max_steps() == default
+    env._task = env.env.tasks[0].model_copy(update={"max_steps": default + 90})
+    assert env._max_steps() == default + 90
+    with pytest.raises(ValueError):
+        Task(**_task(max_steps=0))
