@@ -239,8 +239,8 @@ def test_a_copyleft_app_is_never_bundled(bad):
 def test_an_answer_may_take_any_listed_form():
     from openadapt_flow.rl_env.record_grader import _answer_ok
 
-    spec = {"any_of": ["303-555-0123", "3035550123"]}
-    assert _answer_ok(spec, "ANSWER: 3035550123")
-    assert _answer_ok(spec, "ANSWER: 303-555-0123")
-    assert not _answer_ok(spec, "ANSWER: 7205550132")
-    assert not _answer_ok(spec, "ANSWER: 3035550123 or 7205550132")
+    spec = {"any_of": ["555-010-2020", "5550102020"]}
+    assert _answer_ok(spec, "ANSWER: 5550102020")
+    assert _answer_ok(spec, "ANSWER: 555-010-2020")
+    assert not _answer_ok(spec, "ANSWER: 5550109999")
+    assert not _answer_ok(spec, "ANSWER: 5550102020 or 5550109999")

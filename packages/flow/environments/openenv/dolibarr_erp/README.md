@@ -57,8 +57,9 @@ Every reference solution should print `reward=1.0`. `time-reset` prints
 each reset's time and a hash of the whole record after it; the hashes must
 all match.
 
-If you received the held-out task pack, point the environment at it (the
-file must sit outside this directory) and run the same commands:
+If you have a full held-out task pack (instructions with grade specs and
+reference solutions), point the environment at it (the file must sit outside
+this directory) and run the same commands:
 
 ```bash
 export OPENADAPT_ENV_EXTRA_TASKS=/path/to/tasks.jsonl
