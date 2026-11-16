@@ -25,8 +25,9 @@ PRICES = {  # USD per million tokens, list, 2026-11-03
     "claude-opus-5-5": {"input": 4.0, "output": 20.0, "cache_read": 0.20, "cache_write": 5.0},
     "claude-haiku-5-5": {"input": 0.10, "output": 0.50, "cache_read": 0.01, "cache_write": 0.125},
 }
-MODEL_CALL_CAP = 70
-RUN_USD_CAP = 1.50
+# Per-episode caps; long tasks raise them through the environment.
+MODEL_CALL_CAP = int(os.environ.get("DOLIBARR_AGENT_MAX_CALLS", "70"))
+RUN_USD_CAP = float(os.environ.get("DOLIBARR_AGENT_MAX_USD", "1.50"))
 SCROLL_PX = 120
 
 PREAMBLE = """\

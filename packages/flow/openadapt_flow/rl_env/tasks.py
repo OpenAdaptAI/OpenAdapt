@@ -62,6 +62,8 @@ class Task(_Strict):
     #: A whole-record grading spec (``openadapt_flow.rl_env.record_grader``),
     #: used instead of the verify-run contract when the app has a ``read`` hook.
     grade: dict[str, Any] = Field(default_factory=dict)
+    #: This task's step limit; unset, the manifest's ``agent.max_steps``.
+    max_steps: Optional[int] = Field(default=None, ge=1, le=500)
     _verify_text: Optional[str] = PrivateAttr(default=None)
 
     @property

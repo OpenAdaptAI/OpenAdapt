@@ -633,7 +633,7 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
                 },
                 instruction=task.instruction if task else "",
                 step=self._state.step_count,
-                max_steps=self.env.manifest.agent.max_steps,
+                max_steps=self._max_steps(),
                 last_action_error=(
                     f"the step took longer than {STEP_TIMEOUT_S:.0f} s; "
                     "the episode ended with reward 0"
@@ -742,7 +742,7 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
             except ValueError as exc:
                 # An action this environment can't take still spends a step.
                 self._state.step_count += 1
-                if self._state.step_count >= self.env.manifest.agent.max_steps:
+                if self._state.step_count >= self._max_steps():
                     return self._finish(None, error=str(exc))
                 return self._observe(reward=0.0, done=False, error=str(exc))
             action = WebAction(**native)
@@ -752,9 +752,16 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
         started = time.monotonic()
         error = self._act(action)
         self._last_ms = int(1000 * (time.monotonic() - started))
-        if self._state.step_count >= self.env.manifest.agent.max_steps:
+        if self._state.step_count >= self._max_steps():
             return self._finish(None, error=error)
         return self._observe(reward=0.0, done=False, error=error)
+
+    def _max_steps(self) -> int:
+        """The current task's step limit, else the manifest's."""
+
+        if self._task is not None and self._task.max_steps:
+            return self._task.max_steps
+        return self.env.manifest.agent.max_steps
 
     def _call_tool(self, action: CallToolAction) -> CallToolObservation:
         """Run one MCP tool call as a step; the observation rides in the result."""
@@ -1027,7 +1034,7 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
             elements=json.loads(json.dumps(elements)),
             screenshot_png_b64=shot,
             step=self._state.step_count,
-            max_steps=self.env.manifest.agent.max_steps,
+            max_steps=self._max_steps(),
             last_action_error=error,
             verdict=verdict,
             computer_state=typed.computer_state(
