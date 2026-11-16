@@ -31,7 +31,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Iterator, Optional
 
-APP_IMAGE = "docker.io/dolibarr/dolibarr:20.0.2@sha256:cd19591476431610c8004e96aa619209dfd7f81e8d0c9cae6d19f565ff161af9"
+APP_IMAGE = "docker.io/dolibarr/dolibarr:20.0.2@sha256:dd1103c23e74ca088eef2b4396c8329a85f9a8bdf3d4d6335ffa32c34122fe44"
 DB_IMAGE = "docker.io/library/mariadb:11.8@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4"
 # Throwaway credentials of a loopback-only local container; not secrets.
 DB_PASS = "synthetic-db-pass"

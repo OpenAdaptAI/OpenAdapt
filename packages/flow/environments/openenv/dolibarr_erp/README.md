@@ -24,7 +24,9 @@ check on its own, so you can see which one failed.
 ## Run it (about 10 minutes)
 
 You need Podman or Docker, Python 3.11 or later, git and about 2 GB of
-disk. Everything runs on loopback ports 9760 (the app) and 9761 (its
+disk. The images are pinned by their multi-architecture index digests, so
+the same pins work on x86-64 and arm64. Set `OPENADAPT_CONTAINER_CLI=docker`
+to use Docker when both are installed. Everything runs on loopback ports 9760 (the app) and 9761 (its
 database).
 
 ```bash
@@ -64,12 +66,27 @@ export OPENADAPT_ENV_EXTRA_TASKS=/path/to/tasks.jsonl
 
 ## Connect your agent
 
-Serve the environment over the OpenEnv protocol (`/reset`, `/step`,
-`/state`, `/ws`) with screenshots on:
+Serve the environment over the OpenEnv protocol with screenshots on:
 
 ```bash
 OPENADAPT_ENV_SCREENSHOTS=1 python -m openadapt_flow.rl_env.server environments/openenv/dolibarr_erp --port 8000
 ```
+
+An episode is a WebSocket session (OpenEnv's plain HTTP `/step` keeps no
+episode between requests). Use OpenEnv's own client:
+
+```python
+from openenv import GenericEnvClient
+
+with GenericEnvClient(base_url="http://127.0.0.1:8000", message_timeout_s=180).sync() as env:
+    obs = env.reset(task_id="erp-024")
+    result = env.step({"kind": "done", "claim": "success", "message": "ANSWER: 9"})
+    print(result.reward)
+```
+
+`python -m openadapt_flow.rl_env.validate environments/openenv/dolibarr_erp`
+plays every task this way with four model-free agents and checks the reward
+contract.
 
 Or drive it in-process:
 
@@ -86,7 +103,9 @@ print(obs.reward, obs.metadata["judgement"]["record"]["checks"])
 Actions are `click` (selector or `x`/`y`, `count` for a double click),
 `fill`, `type`, `press`, `select`, `scroll`, `hover`, `goto`, `wait` and
 `done`. `done` takes `claim` (`success` or `failure`) and `message` (the
-final reply). Observations carry the instruction, the URL, the visible text,
+final reply). When a task asks a question, the grader reads the reply's
+last line that starts with `ANSWER:`; that line must hold the value the
+record shows and no competing value. Observations carry the instruction, the URL, the visible text,
 up to 80 interactive elements and, with screenshots on, a 1280x800 PNG.
 `benchmark/dolibarr_erp/agents.py` maps Anthropic's computer-use actions onto
 these, as an example adapter.

@@ -68,6 +68,14 @@ class Task(_Strict):
     def verify_text(self) -> Optional[str]:
         return self._verify_text
 
+    @model_validator(mode="after")
+    def _graded_feasibility(self) -> "Task":
+        # Under whole-record grading the honest claim says it: a task whose
+        # honest report is failure cannot be done as asked.
+        if self.grade and self.grade.get("claim") == "failure":
+            self.feasible = False
+        return self
+
     def public_view(self) -> dict[str, Any]:
         """What the agent and the task-discovery API may see."""
         return {"id": self.id, "split": self.split, "instruction": self.instruction}
