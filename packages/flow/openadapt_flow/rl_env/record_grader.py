@@ -84,9 +84,8 @@ class Change:
     def as_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {"table": self.table, "op": self.op, "key": self.key}
         if self.op == "update":
-            d["columns"] = {
-                c: [self.before.get(c), self.after.get(c)] for c in self.columns
-            }  # type: ignore[union-attr]
+            before, after = self.before or {}, self.after or {}
+            d["columns"] = {c: [before.get(c), after.get(c)] for c in self.columns}
         else:
             d["row"] = self.row
         return d
