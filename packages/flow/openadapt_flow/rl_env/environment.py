@@ -50,7 +50,12 @@ from pydantic import Field, model_validator
 
 from openadapt_flow.rl_env import CONTRACT_VERSION, lifecycle, typed
 from openadapt_flow.rl_env.lifecycle import ProcessNotReaped, kill_child_tree
-from openadapt_flow.rl_env.reward import EpisodeJudge, Judgement, render_verify_config
+from openadapt_flow.rl_env.reward import (
+    EpisodeJudge,
+    Judgement,
+    RecordJudge,
+    render_verify_config,
+)
 from openadapt_flow.rl_env.tasks import (
     PUBLIC_SPLIT,
     EnvDirectory,
@@ -60,7 +65,7 @@ from openadapt_flow.rl_env.tasks import (
 )
 
 ActionKind = Literal[
-    "click", "fill", "type", "press", "select", "scroll", "goto", "wait", "done"
+    "click", "fill", "type", "press", "select", "scroll", "goto", "wait", "done", "hover"
 ]
 
 #: Interactive elements listed in each observation, and the text budget.
@@ -128,10 +133,18 @@ class WebAction(Action):
         default=None, description="goto: a path or #fragment on the app's origin"
     )
     dy: Optional[int] = Field(default=None, description="scroll: pixels")
+    dx: Optional[int] = Field(default=None, description="scroll: horizontal pixels")
+    count: Optional[int] = Field(
+        default=None, description="click: 2 for a double click, 3 for a triple click"
+    )
     seconds: Optional[float] = Field(default=None, description="wait: <= 5")
     claim: Optional[Literal["success", "failure"]] = Field(
         default=None,
         description="done: did the task's change land in the record?",
+    )
+    message: Optional[str] = Field(
+        default=None,
+        description="done: the agent's final report (an answer the task asks for)",
     )
 
     @model_validator(mode="after")
@@ -381,7 +394,7 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
         self.screenshots = screenshots
         self._state = WebState(env_name=self.env.manifest.name)
         self._task: Optional[Task] = None
-        self._judge: Optional[EpisodeJudge] = None
+        self._judge: Optional[EpisodeJudge | RecordJudge] = None
         self._app_url: Optional[str] = None
         self._app_stop: Optional[Callable[[], None]] = None
         self._pw: Any = None
@@ -668,11 +681,17 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
         self._state = WebState(env_name=self.env.manifest.name, done=True)
         app_url = self._ensure_app()
         self._reset_app(task)
-        cfg = render_verify_config(
-            task.verify_text or self.env.verify_text, app_url, self._records_url
-        )
         episode = episode_id or uuid.uuid4().hex
-        judge = EpisodeJudge(cfg, task.params, episode_id=episode)
+        app = self.env.manifest.app
+        judge: Any
+        if task.grade and app.read:
+            noise = _import(app.noise)() if app.noise else None
+            judge = RecordJudge(_import(app.read), task.grade, noise=noise)
+        else:
+            cfg = render_verify_config(
+                task.verify_text or self.env.verify_text, app_url, self._records_url
+            )
+            judge = EpisodeJudge(cfg, task.params, episode_id=episode)
         try:
             self._ensure_page()
             page = self._new_context()
@@ -718,7 +737,7 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
             action = WebAction(**native)
         self._state.step_count += 1
         if action.kind == "done":
-            return self._finish(action.claim)
+            return self._finish(action.claim, message=action.message or "")
         started = time.monotonic()
         error = self._act(action)
         self._last_ms = int(1000 * (time.monotonic() - started))
@@ -786,10 +805,11 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
         page = self._page
         try:
             if action.kind == "click":
+                clicks = min(max(action.count or 1, 1), 3)
                 if action.selector:
-                    self._locator(action.selector).click()
+                    self._locator(action.selector).click(click_count=clicks)
                 elif action.x is not None and action.y is not None:
-                    page.mouse.click(action.x, action.y)
+                    page.mouse.click(action.x, action.y, click_count=clicks)
                 else:
                     return "click needs a selector or x and y"
             elif action.kind == "fill":
@@ -805,7 +825,16 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
                     return "select needs a selector"
                 self._locator(action.selector).select_option(action.value or "")
             elif action.kind == "scroll":
-                page.mouse.wheel(0, action.dy or 400)
+                if action.x is not None and action.y is not None:
+                    page.mouse.move(action.x, action.y)
+                page.mouse.wheel(action.dx or 0, action.dy if action.dy is not None else 400)
+            elif action.kind == "hover":
+                if action.selector:
+                    self._locator(action.selector).hover()
+                elif action.x is not None and action.y is not None:
+                    page.mouse.move(action.x, action.y)
+                else:
+                    return "hover needs a selector or x and y"
             elif action.kind == "goto":
                 return self._goto(action.path or "/")
             elif action.kind == "wait":
@@ -896,8 +925,15 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
         target = urlsplit(path)
         if target.path or target.query:
             # A new path keeps the task's query, which may carry the fault.
+            # Without a task query, the agent's own query (``?id=3``) stands.
             url = urlunsplit(
-                ("", "", target.path or start.path, start.query, target.fragment)
+                (
+                    "",
+                    "",
+                    target.path or start.path,
+                    start.query or target.query,
+                    target.fragment,
+                )
             )
         else:
             url = urlunsplit(("", "", start.path, start.query, target.fragment))
@@ -908,12 +944,14 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
         return None
 
     def _finish(
-        self, claim: Optional[str], error: Optional[str] = None
+        self, claim: Optional[str], error: Optional[str] = None, message: str = ""
     ) -> WebObservation:
         assert self._task is not None and self._judge is not None
         # Let any write the page already sent reach the record first.
         time.sleep(max(self.env.manifest.agent.settle_s, 0.5))
-        judgement = self._judge.judge(claim, self._task.feasible, self._attempted)
+        judgement = self._judge.judge(
+            claim, self._task.feasible, self._attempted, message=message
+        )
         if self._unproven is not None:
             judgement = dataclasses.replace(
                 judgement,

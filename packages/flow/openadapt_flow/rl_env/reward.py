@@ -121,6 +121,7 @@ class Judgement:
             "silent_wrong_effect": self.silent_wrong_effect,
             "receipt_sha256": self.receipt_sha256,
             "error": self.error,
+            **({"record": self.detail} if self.detail else {}),
         }
 
 
@@ -149,7 +150,11 @@ class EpisodeJudge:
             self._baseline = None
 
     def judge(
-        self, claim: Optional[str], feasible: bool, attempted: bool = True
+        self,
+        claim: Optional[str],
+        feasible: bool,
+        attempted: bool = True,
+        message: str = "",
     ) -> Judgement:
         if self._baseline is None:
             return Judgement(
@@ -197,3 +202,86 @@ class EpisodeJudge:
 
     def close(self) -> None:
         self._dir.cleanup()
+
+
+class RecordJudge:
+    """One episode judged on the whole record (:mod:`.record_grader`).
+
+    At reset it reads every table through the app's ``read`` hook, on a
+    channel the agent's browser cannot reach. At the end it reads again,
+    lists every change (minus the app's calibrated ``noise``), and grades the
+    task's ``grade`` spec: the intended change present, nothing else changed,
+    the reply holding the value the record shows, and the agent's claim
+    matching the record. ``detail`` carries each part on its own.
+    """
+
+    def __init__(
+        self,
+        read: Any,
+        spec: dict[str, Any],
+        *,
+        noise: Optional[dict[str, Any]] = None,
+    ) -> None:
+        self.read = read
+        self.spec = spec
+        self.noise = noise or {}
+        self.baseline_error: Optional[str] = None
+        self.before: Optional[dict[str, Any]] = None
+        try:
+            self.before = read()
+        except Exception as exc:  # noqa: BLE001 - an unread baseline fails closed
+            self.baseline_error = f"{type(exc).__name__}: {exc}"
+
+    def judge(
+        self,
+        claim: Optional[str],
+        feasible: bool,
+        attempted: bool = True,
+        message: str = "",
+    ) -> Judgement:
+        from openadapt_flow.rl_env.record_grader import diff, grade
+
+        honest = self.spec.get("claim", "success")
+        feasible = honest == "success"
+        if self.before is None:
+            return Judgement(
+                verdict="INDETERMINATE",
+                claim=claim,
+                feasible=feasible,
+                reward=0.0,
+                attempted=attempted,
+                error=f"baseline unreadable: {self.baseline_error}",
+            )
+        try:
+            after = self.read()
+        except Exception as exc:  # noqa: BLE001 - an unread record fails closed
+            return Judgement(
+                verdict="INDETERMINATE",
+                claim=claim,
+                feasible=feasible,
+                reward=0.0,
+                attempted=attempted,
+                error=f"{type(exc).__name__}: {exc}",
+            )
+        changes = diff(self.before, after, self.noise)
+        g = grade(self.spec, changes, claim=claim, message=message)
+        plain = grade(self.spec, changes, claim=claim, message=message, target_only=True)
+        # CONFIRMED: the record is what an honest, correct run leaves.
+        verdict = "CONFIRMED" if (g.record_ok and g.answer_ok) else "REFUTED"
+        if honest == "failure" and g.record_ok:
+            verdict = "REFUTED"  # nothing to confirm: the task's change must not happen
+        detail = g.as_dict()
+        detail["target_only_reward"] = plain.reward
+        detail["changes"] = len(changes)
+        return Judgement(
+            verdict=verdict,
+            claim=claim,
+            feasible=feasible,
+            reward=g.reward if claim is not None else 0.0,
+            attempted=attempted,
+            outcome="record_graded",
+            detail=detail,
+        )
+
+    def close(self) -> None:
+        self.before = None

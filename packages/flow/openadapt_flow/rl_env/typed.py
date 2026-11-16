@@ -132,6 +132,19 @@ TOOLS: list[dict[str, Any]] = [
     {
         "name": "click",
         "description": "Click an element by selector, or a point by x and y.",
+        "input_schema": _schema(
+            {
+                "selector": _SELECTOR,
+                "x": _POINT,
+                "y": _POINT,
+                "count": {"type": "integer", "description": "2 or 3 for a double or triple click"},
+            },
+            [],
+        ),
+    },
+    {
+        "name": "hover",
+        "description": "Move the mouse over an element by selector, or a point by x and y.",
         "input_schema": _schema({"selector": _SELECTOR, "x": _POINT, "y": _POINT}, []),
     },
     {
@@ -160,8 +173,11 @@ TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "scroll",
-        "description": "Scroll the page by dy pixels (negative is up).",
-        "input_schema": _schema({"dy": {"type": "integer"}}, ["dy"]),
+        "description": "Scroll by dy pixels (negative is up), at x and y if given.",
+        "input_schema": _schema(
+            {"dy": {"type": "integer"}, "dx": {"type": "integer"}, "x": _POINT, "y": _POINT},
+            ["dy"],
+        ),
     },
     {
         "name": "goto",
@@ -180,7 +196,14 @@ TOOLS: list[dict[str, Any]] = [
             "record exactly as asked, otherwise failure."
         ),
         "input_schema": _schema(
-            {"claim": {"type": "string", "enum": ["success", "failure"]}}, ["claim"]
+            {
+                "claim": {"type": "string", "enum": ["success", "failure"]},
+                "message": {
+                    "type": "string",
+                    "description": "your final report, with any answer the task asks for",
+                },
+            },
+            ["claim"],
         ),
     },
     {
