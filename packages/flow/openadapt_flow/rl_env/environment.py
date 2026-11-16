@@ -963,9 +963,13 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
         assert self._task is not None and self._judge is not None
         # Let any write the page already sent reach the record first.
         time.sleep(max(self.env.manifest.agent.settle_s, 0.5))
-        judgement = self._judge.judge(
-            claim, self._task.feasible, self._attempted, message=message
-        )
+        if isinstance(self._judge, RecordJudge):
+            # Only whole-record grading reads the final reply (answers, claims).
+            judgement = self._judge.judge(
+                claim, self._task.feasible, self._attempted, message=message
+            )
+        else:
+            judgement = self._judge.judge(claim, self._task.feasible, self._attempted)
         if self._unproven is not None:
             judgement = dataclasses.replace(
                 judgement,
