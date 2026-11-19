@@ -176,8 +176,10 @@ def no_usage_stats_or_update_check(monkeypatch):
 # default. Python opens its own descriptors close-on-exec, so a child still
 # inherits only its standard streams. A call that would fork anyway fails with
 # the reason, unless the test asks for the ``forking_allowed`` fixture.
-# Windows has no fork and is left alone.
+# Windows has no fork and is left alone. Tests of how the engine itself starts a
+# process ask for ``python_subprocess_defaults`` and get none of this.
 _FORKS: list[str] = []
+_REAL: dict[str, object] = {}
 _FORKING_ALLOWED = False
 
 
@@ -212,10 +214,25 @@ def _subprocesses_do_not_fork():
         _FORKS.append(command)
         return real_fork_exec(args, *rest, **named)
 
+    _REAL.update(init=real_init, fork_exec=real_fork_exec)
     patch.setattr(subprocess.Popen, "__init__", init)
     patch.setattr(subprocess, "_fork_exec", fork_exec)
     yield
     patch.undo()
+    _REAL.clear()
+
+
+@pytest.fixture
+def python_subprocess_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Give this test Python's own subprocess behaviour, as the installed engine has it.
+
+    A test that checks how production code starts a process must not get the
+    session's ``close_fds`` default, or it would pass whatever the code did.
+    """
+
+    if _REAL:
+        monkeypatch.setattr(subprocess.Popen, "__init__", _REAL["init"])
+        monkeypatch.setattr(subprocess, "_fork_exec", _REAL["fork_exec"])
 
 
 @pytest.fixture
