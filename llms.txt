@@ -87,7 +87,7 @@ The MCP server section follows; the other packages are listed at the end.
 
 > Your AI agent decides what to enter. OpenAdapt enters it in the app and checks that it saved.
 
-Use this when an AI agent has decided what to enter in an app with no usable API, such as an EMR, a payer portal, or a desktop or remote-desktop app. OpenAdapt enters the values in the same screens staff use, on a computer the customer controls, then reads the saved record back. When something doesn't match, it stops and a person decides. A normal run makes no AI model calls.
+Use this when an AI agent has decided what to enter in an app with no usable API: any web, desktop or remote-desktop app. EMRs and payer portals are examples of highly regulated settings where it fits. OpenAdapt enters the values in the same screens staff use, on a computer the customer controls, then reads the saved record back. When something doesn't match, it stops and a person decides. A normal run makes no AI model calls.
 
 ## The contract: three tools
 

@@ -7,7 +7,7 @@
 
 Your AI agent decides what to enter. OpenAdapt enters it in the app and checks that it saved.
 
-Use it if your agent reads referrals, intake forms, or authorizations and works out what belongs in the record, but a person still types the result into an app with no usable API. Examples are an electronic medical record (EMR) and a payer portal. This package is the tool your agent calls to do that typing.
+Use it if your agent works out what belongs in a record, but a person still types the result into an app with no usable API. That can be any web, desktop or remote-desktop app. An electronic medical record (EMR) and a payer portal are examples of highly regulated settings where it fits. This package is the tool your agent calls to do that typing.
 
 - A person or your agent shows OpenAdapt the task in the real app. OpenAdapt replays those steps, and by default a run makes no calls to a hosted AI model.
 - Before it types, OpenAdapt checks that the right record is open. After it saves, it reads the record back.
