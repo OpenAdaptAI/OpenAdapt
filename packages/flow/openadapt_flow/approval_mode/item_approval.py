@@ -241,10 +241,12 @@ class ItemApprovalRequest(BaseModel):
     screenshot: str = Field(min_length=1, max_length=256)
     screenshot_sha256: str = Field(pattern=_HEX_SHA256)
     #: How the field state was read: the page's own form controls, or the
-    #: text on the screen where the application exposes no form controls.
+    #: text on the screen where the application exposes no form controls,
+    #: or (``window_fields``) the app window's controls read by value through
+    #: the platform's accessibility API with the rest of it read by OCR.
     #: ``api_request`` when the save is an API step: the digest is then the
     #: exact request, the record and the record check (``api_request``).
-    form_state_kind: Literal["dom", "screen_text", "api_request"]
+    form_state_kind: Literal["dom", "screen_text", "window_fields", "api_request"]
     form_state_sha256: str = Field(pattern=PREFIXED_SHA256_PATTERN)
     created_at: str
     expires_at: str
