@@ -2235,11 +2235,33 @@ def _window_operation(
 #: Control types whose on-screen text is their UIA value: an approval reads
 #: the value and leaves their pixels out of the OCR (a caret blinks there).
 _FORM_VALUE_TYPES = frozenset({"EditControl", "DocumentControl"})
-_MAX_FORM_FIELDS = 256
+#: Leaf controls whose on-screen text is their UIA name by convention
+#: (labels, buttons), and leaf items whose on-screen text is their UIA value
+#: (list and grid cells; their name is often a position such as "first Row
+#: 0", so they count only with a value). Both are read and painted out too,
+#: so a selection highlight or a focus change cannot change how OCR reads
+#: them.
+_FORM_NAMED_TYPES = frozenset(
+    {
+        "TextControl",
+        "ButtonControl",
+        "CheckBoxControl",
+        "RadioButtonControl",
+        "TabItemControl",
+        "HeaderItemControl",
+        "HyperlinkControl",
+        "MenuItemControl",
+    }
+)
+_FORM_ITEM_TYPES = frozenset(
+    {"ListItemControl", "DataItemControl", "TreeItemControl", "CustomControl"}
+)
+_MAX_FORM_FIELDS = 512
+_TOGGLE_STATES = {0: "off", 1: "on", 2: "indeterminate"}
 
 
 def _form_field_value(control: object) -> tuple[bool, Optional[str]]:
-    """``(readable, value)`` of a text field through its Value pattern."""
+    """``(readable, value)`` of a control through its Value pattern."""
     method = _control_value(control, "GetValuePattern", None)
     if not callable(method):
         return False, None
@@ -2253,17 +2275,50 @@ def _form_field_value(control: object) -> tuple[bool, Optional[str]]:
     return True, value[:_MAX_READ_TEXT]
 
 
+def _form_field_state(control: object, control_type: str) -> Optional[str]:
+    """A check box's toggle state, or whether an item is selected; else None."""
+    if control_type in ("CheckBoxControl", "RadioButtonControl"):
+        method = _control_value(control, "GetTogglePattern", None)
+        if callable(method):
+            try:
+                state = getattr(method(), "ToggleState", None)
+            except Exception:  # noqa: BLE001 - pattern not supported
+                state = None
+            if state in _TOGGLE_STATES:
+                return _TOGGLE_STATES[state]
+    method = _control_value(control, "GetSelectionItemPattern", None)
+    if callable(method):
+        try:
+            selected = getattr(method(), "IsSelected", None)
+        except Exception:  # noqa: BLE001 - pattern not supported
+            selected = None
+        if isinstance(selected, bool):
+            return "selected" if selected else "unselected"
+    return None
+
+
+def _rect(bounds: list[int]) -> list[int]:
+    return [bounds[0], bounds[1], bounds[2] - bounds[0], bounds[3] - bounds[1]]
+
+
 def _window_form_fields(
     auto: Any, hwnd: int
 ) -> tuple[Optional[list[dict[str, Any]]], bool]:
-    """The window's title bar and on-screen text fields, in tree order.
+    """The window's controls whose text UIA reads, in tree order.
 
-    Each field is ``{"kind", "rect": [x, y, w, h], "text"}``: ``title_bar``
-    with the window's title, ``edit`` with the field's value. A field whose
-    value cannot be read (a password box, an unsupported pattern) or that is
-    off screen is left out, so its pixels stay in the caller's OCR read.
-    ``(None, False)`` when UIA cannot open the window; ``truncated`` when the
-    walk hit its bounds.
+    Each entry is ``{"kind", "rect": [x, y, w, h], "text", "state"}``:
+
+    - ``title_bar``, with the window's title;
+    - ``edit``, a text field with its value;
+    - ``text``, a leaf label or button with its value or name, or a leaf
+      list or grid cell with its value, and ``state`` its toggle or
+      selection state;
+    - ``state``, a container (a grid row) whose selection state UIA reads:
+      it carries no text and its pixels stay in the caller's OCR read.
+
+    A control that is off screen, or whose text cannot be read or is empty,
+    is left out, so its pixels stay in the OCR read. ``(None, False)`` when
+    UIA cannot open the window; ``truncated`` when the walk hit its bounds.
     """
     from_handle = getattr(auto, "ControlFromHandle", None)
     if not callable(from_handle):
@@ -2285,40 +2340,54 @@ def _window_form_fields(
             return fields, True
         control_type = str(_control_value(control, "ControlTypeName", ""))
         bounds = _bounds(control)
+        on_screen = _control_value(control, "IsOffscreen", True) is False
         if control_type == "TitleBarControl":
             if bounds is not None:
                 fields.append(
                     {
                         "kind": "title_bar",
-                        "rect": [
-                            bounds[0],
-                            bounds[1],
-                            bounds[2] - bounds[0],
-                            bounds[3] - bounds[1],
-                        ],
+                        "rect": _rect(bounds),
                         "text": title[:_MAX_READ_TEXT],
+                        "state": None,
                     }
                 )
             continue
         if control_type in _FORM_VALUE_TYPES:
-            offscreen = _control_value(control, "IsOffscreen", True)
             readable, value = _form_field_value(control)
-            if bounds is not None and offscreen is False and readable:
+            if bounds is not None and on_screen and readable:
                 fields.append(
                     {
                         "kind": "edit",
-                        "rect": [
-                            bounds[0],
-                            bounds[1],
-                            bounds[2] - bounds[0],
-                            bounds[3] - bounds[1],
-                        ],
+                        "rect": _rect(bounds),
                         "text": value,
+                        "state": None,
                     }
                 )
             continue
+        children = _children(control)
+        state = _form_field_state(control, control_type)
+        if not children and control_type in _FORM_NAMED_TYPES | _FORM_ITEM_TYPES:
+            readable, value = _form_field_value(control)
+            text = value if readable and value else None
+            if text is None and control_type in _FORM_NAMED_TYPES:
+                name = " ".join(str(_control_value(control, "Name", "") or "").split())
+                text = name[:_MAX_READ_TEXT] or None
+            if bounds is not None and on_screen and text:
+                fields.append(
+                    {
+                        "kind": "text",
+                        "rect": _rect(bounds),
+                        "text": text,
+                        "state": state,
+                    }
+                )
+            continue
+        if state is not None and bounds is not None and on_screen:
+            fields.append(
+                {"kind": "state", "rect": _rect(bounds), "text": "", "state": state}
+            )
         if depth < _MAX_UIA_DEPTH:
-            stack.extend((c, depth + 1) for c in reversed(_children(control)))
+            stack.extend((c, depth + 1) for c in reversed(children))
     return fields, False
 
 

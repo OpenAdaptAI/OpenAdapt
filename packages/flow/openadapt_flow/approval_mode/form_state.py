@@ -16,13 +16,14 @@ the pause halts the item before the save").
   is read, in reading order and with its frame in the digest, so text
   elsewhere on the screen that changes by itself (a clock in a taskbar, a
   notification) is not mistaken for an edited form.
-- When the backend can also read that window's text fields through the
+- When the backend can also read that window's controls through the
   platform's accessibility API (``approval_form_fields``: UI Automation on
-  Windows), each field and the title bar is read by its value and painted
+  Windows), each text field, label, button, list or grid cell and the title
+  bar is read by its value (with its toggle or selection state) and painted
   out of the OCR read, and the rest of the window is still read by OCR. A
-  caret blinking in a text box or a hovered title-bar button then reads the
-  same every time, while a changed value changes the digest through either
-  channel.
+  caret blinking in a text box, a hovered title-bar button or a selection
+  highlight that dims when the window loses focus then reads the same every
+  time, while a changed value changes the digest through either channel.
 
 Only a digest leaves this module. The digest stays in the run directory; it
 never enters the report or anything sent to Cloud.
@@ -180,8 +181,8 @@ def window_fields_state(
     rectangle and text. Every field rectangle is painted out of the window
     crop before OCR, so what OCR reads there (a caret, a hovered button)
     cannot vary between reads; the field's own value stands in for it. The
-    frame, each field's kind, rectangle and value, and the remaining
-    characters in reading order are all in the digest. ``None`` when nothing was read.
+    frame, each field's kind, rectangle, value and state, and the remaining
+    words in reading order are all in the digest. ``None`` when nothing was read.
     """
 
     from PIL import Image, ImageDraw
@@ -200,8 +201,13 @@ def window_fields_state(
         for field in fields:
             kind, text = str(field["kind"]), str(field["text"])
             fx, fy, fw, fh = (int(v) for v in field["rect"])
-            rows.append([kind, [fx, fy, fw, fh], text])
-            inside = _clamp((fx - x0, fy - y0, fw, fh), w, h)
+            state = field.get("state")
+            rows.append([kind, [fx, fy, fw, fh], text, state])
+            # A ``state`` entry (a selected grid row) carries no text: its
+            # pixels stay in the OCR read.
+            inside = (
+                None if kind == "state" else _clamp((fx - x0, fy - y0, fw, fh), w, h)
+            )
             if inside is not None:
                 ix, iy, iw, ih = inside
                 draw.rectangle((ix, iy, ix + iw - 1, iy + ih - 1), fill="white")
@@ -212,12 +218,8 @@ def window_fields_state(
         return None
     if not words and not any(row[2] for row in rows):
         return None
-    # OCR's word boundaries move with what else is on the screen ("Benchmark
-    # Harness" reads as one word or two), so the words are joined: the
-    # characters and their reading order are what the person saw.
     return _digest(
-        "window_fields",
-        {"window": list(window), "fields": rows, "text": "".join(words)},
+        "window_fields", {"window": list(window), "fields": rows, "words": words}
     )
 
 

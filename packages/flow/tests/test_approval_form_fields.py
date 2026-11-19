@@ -34,6 +34,8 @@ WINDOW = (0, 0, 1024, 720)
 TITLE_BAR = (0, 0, 1024, 30)
 SEARCH = (20, 44, 480, 26)
 NOTE = (20, 340, 600, 120)
+ROW = (20, 100, 600, 40)
+CELLS = [(20, 100, 200, 40), (220, 100, 200, 40), (420, 100, 200, 40)]
 
 
 def _font(size: int):
@@ -53,6 +55,8 @@ def _frame(
     banner: str = "Patient: Neil Sorenson (1984-03-12)",
     note: str = "BP 128/82; follow-up in 2 weeks",
     clock: str = "7:27 PM",
+    row_fill: tuple[int, int, int] = (0, 120, 215),
+    dose: str = "Dose: 12 | 5",
 ) -> bytes:
     image = Image.new("RGB", SIZE, "white")
     draw = ImageDraw.Draw(image)
@@ -74,7 +78,11 @@ def _frame(
             fill="black",
             width=2,
         )
-    draw.text((20, 110), "Neil   Sorenson   1984-03-12", fill="black", font=font)
+    # The selected grid row: its highlight dims when the window loses focus.
+    draw.rectangle((ROW[0], ROW[1], ROW[0] + ROW[2], ROW[1] + ROW[3]), fill=row_fill)
+    for (cx, _cy, _cw, _ch), cell in zip(CELLS, ("Neil", "Sorenson", "1984-03-12")):
+        draw.text((cx + 4, ROW[1] + 8), cell, fill="white", font=font)
+    draw.text((20, 600), dose, fill="black", font=font)
     draw.text((20, 300), banner, fill="black", font=font)
     draw.rectangle(
         (NOTE[0], NOTE[1], NOTE[0] + NOTE[2], NOTE[1] + NOTE[3]), outline="gray"
@@ -88,7 +96,16 @@ def _frame(
     return out.getvalue()
 
 
-def _fields(*, search: str = "Neil", note: str = "BP 128/82; follow-up in 2 weeks"):
+def _fields(
+    *,
+    search: str = "Neil",
+    note: str = "BP 128/82; follow-up in 2 weeks",
+    selected: str = "selected",
+):
+    cells = [
+        {"kind": "text", "rect": rect, "text": text, "state": None}
+        for rect, text in zip(CELLS, ("Neil", "Sorenson", "1984-03-12"))
+    ]
     return {
         "bounds": WINDOW,
         "fields": [
@@ -96,9 +113,12 @@ def _fields(*, search: str = "Neil", note: str = "BP 128/82; follow-up in 2 week
                 "kind": "title_bar",
                 "rect": TITLE_BAR,
                 "text": "Patient Notes - Benchmark Harness",
+                "state": None,
             },
-            {"kind": "edit", "rect": SEARCH, "text": search},
-            {"kind": "edit", "rect": NOTE, "text": note},
+            {"kind": "edit", "rect": SEARCH, "text": search, "state": None},
+            {"kind": "state", "rect": ROW, "text": "", "state": selected},
+            *cells,
+            {"kind": "edit", "rect": NOTE, "text": note, "state": None},
         ],
     }
 
@@ -115,6 +135,12 @@ def test_a_caret_or_a_title_bar_glyph_leaves_the_form_unchanged():
     assert _state(caret=True, close_hover=True, clock="7:28 PM") == before
 
 
+def test_a_dimmed_selection_highlight_leaves_the_form_unchanged():
+    # The window lost focus while the item waited: the selected row turns
+    # grey, its cells read the same through UIA.
+    assert _state(row_fill=(204, 204, 204)) == _state()
+
+
 @pytest.mark.parametrize(
     "fields,frame",
     [
@@ -125,8 +151,17 @@ def test_a_caret_or_a_title_bar_glyph_leaves_the_form_unchanged():
         (_fields(note="BP 138/82; follow-up in 2 weeks"), {}),
         (_fields(search="Nell"), {"search": "Nell"}),
         (None, {"banner": "Patient: Neil Sorensen (1983-01-19)"}),
+        (None, {"dose": "Dose: 1 | 25"}),
+        (_fields(selected="unselected"), {}),
     ],
-    ids=["note-value", "note-value-not-yet-painted", "search-value", "banner-by-ocr"],
+    ids=[
+        "note-value",
+        "note-value-not-yet-painted",
+        "search-value",
+        "banner-by-ocr",
+        "adjacent-numbers-by-ocr",
+        "selection",
+    ],
 )
 def test_a_changed_value_changes_the_form(fields, frame):
     before = _state()
@@ -138,7 +173,7 @@ def test_a_changed_value_changes_the_form(fields, frame):
 def test_a_moved_field_or_window_changes_the_form():
     before = _state()
     moved = _fields()
-    moved["fields"][2] = {**moved["fields"][2], "rect": (20, 341, 600, 120)}
+    moved["fields"][-1] = {**moved["fields"][-1], "rect": (20, 341, 600, 120)}
     assert _state(moved) != before
     window = {**_fields(), "bounds": (0, 0, 1024, 719)}
     assert _state(window) != before
@@ -150,7 +185,9 @@ def test_a_field_covers_only_its_own_pixels():
     # its value must be read. The banner change still shows through the
     # other channel: a different field set is a different digest.
     covering = _fields()
-    covering["fields"].append({"kind": "edit", "rect": (20, 296, 500, 30), "text": ""})
+    covering["fields"].append(
+        {"kind": "edit", "rect": (20, 296, 500, 30), "text": "", "state": None}
+    )
     assert _state(covering) != _state()
 
 
@@ -242,8 +279,14 @@ _GOOD = {
     "status": "ok",
     "window": {"hwnd": 7, "pid": 10, "bounds": [0, 0, 1024, 720]},
     "fields": [
-        {"kind": "title_bar", "rect": [0, 0, 1024, 30], "text": "Patient Notes"},
-        {"kind": "edit", "rect": [20, 44, 480, 26], "text": "Neil"},
+        {
+            "kind": "title_bar",
+            "rect": [0, 0, 1024, 30],
+            "text": "Patient Notes",
+            "state": None,
+        },
+        {"kind": "edit", "rect": [20, 44, 480, 26], "text": "Neil", "state": None},
+        {"kind": "state", "rect": [20, 100, 600, 40], "text": "", "state": "selected"},
     ],
 }
 
@@ -255,8 +298,19 @@ def test_the_windows_backend_reads_the_fields_of_its_one_window():
     assert answer == {
         "bounds": (0, 0, 1024, 720),
         "fields": [
-            {"kind": "title_bar", "rect": (0, 0, 1024, 30), "text": "Patient Notes"},
-            {"kind": "edit", "rect": (20, 44, 480, 26), "text": "Neil"},
+            {
+                "kind": "title_bar",
+                "rect": (0, 0, 1024, 30),
+                "text": "Patient Notes",
+                "state": None,
+            },
+            {"kind": "edit", "rect": (20, 44, 480, 26), "text": "Neil", "state": None},
+            {
+                "kind": "state",
+                "rect": (20, 100, 600, 40),
+                "text": "",
+                "state": "selected",
+            },
         ],
     }
 
@@ -289,6 +343,7 @@ def _bad(**change):
         ({"s1": (7, 10)}, _bad(field_rect=[20, 44, True, 26])),
         ({"s1": (7, 10)}, _bad(field_rect=[20, 44, 0, 26])),
         ({"s1": (7, 10)}, _bad(field_extra=1)),
+        ({"s1": (7, 10)}, _bad(field_state="maybe")),
     ],
     ids=[
         "none-verified",
@@ -303,6 +358,7 @@ def _bad(**change):
         "bool-rect",
         "empty-rect",
         "extra-field-key",
+        "unknown-state",
     ],
 )
 def test_the_windows_backend_refuses_doubtful_fields(captures, answer):
@@ -328,7 +384,11 @@ class _Control:
         offscreen=False,
         name="",
         children=(),
+        selected=None,
+        toggle=None,
     ):
+        self._selected = selected
+        self._toggle = toggle
         self.ControlTypeName = control_type
         self.BoundingRectangle = _Rect(*bounds)
         self.IsOffscreen = offscreen
@@ -343,6 +403,16 @@ class _Control:
         if self._value is None:
             raise RuntimeError("no value pattern")
         return SimpleNamespace(Value=self._value)
+
+    def GetSelectionItemPattern(self):
+        if self._selected is None:
+            raise RuntimeError("no selection item pattern")
+        return SimpleNamespace(IsSelected=self._selected)
+
+    def GetTogglePattern(self):
+        if self._toggle is None:
+            raise RuntimeError("no toggle pattern")
+        return SimpleNamespace(ToggleState=self._toggle)
 
 
 class _Desktop:
@@ -415,6 +485,18 @@ def _agent(monkeypatch, window, desktop=None):
 
 
 def test_the_agent_reads_the_title_bar_and_every_readable_text_field(monkeypatch):
+    row = _Control(
+        "CustomControl",
+        bounds=(20, 140, 620, 180),
+        selected=True,
+        children=[
+            _Control("DataItemControl", bounds=(20, 140, 220, 180), value="Neil"),
+            _Control("DataItemControl", bounds=(220, 140, 420, 180), value=""),
+            # A cell whose only text is its position name: not read, so its
+            # pixels stay in the OCR.
+            _Control("DataItemControl", bounds=(420, 140, 620, 180), name="dob Row 0"),
+        ],
+    )
     window = _window(
         _Control(
             "TitleBarControl",
@@ -432,15 +514,23 @@ def test_the_agent_reads_the_title_bar_and_every_readable_text_field(monkeypatch
                     value="hidden",
                     offscreen=True,
                 ),
-                _Control(
-                    "EditControl", bounds=(20, 110, 500, 130)
-                ),  # password: no value
+                # A password box: no value, so its pixels stay in the OCR.
+                _Control("EditControl", bounds=(20, 110, 500, 130)),
+                row,
                 _Control(
                     "DocumentControl", bounds=(20, 340, 620, 460), value="BP 128/82"
                 ),
                 _Control(
                     "TextControl", bounds=(20, 300, 500, 320), name="Patient: Neil"
                 ),
+                _Control(
+                    "CheckBoxControl",
+                    bounds=(20, 470, 200, 490),
+                    name="Urgent",
+                    toggle=1,
+                ),
+                # A pane with no text of its own is not a field.
+                _Control("PaneControl", bounds=(700, 40, 900, 90)),
             ],
         ),
     )
@@ -448,9 +538,28 @@ def test_the_agent_reads_the_title_bar_and_every_readable_text_field(monkeypatch
     answer = perform("window-form-fields", {"hwnd": 7, "pid": 10})
     assert answer["window"] == {"hwnd": 7, "pid": 10, "bounds": [0, 0, 1024, 720]}
     assert answer["fields"] == [
-        {"kind": "title_bar", "rect": [0, 0, 1024, 30], "text": "Patient Notes"},
-        {"kind": "edit", "rect": [20, 44, 480, 26], "text": "Neil"},
-        {"kind": "edit", "rect": [20, 340, 600, 120], "text": "BP 128/82"},
+        {
+            "kind": "title_bar",
+            "rect": [0, 0, 1024, 30],
+            "text": "Patient Notes",
+            "state": None,
+        },
+        {"kind": "edit", "rect": [20, 44, 480, 26], "text": "Neil", "state": None},
+        {"kind": "state", "rect": [20, 140, 600, 40], "text": "", "state": "selected"},
+        {"kind": "text", "rect": [20, 140, 200, 40], "text": "Neil", "state": None},
+        {
+            "kind": "edit",
+            "rect": [20, 340, 600, 120],
+            "text": "BP 128/82",
+            "state": None,
+        },
+        {
+            "kind": "text",
+            "rect": [20, 300, 480, 20],
+            "text": "Patient: Neil",
+            "state": None,
+        },
+        {"kind": "text", "rect": [20, 470, 180, 20], "text": "Urgent", "state": "on"},
     ]
 
 

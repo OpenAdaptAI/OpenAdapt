@@ -232,6 +232,14 @@ def _pixel_box(value: object) -> Optional[dict[str, int]]:
     return {k: int(value[k]) for k in ("x", "y", "w", "h")}
 
 
+#: The approval form-field read's contract (win_agent ``window-form-fields``).
+_FIELD_KEYS = frozenset({"kind", "rect", "text", "state"})
+_FIELD_KINDS = frozenset({"title_bar", "edit", "text", "state"})
+_FIELD_STATES = frozenset(
+    {None, "on", "off", "indeterminate", "selected", "unselected"}
+)
+
+
 def _window_frame(
     window: Any, hwnd: int, pid: int
 ) -> Optional[tuple[int, int, int, int]]:
@@ -1067,9 +1075,10 @@ class WindowsBackend:
         Automation, for an approval's form state.
 
         Returns ``{"bounds": (x, y, w, h), "fields": [{"kind", "rect",
-        "text"}, ...]}``: the same window :meth:`approval_form_region` names,
-        its title bar and every on-screen text field whose value UIA reads,
-        in tree order. The caller reads those fields by value and the rest of
+        "text", "state"}, ...]}``: the same window
+        :meth:`approval_form_region` names, and its title bar, text fields,
+        labels, buttons and cells whose text UIA reads (with toggle and
+        selection state), in tree order. The caller reads those fields by value and the rest of
         the window by OCR, so a blinking caret or a hovered title-bar button
         no longer changes the digest. None when the agent cannot say, when
         the app shows another window, or on any doubt. Never raises.
@@ -1091,15 +1100,12 @@ class WindowsBackend:
                 return None
             checked: list[dict[str, Any]] = []
             for field in fields:
-                if not isinstance(field, dict) or set(field) != {
-                    "kind",
-                    "rect",
-                    "text",
-                }:
+                if not isinstance(field, dict) or set(field) != _FIELD_KEYS:
                     return None
                 rect, text = field["rect"], field["text"]
                 if (
-                    field["kind"] not in ("title_bar", "edit")
+                    field["kind"] not in _FIELD_KINDS
+                    or field["state"] not in _FIELD_STATES
                     or not isinstance(text, str)
                     or not isinstance(rect, list)
                     or len(rect) != 4
@@ -1109,7 +1115,12 @@ class WindowsBackend:
                 ):
                     return None
                 checked.append(
-                    {"kind": field["kind"], "rect": tuple(rect), "text": text}
+                    {
+                        "kind": field["kind"],
+                        "rect": tuple(rect),
+                        "text": text,
+                        "state": field["state"],
+                    }
                 )
             return {"bounds": bounds, "fields": checked}
         except Exception:  # noqa: BLE001 - no answer is no fields
