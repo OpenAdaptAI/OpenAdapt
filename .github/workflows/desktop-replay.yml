@@ -35,6 +35,7 @@ on:
       - packages/flow/tests/test_check_it_dry_run_apps.py
       - packages/flow/tests/native_apps/check_it_gtk.py
       - packages/flow/tests/test_approval_form_window.py
+      - packages/flow/tests/test_approval_form_fields.py
       - packages/flow/benchmark/rdp_pool/**
       - packages/flow/pyproject.toml
       - packages/flow/uv.lock
@@ -88,7 +89,8 @@ jobs:
         run: |
           mkdir -p runs
           pytest -v -rs -p no:cacheprovider tests/test_windows_attempt_ledger.py \
-            tests/test_approval_form_window.py --junitxml=runs/windows-guards-junit.xml
+            tests/test_approval_form_window.py tests/test_approval_form_fields.py \
+            --junitxml=runs/windows-guards-junit.xml
       - name: Record, compile and replay, judged from the record
         env:
           OAFLOW_WINDOWS_HOSTED_E2E: "1"
