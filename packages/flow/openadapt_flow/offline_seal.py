@@ -73,7 +73,8 @@ ENV_MODE = "OPENADAPT_LOCAL_SEAL"
 _DOMAIN = (LOCAL_SEAL_SCHEMA + "\0").encode("utf-8")
 _SHA256_HEX = r"^[a-f0-9]{64}$"
 _KEY_ID = r"^seal-ed25519-[a-f0-9]{16}$"
-_ISO_SECONDS = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$"
+# [0-9], not \d: pydantic's \d also matches non-ASCII digits.
+_ISO_SECONDS = r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
 _B64 = r"^[A-Za-z0-9+/]+={0,2}$"
 _OUTCOME = r"^[A-Z][A-Z_]{0,31}$"
 _RUN_ID = re.compile(r"[^A-Za-z0-9._:-]")
@@ -83,7 +84,8 @@ _RUN_ID = re.compile(r"[^A-Za-z0-9._:-]")
 _SCOPE_ITEM = r"^[a-z]{1,2}[0-9]{1,3}$"
 _OPTIONAL_FIELDS = ("authorization_sha256", "scope_item")
 
-SubjectKind = Literal["run-report", "record", "export", "file"]
+# "public-card": the card of a public Seal (openadapt_flow.public_seal).
+SubjectKind = Literal["run-report", "record", "export", "file", "public-card"]
 
 LocalSealRefusal = Literal[
     "unsigned",

@@ -6,6 +6,20 @@
 
 ### Features
 
+- `openadapt seal publish [RUN_DIR]` puts a run's public Seal online and
+  prints its link. It shows the exact card first and uploads only after a
+  yes: a y/N prompt (default No) in a terminal, `--yes` elsewhere, and
+  `--yes --allow-ci` under CI; `--yes` skips the question, not the printed
+  card. `--dry-run` sends nothing. A real run's card leaves the program name
+  out (it can be a person's name) unless you pass `--names`; the synthetic
+  tutorial's card includes it. `--github LOGIN` adds a claimed login, and
+  `--endpoint` or `OPENADAPT_SEAL_ENDPOINT` picks the server. The delete token
+  goes to `RUN_DIR/seal.publish.json` (mode 0600) for `openadapt seal
+  unpublish RUN_DIR`, and `openadapt seal verify <link>` checks a hosted
+  Seal's signature here. In a terminal outside CI, the quickstart asks once
+  after its Seal card, and only when Cloud's status route says hosted Seals
+  are on (checked with a one-second limit); otherwise it says nothing about
+  publishing. The quickstart's unused fragment-link code is removed.
 - `openadapt quickstart` reads as a short story: five steps, each a plain
   line with a dim detail, shown with spinners that turn into check marks on
   a terminal. A "Saved and checked" card reads the saved record back field
