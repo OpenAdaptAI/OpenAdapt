@@ -16,6 +16,10 @@ called. The authorization is the run gate on the certified bundle (no
 separate signed admission file); ``authorization.json`` in each run records
 who authorized running it.
 
+With ``--hidpi-scale 2``, each run also keeps a 2x copy of every step frame
+in ``<run>/hidpi/`` (``hidpi_frames.py``): display copies for a high-density
+screen, outside the sealed ``engine/`` directory.
+
 Each run's ``report.json`` is signed with an offline Seal from the key in
 ``--seal-home`` (the private half stays there and is never committed).
 """
@@ -24,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import time
 from pathlib import Path
@@ -36,6 +41,22 @@ EXPECTED = {
     "r5-grace-adeyemi": "VERIFIED",
     "r6-rosa-delgado": "HALTED_BEFORE_EFFECT",
 }
+#: Where r6 must stop: the duplicate dialog's "No matches were found." check.
+DUPLICATE_STOP = "step_039"
+
+
+def mismatches(row: dict[str, Any], halted_at: str | None) -> list[str]:
+    """How one run differs from what the landing demo shows; empty if it doesn't."""
+
+    out = []
+    if row["transaction_outcome"] != row["expected"]:
+        out.append(f"transaction outcome {row['transaction_outcome']}")
+    verified = row["expected"] == "VERIFIED"
+    if row["new_charts"] != (1 if verified else 0) or row["changed_charts"]:
+        out.append(f"{row['new_charts']} new, {row['changed_charts']} changed charts")
+    if not verified and halted_at != DUPLICATE_STOP:
+        out.append(f"stopped at {halted_at}, not {DUPLICATE_STOP}")
+    return out
 
 
 def _seed_existing_chart(fixture: Any) -> int:
@@ -100,6 +121,11 @@ def run_certified(
             raise SystemExit(f"run gate refused {key}:\n{gate.render()}")
         return build_runtime_authorization(workflow, gate, params=params)
 
+    hidpi_scale = env.get("hidpi_scale")
+    copies = item / "hidpi-captures"
+    if hidpi_scale:
+        os.environ["OPENEMR_HIDPI_FRAMES_DIR"] = str(copies)
+        os.environ["OPENEMR_HIDPI_SCALE"] = str(hidpi_scale)
     marks: dict[str, float] = {"start": time.time()}
     setup = type("Setup", (), {"observer": None})()
     report, _ = _run(
@@ -114,6 +140,12 @@ def run_certified(
         marks=marks,
         lookup=env["lookup"],
     )
+    if hidpi_scale:
+        from benchmark.openemr_local.hidpi_frames import pair
+
+        os.environ.pop("OPENEMR_HIDPI_FRAMES_DIR", None)
+        pair(item / "engine", copies, item / "hidpi", scale=hidpi_scale)
+        shutil.rmtree(copies)
     time.sleep(1.0)
     after = sql_patients(fx)
     before_ids = {r["id"] for r in before}
@@ -192,6 +224,13 @@ def main() -> int:
     parser.add_argument("--seal-home", required=True, type=Path)
     parser.add_argument("--authorized-by", required=True)
     parser.add_argument("--policy", default="clinical-write")
+    parser.add_argument(
+        "--hidpi-scale",
+        type=int,
+        default=0,
+        help="also keep a copy of each step frame at this pixel density, in "
+        "<run>/hidpi/ (display only; the engine still runs at scale 1)",
+    )
     args = parser.parse_args()
 
     from openadapt_flow.offline_seal import public_key_entry, seal_run
@@ -201,6 +240,7 @@ def main() -> int:
     bundle = out / "bundle"
     shutil.copytree(args.bundle, bundle)
     env = certified_env(bundle)
+    env["hidpi_scale"] = args.hidpi_scale
     workflow = env["workflow"]
     rows = []
     for n, key in enumerate(REFS, start=1):
@@ -242,6 +282,9 @@ def main() -> int:
             "seal_key_id": seal.key_id,
             "report_sha256": seal.subject_sha256,
         }
+        halted_at = next((r.step_id for r in report.results if not r.ok), None)
+        row["halted_at"] = halted_at
+        row["mismatches"] = mismatches(row, halted_at)
         rows.append(row)
         print(json.dumps(row), flush=True)
     (out / "seal-key.json").write_text(
@@ -260,6 +303,10 @@ def main() -> int:
         )
         + "\n"
     )
+    failed = [r["ref"] for r in rows if r["mismatches"]]
+    if failed:
+        print(f"differs from the expected outcome: {', '.join(failed)}", flush=True)
+        return 1
     return 0
 
 
