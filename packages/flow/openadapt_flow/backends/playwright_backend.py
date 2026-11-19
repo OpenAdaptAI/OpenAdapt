@@ -1559,6 +1559,42 @@ _EDITABLE_VALUE_JS = r"""(el) => {
 # placeholder, name attribute, title. Whitespace-collapsed; null when the
 # element is not an editable field or carries no label evidence. PASSIVE
 # record-time metadata only (see openadapt_flow.backend.FieldLabelBackend).
+#: Whether the focused element takes a sign-in credential. See
+#: :meth:`PlaywrightBackend.focused_field_credential` for the rules.
+_FIELD_CREDENTIAL_JS = r"""(el) => {
+    if (!el || el.tagName !== 'INPUT') return null;
+    const kind = (i) => (i.getAttribute('type') || 'text').toLowerCase();
+    const tokens = (i) =>
+        (i.getAttribute('autocomplete') || '').toLowerCase().split(/\s+/);
+    const secret = (i) => kind(i) === 'password' ||
+        tokens(i).some((t) => t === 'current-password' || t === 'new-password');
+    if (secret(el)) return 'password';
+    if (tokens(el).includes('username')) return 'username';
+    const texty = (i) => ['text', 'email', 'tel', 'search'].includes(kind(i));
+    if (!texty(el)) return null;
+    const scope = el.form || el.ownerDocument;
+    const inputs = Array.from(scope.querySelectorAll('input'))
+        .filter((i) => el.form ? true : !i.form);
+    const first = inputs.findIndex(secret);
+    if (first < 0) return null;
+    const visible = (i) => !!(i.offsetWidth || i.offsetHeight ||
+        i.getClientRects().length);
+    for (let j = first - 1; j >= 0; j--) {
+        const candidate = inputs[j];
+        if (texty(candidate) && visible(candidate)) {
+            return candidate === el ? 'username' : null;
+        }
+    }
+    return null;
+}"""
+
+_CREDENTIAL_AT_JS = (
+    "([x, y]) => { const el = document.elementFromPoint(x, y);"
+    " if (!el) return null;"
+    " if (el.tagName === 'IFRAME' || el.tagName === 'FRAME') return 'frame';"
+    " return (" + _FIELD_CREDENTIAL_JS + ")(el); }"
+)
+
 _FIELD_LABEL_JS = r"""(el) => {
     if (!el.matches(
             'input, textarea, select, [contenteditable=""],' +
@@ -3331,6 +3367,56 @@ class PlaywrightBackend:
 
         return self._focused_element_eval(_FIELD_LABEL_JS)
 
+    def focused_field_credential(self) -> Optional[dict[str, Any]]:
+        """Whether the focused field takes a sign-in credential, and where it is.
+
+        RECORD-TIME seam (:class:`openadapt_flow.backend.CredentialFieldBackend`).
+        Returns ``{"kind": "password" | "username", "box": (x, y, w, h)}``
+        or None. The rules use only the page's own markup, the way a browser's
+        password manager finds a sign-in form:
+
+        * ``password``: an ``<input type="password">``, or an input whose
+          ``autocomplete`` names ``current-password`` or ``new-password``;
+        * ``username``: an input whose ``autocomplete`` names ``username``,
+          or the last visible text, email or phone input before the first
+          password input of the same form (the document when it has no form).
+
+        ``box`` is in top-document viewport pixels, or None when the
+        element's box could not be read. Read-only and never raises; any
+        doubt about the frame chain returns None (see
+        :meth:`_focused_element_call`), and the recorder then refuses to type
+        a known credential value at all.
+        """
+
+        box: dict[str, float] = {}
+        kind = self._focused_element_call(_FIELD_CREDENTIAL_JS, box_out=box)
+        if kind not in ("password", "username"):
+            return None
+        try:
+            rect: Optional[tuple[int, int, int, int]] = (
+                int(box["x"]),
+                int(box["y"]),
+                max(1, int(round(box["width"]))),
+                max(1, int(round(box["height"]))),
+            )
+        except (KeyError, TypeError, ValueError):
+            rect = None
+        return {"kind": kind, "box": rect}
+
+    def credential_field_at(self, x: int, y: int) -> Optional[str]:
+        """The credential kind of the field at a top-document point, or None.
+
+        ``"frame"`` when the point is inside a frame (not looked into), and
+        ``"unknown"`` when the page can't be read: the recorder then keeps a
+        sign-in field blacked out, the safe direction.
+        """
+
+        try:
+            found = self.page.evaluate(_CREDENTIAL_AT_JS, [int(x), int(y)])
+        except Exception:
+            return "unknown"
+        return found if found in ("password", "username", "frame") else None
+
     def _focused_element_eval(self, js: str) -> Optional[str]:
         """Evaluate ``js`` on the focused element, descending nested frames.
 
@@ -4030,12 +4116,15 @@ class PlaywrightBackend:
         arg: Any = None,
         with_arg: bool = False,
         frame_path_out: Optional[list[str]] = None,
+        box_out: Optional[dict[str, float]] = None,
     ) -> Any:
         """Evaluate ``js`` on the exactly bound focused element (see above).
 
         Returns the raw result, or None on any frame mismatch or failure.
         ``frame_path_out``, when given, receives the frame chain the focused
         element is in (outermost first; empty in the top document).
+        ``box_out``, when given, receives the element's bounding box in
+        top-document viewport pixels.
         """
 
         scope: Any = self.page
@@ -4061,6 +4150,9 @@ class PlaywrightBackend:
                             return None
                         if frame_path_out is not None:
                             frame_path_out[:] = frame_path
+                        if box_out is not None:
+                            box_out.clear()
+                            box_out.update(box)
                         if with_arg:
                             return focused.evaluate(js, arg)
                         return focused.evaluate(js)

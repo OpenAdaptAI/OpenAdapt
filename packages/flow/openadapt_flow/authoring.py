@@ -568,6 +568,8 @@ class AuthoringSession:
         #: Values typed for each parameter in this session, kept in memory
         #: only, to check a marked field against the page structure.
         self._typed: dict[str, str] = {}
+        #: Whether the last agent-driven TYPE was withheld as a secret.
+        self.last_type_withheld = False
 
     @property
     def backend_kind(self) -> str:
@@ -808,9 +810,28 @@ class AuthoringSession:
 
         recorder = self._require_recording()
         self._require_not_paused()
+        self.last_type_withheld = False
         self._as_agent(recorder, lambda: recorder.type_text(text, param=param))
-        if param:
+        self.last_type_withheld = bool(getattr(recorder, "last_type_withheld", False))
+        if param and not self.last_type_withheld:
             self._typed[param] = text
+
+    @property
+    def withheld_params(self) -> frozenset[str]:
+        """Names of the inputs withheld as sign-in secrets so far."""
+
+        recorder = self._recorder
+        return frozenset(getattr(recorder, "_withheld_param_names", ()) or ())
+
+    def withhold_credentials(self, inputs: Mapping[str, str]) -> None:
+        """Declare the run's input values a sign-in field may receive.
+
+        See :meth:`openadapt_flow.recorder.Recorder.withhold_credentials`:
+        a password or username field's value becomes a secret parameter
+        named for its input, and its text is never recorded.
+        """
+
+        self._require_recording().withhold_credentials(dict(inputs))
 
     def press(self, key: str) -> None:
         """Press a key or chord through :class:`Recorder`."""

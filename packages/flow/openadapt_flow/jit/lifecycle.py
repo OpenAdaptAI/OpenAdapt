@@ -812,7 +812,7 @@ def admission_status(
     review = _evidence_at(program / REVIEW_FILE, digest)
     canary = _evidence_at(program / CANARY_FILE, digest)
     params = _evidence_at(program / PARAMS_FILE, digest)
-    task_params = _task_params(candidate)
+    task_params = _task_params(candidate, program)
     readback = (canary or {}).get("readback")
     problems = _readback_problems(readback) if readback is not None else None
     try:
@@ -872,8 +872,20 @@ def _require_draft(program: Path) -> dict[str, Any]:
     return candidate
 
 
-def _task_params(candidate: Mapping[str, Any]) -> list[str]:
-    return sorted((candidate.get("task") or {}).get("params") or {})
+def _task_params(
+    candidate: Mapping[str, Any], program: Optional[Path] = None
+) -> list[str]:
+    """The task's parameters the program takes as values, sorted.
+
+    With ``program``, a secret parameter of its bundle (a sign-in value the
+    recording withheld, see ``ir.Step.secret``) is left out: it is typed from
+    ``OPENADAPT_FLOW_SECRET_<NAME>`` and is not a value parameter.
+    """
+
+    names = set((candidate.get("task") or {}).get("params") or {})
+    if program is not None and (Path(program) / "bundle" / "workflow.json").is_file():
+        names -= set(_load_workflow(Path(program) / "bundle").secret_params)
+    return sorted(names)
 
 
 def _has_terminal() -> bool:
@@ -939,7 +951,7 @@ def confirm_params(
     name, _ = resolve_actor(principal_id, program, key_dir=key_dir)
     if not _confirm_ok(confirm):
         raise AdmissionError("confirm_params accepts confirm empty, ok, yes, or True")
-    task_params = _task_params(candidate)
+    task_params = _task_params(candidate, program)
     if sorted(accept_params) != task_params:
         raise AdmissionError(
             f"accept_params {sorted(accept_params)} must be the task's "
@@ -1154,7 +1166,7 @@ def record_review(
         raise AdmissionError("review accepts confirm empty, ok, yes, or True")
     workflow = _load_workflow(program / "bundle")
     digest = _digest(workflow)
-    task_params = _task_params(candidate)
+    task_params = _task_params(candidate, program)
     params = _evidence_at(program / PARAMS_FILE, digest)
     if task_params and params is None:
         raise AdmissionError(
@@ -1326,7 +1338,7 @@ def _evidence_gates(
     teach_authorization_gate(
         program, candidate, key_dir=key_dir, approver_root=approver_root, trust=trust
     )
-    task_params = _task_params(candidate)
+    task_params = _task_params(candidate, program)
     if task_params and _evidence_at(program / PARAMS_FILE, digest) is None:
         raise AdmissionError(f"confirm the parameters {task_params} first")
     canary = _evidence_at(program / CANARY_FILE, digest)
@@ -1504,7 +1516,7 @@ def _write_manifest(
         "workflow_id": candidate.get("workflow_id"),
         "digest": digest,
         "task": candidate.get("task"),
-        "params": _task_params(candidate),
+        "params": _task_params(candidate, program),
         "policy": candidate.get("policy"),
         "admitted_by_principal_id": name,
         "admitted_at": _now(),

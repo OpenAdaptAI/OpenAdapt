@@ -803,7 +803,12 @@ class SkillCache:
             before,
             after,
             expect=self.common["expect"],
-            values={k: str(v) for k, v in params.items()},
+            # A secret parameter (a sign-in value) is never saved in the record.
+            values={
+                k: str(v)
+                for k, v in params.items()
+                if k not in set(workflow.secret_params)
+            },
         )
         verified = (
             reply.get("verified") is True

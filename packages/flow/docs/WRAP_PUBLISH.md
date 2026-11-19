@@ -197,6 +197,54 @@ The scrubber replaces any other principal it finds in these files with
 | Upload | `POST /api/v1/org/{org}/workflow`, or `PUT /api/v1/org/{org}/workflow/{id}/definition` |
 | Check | `GET /api/v1/org/{org}/workflow/{id}/definition?qualification_id=...` |
 
+## Tasks that sign in
+
+A task can start by signing in to the app. Name the username and password as
+inputs like any other, for example
+`"Sign in as {username} with password {password}, then add a note with the text {note}"`.
+
+You don't mark them yourself. During the first run, the recorder checks each
+field the agent types into, using only the page's markup:
+
+- a password field: `type="password"`, or `autocomplete` naming
+  `current-password` or `new-password`;
+- the username field paired with it: `autocomplete="username"`, or the last
+  visible text, email or phone field before the first password field of the
+  same form.
+
+Their inputs become **secret parameters** of the program (`ir.Step.secret`).
+The recording, the program, the run records and the receipts keep the input's
+name and never its value. Each field is blacked out in every saved frame that
+shows it after it was typed into. A credential field that receives text
+matching none of the task's inputs is refused before anything is typed. The
+submit button of a form where only secrets were typed is a sign-in, not a
+save, so it needs no record check.
+
+The program types each secret from `OPENADAPT_FLOW_SECRET_<NAME>`, for
+example `OPENADAPT_FLOW_SECRET_PASSWORD`. The canary and later local runs set
+that variable from the value you passed, for that run only. To keep a value
+off the command line, export the variable instead of passing
+`--param password=...`.
+
+The values still sit in two places on your machine, and both stay there:
+
+- the task file's `canary_params`;
+- a teach authorization, if it names the sign-in inputs by digest.
+
+When text scrubbing works (`openadapt-flow[privacy]`), the model sees each
+input only as a placeholder. Without it, the first run's instruction carries
+the values to your model provider. Cached and hosted runs make no model
+calls.
+
+`publish` lists the secret parameters under `secret_parameters` in the upload
+and leaves them out of the call's inputs. The endpoint is callable only after
+an owner or admin attaches a vault set that holds a key named exactly like
+each secret parameter: on the workflow's page in the dashboard, or with
+`PUT /api/v1/org/<org>/workflow/<workflow>/secrets` and
+`{"secrets_ref": "<set name>"}`. Until then the definition answers
+`vault_set_required`. A call that sends a secret is refused. Each hosted run
+reads the values from the vault inside the sandbox.
+
 ## 6. Call it
 
 ```bash

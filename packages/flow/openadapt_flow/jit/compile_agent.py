@@ -57,6 +57,7 @@ from openadapt_flow.jit.keys import CustomerModelKey
 from openadapt_flow.jit.lifecycle import AdmissionError
 from openadapt_flow.jit.lift import lift_params
 from openadapt_flow.jit.signature import TaskSignature
+from openadapt_flow.secret_inputs import public_values, secret_environment
 
 __all__ = [
     "AdmissionError",
@@ -614,6 +615,10 @@ class Recording:
             self.dispatcher = RecordingDispatcher(self)
             self.computer.dispatcher = self.dispatcher
             self._session.start_record()
+            # A password field, or the username field of a sign-in form,
+            # takes one of these values as a secret parameter: the recording
+            # names the input and never holds its text.
+            self._session.withhold_credentials(self._values)
         except BaseException as error:
             callbacks = [self._close]
             if self.dispatcher is not None:
@@ -1211,7 +1216,12 @@ class CompiledAgent:
     ) -> JitResult:
         program = self.program_dir
         lifecycle.mark_draft(self.bundle_dir)
-        lifted = lift_params(self.bundle_dir, values)
+        # A sign-in value the recording withheld is a secret parameter
+        # already; it is never typed as text, so there is nothing to lift.
+        lifted = lift_params(
+            self.bundle_dir,
+            public_values(values, getattr(session, "withheld_params", ())),
+        )
         candidate = {
             "state": lifecycle.BundleState.DRAFT.value,
             "status": NEEDS_HUMAN_ADMIT,
@@ -1544,7 +1554,9 @@ class CompiledAgent:
             return refused("the bundle changed after its admission was checked")
         if (record.get("task") or {}).get("key") != self.task.key:
             return refused("the admission is for a different task signature")
-        if sorted(workflow.params) != sorted(self.task.params):
+        if sorted({*workflow.params, *workflow.secret_params}) != sorted(
+            self.task.params
+        ):
             return refused("the admitted program's parameters do not match the task")
         if record.get("policy") != self.policy:
             return refused(
@@ -1657,33 +1669,39 @@ class CompiledAgent:
                 if attended_by
                 else "openadapt-flow-jit"
             ),
-            params=values,
+            params=public_values(values, workflow.secret_params),
         )
         if self.app.reset is not None:
             self.app.reset()
         backend, close = self.app.open()
         try:
-            report = Replayer(
-                backend,
-                effect_verifier=self.verifier,
-                governed_authorization=authorization,
-                durable=True,
-                require_settled=True,
-                attended_draft_by=attended_by,
-                draft_key_dir=self.key_dir,
-                deployment_surface=self.app.deployment_surface,
-            ).run(
-                workflow.model_copy(deep=True),
-                params=values,
-                bundle_dir=bundle(),
-                run_dir=run_dir,
-                execution_target_kind=self.app.kind,
-                execution_origin=self.app.origin if self.app.kind == "web" else None,
-                execution_entry_url=self.app.entry_url,
-                execution_target_origin=(
-                    None if self.app.kind == "web" else self.app.origin
-                ),
-            )
+            # A secret parameter (a sign-in the recording withheld) is typed
+            # from its environment variable, set from memory for this run only.
+            public = public_values(values, workflow.secret_params)
+            with secret_environment(values, workflow.secret_params):
+                report = Replayer(
+                    backend,
+                    effect_verifier=self.verifier,
+                    governed_authorization=authorization,
+                    durable=True,
+                    require_settled=True,
+                    attended_draft_by=attended_by,
+                    draft_key_dir=self.key_dir,
+                    deployment_surface=self.app.deployment_surface,
+                ).run(
+                    workflow.model_copy(deep=True),
+                    params=public,
+                    bundle_dir=bundle(),
+                    run_dir=run_dir,
+                    execution_target_kind=self.app.kind,
+                    execution_origin=(
+                        self.app.origin if self.app.kind == "web" else None
+                    ),
+                    execution_entry_url=self.app.entry_url,
+                    execution_target_origin=(
+                        None if self.app.kind == "web" else self.app.origin
+                    ),
+                )
         finally:
             close()
         return None, report

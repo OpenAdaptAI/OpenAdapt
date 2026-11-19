@@ -4280,13 +4280,22 @@ def _form_submit_steps(
     steps: list[Step], observations: dict[str, object]
 ) -> list[Step]:
     """Clicks on the labelled submit button of the one form owning every
-    field typed into since the previous such click."""
+    field typed into since the previous such click.
+
+    A sign-in is not a save: when every field typed since the previous such
+    click is a secret (a password and the username paired with it, see
+    ``ir.Step.secret``), its submit button signs in and writes no record. The
+    keyword risk inference still classifies that button on its own label, so
+    a "Change password" or "Save" button stays irreversible.
+    """
 
     found: list[Step] = []
     typed = False
+    only_secrets = True
     for step in steps:
         if step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION):
             typed = True
+            only_secrets = only_secrets and step.secret
             continue
         raw = observations.get(step.id)
         if (
@@ -4295,8 +4304,10 @@ def _form_submit_steps(
             and step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK)
             and _is_form_save(raw)
         ):
-            found.append(step)
+            if not only_secrets:
+                found.append(step)
             typed = False
+            only_secrets = True
     return found
 
 

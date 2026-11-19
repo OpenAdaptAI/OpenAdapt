@@ -299,6 +299,26 @@ class FieldLabelBackend(Protocol):
 
 
 @runtime_checkable
+class CredentialFieldBackend(Protocol):
+    """Optional RECORD-TIME capability: does the focused field take a sign-in
+    credential?
+
+    The recorder asks before an agent-driven TYPE. A ``password`` or
+    ``username`` field's typed value becomes a SECRET parameter (see
+    ``ir.Step.secret``): the event carries no text and the field's pixels are
+    blacked out in every frame that shows it. The answer comes from the
+    page's own markup only (field type, ``autocomplete`` and the sign-in
+    form's field order), never from the value or a label's wording. Never
+    called at replay.
+    """
+
+    def focused_field_credential(self) -> Optional[dict[str, Any]]:
+        """``{"kind": "password" | "username", "box": (x, y, w, h) | None}``
+        or None. Never raises."""
+        ...
+
+
+@runtime_checkable
 class ExecutionContextIdentityBackend(Protocol):
     """Optional live identities that cannot be inferred from record-row text."""
 

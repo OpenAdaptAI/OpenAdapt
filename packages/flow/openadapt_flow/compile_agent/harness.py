@@ -41,7 +41,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Callable, Mapping, Optional, Sequence
+from typing import Any, Callable, Collection, Mapping, Optional, Sequence
 
 from openadapt_flow.compile_agent import observe as _observe
 from openadapt_flow.jit.adapters import CaptureComputer, Observation, translate
@@ -161,6 +161,10 @@ class RecordReadBack:
         self.baseline = baseline
         self.wanted = {str(k): str(v) for k, v in expect.items()}
         self.values = {str(k): str(v) for k, v in values.items() if str(v)}
+        #: Inputs withheld as sign-in secrets so far. A credential is typed
+        #: into a sign-in form, never saved in the record, so it is not
+        #: expected there.
+        self.withheld: Callable[[], Collection[str]] = tuple
         self._before: Optional[list[dict[str, Any]]] = None
         self._unconfirmed: Optional[list[dict[str, Any]]] = None
 
@@ -248,7 +252,10 @@ class RecordReadBack:
         record = new[0]
         fields = tuple(sorted(record))
         held = {str(v) for v in record.values() if v is not None}
-        missing = sorted(k for k, v in self.values.items() if v not in held)
+        withheld = set(self.withheld())
+        missing = sorted(
+            k for k, v in self.values.items() if v not in held and k not in withheld
+        )
         if missing:
             return ReadBack(
                 "incomplete",
