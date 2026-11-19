@@ -290,11 +290,14 @@ def test_every_rule_runs_on_every_trial_on_a_certified_copy(
     ]
     assert trial_fn.calls[0][2]["lname"] == "Delgado"
     assert len(state["entries"]) == 6 and all(e["passed"] for e in state["entries"])
-    # The trials ran a certified copy; the bundle itself was not written (the
-    # caller saves the certification once every rule passed), and the copy
-    # is gone.
+    # The trials ran a certified copy; the bundle itself was written only
+    # after every rule passed (while the copy, the workflow's verified source
+    # after its save, still existed), and the copy is gone.
     assert {d.name for d in trial_fn.bundle_dirs} == {campaign_mod.RULE_BUNDLE_DIR}
-    assert state["saves"] == [(campaign_mod.RULE_BUNDLE_DIR, True)]
+    assert state["saves"] == [
+        (campaign_mod.RULE_BUNDLE_DIR, True),
+        ("bundle", True),
+    ]
     assert state["invalidated"] == 0
     assert not (tmp_path / campaign_mod.RULE_BUNDLE_DIR).exists()
 
@@ -567,3 +570,44 @@ def test_a_seed_that_creates_nothing_fails_the_trial(
 ) -> None:
     with pytest.raises(QualifyError, match="seed created no record"):
         _trial(monkeypatch, tmp_path, seed_writes=False)
+
+
+def test_a_save_to_the_rule_copy_moves_the_verified_source(tmp_path: Path) -> None:
+    """Why the bundle is saved before the copy is removed (real bundle).
+
+    A save re-anchors a loaded workflow's verified source to where it saved,
+    so once the rule copy is gone, a later save of the bundle finds the
+    copy's assets missing. That is what stopped the OpenEMR referral
+    certification after all its rule trials passed.
+    """
+    import shutil
+
+    from openadapt_flow.bundle_validation import BundleIntegrityError
+    from openadapt_flow.ir import Workflow
+    from openadapt_flow.qualification import save_qualified_workflow
+
+    program = (
+        Path(__file__).resolve().parents[1]
+        / "benchmark"
+        / "openemr_local"
+        / "referral_program"
+        / "program"
+    )
+    bundle = tmp_path / "bundle"
+    shutil.copytree(program, bundle)
+    workflow = Workflow.load(bundle)
+    copy = tmp_path / campaign_mod.RULE_BUNDLE_DIR
+    shutil.copytree(bundle, copy)
+    save_qualified_workflow(workflow, copy)
+    save_qualified_workflow(workflow, bundle)  # the fix: while the copy exists
+    shutil.rmtree(copy)
+    save_qualified_workflow(workflow, bundle)  # the caller's save: no error
+
+    other = tmp_path / "other"
+    shutil.copytree(program, other)
+    stale = Workflow.load(other)
+    shutil.copytree(other, copy)
+    save_qualified_workflow(stale, copy)
+    shutil.rmtree(copy)
+    with pytest.raises(BundleIntegrityError, match="missing from the bundle"):
+        save_qualified_workflow(stale, other)  # without the fix

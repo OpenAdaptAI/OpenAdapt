@@ -278,8 +278,10 @@ class OpenAdaptArm:
             "effects": {
                 "kind": "rest",
                 "base_url": api,
-                "records_path": "/apis/default/api/patient?_limit=1000",
+                "records_path": "/apis/default/api/patient?_limit=200",
                 "records_key": "data",
+                "records_next_path": "links.next",
+                "records_next_absent_is_last": True,
                 "auth": {"bearer_env": "SOR_BEARER_TOKEN"},
             },
             "runtime": {"approval_mode": "problems_only"},

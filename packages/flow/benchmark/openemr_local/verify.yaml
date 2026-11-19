@@ -22,11 +22,19 @@ app:
 
 # Read the patient back through OpenEMR's REST API with a separate,
 # read-only OAuth client. This is the existing RestRecordVerifier.
+# Completeness: OpenEMR caps a page at 200 records (QueryPagination::MAX_LIMIT)
+# and reads one row past the page; `links` always holds `first` and gains
+# `next` only when that row exists. So a page whose `links` has no `next` is
+# the whole read. With more than 200 charts the read has a next link, and a
+# multi-page read without a snapshot token is refused: the check stays
+# indeterminate rather than judging part of the table.
 verifier:
   kind: rest
   base_url: ${OPENEMR_API_URL:-https://127.0.0.1:9300}
-  records_path: /apis/default/api/patient?_limit=1000
+  records_path: /apis/default/api/patient?_limit=200
   records_key: data
+  records_next_path: links.next
+  records_next_absent_is_last: true
   session: benchmark.openemr_local.qualify_hooks:oracle_session
 
 # What the save writes; expands to the effect contract list (one

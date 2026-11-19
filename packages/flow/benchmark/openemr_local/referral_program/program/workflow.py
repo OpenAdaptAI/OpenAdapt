@@ -45,7 +45,7 @@ def run(flow, params=PARAMS):
     # identity: armed via PHI-free salted-hash template (3 band tokens, structured); no patient identifier stored
     flow.click(template='templates/step_009.png', click_point=(427, 430), region=(347, 398, 160, 64))
     # expect region_stable region=(346, 381, 310, 298) phash='80daeba3a383939b' (tol 16)
-    # expect text_present text='October-2026-'
+    # expect text_present text='October-2026-' from the run's clock as '{Month}-{YYYY}-'
 
     # step_011: type <DOB> [reversible]
     flow.type_text(params['DOB'])

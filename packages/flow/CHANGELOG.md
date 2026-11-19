@@ -15,6 +15,54 @@
 
 <!-- version list -->
 
+## Unreleased
+
+### Fixes
+
+- Screen text read from the clock is checked against the run's clock. A
+  text check whose dates all equal the recording date, at the precision the
+  text shows (a date picker's "October 2026", a pre-filled "10/20/2026", a
+  "Tuesday, Oct 20" header), compiles to a clock template
+  (`Postcondition.text_clock`, `openadapt_flow/clock_text.py`). The run
+  renders it from its own clock and checks that date: one confidently read
+  OCR line must carry exactly its fields (runs of letters and digits, so
+  "11/3/2026" never matches "1/13/2026" or "Nov 03, 1990"), never the fuzzy
+  match or the DOM's substring proof, so "October 2025" or another month
+  still fails. Around midnight the local date and the UTC date are both the
+  run's clock, a one-day window. Before,
+  the certified OpenEMR referral program checked the literal
+  "October-2026-" and halted every referral from 1 November. OCR-joined
+  month dates ("October-2026-", "Oct/2026") now classify as dates too.
+  `python -m openadapt_flow.compiler.clock_pass BUNDLE OUT --recorded-on
+  DATE` applies the same rule to a bundle compiled before this; the result
+  must be qualified again.
+- A REST read can declare that its endpoint leaves the next link out of a
+  still-present parent object on the last page
+  (`records_next_absent_is_last: true`, with `records_next_path`). A body
+  without that parent object, or a page that has a next link and no
+  snapshot semantics, stays indeterminate. The OpenEMR recipes use it with
+  `_limit=200` (OpenEMR's page cap), so their read-back is complete again
+  since #2041 instead of "REST read completeness was not established".
+- The first-local delivery fence (#2209) counts the qualification
+  project's operator-confirmed risk decisions in a qualification case bound
+  to the bundle's own project, as the outcome classifier already did. Before,
+  a campaign could not qualify a program whose write-shaped but reversible
+  step the operator had classified. A certified run now checks the
+  operator's decisions against the policy it was admitted under; without
+  that digest no certification reproduced, so the OpenEMR quickstart's
+  certified runs stopped at "Create New Patient" too.
+- `qualify --certify` with business rules saves the certified bundle while
+  the rule trials' copy still exists. A save moves a loaded workflow's
+  verified source to where it saved (#1993), so the final save found the
+  removed copy's assets missing and every such campaign failed after its
+  rule trials passed.
+- The certified OpenEMR referral program behind `openadapt quickstart --app
+  openemr` was qualified again with its date-picker check on the run's
+  clock (content digest `10e45945…`; evidence in
+  `benchmark/scoreboard/raw/openemr_referral/requalified/2026-11-19/`), and
+  a first OpenEMR quickstart on a new machine creates its state folder
+  instead of stopping on the missing lock file.
+
 ## v3.2.0 (2026-11-19)
 
 ### Faster screen steps and encrypted checkpoints
