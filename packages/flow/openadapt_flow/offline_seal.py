@@ -83,7 +83,8 @@ _RUN_ID = re.compile(r"[^A-Za-z0-9._:-]")
 _SCOPE_ITEM = r"^[a-z]{1,2}[0-9]{1,3}$"
 _OPTIONAL_FIELDS = ("authorization_sha256", "scope_item")
 
-SubjectKind = Literal["run-report", "record", "export", "file"]
+# "public-card": the card of a public Seal (openadapt_flow.public_seal).
+SubjectKind = Literal["run-report", "record", "export", "file", "public-card"]
 
 LocalSealRefusal = Literal[
     "unsigned",

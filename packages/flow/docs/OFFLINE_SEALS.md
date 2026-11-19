@@ -437,6 +437,56 @@ appear under `excluded` as `unanchored`, `not_valid`, `duplicate` or
 The profile holds no report content: no patient names, parameters, record
 IDs, run IDs or folder names.
 
+## Public Seals: a summary you can post
+
+```bash
+openadapt-flow local-seal public RUN_DIR             # writes RUN_DIR/public-seal.json
+openadapt seal publish RUN_DIR                        # asks, then uploads it and prints a link
+```
+
+A run's `seal.json` signs its whole `report.json`, which stays on your
+computer. `local-seal public` writes `public-seal.json`
+(`openadapt.public-seal/v1`), which is safe to post. It has two parts:
+
+- `card` (`openadapt.public-card/v1`): the outcome; each step's ok, how its
+  target was found (`structural`, `template`, `template_global`, `geometry`,
+  `ocr`, `grounder`, `api` or `none`) and its strongest passed check
+  (`effect`, `postcondition`, `identity` or `none`); step, heal and model-call
+  counts; the duration; whether the run saw outside network calls; required
+  and confirmed identity, postcondition, effect and authorization checks;
+  `synthetic-tutorial` or `production`; the Flow version; the program and app
+  names (or none, with `--no-names`); the hour the run started; and, with
+  `--github LOGIN`, a claimed GitHub login. `report_sha256` is the private
+  Seal's subject, so whoever holds the report can show that the card belongs
+  to it.
+- `seal`: an offline Seal with `subject_kind` `public-card` over the SHA-256
+  of the card's canonical JSON, so every count is signed. Its `run_id` is
+  `p-` and 16 hex characters of SHA-256(key ID + run ID). It carries the
+  run's `authorization_sha256` and `scope_item` when the run has them.
+
+The card is built from the report through an allow-list. It never holds
+parameters, typed values, step intents, what the identity check read on
+screen, URLs, screenshots, halt text, the run ID or the folder name. A name
+that isn't 1-48 letters, digits, spaces, dots, dashes or underscores is
+refused; pass `--no-names`. Stopped runs get a card too.
+
+The file is at most 4,096 bytes of canonical JSON. The step strip lists
+every step or none: when it would push the file over the limit (from about 45
+steps, depending on the names), it is left empty and only the counts remain. The Seal must be signed
+by the key that sealed the run. Rebuilding an unchanged card reuses the file
+on disk, so its digest stays the same.
+
+`openadapt seal publish` uploads nothing until you say yes: at a y/N prompt
+that defaults to No, or with `--yes` when there is no terminal. Under CI it
+also needs `--allow-ci`. `--dry-run` writes the file and sends nothing. The
+link is unguessable and unlisted. The delete token is saved to
+`RUN_DIR/seal.publish.json` (mode 0600), and `openadapt seal unpublish
+RUN_DIR` takes the Seal down. `openadapt seal verify <link>` fetches a hosted
+Seal and checks its card digest, key ID and signature on your computer.
+
+A public Seal shows that the key in it signed this card. It does not show who
+holds the key, and nobody but the key holder watched the run.
+
 ## Optional: one RFC 3161 timestamp per record
 
 A transparency-log anchor records when Rekor saw a record. An RFC 3161 token

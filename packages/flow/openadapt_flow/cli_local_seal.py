@@ -167,6 +167,28 @@ def _cmd_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_public(args: argparse.Namespace) -> int:
+    """Write RUN_DIR/public-seal.json: the redacted card and a Seal over it."""
+    from openadapt_flow.offline_seal import LocalSealError
+    from openadapt_flow.public_seal import build_public_seal, write_public_seal
+
+    try:
+        doc = build_public_seal(
+            Path(args.run_dir),
+            signer=_signer(args),
+            no_names=args.no_names,
+            github=args.github,
+            provenance=args.provenance,
+        )
+    except LocalSealError as exc:
+        print(f"no public Seal: {exc}", file=sys.stderr)
+        return 1
+    path = write_public_seal(Path(args.run_dir), doc)
+    print(json.dumps(doc, indent=2, sort_keys=True))
+    print(f"wrote {path}", file=sys.stderr)
+    return 0
+
+
 def _cmd_file(args: argparse.Namespace) -> int:
     from openadapt_flow.offline_seal import LocalSealError, enqueue_for_batch, sign_file
 
@@ -932,6 +954,34 @@ def register(sub: Any) -> None:
         ),
     )
     r.set_defaults(func=_guarded(_cmd_run))
+
+    pub = s.add_parser(
+        "public",
+        help=(
+            "Write RUN_DIR/public-seal.json: counts, outcomes, digests and names "
+            "only, signed, safe to post"
+        ),
+        allow_abbrev=False,
+    )
+    pub.add_argument("run_dir", help="a sealed run folder (it has seal.json)")
+    pub.add_argument(
+        "--no-names",
+        action="store_true",
+        help="Leave the program and app names out",
+    )
+    pub.add_argument(
+        "--github",
+        default=None,
+        metavar="LOGIN",
+        help="Claim this GitHub login; a reader checks it against github.com/LOGIN.keys",
+    )
+    pub.add_argument(
+        "--provenance",
+        choices=["production", "synthetic-tutorial"],
+        default=None,
+        help="Default: synthetic-tutorial when the run's receipt says so, else production",
+    )
+    pub.set_defaults(func=_guarded(_cmd_public))
 
     f = s.add_parser(
         "file",

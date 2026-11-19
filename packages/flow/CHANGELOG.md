@@ -15,6 +15,21 @@
 
 <!-- version list -->
 
+## Unreleased
+
+### Public Seals
+
+- `openadapt-flow local-seal public RUN_DIR` writes `public-seal.json`
+  (`openadapt.public-seal/v1`): an allow-listed card of the run (counts,
+  outcomes, each step's rung and strongest check, digests, program and app
+  names, the hour it started) and an offline Seal over the card with the new
+  subject kind `public-card`. Its `run_id` is a hash. It never holds
+  parameters, intents, identity readings, URLs, screenshots or halt text, and
+  works for stopped runs. At most 4,096 bytes; the step strip is all steps or
+  none. `openadapt_flow.public_seal.verify_public_seal` checks one without a
+  key registry. Golden vectors for other verifiers are in
+  `tests/fixtures/public_seal/golden_vectors.json`.
+
 ## v3.1.0 (2026-11-14)
 
 ### Wrap publish: the scrubber keeps a program's structure, and info lint is advice
