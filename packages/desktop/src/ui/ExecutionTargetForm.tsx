@@ -479,7 +479,7 @@ function TargetFields({
               onChange={(event) =>
                 setField("rdp_readiness_text", event.target.value)
               }
-              placeholder="Patient Search"
+              placeholder="Customer Search"
             />
           </Field>
           <RemoteWindowFields
