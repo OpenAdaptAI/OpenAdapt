@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.30.5 (2026-11-19)
+
+### Bug Fixes
+
+- **desktop**: show the window again on a second launch
+
+
+
 ## v0.30.4 (2026-11-19)
 
 ### Bug Fixes
