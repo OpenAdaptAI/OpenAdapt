@@ -25,8 +25,11 @@ import ast
 import copy
 import datetime
 import difflib
+import functools
 import json
+import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -78,10 +81,57 @@ class Commit:
         return bool(match and match.group("bang")) or "BREAKING CHANGE:" in self.body
 
 
+# Every git call here is a local read of history. The slowest takes well under a
+# second, so one that runs this long is stuck.
+GIT_TIMEOUT = 120
+
+
+class GitTimeout(RuntimeError):
+    """A git command did not finish in time."""
+
+
+@functools.lru_cache(maxsize=None)
+def _git_executable(search_path: str | None) -> str:
+    found = shutil.which("git", path=search_path)
+    if found is None:
+        raise FileNotFoundError("git is not on PATH")
+    return os.path.abspath(found)
+
+
+def run_git(
+    root: Path, *args: str, check: bool = True, input: bytes | None = None
+) -> subprocess.CompletedProcess[bytes]:
+    """Run one git command in ``root`` without forking this process.
+
+    On macOS a forked copy of a Python process that has loaded system
+    frameworks can stop before it ever runs git, and the parent then waits
+    inside Popen where no timeout applies. Python starts the child with
+    posix_spawn instead of fork when the program path is absolute, no working
+    directory is passed and inherited descriptors are left alone, so git gets
+    its directory from ``-C``. Python opens its own descriptors close-on-exec,
+    so git still inherits only its three pipes. The timeout then covers the
+    whole call, and a stuck command fails with its name.
+    """
+
+    command = [_git_executable(os.environ.get("PATH")), "-C", str(root), *args]
+    try:
+        return subprocess.run(
+            command,
+            check=check,
+            capture_output=True,
+            input=input,
+            stdin=subprocess.DEVNULL if input is None else None,
+            close_fds=os.name != "posix",
+            timeout=GIT_TIMEOUT,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise GitTimeout(
+            f"git {' '.join(args)} did not finish within {GIT_TIMEOUT}s in {root}"
+        ) from exc
+
+
 def _git(root: Path, *args: str) -> str:
-    return subprocess.run(["git", *args], cwd=root, check=True, capture_output=True).stdout.decode(
-        "utf-8"
-    )
+    return run_git(root, *args).stdout.decode("utf-8")
 
 
 def parse_version(version: str) -> tuple[int, int, int]:
@@ -344,18 +394,14 @@ def _clean_path_merge(
             size = int(_git(root, "cat-file", "-s", value[1]).strip())
             if not 0 <= size <= 8 * 1024 * 1024:
                 raise ValueError("a net Desktop merge blob exceeds its reconstruction bound")
-            content = subprocess.run(
-                ["git", "cat-file", "blob", value[1]], cwd=root, check=True, capture_output=True
-            ).stdout
+            content = run_git(root, "cat-file", "blob", value[1]).stdout
             if len(content) != size or b"\0" in content:
                 raise ValueError("a net Desktop merge has non-text or incomplete blob data")
             contents.append(content)
             target = Path(directory) / label
             target.write_bytes(content)
             files.append(str(target))
-        merged = subprocess.run(
-            ["git", "merge-file", "--stdout", *files], cwd=root, capture_output=True
-        )
+        merged = run_git(root, "merge-file", "--stdout", *files, check=False)
         if path in RELEASE_VERSION_FIELDS:
             # A merge may select a generated engine version, but it may not
             # invent any other bytes. Normalize only witnessed literal spans,
@@ -366,12 +412,7 @@ def _clean_path_merge(
             size = int(_git(root, "cat-file", "-s", resolved[1]).strip())
             if not 0 <= size <= 8 * 1024 * 1024:
                 raise ValueError("release resolution exceeds its content bound")
-            actual = subprocess.run(
-                ["git", "cat-file", "blob", resolved[1]],
-                cwd=root,
-                check=True,
-                capture_output=True,
-            ).stdout
+            actual = run_git(root, "cat-file", "blob", resolved[1]).stdout
             if len(actual) != size or b"\0" in actual:
                 raise ValueError("release resolution has incomplete or non-text data")
             if merged.returncode != 0 or actual != merged.stdout:
@@ -380,21 +421,11 @@ def _clean_path_merge(
                 version = text[spans[0][0] : spans[0][1]]
                 for target, content in zip(files, contents, strict=True):
                     Path(target).write_bytes(_release_content(path, content, version))
-                merged = subprocess.run(
-                    ["git", "merge-file", "--stdout", *files], cwd=root, capture_output=True
-                )
+                merged = run_git(root, "merge-file", "--stdout", *files, check=False)
         if merged.returncode != 0:
             raise ValueError("a net Desktop merge resolution has no clean combination")
     oid = (
-        subprocess.run(
-            ["git", "hash-object", "--stdin"],
-            cwd=root,
-            input=merged.stdout,
-            check=True,
-            capture_output=True,
-        )
-        .stdout.decode("ascii")
-        .strip()
+        run_git(root, "hash-object", "--stdin", input=merged.stdout).stdout.decode("ascii").strip()
     )
     if re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", oid) is None:
         raise ValueError("a net Desktop merge result has incomplete object metadata")
@@ -498,9 +529,7 @@ def commits_for_net_diff(root: Path, base: str, head: str) -> list[Commit]:
             size = int(_git(root, "cat-file", "-s", oid).strip())
             if not 0 <= size <= 8 * 1024 * 1024:
                 raise ValueError("a Desktop copy source exceeds its content bound")
-            raw = subprocess.run(
-                ["git", "cat-file", "blob", oid], cwd=root, check=True, capture_output=True
-            ).stdout
+            raw = run_git(root, "cat-file", "blob", oid).stdout
             if len(raw) != size:
                 raise ValueError("a Desktop copy source has incomplete content")
             blob_cache[oid] = raw
@@ -826,11 +855,7 @@ def last_version_change(root: Path) -> str:
     maximal = set(origins)
     for candidate in origins:
         for other in origins - {candidate}:
-            result = subprocess.run(
-                ["git", "merge-base", "--is-ancestor", candidate, other],
-                cwd=root,
-                capture_output=True,
-            )
+            result = run_git(root, "merge-base", "--is-ancestor", candidate, other, check=False)
             if result.returncode == 0:
                 maximal.discard(candidate)
             elif result.returncode != 1:
@@ -851,9 +876,7 @@ def _release_commits(root: Path, base: str | None, current: str) -> list[Commit]
     _complete_release_history(root)
     if _commit_identity(root, base) != base:
         raise ValueError("--base does not identify the declared commit")
-    result = subprocess.run(
-        ["git", "merge-base", "--is-ancestor", base, "HEAD"], cwd=root, capture_output=True
-    )
+    result = run_git(root, "merge-base", "--is-ancestor", base, "HEAD", check=False)
     if result.returncode != 0:
         raise ValueError("--base must be an available ancestor of HEAD")
     text = (root / "pyproject.toml").read_text(encoding="utf-8")
