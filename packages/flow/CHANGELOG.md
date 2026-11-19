@@ -44,7 +44,15 @@
   project's operator-confirmed risk decisions in a qualification case bound
   to the bundle's own project, as the outcome classifier already did. Before,
   a campaign could not qualify a program whose write-shaped but reversible
-  step the operator had classified.
+  step the operator had classified. A certified run now checks the
+  operator's decisions against the policy it was admitted under; without
+  that digest no certification reproduced, so the OpenEMR quickstart's
+  certified runs stopped at "Create New Patient" too.
+- `qualify --certify` with business rules saves the certified bundle while
+  the rule trials' copy still exists. A save moves a loaded workflow's
+  verified source to where it saved (#1993), so the final save found the
+  removed copy's assets missing and every such campaign failed after its
+  rule trials passed.
 
 ## v3.2.0 (2026-11-19)
 
