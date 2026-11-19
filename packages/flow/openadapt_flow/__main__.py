@@ -13392,6 +13392,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     pr.set_defaults(func=_cmd_connector)
 
+    from openadapt_flow.connector.windows_service import register_service_parser
+
+    register_service_parser(csub)
+
     from openadapt_flow.cli_admit import register_admit_parser
     from openadapt_flow.cli_api import register_api_parser
     from openadapt_flow.cli_check import register_check_parser

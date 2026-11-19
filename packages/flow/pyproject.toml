@@ -214,6 +214,12 @@ windows = [
     "requests>=2.31",
     "pywin32>=312; platform_system == 'Windows'",
 ]
+# Windows service host for the BYOC connector:
+# `openadapt-flow connector service install|start|stop|remove|status`.
+# pywin32 is under the PSF-2.0 license.
+connector-windows = [
+    "pywin32>=306; sys_platform == 'win32'",
+]
 # Reference reward worker: `openadapt-flow serve-reward`. Reads the system of
 # record after a training episode and signs a reward receipt with a local key.
 # A reward receipt is not an Execute Seal; the worker never imports Cloud.

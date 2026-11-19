@@ -58,6 +58,63 @@ Every flag also resolves from an environment variable
 `connector enroll` remains available for mock/development control planes; live
 Cloud token creation is authenticated and organization-scoped in the dashboard.
 
+## Windows service
+
+On Windows, run the Connector as the `OpenAdaptConnector` service instead of
+a console session. The service runs the same loop as `connector run`.
+
+Install, from an elevated (Administrator) prompt:
+
+```powershell
+pip install "openadapt-flow[vision,connector-windows]==<version>"
+# Put the token and settings in the machine-wide config file:
+#   C:\ProgramData\OpenAdapt\connector\connector.toml
+openadapt-flow connector service install
+openadapt-flow connector service start
+openadapt-flow connector service status
+```
+
+`connector.toml` takes the same keys `connector enroll` writes
+(`control_plane_url`, `token`, `org_id`, `profile`, `storage_backend`,
+`storage_root`, ...) under a `[connector]` table. Pass `--config-dir` to
+`install` to use a different directory.
+
+- **Config location.** `%ProgramData%\OpenAdapt\connector`. The service sets
+  `OPENADAPT_HOME` to it.
+- **Account.** The service runs as the virtual account
+  `NT SERVICE\OpenAdaptConnector`, not as LocalSystem. Give that account
+  access to the storage root and anything the deployment profile names.
+- **Permissions.** `install` removes inherited permissions from the config
+  directory. Only SYSTEM, Administrators and the service account can read
+  `connector.toml`, which holds the token. The service account can write only
+  to `logs`.
+- **Logs.** `%ProgramData%\OpenAdapt\connector\logs\connector.log`, rotated at
+  5 MB with five old files kept. The token is never written to the log.
+- **Start and recovery.** Delayed automatic start. The service restarts after
+  a failure (5 s, 5 s, then 60 s). A lost connection to the control plane is
+  retried inside the service with backoff.
+- **Network.** Outbound only. `install` adds no firewall rule.
+- **Desktop.** Services run in session 0, which has no interactive desktop,
+  so a job that drives a desktop app cannot run from the service.
+- **Stop.** `stop` lets a running job finish and report, then exits before the
+  next poll.
+
+Update by stopping the service, installing the pinned version, and starting
+it again:
+
+```powershell
+openadapt-flow connector service stop
+pip install "openadapt-flow[vision,connector-windows]==<new version>"
+openadapt-flow connector service start
+```
+
+Uninstall with `openadapt-flow connector service remove`. The config
+directory, with the token, is kept; delete it to remove the enrollment, and
+revoke the token in Cloud settings.
+
+On other operating systems, `connector service` prints a message and exits
+with code 2; run `connector run` under systemd or launchd instead.
+
 ## Data boundary and safety
 
 * **Down (to the Connector):** a PHI-free job *descriptor* only — run/workflow
