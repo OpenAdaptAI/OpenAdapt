@@ -41,11 +41,31 @@ EXPECTED = {
     "r5-grace-adeyemi": "VERIFIED",
     "r6-rosa-delgado": "HALTED_BEFORE_EFFECT",
 }
-#: Where r6 must stop: the duplicate dialog's "No matches were found." check.
+#: Where r6 must stop: the duplicate dialog, open, without its "no matches" line.
 DUPLICATE_STOP = "step_039"
+DUPLICATE_CLEAR = "No matches were found."
+DUPLICATE_DIALOG = "Confirm Create New Patient"
 
 
-def mismatches(row: dict[str, Any], halted_at: str | None) -> list[str]:
+def duplicate_stop(halt_reason: str | None) -> bool:
+    """True only when the run stopped because the duplicate dialog listed a match.
+
+    The same rule as ``duplicate_stop_observed`` in the launcher's OpenEMR
+    quickstart: a postcondition failure at the step that opens the dialog,
+    with the "no matches" line failing and the dialog itself on screen. A
+    readiness, identity or delivery halt at that step does not count.
+    """
+
+    head, sep, failed = (halt_reason or "").partition(" — failed: ")
+    return (
+        bool(sep)
+        and head.startswith(f"Postconditions failed for step '{DUPLICATE_STOP}' ")
+        and repr(DUPLICATE_CLEAR) in failed
+        and repr(DUPLICATE_DIALOG) not in failed
+    )
+
+
+def mismatches(row: dict[str, Any], halt_reason: str | None) -> list[str]:
     """How one run differs from what the landing demo shows; empty if it doesn't."""
 
     out = []
@@ -54,8 +74,8 @@ def mismatches(row: dict[str, Any], halted_at: str | None) -> list[str]:
     verified = row["expected"] == "VERIFIED"
     if row["new_charts"] != (1 if verified else 0) or row["changed_charts"]:
         out.append(f"{row['new_charts']} new, {row['changed_charts']} changed charts")
-    if not verified and halted_at != DUPLICATE_STOP:
-        out.append(f"stopped at {halted_at}, not {DUPLICATE_STOP}")
+    if not verified and not duplicate_stop(halt_reason):
+        out.append(f"not the duplicate stop: {halt_reason!r}")
     return out
 
 
@@ -128,24 +148,21 @@ def run_certified(
         os.environ["OPENEMR_HIDPI_SCALE"] = str(hidpi_scale)
     marks: dict[str, float] = {"start": time.time()}
     setup = type("Setup", (), {"observer": None})()
-    report, _ = _run(
-        workflow=workflow,
-        bundle_dir=env["bundle"],
-        config=env["config"],
-        hooks=env["hooks"],
-        ctx=ctx,
-        setup=setup,  # type: ignore[arg-type]
-        authorize=authorize,
-        fault_driver=None,
-        marks=marks,
-        lookup=env["lookup"],
-    )
-    if hidpi_scale:
-        from benchmark.openemr_local.hidpi_frames import pair
-
+    try:
+        report, _ = _run(
+            workflow=workflow,
+            bundle_dir=env["bundle"],
+            config=env["config"],
+            hooks=env["hooks"],
+            ctx=ctx,
+            setup=setup,  # type: ignore[arg-type]
+            authorize=authorize,
+            fault_driver=None,
+            marks=marks,
+            lookup=env["lookup"],
+        )
+    finally:
         os.environ.pop("OPENEMR_HIDPI_FRAMES_DIR", None)
-        pair(item / "engine", copies, item / "hidpi", scale=hidpi_scale)
-        shutil.rmtree(copies)
     time.sleep(1.0)
     after = sql_patients(fx)
     before_ids = {r["id"] for r in before}
@@ -157,6 +174,17 @@ def run_certified(
         "new_chart_fields": new_rows[0] if len(new_rows) == 1 else None,
     }
     (item / "sql-readback.json").write_text(json.dumps(sql, indent=2) + "\n")
+    if hidpi_scale:
+        # After the read-back, so a missing copy never hides a write.
+        from benchmark.openemr_local.hidpi_frames import pair
+
+        summary = pair(
+            item / "engine", copies, item / "hidpi", hidpi_scale, strict=False
+        )
+        shutil.rmtree(copies)
+        sql["hidpi_problems"] = [
+            f"no 2x copy of {m['frame']}: {m['reason']}" for m in summary["missing"]
+        ]
     steps = [
         {
             "step_id": r.step_id,
@@ -282,9 +310,10 @@ def main() -> int:
             "seal_key_id": seal.key_id,
             "report_sha256": seal.subject_sha256,
         }
-        halted_at = next((r.step_id for r in report.results if not r.ok), None)
-        row["halted_at"] = halted_at
-        row["mismatches"] = mismatches(row, halted_at)
+        halt = getattr(report, "halt", None)
+        halt_reason = getattr(halt, "reason", None) if halt is not None else None
+        row["halt_reason"] = halt_reason
+        row["mismatches"] = mismatches(row, halt_reason) + sql.get("hidpi_problems", [])
         rows.append(row)
         print(json.dumps(row), flush=True)
     (out / "seal-key.json").write_text(

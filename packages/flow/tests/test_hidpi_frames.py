@@ -85,3 +85,41 @@ def test_pair_writes_matching_copies_and_refuses_others(page, tmp_path):
     assert [m["frame"] for m in summary["missing"]] == ["step_002_after.png"]
     assert summary["missing"][0]["reason"].startswith("differs")
     assert (tmp_path / "out" / "pairs.json").exists()
+
+
+R6_STOP = (
+    "Postconditions failed for step 'step_039' (click 'Create New Patient'): "
+    "expected screen state not reached (semantic drift) — failed: text_present "
+    "'No matches were found.' — run aborted"
+)
+
+
+def _row(expected, outcome, new=0, changed=0):
+    return {
+        "expected": expected,
+        "transaction_outcome": outcome,
+        "new_charts": new,
+        "changed_charts": changed,
+    }
+
+
+def test_runner_accepts_only_the_landing_demo_outcomes():
+    from benchmark.openemr_local.certified_referrals import mismatches
+
+    assert mismatches(_row("VERIFIED", "VERIFIED", new=1), None) == []
+    assert mismatches(_row("VERIFIED", "HALTED_BEFORE_EFFECT"), None)
+    assert mismatches(_row("VERIFIED", "VERIFIED", new=2), None)
+    stop = _row("HALTED_BEFORE_EFFECT", "HALTED_BEFORE_EFFECT")
+    assert mismatches(stop, R6_STOP) == []
+    # A halt at the same step without the dialog is not the duplicate stop.
+    no_dialog = R6_STOP.replace(
+        "'No matches were found.'",
+        "'Confirm Create New Patient', text_present 'No matches were found.'",
+    )
+    assert mismatches(stop, no_dialog)
+    # Nor is a halt elsewhere, or one for another reason at that step.
+    assert mismatches(stop, R6_STOP.replace("step_039", "step_009"))
+    assert mismatches(
+        stop, "Identity check failed for step 'step_039' (click 'Create New Patient')"
+    )
+    assert mismatches(stop, None)
