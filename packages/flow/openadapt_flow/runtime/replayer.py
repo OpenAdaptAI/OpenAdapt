@@ -427,6 +427,11 @@ PC_STRUCTURAL_TEMPLATE_THRESHOLD = 0.8
 # viewport width: a centered crop can hide the value's beginning or suffix.
 # With no focusing click (e.g. Tab between fields), use the whole frame.
 FIELD_REGION_HEIGHT = 240
+# Typed-input verification: when the field changed but the value is not yet
+# readable, re-read it on fresh frames this many times, this far apart (a
+# remote display echoes typed text after the focus change).
+TYPED_ECHO_REREADS = 2
+TYPED_ECHO_WAIT_S = 1.0
 MASKED_FIELD_REGION_WIDTH = 640
 FIELD_REGION_PAD = 16
 
@@ -18098,6 +18103,24 @@ class Replayer:
             baseline_field_value=baseline_field_value,
             allow_masked=allow_masked,
         )
+        # A remote display can paint the focus change at once and the typed
+        # characters a moment later, after the settle saw two equal frames
+        # (measured on a real AVC444 session: 14 of 20 runs). Re-read on
+        # fresh frames a bounded number of times. Nothing is retyped, and
+        # only the exact value read in the field counts, so the verdict can
+        # only become what an earlier read would have proven.
+        rereads = 0
+        while changed and not landed and rereads < TYPED_ECHO_REREADS:
+            rereads += 1
+            time.sleep(TYPED_ECHO_WAIT_S)
+            landed, changed = self._typed_input_landed(
+                text,
+                field_point,
+                baseline_png,
+                field_region=field_region,
+                baseline_field_value=baseline_field_value,
+                allow_masked=allow_masked,
+            )
         if landed:
             result.input_verified = True
             return None

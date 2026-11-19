@@ -799,6 +799,72 @@ def _model_grounded(
     )
 
 
+def _identity_row_point(
+    anchor: Anchor, screen_png: bytes, vision: Any
+) -> Optional[tuple[Point, Region]]:
+    """Find the target's row by its recorded identity band, on pixels.
+
+    A list that gained, lost or reordered rows moves the recorded record to
+    another row, and a different record can take its place (a search that
+    now also finds a patient with the same first name, sorted above). The
+    target's position then proves nothing, and its own label may repeat in
+    every row. What still names it is the identity band recorded beside it
+    (``identifier_region``, e.g. the last name and date of birth).
+
+    Every OCR line that overlaps the band's columns is grouped into rows by
+    vertical position, and each row's text is checked against the recorded
+    identity template. The click moves vertically with the band only when
+    exactly one row verifies; any other count is no proposal. The point is
+    only a proposal: the step's unchanged identity check reads the band at
+    the new point and admits or refuses the click, and the rung is ranked
+    with geometry, below OCR, so an irreversible step still refuses it.
+    """
+
+    template = anchor.identity_template
+    band = anchor.identifier_region
+    if template is None or band is None:
+        return None
+    from openadapt_flow.runtime.identity_template import verify_template_identity
+
+    bx, by, bw, bh = band
+    try:
+        lines = list(vision.ocr(screen_png) or [])
+    except Exception:  # noqa: BLE001 - unreadable frame: no proposal
+        return None
+    columns = []
+    for line in lines:
+        lx, ly, lw, lh = (int(v) for v in line.region)
+        if lx < bx + bw and bx < lx + lw and str(line.text).strip():
+            columns.append((ly + lh / 2.0, lx, str(line.text)))
+    columns.sort()
+    rows: list[list[tuple[float, int, str]]] = []
+    for entry in columns:
+        if rows and abs(entry[0] - rows[-1][0][0]) <= max(4.0, bh / 2.0):
+            rows[-1].append(entry)
+        else:
+            rows.append([entry])
+    verified: list[float] = []
+    for row in rows:
+        text = " ".join(t for _cy, _x, t in sorted(row, key=lambda e: e[1]))
+        try:
+            check = verify_template_identity(template, text)
+        except Exception:  # noqa: BLE001 - an unverifiable row is not a match
+            continue
+        if check.status == "verified":
+            verified.append(sum(e[0] for e in row) / len(row))
+    if len(verified) != 1:
+        return None
+    dy = int(round(verified[0] - (by + bh / 2.0)))
+    point = (int(anchor.click_point[0]), int(anchor.click_point[1]) + dy)
+    region = (
+        anchor.region[0],
+        anchor.region[1] + dy,
+        anchor.region[2],
+        anchor.region[3],
+    )
+    return point, region
+
+
 def resolve(
     anchor: Anchor,
     screen_png: bytes,
@@ -1150,6 +1216,28 @@ def resolve(
                 grounder_model="local",
             )
             return resolution, region
+
+    # Rung 3c: the one row whose recorded identity band verifies, on pixel
+    # surfaces only (see _identity_row_point). It runs before the landmark
+    # geometry estimate, which can only repeat the recorded position: when
+    # rows moved, that position may now hold a different record. It only
+    # proposes; the identity check at the new point decides. Named
+    # ``geometry``: a positional estimate below OCR, so an irreversible step
+    # still refuses it.
+    if structural is None:
+        found = _identity_row_point(anchor, screen_png, vision)
+        if found is not None:
+            point, region = found
+            resolution = Resolution(
+                rung="geometry",
+                point=point,
+                confidence=_GEOMETRY_CONFIDENCE_SCALE * 0.9,
+                elapsed_ms=elapsed_ms(),
+                resolution_evidence_regions=(full_frame_region,),
+            )
+            return resolution, _clamp_region_of_size(
+                point, (region[2], region[3]), viewport
+            )
 
     # Rung 4: geometry from landmarks.
     evidence = identity_landmark_evidence()
