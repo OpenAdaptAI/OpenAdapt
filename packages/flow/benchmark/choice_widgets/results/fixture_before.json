@@ -1,5 +1,5 @@
 {
-  "label": "before (origin/main b4d1c1b8e)",
+  "label": "before 36b9a40f9",
   "results": [
     {
       "cases": {
@@ -38,52 +38,52 @@
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 12.4
+          "seconds": 10.4
         },
         "disabled": {
           "detail": "step_003: Structural safety refusal for step 'step_003' (click recorded visual target): guarded DOM target was unactionable during its pre-dispatch trial \u2014 no action was admitted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 5.0
+          "seconds": 4.8
         },
         "duplicate": {
           "detail": "step_003: Step 'step_003' (click recorded visual target) matched the recorded identity, but 2 shown rows carry the same identity and no recorded record id tells them apart (rung 'structural') \u2014 acting could open another record; refusing to act",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 4.1
+          "seconds": 3.8
         },
         "heldout": {
           "score": "unbindable"
         },
         "missing": {
-          "detail": "step_002: Postconditions failed for step 'step_002' (click recorded visual target): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(188, 109, 366, 310) \u2014 run aborted",
+          "detail": "step_002: Postconditions failed for step 'step_002' (click recorded visual target): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(188, 123, 366, 310) \u2014 run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 9.1
+          "seconds": 9.4
         },
         "reorder_late": {
           "detail": "step_003: Identity check failed for step 'step_003' (click recorded visual target): a target was found positionally (rung 'structural', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<structured identity template>', observed 'Nephrology' (coverage 0.00) \u2014 refusing to act; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 4.1
+          "seconds": 3.8
         },
         "surprise_confirm": {
           "detail": "step_004: Postconditions failed for step 'step_004' (click 'Save'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(1042, 0, 238, 81); text_present 'Saved registration R0001' \u2014 run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 10.0
+          "seconds": 22.8
         },
         "surprise_modal": {
           "detail": "step_004: Postconditions failed for step 'step_004' (click 'Save'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(1042, 0, 238, 81); text_present 'Saved registration R0001' \u2014 run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 10.9
+          "seconds": 10.8
         }
       },
       "kind": "aria_listbox",
@@ -121,31 +121,31 @@
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 14.3
+          "seconds": 13.8
         },
         "disabled": {
           "detail": "step_003: Target for step 'step_003' (click 'Orthopaedics') is not actionable: its one structural candidate is covered or off-viewport (DOM candidate is covered or outside its recorded frame chain)",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 14.4
+          "seconds": 13.6
         },
         "duplicate": {
           "detail": "step_003: Target for step 'step_003' (click 'Orthopaedics') is not actionable: its one structural candidate is covered or off-viewport (DOM candidate is covered or outside its recorded frame chain)",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 14.2
+          "seconds": 13.7
         },
         "heldout": {
           "score": "unbindable"
         },
         "missing": {
-          "detail": "step_002: Postconditions failed for step 'step_002' (click recorded visual target): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(188, 109, 366, 302) \u2014 run aborted",
+          "detail": "step_002: Postconditions failed for step 'step_002' (click recorded visual target): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(188, 123, 366, 302) \u2014 run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 9.3
+          "seconds": 9.0
         },
         "reorder_late": {
           "detail": "step_003: Target for step 'step_003' (click 'Orthopaedics') is not actionable: its one structural candidate is covered or off-viewport (DOM candidate is covered or outside its recorded frame chain)",
@@ -159,14 +159,14 @@
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 4.7
+          "seconds": 3.3
         },
         "surprise_modal": {
-          "detail": "step_003: Target for step 'step_003' (click 'Orthopaedics') is not actionable: its one structural candidate is covered or off-viewport (DOM candidate is covered or outside its recorded frame chain)",
+          "detail": "step_002: Identity check failed for step 'step_002' (click recorded visual target): a target was found positionally (rung 'template', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Select.. Department' (coverage 0.53) \u2014 refusing to act; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 14.4
+          "seconds": 3.3
         }
       },
       "kind": "div_dropdown",
@@ -200,52 +200,52 @@
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 4.4
+          "seconds": 3.8
         },
         "disabled": {
           "detail": "step_003: Typed input could not be verified for step 'step_003' (type 'Card'): the field region changed but the typed value is not readable there (something else rendered over or instead of the input) \u2014 retyping is unsafe in this state; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 4.0
+          "seconds": 3.8
         },
         "duplicate": {
           "detail": "step_003: Typed input could not be verified for step 'step_003' (type 'Card'): the field region changed but the typed value is not readable there (something else rendered over or instead of the input) \u2014 retyping is unsafe in this state; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 3.9
+          "seconds": 3.8
         },
         "heldout": {
           "score": "unbindable"
         },
         "missing": {
-          "detail": "step_002: Postconditions failed for step 'step_002' (click recorded visual target): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(188, 97, 364, 305) \u2014 run aborted",
+          "detail": "step_002: Postconditions failed for step 'step_002' (click recorded visual target): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(188, 103, 364, 314) \u2014 run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 8.9
+          "seconds": 8.6
         },
         "reorder_late": {
           "detail": "step_003: Typed input could not be verified for step 'step_003' (type 'Card'): the field region changed but the typed value is not readable there (something else rendered over or instead of the input) \u2014 retyping is unsafe in this state; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 4.0
+          "seconds": 3.9
         },
         "surprise_confirm": {
           "detail": "step_003: Typed input could not be verified for step 'step_003' (type 'Card'): the field region changed but the typed value is not readable there (something else rendered over or instead of the input) \u2014 retyping is unsafe in this state; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 3.9
+          "seconds": 3.8
         },
         "surprise_modal": {
           "detail": "step_003: Typed input could not be verified for step 'step_003' (type 'Card'): the field region changed but the typed value is not readable there (something else rendered over or instead of the input) \u2014 retyping is unsafe in this state; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 4.1
+          "seconds": 3.7
         }
       },
       "kind": "select2",
@@ -283,52 +283,52 @@
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 10.0
+          "seconds": 9.6
         },
         "disabled": {
-          "detail": "step_004: Postconditions failed for step 'step_004' (click recorded visual target): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(187, 97, 366, 133) \u2014 run aborted",
+          "detail": "step_004: Postconditions failed for step 'step_004' (click recorded visual target): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(187, 103, 366, 144) \u2014 run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 15.7
+          "seconds": 9.2
         },
         "duplicate": {
           "detail": "step_004: Step 'step_004' (click recorded visual target) matched the recorded identity, but 2 shown rows carry the same identity and no recorded record id tells them apart (rung 'geometry') \u2014 acting could open another record; refusing to act",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 10.2
+          "seconds": 3.8
         },
         "heldout": {
           "score": "unbindable"
         },
         "missing": {
-          "detail": "step_002: Postconditions failed for step 'step_002' (click recorded visual target): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(188, 97, 364, 333) \u2014 run aborted",
+          "detail": "step_002: Postconditions failed for step 'step_002' (click recorded visual target): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(188, 114, 364, 333) \u2014 run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 12.2
+          "seconds": 8.7
         },
         "reorder_late": {
-          "detail": "step_002: Identity check failed for step 'step_002' (click recorded visual target): a target was found positionally (rung 'template', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Select.. Department' (coverage 0.53) \u2014 refusing to act; run aborted",
+          "detail": "step_002: Postconditions failed for step 'step_002' (click recorded visual target): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(188, 114, 364, 333) \u2014 run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 3.9
+          "seconds": 8.8
         },
         "surprise_confirm": {
-          "detail": "step_002: Identity check failed for step 'step_002' (click recorded visual target): a target was found positionally (rung 'template', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Select.. Department' (coverage 0.53) \u2014 refusing to act; run aborted",
+          "detail": "step_005: Postconditions failed for step 'step_005' (click 'Save'): expected screen state not reached (semantic drift) \u2014 failed: text_present 'Saved registration R0004' \u2014 run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 4.0
+          "seconds": 9.2
         },
         "surprise_modal": {
-          "detail": "step_002: Identity check failed for step 'step_002' (click recorded visual target): a target was found positionally (rung 'template', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Select.. Department' (coverage 0.53) \u2014 refusing to act; run aborted",
+          "detail": "step_005: Postconditions failed for step 'step_005' (click 'Save'): expected screen state not reached (semantic drift) \u2014 failed: text_present 'Saved registration R0004' \u2014 run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 4.1
+          "seconds": 9.1
         }
       },
       "kind": "chosen",
@@ -400,21 +400,21 @@
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 12.2
+          "seconds": 9.7
         },
         "disabled": {
           "detail": "step_004: Structural safety refusal for step 'step_004' (click recorded visual target): guarded DOM target was unactionable during its pre-dispatch trial \u2014 no action was admitted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 6.8
+          "seconds": 4.7
         },
         "duplicate": {
           "detail": "step_004: Step 'step_004' (click recorded visual target) matched the recorded identity, but 2 shown rows carry the same identity and no recorded record id tells them apart (rung 'structural') \u2014 acting could open another record; refusing to act",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 8.0
+          "seconds": 3.7
         },
         "heldout": {
           "score": "unbindable"
@@ -424,28 +424,28 @@
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 11.1
+          "seconds": 8.5
         },
         "reorder_late": {
           "detail": "step_005: Postconditions failed for step 'step_005' (click 'Save'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(1040, 0, 240, 81); text_present 'Savedregistration Ro005' \u2014 run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 11.6
+          "seconds": 10.5
         },
         "surprise_confirm": {
           "detail": "step_005: Postconditions failed for step 'step_005' (click 'Save'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(1040, 0, 240, 81); text_present 'Savedregistration Ro005' \u2014 run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 10.4
+          "seconds": 9.8
         },
         "surprise_modal": {
           "detail": "step_005: Postconditions failed for step 'step_005' (click 'Save'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(1040, 0, 240, 81); text_present 'Savedregistration Ro005' \u2014 run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 11.1
+          "seconds": 9.7
         }
       },
       "kind": "async_combobox",
@@ -539,6 +539,36 @@
       },
       "kind": "datepicker",
       "pipeline": "record_refused: BrowserAttachError: more than one logical browser action arrived before Flow could retain an exact intermediate frame; recording was refused"
+    },
+    {
+      "cases": {
+        "demo": {
+          "score": "record_refused"
+        },
+        "disabled": {
+          "score": "record_refused"
+        },
+        "duplicate": {
+          "score": "record_refused"
+        },
+        "heldout": {
+          "score": "record_refused"
+        },
+        "missing": {
+          "score": "record_refused"
+        },
+        "reorder_late": {
+          "score": "record_refused"
+        },
+        "surprise_confirm": {
+          "score": "record_refused"
+        },
+        "surprise_modal": {
+          "score": "record_refused"
+        }
+      },
+      "kind": "register",
+      "pipeline": "record_refused: BrowserAttachError: a native <select> selection is not a qualified browser recording action; recording stopped so the demonstrated selection cannot be silently absent from the compiled workflow"
     }
   ],
   "summary": {
@@ -613,6 +643,16 @@
         "surprise_confirm": "record_refused",
         "surprise_modal": "record_refused"
       },
+      "register": {
+        "demo": "record_refused",
+        "disabled": "record_refused",
+        "duplicate": "record_refused",
+        "heldout": "record_refused",
+        "missing": "record_refused",
+        "reorder_late": "record_refused",
+        "surprise_confirm": "record_refused",
+        "surprise_modal": "record_refused"
+      },
       "select2": {
         "demo": "safe_halt",
         "disabled": "safe_halt",
@@ -635,7 +675,7 @@
       }
     },
     "totals": {
-      "record_refused": 32,
+      "record_refused": 40,
       "safe_halt": 35,
       "unbindable": 5
     }

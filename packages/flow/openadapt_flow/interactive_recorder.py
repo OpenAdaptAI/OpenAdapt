@@ -1987,7 +1987,7 @@ _INIT_JS = r"""
           'input[name], select[name], textarea[name], input[id], select[id], textarea[id]')) {
         const type = (el.getAttribute('type') || '').toLowerCase();
         if (type === 'password' || secretStates.has(el)) continue;
-        const key = el.name || el.id;
+        const key = el.name ? 'name:' + el.name : (el.id ? 'id:' + el.id : '');
         if (key && !(key in out)) out[key] = String(el.value);
       }
     } catch (e) {}
@@ -2043,8 +2043,12 @@ _INIT_JS = r"""
       }
     }
     const after = namedFieldValues();
-    const changed = Object.keys(after).filter(
-      (name) => (name in pending.fields) && pending.fields[name] !== after[name]);
+    const changedAll = Object.keys(after).filter(
+      (key) => (key in pending.fields) && pending.fields[key] !== after[key]);
+    // A form field by its name wins over an unnamed control keyed by id
+    // (a search box beside the field that also changed).
+    const named = changedAll.filter((key) => key.startsWith('name:'));
+    const changed = (named.length ? named : changedAll).map((key) => key.slice(key.indexOf(':') + 1));
     return {readback: readback, shows: shown,
             field: changed.length === 1 ? changed[0] : null};
   }

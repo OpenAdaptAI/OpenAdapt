@@ -1,0 +1,388 @@
+{
+  "app": "openemr",
+  "cases": {
+    "demo": {
+      "detail": "step_014: Step 'step_014' (click 'Create New Patient') clicks a control in a repeated row that teach time did not record as a row, and other rows show the same control, and a consequential write follows (identity_uncounted) \u2014 acting could open another record; refusing to act",
+      "expected": {
+        "DOB": "1980-04-12",
+        "fname": "Asha",
+        "lname": "Raoe884c8d",
+        "sex": "Male",
+        "status": "married",
+        "title": "Mr."
+      },
+      "rows": [],
+      "run_success": false,
+      "score": "safe_halt",
+      "seconds": 14.6,
+      "step_results": [
+        {
+          "input_verified": true,
+          "intent": "choose <form_title>",
+          "ok": true,
+          "step": "step_001"
+        },
+        {
+          "input_verified": null,
+          "intent": "press Tab",
+          "ok": true,
+          "step": "step_002"
+        },
+        {
+          "input_verified": true,
+          "intent": "type <form_fname>",
+          "ok": true,
+          "step": "step_003"
+        },
+        {
+          "input_verified": null,
+          "intent": "press Tab",
+          "ok": true,
+          "step": "step_004"
+        },
+        {
+          "input_verified": null,
+          "intent": "press Tab",
+          "ok": true,
+          "step": "step_005"
+        },
+        {
+          "input_verified": true,
+          "intent": "type <form_lname>",
+          "ok": true,
+          "step": "step_006"
+        },
+        {
+          "input_verified": null,
+          "intent": "click recorded visual target",
+          "ok": true,
+          "step": "step_007"
+        },
+        {
+          "input_verified": true,
+          "intent": "type '1980-04-12'",
+          "ok": true,
+          "step": "step_008"
+        },
+        {
+          "input_verified": true,
+          "intent": "choose <form_sex>",
+          "ok": true,
+          "step": "step_010"
+        },
+        {
+          "input_verified": true,
+          "intent": "choose <form_status>",
+          "ok": true,
+          "step": "step_012"
+        },
+        {
+          "input_verified": null,
+          "intent": "scroll by (0, 600)",
+          "ok": true,
+          "step": "step_013"
+        },
+        {
+          "input_verified": null,
+          "intent": "click 'Create New Patient'",
+          "ok": false,
+          "step": "step_014"
+        }
+      ]
+    },
+    "heldout": {
+      "detail": "step_014: Step 'step_014' (click 'Create New Patient') clicks a control in a repeated row that teach time did not record as a row, and other rows show the same control, and a consequential write follows (identity_uncounted) \u2014 acting could open another record; refusing to act",
+      "expected": {
+        "DOB": "1980-04-12",
+        "fname": "Asha",
+        "lname": "Raoe884c8h",
+        "sex": "Female",
+        "status": "single",
+        "title": "Mrs."
+      },
+      "rows": [],
+      "run_success": false,
+      "score": "safe_halt",
+      "seconds": 12.4,
+      "step_results": [
+        {
+          "input_verified": true,
+          "intent": "choose <form_title>",
+          "ok": true,
+          "step": "step_001"
+        },
+        {
+          "input_verified": null,
+          "intent": "press Tab",
+          "ok": true,
+          "step": "step_002"
+        },
+        {
+          "input_verified": true,
+          "intent": "type <form_fname>",
+          "ok": true,
+          "step": "step_003"
+        },
+        {
+          "input_verified": null,
+          "intent": "press Tab",
+          "ok": true,
+          "step": "step_004"
+        },
+        {
+          "input_verified": null,
+          "intent": "press Tab",
+          "ok": true,
+          "step": "step_005"
+        },
+        {
+          "input_verified": true,
+          "intent": "type <form_lname>",
+          "ok": true,
+          "step": "step_006"
+        },
+        {
+          "input_verified": null,
+          "intent": "click recorded visual target",
+          "ok": true,
+          "step": "step_007"
+        },
+        {
+          "input_verified": true,
+          "intent": "type '1980-04-12'",
+          "ok": true,
+          "step": "step_008"
+        },
+        {
+          "input_verified": true,
+          "intent": "choose <form_sex>",
+          "ok": true,
+          "step": "step_010"
+        },
+        {
+          "input_verified": true,
+          "intent": "choose <form_status>",
+          "ok": true,
+          "step": "step_012"
+        },
+        {
+          "input_verified": null,
+          "intent": "scroll by (0, 600)",
+          "ok": true,
+          "step": "step_013"
+        },
+        {
+          "input_verified": null,
+          "intent": "click 'Create New Patient'",
+          "ok": false,
+          "step": "step_014"
+        }
+      ]
+    },
+    "heldout_by_value": {
+      "detail": "step_014: Step 'step_014' (click 'Create New Patient') clicks a control in a repeated row that teach time did not record as a row, and other rows show the same control, and a consequential write follows (identity_uncounted) \u2014 acting could open another record; refusing to act",
+      "expected": {
+        "DOB": "1980-04-12",
+        "fname": "Asha",
+        "lname": "Raoe884c8v",
+        "sex": "Male",
+        "status": "divorced",
+        "title": "Mr."
+      },
+      "rows": [],
+      "run_success": false,
+      "score": "safe_halt",
+      "seconds": 12.1,
+      "step_results": [
+        {
+          "input_verified": true,
+          "intent": "choose <form_title>",
+          "ok": true,
+          "step": "step_001"
+        },
+        {
+          "input_verified": null,
+          "intent": "press Tab",
+          "ok": true,
+          "step": "step_002"
+        },
+        {
+          "input_verified": true,
+          "intent": "type <form_fname>",
+          "ok": true,
+          "step": "step_003"
+        },
+        {
+          "input_verified": null,
+          "intent": "press Tab",
+          "ok": true,
+          "step": "step_004"
+        },
+        {
+          "input_verified": null,
+          "intent": "press Tab",
+          "ok": true,
+          "step": "step_005"
+        },
+        {
+          "input_verified": true,
+          "intent": "type <form_lname>",
+          "ok": true,
+          "step": "step_006"
+        },
+        {
+          "input_verified": null,
+          "intent": "click recorded visual target",
+          "ok": true,
+          "step": "step_007"
+        },
+        {
+          "input_verified": true,
+          "intent": "type '1980-04-12'",
+          "ok": true,
+          "step": "step_008"
+        },
+        {
+          "input_verified": true,
+          "intent": "choose <form_sex>",
+          "ok": true,
+          "step": "step_010"
+        },
+        {
+          "input_verified": true,
+          "intent": "choose <form_status>",
+          "ok": true,
+          "step": "step_012"
+        },
+        {
+          "input_verified": null,
+          "intent": "scroll by (0, 600)",
+          "ok": true,
+          "step": "step_013"
+        },
+        {
+          "input_verified": null,
+          "intent": "click 'Create New Patient'",
+          "ok": false,
+          "step": "step_014"
+        }
+      ]
+    },
+    "missing_option": {
+      "detail": "step_001: Step 'step_001' (choose <form_title>) stopped before continuing: choice_missing; run aborted",
+      "expected": null,
+      "rows": [],
+      "run_success": false,
+      "score": "safe_halt",
+      "seconds": 13.9,
+      "step_results": [
+        {
+          "input_verified": null,
+          "intent": "choose <form_title>",
+          "ok": false,
+          "step": "step_001"
+        }
+      ]
+    }
+  },
+  "demonstration_saved": [
+    {
+      "DOB": "1980-04-12",
+      "fname": "Ravi",
+      "lname": "Kumare884c8",
+      "sex": "Male",
+      "status": "married",
+      "title": "Mr."
+    }
+  ],
+  "label": "after 194666af960f0c577115d07a91a10f026a7c8c09",
+  "params": [
+    "form_fname",
+    "form_lname",
+    "form_sex",
+    "form_status",
+    "form_title"
+  ],
+  "pipeline": "ok",
+  "run": "e884c8",
+  "steps": [
+    {
+      "action": "select_option",
+      "choice": "native_select",
+      "dialog": null,
+      "intent": "choose <form_title>"
+    },
+    {
+      "action": "key",
+      "choice": null,
+      "dialog": null,
+      "intent": "press Tab"
+    },
+    {
+      "action": "type",
+      "choice": null,
+      "dialog": null,
+      "intent": "type <form_fname>"
+    },
+    {
+      "action": "key",
+      "choice": null,
+      "dialog": null,
+      "intent": "press Tab"
+    },
+    {
+      "action": "key",
+      "choice": null,
+      "dialog": null,
+      "intent": "press Tab"
+    },
+    {
+      "action": "type",
+      "choice": null,
+      "dialog": null,
+      "intent": "type <form_lname>"
+    },
+    {
+      "action": "click",
+      "choice": null,
+      "dialog": null,
+      "intent": "click recorded visual target"
+    },
+    {
+      "action": "type",
+      "choice": null,
+      "dialog": null,
+      "intent": "type '1980-04-12'"
+    },
+    {
+      "action": "select_option",
+      "choice": "native_select",
+      "dialog": null,
+      "intent": "choose <form_sex>"
+    },
+    {
+      "action": "select_option",
+      "choice": "native_select",
+      "dialog": null,
+      "intent": "choose <form_status>"
+    },
+    {
+      "action": "scroll",
+      "choice": null,
+      "dialog": null,
+      "intent": "scroll by (0, 600)"
+    },
+    {
+      "action": "click",
+      "choice": null,
+      "dialog": null,
+      "intent": "click 'Create New Patient'"
+    },
+    {
+      "action": "click",
+      "choice": null,
+      "dialog": "accept",
+      "intent": "click recorded visual target"
+    }
+  ]
+}
