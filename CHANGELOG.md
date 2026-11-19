@@ -40,8 +40,8 @@
 ### Requirements
 
 - Require `openadapt-flow>=3.2.0,<4.0.0` in the base install and every Flow
-  extra. `openadapt doctor` and `openadapt deploy` report older Flow releases
-  as unsupported. Flow 3.2 supplies the public Seal that `openadapt seal
+  extra. `openadapt deploy` reports older Flow releases as unsupported. Flow
+  3.2 supplies the public Seal that `openadapt seal
   publish` uploads, and derives the at-rest key once per checkpoint store, so
   the quickstart keeps its checkpoints encrypted at about 23 s. Flow 3 moved
   its vision stack to the `vision` extra; the launcher's `browser` and other
