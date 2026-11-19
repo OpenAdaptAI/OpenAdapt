@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import os
 import subprocess
 import sys
 import time
@@ -24,6 +25,7 @@ from pathlib import Path
 from PIL import Image
 
 from openadapt_flow.backends.remote_display import RemoteDisplayBackend
+from openadapt_flow.runtime.replayer import secret_env_var
 
 APPS = {
     "emr": {"target": "10.30.1.7"},
@@ -345,7 +347,11 @@ def run_campaign(job: dict, out: Path, app: str, spec: dict) -> dict:
     save_frame(backend_for(app).screenshot(), out, f"{app}_record_start")
     t0 = time.monotonic()
     spec["record"](work / "rec")
-    workflow = compile_recording(work / "rec", work / "bundle", name=spec["name"])
+    workflow = compile_recording(
+        work / "rec", work / "bundle", name=spec["name"], **spec.get("compile", {})
+    )
+    for name, value in spec.get("secrets", {}).items():
+        os.environ[secret_env_var(name)] = value
     record_s = time.monotonic() - t0
     zip_dir(work / "bundle", out / f"{app}_bundle.zip")
 
@@ -516,6 +522,11 @@ EMR_STEPS = {
     "confirm": (600, 261),
 }
 EMR_MUST_SAVE = {"healthy", "bpp16", "desktop1440"}
+# The password field's TYPE step (the fourth event): a secret parameter.
+EMR_COMPILE = {
+    "param_overrides": {"step_003": "password"},
+    "secret_param_steps": ["step_003"],
+}
 
 
 def emr_record(rec_dir: Path, order: str = "last_first") -> None:
@@ -534,7 +545,11 @@ def emr_record(rec_dir: Path, order: str = "last_first") -> None:
     rec.click(*st["username"])
     rec.type_text("admin", param="username")
     rec.click(*st["password"])
-    rec.type_text("pass", param="password")
+    # Typed with no name here; compiled as the secret "password" (see
+    # EMR_COMPILE). A plain parameter in a masked field can never be read
+    # back on pixels, so it stops every run (#1831): a deployment declares
+    # it secret, and the value comes from the environment at replay.
+    rec.type_text("pass")
     rec.click(*st["login"])
     # The main screen loads for several seconds after login; a click before it
     # paints would record a blank crop as the menu's template.
@@ -611,9 +626,11 @@ def emr_campaign(job: dict, out: Path) -> dict:
                 "reset": reset,
                 "params": lambda token: {
                     "username": "admin",
-                    "password": "pass",
                     "first_name": token,
                 },
+                "compile": EMR_COMPILE,
+                # The lab fixture's own account (benchmark/openemr_live).
+                "secrets": {"password": "pass"},
                 "judge": emr_judge,
                 "must_save": EMR_MUST_SAVE,
                 "verify": {
