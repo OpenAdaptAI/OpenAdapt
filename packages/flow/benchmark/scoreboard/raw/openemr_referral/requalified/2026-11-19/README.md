@@ -67,3 +67,16 @@ account on the first patient save after a reset, and this fixture carries
 three clerk accounts the pinned image's four built-ins don't have. The UI
 arms' contract now adds two rows per account beyond the four, on each table;
 with it, the recording passed its REST oracle and exact delta audit.
+
+## The quickstart on this bundle
+
+`tests/test_quickstart_openemr.py::test_real_openemr_quickstart` (passed)
+(`OPENADAPT_REAL_QUICKSTART_OPENEMR=1`, headless, its own OpenEMR 8.0.0.3
+stack), 19 November 2026, from this branch: runs 1 to 5 `VERIFIED` /
+`VERIFIED` on bundle `10e45945…` with 0 model calls, and the possible
+duplicate (Rosa Delgado born 1958-03-22 against the existing chart born
+1958-03-27) `HALTED` / `HALTED_BEFORE_EFFECT` at step_039 with 0 new charts
+in the database. The first attempt stopped before the fixture started: a new
+machine had no quickstart state folder (fixed in the same PR). The test's
+summary-line assertion still expected wording the quickstart no longer
+prints; it now checks "5 of 5 saved and checked".
