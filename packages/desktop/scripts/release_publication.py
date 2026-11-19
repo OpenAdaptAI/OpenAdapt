@@ -39,7 +39,9 @@ SIGNING_LINES = {
     ),
     ("macos", "developer-id-notarized"): "- **macOS**: Developer ID signed and notarized.",
     ("windows", "unsigned"): (
-        "- **Windows**: unsigned. SmartScreen warns before install; choose More info > Run anyway."
+        "- **Windows**: unsigned. Microsoft Edge holds the download: choose Keep, then the "
+        "arrow beside Delete, then Keep anyway. If a SmartScreen box appears when you open "
+        "the file, choose More info, then Run anyway."
     ),
     ("windows", "authenticode"): (
         "- **Windows**: signed through SignPath. The MSI and the program it installs are "

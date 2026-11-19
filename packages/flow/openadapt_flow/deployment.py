@@ -397,6 +397,12 @@ class EffectsConfig(BaseModel):
     #: and reads as unreadable when a page fails or the chain is too long.
     #: Unset: no completeness guarantee is inferred from one response.
     records_next_path: Optional[str] = None
+    #: ``rest`` only, with ``records_next_path``: the endpoint's reviewed
+    #: contract leaves the next link out of its (still present) parent
+    #: object on the last page, instead of setting it to null. Set, such a
+    #: page ends the read as complete; a body without the parent object does
+    #: not. Unset: an absent link never establishes completeness.
+    records_next_absent_is_last: Optional[StrictBool] = None
     #: ``rest`` only: dotted path in the first page's body to the number of
     #: records the read should return (``meta.total``). Set, a read whose
     #: count differs reads as unreadable. Unset: no total-count check is made.
@@ -659,6 +665,7 @@ class EffectsConfig(BaseModel):
             "desktop_readback",
             "deferred_report",
             "records_next_path",
+            "records_next_absent_is_last",
             "records_total_path",
             "records_complete",
             "records_list_keys",
@@ -693,6 +700,13 @@ class EffectsConfig(BaseModel):
             )
         if self.records_complete is not None and kind != "rest":
             raise ValueError("effects.records_complete applies only to kind rest")
+        if self.records_next_absent_is_last and (
+            kind != "rest" or not self.records_next_path
+        ):
+            raise ValueError(
+                "effects.records_next_absent_is_last needs kind rest and "
+                "records_next_path"
+            )
         if self.records_list_keys is not None and kind != "rest":
             raise ValueError("effects.records_list_keys applies only to kind rest")
         if self.records_other_lists and (
@@ -2272,6 +2286,7 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
         "desktop_readback",
         "deferred_report",
         "records_next_path",
+        "records_next_absent_is_last",
         "records_total_path",
         "records_complete",
         "records_list_keys",
@@ -2459,6 +2474,7 @@ def _build_effect_verifier_unredacted(
             next_path=cfg.records_next_path,
             total_path=cfg.records_total_path,
             records_complete=cfg.records_complete,
+            next_absent_is_last=bool(cfg.records_next_absent_is_last),
             snapshot_path=cfg.records_snapshot_path,
             consistency=cfg.records_consistency,
             quiescence=quiescence,

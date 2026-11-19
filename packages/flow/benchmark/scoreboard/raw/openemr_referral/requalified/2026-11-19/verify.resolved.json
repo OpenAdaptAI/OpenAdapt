@@ -1,0 +1,180 @@
+{
+  "app": {
+    "entry_url": null,
+    "headless": true,
+    "name": "OpenEMR (local fixture, made-up patients)",
+    "reset": {
+      "command": null,
+      "http": null,
+      "python": "benchmark.openemr_local.qualify_hooks:reset",
+      "timeout_s": 600.0
+    },
+    "session": "benchmark.openemr_local.qualify_hooks:open_session",
+    "storage_state": null,
+    "surface": null,
+    "target": "web",
+    "url": "http://127.0.0.1:9921",
+    "version": "openemr@7c96c8eefe46 (benchmark/openemr_local lock)",
+    "viewport": [
+      1280,
+      800
+    ]
+  },
+  "business_rules": [
+    {
+      "description": "An existing chart for the same person with a close birth date; the duplicate check lists it, and the program stops before saving.",
+      "expect": "HALTED_BEFORE_EFFECT",
+      "halt_at": "empty_result_guard",
+      "halt_reason": "No matches were found.",
+      "id": "existing-duplicate",
+      "params": {
+        "DOB": "1958-03-22",
+        "city": "EXAMPLETON",
+        "country_code": "USA",
+        "email": "rosa.delgado@example.invalid",
+        "fname": "Rosa",
+        "lname": "Delgado",
+        "phone_home": "555-0188",
+        "postal_code": "02139",
+        "sex": "Female",
+        "state_label": "Massachusetts",
+        "street": "7 MILL ROAD",
+        "title": "Mrs."
+      },
+      "readback": "no_mutation",
+      "seed": {
+        "command": null,
+        "http": null,
+        "python": "benchmark.openemr_local.qualify_hooks:seed_existing_chart",
+        "timeout_s": 600.0
+      }
+    }
+  ],
+  "campaign": {
+    "cases": [
+      "representative",
+      "fault-ambiguity",
+      "fault-wrong-identity",
+      "fault-stale-identity",
+      "fault-weak-effect",
+      "fault-missing-effect"
+    ],
+    "id": "openemr-local-patient-registration-v2",
+    "policy": "clinical-write",
+    "trials": 3
+  },
+  "effects": null,
+  "environment_id": "openemr-local-fixture-7c96c8eefe46",
+  "inputs": {
+    "file": null,
+    "params": {},
+    "source": "recorded",
+    "unique": []
+  },
+  "minimum_effect_strength": "independent_system_of_record",
+  "minimum_readback": null,
+  "qualification_id": null,
+  "record": {
+    "duplicate_key": "email",
+    "exact_new_set": false,
+    "expected_count": 1,
+    "fields": {
+      "DOB": "DOB",
+      "city": {
+        "literal": null,
+        "param": "city",
+        "stored": "upper"
+      },
+      "country_code": "country_code",
+      "email": "email",
+      "fname": {
+        "literal": null,
+        "param": "fname",
+        "stored": "capitalize_words"
+      },
+      "lname": {
+        "literal": null,
+        "param": "lname",
+        "stored": "capitalize_words"
+      },
+      "phone_home": "phone_home",
+      "postal_code": "postal_code",
+      "sex": "sex",
+      "state": {
+        "literal": "MA",
+        "param": null
+      },
+      "street": {
+        "literal": null,
+        "param": "street",
+        "stored": "upper"
+      },
+      "title": "title"
+    },
+    "identity_field": "id",
+    "match": [
+      "email",
+      "lname"
+    ],
+    "name": "patient",
+    "surface": null,
+    "timeout_s": 5.0
+  },
+  "save_step": "auto",
+  "schema_version": "openadapt.verify/v1",
+  "verifier": {
+    "session": "benchmark.openemr_local.qualify_hooks:oracle_session",
+    "verifier": {
+      "access_token": null,
+      "access_token_env": null,
+      "auth": null,
+      "base_url": "https://127.0.0.1:9920",
+      "candidates": [],
+      "document_field_paths": {},
+      "document_format": "json",
+      "document_text_pattern": null,
+      "evidence_keep_fields": null,
+      "evidence_redact_fields": [],
+      "field_paths": null,
+      "file_content_probe": null,
+      "file_min_size": 1,
+      "file_mtime_window_s": null,
+      "file_pattern": "*",
+      "fresh_session": null,
+      "glob": "*",
+      "graphql_freshness_field": null,
+      "graphql_freshness_window_s": null,
+      "graphql_query": null,
+      "graphql_records_path": "data",
+      "graphql_variables": {},
+      "kind": "rest",
+      "mail_pattern": "*.eml",
+      "option_params": {},
+      "options": {},
+      "path_params": {},
+      "poll_interval_s": 0.2,
+      "readback_min_ratio": 0.9,
+      "readback_region": null,
+      "records_drop_fields": [],
+      "records_key": "data",
+      "records_next_absent_is_last": true,
+      "records_next_path": "links.next",
+      "records_path": "/apis/default/api/patient?_limit=200",
+      "root": null,
+      "search_param_exprs": {},
+      "search_params": {},
+      "secret_env": {},
+      "smart_backend": null,
+      "sql_connect_args": {},
+      "sql_driver": null,
+      "sql_password_env": null,
+      "sql_query": null,
+      "sql_query_params": {},
+      "sqlite_database": null,
+      "surfaces": {},
+      "timeout_s": 5.0,
+      "ui_readback": null,
+      "verify_tls": true
+    }
+  }
+}

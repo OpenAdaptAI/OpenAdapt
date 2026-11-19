@@ -35,8 +35,8 @@ if TYPE_CHECKING:
 
 import numpy as np
 
+from openadapt_flow import clock_text, volatility
 from openadapt_flow import sealed_set as _sealed
-from openadapt_flow import volatility
 from openadapt_flow.compiler.empty_result_guard import (
     MinedGuard,
     carries_value,
@@ -1074,6 +1074,7 @@ def _new_text_postcondition(
         next_hay = _squash(" ".join(l.text for l in next_lines))
 
     candidates: list[tuple[OcrLine, int]] = []
+    clock_templates: dict[int, str] = {}
     for line in after_lines:
         if line.confidence < MIN_OCR_CONFIDENCE:
             continue
@@ -1081,7 +1082,16 @@ def _new_text_postcondition(
         norm = normalize_text(text)
         if len(norm) < MIN_TEXT_PRESENT_LEN or seen_before(text, norm):
             continue
-        if volatility.classify_text(text, reference_date=reference_date):
+        reason = volatility.classify_text(text, reference_date=reference_date)
+        if reason == "near_date":
+            # A date read from the clock (the recording day, month or year,
+            # at the text's own precision) is checked against the run's
+            # clock instead of dropped; any other near date stays volatile.
+            template = clock_text.compile_clock_text(text, reference_date)
+            if template is None or volatility.residual_reason(text) is not None:
+                continue
+            clock_templates[id(line)] = template
+        elif reason:
             continue
         if _contains_excluded(text, exclude_texts):
             continue
@@ -1120,7 +1130,11 @@ def _new_text_postcondition(
         chosen = min(pool, key=lambda c: dist(c[0]))[0]
     else:
         chosen = max(pool, key=lambda c: c[1])[0]
-    return Postcondition(kind=PostconditionKind.TEXT_PRESENT, text=chosen.text.strip())
+    return Postcondition(
+        kind=PostconditionKind.TEXT_PRESENT,
+        text=chosen.text.strip(),
+        text_clock=clock_templates.get(id(chosen)),
+    )
 
 
 def _values_to_params(params: Mapping[str, str]) -> dict[str, list[str]]:
