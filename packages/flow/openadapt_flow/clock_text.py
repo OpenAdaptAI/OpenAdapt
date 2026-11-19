@@ -40,7 +40,7 @@ import re
 import string
 from datetime import date, datetime, timezone
 from itertools import product
-from typing import Iterable, Optional
+from typing import Any, Iterable, Optional
 
 from openadapt_flow import volatility
 
@@ -402,3 +402,21 @@ def substring_safe(template: str) -> bool:
     if not any(c.isalnum() for c in first_literal) and first_field in _OPEN_ENDED:
         return False
     return True
+
+
+def check_postcondition(pc: Any) -> Any:
+    """Validate ``Postcondition.text_clock`` (called by the IR's validator).
+
+    The template must parse with known tokens, and belongs only on a
+    ``text_present`` / ``text_absent`` check that keeps its recorded text.
+    """
+    template = getattr(pc, "text_clock", None)
+    if template is None:
+        return pc
+    template_tokens(template)
+    kind = getattr(pc.kind, "value", pc.kind)
+    if kind not in ("text_present", "text_absent") or not pc.text:
+        raise ClockTemplateError(
+            "text_clock applies to text_present/text_absent with a recorded text"
+        )
+    return pc

@@ -16,36 +16,44 @@ from typing import Any
 
 import pytest
 
-from openadapt_flow.runtime import replayer as replayer_mod
-from openadapt_flow.runtime.replayer import Replayer
+from openadapt_flow import run_gate
+from openadapt_flow.runtime.clock_checks import first_local_consequential
 
 
 @pytest.fixture
 def calls(monkeypatch: pytest.MonkeyPatch) -> list[bool]:
-    seen: list[bool] = []
+    seen: list[Any] = []
 
     def fake(step: Any, workflow: Any, **kwargs: Any) -> bool:
         strict = kwargs.get("require_current_risk_certification", True)
-        seen.append(strict)
+        seen.append((strict, kwargs.get("certifying_policy_sha256")))
         return strict  # write-shaped: consequential unless the review counts
 
-    monkeypatch.setattr(replayer_mod, "is_consequential", fake)
+    monkeypatch.setattr(run_gate, "is_consequential", fake)
     return seen
-
-
-def _replayer(authorization: Any) -> Replayer:
-    replayer = Replayer.__new__(Replayer)
-    replayer.governed_authorization = authorization
-    return replayer
 
 
 def test_a_bound_qualification_case_counts_the_project_decision(calls) -> None:
     auth = SimpleNamespace(
         qualification_case_id="representative",
+        admitted_policy_contract_sha256="p" * 64,
         _qualification_binding_error=lambda _wf: None,
     )
-    assert _replayer(auth)._first_local_consequential(object(), object()) is False
-    assert calls == [False]
+    assert first_local_consequential(auth, object(), object()) is False
+    assert calls == [(False, "p" * 64)]
+
+
+def test_a_certified_run_checks_against_its_admitted_policy(calls) -> None:
+    """Without the digest no certification reproduces (the bundle's own policy
+    copy is never authority), so a certified run's operator decisions never
+    counted and the quickstart stopped at the dialog-opening step."""
+    auth = SimpleNamespace(
+        qualification_case_id=None,
+        admitted_policy_contract_sha256="c" * 64,
+        _qualification_binding_error=lambda _wf: None,
+    )
+    first_local_consequential(auth, object(), object())
+    assert calls == [(True, "c" * 64)]
 
 
 @pytest.mark.parametrize(
@@ -53,14 +61,17 @@ def test_a_bound_qualification_case_counts_the_project_decision(calls) -> None:
     [
         None,  # an ordinary run
         SimpleNamespace(  # a governed run that is not a qualification case
-            qualification_case_id=None, _qualification_binding_error=lambda _wf: None
+            qualification_case_id=None,
+            admitted_policy_contract_sha256=None,
+            _qualification_binding_error=lambda _wf: None,
         ),
         SimpleNamespace(  # a case bound to another project or revision
             qualification_case_id="representative",
+            admitted_policy_contract_sha256=None,
             _qualification_binding_error=lambda _wf: "project revision changed",
         ),
     ],
 )
 def test_every_other_run_needs_a_current_certification(calls, auth) -> None:
-    assert _replayer(auth)._first_local_consequential(object(), object()) is True
-    assert calls == [True]
+    assert first_local_consequential(auth, object(), object()) is True
+    assert calls == [(True, None)]
