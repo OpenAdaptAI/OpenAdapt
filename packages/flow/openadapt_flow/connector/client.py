@@ -260,16 +260,25 @@ class ConnectorClient:
             raise ConnectorClientError(f"ack failed: {resp.status_code}")
         return resp.json() if resp.content else {}
 
-    def rotate(self) -> dict[str, Any]:
-        """Swap this connector's token. The caller persists it, then uses it."""
-        resp = self._post("/api/connector/rotate", egress.guard_empty())
+    def rotate(self, new_token: Optional[str] = None) -> dict[str, Any]:
+        """Swap this connector's token.
+
+        With ``new_token`` (minted locally by :func:`mint_token`) only its
+        SHA-256 crosses the network, and a retry after a lost response is
+        answered ``already_rotated``. Without it the server mints the token
+        (legacy). Returns the response with ``token`` set to the new token.
+        """
+        body: dict[str, Any] = egress.guard_empty()
+        if new_token is not None:
+            body = egress.guard_rotate(hashlib.sha256(new_token.encode()).hexdigest())
+        resp = self._post("/api/connector/rotate", body)
         if resp.status_code != 200:
             raise ConnectorClientError(f"rotate failed: {resp.status_code}")
         data = resp.json()
-        token = data.get("token")
+        token = new_token if new_token is not None else data.get("token")
         if not isinstance(token, str) or not token.startswith("oaconn_"):
             raise ConnectorClientError("rotate returned no connector token")
-        return data
+        return {**data, "token": token}
 
     def run_callback(self, body: dict[str, Any], *, run_token: Optional[str]) -> None:
         """POST the metadata-only run outcome (allow-listed, run-token auth).
@@ -288,6 +297,11 @@ class ConnectorClient:
         )
         if not 200 <= resp.status_code < 300:
             raise ConnectorClientError(f"run-callback failed: {resp.status_code}")
+
+
+def mint_token() -> str:
+    """A new connector token, minted on this machine (never sent in clear)."""
+    return "oaconn_" + _secrets.token_hex(32)
 
 
 def default_audit_path(home: Optional[str] = None) -> Optional[str]:

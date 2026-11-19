@@ -13402,6 +13402,14 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     pr.add_argument(
+        "--default-secrets-ref",
+        help="Local secret reference used when a job names none",
+    )
+    pr.add_argument(
+        "--admission-key-dir",
+        help="Customer-owned Flow admission key directory (public keys only)",
+    )
+    pr.add_argument(
         "--egress-audit-log",
         help="Append every request body sent to this local JSONL file",
     )
@@ -13782,6 +13790,8 @@ def _connector_flags(args: argparse.Namespace) -> dict[str, object]:
         "trusted_admission_keys",
         "egress_audit_log",
         "max_workers",
+        "admission_key_dir",
+        "default_secrets_ref",
     )
     return {
         k: getattr(args, k, None) for k in keys if getattr(args, k, None) is not None
@@ -13844,6 +13854,11 @@ def _cmd_connector(args: argparse.Namespace) -> int:
 
     def persist_token(new_token: str) -> None:
         settings.token = new_token
+        settings.pending_token = None
+        save_enrollment(settings)
+
+    def persist_pending(new_token: str) -> None:
+        settings.pending_token = new_token
         save_enrollment(settings)
 
     can_persist = connector_config_path().is_file()
@@ -13855,18 +13870,29 @@ def _cmd_connector(args: argparse.Namespace) -> int:
                 f"({connector_config_path()}) holding the current token."
             )
             return 2
+        from openadapt_flow.connector.daemon import finish_rotation, maybe_rotate
+
         client = ConnectorClient(settings.control_plane_url, token=settings.token)
         try:
-            data = client.rotate()
-            persist_token(data["token"])
-        except ConnectorClientError as exc:
-            print(f"connector rotate-token failed: {exc}")
-            return 1
+            if settings.pending_token:
+                ok = finish_rotation(
+                    client, settings.pending_token, persist_token, print
+                )
+            else:
+                ok = maybe_rotate(
+                    client,
+                    persist_token,
+                    print,
+                    persist_pending=persist_pending,
+                    force=True,
+                )
         finally:
             client.close()
+        if not ok:
+            print("connector rotate-token failed; the current token still works.")
+            return 1
         print(
-            "token rotated and persisted (0600); the previous token stops "
-            f"working at {data.get('previous_token_valid_until', 'once replaced')}."
+            "token rotated and persisted (0600); the previous token stops within 5 minutes."
         )
         return 0
 
@@ -13884,12 +13910,17 @@ def _cmd_connector(args: argparse.Namespace) -> int:
         egress_audit_log=settings.egress_audit_log,
     )
     try:
+        if settings.pending_token and can_persist:
+            from openadapt_flow.connector.daemon import finish_rotation
+
+            finish_rotation(client, settings.pending_token, persist_token, print)
         return run_loop(
             client,
             settings,
             runner=_subprocess_runner,
             once=bool(getattr(args, "once", False)),
             persist_token=persist_token if can_persist else None,
+            persist_pending=persist_pending if can_persist else None,
         )
     finally:
         client.close()

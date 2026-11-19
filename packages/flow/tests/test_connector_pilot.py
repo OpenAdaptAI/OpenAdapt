@@ -490,26 +490,59 @@ def test_concurrency_runs_up_to_the_server_cap(tmp_path):
     assert not barrier.broken
 
 
-def test_rotation_persists_before_the_new_token_is_used(tmp_path, monkeypatch):
+def test_rotation_mints_locally_and_sends_only_a_hash(tmp_path, monkeypatch):
     monkeypatch.setenv("OPENADAPT_HOME", str(tmp_path))
     plane = RecordingPlane()
     client = _client(plane)
     client.control.rotate_recommended = True
     settings = ConnectorSettings(control_plane_url="https://cloud.test", token=TOKEN)
     save_enrollment(settings)
-    order: list[str] = []
+    events: list[str] = []
+
+    def pending(new_token: str) -> None:
+        settings.pending_token = new_token
+        save_enrollment(settings)
+        events.append("pending")
 
     def persist(new_token: str) -> None:
         assert client.token == TOKEN  # still the old one while persisting
-        settings.token = new_token
+        settings.token, settings.pending_token = new_token, None
         save_enrollment(settings)
-        order.append("persisted")
+        events.append("persisted")
 
-    assert maybe_rotate(client, persist, lambda _m: None)
-    assert client.token == "oaconn_" + "e" * 64 and order == ["persisted"]
-    assert load_settings().token == client.token
+    assert maybe_rotate(client, persist, lambda _m: None, persist_pending=pending)
+    assert events == ["pending", "persisted"]
+    new = client.token
+    assert new != TOKEN and new.startswith("oaconn_")
+    rotate = [r for r in plane.requests if r.url.path == "/api/connector/rotate"][0]
+    assert json.loads(rotate.content) == {
+        "new_token_sha256": hashlib.sha256(new.encode()).hexdigest()
+    }
+    assert new.encode() not in plane.all_bytes()  # the token itself never crossed
+    reloaded = load_settings()
+    assert reloaded.token == new and reloaded.pending_token is None
     assert (tmp_path / "connector.toml").stat().st_mode & 0o777 == 0o600
     assert not maybe_rotate(client, persist, lambda _m: None)  # nothing recommended now
+
+
+def test_lost_rotate_response_is_finished_by_retrying(monkeypatch):
+    from openadapt_flow.connector.daemon import finish_rotation
+
+    monkeypatch.setattr("openadapt_flow.connector.daemon.time.sleep", lambda _s: None)
+    calls = {"n": 0}
+
+    def handler(request):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise httpx.ReadTimeout("lost", request=request)
+        return httpx.Response(200, json={"token": None, "already_rotated": True})
+
+    client = ConnectorClient(
+        "https://cloud.test", token=TOKEN, transport=httpx.MockTransport(handler)
+    )
+    saved: list[str] = []
+    assert finish_rotation(client, "oaconn_" + "9" * 64, saved.append, lambda _m: None)
+    assert saved == ["oaconn_" + "9" * 64] and client.token == saved[0]
 
 
 # --------------------------------------------------------------------------

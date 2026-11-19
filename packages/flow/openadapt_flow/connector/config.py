@@ -66,6 +66,9 @@ class ConnectorSettings:
 
     control_plane_url: str = "https://app.openadapt.ai"
     token: Optional[str] = None
+    #: A locally minted replacement token whose rotation has not been
+    #: confirmed yet (finished on the next start).
+    pending_token: Optional[str] = None
     org_id: Optional[str] = None
     name: str = "openadapt-connector"
     poll_wait_s: int = 25
@@ -83,10 +86,18 @@ class ConnectorSettings:
     #: Local secret store: ``<secrets_dir>/<secrets_ref>.env`` (mode 0600).
     #: Only the ``secrets_ref`` name ever crosses the network.
     secrets_dir: Optional[str] = None
+    #: Local secret reference used when a dispatch names none (the workflow
+    #: then needs no secret name in the cloud at all).
+    default_secrets_ref: Optional[str] = None
     #: Comma-separated Ed25519 public keys (64 hex) of the program admitters
     #: this runner trusts. A dispatch whose admission key is not pinned here is
     #: refused: the control plane cannot widen what this machine will run.
     trusted_admission_keys: str = ""
+    #: Optional customer-owned Flow admission key directory (principal
+    #: registry and public keys, no private keys). When set, a governed child
+    #: verifies program admissions against it, which also covers admitter-key
+    #: and agent-policy admissions; otherwise only the pinned key is staged.
+    admission_key_dir: Optional[str] = None
     #: Local, append-only JSONL log of every request body this connector sent.
     egress_audit_log: Optional[str] = None
     #: Local ceiling on parallel jobs; the server's cap applies under it.
@@ -152,6 +163,7 @@ def load_settings(
         token=_pick(
             flags, "BYOC_CONNECTOR_TOKEN", file_cfg.get("token"), None, "token"
         ),
+        pending_token=file_cfg.get("pending_token"),
         org_id=_pick(flags, "BYOC_ORG_ID", file_cfg.get("org_id"), None, "org_id"),
         name=str(
             _pick(
@@ -206,6 +218,13 @@ def load_settings(
         secrets_dir=_pick(
             flags, "BYOC_SECRETS_DIR", file_cfg.get("secrets_dir"), None, "secrets_dir"
         ),
+        default_secrets_ref=_pick(
+            flags,
+            "BYOC_DEFAULT_SECRETS_REF",
+            file_cfg.get("default_secrets_ref"),
+            None,
+            "default_secrets_ref",
+        ),
         trusted_admission_keys=str(
             _pick(
                 flags,
@@ -215,6 +234,13 @@ def load_settings(
                 "trusted_admission_keys",
             )
             or ""
+        ),
+        admission_key_dir=_pick(
+            flags,
+            "BYOC_ADMISSION_KEY_DIR",
+            file_cfg.get("admission_key_dir"),
+            None,
+            "admission_key_dir",
         ),
         egress_audit_log=_pick(
             flags,
@@ -258,6 +284,7 @@ def save_enrollment(
     fields: list[tuple[str, Any]] = [
         ("control_plane_url", settings.control_plane_url),
         ("token", settings.token),
+        ("pending_token", settings.pending_token),
         ("org_id", settings.org_id),
         ("name", settings.name),
         ("poll_wait_s", settings.poll_wait_s),
@@ -269,7 +296,9 @@ def save_enrollment(
         ("storage_prefix", settings.storage_prefix),
         ("allow_unencrypted", settings.allow_unencrypted),
         ("secrets_dir", settings.secrets_dir),
+        ("default_secrets_ref", settings.default_secrets_ref),
         ("trusted_admission_keys", settings.trusted_admission_keys),
+        ("admission_key_dir", settings.admission_key_dir),
         ("egress_audit_log", settings.egress_audit_log),
         ("max_workers", settings.max_workers),
         ("qualification_signers_file", settings.qualification_signers_file),

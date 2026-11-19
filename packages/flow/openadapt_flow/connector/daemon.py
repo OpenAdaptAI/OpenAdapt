@@ -269,20 +269,49 @@ def maybe_rotate(
     client: ConnectorClient,
     persist_token: Optional[TokenPersister],
     log: Callable[[str], None],
+    *,
+    persist_pending: Optional[TokenPersister] = None,
+    force: bool = False,
+    attempts: int = 3,
 ) -> bool:
-    """Rotate the token when the control plane recommends it and we can persist."""
-    if not client.control.rotate_recommended or persist_token is None:
+    """Rotate the token when the control plane recommends it and we can persist.
+
+    The new token is minted here and only its hash is sent. It is written to
+    ``pending_token`` first, so a crash or a lost response can be finished on
+    the next start by repeating the same request (the server answers
+    ``already_rotated``) instead of stranding the connector.
+    """
+    if (not force and not client.control.rotate_recommended) or persist_token is None:
         return False
-    try:
-        data = client.rotate()
-        persist_token(data["token"])  # durable before first use
-        client.token = data["token"]
-        client.control.rotate_recommended = False
-        log("[connector] token rotated and persisted")
-        return True
-    except Exception as exc:  # noqa: BLE001 - keep the old token; retry later
-        log(f"[connector] token rotation failed: {type(exc).__name__}")
-        return False
+    from openadapt_flow.connector.client import mint_token
+
+    new_token = mint_token()
+    if persist_pending is not None:
+        persist_pending(new_token)
+    return finish_rotation(client, new_token, persist_token, log, attempts=attempts)
+
+
+def finish_rotation(
+    client: ConnectorClient,
+    new_token: str,
+    persist_token: TokenPersister,
+    log: Callable[[str], None],
+    *,
+    attempts: int = 3,
+) -> bool:
+    for attempt in range(attempts):
+        try:
+            client.rotate(new_token)
+            persist_token(new_token)  # durable before first use
+            client.token = new_token
+            client.control.rotate_recommended = False
+            log("[connector] token rotated and persisted")
+            return True
+        except Exception as exc:  # noqa: BLE001 - keep the old token; retry
+            log(f"[connector] token rotation attempt failed: {type(exc).__name__}")
+            if attempt + 1 < attempts:
+                time.sleep(0.5 * (2**attempt))
+    return False
 
 
 def run_loop(
@@ -295,6 +324,7 @@ def run_loop(
     require_run_token: bool = True,
     log: Callable[[str], None] = print,
     persist_token: Optional[TokenPersister] = None,
+    persist_pending: Optional[TokenPersister] = None,
     heartbeat_s: float = HEARTBEAT_S,
 ) -> int:
     """Poll -> execute -> callback -> ack until interrupted.
@@ -376,7 +406,7 @@ def run_loop(
                 backoff = min(MAX_BACKOFF_S, backoff * 2)
                 continue
             apply_control(client.control, active.ids(), log)
-            maybe_rotate(client, persist_token, log)
+            maybe_rotate(client, persist_token, log, persist_pending=persist_pending)
             if not envelope:
                 continue
             job = _job_from_envelope(client, envelope)

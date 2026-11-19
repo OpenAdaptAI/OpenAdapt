@@ -317,6 +317,10 @@ def guard_empty() -> dict[str, Any]:
     return {}
 
 
+def guard_rotate(new_token_sha256: Any) -> dict[str, Any]:
+    return {"new_token_sha256": _hex64(new_token_sha256, "new_token_sha256")}
+
+
 def serialize_checked(
     body: Mapping[str, Any], secret_values: Iterable[str] = ()
 ) -> bytes:

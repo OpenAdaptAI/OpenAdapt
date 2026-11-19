@@ -36,6 +36,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -510,7 +511,9 @@ def _execute_job(
             f"api key env {gm.api_key_env!r} is not set on this connector",
         )
     try:
-        secret_env = LocalSecretStore(settings.secrets_dir).resolve(job.secrets_ref)
+        secret_env = LocalSecretStore(settings.secrets_dir).resolve(
+            job.secrets_ref or settings.default_secrets_ref
+        )
     except SecretStoreError as exc:
         return _refused(job, "secrets_unavailable", str(exc))
     if on_secrets is not None and secret_env:
@@ -582,10 +585,15 @@ def _execute_job(
                     verified_bundle_sha256=observed_sha256,
                 )
             key_dir = tmp_path / "jit-keys"
-            (key_dir / "keys").mkdir(parents=True)
-            (key_dir / "keys" / "ed25519.pub").write_text(
-                admission["public_key_hex"] + "\n", encoding="utf-8"
-            )
+            if settings.admission_key_dir:
+                # The customer's own registry: a private copy per run, so the
+                # child can never change the operator's trust anchors.
+                shutil.copytree(settings.admission_key_dir, key_dir, symlinks=False)
+            else:
+                (key_dir / "keys").mkdir(parents=True)
+                (key_dir / "keys" / "ed25519.pub").write_text(
+                    admission["public_key_hex"] + "\n", encoding="utf-8"
+                )
 
         try:
             params_file = _write_params_file(job.params, run_dir)
