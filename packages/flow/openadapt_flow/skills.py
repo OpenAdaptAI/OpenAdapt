@@ -330,7 +330,7 @@ def pulled_skill_refusal(
             f"provenance removed, and it is not qualified; pull it again and run "
             "openadapt-flow skill qualify"
         )
-    if not current_certification_matches(workflow):
+    if not current_certification_matches(workflow, **_qualified_policy(lock)):
         return (
             f"pulled skill {provenance.id} has no current certification on your "
             f"instance; run {hint}"
@@ -360,6 +360,35 @@ def pulled_skill_refusal(
     return _origin_refusal(provenance.id, workflow, target_url, hint)
 
 
+def _qualified_policy(lock: Optional[Mapping[str, Any]]) -> dict[str, Any]:
+    """The policy ``skill qualify`` certified under, as a trusted source.
+
+    ``current_certification_matches`` never takes the bundle's own copy of
+    the policy as authority, so without this a qualified skill could never
+    pass. The lock names the policy; it is loaded from the shipped built-in
+    policies, or from the absolute path of the user's own policy file, and
+    the certification is then recomputed against it. Anything else gives no
+    policy, and the certification does not match.
+    """
+
+    qualified = (lock or {}).get("qualified")
+    name = qualified.get("policy") if isinstance(qualified, dict) else None
+    if not isinstance(name, str) or not name:
+        return {}
+    from openadapt_flow.policy import load_builtin_policy, load_policy
+
+    try:
+        return {"policy": load_builtin_policy(name)}
+    except (FileNotFoundError, ValueError):
+        pass
+    if Path(name).is_absolute() and Path(name).is_file():
+        try:
+            return {"policy": load_policy(name)}
+        except (FileNotFoundError, ValueError):
+            return {}
+    return {}
+
+
 def _qualified_origin(workflow: Any) -> Optional[str]:
     project = workflow.qualification
     if project is None:
@@ -377,6 +406,26 @@ def _origin_refusal(
             f"not {_origin(target_url)}; run {hint} for this one"
         )
     return None
+
+
+def is_pulled_skill(bundle_dir: Path | str) -> bool:
+    """Whether a bundle came from a registry pull (lock, provenance or ledger)."""
+
+    bundle_dir = Path(bundle_dir)
+    try:
+        if read_lock(bundle_dir) is not None:
+            return True
+    except SkillError:
+        return True
+    from openadapt_flow.ir import Workflow
+
+    try:
+        workflow = Workflow.load(bundle_dir)
+    except Exception:  # noqa: BLE001 - an unloadable bundle is refused elsewhere
+        return False
+    if not isinstance(workflow, Workflow):
+        return False
+    return workflow.registry is not None or _pulled_id(workflow) is not None
 
 
 def refuse_unqualified_skill(
@@ -798,7 +847,10 @@ def qualify_skill(
         workflow = Workflow.load(bundle_dir)
         lock["qualified"] = {
             "at": _now(),
-            "policy": certify,
+            # An absolute path, so a later check loads the same file.
+            "policy": str(Path(certify).resolve())
+            if Path(certify).is_file()
+            else certify,
             "bundle_digest": workflow.manifest.content_digest
             if workflow.manifest
             else None,

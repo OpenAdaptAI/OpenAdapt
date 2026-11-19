@@ -1,0 +1,1 @@
+Download a workflow from the registry, after checking the attested index and every file against it. The pulled copy does not run, here or through `openadapt-agent`, until `skill qualify` passes on your own instance.
