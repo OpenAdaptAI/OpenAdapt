@@ -140,7 +140,20 @@ def _run_git(root: Path, *args: str, check: bool = False) -> subprocess.Complete
 
 
 def _git(root: Path, *args: str) -> str:
-    return _run_git(root, *args, check=True).stdout.decode("utf-8").strip()
+    """Return a git command's output as text, with every line ending as ``\n``.
+
+    A blob committed on Windows can hold CRLF, and writing that text back with
+    write_text there would turn each CRLF into CR CR LF.
+    """
+
+    text = _run_git(root, *args, check=True).stdout.decode("utf-8")
+    return text.replace("\r\n", "\n").replace("\r", "\n").strip()
+
+
+def _blob(root: Path, spec: str) -> bytes:
+    """The exact bytes of ``<commit>:<path>``."""
+
+    return _run_git(root, "show", spec, check=True).stdout
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Windows has no fork")
@@ -943,7 +956,7 @@ def test_exact_reversion_after_combination_discards_merged_feature_intent(
 ) -> None:
     base, origin, host = _two_sided_history(repo, "feat", False)
     _commit(repo, "merge: combine independent host edits")
-    host.write_text(_git(repo, "show", base + ":src/host.txt") + "\n")
+    host.write_bytes(_blob(repo, base + ":src/host.txt"))
     _commit(repo, "chore: restore the exact ambient host")
     head = _commit(repo, f"{subject}: unrelated retained change", touch="src/retained.txt")
     commits = prepare_release.commits_for_net_diff(repo, base, head)
@@ -957,7 +970,7 @@ def test_test_merge_keeps_a_canceled_feature_out_of_surviving_intent(
 ) -> None:
     base, _origin, host = _two_sided_history(repo, "feat", False)
     _commit(repo, "merge: combine independent host edits")
-    host.write_text(_git(repo, "show", base + ":src/host.txt") + "\n")
+    host.write_bytes(_blob(repo, base + ":src/host.txt"))
     _commit(repo, "chore: restore exact ambient host")
     _commit(repo, f"{subject}: retained change", touch="src/retained.txt")
     branch = _git(repo, "branch", "--show-current")
