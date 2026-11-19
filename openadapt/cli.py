@@ -607,32 +607,17 @@ def _refuse_unknown_tutorial_options(args: list[str]) -> None:
 
 @contextmanager
 def _synthetic_scrub_off():
-    """Keep privacy controls meant for patient data off the synthetic app.
+    """Keep the privacy scrub meant for patient data off the synthetic app.
 
-    The bundled tutorial contains only fixed synthetic data. An unconfigured
-    privacy provider would block it, and encrypting its run checkpoints at
-    rest (a scrypt key derivation per checkpoint read and write) made each
-    run about four times slower: 11 s instead of 3 s on a 2026 MacBook. Flow
-    records the plaintext opt-out, with its reason, in its ledger. It is not
-    set when the operator set a key (``OPENADAPT_BUNDLE_KEY`` or
-    ``OPENADAPT_RECORDING_KEY``) or ``OPENADAPT_FLOW_AT_REST=strict``. An
-    operator's explicit setting is left alone; the defaults are restored
-    afterwards.
+    The bundled tutorial contains only fixed synthetic data, and an
+    unconfigured privacy provider would block it. An operator's explicit
+    ``OPENADAPT_FLOW_SCRUB`` is left alone; the default is restored
+    afterwards. Encryption at rest keeps Flow's own default: run checkpoints
+    are encrypted under the local key.
     """
     scrub = os.environ.get("OPENADAPT_FLOW_SCRUB")
     if scrub in (None, "auto"):
         os.environ["OPENADAPT_FLOW_SCRUB"] = "off"
-    plaintext = os.environ.get(_PLAINTEXT_AT_REST)
-    # Only when the operator configured nothing: a key (either one Flow
-    # reads) or strict mode keeps Flow's own setting.
-    configured = (
-        plaintext
-        or os.environ.get("OPENADAPT_BUNDLE_KEY")
-        or os.environ.get("OPENADAPT_RECORDING_KEY")
-        or (os.environ.get("OPENADAPT_FLOW_AT_REST") or "").strip().lower() == "strict"
-    )
-    if not configured:
-        os.environ[_PLAINTEXT_AT_REST] = "synthetic quickstart data"
     try:
         yield
     finally:
@@ -640,14 +625,6 @@ def _synthetic_scrub_off():
             os.environ.pop("OPENADAPT_FLOW_SCRUB", None)
         elif scrub == "auto":
             os.environ["OPENADAPT_FLOW_SCRUB"] = scrub
-        if plaintext is None:
-            os.environ.pop(_PLAINTEXT_AT_REST, None)
-        else:
-            os.environ[_PLAINTEXT_AT_REST] = plaintext
-
-
-#: Flow's recorded opt-out from encrypting its files at rest.
-_PLAINTEXT_AT_REST = "OPENADAPT_FLOW_PLAINTEXT_AT_REST"
 
 
 def _quickstart_root(out: Optional[Path]) -> Path:
