@@ -186,9 +186,10 @@ def is_encrypted(data: bytes) -> bool:
 # run's checkpoint store seals every container with one salt
 # (:func:`new_salt` and ``encrypt_bytes(salt=...)``), and reads them back many
 # times per run; without this each read and write ran scrypt again (about 130
-# per MockMed run). An entry is reused only for the same passphrase, compared
-# in constant time, and the same work factors; a different passphrase derives
-# again (and fails to decrypt, as before). Never written anywhere.
+# per run in the screen-path study). An entry is reused only for the same
+# passphrase, compared in constant time, and the same work factors; a
+# different passphrase derives again (and fails to decrypt, as before). Never
+# written anywhere.
 _DERIVED: "OrderedDict[tuple[bytes, int, int, int], tuple[bytes, bytes]]" = (
     OrderedDict()
 )
