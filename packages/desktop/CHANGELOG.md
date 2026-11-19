@@ -5,7 +5,9 @@
 
 ### Bug Fixes
 
-- **desktop**: show the window again on a second launch
+- **desktop**: On macOS 26, a step that starts a helper process (a replay, an
+  export, saving an approval key) could on rare occasions wait forever. The
+  engine now starts its helper processes in a way that cannot stall like that.
 
 
 
