@@ -572,8 +572,6 @@ class PlainView(_Base):
             return
         if steps.offer_publish is not None:
             steps.offer_publish(run, lambda line: self._say(f"  {line}"), self._ask)
-        elif steps.publish is not None:
-            self._say(f"  Put it online: {steps.publish(run)}")
 
     def confirm(self, prompt: str) -> None:
         self.stream.write(f"      {prompt} ")
@@ -1185,12 +1183,7 @@ class RichView(_Base):
         pips.append(f"[bold green]{self.marks.save}[/]")
         return f"[dim]{self.marks.line}[/]".join(pips)
 
-    def _seal(
-        self,
-        outcome: Outcome,
-        card: Optional[SealCard],
-        steps: Optional[NextSteps] = None,
-    ) -> None:
+    def _seal(self, outcome: Outcome, card: Optional[SealCard]) -> None:
         from rich.panel import Panel
         from rich.table import Table
 
@@ -1223,13 +1216,6 @@ class RichView(_Base):
                 f"[bold cyan]{self._link(page, str(display_path(page)))}[/]",
             )
             links.add_row("", f"[dim]{_escape(seal_page_note(outcome))}[/]")
-        run = publish_run(outcome)
-        if run is not None and steps is not None and steps.offer_publish is None:
-            if steps.publish is not None:
-                links.add_row(
-                    "[bold]Put it online[/]",
-                    f"[cyan]{_escape(steps.publish(run))}[/]",
-                )
         links.add_row(
             "[dim]Real Seals[/]",
             f"[cyan][link={REAL_SEALS_URL}]{REAL_SEALS_URL}[/link][/]",
@@ -1243,15 +1229,19 @@ class RichView(_Base):
         self._stop_spin()
         self.console.print()
         if outcome.seal is not None:
-            self._seal(outcome, seal_card(outcome), steps)
+            self._seal(outcome, seal_card(outcome))
             run = publish_run(outcome)
             if run is not None and steps.offer_publish is not None:
-                self.console.print()
-                steps.offer_publish(
-                    run,
-                    lambda line: self.console.print(_escape(line), soft_wrap=True),
-                    self._ask,
-                )
+                spoken: list[bool] = []
+
+                def say(line: str) -> None:
+                    # A blank line before the offer, only if there is one.
+                    if not spoken:
+                        spoken.append(True)
+                        self.console.print()
+                    self.console.print(_escape(line), soft_wrap=True)
+
+                steps.offer_publish(run, say, self._ask)
             self.console.print()
         self.console.print(Rule(style="cyan"))
         if all_clear(outcome):

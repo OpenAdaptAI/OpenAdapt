@@ -32,18 +32,17 @@ def next_steps(
     keep: Optional[str] = None,
     shadow: Optional[Callable[[], Optional[str]]] = None,
     offer_publish: Optional[
-        Callable[[Path, Callable[[str], None], Callable[[str], str]], None]
+        Callable[[Path, Callable[[str], None], Callable[[str], str]], bool]
     ] = None,
-    can_publish: bool = True,
 ) -> Callable[[Outcome], NextSteps]:
     """The finale's commands, spelled by the launcher's ``hint`` helper.
 
     ``keep`` and ``shadow`` apply under ``uvx``: the install command, and a
     check (run once, at the finale) for an older ``openadapt`` on PATH.
-    ``offer_publish`` is given only in a terminal outside CI: the finale then
-    asks once whether to put the Seal online. Otherwise it prints the command.
-    ``can_publish`` is False when the engine cannot build public Seals; then
-    the finale neither asks nor prints the command.
+    ``offer_publish`` is given only in a terminal outside CI, with an engine
+    that can build public Seals. At the finale it asks once whether to put
+    the Seal online, and only when Cloud says hosted Seals are live. Otherwise
+    the finale says nothing about publishing.
     """
 
     def build(outcome: Outcome) -> NextSteps:
@@ -67,12 +66,7 @@ def next_steps(
             agent=agent,
             keep=keep,
             shadow=shadow() if shadow is not None else None,
-            publish=(
-                (lambda run_dir: hint(f"seal publish {quote(display_path(run_dir))}"))
-                if can_publish
-                else None
-            ),
-            offer_publish=offer_publish if can_publish else None,
+            offer_publish=offer_publish,
         )
 
     return build

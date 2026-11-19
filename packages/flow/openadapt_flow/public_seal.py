@@ -7,7 +7,8 @@ stopped. A public Seal (``public-seal.json``) is what can leave:
 
 * ``card`` (``openadapt.public-card/v1``): counts, outcomes, the step strip
   (each step's ok, resolution rung and strongest check), digests, the
-  program and app names, and the hour the run started. Every field is copied
+  program name (only when asked for, or for the synthetic tutorial), and the
+  hour the run started. Every field is copied
   from the report through an explicit allow-list and checked against a closed
   pattern. Nothing else is copied: no inputs, typed values, intents, URLs,
   screenshots, halt text or identity readings.
@@ -85,8 +86,10 @@ _NAME_PATTERN = r"^[A-Za-z0-9 ._-]{1,48}$"
 _NAME = re.compile(_NAME_PATTERN[1:-1])
 _LOGIN_PATTERN = r"^[A-Za-z0-9-]{1,39}$"
 _LOGIN = re.compile(_LOGIN_PATTERN[1:-1])
-_SEMVER = r"^\d{1,4}\.\d{1,4}\.\d{1,6}$"
-_HOUR = r"^\d{4}-\d{2}-\d{2}T\d{2}:00:00Z$"
+# ``[0-9]``, not ``\d``: pydantic's ``\d`` also matches non-ASCII digits and a
+# TypeScript verifier's does not, so the two would disagree.
+_SEMVER = r"^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,6}$"
+_HOUR = r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:00:00Z$"
 _PUBLIC_RUN_ID = re.compile(r"p-[a-f0-9]{16}")
 _SHA256 = re.compile(r"[a-f0-9]{64}")
 _OUTCOME_RE = re.compile(r"[A-Z][A-Z_]{0,31}")
@@ -174,7 +177,6 @@ class PublicCardV1(_Closed):
     provenance: Provenance
     flow_version: StrictStr = Field(pattern=_SEMVER)
     program_name: Optional[StrictStr] = Field(pattern=_NAME_PATTERN)
-    app_name: Optional[StrictStr] = Field(pattern=_NAME_PATTERN)
     generated_at: StrictStr = Field(pattern=_HOUR)
     identity_claim: Optional[IdentityClaim] = None
 
@@ -378,16 +380,9 @@ def _name(value: Any, what: str) -> Optional[str]:
         raise PublicSealError(
             "name_not_allowed",
             f"the {what} name is not 1-48 letters, digits, spaces, dots, dashes "
-            "or underscores; pass --no-names to leave both names out",
+            "or underscores; publish without --names to leave it out",
         )
     return value
-
-
-def _app_name(report: Mapping[str, Any]) -> Optional[str]:
-    for key in ("app", "app_name", "application_name"):
-        if report.get(key) not in (None, ""):
-            return _name(report.get(key), "app")
-    return None
 
 
 def _provenance(run_dir: Path) -> Provenance:
@@ -404,7 +399,7 @@ def _provenance(run_dir: Path) -> Provenance:
 def build_card(
     run_dir: Path,
     *,
-    no_names: bool = False,
+    names: Optional[bool] = None,
     github: Optional[str] = None,
     provenance: Optional[Provenance] = None,
     flow_version: Optional[str] = None,
@@ -414,6 +409,10 @@ def build_card(
     A pure function of the run's files and the flags, so rebuilding gives
     the same card. Works for stopped runs: it reads ``report.json``, not
     ``receipt.json``.
+
+    ``names``: whether ``program_name`` is filled in. A program name can be a
+    person's name, so by default (None) only the synthetic tutorial's runs
+    carry it; a real run carries it only with ``names=True`` (``--names``).
     """
     from openadapt_flow import __version__
 
@@ -436,8 +435,10 @@ def build_card(
         else []
     )
     steps = [_step(result) for result in results]
-    program = None if no_names else _name(report.get("workflow_name"), "program")
-    app = None if no_names else _app_name(report)
+    shown_provenance: Provenance = provenance or _provenance(run_dir)
+    if names is None:
+        names = shown_provenance == "synthetic-tutorial"
+    program = _name(report.get("workflow_name"), "program") if names else None
     card: dict[str, Any] = {
         "schema": PUBLIC_CARD_SCHEMA,
         "outcome": outcome,
@@ -455,10 +456,9 @@ def build_card(
             else "unknown"
         ),
         "checks": _checks(report),
-        "provenance": provenance or _provenance(run_dir),
+        "provenance": shown_provenance,
         "flow_version": flow_version or __version__,
         "program_name": program,
-        "app_name": app,
         "generated_at": _hour(report.get("started_at"))
         or _hour(private.issued_at)
         or "1970-01-01T00:00:00Z",
@@ -500,7 +500,7 @@ def build_public_seal(
     run_dir: Path,
     *,
     signer: "SealSigner",
-    no_names: bool = False,
+    names: Optional[bool] = None,
     github: Optional[str] = None,
     provenance: Optional[Provenance] = None,
     now: Optional[datetime] = None,
@@ -515,7 +515,7 @@ def build_public_seal(
     run_dir = Path(run_dir)
     card, private = build_card(
         run_dir,
-        no_names=no_names,
+        names=names,
         github=github,
         provenance=provenance,
         flow_version=flow_version,
@@ -546,9 +546,7 @@ def build_public_seal(
             ).wire()
         if len(public_seal_bytes(doc)) <= MAX_BYTES:
             return doc
-    raise PublicSealError(
-        "too_large", f"the public Seal is over {MAX_BYTES} bytes; try --no-names"
-    )
+    raise PublicSealError("too_large", f"the public Seal is over {MAX_BYTES} bytes")
 
 
 def write_public_seal(run_dir: Path, doc: Mapping[str, Any]) -> Path:
@@ -564,12 +562,31 @@ def write_public_seal(run_dir: Path, doc: Mapping[str, Any]) -> Path:
 # -- checking -----------------------------------------------------------------
 
 
+def _canonical_b64(value: str) -> bool:
+    """True when ``value`` is the one standard base64 spelling of its bytes.
+
+    Python decodes ``AB==`` and ``AA==`` to the same byte; a second spelling
+    of the same signature would give the same Seal a second digest.
+    """
+    try:
+        return (
+            base64.b64encode(base64.b64decode(value, validate=True)).decode() == value
+        )
+    except ValueError:
+        return False
+
+
 def verify_public_seal(data: bytes | str | Mapping[str, Any]) -> PublicSealVerification:
     """Check a public Seal on its own: size, shape, card digest, key id, signature.
 
-    Fail closed. A duplicate JSON key, an unknown field at any level or a
-    pattern miss is ``malformed``. This proves the key in the Seal signed this
-    card; it says nothing about who holds the key.
+    Fail closed. A duplicate JSON key, an unknown field at any level, a
+    pattern miss, or bytes that are not the document's canonical JSON is
+    ``malformed``. This proves the key in the Seal signed this card; it says
+    nothing about who holds the key.
+
+    Cloud's TypeScript verifier (openadapt-cloud ``src/lib/publicSeal.ts``)
+    makes the same checks in the same order, so both give the same answer for
+    every input; ``tests/fixtures/public_seal/golden_vectors.json`` pins that.
     """
     if isinstance(data, Mapping):
         raw = public_seal_bytes(data)
@@ -586,6 +603,15 @@ def verify_public_seal(data: bytes | str | Mapping[str, Any]) -> PublicSealVerif
         return PublicSealVerification(False, "too_large")
     if not isinstance(parsed, dict) or set(parsed) != {"card", "seal"}:
         return PublicSealVerification(False, "malformed", detail="not {card, seal}")
+    # The exact bytes the engine writes, and nothing else: no other key
+    # order, spacing, escape, BOM or spelling of a number (``-0``). Two
+    # parsers can then only disagree about the values, not the text.
+    try:
+        canonical = public_seal_bytes(parsed) == raw
+    except (TypeError, ValueError):  # a lone surrogate cannot be UTF-8
+        canonical = False
+    if not canonical:
+        return PublicSealVerification(False, "malformed", detail="not canonical JSON")
     seal_raw = parsed.get("seal")
     if isinstance(seal_raw, dict) and seal_raw.get("subject_kind") != "public-card":
         return PublicSealVerification(False, "not_public_card")
@@ -594,7 +620,7 @@ def verify_public_seal(data: bytes | str | Mapping[str, Any]) -> PublicSealVerif
     except Exception as exc:
         return PublicSealVerification(False, "malformed", detail=str(exc)[:200])
     # Defaults are for building, not reading: a received card or Seal must
-    # spell out every field it signs, as a strict TypeScript reader requires.
+    # spell out every field it signs, and leave out (not null) what it lacks.
     card_in, seal_in = parsed["card"], parsed["seal"]
     if "schema" not in card_in or not {"schema", "issuer", "algorithm"} <= set(seal_in):
         return PublicSealVerification(False, "malformed", detail="missing field")
@@ -602,13 +628,16 @@ def verify_public_seal(data: bytes | str | Mapping[str, Any]) -> PublicSealVerif
         return PublicSealVerification(
             False, "malformed", detail="identity_claim is null; leave it out"
         )
+    if any(value is None for value in seal_in.values()):
+        return PublicSealVerification(
+            False, "malformed", detail="a Seal field is null; leave it out"
+        )
+    if not (_canonical_b64(doc.seal.public_key) and _canonical_b64(doc.seal.signature)):
+        return PublicSealVerification(False, "malformed", detail="base64 spelling")
     # Hash the card as it arrived, not as re-serialized, so nothing is dropped.
     if card_sha256(parsed["card"]) != doc.seal.subject_sha256:
         return PublicSealVerification(False, "card_mismatch")
-    try:
-        key_raw = base64.b64decode(doc.seal.public_key, validate=True)
-    except ValueError:
-        return PublicSealVerification(False, "malformed", detail="public_key")
+    key_raw = base64.b64decode(doc.seal.public_key, validate=True)
     if len(key_raw) != 32 or seal_key_id(key_raw) != doc.seal.key_id:
         return PublicSealVerification(False, "key_id_mismatch")
     try:

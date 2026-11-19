@@ -989,7 +989,7 @@ def test_uvx_spelling_reaches_every_printed_command(root, monkeypatch):
     outcome = Outcome(root=root, seal=SealFacts("k", 5))
     steps = next_steps(cli._hint, cli._shell_quote, True)(outcome)
     py = f"{sys.version_info[0]}.{sys.version_info[1]}"
-    for command in (steps.verify, steps.record, steps.agent, steps.publish(root)):
+    for command in (steps.verify, steps.record, steps.agent):
         assert command.startswith(f"uvx --python {py} openadapt "), command
 
 
@@ -1011,8 +1011,6 @@ def test_every_printed_command_answers_help_in_a_fresh_environment(tmp_path):
         outcome
     )
     commands = [steps.record, steps.agent] + ([steps.verify] if steps.verify else [])
-    if steps.verify and steps.publish is not None:
-        commands.append(steps.publish(root / "run-1"))
     env = {
         "PATH": os.environ.get("PATH", ""),
         "HOME": str(tmp_path),

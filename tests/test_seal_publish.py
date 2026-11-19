@@ -74,7 +74,7 @@ class Recorder:
         self.responses = list(responses)
         self.requests: list[tuple[str, str, bytes | None, dict]] = []
 
-    def __call__(self, method, url, body, headers):
+    def __call__(self, method, url, body, headers, *_timeout):
         self.requests.append((method, url, body, dict(headers)))
         return self.responses.pop(0)
 
@@ -262,12 +262,37 @@ def test_server_refusals_are_plain_and_save_nothing(
 
 
 @needs_engine
-def test_names_that_fail_the_pattern_suggest_no_names(make_run, tmp_path):
+def test_names_that_fail_the_pattern_suggest_leaving_them_out(make_run, tmp_path):
     run = make_run(workflow_name="Jane Doe's chart/notes")
     with pytest.raises(PublishError) as exc:
-        _publish(run, Recorder(), dry_run=True)
-    assert "--no-names" in str(exc.value)
-    _publish(run, Recorder(), dry_run=True, no_names=True)
+        _publish(run, Recorder(), dry_run=True, names=True)
+    assert "without --names" in str(exc.value)
+    _publish(run, Recorder(), dry_run=True)
+    card = json.loads((run / "public-seal.json").read_text())["card"]
+    assert card["program_name"] is None
+
+
+@needs_engine
+def test_a_real_run_has_no_names_unless_asked(make_run, tmp_path):
+    run = make_run()
+    _publish(run, Recorder(), dry_run=True)
+    card = json.loads((run / "public-seal.json").read_text())["card"]
+    assert card["provenance"] == "production"
+    assert card["program_name"] is None and "app_name" not in card
+    _publish(run, Recorder(), dry_run=True, names=True)
+    card = json.loads((run / "public-seal.json").read_text())["card"]
+    assert card["program_name"] == "local-quickstart"
+
+
+@needs_engine
+def test_a_tutorial_run_carries_its_name_by_default(make_run, tmp_path):
+    run = make_run()
+    _publish(run, Recorder(), dry_run=True, provenance="synthetic-tutorial")
+    card = json.loads((run / "public-seal.json").read_text())["card"]
+    assert card["program_name"] == "local-quickstart"
+    _publish(
+        run, Recorder(), dry_run=True, provenance="synthetic-tutorial", names=False
+    )
     card = json.loads((run / "public-seal.json").read_text())["card"]
     assert card["program_name"] is None
 
@@ -326,12 +351,24 @@ def test_cli_publish_with_yes_uses_the_transport(make_run, tmp_path, monkeypatch
     )
     assert result.exit_code == 0, result.output
     assert f"Published: {ORIGIN}/seal#{SEAL_ID}" in result.output
+    # --yes skips the question, not the card: it is printed before the upload.
+    assert result.output.index('"card"') < result.output.index("Published:")
+    assert "Publish? [y/N]" not in result.output
 
 
 def test_cli_publish_help_runs_nothing(tmp_path):
     result = CliRunner().invoke(cli.main, ["seal", "publish", "--help"])
     assert result.exit_code == 0
-    assert "--dry-run" in result.output and "--no-names" in result.output
+    assert "--dry-run" in result.output and "--names" in result.output
+
+
+def test_cli_names_and_no_names_cannot_both_be_given(make_run, tmp_path):
+    run = make_run()
+    result = CliRunner().invoke(
+        cli.main, ["seal", "publish", str(run), "--names", "--no-names", "--dry-run"]
+    )
+    assert result.exit_code == 2
+    assert not (run / "public-seal.json").exists()
 
 
 # -- unpublish and links ---------------------------------------------------------
@@ -482,10 +519,77 @@ def test_cli_seal_verify_routes_a_link(make_run, tmp_path, monkeypatch):
 # -- quickstart -----------------------------------------------------------------
 
 
-def test_the_quickstart_offer_exists_only_in_a_terminal_outside_ci(monkeypatch):
-    monkeypatch.setattr(cli, "_public_seals_available", lambda: True)
+def _status(enabled) -> Response:
+    return Response(200, {}, json.dumps({"enabled": enabled}).encode())
+
+
+def test_hosted_seals_live_needs_exactly_enabled_true():
+    live = seal_publish.hosted_seals_live
+    transport = Recorder(_status(True))
+    assert live(ORIGIN, transport=transport)
+    assert transport.requests == [
+        (
+            "GET",
+            f"{ORIGIN}/api/public/local-seals/status",
+            None,
+            {"Accept": "application/json"},
+        )
+    ]
+    assert not live(ORIGIN, transport=Recorder(_status(False)))
+    assert not live(ORIGIN, transport=Recorder(_status("true")))
+    assert not live(ORIGIN, transport=Recorder(Response(404, {}, b"")))
+    assert not live(ORIGIN, transport=Recorder(Response(200, {}, b"not json")))
+    body = json.dumps({"enabled": True, "extra": 1}).encode()
+    assert not live(ORIGIN, transport=Recorder(Response(200, {}, body)))
+
+    def unreachable(*_args):
+        raise OSError("no route")
+
+    assert not live(ORIGIN, transport=unreachable)
+
+
+def test_hosted_seals_live_gives_up_after_its_timeout():
+    import threading
+    import time
+
+    release = threading.Event()
+
+    def slow(*_args):
+        release.wait(5)
+        return _status(True)
+
+    started = time.monotonic()
+    try:
+        assert not seal_publish.hosted_seals_live(ORIGIN, transport=slow, timeout_s=0.2)
+        assert time.monotonic() - started < 2
+    finally:
+        release.set()
+
+
+def test_hosted_seals_live_bounds_the_real_transport_to_its_timeout(monkeypatch):
+    seen: list = []
+
+    def real(method, url, body, headers, timeout):
+        seen.append(timeout)
+        return _status(True)
+
+    monkeypatch.setattr(seal_publish, "urllib_transport", real)
+    assert seal_publish.hosted_seals_live(ORIGIN)
+    assert seen == [seal_publish.STATUS_TIMEOUT_S] == [1.0]
+
+
+def _terminal(monkeypatch) -> None:
     monkeypatch.setattr(sys.stdin, "isatty", lambda: True, raising=False)
     monkeypatch.setattr(sys.stdout, "isatty", lambda: True, raising=False)
+    monkeypatch.setattr(cli, "_public_seals_available", lambda: True)
+
+
+def test_the_quickstart_offer_exists_only_in_a_terminal_outside_ci(monkeypatch):
+    def no_status(*_args):
+        raise AssertionError("checked the status where no offer can be made")
+
+    monkeypatch.setattr(seal_publish, "urllib_transport", no_status)
+    _terminal(monkeypatch)
     assert cli._quickstart_publish_offer() is not None
     monkeypatch.setenv("CI", "1")
     assert cli._quickstart_publish_offer() is None
@@ -497,22 +601,79 @@ def test_the_quickstart_offer_exists_only_in_a_terminal_outside_ci(monkeypatch):
     assert cli._quickstart_publish_offer() is None
 
 
-def test_the_quickstart_offer_asks_once_and_no_sends_nothing(
+@pytest.mark.parametrize(
+    "status",
+    [
+        _status(False),
+        Response(404, {}, b'{"error":"not_found"}'),
+        Response(503, {}, b""),
+        OSError("unreachable"),
+    ],
+)
+def test_the_quickstart_offers_nothing_unless_cloud_is_live(
+    make_run, tmp_path, monkeypatch, status
+):
+    run = make_run()
+    _terminal(monkeypatch)
+
+    def transport(method, url, body, headers, *_timeout):
+        assert (method, url) == (
+            "GET",
+            f"{seal_publish.DEFAULT_ENDPOINT}/api/public/local-seals/status",
+        )
+        if isinstance(status, Exception):
+            raise status
+        return status
+
+    monkeypatch.setattr(seal_publish, "urllib_transport", transport)
+    offer = cli._quickstart_publish_offer()
+    said: list[str] = []
+
+    def ask(_question):
+        raise AssertionError("asked while hosted Seals are not live")
+
+    assert offer(run, said.append, ask) is False
+    assert said == []
+    assert not (run / "public-seal.json").exists()
+
+
+def test_the_quickstart_offer_shows_the_card_then_asks_once(
     make_run, tmp_path, monkeypatch
 ):
     run = make_run()
-    monkeypatch.setattr(sys.stdin, "isatty", lambda: True, raising=False)
-    monkeypatch.setattr(sys.stdout, "isatty", lambda: True, raising=False)
-    monkeypatch.setattr(cli, "_public_seals_available", lambda: True)
+    _terminal(monkeypatch)
+    transport = Recorder(_status(True))
+    monkeypatch.setattr(seal_publish, "urllib_transport", transport)
     offer = cli._quickstart_publish_offer()
-    asked: list[str] = []
-    said: list[str] = []
-    offer(run, said.append, lambda q: asked.append(q) or "")
-    assert len(asked) == 1 and asked[0].endswith("Publish? [y/N] ")
-    assert said[-1] == "Not published."
+    events: list[tuple[str, str]] = []
+    offer(
+        run,
+        lambda line: events.append(("say", line)),
+        lambda q: events.append(("ask", q)) or "",
+    )
+    asks = [i for i, (kind, _) in enumerate(events) if kind == "ask"]
+    assert len(asks) == 1 and events[asks[0]][1].endswith("Publish? [y/N] ")
+    # The exact card that would be uploaded is printed before the question.
     card = json.loads((run / "public-seal.json").read_text())["card"]
+    shown = [
+        json.loads(line) for kind, line in events[: asks[0]] if line.startswith("{")
+    ]
+    assert shown and shown[0]["card"] == card
     assert card["provenance"] == "synthetic-tutorial"
+    assert events[-1] == ("say", "Not published.")
     assert not (run / "seal.publish.json").exists()
+    # Only the status check was sent; a No uploads nothing.
+    assert [r[0] for r in transport.requests] == ["GET"]
+
+
+@needs_engine
+def test_the_tutorial_card_carries_the_program_name(make_run, tmp_path, monkeypatch):
+    run = make_run()
+    _terminal(monkeypatch)
+    monkeypatch.setattr(seal_publish, "urllib_transport", Recorder(_status(True)))
+    cli._quickstart_publish_offer()(run, lambda _line: None, lambda _q: "")
+    card = json.loads((run / "public-seal.json").read_text())["card"]
+    assert card["program_name"] == "local-quickstart"
 
 
 def test_the_finale_offers_once_after_the_seal_card(tmp_path, monkeypatch):
@@ -528,6 +689,7 @@ def test_the_finale_offers_once_after_the_seal_card(tmp_path, monkeypatch):
     def offer(run_dir, say, ask):
         calls.append(run_dir)
         say("offer shown")
+        return True
 
     root = tmp_path / "openadapt-quickstart"
     stream = io.StringIO()
@@ -543,7 +705,7 @@ def test_the_finale_offers_once_after_the_seal_card(tmp_path, monkeypatch):
     assert "seal publish" not in text
 
 
-def test_without_a_terminal_the_finale_prints_the_publish_command(
+def test_without_an_offer_the_finale_says_nothing_about_publishing(
     tmp_path, monkeypatch
 ):
     from test_quickstart import FakeEngine, _clock
@@ -560,34 +722,8 @@ def test_without_a_terminal_the_finale_prints_the_publish_command(
         next_steps=next_steps(cli._hint, cli._shell_quote, True),
         clock=_clock(),
     )
-    assert (
-        "  Put it online: openadapt seal publish openadapt-quickstart/run-1\n"
-        in stream.getvalue()
-    )
-
-
-def test_an_engine_without_public_seals_gets_no_publish_line(tmp_path, monkeypatch):
-    from test_quickstart import FakeEngine, _clock
-
-    from openadapt.quickstart import next_steps
-    from openadapt.quickstart.story import run_story
-    from openadapt.quickstart.view import PlainView
-
-    monkeypatch.chdir(tmp_path)
-    stream = io.StringIO()
-
-    def offer(*_args):
-        raise AssertionError("offered without an engine that can publish")
-
-    run_story(
-        FakeEngine(tmp_path / "openadapt-quickstart"),
-        PlainView(stream),
-        next_steps=next_steps(
-            cli._hint, cli._shell_quote, True, offer_publish=offer, can_publish=False
-        ),
-        clock=_clock(),
-    )
-    assert "seal publish" not in stream.getvalue()
+    text = stream.getvalue()
+    assert "seal publish" not in text and "online" not in text.lower()
 
 
 def _rich_finale(tmp_path, offer) -> str:
@@ -616,6 +752,7 @@ def test_the_terminal_finale_offers_once_between_the_seal_and_next(
     def offer(run_dir, say, ask):
         calls.append(run_dir)
         say("offer shown")
+        return True
 
     text = _rich_finale(tmp_path, offer)
     assert calls == [tmp_path / "openadapt-quickstart" / "run-1"]
@@ -623,11 +760,13 @@ def test_the_terminal_finale_offers_once_between_the_seal_and_next(
     assert "Put it online" not in text
 
 
-def test_the_terminal_finale_shows_the_command_without_an_offer(tmp_path, monkeypatch):
+def test_the_terminal_finale_without_an_offer_has_no_publish_line(
+    tmp_path, monkeypatch
+):
     monkeypatch.chdir(tmp_path)
-    text = _rich_finale(tmp_path, None)
-    assert "Put it online" in text
-    assert "openadapt seal publish openadapt-quickstart/run-1" in text
+    for offer in (None, lambda *_args: False):
+        text = _rich_finale(tmp_path, offer)
+        assert "Put it online" not in text and "seal publish" not in text
 
 
 def test_the_upload_bytes_match_the_engines(make_run):

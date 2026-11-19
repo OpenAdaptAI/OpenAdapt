@@ -176,7 +176,7 @@ def _cmd_public(args: argparse.Namespace) -> int:
         doc = build_public_seal(
             Path(args.run_dir),
             signer=_signer(args),
-            no_names=args.no_names,
+            names=args.names,
             github=args.github,
             provenance=args.provenance,
         )
@@ -958,16 +958,30 @@ def register(sub: Any) -> None:
     pub = s.add_parser(
         "public",
         help=(
-            "Write RUN_DIR/public-seal.json: counts, outcomes, digests and names "
+            "Write RUN_DIR/public-seal.json: counts, outcomes and digests "
             "only, signed, safe to post"
         ),
         allow_abbrev=False,
     )
     pub.add_argument("run_dir", help="a sealed run folder (it has seal.json)")
-    pub.add_argument(
+    names = pub.add_mutually_exclusive_group()
+    names.add_argument(
+        "--names",
+        dest="names",
+        action="store_const",
+        const=True,
+        default=None,
+        help=(
+            "Include the program name (it can be a person's name). Default: "
+            "only for the synthetic tutorial"
+        ),
+    )
+    names.add_argument(
         "--no-names",
-        action="store_true",
-        help="Leave the program and app names out",
+        dest="names",
+        action="store_const",
+        const=False,
+        help="Leave the program name out, even for the tutorial",
     )
     pub.add_argument(
         "--github",

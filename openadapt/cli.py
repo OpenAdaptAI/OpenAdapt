@@ -774,7 +774,6 @@ def quickstart(
         keep=_keep_command(),
         shadow=_shadowing_openadapt if _under_uvx() else None,
         offer_publish=_quickstart_publish_offer(),
-        can_publish=_public_seals_available(),
     )
     try:
         with _synthetic_scrub_off():
@@ -815,7 +814,14 @@ def _public_seals_available() -> bool:
 
 
 def _quickstart_publish_offer():
-    """The finale's one publish question, or None outside a terminal or under CI."""
+    """The finale's one publish question, or None outside a terminal or under CI.
+
+    Checked in this order, so nothing touches the network unless it could
+    ask: CI or no terminal (no offer), an engine that cannot build public
+    Seals (no offer), then, at the finale, Cloud's status route with a
+    one-second limit. The question is asked only when Cloud answers
+    ``{"enabled": true}``; otherwise the finale says nothing about publishing.
+    """
     from openadapt.seal_publish import in_ci
 
     if in_ci() or not (sys.stdin.isatty() and sys.stdout.isatty()):
@@ -823,13 +829,22 @@ def _quickstart_publish_offer():
     if not _public_seals_available():
         return None
 
-    def offer(run_dir: Path, say, ask) -> None:
-        from openadapt.seal_publish import PublishError, publish
+    def offer(run_dir: Path, say, ask) -> bool:
+        from openadapt.seal_publish import (
+            PublishError,
+            endpoint,
+            hosted_seals_live,
+            publish,
+        )
 
+        try:
+            if not hosted_seals_live(endpoint()):
+                return False
+        except PublishError:
+            return False
         say(
-            f"Put this Seal online? The upload is {run_dir / 'public-seal.json'}: "
-            "the counts above, each step's check, digests, and the program and "
-            "app names."
+            "Put this Seal online? This is the exact summary that would be "
+            f"uploaded ({run_dir / 'public-seal.json'}):"
         )
         try:
             publish(
@@ -837,7 +852,6 @@ def _quickstart_publish_offer():
                 interactive=True,
                 ask=ask,
                 say=say,
-                show_card=False,
                 provenance="synthetic-tutorial",
                 command=_hint,
             )
@@ -847,6 +861,7 @@ def _quickstart_publish_offer():
             say("Not published.")
         except Exception as exc:  # noqa: BLE001 - the run already succeeded
             say(f"Not published: {exc}")
+        return True
 
     return offer
 
@@ -2042,11 +2057,14 @@ def _seal_publish_parser() -> argparse.ArgumentParser:
         prog="openadapt seal publish",
         description=(
             "Upload a run's public Seal and print its link. The public Seal is "
-            "RUN_DIR/public-seal.json: counts, outcomes, the step strip, digests, "
-            "the program and app names and the hour the run started, signed by "
-            "this computer's Seal key. It never holds inputs, typed values, "
-            "screenshots or record contents. Nothing is uploaded until you say "
-            "yes: at the prompt, or with --yes when there is no terminal."
+            "RUN_DIR/public-seal.json: counts, outcomes, the step strip, digests "
+            "and the hour the run started, signed by this computer's Seal key. "
+            "It never holds inputs, typed values, screenshots or record "
+            "contents. The program name is left out unless you pass --names "
+            "(the synthetic tutorial includes it). The exact card is printed "
+            "first, and nothing is uploaded until you say yes: at the prompt, "
+            "or with --yes when there is no terminal. --yes skips the "
+            "question, not the printed card."
         ),
         allow_abbrev=False,
     )
@@ -2074,8 +2092,24 @@ def _seal_publish_parser() -> argparse.ArgumentParser:
         default=None,
         help="claim this GitHub login; the page shows whether github.com/LOGIN.keys lists your Seal key",
     )
-    parser.add_argument(
-        "--no-names", action="store_true", help="leave the program and app names out"
+    names = parser.add_mutually_exclusive_group()
+    names.add_argument(
+        "--names",
+        dest="names",
+        action="store_const",
+        const=True,
+        default=None,
+        help=(
+            "include the program name; it can be a person's name (default: "
+            "only for the synthetic tutorial)"
+        ),
+    )
+    names.add_argument(
+        "--no-names",
+        dest="names",
+        action="store_const",
+        const=False,
+        help="leave the program name out, even for the tutorial",
     )
     parser.add_argument(
         "--endpoint",
@@ -2128,7 +2162,7 @@ def _publish_seal(argv: list[str]) -> int:
             yes=options.yes,
             allow_ci=options.allow_ci,
             dry_run=options.dry_run,
-            no_names=options.no_names,
+            names=options.names,
             github=options.github,
             endpoint_value=options.endpoint,
             say=click.echo,

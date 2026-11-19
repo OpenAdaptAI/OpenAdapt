@@ -454,8 +454,8 @@ computer. `local-seal public` writes `public-seal.json`
   (`effect`, `postcondition`, `identity` or `none`); step, heal and model-call
   counts; the duration; whether the run saw outside network calls; required
   and confirmed identity, postcondition, effect and authorization checks;
-  `synthetic-tutorial` or `production`; the Flow version; the program and app
-  names (or none, with `--no-names`); the hour the run started; and, with
+  `synthetic-tutorial` or `production`; the Flow version; the program name
+  or null; the hour the run started; and, with
   `--github LOGIN`, a claimed GitHub login. `report_sha256` is the private
   Seal's subject, so whoever holds the report can show that the card belongs
   to it.
@@ -466,19 +466,31 @@ computer. `local-seal public` writes `public-seal.json`
 
 The card is built from the report through an allow-list. It never holds
 parameters, typed values, step intents, what the identity check read on
-screen, URLs, screenshots, halt text, the run ID or the folder name. A name
-that isn't 1-48 letters, digits, spaces, dots, dashes or underscores is
-refused; pass `--no-names`. Stopped runs get a card too.
+screen, URLs, screenshots, halt text, the run ID, the folder name or the
+app's name (the report has no reliable app field). Stopped runs get a card
+too.
+
+A program name can be a person's name, so it is null on a real run unless you
+pass `--names`. The synthetic tutorial's runs carry it by default
+(`--no-names` leaves it out). A name that isn't 1-48 letters, digits, spaces,
+dots, dashes or underscores is refused.
 
 The file is at most 4,096 bytes of canonical JSON. The step strip lists
 every step or none: when it would push the file over the limit (from about 45
-steps, depending on the names), it is left empty and only the counts remain. The Seal must be signed
+steps, depending on the name), it is left empty and only the counts remain. The Seal must be signed
 by the key that sealed the run. Rebuilding an unchanged card reuses the file
 on disk, so its digest stays the same.
 
-`openadapt seal publish` uploads nothing until you say yes: at a y/N prompt
+The file must be exactly the engine's canonical JSON (sorted keys, no
+spaces, no byte-order mark), and every base64 value must be in its one
+standard spelling. Other bytes for the same values are `malformed`, so Cloud's
+TypeScript verifier and this one agree on every input; the golden vectors in
+`tests/fixtures/public_seal/golden_vectors.json` pin that.
+
+`openadapt seal publish` prints the exact card, then uploads nothing until you
+say yes: at a y/N prompt
 that defaults to No, or with `--yes` when there is no terminal. Under CI it
-also needs `--allow-ci`. `--dry-run` writes the file and sends nothing. The
+also needs `--allow-ci`. `--yes` skips the question, not the printed card. `--dry-run` writes the file and sends nothing. The
 link is unguessable and unlisted. The delete token is saved to
 `RUN_DIR/seal.publish.json` (mode 0600), and `openadapt seal unpublish
 RUN_DIR` takes the Seal down. `openadapt seal verify <link>` fetches a hosted

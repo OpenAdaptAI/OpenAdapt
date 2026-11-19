@@ -122,7 +122,8 @@ def test_planted_values_never_reach_the_public_seal(tmp_path):
     for word in (b"Planted", b"PLANTED", b"planted", b"4417", b"1961", b"emr.example"):
         assert word not in raw
     card = doc["card"]
-    assert card["program_name"] == "add-visit-note"
+    # A real run: no name unless asked for.
+    assert card["program_name"] is None
     assert set(card) == {
         "schema",
         "outcome",
@@ -139,7 +140,6 @@ def test_planted_values_never_reach_the_public_seal(tmp_path):
         "provenance",
         "flow_version",
         "program_name",
-        "app_name",
         "generated_at",
     }
 
@@ -155,7 +155,9 @@ def test_round_trip_and_the_card_is_what_is_signed(tmp_path):
     assert doc["card"]["generated_at"] == "2026-11-18T09:00:00Z"
     tampered = json.loads(public_seal_bytes(doc))
     tampered["card"]["heals"] = 0
-    assert verify_public_seal(json.dumps(tampered)).reason == "card_mismatch"
+    assert verify_public_seal(canonical_json(tampered)).reason == "card_mismatch"
+    # The same document with other spacing is not the bytes that were signed.
+    assert verify_public_seal(json.dumps(doc)).reason == "malformed"
 
 
 def test_authorization_and_scope_item_are_carried_and_signed(tmp_path, monkeypatch):
@@ -180,12 +182,12 @@ def test_authorization_and_scope_item_are_carried_and_signed(tmp_path, monkeypat
     assert verify_public_seal(public_seal_bytes(doc)).ok
     changed = json.loads(public_seal_bytes(doc))
     changed["seal"]["scope_item"] = "r4"
-    assert verify_public_seal(json.dumps(changed)).reason == "bad_signature"
+    assert verify_public_seal(canonical_json(changed)).reason == "bad_signature"
 
 
 def test_a_64_step_card_fits_in_4096_bytes(tmp_path):
-    run = _sealed_run(tmp_path, _report(64, app="OpenEMR"))
-    doc = build_public_seal(run, signer=_signer(), now=NOW, github="a" * 39)
+    run = _sealed_run(tmp_path, _report(64))
+    doc = build_public_seal(run, signer=_signer(), now=NOW, github="a" * 39, names=True)
     assert len(public_seal_bytes(doc)) <= MAX_BYTES
     assert doc["card"]["steps_total"] == 64
     # The strip is whole or empty, never cut short.
@@ -229,7 +231,7 @@ def test_the_run_id_is_hashed_and_stable(tmp_path):
     again = build_public_seal(run, signer=signer, now=later)
     # Same card and key: the Seal on disk is reused, so its digest is the same.
     assert again == first
-    other_card = build_public_seal(run, signer=signer, now=later, no_names=True)
+    other_card = build_public_seal(run, signer=signer, now=later, names=True)
     assert other_card["seal"]["run_id"] == first["seal"]["run_id"]
     assert other_card["seal"]["issued_at"] != first["seal"]["issued_at"]
 
@@ -237,11 +239,28 @@ def test_the_run_id_is_hashed_and_stable(tmp_path):
 def test_names_that_fail_the_pattern_are_refused(tmp_path):
     run = _sealed_run(tmp_path, _report(workflow_name="Jane's chart / notes"))
     with pytest.raises(PublicSealError) as exc:
-        build_public_seal(run, signer=_signer(), now=NOW)
+        build_public_seal(run, signer=_signer(), now=NOW, names=True)
     assert exc.value.code == "name_not_allowed"
-    assert "--no-names" in str(exc.value)
-    doc = build_public_seal(run, signer=_signer(), now=NOW, no_names=True)
-    assert doc["card"]["program_name"] is None and doc["card"]["app_name"] is None
+    assert "--names" in str(exc.value)
+    doc = build_public_seal(run, signer=_signer(), now=NOW)
+    assert doc["card"]["program_name"] is None
+    assert "app_name" not in doc["card"]
+
+
+def test_names_default_off_for_real_runs_and_on_for_the_tutorial(tmp_path):
+    run = _sealed_run(tmp_path, _report())
+    assert build_card(run)[0]["program_name"] is None
+    assert build_card(run, names=True)[0]["program_name"] == "add-visit-note"
+    assert build_card(run, provenance="synthetic-tutorial")[0]["program_name"] == (
+        "add-visit-note"
+    )
+    assert (
+        build_card(run, provenance="synthetic-tutorial", names=False)[0]["program_name"]
+        is None
+    )
+    # A real run's report carrying an app field still never shows it.
+    app_run = _sealed_run(tmp_path, _report(app="OpenEMR"), name="app")
+    assert "app_name" not in build_card(app_run, names=True)[0]
 
 
 def test_unsealed_and_other_key_runs_are_refused(tmp_path):
@@ -308,11 +327,16 @@ def test_local_seal_public_cli(tmp_path, capsys, monkeypatch):
     run.mkdir()
     (run / "report.json").write_text(json.dumps(_report()), encoding="utf-8")
     seal_run(run, home=home, now=NOW, enqueue=False)
-    code = main(["local-seal", "--home", str(home), "public", str(run), "--no-names"])
+    code = main(["local-seal", "--home", str(home), "public", str(run)])
     assert code in (0, None)
     printed = json.loads(capsys.readouterr().out)
     assert printed["card"]["program_name"] is None
     assert verify_public_seal((run / "public-seal.json").read_bytes()).ok
+    (run / "public-seal.json").unlink()
+    code = main(["local-seal", "--home", str(home), "public", str(run), "--names"])
+    assert code in (0, None)
+    printed = json.loads(capsys.readouterr().out)
+    assert printed["card"]["program_name"] == "add-visit-note"
 
 
 # -- golden vectors, shared with Cloud's TypeScript verifier -------------------
@@ -330,7 +354,7 @@ def _resign(doc: dict, signer: SoftwareSigner, **seal_changes) -> dict:
 
 def _vectors(tmp_path: Path) -> dict:
     signer = _signer(42)
-    plain = _sealed_run(tmp_path, _report(6, stop_at=4, app="MockMed"), signer, "a")
+    plain = _sealed_run(tmp_path, _report(6, stop_at=4), signer, "a")
     base = build_public_seal(
         plain,
         signer=signer,
@@ -413,9 +437,8 @@ def _vectors(tmp_path: Path) -> dict:
     )
 
     unnamed = _sealed_run(tmp_path, _report(2), signer, "c")
-    no_names = build_public_seal(
-        unnamed, signer=signer, now=NOW, no_names=True, flow_version="3.1.0"
-    )
+    no_names = build_public_seal(unnamed, signer=signer, now=NOW, flow_version="3.1.0")
+    assert no_names["card"]["program_name"] is None
     cases.append(("valid_no_names", text(no_names), "valid"))
 
     long_run = _sealed_run(tmp_path, _report(64), signer, "d")
@@ -480,6 +503,56 @@ def _vectors(tmp_path: Path) -> dict:
     assert len(padded.encode()) == MAX_BYTES + 1
     cases.append(("too_large_4097", padded, "too_large"))
 
+    # Where Python and TypeScript could read the same input differently.
+    # Each is refused (or accepted) the same way by both verifiers.
+    with_app = json.loads(text(base))
+    with_app["card"]["app_name"] = "MockMed"
+    cases.append(
+        ("app_name_present", canonical_json(_resign(with_app, signer)), "malformed")
+    )
+
+    cases.append(("not_canonical_spacing", body.replace(",", ", ", 1), "malformed"))
+    cases.append(("byte_order_mark", "\ufeff" + body, "malformed"))
+    zero = text(base)
+    assert '"model_calls":0,' in zero
+    cases.append(
+        (
+            "negative_zero",
+            zero.replace('"model_calls":0,', '"model_calls":-0,', 1),
+            "malformed",
+        )
+    )
+
+    digit = json.loads(text(base))
+    digit["card"]["flow_version"] = "3.1.\u0663"  # ARABIC-INDIC DIGIT THREE
+    cases.append(
+        ("non_ascii_digit", canonical_json(_resign(digit, signer)), "malformed")
+    )
+
+    null_scope = json.loads(text(with_auth))
+    null_scope["seal"]["scope_item"] = None
+    cases.append(
+        ("seal_field_null", canonical_json(_resign(null_scope, signer)), "malformed")
+    )
+
+    # The last base64 character of a 64-byte signature carries 4 unused bits;
+    # setting one spells the same bytes differently.
+    respelled = json.loads(text(base))
+    signature = respelled["seal"]["signature"]
+    alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    last = alphabet[alphabet.index(signature[-3]) | 1]
+    respelled["seal"]["signature"] = signature[:-3] + last + "=="
+    assert base64.b64decode(respelled["seal"]["signature"]) == base64.b64decode(
+        signature
+    )
+    cases.append(("signature_base64_respelled", canonical_json(respelled), "malformed"))
+
+    over = json.loads(text(base))
+    over["card"]["checks"]["effects"] = {"required": 0, "confirmed": 1}
+    cases.append(
+        ("confirmed_over_required", canonical_json(_resign(over, signer)), "valid")
+    )
+
     return {
         "about": (
             "Golden vectors for openadapt.public-seal/v1, generated by "
@@ -493,6 +566,12 @@ def _vectors(tmp_path: Path) -> dict:
         "key_id": signer.key_id,
         "cases": [{"name": n, "body": b, "expect": e} for n, b, e in cases],
     }
+
+
+#: SHA-256 of golden_vectors.json. openadapt-cloud keeps a byte copy
+#: (tests/fixtures/public-seal/golden_vectors.json) pinned to the same hash.
+#: When this changes, copy the file to Cloud and update both hashes.
+VECTORS_SHA256 = "3a4876270a6cb75a212305214c31f8fddc0aa27c8a1dec4de56284bb1919ca44"
 
 
 def test_golden_vectors_verify_as_labelled(tmp_path):
@@ -511,6 +590,10 @@ def test_golden_vectors_verify_as_labelled(tmp_path):
     assert {c["name"] for c in committed["cases"]} == {
         c["name"] for c in vectors["cases"]
     }
+    assert hashlib.sha256(VECTORS.read_bytes()).hexdigest() == VECTORS_SHA256, (
+        "golden_vectors.json changed: copy it to openadapt-cloud "
+        "tests/fixtures/public-seal/ and update VECTORS_SHA256 in both repos"
+    )
 
 
 def test_a_development_flow_version_is_a_closed_refusal(tmp_path):

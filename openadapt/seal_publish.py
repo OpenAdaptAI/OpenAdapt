@@ -2,9 +2,11 @@
 
 A run's own Seal (``seal.json``) signs its whole ``report.json``, which stays on
 this computer. Publishing builds the run's *public* Seal (``public-seal.json``,
-:mod:`openadapt_flow.public_seal`): counts, outcomes, the step strip, digests,
-the program and app names and the hour the run started, signed by the same
-key. Only that file is uploaded, and only after the person says yes:
+:mod:`openadapt_flow.public_seal`): counts, outcomes, the step strip, digests
+and the hour the run started, signed by the same key. The program name is in
+it only with ``--names`` (or for the synthetic tutorial), because a program
+name can be a person's name. The exact card is always printed first; only
+that file is uploaded, and only after the person says yes:
 
 * in a terminal, a y/N prompt that defaults to No;
 * anywhere else, ``--yes``; under CI, ``--yes --allow-ci``.
@@ -34,7 +36,11 @@ DEFAULT_ENDPOINT = "https://app.openadapt.ai"
 ENV_ENDPOINT = "OPENADAPT_SEAL_ENDPOINT"
 PUBLISH_FILE = "seal.publish.json"
 API_PATH = "/api/public/local-seals"
+#: Answers ``{"enabled": true}`` only while Cloud accepts uploads.
+STATUS_PATH = API_PATH + "/status"
 TIMEOUT_S = 15.0
+#: The quickstart waits at most this long to learn whether to offer.
+STATUS_TIMEOUT_S = 1.0
 _ID = re.compile(r"^[A-Za-z0-9_-]{43}\Z")
 _QUICKSTART_ROOT = re.compile(r"openadapt-quickstart(-[0-9]+)?")
 
@@ -74,7 +80,11 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def urllib_transport(
-    method: str, url: str, body: Optional[bytes], headers: Mapping[str, str]
+    method: str,
+    url: str,
+    body: Optional[bytes],
+    headers: Mapping[str, str],
+    timeout: float = TIMEOUT_S,
 ) -> Response:
     """The real transport: one request to ``url``, no redirects followed."""
     request = urllib.request.Request(
@@ -82,7 +92,7 @@ def urllib_transport(
     )
     opener = urllib.request.build_opener(_NoRedirect)
     try:
-        with opener.open(request, timeout=TIMEOUT_S) as reply:
+        with opener.open(request, timeout=timeout) as reply:
             return Response(reply.status, dict(reply.headers), reply.read())
     except urllib.error.HTTPError as reply:
         return Response(reply.code, dict(reply.headers or {}), reply.read() or b"")
@@ -122,6 +132,48 @@ def endpoint(
 
 def host_of(origin: str) -> str:
     return urlsplit(origin).netloc
+
+
+def hosted_seals_live(
+    origin: str,
+    *,
+    transport: Optional[Transport] = None,
+    timeout_s: float = STATUS_TIMEOUT_S,
+) -> bool:
+    """True only when ``origin`` answers 200 ``{"enabled": true}`` within ``timeout_s``.
+
+    Anything else (an error, a timeout, a 404 from a Cloud without the route,
+    ``{"enabled": false}``) is False. The wait is bounded with a thread, since
+    a socket timeout does not bound the DNS lookup.
+    """
+    import threading
+
+    url = origin + STATUS_PATH
+    headers = {"Accept": "application/json"}
+    if transport is None:
+        real = _module_transport()
+
+        def transport(method, url, body, headers):  # type: ignore[no-redef]
+            return real(method, url, body, headers, timeout_s)
+
+    answer: list[Response] = []
+
+    def ask() -> None:
+        try:
+            answer.append(transport("GET", url, None, headers))
+        except Exception:  # noqa: BLE001 - any failure means "do not offer"
+            pass
+
+    worker = threading.Thread(target=ask, name="seal-status", daemon=True)
+    worker.start()
+    worker.join(timeout_s)
+    if worker.is_alive() or not answer or answer[0].status != 200:
+        return False
+    try:
+        data = json.loads(answer[0].body.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        return False
+    return data == {"enabled": True}
 
 
 def in_ci(env: Optional[Mapping[str, str]] = None) -> bool:
@@ -212,11 +264,15 @@ def tutorial_provenance(run_dir: Path) -> Optional[str]:
 def build(
     run_dir: Path,
     *,
-    no_names: bool = False,
+    names: Optional[bool] = None,
     github: Optional[str] = None,
     provenance: Optional[str] = None,
 ) -> dict[str, Any]:
-    """Build (or reuse) and write ``RUN_DIR/public-seal.json``. No network."""
+    """Build (or reuse) and write ``RUN_DIR/public-seal.json``. No network.
+
+    ``names``: True includes the program name, False leaves it out, None
+    (the default) includes it only for the synthetic tutorial.
+    """
     public_seal = _engine()
     from openadapt_flow.offline_seal import LocalSealError, seal_home, signer_for
 
@@ -225,14 +281,14 @@ def build(
         doc = public_seal.build_public_seal(
             run_dir,
             signer=signer,
-            no_names=no_names,
+            names=names,
             github=github,
             provenance=provenance or tutorial_provenance(run_dir),
         )
     except LocalSealError as exc:
         hint = ""
         if exc.code == "name_not_allowed":
-            hint = " Run again with --no-names."
+            hint = " Run again without --names."
         raise PublishError(f"No public Seal for {run_dir}: {exc}.{hint}") from exc
     public_seal.write_public_seal(run_dir, doc)
     return doc
@@ -503,7 +559,7 @@ def publish(
     yes: bool = False,
     allow_ci: bool = False,
     dry_run: bool = False,
-    no_names: bool = False,
+    names: Optional[bool] = None,
     github: Optional[str] = None,
     endpoint_value: Optional[str] = None,
     provenance: Optional[str] = None,
@@ -511,12 +567,13 @@ def publish(
     ask: Callable[[str], str] = input,
     say: Callable[[str], None] = print,
     transport: Optional[Transport] = None,
-    show_card: bool = True,
     command: Callable[[str], str] = lambda rest: f"openadapt {rest}",
 ) -> Optional[str]:
     """Build, show, ask, upload. Returns the link, or None when nothing was sent.
 
-    Raises :class:`PublishError` with an exit code for each refusal.
+    The exact card is always printed before anything is asked or sent;
+    ``yes`` skips the question, never the card. Raises :class:`PublishError`
+    with an exit code for each refusal.
     """
     run_dir = Path(run_dir)
     origin = endpoint(endpoint_value)
@@ -525,9 +582,8 @@ def publish(
         say(f"Already published: {existing['url']}")
         say(f"To take it down: {command(f'seal unpublish {_quote(run_dir)}')}")
         return str(existing["url"])
-    doc = build(run_dir, no_names=no_names, github=github, provenance=provenance)
-    if show_card:
-        say(card_text(doc))
+    doc = build(run_dir, names=names, github=github, provenance=provenance)
+    say(card_text(doc))
     if dry_run:
         say(f"Dry run: wrote {run_dir / 'public-seal.json'}. Nothing was uploaded.")
         return None
@@ -564,6 +620,7 @@ __all__ = [
     "check_link",
     "consent",
     "endpoint",
+    "hosted_seals_live",
     "in_ci",
     "parse_link",
     "publish",
