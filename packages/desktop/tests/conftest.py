@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -162,3 +163,23 @@ def no_usage_stats_or_update_check(monkeypatch):
 
     monkeypatch.setenv("DO_NOT_TRACK", "1")
     monkeypatch.setenv("OPENADAPT_UPDATE_CHECK", "false")
+
+
+@pytest.fixture
+def no_subprocess_fork(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fail any subprocess that would fork pytest.
+
+    By the time the release tests run, earlier tests have loaded macOS system
+    frameworks into the pytest process. On the hosted macOS runners a forked
+    copy of that process sometimes never reached exec, and the parent waited
+    inside Popen until the job was cancelled. With this guard a call that
+    brings the fork back fails at once, on Linux as well as macOS.
+    """
+
+    if not getattr(subprocess, "_USE_POSIX_SPAWN", False):
+        return
+
+    def refuse(args, *_rest, **_named):
+        raise AssertionError(f"{args!r} would fork pytest; run git through native_release.run_git")
+
+    monkeypatch.setattr(subprocess, "_fork_exec", refuse)
