@@ -137,20 +137,44 @@ class FakeSession:
 
 
 def _complete_array_oracle(*args: Any, **kwargs: Any) -> OpenEMRPatientOracle:
-    """The FakeSession above returns its entire literal array in one response."""
+    """The FakeSession above returns its entire literal array in one response.
+
+    Shaped as OpenEMR's last page: ``links`` holds ``first`` and no ``next``.
+    """
     oracle = OpenEMRPatientOracle(*args, **kwargs)
-    oracle.verifier.records_complete = True
+    session = oracle.verifier._session
+    if isinstance(session, FakeSession) and isinstance(session.body, dict):
+        session.body = {**session.body, "links": {"first": "https://fixture/x"}}
     return oracle
 
 
 def test_bounded_live_oracle_has_no_implicit_completeness_declaration() -> None:
+    """A body without OpenEMR's ``links`` object never reads as complete."""
     oracle = OpenEMRPatientOracle(
         "http://fixture", FakeSession({"data": []}), timeout_s=0.1
     )
     state = oracle.capture()
     assert state.reachable is False
-    assert state.readback_complete is None
+    assert state.readback_complete is not True
     assert state.records == []
+
+
+def test_live_oracle_reads_openemr_last_page_as_complete() -> None:
+    """OpenEMR adds links.next only when a record follows the page."""
+    last = FakeSession({"data": [], "links": {"first": "https://fixture/x"}})
+    state = OpenEMRPatientOracle("http://fixture", last, timeout_s=0.1).capture()
+    assert state.reachable is True
+    more = FakeSession(
+        {
+            "data": [],
+            "links": {
+                "first": "x",
+                "next": "http://fixture/apis/default/api/patient?_offset=200",
+            },
+        }
+    )
+    state = OpenEMRPatientOracle("http://fixture", more, timeout_s=0.1).capture()
+    assert state.reachable is False
 
 
 def test_lock_pins_exact_release_image_source_and_runtime_proofs() -> None:

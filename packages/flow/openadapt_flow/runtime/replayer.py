@@ -8239,7 +8239,7 @@ class Replayer:
 
         first_local_gui = (
             self._first_local_delivery_step is not None
-            and is_consequential(step, workflow)
+            and self._first_local_consequential(step, workflow)
         )
         if first_local_gui and first_local_effect_refusal(step, result, step.effects):
             result.elapsed_ms = (time.monotonic() - t0) * 1000.0
@@ -11304,6 +11304,32 @@ class Replayer:
             }
         )
 
+    def _first_local_consequential(self, step: Step, workflow: Workflow) -> bool:
+        """Whether the first-local delivery fence treats ``step`` as a write.
+
+        The same step set the outcome classifier uses for this run
+        (``execution_profiles.classify_execution_outcome``): in a qualification
+        case bound to this bundle's own qualification project (its id,
+        revision and contract digest, checked by the case authorization), the
+        project's operator-confirmed risk decisions count before a
+        certification exists, because the campaign is what certifies them.
+        Every other run needs a current certification for an operator
+        down-classification, as before. Without this, a campaign could not
+        qualify a program whose write-shaped but reversible step (a button
+        that only opens a confirmation dialog) the operator classified: the
+        fence refused it for having no effect contract.
+        """
+
+        authorization = self.governed_authorization
+        review = bool(
+            authorization is not None
+            and authorization.qualification_case_id is not None
+            and authorization._qualification_binding_error(workflow) is None
+        )
+        return is_consequential(
+            step, workflow, require_current_risk_certification=not review
+        )
+
     def _step_is_consequential(self, step: Step, workflow: Workflow) -> bool:
         authorization = self.governed_authorization
         return is_consequential(step, workflow) or (
@@ -12929,7 +12955,7 @@ class Replayer:
             and self._first_local_delivery_step is not None
             and not interstitial
             and not api_delivery
-            and is_consequential(step, workflow)
+            and self._first_local_consequential(step, workflow)
         ):
             refusal = arm_first_local_delivery(self, step, params, actuation="gui")
         if refusal is not None:

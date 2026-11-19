@@ -35,8 +35,8 @@ if TYPE_CHECKING:
 
 import numpy as np
 
-from openadapt_flow import sealed_set as _sealed
 from openadapt_flow import clock_text, volatility
+from openadapt_flow import sealed_set as _sealed
 from openadapt_flow.compiler.empty_result_guard import (
     MinedGuard,
     carries_value,

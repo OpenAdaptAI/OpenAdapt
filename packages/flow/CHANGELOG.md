@@ -15,6 +15,37 @@
 
 <!-- version list -->
 
+## Unreleased
+
+### Fixes
+
+- Screen text read from the clock is checked against the run's clock. A
+  text check whose dates all equal the recording date, at the precision the
+  text shows (a date picker's "October 2026", a pre-filled "10/20/2026", a
+  "Tuesday, Oct 20" header), compiles to a clock template
+  (`Postcondition.text_clock`, `openadapt_flow/clock_text.py`). The run
+  renders it from its own clock (local date, and the UTC date around
+  midnight) and checks that exact date: OCR must read it exactly, never by
+  the fuzzy match, so "October 2025" or another month still fails. Before,
+  the certified OpenEMR referral program checked the literal
+  "October-2026-" and halted every referral from 1 November. OCR-joined
+  month dates ("October-2026-", "Oct/2026") now classify as dates too.
+  `python -m openadapt_flow.compiler.clock_pass BUNDLE OUT --recorded-on
+  DATE` applies the same rule to a bundle compiled before this; the result
+  must be qualified again.
+- A REST read can declare that its endpoint leaves the next link out of a
+  still-present parent object on the last page
+  (`records_next_absent_is_last: true`, with `records_next_path`). A body
+  without that parent object, or a page that has a next link and no
+  snapshot semantics, stays indeterminate. The OpenEMR recipes use it with
+  `_limit=200` (OpenEMR's page cap), so their read-back is complete again
+  since #2041 instead of "REST read completeness was not established".
+- The first-local delivery fence (#2209) counts the qualification
+  project's operator-confirmed risk decisions in a qualification case bound
+  to the bundle's own project, as the outcome classifier already did. Before,
+  a campaign could not qualify a program whose write-shaped but reversible
+  step the operator had classified.
+
 ## v3.2.0 (2026-11-19)
 
 ### Faster screen steps and encrypted checkpoints

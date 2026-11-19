@@ -131,10 +131,14 @@ def _token_values(token: str, on: date) -> tuple[str, ...]:
         return (f"{on.year % 100:02d}",)
     if token in ("MM", "M", "M?"):
         padded, bare = f"{on.month:02d}", str(on.month)
-        return {"MM": (padded,), "M": (bare,)}.get(token, tuple(dict.fromkeys((padded, bare))))
+        return {"MM": (padded,), "M": (bare,)}.get(
+            token, tuple(dict.fromkeys((padded, bare)))
+        )
     if token in ("DD", "D", "D?"):
         padded, bare = f"{on.day:02d}", str(on.day)
-        return {"DD": (padded,), "D": (bare,)}.get(token, tuple(dict.fromkeys((padded, bare))))
+        return {"DD": (padded,), "D": (bare,)}.get(
+            token, tuple(dict.fromkeys((padded, bare)))
+        )
     lowered = token.lower()
     if lowered == "month":
         return (_word(_MONTHS[on.month - 1], token),)
@@ -279,9 +283,7 @@ def _month_fragment(match: re.Match[str], on: date) -> Optional[str]:
         return None
     if year_s is not None and int(year_s) != on.year:
         return None
-    if weekday_s is not None and (
-        volatility.weekday_number(weekday_s) != on.weekday()
-    ):
+    if weekday_s is not None and (volatility.weekday_number(weekday_s) != on.weekday()):
         return None
     text = match.group(0)
     start = match.start()

@@ -117,9 +117,9 @@ class RestRecordVerifier(VerifierAdapterBase):
         next_absent_is_last: With ``next_path``: the endpoint's reviewed
             contract is that a page with more records after it carries the
             next link, and the last page leaves the link OUT of an object
-            that is still there (OpenEMR's Standard API: ``links`` always
-            holds ``first``; it adds ``next`` only when its one-row-past-the-
-            page probe found another record). Set, a body whose next link's
+            that is still there (for example an API whose ``links`` always
+            holds ``first`` and gains ``next`` only when a read one row past
+            the page found another record). Set, a body whose next link's
             parent object is present without the link is the last page; a
             body without that parent object still reads as incomplete.
             Unset, an absent link never ends the read.

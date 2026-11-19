@@ -228,9 +228,7 @@ class TestReplayCheck:
         )
         at = datetime(2026, 11, 3, 12, tzinfo=timezone.utc)
         assert _replayer(["Nothing due"], at)._postcondition_passes(pc, b"", None)
-        assert not _replayer(["Nov 3, 2026"], at)._postcondition_passes(
-            pc, b"", None
-        )
+        assert not _replayer(["Nov 3, 2026"], at)._postcondition_passes(pc, b"", None)
 
 
 class TestBundlePass:
@@ -244,8 +242,12 @@ class TestBundlePass:
                 action=ActionKind.KEY,
                 key="Enter",
                 expect=[
-                    Postcondition(kind=PostconditionKind.TEXT_PRESENT, text="October-2026-"),
-                    Postcondition(kind=PostconditionKind.TEXT_PRESENT, text="Date of birth"),
+                    Postcondition(
+                        kind=PostconditionKind.TEXT_PRESENT, text="October-2026-"
+                    ),
+                    Postcondition(
+                        kind=PostconditionKind.TEXT_PRESENT, text="Date of birth"
+                    ),
                     Postcondition(
                         kind=PostconditionKind.TEXT_PRESENT,
                         text="October 2026",

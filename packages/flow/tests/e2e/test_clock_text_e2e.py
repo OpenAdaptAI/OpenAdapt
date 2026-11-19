@@ -68,7 +68,9 @@ def bundle(app_url: str, tmp_path_factory: pytest.TempPathFactory) -> Path:
         box = page.locator("#dob").bounding_box()
         assert box is not None
         recorder = Recorder(backend, tmp_path_factory.mktemp("rec"), app_url=app_url)
-        recorder.click(int(box["x"] + box["width"] / 2), int(box["y"] + box["height"] / 2))
+        recorder.click(
+            int(box["x"] + box["width"] / 2), int(box["y"] + box["height"] / 2)
+        )
         page.locator("#month").wait_for(state="visible")
         recording = recorder.finish()
     finally:

@@ -72,7 +72,11 @@ def relativize_clock_texts(
                 continue
             expect[index] = condition.model_copy(update={"text_clock": template})
             changed.append(f"{step.id}: {condition.text!r} -> {template!r}")
-        steps.append(step.model_copy(update={"expect": expect}) if expect != step.expect else step)
+        steps.append(
+            step.model_copy(update={"expect": expect})
+            if expect != step.expect
+            else step
+        )
     return steps, changed
 
 
