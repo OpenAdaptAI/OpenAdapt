@@ -419,6 +419,19 @@ def test_unpublish_on_a_410_forgets_the_token(make_run, tmp_path):
     assert not (run / "seal.publish.json").exists()
 
 
+@pytest.mark.parametrize("extra", [[], ["--yes"]])
+def test_cli_unpublish_accepts_yes_like_publish(make_run, tmp_path, monkeypatch, extra):
+    run = make_run()
+    _publish(run, Recorder(created()), yes=True, interactive=False)
+    transport = Recorder(Response(204, {}, b""))
+    monkeypatch.setattr(seal_publish, "urllib_transport", transport)
+    result = CliRunner().invoke(cli.main, ["seal", "unpublish", str(run), *extra])
+    assert result.exit_code == 0, result.output
+    assert "Unpublished." in result.output
+    assert [request[0] for request in transport.requests] == ["DELETE"]
+    assert not (run / "seal.publish.json").exists()
+
+
 def test_a_tutorial_sibling_marks_practice_only_inside_a_quickstart_folder(tmp_path):
     from openadapt.seal_publish import tutorial_provenance
 
