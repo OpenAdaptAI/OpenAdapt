@@ -297,7 +297,11 @@ def _next_page_poll_s(backend: Backend, deadline: float) -> float:
             hint = hint_of()
         except Exception:
             hint = 0.0
-        if isinstance(hint, (int, float)) and not isinstance(hint, bool) and hint > wait:
+        if (
+            isinstance(hint, (int, float))
+            and not isinstance(hint, bool)
+            and hint > wait
+        ):
             wait = hint
     return max(0.0, min(wait, deadline - time.monotonic()))
 

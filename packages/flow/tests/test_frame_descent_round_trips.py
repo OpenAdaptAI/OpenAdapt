@@ -222,7 +222,7 @@ def test_focused_value_reads_through_nested_frames_and_refuses_ambiguity(browser
         # selector the descent derives must still name exactly one frame.
         page.frames[1].evaluate(
             "() => document.body.insertAdjacentHTML('beforeend', "
-            "'<iframe id=\"app\" style=\"width:50px;height:50px\"></iframe>')"
+            '\'<iframe id="app" style="width:50px;height:50px"></iframe>\')'
         )
         inner.locator("#field").focus()
         path: list[str] = []
@@ -230,4 +230,3 @@ def test_focused_value_reads_through_nested_frames_and_refuses_ambiguity(browser
         assert path and path[-1] != "#app"
     finally:
         page.close()
-

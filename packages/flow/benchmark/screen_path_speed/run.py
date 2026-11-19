@@ -34,6 +34,7 @@ from typing import Any
 from benchmark.openemr_api_tier.common import (
     REFERRALS,
     load_demo,
+    owned_fixture_oracle,
     record_check,
     reset_and_seed,
     spec_for,
@@ -63,7 +64,14 @@ def engine_head() -> str:
         ["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True, text=True
     ).stdout.strip()
     dirty = subprocess.run(
-        ["git", "-C", str(root), "status", "--porcelain", "packages/flow/openadapt_flow"],
+        [
+            "git",
+            "-C",
+            str(root),
+            "status",
+            "--porcelain",
+            "packages/flow/openadapt_flow",
+        ],
         capture_output=True,
         text=True,
     ).stdout.strip()
@@ -73,7 +81,6 @@ def engine_head() -> str:
 def run_item(
     env: dict[str, Any], ref_idx: int, bundle: Path, out: Path, profile: bool
 ) -> dict[str, Any]:
-    from benchmark.harness.openemr_local import OpenEMRPatientOracle
     from openadapt_flow.ir import Workflow
     from openadapt_flow.runtime import Replayer
 
@@ -82,7 +89,7 @@ def run_item(
     spec = spec_for(ref)
     out.mkdir(parents=True)
     before_ids = {r["id"] for r in sql_patients(f)}
-    oracle = OpenEMRPatientOracle(f.api_base_url, f.token_session("oracle"), spec)
+    oracle = owned_fixture_oracle(f, spec)
     res: dict[str, Any] = {"ref": ref.key, "mismatch": ref.mismatch, "error": None}
     prof = None
     t0 = time.time()
@@ -209,9 +216,10 @@ def main() -> None:
 
         apply_speed_profile(a.speed)
 
+    from playwright.sync_api import sync_playwright
+
     import openadapt_flow
     import openadapt_flow.vision.ocr  # noqa: F401
-    from playwright.sync_api import sync_playwright
 
     ocr = sys.modules["openadapt_flow.vision.ocr"]
     bundle, out = Path(a.bundle), Path(a.out)
@@ -233,7 +241,9 @@ def main() -> None:
             idx = ((a.start + pos) % len(REFERRALS)) + 1
             waited = wait_quiet()
             l0 = load1()
-            item_dir = out / f"b{a.block:02d}-{a.arm}-{pos + 1}-{REFERRALS[idx - 1].key}"
+            item_dir = (
+                out / f"b{a.block:02d}-{a.arm}-{pos + 1}-{REFERRALS[idx - 1].key}"
+            )
             res = run_item(env, idx, bundle, item_dir, a.profile)
             l1 = load1()
             row = {

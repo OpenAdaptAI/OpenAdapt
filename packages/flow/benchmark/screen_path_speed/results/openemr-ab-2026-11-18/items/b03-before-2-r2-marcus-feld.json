@@ -1,0 +1,733 @@
+{
+ "ref": "r2-marcus-feld",
+ "mismatch": false,
+ "error": null,
+ "engine_success": true,
+ "outcome": "COMPLETED_UNVERIFIED",
+ "steps": 41,
+ "step_errors": [],
+ "timings_ms": {
+  "settle_after": 5772.5,
+  "actuate": 5276.0,
+  "postcondition": 2441.6,
+  "identity": 1981.2,
+  "ocr": 1362.6,
+  "screenshot": 1348.9,
+  "resolve": 1196.3,
+  "settle_before": 425.3,
+  "readback": 344.3,
+  "other": 173.6,
+  "artifact_write": 36.1
+ },
+ "checks": [
+  "step_000|verified|structured|None|True|None|None|0|True",
+  "step_001|None|None|True|None|None|None|0|True",
+  "step_002|None|None|None|True|None|None|0|True",
+  "step_003|verified|structured|None|True|None|None|0|True",
+  "step_004|None|None|None|True|None|None|0|True",
+  "step_005|None|None|True|None|None|None|0|True",
+  "step_006|verified|structured|None|True|None|None|0|True",
+  "step_007|None|None|None|True|None|None|0|True",
+  "step_008|None|None|True|None|None|None|0|True",
+  "step_009|verified|structured|None|True|None|None|0|True",
+  "step_010|None|None|None|True|None|None|0|True",
+  "step_011|None|None|True|None|None|None|0|True",
+  "step_012|verified|structured|None|True|None|None|0|True",
+  "step_013|None|None|True|None|None|None|0|True",
+  "step_014|None|None|None|True|None|None|0|True",
+  "step_015|None|None|None|True|None|None|0|True",
+  "step_016|None|None|None|None|None|None|0|True",
+  "step_017|verified|structured|None|True|None|None|0|True",
+  "step_018|None|None|None|True|None|None|0|True",
+  "step_019|None|None|True|None|None|None|0|True",
+  "step_020|verified|structured|None|True|None|None|0|True",
+  "step_021|None|None|None|True|None|None|0|True",
+  "step_022|None|None|True|None|None|None|0|True",
+  "step_023|verified|structured|None|True|None|None|0|True",
+  "step_024|None|None|True|None|None|None|0|True",
+  "step_025|None|None|None|True|None|None|0|True",
+  "step_026|verified|structured|None|True|None|None|0|True",
+  "step_027|None|None|None|True|None|None|0|True",
+  "step_028|None|None|True|None|None|None|0|True",
+  "step_029|verified|structured|None|True|None|None|0|True",
+  "step_030|None|None|None|True|None|None|0|True",
+  "step_031|None|None|True|None|None|None|0|True",
+  "step_032|verified|structured|None|True|None|None|0|True",
+  "step_033|None|None|None|True|None|None|0|True",
+  "step_034|None|None|True|None|None|None|0|True",
+  "step_035|verified|structured|None|True|None|None|0|True",
+  "step_036|None|None|True|None|None|None|0|True",
+  "step_037|None|None|None|True|None|None|0|True",
+  "step_038|None|None|None|None|None|None|0|True",
+  "step_039|verified|structured|None|True|None|None|0|True",
+  "step_040|verified|context|None|True|None|True|11|True"
+ ],
+ "per_step": [
+  {
+   "step_id": "step_000",
+   "intent": "click 'Unassigned'",
+   "elapsed_ms": 795.8,
+   "timings": {
+    "screenshot": 89.3,
+    "settle_before": 307.5,
+    "artifact_write": 1.0,
+    "postcondition": 14.2,
+    "resolve": 56.3,
+    "identity": 73.1,
+    "actuate": 140.8,
+    "settle_after": 111.1,
+    "other": 2.5
+   }
+  },
+  {
+   "step_id": "step_001",
+   "intent": "type <title>",
+   "elapsed_ms": 406.6,
+   "timings": {
+    "settle_before": 3.1,
+    "artifact_write": 0.7,
+    "postcondition": 56.9,
+    "resolve": 0.0,
+    "identity": 0.0,
+    "screenshot": 27.6,
+    "settle_after": 38.9,
+    "actuate": 277.1,
+    "other": 2.3
+   }
+  },
+  {
+   "step_id": "step_002",
+   "intent": "press Enter",
+   "elapsed_ms": 279.5,
+   "timings": {
+    "settle_before": 3.0,
+    "artifact_write": 0.8,
+    "postcondition": 121.6,
+    "resolve": 0.0,
+    "identity": 0.0,
+    "actuate": 8.9,
+    "screenshot": 23.3,
+    "settle_after": 119.3,
+    "other": 2.6
+   }
+  },
+  {
+   "step_id": "step_003",
+   "intent": "click 'First Name'",
+   "elapsed_ms": 470.3,
+   "timings": {
+    "settle_before": 2.7,
+    "artifact_write": 1.0,
+    "postcondition": 13.5,
+    "resolve": 52.8,
+    "identity": 117.1,
+    "actuate": 133.8,
+    "screenshot": 23.8,
+    "settle_after": 121.9,
+    "other": 3.8
+   }
+  },
+  {
+   "step_id": "step_004",
+   "intent": "press Control+a",
+   "elapsed_ms": 220.4,
+   "timings": {
+    "settle_before": 2.8,
+    "artifact_write": 1.1,
+    "postcondition": 64.1,
+    "resolve": 0.0,
+    "identity": 0.0,
+    "actuate": 8.9,
+    "screenshot": 28.6,
+    "settle_after": 112.4,
+    "other": 2.5
+   }
+  },
+  {
+   "step_id": "step_005",
+   "intent": "type <fname>",
+   "elapsed_ms": 390.3,
+   "timings": {
+    "settle_before": 2.6,
+    "artifact_write": 0.7,
+    "postcondition": 73.6,
+    "resolve": 0.0,
+    "identity": 0.0,
+    "screenshot": 28.6,
+    "settle_after": 39.3,
+    "actuate": 243.1,
+    "other": 2.3
+   }
+  },
+  {
+   "step_id": "step_006",
+   "intent": "click 'Last Name'",
+   "elapsed_ms": 424.3,
+   "timings": {
+    "settle_before": 2.7,
+    "artifact_write": 1.0,
+    "postcondition": 14.4,
+    "resolve": 52.4,
+    "identity": 85.8,
+    "actuate": 127.7,
+    "screenshot": 30.0,
+    "settle_after": 108.0,
+    "other": 2.3
+   }
+  },
+  {
+   "step_id": "step_007",
+   "intent": "press Control+a",
+   "elapsed_ms": 217.2,
+   "timings": {
+    "settle_before": 3.1,
+    "artifact_write": 1.0,
+    "postcondition": 63.4,
+    "resolve": 0.0,
+    "identity": 0.0,
+    "actuate": 9.6,
+    "screenshot": 26.4,
+    "settle_after": 111.4,
+    "other": 2.3
+   }
+  },
+  {
+   "step_id": "step_008",
+   "intent": "type <lname>",
+   "elapsed_ms": 453.3,
+   "timings": {
+    "settle_before": 2.5,
+    "artifact_write": 0.6,
+    "postcondition": 78.4,
+    "resolve": 0.0,
+    "identity": 0.0,
+    "screenshot": 33.0,
+    "settle_after": 106.7,
+    "actuate": 229.8,
+    "other": 2.3
+   }
+  },
+  {
+   "step_id": "step_009",
+   "intent": "click recorded visual target",
+   "elapsed_ms": 704.0,
+   "timings": {
+    "settle_before": 3.0,
+    "artifact_write": 1.1,
+    "postcondition": 173.6,
+    "resolve": 57.3,
+    "identity": 81.2,
+    "actuate": 138.9,
+    "screenshot": 29.8,
+    "settle_after": 216.4,
+    "other": 2.6
+   }
+  },
+  {
+   "step_id": "step_010",
+   "intent": "press Control+a",
+   "elapsed_ms": 217.9,
+   "timings": {
+    "settle_before": 3.2,
+    "artifact_write": 0.8,
+    "postcondition": 62.9,
+    "resolve": 0.0,
+    "identity": 0.0,
+    "actuate": 8.9,
+    "screenshot": 25.3,
+    "settle_after": 114.4,
+    "other": 2.5
+   }
+  },
+  {
+   "step_id": "step_011",
+   "intent": "type <DOB>",
+   "elapsed_ms": 433.0,
+   "timings": {
+    "settle_before": 2.7,
+    "artifact_write": 0.6,
+    "postcondition": 74.5,
+    "resolve": 0.0,
+    "identity": 0.0,
+    "screenshot": 32.8,
+    "settle_after": 64.8,
+    "actuate": 255.0,
+    "other": 2.5
+   }
+  },
+  {
+   "step_id": "step_012",
+   "intent": "click 'Unassigned'",
+   "elapsed_ms": 427.9,
+   "timings": {
+    "settle_before": 2.1,
+    "artifact_write": 0.8,
+    "postcondition": 19.6,
+    "resolve": 50.8,
+    "identity": 72.8,
+    "actuate": 134.9,
+    "screenshot": 29.3,
+    "settle_after": 115.2,
+    "other": 2.3
+   }
+  },
+  {
+   "step_id": "step_013",
+   "intent": "type <sex>",
+   "elapsed_ms": 399.6,
+   "timings": {
+    "settle_before": 3.5,
+    "artifact_write": 0.7,
+    "postcondition": 55.7,
+    "resolve": 0.0,
+    "identity": 0.0,
+    "screenshot": 28.8,
+    "settle_after": 36.9,
+    "actuate": 271.2,
+    "other": 2.8
+   }
+  },
+  {
+   "step_id": "step_014",
+   "intent": "press Enter",
+   "elapsed_ms": 276.3,
+   "timings": {
+    "settle_before": 2.6,
+    "artifact_write": 0.6,
+    "postcondition": 123.8,
+    "resolve": 0.0,
+    "identity": 0.0,
+    "actuate": 8.7,
+    "screenshot": 24.7,
+    "settle_after": 113.5,
+    "other": 2.4
+   }
+  },
+  {
+   "step_id": "step_015",
+   "intent": "click recorded visual target",
+   "elapsed_ms": 771.6,
+   "timings": {
+    "settle_before": 2.7,
+    "artifact_write": 0.9,
+    "postcondition": 18.4,
+    "resolve": 61.4,
+    "identity": 0.0,
+    "actuate": 165.2,
+    "screenshot": 28.3,
+    "settle_after": 457.0,
+    "other": 37.7
+   }
+  },
+  {
+   "step_id": "step_016",
+   "intent": "scroll by (0, 600)",
+   "elapsed_ms": 416.1,
+   "timings": {
+    "settle_before": 2.7,
+    "artifact_write": 0.9,
+    "postcondition": 0.0,
+    "resolve": 103.1,
+    "identity": 100.0,
+    "screenshot": 89.1,
+    "settle_after": 87.9,
+    "actuate": 29.7,
+    "other": 2.6
+   }
+  },
+  {
+   "step_id": "step_017",
+   "intent": "click recorded visual target",
+   "elapsed_ms": 407.7,
+   "timings": {
+    "settle_before": 2.4,
+    "artifact_write": 1.0,
+    "postcondition": 22.2,
+    "resolve": 55.0,
+    "identity": 70.1,
+    "actuate": 117.8,
+    "screenshot": 22.1,
+    "settle_after": 114.8,
+    "other": 2.3
+   }
+  },
+  {
+   "step_id": "step_018",
+   "intent": "press Control+a",
+   "elapsed_ms": 217.2,
+   "timings": {
+    "settle_before": 3.0,
+    "artifact_write": 0.7,
+    "postcondition": 60.1,
+    "resolve": 0.0,
+    "identity": 0.0,
+    "actuate": 9.1,
+    "screenshot": 25.9,
+    "settle_after": 115.9,
+    "other": 2.5
+   }
+  },
+  {
+   "step_id": "step_019",
+   "intent": "type <street>",
+   "elapsed_ms": 414.9,
+   "timings": {
+    "settle_before": 2.8,
+    "artifact_write": 0.9,
+    "postcondition": 86.8,
+    "resolve": 0.0,
+    "identity": 0.0,
+    "screenshot": 23.6,
+    "settle_after": 67.8,
+    "actuate": 230.7,
+    "other": 2.3
+   }
+  },
+  {
+   "step_id": "step_020",
+   "intent": "click recorded visual target",
+   "elapsed_ms": 461.6,
+   "timings": {
+    "settle_before": 2.7,
+    "artifact_write": 1.1,
+    "postcondition": 14.5,
+    "resolve": 59.5,
+    "identity": 108.6,
+    "actuate": 126.1,
+    "screenshot": 27.0,
+    "settle_after": 118.9,
+    "other": 3.0
+   }
+  },
+  {
+   "step_id": "step_021",
+   "intent": "press Control+a",
+   "elapsed_ms": 220.0,
+   "timings": {
+    "settle_before": 3.4,
+    "artifact_write": 0.7,
+    "postcondition": 67.0,
+    "resolve": 0.0,
+    "identity": 0.0,
+    "actuate": 9.2,
+    "screenshot": 31.4,
+    "settle_after": 105.9,
+    "other": 2.4
+   }
+  },
+  {
+   "step_id": "step_022",
+   "intent": "type <city>",
+   "elapsed_ms": 406.6,
+   "timings": {
+    "settle_before": 2.6,
+    "artifact_write": 0.9,
+    "postcondition": 83.8,
+    "resolve": 0.0,
+    "identity": 0.0,
+    "screenshot": 27.1,
+    "settle_after": 39.0,
+    "actuate": 251.1,
+    "other": 2.2
+   }
+  },
+  {
+   "step_id": "step_023",
+   "intent": "click 'Jnassigned'",
+   "elapsed_ms": 480.3,
+   "timings": {
+    "settle_before": 2.7,
+    "artifact_write": 1.2,
+    "postcondition": 14.9,
+    "resolve": 61.0,
+    "identity": 88.2,
+    "actuate": 164.6,
+    "screenshot": 29.8,
+    "settle_after": 115.5,
+    "other": 2.6
+   }
+  },
+  {
+   "step_id": "step_024",
+   "intent": "type <state_label>",
+   "elapsed_ms": 433.1,
+   "timings": {
+    "settle_before": 3.0,
+    "artifact_write": 0.7,
+    "postcondition": 76.0,
+    "resolve": 0.0,
+    "identity": 0.0,
+    "screenshot": 29.2,
+    "settle_after": 37.7,
+    "actuate": 283.5,
+    "other": 3.0
+   }
+  },
+  {
+   "step_id": "step_025",
+   "intent": "press Enter",
+   "elapsed_ms": 274.0,
+   "timings": {
+    "settle_before": 2.5,
+    "artifact_write": 0.6,
+    "postcondition": 126.5,
+    "resolve": 0.0,
+    "identity": 0.0,
+    "actuate": 9.6,
+    "screenshot": 23.7,
+    "settle_after": 108.5,
+    "other": 2.5
+   }
+  },
+  {
+   "step_id": "step_026",
+   "intent": "click recorded visual target",
+   "elapsed_ms": 439.7,
+   "timings": {
+    "settle_before": 2.7,
+    "artifact_write": 1.3,
+    "postcondition": 12.4,
+    "resolve": 53.1,
+    "identity": 82.5,
+    "actuate": 139.1,
+    "screenshot": 28.4,
+    "settle_after": 117.5,
+    "other": 2.6
+   }
+  },
+  {
+   "step_id": "step_027",
+   "intent": "press Control+a",
+   "elapsed_ms": 224.2,
+   "timings": {
+    "settle_before": 3.3,
+    "artifact_write": 0.8,
+    "postcondition": 62.8,
+    "resolve": 0.0,
+    "identity": 0.0,
+    "actuate": 9.1,
+    "screenshot": 29.0,
+    "settle_after": 116.6,
+    "other": 2.6
+   }
+  },
+  {
+   "step_id": "step_028",
+   "intent": "type <postal_code>",
+   "elapsed_ms": 404.7,
+   "timings": {
+    "settle_before": 2.6,
+    "artifact_write": 0.8,
+    "postcondition": 76.0,
+    "resolve": 0.0,
+    "identity": 0.0,
+    "screenshot": 28.3,
+    "settle_after": 63.3,
+    "actuate": 231.3,
+    "other": 2.4
+   }
+  },
+  {
+   "step_id": "step_029",
+   "intent": "click recorded visual target",
+   "elapsed_ms": 420.9,
+   "timings": {
+    "settle_before": 2.6,
+    "artifact_write": 0.9,
+    "postcondition": 14.4,
+    "resolve": 55.1,
+    "identity": 72.3,
+    "actuate": 126.7,
+    "screenshot": 30.1,
+    "settle_after": 116.4,
+    "other": 2.3
+   }
+  },
+  {
+   "step_id": "step_030",
+   "intent": "press Control+a",
+   "elapsed_ms": 221.5,
+   "timings": {
+    "settle_before": 3.3,
+    "artifact_write": 0.7,
+    "postcondition": 65.9,
+    "resolve": 0.0,
+    "identity": 0.0,
+    "actuate": 8.9,
+    "screenshot": 24.9,
+    "settle_after": 115.4,
+    "other": 2.4
+   }
+  },
+  {
+   "step_id": "step_031",
+   "intent": "type <phone_home>",
+   "elapsed_ms": 396.8,
+   "timings": {
+    "settle_before": 2.8,
+    "artifact_write": 0.7,
+    "postcondition": 76.5,
+    "resolve": 0.0,
+    "identity": 0.0,
+    "screenshot": 30.3,
+    "settle_after": 33.3,
+    "actuate": 250.6,
+    "other": 2.7
+   }
+  },
+  {
+   "step_id": "step_032",
+   "intent": "click recorded visual target",
+   "elapsed_ms": 438.0,
+   "timings": {
+    "settle_before": 3.3,
+    "artifact_write": 1.1,
+    "postcondition": 14.6,
+    "resolve": 55.4,
+    "identity": 82.3,
+    "actuate": 132.1,
+    "screenshot": 30.0,
+    "settle_after": 116.7,
+    "other": 2.6
+   }
+  },
+  {
+   "step_id": "step_033",
+   "intent": "press Control+a",
+   "elapsed_ms": 225.6,
+   "timings": {
+    "settle_before": 3.2,
+    "artifact_write": 0.7,
+    "postcondition": 65.0,
+    "resolve": 0.0,
+    "identity": 0.0,
+    "actuate": 8.9,
+    "screenshot": 28.6,
+    "settle_after": 116.6,
+    "other": 2.6
+   }
+  },
+  {
+   "step_id": "step_034",
+   "intent": "type <email>",
+   "elapsed_ms": 394.2,
+   "timings": {
+    "settle_before": 2.6,
+    "artifact_write": 0.7,
+    "postcondition": 78.2,
+    "resolve": 0.0,
+    "identity": 0.0,
+    "screenshot": 25.3,
+    "settle_after": 36.6,
+    "actuate": 248.3,
+    "other": 2.5
+   }
+  },
+  {
+   "step_id": "step_035",
+   "intent": "click 'Jnassigned'",
+   "elapsed_ms": 417.7,
+   "timings": {
+    "settle_before": 2.6,
+    "artifact_write": 1.0,
+    "postcondition": 12.6,
+    "resolve": 59.6,
+    "identity": 78.6,
+    "actuate": 122.1,
+    "screenshot": 26.0,
+    "settle_after": 112.5,
+    "other": 2.7
+   }
+  },
+  {
+   "step_id": "step_036",
+   "intent": "type <country_code>",
+   "elapsed_ms": 418.1,
+   "timings": {
+    "settle_before": 3.2,
+    "artifact_write": 0.7,
+    "postcondition": 58.7,
+    "resolve": 0.0,
+    "identity": 0.0,
+    "screenshot": 24.2,
+    "settle_after": 36.4,
+    "actuate": 292.1,
+    "other": 2.7
+   }
+  },
+  {
+   "step_id": "step_037",
+   "intent": "press Enter",
+   "elapsed_ms": 296.7,
+   "timings": {
+    "settle_before": 2.4,
+    "artifact_write": 0.8,
+    "postcondition": 133.0,
+    "resolve": 0.0,
+    "identity": 0.0,
+    "actuate": 8.9,
+    "screenshot": 30.1,
+    "settle_after": 119.1,
+    "other": 2.4
+   }
+  },
+  {
+   "step_id": "step_038",
+   "intent": "scroll by (0, 600)",
+   "elapsed_ms": 562.0,
+   "timings": {
+    "settle_before": 2.7,
+    "artifact_write": 0.8,
+    "postcondition": 0.0,
+    "resolve": 122.4,
+    "identity": 197.4,
+    "screenshot": 87.9,
+    "settle_after": 116.2,
+    "actuate": 32.1,
+    "other": 2.6
+   }
+  },
+  {
+   "step_id": "step_039",
+   "intent": "click recorded visual target",
+   "elapsed_ms": 1893.3,
+   "timings": {
+    "settle_before": 2.6,
+    "artifact_write": 1.5,
+    "postcondition": 77.6,
+    "resolve": 117.0,
+    "identity": 392.1,
+    "actuate": 160.1,
+    "screenshot": 28.6,
+    "settle_after": 577.7,
+    "ocr": 532.2,
+    "other": 4.0
+   }
+  },
+  {
+   "step_id": "step_040",
+   "intent": "click recorded visual target",
+   "elapsed_ms": 2985.8,
+   "timings": {
+    "screenshot": 58.7,
+    "settle_before": 7.8,
+    "artifact_write": 1.5,
+    "postcondition": 113.5,
+    "ocr": 830.4,
+    "resolve": 124.1,
+    "identity": 279.1,
+    "actuate": 111.8,
+    "settle_after": 1079.1,
+    "readback": 344.3,
+    "other": 35.4
+   }
+  }
+ ],
+ "new_charts": 1,
+ "readback": "12/12",
+ "correct": true,
+ "wall_s": 23.358,
+ "setup_s": 1.355,
+ "engine_s": 20.695,
+ "readback_s": 1.309
+}
