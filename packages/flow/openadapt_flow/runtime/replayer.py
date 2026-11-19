@@ -19399,7 +19399,14 @@ class Replayer:
         field's value must match exactly. Unobservable is a failure.
         """
 
-        params = getattr(self, "_current_params", None) or {}
+        # A program run tracks its parameters per state; a linear run keeps
+        # them in ``_run_params``. Without the fallback, every linear run's
+        # dropdown check failed (closed) because it saw no parameters.
+        params = (
+            getattr(self, "_current_params", None)
+            or getattr(self, "_run_params", None)
+            or {}
+        )
         if not pc.param or pc.param not in params:
             return False
         expected = runtime_param_text(params[pc.param])
