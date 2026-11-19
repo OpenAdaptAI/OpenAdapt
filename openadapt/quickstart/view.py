@@ -23,7 +23,12 @@ from pathlib import Path
 from typing import IO, Any, Iterator, Mapping, Optional, Sequence
 
 from openadapt.quickstart.engine import BreakFacts, DemoStep, RunFacts
-from openadapt.quickstart.notices import Notices, collect_notices, plaintext_line
+from openadapt.quickstart.notices import (
+    Notices,
+    collect_notices,
+    key_line,
+    plaintext_line,
+)
 from openadapt.quickstart.scene import MOCKMED, Scene
 from openadapt.quickstart.seal_link import SealCard, read_card
 from openadapt.quickstart.story import (
@@ -414,9 +419,12 @@ class _Base:
             self._notices = notices
             yield
 
-    def _plaintext(self, root: Path) -> Optional[str]:
+    def _plaintext(self, root: Path) -> list[str]:
+        """The finale's at-rest lines: an unencrypted folder, a new key."""
         paths = self._notices.paths if self._notices else []
-        return plaintext_line(paths, display_path(root))
+        created = self._notices.key_created if self._notices else None
+        lines = (plaintext_line(paths, display_path(root)), key_line(created))
+        return [line for line in lines if line]
 
     def expect_runs(self, inputs: Sequence[str]) -> None:
         self._expected = list(inputs)
@@ -637,8 +645,7 @@ class PlainView(_Base):
             self._say(f"  {path}")
         self._say(f"More next steps: {more_hint(steps)}")
         self._say(details_line(outcome))
-        notice = self._plaintext(outcome.root)
-        if notice:
+        for notice in self._plaintext(outcome.root):
             self._say(notice)
         if steps.shadow:
             self._say(steps.shadow)
@@ -1273,8 +1280,7 @@ class RichView(_Base):
         )
         self.console.print()
         self.console.print(f"[dim]{_escape(details_line(outcome))}[/]")
-        notice = self._plaintext(outcome.root)
-        if notice:
+        for notice in self._plaintext(outcome.root):
             self.console.print(f"[dim]{_escape(notice)}[/]")
         if steps.shadow:
             self.console.print(f"[yellow]{_escape(steps.shadow)}[/]")

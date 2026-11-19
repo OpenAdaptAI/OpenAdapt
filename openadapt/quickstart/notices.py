@@ -5,8 +5,10 @@ records it in its plaintext ledger. The quickstart writes seven such folders
 of synthetic data; seven warnings through the live display tear it and bury
 the story. While the story runs, these notices are collected (in the main
 process) or dropped (in Act 2's worker processes, whose folders the ledger
-still records), and the finale says it once. Every other stderr line passes
-through unchanged.
+still records), and the finale says it once. Flow's one-time "Created a local
+encryption key" line is held for the finale too: the key is created here, in
+the main process, before the story and its workers start. Every other stderr
+line passes through unchanged.
 """
 
 from __future__ import annotations
@@ -26,6 +28,9 @@ QUIET_ENV = "OPENADAPT_QUICKSTART_PLAINTEXT_NOTICES"
 #: ('reason')" once under Flow's recorded opt-out.
 _PLAINTEXT = re.compile(r"^WARNING: writing (.+?) in plaintext at (rest \(|.+?: )")
 
+#: Flow's line when it creates this machine's at-rest key on first use.
+_KEY_CREATED = re.compile(r"^Created a local encryption key .* at (.+?)\. Back it up")
+
 
 class Notices(io.TextIOBase):
     """Stands in for stderr: keeps the plaintext notices, forwards the rest."""
@@ -33,6 +38,7 @@ class Notices(io.TextIOBase):
     def __init__(self, target: IO[str]) -> None:
         self.target = target
         self.paths: list[str] = []
+        self.key_created: Optional[str] = None
         self._partial = ""
         self._lock = threading.Lock()
 
@@ -45,8 +51,11 @@ class Notices(io.TextIOBase):
             while "\n" in self._partial:
                 line, self._partial = self._partial.split("\n", 1)
                 match = _PLAINTEXT.match(line)
+                created = _KEY_CREATED.match(line)
                 if match:
                     self.paths.append(match.group(2))
+                elif created:
+                    self.key_created = created.group(1)
                 else:
                     self.target.write(line + "\n")
         return len(text)
@@ -72,6 +81,7 @@ def collect_notices(target: Optional[IO[str]] = None) -> Iterator[Notices]:
     os.environ[QUIET_ENV] = "1"
     try:
         with contextlib.redirect_stderr(notices):
+            _ensure_local_key()
             yield notices
     finally:
         notices.flush()
@@ -79,6 +89,22 @@ def collect_notices(target: Optional[IO[str]] = None) -> Iterator[Notices]:
             os.environ.pop(QUIET_ENV, None)
         else:
             os.environ[QUIET_ENV] = previous
+
+
+def _ensure_local_key() -> None:
+    """Create Flow's local at-rest key now, so workers find it and say nothing.
+
+    Skipped when a key is configured or encryption is opted out. Any error is
+    left for Flow to raise where it needs the key, with its own message.
+    """
+    try:
+        from openadapt_flow import at_rest
+
+        if at_rest.explicit_key() or at_rest.opt_out_reason() is not None:
+            return
+        at_rest.local_key()
+    except Exception:  # noqa: BLE001 - Flow reports it where the key is used
+        return
 
 
 def quiet_in_worker() -> None:
@@ -94,8 +120,19 @@ def plaintext_line(paths: Sequence[str], where: object) -> Optional[str]:
     if not paths:
         return None
     return (
-        f"{where} is written unencrypted (synthetic data only); "
-        "OPENADAPT_FLOW_AT_REST=strict refuses that"
+        f"Reports and screenshots in {where} are unencrypted (synthetic data "
+        "only); OPENADAPT_FLOW_AT_REST=strict refuses that"
+    )
+
+
+def key_line(path: Optional[str]) -> Optional[str]:
+    """The finale's line when this run created the local at-rest key."""
+
+    if not path:
+        return None
+    return (
+        f"Created a local encryption key at {path}; back it up: "
+        "what it encrypts can't be read without it"
     )
 
 
@@ -103,6 +140,7 @@ __all__ = [
     "QUIET_ENV",
     "Notices",
     "collect_notices",
+    "key_line",
     "plaintext_line",
     "quiet_in_worker",
 ]
