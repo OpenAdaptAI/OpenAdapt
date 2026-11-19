@@ -65,18 +65,43 @@ class PublishError(RuntimeError):
         self.exit_code = exit_code
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuse redirects: a redirected POST would be re-sent as a GET elsewhere."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
+        return None
+
+
 def urllib_transport(
     method: str, url: str, body: Optional[bytes], headers: Mapping[str, str]
 ) -> Response:
-    """The real transport: one HTTPS request, no redirects followed for writes."""
+    """The real transport: one request to ``url``, no redirects followed."""
     request = urllib.request.Request(
         url, data=body, method=method, headers=dict(headers)
     )
+    opener = urllib.request.build_opener(_NoRedirect)
     try:
-        with urllib.request.urlopen(request, timeout=TIMEOUT_S) as reply:  # noqa: S310
+        with opener.open(request, timeout=TIMEOUT_S) as reply:
             return Response(reply.status, dict(reply.headers), reply.read())
     except urllib.error.HTTPError as reply:
         return Response(reply.code, dict(reply.headers or {}), reply.read() or b"")
+
+
+def public_bytes(doc: Mapping[str, Any]) -> bytes:
+    """The exact upload bytes: sorted-key compact JSON, as the engine writes it."""
+    return json.dumps(
+        dict(doc), sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode("utf-8")
+
+
+def available() -> bool:
+    """True when the installed openadapt-flow can build public Seals."""
+    import importlib.util
+
+    try:
+        return importlib.util.find_spec("openadapt_flow.public_seal") is not None
+    except (ImportError, ValueError):
+        return False
 
 
 def endpoint(
@@ -275,8 +300,7 @@ def upload(
     transport: Transport,
 ) -> dict[str, Any]:
     """POST the exact bytes of ``public-seal.json``; save ``{id, url, delete_token}``."""
-    public_seal = _engine()
-    body = public_seal.public_seal_bytes(doc)
+    body = public_bytes(doc)
     try:
         response = transport(
             "POST",

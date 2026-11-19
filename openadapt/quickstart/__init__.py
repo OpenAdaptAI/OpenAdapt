@@ -34,6 +34,7 @@ def next_steps(
     offer_publish: Optional[
         Callable[[Path, Callable[[str], None], Callable[[str], str]], None]
     ] = None,
+    can_publish: bool = True,
 ) -> Callable[[Outcome], NextSteps]:
     """The finale's commands, spelled by the launcher's ``hint`` helper.
 
@@ -41,6 +42,8 @@ def next_steps(
     check (run once, at the finale) for an older ``openadapt`` on PATH.
     ``offer_publish`` is given only in a terminal outside CI: the finale then
     asks once whether to put the Seal online. Otherwise it prints the command.
+    ``can_publish`` is False when the engine cannot build public Seals; then
+    the finale neither asks nor prints the command.
     """
 
     def build(outcome: Outcome) -> NextSteps:
@@ -64,10 +67,12 @@ def next_steps(
             agent=agent,
             keep=keep,
             shadow=shadow() if shadow is not None else None,
-            publish=lambda run_dir: hint(
-                f"seal publish {quote(display_path(run_dir))}"
+            publish=(
+                (lambda run_dir: hint(f"seal publish {quote(display_path(run_dir))}"))
+                if can_publish
+                else None
             ),
-            offer_publish=offer_publish,
+            offer_publish=offer_publish if can_publish else None,
         )
 
     return build

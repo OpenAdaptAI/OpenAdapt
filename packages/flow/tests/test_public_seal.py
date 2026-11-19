@@ -268,6 +268,31 @@ def test_receipt_provenance_marks_the_tutorial(tmp_path):
     assert build_card(run, provenance="production")[0]["provenance"] == "production"
 
 
+def test_contract_counts_come_from_the_outcome_envelope(tmp_path):
+    envelope = {
+        "required_contracts": {
+            "authorization": 1,
+            "identity": 5,
+            "postcondition": 9,
+            "effect": 2,
+        },
+        "passed_contracts": {
+            "authorization": 1,
+            "identity": 5,
+            "postcondition": 9,
+            "effect": 0,
+        },
+    }
+    run = _sealed_run(tmp_path, _report(outcome_envelope=envelope))
+    checks = build_card(run)[0]["checks"]
+    assert checks == {
+        "identity": {"required": 5, "confirmed": 5},
+        "postconditions": {"required": 9, "confirmed": 9},
+        "effects": {"required": 2, "confirmed": 0},
+        "authorization": {"required": 1, "confirmed": 1},
+    }
+
+
 def test_the_written_file_is_compact_canonical_bytes(tmp_path):
     run = _sealed_run(tmp_path, _report())
     doc = build_public_seal(run, signer=_signer(), now=NOW)
@@ -385,6 +410,32 @@ def _vectors(tmp_path: Path) -> dict:
             canonical_json(_resign(kind, signer, subject_kind="file")),
             "not_public_card",
         )
+    )
+
+    unnamed = _sealed_run(tmp_path, _report(2), signer, "c")
+    no_names = build_public_seal(
+        unnamed, signer=signer, now=NOW, no_names=True, flow_version="3.1.0"
+    )
+    cases.append(("valid_no_names", text(no_names), "valid"))
+
+    long_run = _sealed_run(tmp_path, _report(64), signer, "d")
+    stripless = build_public_seal(
+        long_run, signer=signer, now=NOW, flow_version="3.1.0"
+    )
+    assert stripless["card"]["steps"] == []
+    cases.append(("valid_64_steps_no_strip", text(stripless), "valid"))
+
+    partial = json.loads(text(base))
+    partial["card"]["steps"] = partial["card"]["steps"][:3]
+    cases.append(
+        ("partial_strip", canonical_json(_resign(partial, signer)), "malformed")
+    )
+
+    outcome = json.loads(text(base))
+    outcome["seal"]["outcome"] = "VERIFIED"
+    resigned_outcome = _resign(outcome, signer)
+    cases.append(
+        ("seal_outcome_differs", canonical_json(resigned_outcome), "malformed")
     )
 
     padded = body[:-1] + " " * (MAX_BYTES + 1 - len(body)) + "}"

@@ -764,6 +764,7 @@ def quickstart(
         keep=_keep_command(),
         shadow=_shadowing_openadapt if _under_uvx() else None,
         offer_publish=_quickstart_publish_offer(),
+        can_publish=_public_seals_available(),
     )
     try:
         with _synthetic_scrub_off():
@@ -797,11 +798,19 @@ def quickstart(
         raise click.exceptions.Exit(1)
 
 
+def _public_seals_available() -> bool:
+    from openadapt.seal_publish import available
+
+    return available()
+
+
 def _quickstart_publish_offer():
     """The finale's one publish question, or None outside a terminal or under CI."""
     from openadapt.seal_publish import in_ci
 
     if in_ci() or not (sys.stdin.isatty() and sys.stdout.isatty()):
+        return None
+    if not _public_seals_available():
         return None
 
     def offer(run_dir: Path, say, ask) -> None:

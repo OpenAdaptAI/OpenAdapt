@@ -16,16 +16,9 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-pytest.importorskip(
-    "openadapt_flow.public_seal", reason="openadapt-flow without public Seals"
-)
-
-from openadapt import (
-    cli,  # noqa: E402
-    seal_publish,  # noqa: E402
-)
-from openadapt.quickstart.seal_link import read_card  # noqa: E402
-from openadapt.seal_publish import (  # noqa: E402
+from openadapt import cli, seal_publish
+from openadapt.quickstart.seal_link import read_card
+from openadapt.seal_publish import (
     PROMPT,
     PublishError,
     Response,
@@ -35,6 +28,17 @@ from openadapt.seal_publish import (  # noqa: E402
     parse_link,
     publish,
     unpublish,
+)
+
+#: The engine's golden vectors: a real signed public Seal, used as the upload
+#: when this environment's openadapt-flow cannot build one.
+VECTORS = (
+    Path(__file__).resolve().parents[1]
+    / "packages/flow/tests/fixtures/public_seal/golden_vectors.json"
+)
+ENGINE = seal_publish.available()
+needs_engine = pytest.mark.skipif(
+    not ENGINE, reason="this openadapt-flow cannot build public Seals"
 )
 
 SEAL_ID = "A" * 22 + "b" * 21
@@ -80,7 +84,13 @@ def created() -> Response:
     return Response(201, {}, json.dumps(body).encode())
 
 
-def _sealed_run(tmp_path: Path, name: str = "run-1", **report_extra) -> Path:
+def _golden_doc() -> dict:
+    vectors = json.loads(VECTORS.read_text(encoding="utf-8"))
+    body = next(c["body"] for c in vectors["cases"] if c["name"] == "valid")
+    return json.loads(body)
+
+
+def _real_run(tmp_path: Path, name: str, report_extra: dict) -> Path:
     from openadapt_flow.ir import RunReport, StepResult
     from openadapt_flow.offline_seal import seal_home, seal_run
 
@@ -105,6 +115,32 @@ def _sealed_run(tmp_path: Path, name: str = "run-1", **report_extra) -> Path:
     return run
 
 
+@pytest.fixture()
+def make_run(tmp_path, monkeypatch):
+    """A sealed run folder. Without an engine that builds public Seals, the
+    build step is replaced by the engine's golden public Seal, so the consent,
+    upload and token tests still run."""
+
+    def make(name: str = "run-1", **report_extra) -> Path:
+        if ENGINE:
+            return _real_run(tmp_path, name, report_extra)
+        run = tmp_path / "openadapt-quickstart" / name
+        run.mkdir(parents=True)
+        (run / "seal.json").write_text("{}", encoding="utf-8")
+
+        def build(run_dir, **_kwargs):
+            doc = _golden_doc()
+            (Path(run_dir) / "public-seal.json").write_bytes(
+                seal_publish.public_bytes(doc)
+            )
+            return doc
+
+        monkeypatch.setattr(seal_publish, "build", build)
+        return run
+
+    return make
+
+
 def _publish(run: Path, transport: Recorder, **kwargs) -> tuple[str | None, list[str]]:
     said: list[str] = []
     kwargs.setdefault("endpoint_value", ORIGIN)
@@ -115,8 +151,8 @@ def _publish(run: Path, transport: Recorder, **kwargs) -> tuple[str | None, list
 # -- upload --------------------------------------------------------------------
 
 
-def test_publish_uploads_the_public_seal_bytes_and_saves_the_token(tmp_path):
-    run = _sealed_run(tmp_path)
+def test_publish_uploads_the_public_seal_bytes_and_saves_the_token(make_run, tmp_path):
+    run = make_run()
     transport = Recorder(created())
     url, said = _publish(run, transport, yes=True, interactive=False)
     assert url == f"{ORIGIN}/seal#{SEAL_ID}"
@@ -135,8 +171,8 @@ def test_publish_uploads_the_public_seal_bytes_and_saves_the_token(tmp_path):
     assert shown["card"] == json.loads(body)["card"]
 
 
-def test_no_terminal_and_no_yes_refuses_without_a_request(tmp_path):
-    run = _sealed_run(tmp_path)
+def test_no_terminal_and_no_yes_refuses_without_a_request(make_run, tmp_path):
+    run = make_run()
     transport = Recorder()
     with pytest.raises(PublishError) as exc:
         _publish(run, transport, interactive=False)
@@ -145,8 +181,8 @@ def test_no_terminal_and_no_yes_refuses_without_a_request(tmp_path):
     assert not (run / "seal.publish.json").exists()
 
 
-def test_ci_refuses_even_with_yes_unless_allow_ci(tmp_path, monkeypatch):
-    run = _sealed_run(tmp_path)
+def test_ci_refuses_even_with_yes_unless_allow_ci(make_run, tmp_path, monkeypatch):
+    run = make_run()
     monkeypatch.setenv("CI", "true")
     transport = Recorder(created())
     with pytest.raises(PublishError) as exc:
@@ -157,8 +193,8 @@ def test_ci_refuses_even_with_yes_unless_allow_ci(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("answer", ["", "n", "no", "N", "maybe"])
-def test_the_prompt_defaults_to_no(tmp_path, answer):
-    run = _sealed_run(tmp_path)
+def test_the_prompt_defaults_to_no(make_run, tmp_path, answer):
+    run = make_run()
     transport = Recorder()
     asked: list[str] = []
     url, said = _publish(
@@ -177,15 +213,15 @@ def test_the_prompt_text_is_the_agreed_one():
     )
 
 
-def test_yes_at_the_prompt_publishes(tmp_path):
-    run = _sealed_run(tmp_path)
+def test_yes_at_the_prompt_publishes(make_run, tmp_path):
+    run = make_run()
     transport = Recorder(created())
     url, _ = _publish(run, transport, interactive=True, ask=lambda _: "y")
     assert url and len(transport.requests) == 1
 
 
-def test_dry_run_writes_the_file_and_sends_nothing(tmp_path):
-    run = _sealed_run(tmp_path)
+def test_dry_run_writes_the_file_and_sends_nothing(make_run, tmp_path):
+    run = make_run()
     transport = Recorder()
     url, said = _publish(run, transport, dry_run=True, yes=True)
     assert url is None and transport.requests == []
@@ -193,8 +229,8 @@ def test_dry_run_writes_the_file_and_sends_nothing(tmp_path):
     assert said[-1].startswith("Dry run:")
 
 
-def test_a_published_run_is_not_uploaded_twice(tmp_path):
-    run = _sealed_run(tmp_path)
+def test_a_published_run_is_not_uploaded_twice(make_run, tmp_path):
+    run = make_run()
     transport = Recorder(created())
     first, _ = _publish(run, transport, yes=True, interactive=False)
     again, said = _publish(run, transport, yes=True, interactive=False)
@@ -212,8 +248,10 @@ def test_a_published_run_is_not_uploaded_twice(tmp_path):
         (400, {}, "invalid"),
     ],
 )
-def test_server_refusals_are_plain_and_save_nothing(tmp_path, status, headers, phrase):
-    run = _sealed_run(tmp_path)
+def test_server_refusals_are_plain_and_save_nothing(
+    make_run, tmp_path, status, headers, phrase
+):
+    run = make_run()
     body = json.dumps({"error": "invalid"}).encode()
     with pytest.raises(PublishError) as exc:
         _publish(
@@ -223,8 +261,9 @@ def test_server_refusals_are_plain_and_save_nothing(tmp_path, status, headers, p
     assert not (run / "seal.publish.json").exists()
 
 
-def test_names_that_fail_the_pattern_suggest_no_names(tmp_path):
-    run = _sealed_run(tmp_path, workflow_name="Jane Doe's chart/notes")
+@needs_engine
+def test_names_that_fail_the_pattern_suggest_no_names(make_run, tmp_path):
+    run = make_run(workflow_name="Jane Doe's chart/notes")
     with pytest.raises(PublishError) as exc:
         _publish(run, Recorder(), dry_run=True)
     assert "--no-names" in str(exc.value)
@@ -256,26 +295,30 @@ def test_consent_never_asks_off_a_terminal():
 # -- the command ----------------------------------------------------------------
 
 
-def test_cli_without_a_terminal_exits_2_and_sends_nothing(tmp_path, monkeypatch):
-    run = _sealed_run(tmp_path)
+def test_cli_without_a_terminal_exits_2_and_sends_nothing(
+    make_run, tmp_path, monkeypatch
+):
+    run = make_run()
     result = CliRunner().invoke(cli.main, ["seal", "publish", str(run)])
     assert result.exit_code == 2, result.output
     assert "Pass --yes" in result.output
     assert not (run / "seal.publish.json").exists()
 
 
-def test_cli_dry_run_defaults_to_the_newest_quickstart_run(tmp_path, monkeypatch):
-    _sealed_run(tmp_path, "run-1")
-    newest = _sealed_run(tmp_path, "run-2")
+def test_cli_dry_run_defaults_to_the_newest_quickstart_run(
+    make_run, tmp_path, monkeypatch
+):
+    make_run("run-1")
+    newest = make_run("run-2")
     monkeypatch.chdir(tmp_path)
     result = CliRunner().invoke(cli.main, ["seal", "publish", "--dry-run"])
     assert result.exit_code == 0, result.output
     assert (newest / "public-seal.json").is_file()
-    assert '"steps_total": 1' in result.output
+    assert '"steps_total":' in result.output
 
 
-def test_cli_publish_with_yes_uses_the_transport(tmp_path, monkeypatch):
-    run = _sealed_run(tmp_path)
+def test_cli_publish_with_yes_uses_the_transport(make_run, tmp_path, monkeypatch):
+    run = make_run()
     transport = Recorder(created())
     monkeypatch.setattr(seal_publish, "urllib_transport", transport)
     result = CliRunner().invoke(
@@ -294,8 +337,8 @@ def test_cli_publish_help_runs_nothing(tmp_path):
 # -- unpublish and links ---------------------------------------------------------
 
 
-def test_unpublish_sends_the_token_and_forgets_it(tmp_path):
-    run = _sealed_run(tmp_path)
+def test_unpublish_sends_the_token_and_forgets_it(make_run, tmp_path):
+    run = make_run()
     _publish(run, Recorder(created()), yes=True, interactive=False)
     transport = Recorder(Response(204, {}, b""))
     line = unpublish(run, origin=None, transport=transport)
@@ -310,8 +353,8 @@ def test_unpublish_sends_the_token_and_forgets_it(tmp_path):
     assert not (run / "seal.publish.json").exists()
 
 
-def test_unpublish_with_a_refused_token_keeps_it(tmp_path):
-    run = _sealed_run(tmp_path)
+def test_unpublish_with_a_refused_token_keeps_it(make_run, tmp_path):
+    run = make_run()
     _publish(run, Recorder(created()), yes=True, interactive=False)
     with pytest.raises(PublishError):
         unpublish(run, origin=None, transport=Recorder(Response(403, {}, b"")))
@@ -332,8 +375,9 @@ def _hosted(run: Path, **identity) -> Response:
     return Response(200, {}, json.dumps(body).encode())
 
 
-def test_seal_verify_checks_a_hosted_link_here(tmp_path):
-    run = _sealed_run(tmp_path)
+@needs_engine
+def test_seal_verify_checks_a_hosted_link_here(make_run, tmp_path):
+    run = make_run()
     _publish(run, Recorder(), dry_run=True)
     said: list[str] = []
     transport = Recorder(_hosted(run))
@@ -353,8 +397,11 @@ def test_seal_verify_checks_a_hosted_link_here(tmp_path):
     assert "OpenAdapt did not watch this run." in said[2]
 
 
-def test_seal_verify_refuses_a_changed_card_whatever_the_server_says(tmp_path):
-    run = _sealed_run(tmp_path)
+@needs_engine
+def test_seal_verify_refuses_a_changed_card_whatever_the_server_says(
+    make_run, tmp_path
+):
+    run = make_run()
     _publish(run, Recorder(), dry_run=True)
     reply = _hosted(run)
     data = json.loads(reply.body)
@@ -388,8 +435,9 @@ def test_only_hosted_seal_links_are_links():
     assert parse_link("report.json") is None
 
 
-def test_cli_seal_verify_routes_a_link(tmp_path, monkeypatch):
-    run = _sealed_run(tmp_path)
+@needs_engine
+def test_cli_seal_verify_routes_a_link(make_run, tmp_path, monkeypatch):
+    run = make_run()
     _publish(run, Recorder(), dry_run=True)
     monkeypatch.setattr(seal_publish, "urllib_transport", Recorder(_hosted(run)))
     result = CliRunner().invoke(
@@ -403,20 +451,27 @@ def test_cli_seal_verify_routes_a_link(tmp_path, monkeypatch):
 
 
 def test_the_quickstart_offer_exists_only_in_a_terminal_outside_ci(monkeypatch):
+    monkeypatch.setattr(cli, "_public_seals_available", lambda: True)
     monkeypatch.setattr(sys.stdin, "isatty", lambda: True, raising=False)
     monkeypatch.setattr(sys.stdout, "isatty", lambda: True, raising=False)
     assert cli._quickstart_publish_offer() is not None
     monkeypatch.setenv("CI", "1")
     assert cli._quickstart_publish_offer() is None
     monkeypatch.delenv("CI")
+    monkeypatch.setattr(cli, "_public_seals_available", lambda: False)
+    assert cli._quickstart_publish_offer() is None
+    monkeypatch.setattr(cli, "_public_seals_available", lambda: True)
     monkeypatch.setattr(sys.stdin, "isatty", lambda: False, raising=False)
     assert cli._quickstart_publish_offer() is None
 
 
-def test_the_quickstart_offer_asks_once_and_no_sends_nothing(tmp_path, monkeypatch):
-    run = _sealed_run(tmp_path)
+def test_the_quickstart_offer_asks_once_and_no_sends_nothing(
+    make_run, tmp_path, monkeypatch
+):
+    run = make_run()
     monkeypatch.setattr(sys.stdin, "isatty", lambda: True, raising=False)
     monkeypatch.setattr(sys.stdout, "isatty", lambda: True, raising=False)
+    monkeypatch.setattr(cli, "_public_seals_available", lambda: True)
     offer = cli._quickstart_publish_offer()
     asked: list[str] = []
     said: list[str] = []
@@ -476,6 +531,91 @@ def test_without_a_terminal_the_finale_prints_the_publish_command(
     assert (
         "  Put it online: openadapt seal publish openadapt-quickstart/run-1\n"
         in stream.getvalue()
+    )
+
+
+def test_an_engine_without_public_seals_gets_no_publish_line(tmp_path, monkeypatch):
+    from test_quickstart import FakeEngine, _clock
+
+    from openadapt.quickstart import next_steps
+    from openadapt.quickstart.story import run_story
+    from openadapt.quickstart.view import PlainView
+
+    monkeypatch.chdir(tmp_path)
+    stream = io.StringIO()
+
+    def offer(*_args):
+        raise AssertionError("offered without an engine that can publish")
+
+    run_story(
+        FakeEngine(tmp_path / "openadapt-quickstart"),
+        PlainView(stream),
+        next_steps=next_steps(
+            cli._hint, cli._shell_quote, True, offer_publish=offer, can_publish=False
+        ),
+        clock=_clock(),
+    )
+    assert "seal publish" not in stream.getvalue()
+
+
+def _rich_finale(tmp_path, offer) -> str:
+    from test_quickstart import FakeEngine, _clock, _Terminal, _visible
+
+    from openadapt.quickstart import next_steps
+    from openadapt.quickstart.story import run_story
+    from openadapt.quickstart.view import RichView
+
+    stream = _Terminal()
+    run_story(
+        FakeEngine(tmp_path / "openadapt-quickstart"),
+        RichView(stream, environ={}, width=110, animate=False),
+        next_steps=next_steps(cli._hint, cli._shell_quote, True, offer_publish=offer),
+        clock=_clock(),
+    )
+    return _visible(stream.getvalue())
+
+
+def test_the_terminal_finale_offers_once_between_the_seal_and_next(
+    tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    calls: list[Path] = []
+
+    def offer(run_dir, say, ask):
+        calls.append(run_dir)
+        say("offer shown")
+
+    text = _rich_finale(tmp_path, offer)
+    assert calls == [tmp_path / "openadapt-quickstart" / "run-1"]
+    assert text.index("Your Seal") < text.index("offer shown") < text.index("Next  ")
+    assert "Put it online" not in text
+
+
+def test_the_terminal_finale_shows_the_command_without_an_offer(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    text = _rich_finale(tmp_path, None)
+    assert "Put it online" in text
+    assert "openadapt seal publish openadapt-quickstart/run-1" in text
+
+
+def test_the_upload_bytes_match_the_engines(make_run):
+    doc = _golden_doc()
+    if ENGINE:
+        from openadapt_flow.public_seal import public_seal_bytes
+
+        assert seal_publish.public_bytes(doc) == public_seal_bytes(doc)
+    vectors = json.loads(VECTORS.read_text(encoding="utf-8"))
+    body = next(c["body"] for c in vectors["cases"] if c["name"] == "valid")
+    assert seal_publish.public_bytes(doc) == body.encode()
+
+
+def test_the_real_transport_refuses_redirects():
+    import urllib.request
+
+    handler = seal_publish._NoRedirect()
+    request = urllib.request.Request("https://a.test/x", data=b"{}", method="POST")
+    assert (
+        handler.redirect_request(request, None, 307, "", {}, "https://b.test") is None
     )
 
 
