@@ -114,6 +114,15 @@ class RestRecordVerifier(VerifierAdapterBase):
             page on the same origin and endpoint path is read (at most :data:`MAX_PAGES`); a
             failed page or a longer chain reads as unreadable. Unset, one
             response is not assumed to be the whole read.
+        next_absent_is_last: With ``next_path``: the endpoint's reviewed
+            contract is that a page with more records after it carries the
+            next link, and the last page leaves the link OUT of an object
+            that is still there (OpenEMR's Standard API: ``links`` always
+            holds ``first``; it adds ``next`` only when its one-row-past-the-
+            page probe found another record). Set, a body whose next link's
+            parent object is present without the link is the last page; a
+            body without that parent object still reads as incomplete.
+            Unset, an absent link never ends the read.
         total_path: Dotted path in every page's body to the number of
             records the server holds for the read. Set, a read whose record
             count differs, or a body without it, reads as unreadable. Unset,
@@ -157,6 +166,7 @@ class RestRecordVerifier(VerifierAdapterBase):
         next_path: Optional[str] = None,
         total_path: Optional[str] = None,
         records_complete: Optional[bool] = None,
+        next_absent_is_last: bool = False,
         snapshot_path: Optional[str] = None,
         consistency: Optional[str] = None,
         quiescence: Any = None,
@@ -169,6 +179,9 @@ class RestRecordVerifier(VerifierAdapterBase):
         if self.other_lists and (self.list_keys is None or records_key is not None):
             raise ValueError("other_lists needs list_keys and no records_key")
         self.next_path = next_path
+        if next_absent_is_last and not next_path:
+            raise ValueError("next_absent_is_last needs next_path")
+        self.next_absent_is_last = bool(next_absent_is_last)
         self.total_path = total_path
         self.records_complete = records_complete
         self.snapshot_path = snapshot_path
@@ -394,7 +407,12 @@ class RestRecordVerifier(VerifierAdapterBase):
                 break
             following = _dotted_value(body, self.next_path)
             if following is _MISSING:
-                next_chain_complete = False
+                parent, _, _ = self.next_path.rpartition(".")
+                next_chain_complete = (
+                    self.next_absent_is_last
+                    and bool(parent)
+                    and isinstance(_dotted_value(body, parent), dict)
+                )
                 break
             if following in (None, ""):
                 break

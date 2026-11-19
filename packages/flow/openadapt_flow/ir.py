@@ -751,6 +751,34 @@ class Postcondition(BaseModel):
     #: not pass for "No matches were found.".
     exact: bool = False
 
+    #: TEXT_PRESENT / TEXT_ABSENT: ``text`` was read from the clock when it
+    #: was recorded (a date picker's month, a pre-filled date). This is its
+    #: clock template (:mod:`openadapt_flow.clock_text`): the runtime renders
+    #: it from the run's clock and checks that specific text, digit for digit,
+    #: instead of the recorded literal. ``text`` keeps the recorded literal.
+    text_clock: Optional[str] = Field(default=None, min_length=1, max_length=256)
+
+    @field_validator("text_clock")
+    @classmethod
+    def _valid_clock_template(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None:
+            from openadapt_flow.clock_text import template_tokens
+
+            template_tokens(value)
+        return value
+
+    @model_validator(mode="after")
+    def _clock_template_needs_text(self) -> "Postcondition":
+        if self.text_clock is not None and (
+            self.kind
+            not in (PostconditionKind.TEXT_PRESENT, PostconditionKind.TEXT_ABSENT)
+            or not self.text
+        ):
+            raise ValueError(
+                "text_clock applies to text_present/text_absent with a recorded text"
+            )
+        return self
+
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
         """Leave the local-edit fields out when unset, so every existing
@@ -759,6 +787,8 @@ class Postcondition(BaseModel):
         data: dict[str, Any] = handler(self)
         if not self.exact:
             data.pop("exact", None)
+        if self.text_clock is None:
+            data.pop("text_clock", None)
         if self.field_selector is None:
             data.pop("field_selector", None)
         if self.param is None:

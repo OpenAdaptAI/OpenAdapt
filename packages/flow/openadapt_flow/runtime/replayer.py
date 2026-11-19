@@ -69,6 +69,7 @@ from typing import (
 )
 from urllib.parse import urlsplit
 
+from openadapt_flow import clock_text as _clock_text
 from openadapt_flow import sealed_set as _sealed
 from openadapt_flow.assurance import effect_read_wording as _effect_read_wording
 from openadapt_flow.backend import (
@@ -890,6 +891,10 @@ class Replayer:
     _render_scale_evidence: Optional[dict[str, Any]] = None
     identity_copy: Optional[looks_mod.IdentityCopyConfig] = None
     _identity_input_looks: bool = False
+    #: The run's clock: a zero-argument callable returning an aware datetime.
+    #: None reads the system clock. Clock-derived postcondition texts
+    #: (``Postcondition.text_clock``) and the identity volatility date use it.
+    clock: Optional[Callable[[], datetime]] = None
 
     def __init__(
         self,
@@ -7624,6 +7629,7 @@ class Replayer:
                     condition.kind is not PostconditionKind.TEXT_PRESENT
                     or not text
                     or "{" in text
+                    or condition.text_clock is not None
                 ):
                     continue
                 evidence = True
@@ -15884,7 +15890,7 @@ class Replayer:
             anchor.region[2],
             anchor.region[3],
         )
-        today = date.today()
+        today = self._run_today()
 
         def observe(
             png: bytes,
@@ -16458,7 +16464,7 @@ class Replayer:
             # Count through the live row probe; the dialog itself proves
             # nothing about whether its target belongs to a record row.
             return self._structured_census(step, resolution.point)
-        today = date.today()
+        today = self._run_today()
         dialog_box = self.__dict__.get("_identity_dialog_box")
         try:
             lines = [
@@ -17027,7 +17033,7 @@ class Replayer:
             anchor.region[2],
             anchor.region[3],
         )
-        today = date.today()
+        today = self._run_today()
 
         def attempt(
             png: bytes,
@@ -19126,6 +19132,8 @@ class Replayer:
         """A natural-language expected-state for the drift-oracle, or None if
         the postcondition kind is not render-drift-rescuable."""
         kind = pc.kind.value if hasattr(pc.kind, "value") else pc.kind
+        if kind == "text_present" and getattr(pc, "text_clock", None):
+            return None  # a clock text is checked exactly, never by the oracle
         if kind == "text_present" and pc.text:
             return f"the text {pc.text!r} is visible on the screen"
         if kind == "region_stable":
@@ -19462,6 +19470,12 @@ class Replayer:
             return f"no_duplicate_candidate (no listed row has this run's {names})"
         if kind in ("text_present", "text_absent"):
             exact = " (exact)" if getattr(pc, "exact", False) else ""
+            clock_texts = self._clock_texts(pc)
+            if clock_texts:
+                return (
+                    f"{kind} {clock_texts[0]!r} (from the run's clock; "
+                    f"recorded as {pc.text!r})"
+                )
             return f"{kind}{exact} {pc.text!r}"
         if kind in ("url_changed", "title_changed", "new_tab_opened"):
             return f"{kind} (vs. the step's start state)"
@@ -19540,6 +19554,12 @@ class Replayer:
             # or split it across boxes — see vision.ocr.text_present.
             if pc.text is None:
                 return False
+            clock_texts = self._clock_texts(pc)
+            if clock_texts is not None:
+                return any(
+                    self._clock_text_shown(text, pc.text_clock, frame_png)
+                    for text in clock_texts
+                )
             if getattr(pc, "exact", False):
                 return self._exact_text_holds(pc.text, frame_png)
             # Page-structure first: the DOM can PROVE the text is rendered,
@@ -19550,6 +19570,13 @@ class Replayer:
                 return True
             return self.vision.text_present(frame_png, pc.text)
         if kind == "text_absent":
+            clock_texts = self._clock_texts(pc)
+            if clock_texts is not None:
+                # Absent means absent in every rendering (the fuzzy reader:
+                # a near reading counts as present, the safe direction).
+                return not any(
+                    self.vision.text_present(frame_png, text) for text in clock_texts
+                )
             return pc.text is None or not self.vision.text_present(frame_png, pc.text)
         if kind == "region_stable":
             if pc.region is None or pc.phash is None:
@@ -19648,6 +19675,42 @@ class Replayer:
                 self._pc_scaled_match = True
                 return True
         return False
+
+    def _run_today(self) -> date:
+        """The run clock's local date (:attr:`clock`, else the system clock)."""
+        clock = self.clock
+        return _clock_text.run_clock_dates(clock() if callable(clock) else None)[0]
+
+    def _clock_texts(self, pc: Any) -> Optional[list[str]]:
+        """The texts a clock-derived postcondition expects now, else None.
+
+        None for an ordinary postcondition (its ``text`` is the literal to
+        check). For ``text_clock``, every rendering of the template on the run
+        clock's dates (:func:`clock_text.run_clock_dates`: the local date and,
+        around midnight, the UTC date), each one specific date.
+        """
+        template = getattr(pc, "text_clock", None)
+        if not template:
+            return None
+        clock = self.clock
+        now = clock() if callable(clock) else None
+        return _clock_text.renderings(template, _clock_text.run_clock_dates(now))
+
+    def _clock_text_shown(self, text: str, template: str, frame_png: bytes) -> bool:
+        """A clock-rendered text is on screen, read exactly (never fuzzily).
+
+        The fuzzy OCR match would take "October 2025" for "October 2026", so a
+        clock text passes only when OCR reads it exactly (case, spaces and
+        punctuation aside) as a line, or the DOM proves it rendered. The DOM
+        check is a substring match, so it is used only when the text cannot be
+        the inside of a longer number ("Nov 3" inside "Nov 30"): see
+        :func:`clock_text.substring_safe`. A vision with no exact reader and
+        no usable DOM fails closed.
+        """
+        counter = getattr(self.vision, "exact_text_count", None)
+        if callable(counter) and counter(frame_png, text) >= 1:
+            return True
+        return _clock_text.substring_safe(template) and self._dom_text_visible(text)
 
     def _exact_text_holds(self, text: str, frame_png: bytes) -> bool:
         """An exact text check (``Postcondition.exact``, ``Predicate.exact``).

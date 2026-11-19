@@ -231,13 +231,17 @@ class OpenEMRPatientOracle:
             {
                 "lname": self.spec.lname,
                 "email": self.spec.email,
-                "_limit": "100",
+                "_limit": "200",
             }
         )
+        # OpenEMR adds links.next only when a record follows the page, and
+        # always returns links.first: a page without links.next is the last.
         self.verifier = RestRecordVerifier(
             base_url.rstrip("/"),
             records_path=f"/apis/default/api/patient?{query}",
             records_key="data",
+            next_path="links.next",
+            next_absent_is_last=True,
             session=session,
             timeout_s=timeout_s,
             poll_interval_s=0.2,

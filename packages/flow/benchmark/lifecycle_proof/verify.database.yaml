@@ -26,8 +26,10 @@ verifier:
     patient:
       kind: rest
       base_url: ${OPENEMR_API_URL:-https://127.0.0.1:9300}
-      records_path: /apis/default/api/patient?_limit=1000
+      records_path: /apis/default/api/patient?_limit=200
       records_key: data
+      records_next_path: links.next
+      records_next_absent_is_last: true
       auth:
         bearer_env: OPENEMR_ORACLE_TOKEN
 
