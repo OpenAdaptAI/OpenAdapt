@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.30.4 (2026-11-19)
+
+### Bug Fixes
+
+- **desktop**: stop terminal windows opening over the app on Windows
+
+
+
 ## v0.30.3 (2026-11-19)
 
 ### Bug Fixes
