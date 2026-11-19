@@ -34,11 +34,14 @@ def main() -> None:
     ap.add_argument("--arm", action="append", required=True)
     ap.add_argument("--blocks", type=int, default=4)
     ap.add_argument("--per-block", type=int, default=4)
+    ap.add_argument(
+        "--durable", action="store_true", help="Pass --durable to every run"
+    )
     a = ap.parse_args()
     arms = [parse_arm(s) for s in a.arm]
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
-    results = out / "rows.jsonl"
+    results = out / "timings.jsonl"
     for b in range(a.blocks):
         shift = b % len(arms)
         order = arms[shift:] + arms[:shift]
@@ -64,7 +67,7 @@ def main() -> None:
                 str(a.per_block),
                 "--start",
                 str(b * a.per_block),
-            ]
+            ] + (["--durable"] if a.durable else [])
             print(f"block {b + 1} arm {name}", flush=True)
             # Run from the arm's own checkout: ``python -m`` puts the working
             # directory ahead of PYTHONPATH, so running from another checkout

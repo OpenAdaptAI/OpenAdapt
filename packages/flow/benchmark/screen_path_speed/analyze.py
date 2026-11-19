@@ -6,7 +6,7 @@ The check comparison requires every arm to prove the same thing at every
 step of the same referral: identity status and mode, input read-back,
 postconditions, submit binding and the save's record check.
 
-    python -m benchmark.screen_path_speed.analyze ROWS.jsonl > summary.json
+    python -m benchmark.screen_path_speed.analyze TIMINGS.jsonl > summary.json
 """
 
 from __future__ import annotations

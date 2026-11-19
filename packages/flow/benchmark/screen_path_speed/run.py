@@ -57,21 +57,18 @@ def wait_quiet(max_s: float = 1800.0) -> float:
 
 
 def engine_head() -> str:
+    """The engine checkout's commit, with ``+dirty`` when its engine code has
+    uncommitted changes."""
     import openadapt_flow
 
-    root = Path(openadapt_flow.__file__).resolve().parents[2]
+    package = Path(openadapt_flow.__file__).resolve().parent
     out = subprocess.run(
-        ["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True, text=True
+        ["git", "-C", str(package), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
     ).stdout.strip()
     dirty = subprocess.run(
-        [
-            "git",
-            "-C",
-            str(root),
-            "status",
-            "--porcelain",
-            "packages/flow/openadapt_flow",
-        ],
+        ["git", "-C", str(package), "status", "--porcelain", "--", "."],
         capture_output=True,
         text=True,
     ).stdout.strip()
@@ -79,7 +76,12 @@ def engine_head() -> str:
 
 
 def run_item(
-    env: dict[str, Any], ref_idx: int, bundle: Path, out: Path, profile: bool
+    env: dict[str, Any],
+    ref_idx: int,
+    bundle: Path,
+    out: Path,
+    profile: bool,
+    durable: bool = False,
 ) -> dict[str, Any]:
     from openadapt_flow.ir import Workflow
     from openadapt_flow.runtime import Replayer
@@ -109,10 +111,40 @@ def run_item(
 
             prof = RunProfiler()
             prof.install(backend)
-        rep = Replayer(backend, effect_verifier=oracle.verifier, api_steps=False).run(
-            workflow, params=spec.params(), bundle_dir=bundle, run_dir=out / "engine"
-        )
+        options: dict[str, Any] = {}
+        person = None
+        if durable:
+            # A durable run with checkpoints sealed under the default at-rest
+            # key, as `openadapt-flow run` uses by default. A durable run
+            # needs a person's approval for the first consequential click;
+            # the harness answers at once (approval_durable.HarnessPerson)
+            # and the wait is reported apart.
+            from benchmark.openemr_api_tier.approval_durable import HarnessPerson
+            from openadapt_flow import at_rest
+            from openadapt_flow.approval_mode.gate import ApprovalGate
+            from openadapt_flow.approval_mode.item_approval import ItemApprovalStore
+
+            store = ItemApprovalStore(out / "engine")
+            person = HarnessPerson(store)
+            options = {
+                "durable": True,
+                "checkpoint_key": at_rest.default_key(),
+                "approval_gate": ApprovalGate(
+                    "each_item",
+                    approval_store=store,
+                    approval_wait_s=120.0,
+                    approval_poll_s=0.05,
+                    sleep=person.sleep,
+                    monotonic=time.monotonic,
+                ),
+            }
+        rep = Replayer(
+            backend, effect_verifier=oracle.verifier, api_steps=False, **options
+        ).run(workflow, params=spec.params(), bundle_dir=bundle, run_dir=out / "engine")
         t_task = time.time()
+        if person is not None:
+            res["approval_wait_s"] = round(person.waited_s, 3)
+            res["approvals"] = len(person.answered)
         if prof is not None:
             prof.uninstall()
         raw = rep.model_dump(mode="json")
@@ -205,6 +237,12 @@ def main() -> None:
     ap.add_argument("--start", type=int, default=0, help="First referral offset")
     ap.add_argument("--profile", action="store_true")
     ap.add_argument(
+        "--durable",
+        action="store_true",
+        help="Durable run, checkpoints sealed under the default at-rest key; "
+        "counts scrypt key derivations per item",
+    )
+    ap.add_argument(
         "--speed",
         default=None,
         help="Apply a named speed profile (openadapt_flow.runtime.speed); "
@@ -222,6 +260,17 @@ def main() -> None:
     import openadapt_flow.vision.ocr  # noqa: F401
 
     ocr = sys.modules["openadapt_flow.vision.ocr"]
+    # Count every scrypt run, comparable across engine versions.
+    from cryptography.hazmat.primitives.kdf import scrypt as _scrypt
+
+    scrypt_count = {"n": 0}
+    _derive = _scrypt.Scrypt.derive
+
+    def _counted(self: Any, material: bytes) -> bytes:
+        scrypt_count["n"] += 1
+        return _derive(self, material)
+
+    _scrypt.Scrypt.derive = _counted  # type: ignore[method-assign]
     bundle, out = Path(a.bundle), Path(a.out)
     head = engine_head()
     demo, f = load_demo(), SpikeFixture()
@@ -244,12 +293,16 @@ def main() -> None:
             item_dir = (
                 out / f"b{a.block:02d}-{a.arm}-{pos + 1}-{REFERRALS[idx - 1].key}"
             )
-            res = run_item(env, idx, bundle, item_dir, a.profile)
+            derived0 = scrypt_count["n"]
+            res = run_item(env, idx, bundle, item_dir, a.profile, a.durable)
+            res["scrypt_derivations"] = scrypt_count["n"] - derived0
             l1 = load1()
             row = {
                 "arm": a.arm,
                 "engine_head": head,
                 "speed": a.speed or "default",
+                "durable": a.durable,
+                "scrypt_derivations": res.get("scrypt_derivations"),
                 "page_quiet_ms": os.environ.get("OPENADAPT_FLOW_PAGE_QUIET_MS"),
                 "block": a.block,
                 "pos": pos + 1,
@@ -276,6 +329,8 @@ def main() -> None:
                         "readback_s",
                         "timings_ms",
                         "checks",
+                        "approval_wait_s",
+                        "approvals",
                     )
                 },
             }

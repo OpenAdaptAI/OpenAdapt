@@ -112,3 +112,32 @@ def test_the_cache_is_bounded(monkeypatch):
     for _ in range(6):
         crypto.encrypt_bytes(b"x", KEY, aad=crypto.CHECKPOINT_AAD)
     assert len(crypto._DERIVED) <= 3
+
+
+def test_a_durable_run_derives_its_key_a_bounded_number_of_times(tmp_path):
+    # A whole durable run, checkpoints sealed under a key: every checkpoint
+    # write and the run's own reads of them share one derivation. Before the
+    # fix each one ran scrypt again.
+    from openadapt_flow.ir import Workflow
+    from openadapt_flow.runtime.replayer import Replayer
+    from tests.test_durable_runtime import _key_step, _vision_ok
+    from tests.test_replayer import FakeBackend
+
+    workflow = Workflow(
+        name="durable-keyed",
+        steps=[_key_step(f"s{i}", "A", risk="reversible") for i in range(12)],
+    )
+    bundle, run_dir = tmp_path / "bundle", tmp_path / "run"
+    workflow.save(bundle)
+    crypto._DERIVED.clear()
+    before = crypto.derivations
+    report = Replayer(
+        FakeBackend(),
+        vision=_vision_ok(),
+        durable=True,
+        checkpoint_key=KEY,
+        poll_interval_s=0.01,
+    ).run(workflow, bundle_dir=bundle, run_dir=run_dir)
+    assert report.success is True
+    assert len(CheckpointStore(run_dir, key=KEY).checkpoints()) == 12
+    assert crypto.derivations - before <= 3

@@ -19,9 +19,14 @@ while every check stays on. Each of the 41 steps waits until the page has
 been quiet for 100 ms, then proves the right element and the right value
 through the browser. The two save steps alone take about 4.3 s: the
 duplicate-patient check before the save, and the save followed by the
-system-of-record read-back. A realistic floor for this program on the screen
-is about 10 to 12 s wall time. The large speedup is the API step: 3.3 s on
-the scoreboard.
+system-of-record read-back. Even with every action and check free, the
+program would still take about 12 to 13 s wall time on the screen (see "The
+floor"). The large speedup is the API step: 3.3 s on the scoreboard.
+
+The bigger finding is elsewhere. With encryption at rest on, the default for
+`openadapt-flow run`, each checkpoint read and write ran scrypt. A durable
+OpenEMR referral on main ran scrypt 2,667 times and took 546 s of engine
+time before the save; with the fix it runs scrypt twice and takes 14 s.
 
 ## Setup
 
@@ -35,9 +40,9 @@ the scoreboard.
   (`engine_s`), and the harness's own SQL read-back (`readback_s`). The
   harness read-back includes a fixed 1.0 s settle. The engine also confirms
   each save itself, over OpenEMR's REST API, inside `engine_s`.
-- Arms: `before` is commit `aebf7a388`, which is origin/main plus the two
-  fixes below. On main as it stands, the program can't finish a referral at
-  all. `after` is the branch tip. `after-quiet50` is the branch tip with the
+- Arms: `before` is origin/main plus the two fixes below (fixes 3 and 4),
+  with no speed change. On main as it stands, the program can't finish a
+  referral at all. `after` adds the speed changes and the key fix. `after-quiet50` is the branch tip with the
   existing page-quiet setting lowered to 50 ms
   (`OPENADAPT_FLOW_PAGE_QUIET_MS=50`). That arm is a tradeoff, not a default.
 - Protocol: `compare.py` runs blocks of 4 referrals per arm and rotates the
@@ -53,8 +58,8 @@ the scoreboard.
 
 | Arm | Saves correct | Duplicate stopped | Wall s median (p25 to p75, min to max) | Engine s median |
 |---|---|---|---|---|
-| before (`aebf7a388`) | 14 of 14 | 2 of 2 at step_039 | 23.25 (22.70 to 24.54, 22.05 to 32.61) | 20.46 |
-| after (`5aa8a6ce9`) | 14 of 14 | 2 of 2 at step_039 | 20.13 (19.57 to 20.35, 19.17 to 22.69) | 17.33 |
+| before | 14 of 14 | 2 of 2 at step_039 | 23.25 (22.70 to 24.54, 22.05 to 32.61) | 20.46 |
+| after | 14 of 14 | 2 of 2 at step_039 | 20.13 (19.57 to 20.35, 19.17 to 22.69) | 17.33 |
 | after, 50 ms page quiet | 14 of 14 | 2 of 2 at step_039 | 18.01 (17.62 to 18.58, 17.14 to 20.62) | 15.29 |
 
 All three arms ran the same checks at every step of every referral:
@@ -62,8 +67,16 @@ identity status and mode, input read-back, postconditions, submit binding,
 and the save's 11 record-check effects. `summary.json` reports
 `identical_across_arms_and_runs: true`.
 
-Data: `results/openemr-ab-2026-11-18/` (`rows.jsonl`, `summary.json` and
+Data: `results/openemr-ab-2026-11-18/` (`timings.jsonl`, `summary.json` and
 one result per item, with per-step timings).
+
+The `engine_head` in the rows names commits from before a rebase onto main:
+`aebf7a388` is now `c9288eecf` (the fixes), `60ef46494` is `f36446514`
+(the speed changes), and `5aa8a6ce9` is `ea874adcb` (the key fix). The
+engine code is identical. The harness that produced the data declared the
+REST read complete inside the shared oracle. The committed harness declares
+it in `common.owned_fixture_oracle` instead; the encrypted runs below used
+the committed harness.
 
 ## Where the time goes (before)
 
@@ -86,13 +99,13 @@ Exclusive time per run, median of seven saves, from the profiler in
 | Save read-back (REST) | 0.2 | 1% | The engine's record check after the save |
 | Other | 0.8 | 4% | Engine bookkeeping |
 
-By step kind (before, then after, per step): click 502 ms and 404 ms, type
-406 ms and 275 ms, select-all key 226 ms and 180 ms, Enter 281 ms and
-203 ms, scroll 490 ms and 394 ms. The two save steps took 4.7 s and 4.3 s.
-Outside the engine: sign-in 1.4 s, harness read-back 1.3 s.
+By step kind (before, then after, median per step over 14 saves each): click
+502 ms and 428 ms, type 406 ms and 292 ms, select-all key 226 ms and 195 ms,
+Enter 281 ms and 223 ms, scroll 490 ms and 403 ms. The two save steps took
+4.7 s and 4.4 s. Outside the engine: sign-in 1.4 s, harness read-back 1.3 s.
 
-Most of the 1.8 s in typing, read-back, identity and lookups was one pattern: a frame
-descent. OpenEMR's form sits two frames deep, and every DOM proof walked the
+Typing, input read-back, identity and target resolution (about 6.8 s
+together) mostly repeat one pattern: a frame descent. OpenEMR's form sits two frames deep, and every DOM proof walked the
 frame chain with about 14 to 28 separate browser calls. A run made about
 3,970 Playwright calls.
 
@@ -114,7 +127,9 @@ frame chain with about 14 to 28 separate browser calls. A run made about
    page reports when its latest change becomes a full window old. No probe
    can answer quiet before then, so the settle sleeps until then instead of
    probing every 20 ms. The window, and every signal the probe checks, are
-   unchanged (`tests/test_page_settle_wait_hint.py`).
+   unchanged (`tests/test_page_settle_wait_hint.py`). Probes per run fell
+   from 352 to 219, but the measured settle time didn't fall (5.8 s before,
+   6.1 s after), so the speedup above comes from the frame descent.
 3. **Fix: the dropdown check on a linear run.** The `field_value`
    postcondition read only a program run's parameters, so every linear run
    halted at its first dropdown commit (step_002 here). It failed closed, so
@@ -152,18 +167,59 @@ frame chain with about 14 to 28 separate browser calls. A run made about
 - **Screenshots** (about 30 ms each): a raw capture would skip Playwright's caret
   hiding, which changes pixels compared with the recording.
 
+## The floor
+
+With the checks as they are, and every action, lookup and proof free, a
+referral would still cost about 12 to 13 s wall time:
+
+| Part | Seconds |
+|---|---|
+| 39 form steps × (100 ms quiet window + one 30 ms screenshot) | 5.1 |
+| The two save steps (duplicate check, save, server time, read-back) | 4.4 |
+| Sign-in and opening the form | 1.4 |
+| The harness's own SQL read-back, including its fixed 1.0 s settle | 1.3 |
+| Total | 12.2 |
+
+Today's 20.1 s is the floor plus about 8 s of actions and proofs.
+
 ## What would go further
 
 - **Fuse click, select-all and type into one verified field-set** (a compiler
-  change). A field now costs about 860 ms in three steps. One identity check,
-  one fill, one read-back and one settle would cost about 350 ms. Over the
-  form's 8 or 9 fields that saves about 4 s, to roughly 16 s wall time.
+  change). A field now costs about 915 ms in three steps (428 + 195 + 292).
+  One identity check, one fill, one read-back and one settle would cost
+  about 350 ms. Over the form's 8 or 9 fields that saves 4 to 5 s, to
+  roughly 15 to 16 s wall time.
 - **Sign in once per worklist**, which the worklist runner already does:
   minus 1.4 s per referral after the first.
 - **Parallel workers** (`--workers`) raise throughput, not per-referral
   time.
 - **The API step**, which the compiler already proposes for this form:
   0.6 s engine time and 3.3 s wall time on the scoreboard.
+
+## Encrypted durable runs on OpenEMR
+
+`openadapt-flow run` is durable and seals its checkpoints under the local
+at-rest key by default. `run.py --durable` runs the referral that way, with
+the approval gate answered by the harness (`approval_durable.HarnessPerson`).
+Every arm stops at step_039, before the save, with
+`gate_error`: the durable GUI save isn't admitted for this bundle, as
+`openemr_api_tier/approval_durable.py` notes. So these runs cover the 39
+form steps and the duplicate check's first click, not a save. They count
+every scrypt run.
+
+| Engine | Items | scrypt runs per item | Engine s | Wall s |
+|---|---|---|---|---|
+| origin/main plus fixes 3 and 4 (`c9288eecf`) | 1 | 2,667 | 545.6 | 548.5 |
+| plus the frame-descent change, before the key fix (`f36446514`) | 1 | 2,667 | 521.2 | 524.3 |
+| the branch (`bf143845a`, plus the move of the frame JavaScript into its own module) | 4 | 2 | 14.0 to 14.6 | 16.8 to 17.5 |
+
+On main, an encrypted durable referral spends about eight to nine minutes in
+key derivation before it reaches the save. A plain linear run (the table above)
+has no checkpoints, so this cost doesn't show there. A separate count of
+286 scrypt runs for a 12-step durable run on the pre-fix engine ran at the
+same time as part of the `c9288eecf` item, so that item's time is somewhat
+high; its scrypt count isn't affected. Data:
+`results/openemr-encrypted-durable-2026-11-18/`.
 
 ## MockMed tutorial: the at-rest key fix
 
@@ -193,7 +249,7 @@ python -m benchmark.openemr_api_tier.feature_e2e compile --recording REC --out B
 GATE_LOAD1=12 python -m benchmark.screen_path_speed.compare --bundle BUNDLE --out OUT \
   --arm before=<checkout A> --arm after=<checkout B> \
   --arm after-quiet50=<checkout B>:OPENADAPT_FLOW_PAGE_QUIET_MS=50 --blocks 4
-python -m benchmark.screen_path_speed.analyze OUT/rows.jsonl
+python -m benchmark.screen_path_speed.analyze OUT/timings.jsonl
 python -m benchmark.screen_path_speed.run --bundle BUNDLE --out O --results R \
   --arm x --per-block 8 --profile       # the per-step profile
 ```

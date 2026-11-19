@@ -284,10 +284,12 @@ def _page_settled(
 def _next_page_poll_s(backend: Backend, deadline: float) -> float:
     """How long to wait before the next quiescence probe.
 
-    The page probe can report when the latest change becomes a full window
-    old; no probe can answer quiet before then, so polling sooner only spends
-    calls. Waiting until then never delays a quiet answer, and the probe that
-    follows judges every signal as before. Without a hint, poll every
+    The page probe can report when the latest change it has seen becomes a
+    full window old; no probe can answer quiet before then, so polling sooner
+    only spends calls. The probe that follows judges every signal as before,
+    so the wait can only make a settle longer, never declare quiet sooner
+    (network activity is stamped when Playwright delivers the event, so a
+    hint can be slightly late). Without a hint, poll every
     :data:`PAGE_POLL_S`. Never past the deadline.
     """
     wait = PAGE_POLL_S
