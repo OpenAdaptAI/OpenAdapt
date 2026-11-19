@@ -120,8 +120,8 @@ def plaintext_line(paths: Sequence[str], where: object) -> Optional[str]:
     if not paths:
         return None
     return (
-        f"Reports and screenshots in {where} are unencrypted (synthetic data "
-        "only); OPENADAPT_FLOW_AT_REST=strict refuses that"
+        f"The recording, program and run reports in {where} are unencrypted "
+        "(synthetic data only); OPENADAPT_FLOW_AT_REST=strict refuses that"
     )
 
 

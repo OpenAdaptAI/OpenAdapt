@@ -863,8 +863,8 @@ def test_engine_plaintext_notices_collapse_to_one_line(root, monkeypatch):
         run_story(Noisy(root), view, next_steps=_steps, clock=_clock())
     assert err.getvalue() == "something else\n"
     assert (
-        "Reports and screenshots in openadapt-quickstart are unencrypted "
-        "(synthetic data only)" in stream.getvalue()
+        "The recording, program and run reports in openadapt-quickstart are "
+        "unencrypted (synthetic data only)" in stream.getvalue()
     )
 
 
