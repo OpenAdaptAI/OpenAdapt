@@ -9,7 +9,7 @@ success is decided by DB state, never OCR.
 
 Commands (all print machine-readable output):
 
-    seed [--drift none|siblings|reorder]   (re)create + seed the DB
+    seed [--drift none|siblings|decoy|reorder|absent]   (re)create + seed the DB
     list [filter]                          JSON list of patients (name match)
     save <id> <note_base64>                set a patient's note; prints OK
     get  <id>                              JSON of one patient
@@ -76,6 +76,10 @@ def seed(drift: str = "none") -> None:
         rows += DRIFT_DECOY
     if drift == "reorder":
         rows = list(reversed(rows))
+    if drift == "absent":
+        # The target is gone and only its near-identical sibling matches the
+        # search: every run must stop, never save to the sibling.
+        rows = [r for r in rows if r[0] != 1] + DRIFT_SIBLINGS
     con.executemany(
         "INSERT INTO patients (id, first, last, dob, note) VALUES (?,?,?,?,?)",
         rows,
