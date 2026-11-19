@@ -199,11 +199,11 @@ def _workflow() -> Workflow:
     )
 
 
-def _environment() -> EnvironmentBoundary:
+def _environment(identity: str = "qualified-app") -> EnvironmentBoundary:
     return EnvironmentBoundary(
         target_kind="citrix",
         application="Qualified application",
-        application_identity="qualified-app",
+        application_identity=identity,
         application_version="1",
         environment_observer_id="fixture-observer",
         environment_observer_contract_sha256="c" * 64,
@@ -438,8 +438,10 @@ def test_api_only_qualification_uses_only_executable_targets() -> None:
     assert QualificationRefusalCode.CASE_TARGET_INVALID not in refusal_codes
 
 
-def _configure(workflow: Workflow, *, tier: VerificationTier) -> None:
-    init_project(workflow, environment=_environment())
+def _configure(
+    workflow: Workflow, *, tier: VerificationTier, identity: str = "qualified-app"
+) -> None:
+    init_project(workflow, environment=_environment(identity))
     set_action_classification(
         workflow,
         ActionRiskClassification(
@@ -527,7 +529,9 @@ def _record_passing_campaign(workflow: Workflow, evidence_root: Path) -> None:
     assert project is not None
     evidence_root.mkdir(parents=True, exist_ok=True)
     campaign_sha256 = sha256_bytes(b"qualification-campaign")
-    observed_application_sha256 = sha256_bytes(b"qualified-app")
+    observed_application_sha256 = sha256_bytes(
+        project.environment.application_identity.encode()
+    )
     observed_version_sha256 = sha256_bytes(b"1")
     observed_session_sha256 = "3" * 64
     observed_binding = qualification_environment_binding_sha256(

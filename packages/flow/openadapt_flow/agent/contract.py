@@ -457,6 +457,7 @@ FAILED_CHECKS: dict[str, str] = {
     "app_target_missing": "The run setup doesn't say which app or window to use.",
     "dispatch_mismatch": "The hosted request doesn't match this exact run.",
     "url_override_not_allowed": "This server doesn't let callers change the app address.",
+    "skill_not_qualified": "This pulled workflow isn't qualified on this app address yet.",
     "other": "Another setup check refused the run. The operator can see which one.",
 }
 

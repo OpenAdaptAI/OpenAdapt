@@ -72,6 +72,14 @@ them can be listed, but `pull` labels it "no record check".
    `skill qualify` for the bound app's environment. The message names the
    command to run. Governed runs refuse an uncertified bundle already. The new
    refusal also covers `replay`, the permissive path, for pulled skills.
+   `openadapt-agent` makes the same check before it starts Flow, against the
+   run's app address (an allowed override, `--url`, or the deployment
+   config's `backend.url`). It answers `not_ready_to_run` with the failed
+   check `skill_not_qualified`, or `app_target_missing` when no address is
+   set, and keeps the bundle path and the qualified address out of the reply.
+   The certification is recomputed against the policy `skill qualify` used,
+   loaded from the shipped policies or the absolute path the lock records,
+   never from the bundle's own copy.
 
 The refusal keys off the provenance in the workflow, not the lock file:
 deleting `skill.lock.json` changes nothing. Removing the provenance changes
