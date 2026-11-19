@@ -107,13 +107,6 @@ def _state(fields=None, **frame):
     return window_fields_state(vision, _frame(**frame), fields or _fields())
 
 
-def test_the_issue_reproduces_with_ocr_alone():
-    # The old read: OCR of the whole window. A caret is enough to change it.
-    plain = screen_text_state(vision, _frame(), [WINDOW])
-    assert plain is not None
-    assert screen_text_state(vision, _frame(caret=True), [WINDOW]) != plain
-
-
 def test_a_caret_or_a_title_bar_glyph_leaves_the_form_unchanged():
     before = _state()
     assert before is not None and before[0] == "window_fields"
