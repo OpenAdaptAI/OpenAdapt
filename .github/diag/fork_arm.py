@@ -6,16 +6,22 @@ if arm in ("imports", "spawn", "hold"):
     import objc, Foundation, Quartz, AppKit  # noqa: F401,E401
     import mss, numpy, PIL.Image, httpx  # noqa: F401,E401
     import openadapt_desktop.dispatch  # noqa: F401
+if arm.startswith("tk"):
+    import tkinter  # noqa: F401  (what openadapt_capture.recorder pulls in through pympler)
 cwd = tempfile.mkdtemp()
 out = subprocess.run(["/bin/ps", "-M", "-p", str(os.getpid())], capture_output=True, text=True, close_fds=False).stdout
 print(f"arm={arm} pid={os.getpid()} native_threads={len(out.strip().splitlines()) - 1} modules={len(sys.modules)}", flush=True)
-if arm == "hold":  # local check of the supervisor: a child held before exec
+if arm in ("hold", "tk-hold"):  # local check of the supervisor: a child held before exec
     subprocess.run(["/usr/bin/true"], preexec_fn=lambda: time.sleep(600))
     sys.exit(0)
 start = time.time()
 killed = 0
 for i in range(1, count + 1):
-    if arm == "spawn":
+    if arm == "tk-fork":  # fork, and the child closes inherited descriptors (the Popen default)
+        done = subprocess.run(["/usr/bin/true"], capture_output=True, stdin=subprocess.DEVNULL)
+    elif arm == "tk-fork-keepfds":  # fork (forced by cwd), but the child closes nothing
+        done = subprocess.run(["/usr/bin/true"], capture_output=True, stdin=subprocess.DEVNULL, cwd=cwd, close_fds=False)
+    elif arm in ("spawn", "tk-spawn"):
         done = subprocess.run(["/usr/bin/true"], capture_output=True, stdin=subprocess.DEVNULL, close_fds=False)
     else:
         done = subprocess.run(["/usr/bin/true"], capture_output=True, stdin=subprocess.DEVNULL, cwd=cwd)
