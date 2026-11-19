@@ -24,8 +24,8 @@ except ModuleNotFoundError:  # pragma: no cover - exercised on Python 3.10 CI
     import tomli as tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
-# Launcher 1.21 requires Flow 2.7's wrap command.
-# Keep every earlier rejection case, including the former 2.6 floor.
+# Launcher 1.22 requires Flow 3.2 (public Seals, the at-rest key derived once
+# per store). Keep every earlier rejection case, including the former 2.7 floor.
 BELOW_FLOOR = [
     "1.29.0",
     "1.35.1",
@@ -36,8 +36,12 @@ BELOW_FLOOR = [
     "2.5.1",
     "2.6.0",
     "2.6.1",
+    "2.7.0",
+    "2.7.1",
+    "3.0.0",
+    "3.1.0",
 ]
-ACCEPTED = "2.7.0"
+ACCEPTED = "3.2.0"
 
 
 def _flow_requirements() -> list[Requirement]:
@@ -81,6 +85,6 @@ def test_doctor_and_deploy_accept_the_fixed_release() -> None:
     assert Requirement(f"openadapt-flow{_SUPPORTED_FLOW_RANGE}").specifier.contains(
         ACCEPTED
     )
-    # Flow 3 moved only its vision stack to an extra; 4 is unknown.
-    assert _supported_flow_version("3.0.0")
+    # Later Flow 3 releases are accepted; 4 is unknown.
+    assert _supported_flow_version("3.99.0")
     assert not _supported_flow_version("4.0.0")

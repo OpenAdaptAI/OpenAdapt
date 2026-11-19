@@ -2,7 +2,7 @@
 
 <!-- version list -->
 
-## Unreleased (1.22.0)
+## v1.22.0 (2026-11-19)
 
 ### Features
 
@@ -39,10 +39,16 @@
 
 ### Requirements
 
-- Accept `openadapt-flow` 3.x as well as 2.7 or later: every Flow requirement
-  is now `>=2.7.0,<4.0.0`, and `openadapt doctor` accepts Flow 3. Flow 3 moved
+- Require `openadapt-flow>=3.2.0,<4.0.0` in the base install and every Flow
+  extra. `openadapt deploy` reports older Flow releases as unsupported. Flow
+  3.2 supplies the public Seal that `openadapt seal
+  publish` uploads, and derives the at-rest key once per checkpoint store, so
+  the quickstart keeps its checkpoints encrypted at about 23 s. Flow 3 moved
   its vision stack to the `vision` extra; the launcher's `browser` and other
   surface extras include it, and `openadapt[flow]` now names it.
+- With `openadapt-agent` 2.2.2, which also accepts Flow 3, `pip install
+  openadapt` installs Flow 3, and `openadapt` and `openadapt-verify` install
+  together.
 
 ## v1.21.0 (2026-11-09)
 
