@@ -678,3 +678,131 @@ def test_the_hosted_read_back_names_its_confirmer_only_by_hmac(
     load_verify_config(path)
     # A file that names no person is copied byte for byte.
     assert ha.hosted_readback(CHECKS, tmp_path) == CHECKS
+
+
+# -- a program that signs in: secret parameters come only from the runner env --
+
+
+def test_cli_admits_a_signed_in_program_with_secrets_only_in_the_environment(
+    runner: dict[str, Any],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The managed invocation the hosted runner builds: value parameters in
+    the params file and the authorization, secrets only as
+    OPENADAPT_FLOW_SECRET_<NAME> (runner/modal_app.py flow_secret_env)."""
+
+    from openadapt_flow.runner.dispatch_envelope import (
+        ManagedDispatchEnvelope,
+        dispatch_binding_sha256,
+        write_managed_dispatch_envelope_value,
+    )
+    from openadapt_flow.runtime.authorization import runtime_inputs_digest
+
+    bundle = tmp_path / "bundle"
+    steps = [
+        Step(
+            id="step_000",
+            intent="type <username> (secret)",
+            action=ActionKind.TYPE,
+            param="username",
+            secret=True,
+        ),
+        Step(
+            id="step_001",
+            intent="type <password> (secret)",
+            action=ActionKind.TYPE,
+            param="password",
+            secret=True,
+        ),
+        Step(id="step_002", intent="type note", action=ActionKind.TYPE, param="note"),
+        Step(
+            id="step_003",
+            intent="click Save",
+            action=ActionKind.CLICK,
+            effects=[
+                Effect(
+                    kind=EffectKind.RECORD_WRITTEN, match={"type": "note"}, field="note"
+                )
+            ],
+        ),
+    ]
+    Workflow(
+        name="t",
+        steps=steps,
+        params={"note": "demonstrated"},
+        secret_params=["password", "username"],
+    ).save(bundle)
+    (bundle / ha.READBACK_PATH).parent.mkdir(parents=True)
+    (bundle / ha.READBACK_PATH).write_text(CHECKS)
+    keys = _keys(tmp_path / "keys")
+    _admit(bundle, keys)
+    _host(bundle, keys)
+    workflow = Workflow.load(bundle)
+    shape = ha.run_shape(bundle, workflow, policy_source="clinical-write")
+    values = {"note": "from the call"}
+    inputs = runtime_inputs_digest(workflow, values, {})
+    authorization = _authorization(shape, runtime_inputs_digest=inputs)
+    run_id = "55555555-5555-4555-8555-555555555556"
+    dispatch = write_managed_dispatch_envelope_value(
+        tmp_path / "managed-dispatch.json",
+        ManagedDispatchEnvelope(
+            run_id=run_id,
+            bundle_content_digest=shape["bundle_content_digest"],
+            runtime_inputs_digest=inputs,
+            authorization=authorization,
+            dispatch_binding_sha256=dispatch_binding_sha256(run_id, authorization),
+        ),
+    )
+    monkeypatch.setenv(lifecycle.KEY_DIR_ENV, str(keys))
+    monkeypatch.setenv("OPENADAPT_FLOW_SECRET_USERNAME", "synthetic-user")
+    monkeypatch.setenv("OPENADAPT_FLOW_SECRET_PASSWORD", "synthetic-password")
+    params = tmp_path / "params.json"
+    params.write_text(json.dumps(values))
+    rc = cli.main(
+        [
+            "run",
+            str(bundle),
+            "--profile",
+            "standard",
+            "--policy",
+            "clinical-write",
+            "--params-file",
+            str(params),
+            "--allow-unencrypted",
+            "--managed-dispatch-file",
+            str(dispatch),
+            "--backend",
+            "web",
+            "--url",
+            "https://app.example.com/",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert rc == 0, out
+    assert runner["authorization"] is not None
+    assert "synthetic-password" not in out and "synthetic-user" not in out
+
+    # A call that carries a secret is a different run: the dispatch refuses.
+    params.write_text(json.dumps({**values, "password": "synthetic-password"}))
+    rc = cli.main(
+        [
+            "run",
+            str(bundle),
+            "--profile",
+            "standard",
+            "--policy",
+            "clinical-write",
+            "--params-file",
+            str(params),
+            "--allow-unencrypted",
+            "--managed-dispatch-file",
+            str(dispatch),
+            "--backend",
+            "web",
+            "--url",
+            "https://app.example.com/",
+        ]
+    )
+    assert rc == 2

@@ -197,7 +197,11 @@ def test_a_sign_in_submit_is_not_a_save_but_the_next_form_is(monkeypatch) -> Non
         _step(3, ActionKind.TYPE, text="a note"),
         _step(4, ActionKind.CLICK),
     ]
-    found = _form_submit_steps(steps, {"step_002": {}, "step_004": {}})
+    found = _form_submit_steps(
+        steps,
+        {"step_002": {}, "step_004": {}},
+        {"step_000": "username", "step_001": "password"},
+    )
     assert [s.id for s in found] == ["step_004"]
     # A form with one ordinary field beside a secret is still a save.
     mixed = [
@@ -205,7 +209,10 @@ def test_a_sign_in_submit_is_not_a_save_but_the_next_form_is(monkeypatch) -> Non
         _step(1, ActionKind.TYPE, text="new display name"),
         _step(2, ActionKind.CLICK),
     ]
-    assert [s.id for s in _form_submit_steps(mixed, {"step_002": {}})] == ["step_002"]
+    assert [
+        s.id
+        for s in _form_submit_steps(mixed, {"step_002": {}}, {"step_000": "password"})
+    ] == ["step_002"]
 
 
 def test_a_secret_is_in_the_environment_only_during_its_run(monkeypatch) -> None:
@@ -268,3 +275,41 @@ def test_the_cli_reads_a_missing_sign_in_input_from_its_secret_variable(
     monkeypatch.setenv("OPENADAPT_FLOW_SECRET_PASSWORD", PASSWORD)
     values = _with_secret_env({"note": "n"}, ["note", "password", "username"])
     assert values == {"note": "n", "password": PASSWORD}
+
+
+def test_a_withheld_value_typed_into_another_field_is_refused(tmp_path: Path) -> None:
+    backend = SignInBackend()
+    rec = Recorder(backend, tmp_path / "rec", app_url="http://fake.local/")
+    rec.withhold_credentials({"password": PASSWORD, "note": "n"})
+    backend.focus = "password"
+    rec.type_text(PASSWORD)
+    backend.focus = None
+    with pytest.raises(CredentialFieldError):
+        rec.type_text(f"my password is {PASSWORD}")
+    assert backend.typed == [PASSWORD]
+
+
+def test_a_password_change_or_a_lone_pin_stays_a_save(monkeypatch) -> None:
+    from openadapt_flow.compiler import compile as compile_module
+
+    monkeypatch.setattr(compile_module, "_is_form_save", lambda raw: True)
+    steps = [
+        _step(0, ActionKind.TYPE, param="username", secret=True),
+        _step(1, ActionKind.TYPE, param="password", secret=True),
+        _step(2, ActionKind.CLICK),
+    ]
+    observations = {"step_002": {}}
+    sign_in = {"step_000": "username", "step_001": "password"}
+    assert _form_submit_steps(steps, observations, sign_in) == []
+    change = {"step_000": "username", "step_001": "new-password"}
+    assert [s.id for s in _form_submit_steps(steps, observations, change)] == [
+        "step_002"
+    ]
+    pin = [
+        _step(0, ActionKind.TYPE, param="pin", secret=True),
+        _step(1, ActionKind.CLICK),
+    ]
+    assert [
+        s.id
+        for s in _form_submit_steps(pin, {"step_001": {}}, {"step_000": "password"})
+    ] == ["step_001"]

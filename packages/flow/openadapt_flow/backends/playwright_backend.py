@@ -1568,7 +1568,9 @@ _FIELD_CREDENTIAL_JS = r"""(el) => {
         (i.getAttribute('autocomplete') || '').toLowerCase().split(/\s+/);
     const secret = (i) => kind(i) === 'password' ||
         tokens(i).some((t) => t === 'current-password' || t === 'new-password');
-    if (secret(el)) return 'password';
+    if (secret(el)) {
+        return tokens(el).includes('new-password') ? 'new-password' : 'password';
+    }
     if (tokens(el).includes('username')) return 'username';
     const texty = (i) => ['text', 'email', 'tel', 'search'].includes(kind(i));
     if (!texty(el)) return null;
@@ -3371,12 +3373,14 @@ class PlaywrightBackend:
         """Whether the focused field takes a sign-in credential, and where it is.
 
         RECORD-TIME seam (:class:`openadapt_flow.backend.CredentialFieldBackend`).
-        Returns ``{"kind": "password" | "username", "box": (x, y, w, h)}``
+        Returns ``{"kind": "password" | "new-password" | "username", "box":
+        (x, y, w, h)}``
         or None. The rules use only the page's own markup, the way a browser's
         password manager finds a sign-in form:
 
         * ``password``: an ``<input type="password">``, or an input whose
-          ``autocomplete`` names ``current-password`` or ``new-password``;
+          ``autocomplete`` names ``current-password`` (``new-password`` when
+          it names that: a password change or sign-up);
         * ``username``: an input whose ``autocomplete`` names ``username``,
           or the last visible text, email or phone input before the first
           password input of the same form (the document when it has no form).
@@ -3390,7 +3394,7 @@ class PlaywrightBackend:
 
         box: dict[str, float] = {}
         kind = self._focused_element_call(_FIELD_CREDENTIAL_JS, box_out=box)
-        if kind not in ("password", "username"):
+        if kind not in ("password", "new-password", "username"):
             return None
         try:
             rect: Optional[tuple[int, int, int, int]] = (
@@ -3415,7 +3419,11 @@ class PlaywrightBackend:
             found = self.page.evaluate(_CREDENTIAL_AT_JS, [int(x), int(y)])
         except Exception:
             return "unknown"
-        return found if found in ("password", "username", "frame") else None
+        return (
+            found
+            if found in ("password", "new-password", "username", "frame")
+            else None
+        )
 
     def _focused_element_eval(self, js: str) -> Optional[str]:
         """Evaluate ``js`` on the focused element, descending nested frames.

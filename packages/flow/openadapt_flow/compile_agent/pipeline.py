@@ -748,7 +748,11 @@ class FirstRunCompiler:
         # not in run 1's value digests, the record check or the proposal.
         withheld = self._secret_params()
         public = {k: v for k, v in values.items() if k not in withheld}
-        _write_run1_values(self.out_dir / RUN1_VALUES_FILE, public)
+        if jit.candidate() is not None:
+            # Only a draft is ever admitted against these digests. A refused or
+            # failed capture has no bundle to say which inputs were secret, so
+            # it keeps no digest of any input.
+            _write_run1_values(self.out_dir / RUN1_VALUES_FILE, public)
         harness = harnessed.harness
         run1: dict[str, Any] = {
             "attempt": str(attempt),

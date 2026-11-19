@@ -416,9 +416,23 @@ class Recorder:
             self._withheld_param_names.add(name)
             self._params.pop(name, None)
             self._credential_fields.append((self._active_surface, kind, region))
-        elif param is not None:
-            event["param"] = param
-            self._params[param] = text
+        else:
+            withheld = [
+                value
+                for value, name in (self._credential_inputs or {}).items()
+                if name in self._withheld_param_names and value in text
+            ]
+            if withheld:
+                # A sign-in value already withheld must not reappear as text in
+                # another field (a slip, or a "show password" text box).
+                raise CredentialFieldError(
+                    "a sign-in value withheld as a secret parameter was about to "
+                    "be typed into a field that is not a credential field; "
+                    "nothing was typed"
+                )
+            if param is not None:
+                event["param"] = param
+                self._params[param] = text
         #: Whether the last TYPE was withheld as a secret (callers that log
         #: what they typed must not log it).
         self.last_type_withheld = credential is not None
@@ -1371,6 +1385,7 @@ class Recorder:
             return None
         if not isinstance(found, dict) or found.get("kind") not in (
             "password",
+            "new-password",
             "username",
         ):
             return None
