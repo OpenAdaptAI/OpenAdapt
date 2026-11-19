@@ -64,7 +64,7 @@ jobs:
           # Actions ends a step's child processes when the step ends, so
           # start the stub through WMI, outside the step's job object.
           $python = (Get-Command python).Source
-          $stub = Join-Path $env:GITHUB_WORKSPACE 'packages\flow\tests\connector_stub\stub_control_plane.py'
+          $stub = Join-Path $env:GITHUB_WORKSPACE 'packages\flow\tests\connector_stub\stub_server.py'
           $out = Join-Path $env:EVIDENCE_DIR 'stub-stdout.txt'
           $err = Join-Path $env:EVIDENCE_DIR 'stub-stderr.txt'
           $cmd = "cmd.exe /c `"`"$python`" `"$stub`" --log `"$log`" --port-file `"$portFile`" --empty-polls 3 > `"$out`" 2> `"$err`"`""

@@ -74,6 +74,9 @@ openadapt-flow connector service start
 openadapt-flow connector service status
 ```
 
+Install into a regular Python installation, not a virtual environment: the
+service runs that installation's `python.exe`, and `install` refuses a venv.
+
 `connector.toml` takes the same keys `connector enroll` writes
 (`control_plane_url`, `token`, `org_id`, `profile`, `storage_backend`,
 `storage_root`, ...) under a `[connector]` table. Pass `--config-dir` to

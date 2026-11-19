@@ -266,22 +266,30 @@ def serve(
 # ---------------------------------------------------------------------------
 # Install-time helpers (subprocess commands built here; run only on Windows)
 # ---------------------------------------------------------------------------
-def service_python(executable: Optional[str] = None) -> tuple[str, Optional[str]]:
-    """The python.exe to host the service and, for a venv, its PYTHONPATH.
+VENV_MESSAGE = (
+    "connector service install: this Python is a virtual environment. A "
+    "venv's python.exe is a launcher that runs the real interpreter as a "
+    "child process, which the service control manager cannot talk to. "
+    "Install openadapt-flow[connector-windows] into a regular Python "
+    "installation (for example the python.org installer, for all users) and "
+    "run install from there."
+)
 
-    A venv's ``python.exe`` is a launcher that starts the base interpreter as
-    a child process, which the service control manager cannot talk to. For a
-    venv, host the service on the base ``python.exe`` and put the venv's
-    site-packages on ``PYTHONPATH``.
+
+def service_python(
+    executable: Optional[str] = None,
+    *,
+    prefix: Optional[str] = None,
+    base_prefix: Optional[str] = None,
+) -> str:
+    """The python.exe that hosts the service: this interpreter, never a venv.
+
+    Raises:
+        RuntimeError: when this interpreter runs inside a virtual environment.
     """
-    exe = executable or sys.executable
-    if sys.prefix == sys.base_prefix:
-        return exe, None
-    import site
-
-    base = Path(sys.base_prefix) / "python.exe"
-    paths = [p for p in site.getsitepackages() if p.startswith(sys.prefix)]
-    return str(base), os.pathsep.join(paths) or None
+    if (prefix or sys.prefix) != (base_prefix or sys.base_prefix):
+        raise RuntimeError(VENV_MESSAGE)
+    return executable or sys.executable
 
 
 def service_command_line(python: str, config_dir: Path) -> str:
@@ -425,7 +433,7 @@ def _require_pywin32() -> None:
 
 def install_service(config_dir: Path) -> None:  # pragma: no cover - Windows
     _require_pywin32()
-    python, pythonpath = service_python()
+    python = service_python()
     config_dir.mkdir(parents=True, exist_ok=True)
     log_dir(config_dir).mkdir(parents=True, exist_ok=True)
 
@@ -457,22 +465,6 @@ def install_service(config_dir: Path) -> None:  # pragma: no cover - Windows
             win32service.CloseServiceHandle(handle)
     finally:
         win32service.CloseServiceHandle(scm)
-
-    if pythonpath:
-        import winreg
-
-        key = winreg.OpenKey(
-            winreg.HKEY_LOCAL_MACHINE,
-            f"SYSTEM\\CurrentControlSet\\Services\\{SERVICE_NAME}",
-            0,
-            winreg.KEY_SET_VALUE,
-        )
-        try:
-            winreg.SetValueEx(
-                key, "Environment", 0, winreg.REG_MULTI_SZ, [f"PYTHONPATH={pythonpath}"]
-            )
-        finally:
-            winreg.CloseKey(key)
 
     for command in recovery_commands():
         _run(command)

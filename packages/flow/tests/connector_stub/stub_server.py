@@ -15,7 +15,7 @@ Every request is appended to a JSON file (method, path, sorted header names,
 parsed body). Header values are never recorded, so the bearer token never
 reaches the log.
 
-    python stub_control_plane.py --log requests.json --port-file port.txt
+    python stub_server.py --log requests.json --port-file port.txt
 """
 
 from __future__ import annotations

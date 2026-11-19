@@ -22,12 +22,12 @@ import pytest
 from openadapt_flow.__main__ import build_parser
 from openadapt_flow.connector import windows_service as ws
 
-STUB = Path(__file__).parent / "connector_stub" / "stub_control_plane.py"
+STUB = Path(__file__).parent / "connector_stub" / "stub_server.py"
 TOKEN = "tok_test_connector_service_0123456789"
 
 
 def _load_stub():
-    spec = importlib.util.spec_from_file_location("stub_control_plane", STUB)
+    spec = importlib.util.spec_from_file_location("stub_server", STUB)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
@@ -118,6 +118,17 @@ def test_service_command_line_quotes_paths(tmp_path: Path) -> None:
     assert line.startswith('"C:\\Py 312\\python.exe" -m ')
     assert ws.SERVICE_MODULE in line and ws.HOST_FLAG in line
     assert f'--config-dir "{tmp_path / "a b"}"' in line
+
+
+def test_install_refuses_a_venv_interpreter() -> None:
+    with pytest.raises(RuntimeError, match="virtual environment"):
+        ws.service_python(
+            "C:/venv/Scripts/python.exe", prefix="C:/venv", base_prefix="C:/Py"
+        )
+    assert (
+        ws.service_python("C:/Py/python.exe", prefix="C:/Py", base_prefix="C:/Py")
+        == "C:/Py/python.exe"
+    )
 
 
 def test_acl_grants_only_system_admins_and_the_service() -> None:
