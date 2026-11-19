@@ -4,7 +4,7 @@ OpenAdapt turns a task that a person or an AI agent does once in an
 application into a program that repeats it with new inputs. The program makes
 the same entry every time with no calls to a hosted AI model, checks that the
 entry landed in the right record by reading it back, and stops instead of
-guessing. It works in any web, desktop or remote-desktop application with no
+guessing. It is for web, desktop and remote-desktop applications with no
 usable API. EMRs and payer portals are examples of highly regulated settings
 where those checks matter most.
 
