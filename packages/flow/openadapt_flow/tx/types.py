@@ -207,6 +207,7 @@ class EntityLensSpec(_FrozenModel):
         "etag",
         "version",
     )
+    create_defaults: tuple[str, ...] = ()
     field_codecs: dict[str, FieldCodec] = Field(default_factory=dict)
     duplicate_keys: tuple[str, ...] = ()
     expected_author: Optional[str] = None

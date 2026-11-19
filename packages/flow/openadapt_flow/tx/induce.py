@@ -1127,6 +1127,7 @@ def induce_lens_from_har(
     if intended_inputs:
         user_supplied_keys.update(_flatten_record(intended_inputs).keys())
 
+    create_defaults_list: list[str] = []
     for ex in post_creates:
         rec, _ = _unwrap_single_record(ex.resp_json)
         if rec is None:
@@ -1136,11 +1137,11 @@ def induce_lens_from_har(
         for path, val in flat_resp.items():
             if path == id_field or path in flat_req:
                 continue
-            if (
-                _looks_like_metadata_or_volatile(path, val)
-                and path not in volatile_list
-            ):
-                volatile_list.append(path)
+            if _looks_like_metadata_or_volatile(path, val):
+                if path not in volatile_list:
+                    volatile_list.append(path)
+            elif path not in create_defaults_list:
+                create_defaults_list.append(path)
 
     for _eid, history in entity_snapshots.items():
         for idx in range(1, len(history)):
@@ -1254,6 +1255,7 @@ def induce_lens_from_har(
         delete_endpoint=delete_endpoint,
         identity_fields=tuple(identity_candidates),
         volatile_fields=tuple(volatile_list),
+        create_defaults=tuple(create_defaults_list),
         field_codecs=field_codecs,
         duplicate_keys=tuple(duplicate_keys),
     )
@@ -1626,6 +1628,7 @@ def probe_put_semantics(
 
         codecs = dict(candidate.field_codecs)
         volatile_list = list(candidate.volatile_fields)
+        create_defaults_list = list(candidate.create_defaults)
         user_keys = set(_flatten_record(sample_record).keys()) | set(
             _flatten_record(sample_update).keys()
         )
@@ -1644,13 +1647,12 @@ def probe_put_semantics(
                     codecs[path] = inferred
 
         for path, val in flat_r0.items():
-            if (
-                path != candidate.id_field
-                and path not in user_keys
-                and _looks_like_metadata_or_volatile(path, val)
-                and path not in volatile_list
-            ):
-                volatile_list.append(path)
+            if path != candidate.id_field and path not in user_keys:
+                if _looks_like_metadata_or_volatile(path, val):
+                    if path not in volatile_list:
+                        volatile_list.append(path)
+                elif path not in create_defaults_list:
+                    create_defaults_list.append(path)
 
         write_mode: WriteMode = candidate.write_mode
         if candidate.write_mode == "create" and sample_update:
@@ -1744,6 +1746,7 @@ def probe_put_semantics(
             }
             merged_payload.update(sample_update)
             hdrs_merged = dict(auth_headers or {})
+            hdrs_merged.setdefault("X-Actor-Id", "openadapt-probe-updater")
             if etag_0 and candidate.write_endpoint.etag_header:
                 hdrs_merged["If-Match"] = etag_0
             m_status, _, _ = _http_json(
@@ -1806,6 +1809,7 @@ def probe_put_semantics(
             update={
                 "write_mode": write_mode,
                 "volatile_fields": tuple(volatile_list),
+                "create_defaults": tuple(create_defaults_list),
                 "field_codecs": codecs,
                 "identity_fields": tuple(identity_fields),
             }

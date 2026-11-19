@@ -284,9 +284,29 @@ class _AutoImportedOpenAdaptTxArm:
         pack: Optional[CertifiedLensPack] = None
         if callable(certify_fn):
             try:
-                maybe_pack = certify_fn(lens)
+                sample_rec = server.make_background_create_payload(999, 1)
+                _, sample_upd = server.make_background_update_payload(999, 1)
+                maybe_pack = certify_fn(
+                    lens,
+                    sample_record=sample_rec,
+                    sample_update=sample_upd,
+                    headers={"X-Actor-Id": "tx-certifier"},
+                )
                 if isinstance(maybe_pack, CertifiedLensPack) and maybe_pack.certified:
                     pack = maybe_pack
+                    lens = pack.lens
+            except TypeError:
+                try:
+                    maybe_pack = certify_fn(
+                        lens,
+                        sample_record=sample_rec,
+                        sample_update=sample_upd,
+                    )
+                    if isinstance(maybe_pack, CertifiedLensPack) and maybe_pack.certified:
+                        pack = maybe_pack
+                        lens = pack.lens
+                except Exception:
+                    pack = None
             except Exception:
                 pack = None
         if pack is None:
@@ -311,11 +331,13 @@ class _AutoImportedOpenAdaptTxArm:
         elif hasattr(tap, "__enter__"):
             tap.__enter__()
 
-        judge = _instantiate_with_matching_kwargs(judge_cls, {})
+        from openadapt_flow.tx.judge import SafeNormalizedEntailmentOracle
+
+        judge = judge_cls(entailment_oracle=SafeNormalizedEntailmentOracle())
         engine = _instantiate_with_matching_kwargs(
             engine_cls,
             {
-                "lens": lens,
+                "lens": pack,
                 "lens_spec": lens,
                 "pack": pack,
                 "lens_pack": pack,
@@ -336,90 +358,67 @@ class _AutoImportedOpenAdaptTxArm:
         *,
         fault_proxy: Optional[FaultInjectingProxy] = None,
     ) -> ArmExecutionResult:
-        try:
-            tap, pack, engine = self._get_or_create_ctx(server)
-            lens = pack.lens
+        tap, pack, engine = self._get_or_create_ctx(server)
+        lens = pack.lens
 
-            def _agent_action(*args: Any, **kwargs: Any) -> None:
-                tap_url = str(args[0]) if args else str(tap.base_url)
-                if fault_proxy is not None:
-                    fault_proxy.set_upstream(tap_url)
-                    dest = fault_proxy.base_url
-                else:
-                    dest = tap_url
-                if task.operation == "create" and lens.create_endpoint is not None:
-                    _http_json_request(
-                        dest,
-                        lens.create_endpoint.method,
-                        lens.create_endpoint.path_template,
-                        body=dict(task.intended_delta),
-                        headers={"X-Actor-Id": task.actor_id},
-                    )
-                elif task.operation == "update" and task.entity_id is not None:
-                    path = _format_endpoint_path(
-                        lens.write_endpoint.path_template,
-                        task.entity_id,
-                    )
-                    payload = dict(task.intended_delta)
-                    hdrs = {"X-Actor-Id": task.actor_id}
-                    r0_now = server.get_record_direct(task.entity_id) or {}
-                    if lens.write_mode == "replace":
-                        payload = {**r0_now, **task.intended_delta}
-                    if "etag" in r0_now:
-                        hdrs["If-Match"] = str(r0_now["etag"])
-                    _http_json_request(
-                        dest,
-                        lens.write_endpoint.method,
-                        path,
-                        body=payload,
-                        headers=hdrs,
-                    )
+        # Build safe merged payload from engine's own pre-read rules (never touching DB directly)
+        client = engine.client
 
-            commit_fn = (
-                getattr(engine, "commit", None)
-                or getattr(engine, "execute", None)
-                or getattr(engine, "run", None)
-            )
-            if commit_fn is None:
-                return self._fallback.execute(server, task, fault_proxy=fault_proxy)
-
-            sig = inspect.signature(commit_fn)
-            call_kwargs: dict[str, Any] = {}
-            for pname in sig.parameters:
-                if pname == "task":
-                    call_kwargs[pname] = task
-                elif pname in (
-                    "action_fn",
-                    "agent_fn",
-                    "executor",
-                    "write_fn",
-                    "callback",
-                ):
-                    call_kwargs[pname] = _agent_action
-                elif pname in ("lens", "lens_spec"):
-                    call_kwargs[pname] = lens
-                elif pname in ("pack", "lens_pack"):
-                    call_kwargs[pname] = pack
-
-            res: Any = (
-                commit_fn(**call_kwargs)
-                if call_kwargs
-                else commit_fn(task, _agent_action)
-            )
-            if isinstance(res, TxCommitResult):
-                return ArmExecutionResult(
-                    arm_name=self.name,
-                    task_id=task.task_id,
-                    accepted=(res.outcome == "CONFIRMED"),
-                    outcome_label=res.outcome,
-                    rows_read=res.rows_read,
-                    duration_ms=res.duration_ms,
-                    reason=";".join(res.reasons),
-                    occ_status=res.occ_status,
+        def _agent_action(*args: Any, **kwargs: Any) -> None:
+            tap_url = str(args[0]) if args else str(tap.base_url)
+            if fault_proxy is not None:
+                fault_proxy.set_upstream(tap_url)
+                dest = fault_proxy.base_url
+            else:
+                dest = tap_url
+            if task.operation == "create" and lens.create_endpoint is not None:
+                _http_json_request(
+                    dest,
+                    lens.create_endpoint.method,
+                    lens.create_endpoint.path_template,
+                    body=dict(task.intended_delta),
+                    headers={"X-Actor-Id": task.actor_id},
                 )
-            return self._fallback.execute(server, task, fault_proxy=fault_proxy)
-        except Exception:
-            return self._fallback.execute(server, task, fault_proxy=fault_proxy)
+            elif task.operation == "update" and task.entity_id is not None:
+                path = _format_endpoint_path(
+                    lens.write_endpoint.path_template,
+                    task.entity_id,
+                )
+                payload = dict(task.intended_delta)
+                hdrs = {"X-Actor-Id": task.actor_id}
+                if lens.write_mode == "replace" or lens.write_endpoint.etag_header:
+                    r0_resp, r0_now, _ = client.get_one(task.entity_id)
+                    if r0_now is not None and lens.write_mode == "replace":
+                        payload = {**r0_now, **task.intended_delta}
+                    if r0_resp.etag:
+                        hdrs["If-Match"] = r0_resp.etag
+                    elif r0_now is not None and "etag" in r0_now:
+                        hdrs["If-Match"] = str(r0_now["etag"])
+                _http_json_request(
+                    dest,
+                    lens.write_endpoint.method,
+                    path,
+                    body=payload,
+                    headers=hdrs,
+                )
+
+        if hasattr(engine, "wrap_action"):
+            res = engine.wrap_action(task, _agent_action)
+        else:
+            res = engine.execute(task)
+
+        if not isinstance(res, TxCommitResult):
+            raise TypeError(f"Expected TxCommitResult, got {type(res)!r}")
+        return ArmExecutionResult(
+            arm_name=self.name,
+            task_id=task.task_id,
+            accepted=(res.outcome == "CONFIRMED"),
+            outcome_label=res.outcome,
+            rows_read=res.rows_read,
+            duration_ms=res.duration_ms,
+            reason=";".join(res.reasons),
+            occ_status=res.occ_status,
+        )
 
 
 class _FactoryWrappedArm:

@@ -752,6 +752,8 @@ class SafeNormalizedEntailmentOracle(EntailmentOracle):
                 return True, "ISO-8601 midnight date canonical entailment"
             if canonical_phones_match(intended_value, stored_value):
                 return True, "E.164/NANP phone canonical entailment"
+            if iso_subdivisions_match(intended_value, stored_value):
+                return True, "ISO-3166-2 subdivision postal code entailment"
             if _normalize_whitespace_case(intended_value) == _normalize_whitespace_case(
                 stored_value
             ):
@@ -846,6 +848,43 @@ class SafeNormalizedEntailmentOracle(EntailmentOracle):
             False,
             f"non-entailed values on {field_path!r}: {intended_value!r} vs {stored_value!r}",
         )
+
+
+_ISO_SUBDIVISION_MAP: dict[str, str] = {
+    "alabama": "AL", "alaska": "AK", "arizona": "AZ", "arkansas": "AR",
+    "california": "CA", "colorado": "CO", "connecticut": "CT", "delaware": "DE",
+    "district of columbia": "DC", "florida": "FL", "georgia": "GA", "hawaii": "HI",
+    "idaho": "ID", "illinois": "IL", "indiana": "IN", "iowa": "IA",
+    "kansas": "KS", "kentucky": "KY", "louisiana": "LA", "maine": "ME",
+    "maryland": "MD", "massachusetts": "MA", "michigan": "MI", "minnesota": "MN",
+    "mississippi": "MS", "missouri": "MO", "montana": "MT", "nebraska": "NE",
+    "nevada": "NV", "new hampshire": "NH", "new jersey": "NJ", "new mexico": "NM",
+    "new york": "NY", "north carolina": "NC", "north dakota": "ND", "ohio": "OH",
+    "oklahoma": "OK", "oregon": "OR", "pennsylvania": "PA", "rhode island": "RI",
+    "south carolina": "SC", "south dakota": "SD", "tennessee": "TN", "texas": "TX",
+    "utah": "UT", "vermont": "VT", "virginia": "VA", "washington": "WA",
+    "west virginia": "WV", "wisconsin": "WI", "wyoming": "WY",
+    "alberta": "AB", "british columbia": "BC", "manitoba": "MB",
+    "new brunswick": "NB", "newfoundland and labrador": "NL",
+    "northwest territories": "NT", "nova scotia": "NS", "nunavut": "NU",
+    "ontario": "ON", "prince edward island": "PE", "quebec": "QC",
+    "saskatchewan": "SK", "yukon": "YT",
+}
+
+
+def iso_subdivisions_match(intended: str, stored: str) -> bool:
+    """Exact 1-to-1 ISO-3166-2 US/CA subdivision full-name <-> 2-letter code check."""
+    a = _normalize_whitespace_case(intended)
+    b = _normalize_whitespace_case(stored)
+    if not a or not b or a == b:
+        return False
+    code_a = _ISO_SUBDIVISION_MAP.get(a)
+    if code_a is not None and code_a.lower() == b:
+        return True
+    code_b = _ISO_SUBDIVISION_MAP.get(b)
+    if code_b is not None and code_b.lower() == a:
+        return True
+    return False
 
 
 StructuralEntailmentOracle = SafeNormalizedEntailmentOracle
@@ -1157,7 +1196,7 @@ class FrameAndIntentJudge(JudgeProtocol):
         allowed_server_defaults: Optional[tuple[str, ...]] = None,
     ) -> JudgeVerdict:
         effective_defaults = (
-            tuple(allowed_server_defaults)
+            tuple(dict.fromkeys(self._allowed_server_defaults + tuple(allowed_server_defaults)))
             if allowed_server_defaults is not None
             else self._allowed_server_defaults
         )

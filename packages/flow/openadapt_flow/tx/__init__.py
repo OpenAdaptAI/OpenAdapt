@@ -1,5 +1,36 @@
 """OpenAdapt Transactional Commit Layer (tx): O(1) wire-scoped ACID guarantees for AI agents."""
 
+from openadapt_flow.tx.induce import (
+    SandboxSafetyError,
+    certify_lens_on_sandbox,
+    induce_lens_from_har,
+    probe_put_semantics,
+)
+from openadapt_flow.tx.judge import (
+    FrameAndIntentJudge,
+    SafeNormalizedEntailmentOracle,
+    apply_field_codec,
+    flatten_record,
+    infer_field_codec,
+    strict_equal,
+)
+from openadapt_flow.tx.lens import (
+    EntityLensClient,
+    LensHttpResponse,
+    TransactionalCommitEngine,
+    deep_merge,
+    strip_readonly_volatile,
+)
+from openadapt_flow.tx.network_bridge import (
+    load_network_capture_as_har,
+    network_capture_entries_to_har,
+)
+from openadapt_flow.tx.receipt import (
+    TxReceiptPayload,
+    issue_tx_receipt,
+    load_or_create_signing_key,
+    verify_tx_receipt,
+)
 from openadapt_flow.tx.types import (
     CERTIFIED_LENS_PACK_SCHEMA,
     ENTITY_LENS_SCHEMA,
@@ -26,6 +57,13 @@ from openadapt_flow.tx.types import (
     canonical_sha256,
     salted_sha256,
 )
+from openadapt_flow.tx.wire_tap import (
+    SessionWireTap,
+    WirePolicy,
+    dump_har,
+    har_to_summary,
+    load_har,
+)
 
 __all__ = [
     "CERTIFIED_LENS_PACK_SCHEMA",
@@ -36,20 +74,46 @@ __all__ = [
     "CodecKind",
     "EndpointTemplate",
     "EntailmentOracle",
+    "EntityLensClient",
     "EntityLensSpec",
     "FieldCodec",
     "FieldVerdict",
+    "FrameAndIntentJudge",
     "JudgeProtocol",
     "JudgeTier",
     "JudgeVerdict",
+    "LensHttpResponse",
     "OCCStatus",
+    "SafeNormalizedEntailmentOracle",
+    "SandboxSafetyError",
+    "SessionWireTap",
+    "TransactionalCommitEngine",
     "TxCommitResult",
     "TxOutcome",
+    "TxReceiptPayload",
     "TxTask",
     "WireMutationRecord",
+    "WirePolicy",
     "WireSessionSummary",
     "WireTapProtocol",
     "WriteMode",
+    "apply_field_codec",
     "canonical_sha256",
+    "certify_lens_on_sandbox",
+    "deep_merge",
+    "dump_har",
+    "flatten_record",
+    "har_to_summary",
+    "induce_lens_from_har",
+    "infer_field_codec",
+    "issue_tx_receipt",
+    "load_har",
+    "load_network_capture_as_har",
+    "load_or_create_signing_key",
+    "network_capture_entries_to_har",
+    "probe_put_semantics",
     "salted_sha256",
+    "strict_equal",
+    "strip_readonly_volatile",
+    "verify_tx_receipt",
 ]

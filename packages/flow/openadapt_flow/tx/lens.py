@@ -1313,12 +1313,21 @@ class TransactionalCommitEngine:
                     occ_status = "CONCURRENT_MODIFICATION"
                     reasons.append("concurrent_version_jump")
 
+        eval_kwargs: dict[str, Any] = {
+            "volatile_fields": self._effective_volatile_fields(),
+            "field_codecs": self.lens.field_codecs,
+        }
+        if self.lens.create_defaults:
+            import inspect as _inspect
+
+            if "allowed_server_defaults" in _inspect.signature(self.judge.evaluate).parameters:
+                eval_kwargs["allowed_server_defaults"] = self.lens.create_defaults
+
         verdict = self.judge.evaluate(
             r0,
             r1,
             task.intended_delta,
-            volatile_fields=self._effective_volatile_fields(),
-            field_codecs=self.lens.field_codecs,
+            **eval_kwargs,
         )
 
         for clobbered_field in verdict.clobbered_fields:

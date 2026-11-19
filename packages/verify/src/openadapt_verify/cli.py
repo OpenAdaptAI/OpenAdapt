@@ -423,12 +423,54 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         help="audit a bundled script against a synthetic local store",
     )
     aud.add_argument("command", nargs=argparse.REMAINDER)
+    txi = sub.add_parser(
+        "tx-induce",
+        help="Induce and optionally sandbox-certify an O(1) EntityLens from HAR or network.jsonl",
+    )
+    txi.add_argument("--har", help="HAR 1.2 trace file")
+    txi.add_argument("--recording", help="OpenAdapt recording dir or network.jsonl")
+    txi.add_argument("--out", required=True, help="Output JSON path for lens or certified pack")
+    txi.add_argument("--sandbox-url", help="Declared staging/sandbox URL for 6-probe certification")
+    txi.add_argument("--sample-record", help="Sample JSON record for sandbox probing")
+    txi.add_argument("--sample-update", help="Sample JSON update delta for sandbox probing")
+    txi.add_argument("--allow-remote-sandbox", action="store_true")
+
+    txr = sub.add_parser(
+        "tx-run",
+        help="Execute or wrap an agent write through the O(1) TransactionalCommitEngine",
+    )
+    txr.add_argument("--lens", required=True, help="EntityLensSpec or CertifiedLensPack JSON file")
+    txr.add_argument("--task", required=True, help="TxTask JSON file")
+    txr.add_argument("--state", help="State/receipts directory")
+    txr.add_argument("command", nargs=argparse.REMAINDER)
+
     args = parser.parse_args(argv)
     try:
         if args.command_name == "quickstart":
             return _quickstart(args)
         if args.command_name == "audit":
             return _audit(args)
+        if args.command_name == "tx-induce":
+            from openadapt_verify.tx import run_cli_induce
+
+            return run_cli_induce(
+                har_path=args.har,
+                recording_dir=args.recording,
+                out_path=args.out,
+                sandbox_url=args.sandbox_url,
+                sample_record_path=args.sample_record,
+                sample_update_path=args.sample_update,
+                allow_remote_sandbox=args.allow_remote_sandbox,
+            )
+        if args.command_name == "tx-run":
+            from openadapt_verify.tx import run_cli_tx
+
+            return run_cli_tx(
+                lens_path=args.lens,
+                task_path=args.task,
+                state_dir=args.state,
+                command=args.command,
+            )
         if args.command_name == "run":
             return _run(args)
         if args.command_name == "verify":
