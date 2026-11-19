@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import socket
 import stat
 import sys
@@ -333,8 +334,11 @@ def test_cli_without_a_terminal_exits_2_and_sends_nothing(
 def test_cli_dry_run_defaults_to_the_newest_quickstart_run(
     make_run, tmp_path, monkeypatch
 ):
-    make_run("run-1")
+    older = make_run("run-1")
     newest = make_run("run-2")
+    # Give the two Seals distinct times; the helper must pick the newer one.
+    os.utime(older / "seal.json", ns=(1_000_000_000, 1_000_000_000))
+    os.utime(newest / "seal.json", ns=(2_000_000_000, 2_000_000_000))
     monkeypatch.chdir(tmp_path)
     result = CliRunner().invoke(cli.main, ["seal", "publish", "--dry-run"])
     assert result.exit_code == 0, result.output

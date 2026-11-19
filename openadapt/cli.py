@@ -2127,7 +2127,8 @@ def _newest_sealed_run() -> Optional[Path]:
     runs = _sealed_run_dirs(root)
     if not runs:
         return None
-    return max(runs, key=lambda run: (run / "seal.json").stat().st_mtime)
+    # Ties (same mtime) break on the folder name, so run-2 beats run-1.
+    return max(runs, key=lambda run: ((run / "seal.json").stat().st_mtime_ns, run.name))
 
 
 def _ask_line(prompt: str) -> str:
