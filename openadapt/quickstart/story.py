@@ -130,6 +130,11 @@ class Outcome:
     page: Optional[Path] = None
     page_opened: bool = False
     total_seconds: float = 0.0
+    #: What each run's record check reads back: ``(field, literal, param)``
+    #: from the compiled bundle (empty when the engine can't say).
+    readback: list[tuple[str, Optional[str], Optional[str]]] = field(
+        default_factory=list
+    )
 
     @property
     def checked(self) -> int:
@@ -239,6 +244,12 @@ def run_story(
             outcome.program_steps = engine.compile()
         outcome.program_name = engine.program_name
         outcome.act1_seconds = clock() - act_start
+        fields = getattr(engine, "readback_fields", None)
+        if fields is not None:
+            try:
+                outcome.readback = list(fields())
+            except Exception:  # noqa: BLE001 - the card then shows counts only
+                outcome.readback = []
         view.compiled(outcome)
         if verbose:
             view.detail(
@@ -272,6 +283,9 @@ def run_story(
                 view.detail(_engine_detail_run(run, scene))
             view.progress(len(outcome.runs), total, outcome.checked)
 
+        expect = getattr(view, "expect_runs", None)
+        if expect is not None:
+            expect(list(inputs))
         with view.running(total, engine.parallel):
             engine.run_all(inputs, finished)
         outcome.act2_seconds = clock() - act_start
@@ -358,10 +372,12 @@ def _act2_subtitle(
 ) -> str:
     # An engine that can't give a run its own note replays the demonstrated
     # one, and the header says so.
+    if total == 1:
+        noun = scene.inputs_noun.removesuffix("s")
+        return f"the program on a new {noun}" if varied else "the program once"
+    noun = scene.inputs_noun
     what = (
-        f"the program on {total} new {scene.inputs_noun}"
-        if varied
-        else f"the program {total} times"
+        f"the program on {total} new {noun}" if varied else f"the program {total} times"
     )
     if parallel >= total:
         return f"{what}, all at once"

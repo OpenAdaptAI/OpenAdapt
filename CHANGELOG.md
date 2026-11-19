@@ -4,6 +4,28 @@
 
 ## Unreleased (1.22.0)
 
+### Features
+
+- `openadapt quickstart` reads as a short story: five steps, each a plain
+  line with a dim detail, shown with spinners that turn into check marks on
+  a terminal. A "Saved and checked" card reads the saved record back field
+  by field. The broken save shows the screen and the database side by side
+  and ends "Stopped. Not marked done.", with the engine's own next step (a
+  person checks the record before anything is retried). The run's Seal is
+  drawn with a clickable link to its offline `seal.html`, followed by one
+  next step (give your agent the task as an MCP tool). `openadapt quickstart
+  --more` prints every other next step. Output that isn't a terminal, or
+  runs with `NO_COLOR` or `TERM=dumb`, stays plain lines with no animation.
+  At 60 columns the boxes stack. The engine's exact terms stay in each run's
+  `REPORT.md`.
+- The quickstart runs the program on one new note instead of five, and asks
+  Flow not to encrypt the synthetic run's checkpoints (Flow's recorded
+  `OPENADAPT_FLOW_PLAINTEXT_AT_REST` opt-out, which is not set under
+  `OPENADAPT_FLOW_AT_REST=strict` or a configured `OPENADAPT_BUNDLE_KEY` or
+  `OPENADAPT_RECORDING_KEY`). Encrypting the checkpoints derived a scrypt key on every read
+  and write, which made one run take 11 s instead of 3 s. A full run takes
+  about 23 s again, down from 66 to 79 s.
+
 ### Requirements
 
 - Accept `openadapt-flow` 3.x as well as 2.7 or later: every Flow requirement

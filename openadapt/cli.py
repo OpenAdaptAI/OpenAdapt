@@ -572,6 +572,7 @@ _QUICKSTART_OPTIONS = frozenset(
         "--verbose",
         "--headed",
         "--break-it",
+        "--more",
         "--help",
     }
 )
@@ -606,14 +607,32 @@ def _refuse_unknown_tutorial_options(args: list[str]) -> None:
 
 @contextmanager
 def _synthetic_scrub_off():
-    """Keep an unconfigured privacy provider from blocking the synthetic app.
+    """Keep privacy controls meant for patient data off the synthetic app.
 
-    The bundled tutorial contains only fixed synthetic data. An operator's
-    explicit setting is left alone; the default is restored afterwards.
+    The bundled tutorial contains only fixed synthetic data. An unconfigured
+    privacy provider would block it, and encrypting its run checkpoints at
+    rest (a scrypt key derivation per checkpoint read and write) made each
+    run about four times slower: 11 s instead of 3 s on a 2026 MacBook. Flow
+    records the plaintext opt-out, with its reason, in its ledger. It is not
+    set when the operator set a key (``OPENADAPT_BUNDLE_KEY`` or
+    ``OPENADAPT_RECORDING_KEY``) or ``OPENADAPT_FLOW_AT_REST=strict``. An
+    operator's explicit setting is left alone; the defaults are restored
+    afterwards.
     """
     scrub = os.environ.get("OPENADAPT_FLOW_SCRUB")
     if scrub in (None, "auto"):
         os.environ["OPENADAPT_FLOW_SCRUB"] = "off"
+    plaintext = os.environ.get(_PLAINTEXT_AT_REST)
+    # Only when the operator configured nothing: a key (either one Flow
+    # reads) or strict mode keeps Flow's own setting.
+    configured = (
+        plaintext
+        or os.environ.get("OPENADAPT_BUNDLE_KEY")
+        or os.environ.get("OPENADAPT_RECORDING_KEY")
+        or (os.environ.get("OPENADAPT_FLOW_AT_REST") or "").strip().lower() == "strict"
+    )
+    if not configured:
+        os.environ[_PLAINTEXT_AT_REST] = "synthetic quickstart data"
     try:
         yield
     finally:
@@ -621,6 +640,14 @@ def _synthetic_scrub_off():
             os.environ.pop("OPENADAPT_FLOW_SCRUB", None)
         elif scrub == "auto":
             os.environ["OPENADAPT_FLOW_SCRUB"] = scrub
+        if plaintext is None:
+            os.environ.pop(_PLAINTEXT_AT_REST, None)
+        else:
+            os.environ[_PLAINTEXT_AT_REST] = plaintext
+
+
+#: Flow's recorded opt-out from encrypting its files at rest.
+_PLAINTEXT_AT_REST = "OPENADAPT_FLOW_PLAINTEXT_AT_REST"
 
 
 def _quickstart_root(out: Optional[Path]) -> Path:
@@ -682,6 +709,14 @@ def _quickstart_root(out: Optional[Path]) -> Path:
     is_flag=True,
     help="Also print each run's engine detail and report path.",
 )
+@click.option(
+    "--more",
+    is_flag=True,
+    help=(
+        "Print every next step for the last quickstart in this folder (or "
+        "--out) and exit. Runs nothing."
+    ),
+)
 @click.option("--headed", is_flag=True, hidden=True)
 @click.option("--break-it", "break_it", is_flag=True, hidden=True)
 @click.pass_context
@@ -692,14 +727,15 @@ def quickstart(
     headless: bool,
     no_break: bool,
     verbose: bool,
+    more: bool,
     headed: bool,
     break_it: bool,
 ) -> None:
     """Show a task once, run it, then watch it catch a save that didn't happen.
 
-    About 30 seconds, in a synthetic clinic app on this computer. OpenAdapt
-    turns one demonstration into a program, runs it five times and checks
-    every save in the app's database, then makes one save fail silently: the
+    About 25 seconds, in a synthetic clinic app on this computer. OpenAdapt
+    turns one demonstration into a program, runs it on a new note and checks
+    the save in the app's database, then makes one save fail silently: the
     screen says saved, the database has nothing, and OpenAdapt stops. The
     program makes no AI calls. Nothing in the output directory is overwritten.
 
@@ -712,6 +748,9 @@ def quickstart(
     Other flags of the engine tutorial (for example --guided or
     --interactive-record) run that tutorial instead, unchanged.
     """
+    if more:
+        _quickstart_more(out, app)
+        return
     _require_supported_python()
     _refuse_unknown_tutorial_options(command_ctx.args)
     openemr = _openemr_checkout(command_ctx.args) if app == "openemr" else None
@@ -765,6 +804,47 @@ def quickstart(
         outcome.broken is not None and not outcome.broken.stopped
     ):
         raise click.exceptions.Exit(1)
+
+
+def _last_quickstart_root(cwd: Optional[Path] = None) -> Optional[Path]:
+    """The newest ``openadapt-quickstart[-N]`` folder here, or None."""
+    base = cwd or Path.cwd()
+    found = [
+        path
+        for path in base.glob(f"{_DEFAULT_QUICKSTART_DIR}*")
+        if path.is_dir()
+        and (
+            path.name == _DEFAULT_QUICKSTART_DIR
+            or re.fullmatch(rf"{_DEFAULT_QUICKSTART_DIR}-\d+", path.name)
+        )
+    ]
+    return max(found, key=lambda path: path.stat().st_mtime) if found else None
+
+
+def _quickstart_more(out: Optional[Path], app: str) -> None:
+    """``openadapt quickstart --more``: every next step, then exit."""
+    from openadapt.quickstart import next_steps
+    from openadapt.quickstart.engine import SealFacts
+    from openadapt.quickstart.story import Outcome
+    from openadapt.quickstart.view import more_lines
+
+    root = out.expanduser().resolve() if out is not None else _last_quickstart_root()
+    if root is None:
+        root = Path(_DEFAULT_QUICKSTART_DIR).resolve()
+    seal_page = root / "run-1" / "seal.html"
+    sealed = (root / "run-1" / "seal.json").is_file()
+    outcome = Outcome(root=root, seal=SealFacts("", 1) if sealed else None)
+    steps = next_steps(
+        _hint,
+        _shell_quote,
+        app == "mockmed" and _agent_serves_tutorial(),
+        keep=_keep_command(),
+        shadow=_shadowing_openadapt if _under_uvx() else None,
+    )(outcome)
+    if not root.is_dir():
+        click.echo(f"No quickstart folder here yet. Run: {_hint('quickstart')}")
+    for line in more_lines(steps, root, seal_page if seal_page.is_file() else None):
+        click.echo(line)
 
 
 def _openemr_checkout(extra: list[str]) -> Path:

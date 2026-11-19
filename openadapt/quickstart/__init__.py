@@ -1,14 +1,15 @@
 """``openadapt quickstart``: show a task once, run it, break it.
 
 The first command anyone runs. It demonstrates one task in a synthetic clinic
-app (MockMed), compiles it into a program, runs the program five times with a
-new note each time and checks every save in the app's database, then makes
-one save fail silently: the screen says saved, the database has nothing, and
+app (MockMed), compiles it into a program, runs the program on a new note and
+checks the save in the app's database, then makes one save fail
+silently: the screen says saved, the database has nothing, and
 OpenAdapt stops instead of reporting success.
 """
 
 from __future__ import annotations
 
+import contextlib
 import sys
 from pathlib import Path
 from typing import IO, Any, Callable, Optional
@@ -95,15 +96,30 @@ def run_quickstart(
         # A person watching gets a short pause between demonstrated actions;
         # a hidden browser runs at full speed.
         engine = FlowEngine(root, visible=visible, pace_s=0.3 if visible else 0.0)
-    return run_story(
-        engine,
-        make_view(stream, scene=getattr(engine, "scene", MOCKMED)),
-        next_steps=steps,
-        break_it=break_it,
-        interactive=interactive,
-        verbose=verbose,
-        open_page=open_page if display_available() else None,
-    )
+    view = make_view(stream, scene=getattr(engine, "scene", MOCKMED))
+    notices = getattr(view, "collect_notices", None)
+    with notices() if notices is not None else contextlib.nullcontext():
+        try:
+            return run_story(
+                engine,
+                view,
+                next_steps=steps,
+                break_it=break_it,
+                interactive=interactive,
+                verbose=verbose,
+                # Only when this output is the terminal a person is reading:
+                # a captured or redirected stream never opens a browser.
+                open_page=open_page if _shown(stream, display_available) else None,
+            )
+        finally:
+            close = getattr(view, "close", None)
+            if close is not None:
+                close()
+
+
+def _shown(stream: IO[str], display_available: Callable[[], bool]) -> bool:
+    isatty = getattr(stream, "isatty", None)
+    return bool(callable(isatty) and isatty()) and display_available()
 
 
 __all__ = ["next_steps", "run_quickstart"]

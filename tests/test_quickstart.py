@@ -46,7 +46,7 @@ from openadapt.quickstart.images import (
     image_sequence,
 )
 from openadapt.quickstart.story import NextSteps, Outcome, run_story
-from openadapt.quickstart.view import Marks, PlainView, RichView, make_view
+from openadapt.quickstart.view import Marks, PlainView, RichView, make_view, more_lines
 
 SNAPSHOT = Path(__file__).parent / "snapshots" / "quickstart_plain.snapshot"
 
@@ -169,6 +169,13 @@ class FakeEngine:
     def program_name(self):
         return "local-quickstart"
 
+    def readback_fields(self):
+        return [
+            ("patient_id", "p1", None),
+            ("type", "Triage", None),
+            ("note", None, "note"),
+        ]
+
     def note_param(self):
         return self._note_param
 
@@ -283,8 +290,8 @@ def test_plain_output_runs_the_three_acts_in_order(root):
         "seal pages",
     ]
     assert engine.calls.index("seal") > engine.calls.index("run 5")
-    acts = [output.index(f"\n{n}  ") for n in (1, 2, 3)]
-    assert acts == sorted(acts)
+    steps = [output.index(f"\n[{n}/5] ") for n in (1, 2, 3, 4, 5)]
+    assert steps == sorted(steps)
     assert "\x1b[" not in output
 
 
@@ -314,16 +321,51 @@ def test_verbose_adds_the_engine_detail(root):
     assert str(root / "run-1" / "REPORT.md") in output
 
 
-def test_finale_is_at_most_twelve_lines_with_exactly_two_next_steps(root):
+def test_finale_has_one_next_step_and_the_rest_behind_more(root):
     output, _ = _plain(FakeEngine(root))
-    finale = output[output.index("\nReceipt\n") + 1 :].rstrip("\n").splitlines()
-    assert len(finale) <= 12, finale
-    assert [line for line in finale if line.startswith(("Try it", "Give your"))] == [
-        "Try it on your own app: openadapt flow record --backend web --url "
-        "https://your-app.example --out my-task",
-        "Give your agent this as a tool: openadapt agent serve --allow-run",
-    ]
-    assert sum(1 for line in finale if line.startswith("Details: ")) == 1
+    finale = output[output.index("\nYour Seal: ") + 1 :].rstrip("\n").splitlines()
+    assert len(finale) <= 16, finale
+    at = finale.index("Next: Give your agent this task as a tool")
+    assert finale[at + 1] == (
+        "  claude mcp add openadapt -- openadapt agent serve --allow-run"
+    )
+    assert sum(1 for line in finale if line.startswith("Next: ")) == 1
+    assert "flow record" not in output
+    assert "More next steps: openadapt quickstart --more" in finale
+    assert sum(1 for line in finale if line.startswith("Done in ")) == 1
+
+
+def test_more_lists_every_other_next_step(root):
+    steps = _steps(Outcome(root=root, seal=SealFacts("k", 1)))
+    lines = more_lines(steps, root, root / "run-1" / "seal.html")
+    assert lines[0] == (
+        "Give your agent this task as a tool (Claude Code): claude mcp add "
+        "openadapt -- openadapt agent serve --allow-run"
+    )
+    joined = "\n".join(lines)
+    assert "Try it on your own app: openadapt flow record --backend web" in joined
+    assert (
+        "Check every Seal again: openadapt seal verify openadapt-quickstart" in joined
+    )
+    assert "Open your Seal (offline): openadapt-quickstart/run-1/seal.html" in joined
+    assert "https://openadapt.ai/seals" in joined
+
+
+def test_quickstart_more_prints_and_runs_nothing(tmp_path, monkeypatch):
+    monkeypatch.setattr(sys, "prefix", "/opt/openadapt-env")
+    monkeypatch.setattr(
+        "openadapt.quickstart.run_quickstart",
+        lambda *a, **k: pytest.fail("--more ran the quickstart"),
+    )
+    with CliRunner().isolated_filesystem(temp_dir=tmp_path):
+        (Path("openadapt-quickstart") / "run-1").mkdir(parents=True)
+        Path("openadapt-quickstart/run-1/seal.json").write_text("{}")
+        Path("openadapt-quickstart/run-1/seal.html").write_text("")
+        result = CliRunner().invoke(cli.main, ["quickstart", "--more"])
+    assert result.exit_code == 0, result.output
+    assert "claude mcp add openadapt --" in result.output
+    assert "seal verify openadapt-quickstart" in result.output
+    assert "openadapt-quickstart/run-1/seal.html" in result.output
 
 
 def test_no_break_skips_act_three(root):
@@ -333,7 +375,8 @@ def test_no_break_skips_act_three(root):
     assert "break" not in engine.calls
     assert "page" not in engine.calls
     assert outcome.broken is None
-    assert "Receipt" in output
+    assert "[5/5]" not in output
+    assert "Your Seal: " in output
 
 
 # ---------------------------------------------------------------------------
@@ -358,7 +401,7 @@ def test_numbers_follow_the_runs(root):
     )
     output, outcome = _plain(engine)
 
-    assert "Compiled into a program: 9 steps." in output
+    assert "Turn it into a program · 9 steps, local-quickstart" in output
     assert "Click Go" in output and "3.8s" in output
     assert "11.2s" in output  # run 2's own time
     assert "■ Stopped before saving" in output
@@ -366,8 +409,13 @@ def test_numbers_follow_the_runs(root):
     assert "5 of 5" not in output
     assert "0 AI calls" not in output
     # Four checked runs and the stopped one.
-    assert "Seal       seal-ed25519-0123456789abcdef · 5 reports signed" in output
-    assert "Cost       3 AI calls · $0.04 · " in output
+    assert "key seal-ed25519-0123456789abcdef · 5 reports signed" in output
+    assert "■ 4 of 5 saved and checked" in output
+    assert "4 of 5 runs · 3 model calls · $0.04 · " in output
+    # A run that didn't check out replaces the next step with its report.
+    assert "Next: A run didn't check out. Read its report" in output
+    assert "  openadapt-quickstart/run-4/REPORT.md" in output
+    assert "claude mcp add" not in output
     assert outcome.checked == 4
 
 
@@ -393,7 +441,7 @@ def test_the_aha_line_appears_only_when_the_run_showed_it(root):
     assert "reports Done" not in quiet
 
     missed, _ = _plain(FakeEngine(root, broken={"execution_outcome": "VERIFIED"}))
-    assert "Stopped before reporting success" not in missed
+    assert "Not marked done" not in missed
     assert "did not stop" in missed
 
 
@@ -417,14 +465,14 @@ def test_a_stop_the_record_check_did_not_cause_is_not_the_demonstration(root):
     assert "It found nothing" not in output
     assert "reports Done" not in output
     assert "a saved message" not in output, "the screen was never observed"
-    assert "Stopped before reporting success" not in output
+    assert "Not marked done" not in output
     assert "not at the check this act sets off" in output
 
 
 def test_an_engine_without_run_inputs_does_not_claim_new_notes(root):
     output, _ = _plain(FakeEngine(root, note_param=False))
     assert "new notes" not in output
-    assert "2  Run it · the program 5 times, all at once" in output
+    assert "[4/5] Run it 5 times · all at once" in output
 
 
 @pytest.mark.parametrize(
@@ -448,16 +496,20 @@ def test_the_finale_names_the_persons_own_seal_then_the_real_ones(root):
     engine = FakeEngine(root)
     opened = []
     output, outcome = _plain(engine, open_page=lambda page: opened.append(page) or True)
-    finale = output[output.index("\nReceipt\n") + 1 :].splitlines()
-    at = finale.index("Your Seal: openadapt-quickstart/run-1/seal.html")
+    finale = output[output.index("\nYour Seal: ") + 1 :].splitlines()
+    at = finale.index("  Open it: openadapt-quickstart/run-1/seal.html")
     assert finale[at + 1] == (
-        "See real Seals from OpenEMR runs: https://openadapt.ai/seals"
+        "    opened in your browser; it checks the signature in your browser, "
+        "offline; nothing is uploaded"
+    )
+    assert (
+        finale[at + 2] == "  Real Seals from OpenEMR runs: https://openadapt.ai/seals"
     )
     # The person's own Seal opens; the side-by-side page does not.
     assert opened == [root / "run-1" / "seal.html"]
     assert outcome.seal_page_opened
     assert outcome.seal_pages.broken == root / "run-broken" / "seal.html"
-    assert "opened in your browser" not in output
+    assert "side by side: openadapt-quickstart/index.html\n" in output
     # The page's own command checks that run folder.
     assert engine.seal_command == "openadapt seal verify openadapt-quickstart/run-1"
 
@@ -468,10 +520,9 @@ def test_a_seal_page_that_fails_leaves_the_seal_and_no_page_line(root):
             raise RuntimeError("no viewer")
 
     output, outcome = _plain(NoPages(root), open_page=lambda page: True)
-    assert "Your Seal" not in output
-    assert "openadapt.ai/seals" not in output
+    assert "Open it" not in output
     # The stopped run's Seal was written, so it counts without its page.
-    assert "Seal       seal-ed25519-0123456789abcdef · 6 reports signed" in output
+    assert "key seal-ed25519-0123456789abcdef · 6 reports signed" in output
     assert not outcome.seal_page_opened
 
 
@@ -481,9 +532,9 @@ def test_the_stopped_run_counts_only_when_its_seal_was_written(root):
             raise RuntimeError("key_unavailable")
 
     output, outcome = _plain(NoBrokenSeal(root), open_page=lambda page: True)
-    assert "Seal       seal-ed25519-0123456789abcdef · 5 reports signed" in output
+    assert "key seal-ed25519-0123456789abcdef · 5 reports signed" in output
     # The person's own Seal page is still written and opened.
-    assert "Your Seal: openadapt-quickstart/run-1/seal.html" in output
+    assert "  Open it: openadapt-quickstart/run-1/seal.html" in output
     assert outcome.seal_page_opened
 
 
@@ -516,7 +567,7 @@ def test_no_prompt_without_a_terminal(root, monkeypatch):
         root, visible=False, break_it=True, verbose=False, steps=_steps, stream=stream
     )
     assert "Press Enter" not in stream.getvalue()
-    assert "Break it" in stream.getvalue()
+    assert "[5/5] Break the next save" in stream.getvalue()
 
 
 def test_a_terminal_gets_the_prompt_and_waiting_is_not_counted(root, monkeypatch):
@@ -640,9 +691,9 @@ def test_terminals_without_unicode_get_ascii_marks(root):
 # ---------------------------------------------------------------------------
 
 
-def _rich(root, environ, **engine_kwargs) -> str:
+def _rich(root, environ, width: int = 110, **engine_kwargs) -> str:
     stream = _Terminal()
-    view = RichView(stream, environ=environ, width=110)
+    view = RichView(stream, environ=environ, width=width, animate=False)
     run_story(
         FakeEngine(root, **engine_kwargs),
         view,
@@ -652,7 +703,16 @@ def _rich(root, environ, **engine_kwargs) -> str:
     return stream.getvalue()
 
 
-def test_terminal_finale_fits_twelve_lines_with_every_optional_line(root, monkeypatch):
+def _visible(text: str) -> str:
+    """Terminal output without color or hyperlink escapes."""
+
+    import re
+
+    text = re.sub(r"\x1b\]8;[^\x1b]*\x1b\\", "", text)
+    return re.sub(r"\x1b\[[0-9;]*m", "", text)
+
+
+def test_terminal_finale_is_short_with_every_optional_line(root, monkeypatch):
     stream = _Terminal()
     outcome = Outcome(root=root, seal=SealFacts("seal-ed25519-0", 5))
     outcome.runs = [_run(root, index) for index in range(1, 6)]
@@ -663,22 +723,99 @@ def test_terminal_finale_fits_twelve_lines_with_every_optional_line(root, monkey
         keep="uv tool install --python 3.12 openadapt",
         shadow="Your shell's openadapt is 1.5.1 at /opt/x; the commands above use uvx.",
     )
-    RichView(stream, environ={}, width=110).finale(outcome, steps)
-    lines = [line for line in stream.getvalue().splitlines() if line.strip()]
-    assert len(lines) <= 12, lines
+    RichView(stream, environ={}, width=110, animate=False).finale(outcome, steps)
+    lines = [line for line in _visible(stream.getvalue()).splitlines() if line.strip()]
+    assert len(lines) <= 20, lines
+    assert lines[-1].startswith("Your shell's openadapt is 1.5.1")
+    assert "uv tool install" not in "\n".join(lines)
 
 
-def test_terminal_view_renders_color_boxes_and_the_comparison(root):
+def test_terminal_view_tells_the_story_with_boxes_and_one_next_step(root):
     output = _rich(root, {"TERM_PROGRAM": "Apple_Terminal"})
+    text = _visible(output)
     assert "\x1b[" in output
-    assert "╭─ Receipt" in output
-    assert "What the screen showed" in output
-    assert "Encounter saved — Synthetic" in output
-    assert "What the database showed" in output
-    assert "0 new records" in output
-    assert "A screen-trusting bot" in output and "✓ Done" in output
-    assert "■ Stopped before reporting success" in output
+    assert "✓  Clinic app ready" in text
+    assert "Open › New Encounter › Triage › Note" in text
+    assert "─  Saved and checked  ─" in text
+    assert '✓ note        "Follow-up in two weeks"' in text
+    assert "╭─ The screen" in text and "╭─ The database" in text
+    assert "Encounter saved — Synthetic" in text
+    assert "✗ 0 new records" in text
+    assert "A screen-trusting bot  ✓ Done" in text
+    assert "■ Stopped. Not marked done." in text
+    assert "a person checks the record before anything is retried" in text
+    assert "◆ Your Seal" in text and "●─●─●─●─●─◆" in text
+    assert "claude mcp add openadapt -- openadapt agent serve --allow-run" in text
+    assert text.count("Next  ") == 1
+    assert "flow record" not in text
     assert "\x1b]1337;" not in output and "\x1b_G" not in output
+
+
+def test_terminal_view_links_the_seal_page(root):
+    output = _rich(root, {})
+    uri = (root / "run-1" / "seal.html").resolve().as_uri()
+    assert "\x1b]8;id=" in output and uri in output
+    assert "https://openadapt.ai/seals" in output
+
+
+def test_narrow_terminal_stacks_and_never_boxes_a_wrapped_command(root):
+    output = _visible(_rich(root, {}, width=60))
+    lines = output.splitlines()
+    # Only the command is left for the terminal to wrap, so a copy of it
+    # carries no border characters.
+    wide = [line for line in lines if len(line) > 60]
+    assert wide == ["› claude mcp add openadapt -- openadapt agent serve --allow-run"]
+    # The screen and the record stack: no line holds both boxes.
+    assert not any("The screen" in line and "The database" in line for line in lines)
+    assert "› claude mcp add openadapt -- openadapt agent serve --allow-run" in output
+
+
+def test_a_terminal_animates_and_a_recording_does_not(root):
+    assert RichView(_Terminal(), environ={}).animate is True
+    assert RichView(io.StringIO(), environ={}).animate is False
+
+
+def test_the_seal_card_reads_the_runs_receipt(root):
+    run = root / "run-1"
+    run.mkdir(parents=True)
+    (run / "receipt.json").write_text(json.dumps(RECEIPT))
+    (run / "seal.json").write_text(json.dumps(SEAL))
+    plain, _ = _plain(FakeEngine(root))
+    assert "Your Seal: Saved and checked" in plain
+    assert "6 of 6 steps · 2 of 2 record checks · 0 model calls" in plain
+    assert "ed25519 over report sha256 6dd4a7f2d1ea" in plain
+    assert "VERIFIED" not in plain
+    text = _visible(_rich(root, {}))
+    assert "6 of 6 steps · 2 of 2 record checks · 0 model calls" in text
+
+
+RECEIPT = {
+    "schema_version": "openadapt.run-receipt/v2",
+    "outcome": "VERIFIED",
+    "transaction_outcome": "VERIFIED",
+    "steps_ok": 6,
+    "steps_total": 6,
+    "effects_confirmed": 2,
+    "effects_required": 2,
+    "postconditions_confirmed": 9,
+    "postconditions_required": 9,
+    "model_calls": 0,
+    "bundle_digest": "b025b630b5faedffc6f96cd630e140a61751ff2233c0d654b6ce7d55ec11e736",
+    "receipt_digest": "1905fc77e1ea45c1bcdd62173cd7270ef987eb420f7cf81e3ee187fda54dbb24",
+}
+SEAL = {
+    "schema": "openadapt.local-seal/v1",
+    "algorithm": "ed25519",
+    "issuer": "local",
+    "key_id": "seal-ed25519-accd03a9246d29bb",
+    "public_key": "JpfLXYLyY0CVqHz4tHY8eTyC9e7ggpoxLPq6ITgDeHU=",
+    "outcome": "VERIFIED",
+    "run_id": "run-1",
+    "subject_kind": "run-report",
+    "subject_sha256": "6dd4a7f2d1ea7954acbcf199cc83f9e7102f941eb8003df34043242186bf0d92",
+    "issued_at": "2026-11-19T01:45:03Z",
+    "signature": "8/w6JW9Juu4nKcCAowDP3y8trO9Ryf/Ucb4n5hHF1CwmuHeU2+stUmygDiylvgtRWurorcOVAdz6qEjvswr+CQ==",
+}
 
 
 @pytest.mark.parametrize(
@@ -695,15 +832,40 @@ def test_terminal_view_draws_the_screenshot_where_supported(root, environ, marke
     shot = _png(root / "shot.png", 1280, 800)
     output = _rich(root, environ, broken={"screenshot": shot})
     assert marker in output
-    assert "What the database showed" in output
-    # The text box is the fallback, not drawn as well.
-    assert "╭─ What the screen showed" not in output
+    assert "The database" in output
+    # The text boxes are the fallback, not drawn as well.
+    assert "╭─ The screen" not in _visible(output)
 
 
 def test_terminal_view_falls_back_when_the_screenshot_is_missing(root):
     output = _rich(root, {"TERM_PROGRAM": "iTerm.app"}, broken={"screenshot": None})
     assert "\x1b]1337;" not in output
-    assert "╭─ What the screen showed" in output
+    assert "╭─ The screen" in _visible(output)
+
+
+def test_engine_plaintext_notices_collapse_to_one_line(root, monkeypatch):
+    err = io.StringIO()
+    monkeypatch.setattr(sys, "stderr", err)
+    stream = io.StringIO()
+    view = PlainView(stream)
+
+    class Noisy(FakeEngine):
+        def compile(self):
+            print(
+                "WARNING: writing a compiled bundle in plaintext at /x/bundle: it "
+                "can't be encrypted yet",
+                file=sys.stderr,
+            )
+            print("something else", file=sys.stderr)
+            return super().compile()
+
+    with view.collect_notices():
+        run_story(Noisy(root), view, next_steps=_steps, clock=_clock())
+    assert err.getvalue() == "something else\n"
+    assert (
+        "openadapt-quickstart is written unencrypted (synthetic data only)"
+        in stream.getvalue()
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -914,6 +1076,8 @@ def test_seal_verify_names_a_folder_with_no_sealed_run(tmp_path):
     reason="set OPENADAPT_REAL_QUICKSTART=1 to drive a real browser (~30 s)",
 )
 def test_real_quickstart(tmp_path, monkeypatch):
+    from openadapt.quickstart.engine import FlowEngine
+
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("OPENADAPT_SEAL_HOME", str(tmp_path / "seal"))
     root = tmp_path / "openadapt-quickstart"
@@ -928,12 +1092,15 @@ def test_real_quickstart(tmp_path, monkeypatch):
         interactive=False,
     )
     output = stream.getvalue()
-    assert outcome.checked == len(RUN_NOTES), output
+    # The quickstart runs the program on FlowEngine.inputs (one new note).
+    runs = len(FlowEngine.inputs)
+    assert outcome.checked == runs, output
     assert outcome.model_calls == 0
     assert outcome.broken is not None and outcome.broken.stopped
     assert outcome.broken.new_records == 0
-    assert f"{len(RUN_NOTES)} of {len(RUN_NOTES)} saved and checked" in output
-    for index in range(1, len(RUN_NOTES) + 1):
+    assert outcome.broken.transaction_outcome == "RECONCILIATION_REQUIRED"
+    assert f"{runs} of {runs} saved and checked" in output
+    for index in range(1, runs + 1):
         report = json.loads((root / f"run-{index}" / "report.json").read_text())
         assert report["execution_outcome"] == "VERIFIED"
         assert report["params"]["note"] in output
@@ -996,3 +1163,64 @@ def test_sealing_the_stopped_run_signs_its_report(tmp_path, monkeypatch):
     broken.run_dir.mkdir(parents=True)
     assert FlowEngine(tmp_path, visible=False).seal_broken(broken) is True
     assert sealed == ["run-broken"]
+
+
+# ---------------------------------------------------------------------------
+# Review fixes: the at-rest opt-out, recorded compile time, the Seal page
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("environ", "applied"),
+    [
+        ({}, True),
+        ({"OPENADAPT_BUNDLE_KEY": "k"}, False),
+        ({"OPENADAPT_RECORDING_KEY": "k"}, False),
+        ({"OPENADAPT_FLOW_AT_REST": "strict"}, False),
+        ({"OPENADAPT_FLOW_AT_REST": " Strict "}, False),
+        ({"OPENADAPT_FLOW_PLAINTEXT_AT_REST": "operator reason"}, False),
+    ],
+)
+def test_the_plaintext_opt_out_applies_only_when_nothing_is_configured(
+    monkeypatch, environ, applied
+):
+    for name in (
+        "OPENADAPT_BUNDLE_KEY",
+        "OPENADAPT_RECORDING_KEY",
+        "OPENADAPT_FLOW_AT_REST",
+        "OPENADAPT_FLOW_PLAINTEXT_AT_REST",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in environ.items():
+        monkeypatch.setenv(name, value)
+    before = os.environ.get("OPENADAPT_FLOW_PLAINTEXT_AT_REST")
+    with cli._synthetic_scrub_off():
+        inside = os.environ.get("OPENADAPT_FLOW_PLAINTEXT_AT_REST")
+    assert (inside == "synthetic quickstart data") is applied
+    if not applied:
+        assert inside == before
+    # Restored afterwards: it never outlives the quickstart.
+    assert os.environ.get("OPENADAPT_FLOW_PLAINTEXT_AT_REST") == before
+
+
+def test_a_recorded_demonstration_times_the_compile_alone():
+    from openadapt.quickstart.scene import OPENEMR
+    from openadapt.quickstart.view import compile_seconds
+
+    outcome = Outcome(root=Path("qs"))
+    outcome.act1_seconds = 0.5
+    outcome.demo_steps = [DemoStep(label="Click Save", seconds=36.8)]
+    assert compile_seconds(outcome, OPENEMR) == 0.5
+    outcome.act1_seconds = 2.0
+    outcome.demo_steps = [DemoStep(label="Click Save", seconds=1.6)]
+    assert compile_seconds(outcome) == pytest.approx(0.4)
+
+
+def test_a_captured_stream_never_opens_the_seal_page():
+    """Under pytest -s stdout can be a terminal; the stream decides, not stdout."""
+
+    import openadapt.quickstart as quickstart
+
+    assert quickstart._shown(io.StringIO(), lambda: True) is False
+    assert quickstart._shown(_Terminal(), lambda: True) is True
+    assert quickstart._shown(_Terminal(), lambda: False) is False
