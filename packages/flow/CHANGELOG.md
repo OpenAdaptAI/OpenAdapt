@@ -53,6 +53,12 @@
   verified source to where it saved (#1993), so the final save found the
   removed copy's assets missing and every such campaign failed after its
   rule trials passed.
+- The certified OpenEMR referral program behind `openadapt quickstart --app
+  openemr` was qualified again with its date-picker check on the run's
+  clock (content digest `10e45945…`; evidence in
+  `benchmark/scoreboard/raw/openemr_referral/requalified/2026-11-19/`), and
+  a first OpenEMR quickstart on a new machine creates its state folder
+  instead of stopping on the missing lock file.
 
 ## v3.2.0 (2026-11-19)
 
