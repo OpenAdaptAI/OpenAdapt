@@ -313,3 +313,17 @@ def test_a_password_change_or_a_lone_pin_stays_a_save(monkeypatch) -> None:
         s.id
         for s in _form_submit_steps(pin, {"step_001": {}}, {"step_000": "password"})
     ] == ["step_001"]
+
+
+def test_a_field_that_cannot_be_read_takes_no_declared_input(tmp_path: Path) -> None:
+    class Unreadable(SignInBackend):
+        def focused_field_credential(self) -> Optional[dict[str, Any]]:
+            return {"kind": "unknown", "box": None}
+
+    backend = Unreadable()
+    rec = Recorder(backend, tmp_path / "rec", app_url="http://fake.local/")
+    rec.withhold_credentials({"password": PASSWORD, "note": "n"})
+    with pytest.raises(CredentialFieldError):
+        rec.type_text(PASSWORD)
+    rec.type_text("free text")  # not a declared input: typed as before
+    assert backend.typed == ["free text"]

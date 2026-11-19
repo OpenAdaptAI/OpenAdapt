@@ -1562,7 +1562,11 @@ _EDITABLE_VALUE_JS = r"""(el) => {
 #: Whether the focused element takes a sign-in credential. See
 #: :meth:`PlaywrightBackend.focused_field_credential` for the rules.
 _FIELD_CREDENTIAL_JS = r"""(el) => {
-    if (!el || el.tagName !== 'INPUT') return null;
+    // A focused control inside an open shadow root shows as its host.
+    while (el && el.shadowRoot && el.shadowRoot.activeElement) {
+        el = el.shadowRoot.activeElement;
+    }
+    if (!el || el.tagName !== 'INPUT') return 'none';
     const kind = (i) => (i.getAttribute('type') || 'text').toLowerCase();
     const tokens = (i) =>
         (i.getAttribute('autocomplete') || '').toLowerCase().split(/\s+/);
@@ -1573,21 +1577,30 @@ _FIELD_CREDENTIAL_JS = r"""(el) => {
     }
     if (tokens(el).includes('username')) return 'username';
     const texty = (i) => ['text', 'email', 'tel', 'search'].includes(kind(i));
-    if (!texty(el)) return null;
+    if (!texty(el)) return 'none';
+    // Rendered for a person: a box on the page, not hidden, not transparent.
+    // A decoy password (an autofill trap) is none of these.
+    const visible = (i) => {
+        const r = i.getBoundingClientRect();
+        if (r.width <= 0 || r.height <= 0 || r.bottom <= 0 || r.right <= 0) {
+            return false;
+        }
+        const style = i.ownerDocument.defaultView.getComputedStyle(i);
+        return style.visibility !== 'hidden' && style.display !== 'none' &&
+            parseFloat(style.opacity || '1') > 0;
+    };
     const scope = el.form || el.ownerDocument;
     const inputs = Array.from(scope.querySelectorAll('input'))
         .filter((i) => el.form ? true : !i.form);
-    const first = inputs.findIndex(secret);
-    if (first < 0) return null;
-    const visible = (i) => !!(i.offsetWidth || i.offsetHeight ||
-        i.getClientRects().length);
+    const first = inputs.findIndex((i) => secret(i) && visible(i));
+    if (first < 0) return 'none';
     for (let j = first - 1; j >= 0; j--) {
         const candidate = inputs[j];
         if (texty(candidate) && visible(candidate)) {
-            return candidate === el ? 'username' : null;
+            return candidate === el ? 'username' : 'none';
         }
     }
-    return null;
+    return 'none';
 }"""
 
 _CREDENTIAL_AT_JS = (
@@ -3373,8 +3386,8 @@ class PlaywrightBackend:
         """Whether the focused field takes a sign-in credential, and where it is.
 
         RECORD-TIME seam (:class:`openadapt_flow.backend.CredentialFieldBackend`).
-        Returns ``{"kind": "password" | "new-password" | "username", "box":
-        (x, y, w, h)}``
+        Returns ``{"kind": "password" | "new-password" | "username" |
+        "unknown", "box": (x, y, w, h)}``
         or None. The rules use only the page's own markup, the way a browser's
         password manager finds a sign-in form:
 
@@ -3386,16 +3399,22 @@ class PlaywrightBackend:
           password input of the same form (the document when it has no form).
 
         ``box`` is in top-document viewport pixels, or None when the
-        element's box could not be read. Read-only and never raises; any
-        doubt about the frame chain returns None (see
+        element's box could not be read. Read-only and never raises. None
+        means the control was read and takes no credential; ``unknown``
+        means it could not be read (any doubt about the frame chain, see
         :meth:`_focused_element_call`), and the recorder then refuses to type
-        a known credential value at all.
+        a declared input into it.
         """
 
         box: dict[str, float] = {}
         kind = self._focused_element_call(_FIELD_CREDENTIAL_JS, box_out=box)
-        if kind not in ("password", "new-password", "username"):
+        if kind == "none":
             return None
+        if kind not in ("password", "new-password", "username"):
+            # The focused control could not be read (a frame chain that does
+            # not verify, a failed call). The recorder refuses to type a
+            # declared input into it.
+            return {"kind": "unknown", "box": None}
         try:
             rect: Optional[tuple[int, int, int, int]] = (
                 int(box["x"]),

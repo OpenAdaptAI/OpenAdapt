@@ -401,6 +401,14 @@ class Recorder:
         field_label = self._focused_field_label()
         if field_label:
             event["field_label"] = field_label
+        if credential is not None and credential[0] == "unknown":
+            if text in (self._credential_inputs or {}):
+                raise CredentialFieldError(
+                    "the focused field could not be read, so a declared input "
+                    "can't be typed into it (it may be a sign-in field); "
+                    "nothing was typed"
+                )
+            credential = None
         if credential is not None:
             kind, region = credential
             name = param or (self._credential_inputs or {}).get(text)
@@ -1382,13 +1390,16 @@ class Recorder:
         try:
             found = getter()
         except Exception:
+            found = {"kind": "unknown"}
+        if found is None:
             return None
         if not isinstance(found, dict) or found.get("kind") not in (
             "password",
             "new-password",
             "username",
         ):
-            return None
+            # A seam that answered but could not say: fail closed.
+            return "unknown", _WHOLE_FRAME
         box = found.get("box")
         try:
             x, y, w, h = (int(v) for v in box)  # type: ignore[union-attr]
