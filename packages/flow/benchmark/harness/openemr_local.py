@@ -241,6 +241,11 @@ class OpenEMRPatientOracle:
             session=session,
             timeout_s=timeout_s,
             poll_interval_s=0.2,
+            # One unpaged answer: the query names the patient (last name and
+            # email) and the fixture holds far fewer than 100 charts, so the
+            # read is the whole matching set. Since #2041 the verifier treats
+            # an undeclared read as indeterminate and refuses the save.
+            records_complete=True,
         )
 
     def capture(self) -> EffectState:
