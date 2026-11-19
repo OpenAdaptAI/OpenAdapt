@@ -184,6 +184,7 @@ jobs:
           Get-Content (Join-Path $env:EVIDENCE_DIR 'connector.log') -ErrorAction SilentlyContinue
           $hits = Get-ChildItem $env:EVIDENCE_DIR -File | Select-String -SimpleMatch $env:CI_CONNECTOR_TOKEN
           if ($hits) { $hits | ForEach-Object { $_.Path }; throw 'the connector token appears in the evidence' }
+          exit 0
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
