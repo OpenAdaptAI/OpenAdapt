@@ -15,6 +15,40 @@
 
 <!-- version list -->
 
+## Unreleased
+
+### Features
+
+- Dropdowns, searchable selects, type-aheads and native selects are recorded,
+  compiled and run as one model, a choice (`OptionChoice` on a
+  `SELECT_OPTION` step, docs/CHOICES.md). A click on an option of a list the
+  previous action opened is a choice when the control showed the option
+  afterwards; recording judges this from behaviour (an option role, or
+  same-shaped siblings that appeared after the previous press), never from a
+  widget library. Replay opens the control, types the wanted value when the
+  person searched, waits for the options to settle, clicks the one enabled
+  option whose label or value matches, and reads the control back. A
+  missing, duplicate or disabled option, or a control that does not show the
+  choice, halts before the next step (`choice_missing`, `choice_ambiguous`,
+  `choice_disabled`, `choice_unverified`). A choice on a field passed to
+  `--param` becomes that parameter. Interactive and attached recording no
+  longer refuse a native `<select>`, and lists that choose on press or on
+  release (where the browser sends no click to the option) are no longer
+  silently missing from the recording.
+- Browser `alert`/`confirm` answers are recorded in interactive and attached
+  recording, from the value the page received, and attached to the click
+  that raised them, including a dialog the next page raises after a save.
+  A headed recording leaves the dialog for the person instead of letting
+  Playwright dismiss it. A program recorded this way stops on a dialog no
+  step expects (`dialog_unexpected`).
+
+### Fixes
+
+- A screenshot interrupted by a navigation inside an iframe or by an open
+  browser dialog is retried instead of failing the recording or run.
+- A click on a `<label>` and the click the browser forwards to its control
+  record as one action.
+
 ## v3.3.0 (2026-11-19)
 
 ### Fixes

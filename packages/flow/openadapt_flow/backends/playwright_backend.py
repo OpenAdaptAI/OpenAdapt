@@ -73,6 +73,7 @@ VIEWPORT: tuple[int, int] = (1280, 800)
 # Login pages often attach and detach iframes for a few seconds after a click.
 # Retry until the tree is quiet. Still refuse if it never settles.
 _MASKED_SCREENSHOT_TIMEOUT_S = 8.0
+_DIALOG_CAPTURE_WAIT_S = 120.0
 _MASKED_SCREENSHOT_RETRY_SLEEP_S = 0.05
 # A capture that overlaps a navigation commit (a form POST answered with a
 # redirect, for example) fails in Chromium with "Unable to capture
@@ -80,10 +81,21 @@ _MASKED_SCREENSHOT_RETRY_SLEEP_S = 0.05
 # nothing about the page; wait for the new document and capture again.
 _NAVIGATION_SCREENSHOT_TIMEOUT_S = 30.0
 _NAVIGATION_SCREENSHOT_ATTEMPT_TIMEOUT_MS = 10_000
+# Captures interrupted by a navigation (a form inside an iframe saving and
+# loading the next page) or by a browser dialog, which is answered by the step
+# that expects it or dismissed as unexpected. Retried, never accepted.
+_NAVIGATION_CAPTURE_ERRORS = (
+    "Frame is currently attempting a navigation",
+    "Navigation interrupted",
+    # "interrupted evaluation" and, while a person answers it, "prevents
+    # evaluation".
+    "JavaScript dialog",
+)
 _TRANSIENT_SCREENSHOT_ERRORS = (
     "Unable to capture screenshot",
     "Timeout",
     "Execution context was destroyed",
+    *_NAVIGATION_CAPTURE_ERRORS,
 )
 
 # How long a click that reported its page closed waits for the page to read
@@ -2581,6 +2593,7 @@ class PlaywrightBackend:
             tuple[str, Optional[str], Optional[re.Pattern[str]]]
         ] = None
         self._dialogs_seen: list[dict[str, Any]] = []
+        self._choice: Any = None
         self._screenshot_scale = screenshot_scale
         self._screenshot_mask_selectors = screenshot_mask_selectors
         self._structural_state_reader = structural_state_reader
@@ -5863,6 +5876,46 @@ class PlaywrightBackend:
         self._dialog_armed = (response, message, pattern)
         self._dialogs_seen = []
 
+    def watch_dialogs(self) -> None:
+        """Answer every dialog from now on, so none is dismissed unseen.
+
+        Called once by the runtime before a run. A dialog no step armed is
+        dismissed and kept for :meth:`take_unexpected_dialogs`; the runtime
+        stops the run on it instead of carrying on after Playwright's silent
+        default dismissal changed what the page did.
+        """
+
+        if not self._dialog_listening:
+            self.page.on("dialog", self._on_dialog)
+            self._dialog_listening = True
+
+    def take_unexpected_dialogs(self) -> list[dict[str, Any]]:
+        """The dialogs shown while no step had armed an answer, then clear."""
+
+        if self._dialog_armed is not None:
+            return []
+        seen, self._dialogs_seen = self._dialogs_seen, []
+        return seen
+
+    # -- dropdown choices (docs/CHOICES.md) ---------------------------------
+
+    def choose_option(
+        self, contract: Any, wanted: str, *, point: tuple[int, int]
+    ) -> dict[str, Any]:
+        """Choose ``wanted`` in the dropdown at ``point`` (OptionChoice)."""
+
+        from openadapt_flow.backends.choice import BrowserChoice
+
+        if self._choice is None:
+            self._choice = BrowserChoice(self.page, self._frame_point)
+        self._assert_qualification_environment_current()
+        return self._choice.choose(contract, wanted, point)
+
+    def confirm_choice(self) -> bool:
+        """Whether the last chosen option still shows on its control."""
+
+        return self._choice is not None and self._choice.confirm()
+
     def take_dialogs(self, timeout_s: float = 0.0) -> list[dict[str, Any]]:
         """The dialogs answered since the last arm, then disarm.
 
@@ -5892,6 +5945,14 @@ class PlaywrightBackend:
             kind = str(dialog.type)
         except Exception:
             kind = ""
+        if kind == "beforeunload" and self._dialog_armed is None:
+            # Leaving a page with unsaved edits: keep Playwright's default
+            # (stay on course and let the navigation the step caused happen).
+            try:
+                dialog.accept()
+            except Exception:
+                pass
+            return
         armed, self._dialog_armed = self._dialog_armed, None
         matched = False
         if armed is not None:
@@ -5949,6 +6010,9 @@ class PlaywrightBackend:
             return self._capture_across_navigation(base_options)
 
         deadline = time.monotonic() + _MASKED_SCREENSHOT_TIMEOUT_S
+        # A person answering a browser dialog in a headed recording gets this
+        # long before the capture gives up.
+        dialog_deadline = time.monotonic() + _DIALOG_CAPTURE_WAIT_S
         while True:
             # A retry can observe a different secret boundary even after the
             # frame tree settles. Rebind or refuse before every capture.
@@ -5973,8 +6037,18 @@ class PlaywrightBackend:
                 # Flush lifecycle events that Chromium sent with or before the
                 # screenshot response before accepting the in-memory bytes.
                 self.page.evaluate("() => null")
-            except Exception:
-                if generation != self._screenshot_frame_generation:
+            except Exception as error:
+                # A navigation or a dialog during the capture is retried like
+                # a changed frame tree.
+                if "JavaScript dialog" in str(error):
+                    if time.monotonic() >= dialog_deadline:
+                        raise
+                    deadline = max(deadline, time.monotonic() + 1.0)
+                    time.sleep(_MASKED_SCREENSHOT_RETRY_SLEEP_S)
+                    continue
+                if generation != self._screenshot_frame_generation or any(
+                    marker in str(error) for marker in _NAVIGATION_CAPTURE_ERRORS
+                ):
                     if time.monotonic() >= deadline:
                         break
                     time.sleep(_MASKED_SCREENSHOT_RETRY_SLEEP_S)

@@ -57,6 +57,7 @@ from openadapt_flow.ir import (
     HoverEvidence,
     Landmark,
     NativeSelectContract,
+    OptionChoice,
     ParamKind,
     ParamSpec,
     Point,
@@ -110,6 +111,283 @@ MIN_TEMPLATE_STD = 5.0
 
 # Minimum OCR confidence for a line to be used as ocr_text / landmark text.
 MIN_OCR_CONFIDENCE = 0.5
+
+
+_CHOICE_KEYS = frozenset({"Enter", "ArrowUp", "ArrowDown", "Escape"})
+
+
+def _declare_choice_params(
+    events: list[dict], params: dict[str, str], param_values: list[str]
+) -> None:
+    """A choice bound to a parameter declares it, demonstrated label as default.
+
+    The label is then never asserted in any postcondition, as a typed
+    parameter's value is not. A name a typed field already uses keeps the
+    choice literal.
+    """
+
+    for event in events:
+        choice = event.get("choice")
+        if not isinstance(choice, dict):
+            continue
+        name, label = choice.get("param"), choice.get("label")
+        if not isinstance(name, str) or not isinstance(label, str) or not label:
+            continue
+        if choice.get("shows") or (name in params and params[name] != label):
+            choice.pop("param", None)
+            continue
+        params[name] = label
+        param_values.append(label)
+
+
+def _plain_click(step: Step) -> bool:
+    return (
+        step.action is ActionKind.CLICK
+        and step.anchor is not None
+        and not step.effects
+        and step.dialog is None
+        and not step.opens
+        and not step.closes_surface
+        and step.submit_binding is None
+        and step.api_binding is None
+    )
+
+
+def _search_words(typed: str, label: str) -> Optional[tuple[int, int]]:
+    """Where a typed search sits in the label, as whole words, or None.
+
+    The search ``Rich`` in ``10000GX - Richard Jones`` is the start of word 2;
+    ``Dr. As`` in ``Dr. Asha Rao`` is word 0 and the start of word 1.
+    """
+
+    query = typed.casefold().split()
+    words = label.casefold().split()
+    if not query:
+        return None
+    for first in range(len(words) - len(query) + 1):
+        window = words[first : first + len(query)]
+        if window[:-1] == query[:-1] and window[-1].startswith(query[-1]):
+            return (first, len(query))
+    return None
+
+
+def _choice_contract(choice: dict, query: Optional[str]) -> Optional[OptionChoice]:
+    try:
+        if choice.get("kind") == "native_select":
+            return OptionChoice(
+                kind="native_select",
+                label=str(choice.get("label") or ""),
+                value=choice.get("value")
+                if isinstance(choice.get("value"), str)
+                else None,
+                readback="select",
+            )
+        shape = choice.get("shape") if isinstance(choice.get("shape"), dict) else {}
+        label = str(choice.get("label") or "")
+        return OptionChoice(
+            kind="listed_option",
+            label=str(choice.get("label") or ""),
+            value=choice.get("value") if isinstance(choice.get("value"), str) else None,
+            query=(
+                "none"
+                if query is None
+                else ("words" if _search_words(query, label) else "label")
+            ),
+            query_words=_search_words(query, label) if query is not None else None,
+            option={
+                "role": shape.get("role"),
+                "tag": shape.get("tag"),
+                "classes": tuple(shape.get("classes") or ()),
+            },
+            readback=choice.get("readback"),
+            shows=choice.get("shows") if isinstance(choice.get("shows"), str) else None,
+        )
+    except Exception:
+        return None
+
+
+def _fold_choices(
+    pending: list[tuple[Step, Optional[bytes], Optional[bytes], dict]],
+    aliases: dict[str, str],
+    notes: list[dict[str, Any]],
+    ocr_cache: dict[Any, Any],
+) -> list[tuple[Step, Optional[bytes], Optional[bytes], dict]]:
+    """Fold each demonstrated dropdown choice into one SELECT_OPTION step.
+
+    docs/CHOICES.md. A recorded option click carries ``choice`` evidence: the
+    option's shape and label, and the recorder's read-back that the control
+    the previous press hit showed the label once the screen settled. A
+    native select's choice is a click at the select. The fold takes, in
+    order, the control's opening click, an optional search typed into the
+    list (only when the typed text is part of the label, so replay can type
+    the wanted label instead), and the option click, and keeps the control's
+    anchor. Anything else stays as the clicks and keys it was, with a note.
+    """
+
+    out: list[tuple[Step, Optional[bytes], Optional[bytes], dict]] = []
+    for step, before, after, event in pending:
+        choice = event.get("choice")
+        if not isinstance(choice, dict) or step.action is not ActionKind.CLICK:
+            out.append((step, before, after, event))
+            continue
+        native = choice.get("kind") == "native_select"
+        absorbed: list[tuple[Step, Optional[bytes], Optional[bytes], dict]] = []
+        query: Optional[str] = None
+        reason: Optional[str] = None
+        if native:
+            locator = step.anchor.structural if step.anchor is not None else None
+            # Keys the person pressed on the select, then the click that
+            # focused it, belong to the same choice.
+            while (
+                out
+                and out[-1][0].action is ActionKind.KEY
+                and out[-1][0].key in _CHOICE_KEYS
+            ):
+                absorbed.insert(0, out.pop())
+            if out and _plain_click(out[-1][0]):
+                prior = out[-1][0].anchor.structural if out[-1][0].anchor else None
+                if (
+                    prior is not None
+                    and locator is not None
+                    and locator.selector
+                    and prior.selector == locator.selector
+                    and (prior.frame_path or None) == (locator.frame_path or None)
+                ):
+                    absorbed.insert(0, out.pop())
+            # The focusing click saw the control before the change; the
+            # change event already shows the new value.
+            control = (
+                absorbed[0][0]
+                if absorbed and absorbed[0][0].action is ActionKind.CLICK
+                else step
+            )
+        else:
+            if out and out[-1][0].action is ActionKind.TYPE:
+                typed = out[-1][0]
+                text = typed.text or ""
+                if (
+                    typed.secret
+                    or typed.param is not None
+                    or not text.strip()
+                    or text.casefold().strip()
+                    not in str(choice.get("label") or "").casefold()
+                ):
+                    reason = (
+                        "the search typed before the option is not part of its label"
+                    )
+                else:
+                    absorbed.insert(0, out.pop())
+                    query = text
+            if reason is None and out and _plain_click(out[-1][0]):
+                absorbed.insert(0, out.pop())
+            elif reason is None:
+                reason = "no click opened the list"
+            control = absorbed[0][0] if absorbed and reason is None else step
+        contract = _choice_contract(choice, query) if reason is None else None
+        if contract is None:
+            # Restore what was taken off and keep the clicks as they were.
+            out.extend(absorbed)
+            out.append((step, before, after, event))
+            notes.append(
+                {
+                    "change": "choice_not_folded",
+                    "step": step.id,
+                    "reason": reason or "the recorded choice evidence is incomplete",
+                }
+            )
+            continue
+        param = choice.get("param") if isinstance(choice.get("param"), str) else None
+        label = contract.label
+        anchor = (
+            control.anchor.model_copy(deep=True) if control.anchor is not None else None
+        )
+        crop_reason = control.identifier_crop_missing_reason
+        identity_update: dict[str, Any] = {}
+        if (
+            anchor is not None
+            and structural_locator_is_locatable(anchor.structural)
+            and not anchor.structured_identity
+            and not anchor.record_key
+            and (anchor.identifier_crop is not None or anchor.context_text)
+        ):
+            # The automatic text and pixel band beside a form control holds
+            # its label, the neighbouring fields and part of the control,
+            # whose look changes with focus, hover and every typed value. It
+            # is not record identity (a record row on the web carries DOM row
+            # identity, kept above). The control is found by its locator and
+            # the choice is proven by its read-back.
+            anchor = anchor.model_copy(
+                update={
+                    "identifier_crop": None,
+                    "identifier_region": None,
+                    "context_text": None,
+                    "identity_template": None,
+                }
+            )
+            crop_reason = (
+                "a dropdown control is located by its DOM locator and checked "
+                "by reading the choice back; its label band is not record identity"
+            )
+            identity_update = {
+                "identity_armed": False,
+                "identity_unarmed_reason": crop_reason,
+            }
+        try:
+            chosen = control.model_copy(
+                update={
+                    "id": step.id,
+                    "action": ActionKind.SELECT_OPTION,
+                    "intent": (
+                        f"choose <{param}>"
+                        if param
+                        else f"choose '{_text_preview(label)}'"
+                    ),
+                    "text": None if param else label,
+                    "param": param,
+                    "choice": contract,
+                    "anchor": anchor,
+                    "identifier_crop_missing_reason": crop_reason,
+                    **identity_update,
+                    "expect": list(step.expect),
+                    "risk": step.risk,
+                }
+            )
+            chosen = Step.model_validate(chosen.model_dump(mode="json"))
+        except Exception as exc:
+            out.extend(absorbed)
+            out.append((step, before, after, event))
+            notes.append(
+                {
+                    "change": "choice_not_folded",
+                    "step": step.id,
+                    "reason": f"the choice step is invalid ({type(exc).__name__})",
+                }
+            )
+            continue
+        first_before = absorbed[0][1] if absorbed else before
+        merged = {
+            **{k: v for k, v in event.items() if not k.endswith("_before")},
+            **{
+                k: v
+                for k, v in (absorbed[0][3] if absorbed else event).items()
+                if k.endswith("_before")
+            },
+        }
+        for absorbed_step, _b, _a, absorbed_event in absorbed:
+            aliases[absorbed_step.id] = chosen.id
+            ocr_cache.pop((int(absorbed_event.get("i", -1)), "after"), None)
+        notes.append(
+            {
+                "change": "choice_gesture",
+                "step": chosen.id,
+                "kind": contract.kind,
+                "query": contract.query,
+                "parameter": param,
+                "absorbed_steps": [a[0].id for a in absorbed],
+            }
+        )
+        out.append((chosen, first_before, after, merged))
+    return out
 
 
 def _native_selection_event(
@@ -2590,6 +2868,7 @@ def _compile_recording(
             text = event.get("text")
             if text:
                 param_values.append(text)
+    _declare_choice_params(events, params, param_values)
     # A compile-time secret's demonstrated value is excluded from
     # postconditions too, even though it never lands in workflow.params.
     param_values.extend(secret_exclude_values)
@@ -3307,6 +3586,9 @@ def _compile_recording(
             native_pending.append((step, before, after, event))
             index += 1
         pending = native_pending
+        pending = _fold_choices(
+            pending, absorbed_step_aliases, native_selection_notes, ocr_cache
+        )
     # Collapse a demonstrated native/pixel option selection into one explicit
     # SELECT_OPTION contract. This is deliberately evidence-gated and remote-only:
     # the prior click names an exact field region; typing produces a provisional
@@ -3920,6 +4202,7 @@ def _compile_recording(
         surface=surface,
         execution_mode=execution_mode,
         params=params,
+        dialogs_recorded=bool(meta.get("dialogs_captured")),
         # Workflow-program IR, Phase 1: emit a TYPED spec for each recorded
         # parameter alongside the frozen ``params`` dict -- generalizing the
         # recorder's single "note value at replay" into a first-class,

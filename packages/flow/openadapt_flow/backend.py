@@ -44,6 +44,20 @@ class StructuralElementNotActionable(StructuralResolutionRefused):
     """
 
 
+class ChoiceRefused(RuntimeError):
+    """The choice stopped before an option was clicked or was not confirmed.
+
+    ``code`` is one of ``choice_control_missing``, ``choice_search_missing``,
+    ``choice_missing``, ``choice_ambiguous``, ``choice_disabled`` and
+    ``choice_unverified``. The message never carries option text: option
+    labels can be patient data.
+    """
+
+    def __init__(self, code: str, detail: str = "") -> None:
+        super().__init__(f"{code}{': ' + detail if detail else ''}")
+        self.code = code
+
+
 class ActionDeliveryUncertain(RuntimeError):
     """An action API failed after delivery may already have begun.
 
@@ -584,6 +598,24 @@ class NativeSelectBackend(Protocol):
 
     def native_selected_option_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
         """Read the committed option only while the delivered target is continuous."""
+        ...
+
+
+@runtime_checkable
+class ChoiceBackend(Protocol):
+    """Choose a dropdown option by its label or value (docs/CHOICES.md).
+
+    ``choose_option`` raises :class:`ChoiceRefused` when no option, more
+    than one, or a disabled one shows the wanted value, or when the control
+    does not show the choice afterwards.
+    """
+
+    def choose_option(
+        self, contract: Any, wanted: str, *, point: tuple[int, int]
+    ) -> dict[str, Any]: ...
+
+    def confirm_choice(self) -> bool:
+        """Read the chosen option back once more on the settled page."""
         ...
 
 

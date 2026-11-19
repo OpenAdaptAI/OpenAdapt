@@ -423,6 +423,9 @@ def select_attached_page(
 # click of a double-click gesture can supersede it. Chromium's double-click
 # interval is 500 ms.
 _DOUBLE_CLICK_WINDOW_MS = 500
+#: How long an idle recording keeps the last click open for a browser dialog
+#: the page it loaded raises (the replayer waits as long for that dialog).
+_LATE_DIALOG_S = 5.0
 
 _INIT_JS = r"""
 (() => {
@@ -614,6 +617,7 @@ _INIT_JS = r"""
                            error: privacyBoundaryError}),
     registerExistingClosedShadowHost,
     structuralState: (secretSeenEarlier) => safePageState(secretSeenEarlier),
+    choiceCommit: (token) => choiceCommit(token),
   };
   window[CLEANUP_KEY] = {sessionId: SESSION_ID, stopEvents, cleanup};
 
@@ -1847,8 +1851,263 @@ _INIT_JS = r"""
     return event.target;
   }
 
+  // ---- dropdown choices (docs/CHOICES.md) -------------------------------
+  // A choice is a click on an option of a list the previous action opened.
+  // Two behaviours define it, never a widget library: the option has an
+  // option role, or it is one of several same-shaped siblings (same tag,
+  // shared classes); and it, or a container around it, appeared or was shown
+  // after the previous pointer action. The control the previous click hit
+  // must then show the option's label (checked from Python once the screen
+  // settles, through choiceCommit).
+  let actionSeq = 0;
+  const shownAt = new WeakMap();
+  const builtClasses = new WeakMap();
+  const choiceObserver = new MutationObserver((records) => {
+    for (const record of records) {
+      if (record.type === 'childList') {
+        for (const node of record.addedNodes) {
+          if (node.nodeType !== 1) continue;
+          shownAt.set(node, {seq: actionSeq, added: true});
+          // The classes an inserted element was built with, before hover or
+          // keyboard highlighting adds state classes to one of them.
+          try {
+            builtClasses.set(node, node.className);
+            const inner = node.querySelectorAll ? node.querySelectorAll('[class]') : [];
+            for (let k = 0; k < inner.length && k < 500; k++) {
+              builtClasses.set(inner[k], inner[k].className);
+            }
+          } catch (e) {}
+        }
+      } else if (record.target && record.target.nodeType === 1) {
+        const prior = shownAt.get(record.target);
+        if (!(prior && prior.seq === actionSeq && prior.added)) {
+          shownAt.set(record.target, {seq: actionSeq, added: false});
+        }
+      }
+    }
+  });
+  try {
+    choiceObserver.observe(document, {
+      childList: true, subtree: true, attributes: true,
+      attributeFilter: ['hidden', 'style', 'class', 'aria-hidden', 'aria-expanded'],
+    });
+  } catch (e) {}
+  const OPTION_ROLES = ['option', 'treeitem'];
+  const choiceNorm = (t) => String(t || '').replace(/\s+/g, ' ').trim();
+  function popupLike(node) {
+    try {
+      const role = node.getAttribute('role');
+      if (['listbox', 'tree', 'grid', 'dialog', 'menu'].indexOf(role) >= 0) return true;
+      const position = getComputedStyle(node).position;
+      return position === 'absolute' || position === 'fixed';
+    } catch (e) { return false; }
+  }
+  function appearedThisAction(el) {
+    // Inserted since the previous press, or a floating container (a popup)
+    // around it changed its visibility attributes since then. Attribute
+    // changes on the option itself (hover highlighting) do not count.
+    for (let node = el; node && node !== document.documentElement;
+         node = node.parentElement) {
+      const mark = shownAt.get(node);
+      if (!mark || mark.seq !== actionSeq) continue;
+      if (mark.added || (node !== el && popupLike(node))) return true;
+    }
+    return false;
+  }
+  // Classes that mark a state (the highlighted or hovered option), not what
+  // an option is. Leaving them in would find only the one highlighted option.
+  const STATE_CLASS = /(^|[-_])(highlight|highlighted|hover|hovered|focus|focused|active|selected|current|checked|open|pressed|keyboard)$|^(is|has)-/i;
+  function sharedClasses(el) {
+    const parent = el.parentElement;
+    if (!parent || el === document.body) return null;
+    const own = Array.from(el.classList).filter(
+      (c) => /^[A-Za-z_-][A-Za-z0-9_-]{0,127}$/.test(c) && !STATE_CLASS.test(c));
+    const siblings = Array.from(parent.children).filter(
+      (sib) => sib !== el && sib.tagName === el.tagName);
+    if (!own.length) {
+      // A plain list (items with no classes at all): the tag alone, and
+      // replay still only looks at items that appeared after the opening.
+      return siblings.length && !el.className
+        && siblings.every((sib) => !sib.className) ? [] : null;
+    }
+    const shared = own.filter((c) => siblings.some((sib) => sib.classList.contains(c)));
+    const peers = shared.length
+      ? siblings.filter((sib) => shared.every((c) => sib.classList.contains(c))) : [];
+    if (peers.length) return shared.slice(0, 8);
+    if (siblings.length) return null;
+    // The only option left (a search filtered the list): its shape is the
+    // classes it was built with, which leaves out highlighting.
+    const built = builtClasses.get(el);
+    if (typeof built !== 'string') return null;
+    const tokens = built.split(/\s+/).filter(
+      (c) => c && own.indexOf(c) >= 0 && /^[A-Za-z_-][A-Za-z0-9_-]{0,127}$/.test(c));
+    return tokens.length ? tokens.slice(0, 8) : null;
+  }
+  function optionEvidence(target) {
+    try {
+      if (!target || !target.closest || opaqueSecretActive) return null;
+      let el = target.closest(OPTION_ROLES.map((r) => '[role="' + r + '"]').join(','));
+      let shape = null;
+      if (el) {
+        shape = {role: el.getAttribute('role'), tag: el.tagName.toLowerCase(), classes: []};
+      } else {
+        for (let node = target, depth = 0; node && depth < 4;
+             node = node.parentElement, depth++) {
+          if (node === document.body || node.matches('form, table, tbody, thead')) break;
+          if (node.matches('a[href], button, input, select, textarea, label')) break;
+          const classes = sharedClasses(node);
+          if (classes) {
+            el = node;
+            shape = {role: null, tag: node.tagName.toLowerCase(), classes: classes};
+            break;
+          }
+        }
+      }
+      if (!el || !shape || !appearedThisAction(el)) return null;
+      const label = choiceNorm(el.innerText || el.textContent);
+      if (!label || label.length > 512) return null;
+      if (secretValueIn(label, identityMatchValues()) !== null) return null;
+      const rawValue = el.getAttribute('data-value') ?? el.getAttribute('value');
+      return {
+        el: el,
+        shape: shape,
+        label: label,
+        value: rawValue === null ? null : String(rawValue).slice(0, 512),
+        disabled: el.getAttribute('aria-disabled') === 'true'
+          || Array.from(el.classList).some((c) => /disabled/i.test(c)),
+      };
+    } catch (e) { return null; }
+  }
+  function namedFieldValues() {
+    const out = {};
+    try {
+      // Keyed by name, or by id for an unnamed control (the same name/id
+      // that --param takes).
+      for (const el of document.querySelectorAll(
+          'input[name], select[name], textarea[name], input[id], select[id], textarea[id]')) {
+        const type = (el.getAttribute('type') || '').toLowerCase();
+        if (type === 'password' || secretStates.has(el)) continue;
+        const key = el.name || el.id;
+        if (key && !(key in out)) out[key] = String(el.value);
+      }
+    } catch (e) {}
+    return out;
+  }
+  const choiceTokens = new Map();
+  let lastControl = null;
+  let choiceDown = null;
+  function choiceCommit(token) {
+    // Called once the screen settled after the option click.
+    const pending = choiceTokens.get(token);
+    choiceTokens.delete(token);
+    if (!pending) return null;
+    const label = pending.label.toLowerCase();
+    const shows = (text) => {
+      text = choiceNorm(text).toLowerCase();
+      if (!text) return false;
+      if (text === label) return true;
+      if (text.length > label.length + 40) return false;
+      const at = text.indexOf(label);
+      if (at < 0) return false;
+      const word = /[\p{L}\p{N}]/u;
+      return !word.test(at ? text[at - 1] : '')
+        && !word.test(text[at + label.length] || '');
+    };
+    let readback = null;
+    const control = pending.control;
+    if (control && control.isConnected) {
+      const input = control.closest && control.closest('input, textarea');
+      if (input && isTextEntry(input)
+          && choiceNorm(input.value).toLowerCase() === label) {
+        readback = 'control_value';
+      } else {
+        // The label as text in the control or a box around it (a search
+        // field that clears itself and shows the choice beside it).
+        for (let node = control, depth = 0; node && depth < 4;
+             node = node.parentElement, depth++) {
+          if (node === document.body || node.tagName === 'FORM') break;
+          if (shows(node.innerText)) { readback = 'control_text'; break; }
+        }
+      }
+    }
+    let shown = null;
+    if (!readback && control && control.isConnected) {
+      // A list whose choice writes something other than its label into a
+      // text control (a calendar day writes a date): keep that exact text.
+      const input = control.closest && control.closest('input, textarea');
+      if (input && isTextEntry(input) && choiceNorm(input.value)
+          && choiceNorm(input.value) !== choiceNorm(pending.before)
+          && secretValueIn(input.value, identityMatchValues()) === null) {
+        readback = 'control_value';
+        shown = choiceNorm(input.value).slice(0, 512);
+      }
+    }
+    const after = namedFieldValues();
+    const changed = Object.keys(after).filter(
+      (name) => (name in pending.fields) && pending.fields[name] !== after[name]);
+    return {readback: readback, shows: shown,
+            field: changed.length === 1 ? changed[0] : null};
+  }
+  function choicePointerEvent(down) {
+    const token = SESSION_ID + ':choice:' + String(++choiceSerial);
+    let before = '';
+    try {
+      const input = down.control && down.control.closest
+        && down.control.closest('input, textarea');
+      if (input) before = String(input.value);
+    } catch (e) {}
+    choiceTokens.set(token, {
+      label: down.choice.label, control: down.control, fields: down.fields,
+      before: before,
+    });
+    lastChoiceAt = performance.now();
+    if (choiceTokens.size > 16) choiceTokens.delete(choiceTokens.keys().next().value);
+    const out = {
+      kind: 'click', x: down.x, y: down.y, sid: down.sid,
+      structural: down.structural, idr: down.idr,
+      choice: {
+        token: token, shape: down.choice.shape, label: down.choice.label,
+        value: down.choice.value, disabled: down.choice.disabled,
+      },
+    };
+    if (down.sid_withheld) out.sid_withheld = down.sid_withheld;
+    return out;
+  }
+  let choiceSerial = 0;
+  let lastChoiceAt = -1e9;
+
+  // ---- browser dialogs ----------------------------------------------------
+  // alert/confirm/prompt block the page and their answer never reaches a DOM
+  // event, so the answer is read where the page reads it: the call's return
+  // value. A person answers the dialog in the browser; this only reports it.
+  for (const kind of ['alert', 'confirm', 'prompt']) {
+    try {
+      const original = window[kind];
+      if (typeof original !== 'function') continue;
+      const wrapped = function (message) {
+        const answer = original.apply(window, arguments);
+        try {
+          // A dialog from an iframe carries no coordinates, but its frame
+          // must still be one the recording can place.
+          if (frameSpace() === null) { refuseFrame(); return answer; }
+          emitInFrameSpace({
+            kind: 'dialog', type: kind,
+            message: String(message === undefined ? '' : message).slice(0, 2000),
+            response: kind === 'alert' ? 'accept'
+              : (kind === 'confirm' ? (answer ? 'accept' : 'dismiss')
+                 : (answer === null ? 'dismiss' : 'prompt')),
+          });
+        } catch (e) {}
+        return answer;
+      };
+      Object.defineProperty(window, kind, {value: wrapped, configurable: true, writable: true});
+    } catch (e) {}
+  }
+
   let pointerDown = null;
   let suppressClick = false;
+  let lastLabelClick = null;
+  let clickTask = 0;
   listenOn(window, 'resize', () => {
     if (resizeTimer !== null) clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
@@ -1914,6 +2173,15 @@ _INIT_JS = r"""
       ),
       idr: composeRect(fs, identifierRect()),
     };
+    // A choice is judged on the list this press lands in, before a page that
+    // chooses on press (not on click) can remove it.
+    const choice = lastControl ? optionEvidence(target) : null;
+    choiceDown = choice ? {
+      ...pointerDown, choice: choice, control: lastControl,
+      fields: namedFieldValues(), consumed: false,
+    } : null;
+    if (!choice) lastControl = target;
+    actionSeq += 1;
   });
 
   listen('pointerup', (e) => {
@@ -1924,7 +2192,23 @@ _INIT_JS = r"""
     if (fs === null) { refuseFrame(); return; }
     const endX = Math.round(e.clientX + fs.dx);
     const endY = Math.round(e.clientY + fs.dy);
-    if (Math.hypot(endX - start.x, endY - start.y) < 5) return;
+    if (Math.hypot(endX - start.x, endY - start.y) < 5) {
+      const pending = choiceDown;
+      if (pending) {
+        // A list that chooses on press or release removes the option before
+        // the click, and the browser then sends the click elsewhere or not
+        // at all. The choice is the press, so emit it once if no click on
+        // the option follows in this same input task.
+        setTimeout(() => {
+          if (pending.consumed) return;
+          pending.consumed = true;
+          if (choiceDown === pending) choiceDown = null;
+          emitInFrameSpace(choicePointerEvent(pending));
+        }, 0);
+      }
+      return;
+    }
+    choiceDown = null;
     suppressClick = true;
     setTimeout(() => { suppressClick = false; }, 0);
     const dragEvent = {
@@ -1981,6 +2265,35 @@ _INIT_JS = r"""
     const fs = frameSpace();
     if (fs === null) { refuseFrame(); return; }
     const target = deepEventTarget(e);
+    // A click on a <label> makes the browser click its control as well,
+    // in the same task. That second click is the label's effect, not a
+    // second action.
+    const labelClick = lastLabelClick;
+    lastLabelClick = null;
+    if (labelClick && labelClick.task === clickTask && target.labels
+        && Array.from(target.labels).indexOf(labelClick.label) >= 0) {
+      return;
+    }
+    const clickedLabel = target.closest ? target.closest('label') : null;
+    if (clickedLabel && clickedLabel.control) {
+      lastLabelClick = {label: clickedLabel, task: clickTask};
+      setTimeout(() => { clickTask += 1; }, 0);
+    }
+    const pendingChoice = choiceDown;
+    let choiceOfClick = null;
+    if (pendingChoice && !pendingChoice.consumed) {
+      pendingChoice.consumed = true;
+      choiceDown = null;
+      const el = pendingChoice.choice.el;
+      if (el === target || (el.contains && el.contains(target))) {
+        choiceOfClick = choicePointerEvent(pendingChoice).choice;
+      } else {
+        // The option went away before the click (chosen on press or
+        // release): the press was the action.
+        emitInFrameSpace(choicePointerEvent(pendingChoice));
+        return;
+      }
+    }
     const rowIdentity = structuredIdentityEvidence(e.clientX, e.clientY, target);
     const submitBinding = submitBindingEvidence(target);
     const pointerEvent = {
@@ -2000,6 +2313,7 @@ _INIT_JS = r"""
     if (submitBinding) pointerEvent.submit_binding = submitBinding;
     const section = sectionEvidence(target);
     if (section) pointerEvent.section = section;
+    if (choiceOfClick) pointerEvent.choice = choiceOfClick;
     emitInFrameSpace(pointerEvent);
   });
 
@@ -2035,14 +2349,64 @@ _INIT_JS = r"""
     // the moment the operator makes the selection.
     const el = deepEventTarget(e);
     if (el && el.matches && el.matches('select')) {
-      emit({kind: 'control_refusal', control: 'select'});
+      if (e.isTrusted) {
+        nativeChoice(el);
+      } else if (el === lastControl || el === document.activeElement) {
+        // A select the person just clicked or focused changed with no input
+        // the page can attribute to them (an automation tool set it). It may
+        // be their choice, so refuse rather than leave it out.
+        emit({kind: 'control_refusal', control: 'select'});
+      }
     }
   });
+  function nativeChoice(el) {
+    // A visible <select> the person changed is a choice of its own. A
+    // hidden one is the form value behind a custom list; that list's option
+    // click is the choice, and this change is only its commit.
+    try {
+      const fs = frameSpace();
+      if (fs === null) { refuseFrame(); return; }
+      if (el.multiple) { emit({kind: 'control_refusal', control: 'select'}); return; }
+      const r = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      const shown = r.width >= 2 && r.height >= 2 && style.visibility !== 'hidden'
+        && style.display !== 'none' && Number(style.opacity) !== 0;
+      if (!shown) return;
+      const option = el.selectedOptions[0];
+      const label = option ? choiceNorm(option.label || option.text) : '';
+      if (!label || secretValueIn(label, identityMatchValues()) !== null) {
+        emit({kind: 'control_refusal', control: 'select'});
+        return;
+      }
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const rowIdentity = structuredIdentityEvidence(cx, cy, el);
+      const out = {
+        kind: 'select_choice',
+        x: Math.round(cx + fs.dx), y: Math.round(cy + fs.dy),
+        sid: rowIdentity.sid,
+        structural: frameStructural(fs, structuralTarget(cx, cy, el)),
+        idr: composeRect(fs, identifierRect()),
+        choice: {
+          label: label, value: String(el.value).slice(0, 512),
+          field: el.name || el.id || null,
+        },
+      };
+      if (rowIdentity.withheld) out.sid_withheld = rowIdentity.withheld;
+      emitInFrameSpace(out);
+    } catch (e) {
+      emit({kind: 'control_refusal', control: 'select'});
+    }
+  }
   listen('focusout', (e) => commitSecretValueFor(inputEventTarget(e)));
   listen('submit', commitSecretValues);
   listenOn(window, 'pagehide', commitSecretValues);
 
   listen('input', (e) => {
+    // A list that writes its choice into a text control (a calendar writing
+    // a date) sends the page's own input event right after the choice. The
+    // choice is the person's action; that event is its effect.
+    if (!e.isTrusted && performance.now() - lastChoiceAt < 1500) return;
     const fs = frameSpace();
     if (fs === null) { refuseFrame(); return; }
     refreshSecretBindings();
@@ -2270,6 +2634,9 @@ class InteractiveRecorder:
         self._param_fields = set(param_fields)
         self._identifier_fields = set(identifier_fields)
         self._headless = headless
+        self._select_commit_at: Optional[float] = None
+        self._select_commit_selector: Optional[str] = None
+        self._pending_click_at = 0.0
         if browser_page_url and not cdp_endpoint:
             raise BrowserAttachError("browser_page_url requires a browser CDP endpoint")
         if cdp_endpoint and headless:
@@ -2415,6 +2782,16 @@ class InteractiveRecorder:
                 require_rendering_ready(self._browser, attached_page=self.page)
 
             self._context = self.page.context
+            if not self._headless:
+                # Without a listener Playwright dismisses every browser dialog
+                # itself, so a person could never answer "OK" to a confirm()
+                # and the save behind it would silently not happen. This one
+                # answers nothing: the dialog stays open for the person, and
+                # the page reports their answer (docs/CHOICES.md, "Dialogs").
+                try:
+                    self._context.on("dialog", lambda _dialog: None)
+                except Exception:
+                    pass
             if self._capture_network:
                 from openadapt_flow.network_capture import NetworkCapture
 
@@ -2529,6 +2906,8 @@ class InteractiveRecorder:
                 event_clock=self._event_clock,
                 **self._settle,
             )
+            # The page reports every alert/confirm/prompt answer (CHOICES.md).
+            self.recorder.dialogs_captured = True
             if self._owns_browser:
                 self._last_frame = self.recorder._wait_settled()
                 self._last_structural = self._structural_state()
@@ -3522,6 +3901,8 @@ class InteractiveRecorder:
             "hotkey",
             "scroll",
             "viewport",
+            "select_choice",
+            "dialog",
         }:
             return
         self._track_secret_document(
@@ -3940,13 +4321,63 @@ class InteractiveRecorder:
             # single click.
             if self._pending_click is not None:
                 self._pending_click_pumps -= 1
-                if self._pending_click_pumps <= 0:
+                # A click that loads a page can raise a browser dialog only
+                # once that page loads. Hold it while idle (any next action
+                # still flushes it at once) so the dialog joins the click
+                # that raised it; replay waits as long for it.
+                if (
+                    self._pending_click_pumps <= 0
+                    and time.monotonic() - self._pending_click_at >= _LATE_DIALOG_S
+                ):
                     self._flush_click()
             return not self._stop_condition_reached()
         return not self._stop_condition_reached()
 
     def _process(self, ev: dict[str, Any]) -> None:
         kind = ev.get("kind")
+        if kind == "dialog":
+            self._attach_dialog(ev)
+            return
+        observed_at = ev.get("_oaflow_observed_at")
+        if (
+            self._select_commit_at is not None
+            and isinstance(observed_at, (int, float))
+            and float(observed_at) - self._select_commit_at < 0.5
+            and (
+                (kind == "key" and ev.get("key") in ("Enter", "Tab"))
+                or (
+                    kind == "click"
+                    and self._select_commit_selector
+                    and isinstance(ev.get("structural"), dict)
+                    and ev["structural"].get("selector") == self._select_commit_selector
+                )
+            )
+        ):
+            # The key that closed a native select's list, or the click that
+            # opened it and reached the page only as the list closed, is part
+            # of the choice just recorded.
+            return
+        if kind == "select_choice":
+            # A native select the person changed: one choice at the
+            # control's center, recorded like a click (docs/CHOICES.md).
+            observed = ev.get("_oaflow_observed_at")
+            self._select_commit_at = (
+                float(observed) if isinstance(observed, (int, float)) else None
+            )
+            structural = ev.get("structural")
+            self._select_commit_selector = (
+                structural.get("selector") if isinstance(structural, dict) else None
+            )
+            raw = ev.get("choice") if isinstance(ev.get("choice"), dict) else {}
+            ev = {**ev, "kind": "click"}
+            ev["choice"] = {
+                "kind": "native_select",
+                "label": str(raw.get("label") or ""),
+                "value": str(raw.get("value") or ""),
+                "field": raw.get("field"),
+                "readback": "select",
+            }
+            kind = "click"
         if kind == "input":
             self._flush_click()
             self._flush_scroll()
@@ -3973,10 +4404,16 @@ class InteractiveRecorder:
             # Settle first: the screenshots deliver the save's request event.
             # If a write was in flight, settle again once it has landed.
             ev["_oaflow_after_frame"] = self.recorder._wait_settled()
-            if self._wait_for_writes():
+            wrote = self._wait_for_writes()
+            if wrote:
                 ev["_oaflow_after_frame"] = self.recorder._wait_settled()
+                # A list that saves as soon as an option is picked is a write,
+                # not a field: it stays a click under the write rules.
+                ev.pop("choice", None)
             ev["_oaflow_structural_after"] = self._structural_state()
+            self._commit_choice(ev)
             self._pending_click = ev
+            self._pending_click_at = time.monotonic()
             self._pending_click_pumps = max(
                 1, -(-_DOUBLE_CLICK_WINDOW_MS // max(1, self._poll_ms))
             )
@@ -3995,6 +4432,91 @@ class InteractiveRecorder:
             self._flush_type()
             self._flush_scroll()
             self._record_key(ev)
+
+    def _attach_dialog(self, ev: dict[str, Any]) -> None:
+        """Give the browser dialog a click raised to that click's event."""
+
+        response = ev.get("response")
+        if response == "prompt":
+            self._listener_error = BrowserAttachError(
+                "the page asked for typed text in a browser prompt() dialog; "
+                "a typed dialog answer is not a recordable action, so "
+                "recording stopped"
+            )
+            self.done = True
+            return
+        pending = self._pending_click
+        if (
+            pending is None
+            or response not in ("accept", "dismiss")
+            or "dialog" in pending
+        ):
+            self._listener_error = BrowserAttachError(
+                "a browser dialog opened without exactly one click that raised "
+                "it; recording stopped so its answer cannot be lost"
+            )
+            self.done = True
+            return
+        pending["dialog"] = {
+            "response": response,
+            "message": str(ev.get("message") or "")[:2000],
+        }
+
+    def _commit_choice(self, ev: dict[str, Any]) -> None:
+        """Settle what an option click chose (docs/CHOICES.md).
+
+        The page kept the control the previous press hit. Now that the screen
+        settled, it reports whether that control shows the option, and which
+        one named form field changed. Without that read-back the click stays
+        an ordinary click.
+        """
+
+        raw = ev.get("choice")
+        if not isinstance(raw, dict):
+            return
+        if raw.get("kind") == "native_select":
+            if not raw.get("label"):
+                ev.pop("choice", None)
+            return
+        token = raw.get("token")
+        commit: Any = None
+        if isinstance(token, str) and self.page is not None:
+            for frame in list(self.page.frames):
+                try:
+                    commit = frame.evaluate(
+                        "(t) => { const r = window.__oaflowRecorder;"
+                        " return r && r.choiceCommit ? r.choiceCommit(t) : null; }",
+                        token,
+                    )
+                except Exception:
+                    commit = None
+                if isinstance(commit, dict):
+                    break
+        if not isinstance(commit, dict) or commit.get("readback") not in (
+            "control_text",
+            "control_value",
+        ):
+            ev.pop("choice", None)
+            return
+        shape = raw.get("shape") if isinstance(raw.get("shape"), dict) else {}
+        ev["choice"] = {
+            "kind": "listed_option",
+            "label": str(raw.get("label") or ""),
+            "value": raw.get("value") if isinstance(raw.get("value"), str) else None,
+            "shape": {
+                "role": shape.get("role"),
+                "tag": str(shape.get("tag") or ""),
+                "classes": [str(c) for c in (shape.get("classes") or [])][:8],
+            },
+            "disabled": bool(raw.get("disabled")),
+            "readback": commit["readback"],
+            "shows": commit.get("shows")
+            if isinstance(commit.get("shows"), str)
+            else None,
+            "field": commit.get("field")
+            if isinstance(commit.get("field"), str)
+            else None,
+        }
 
     def _flush_click(self) -> None:
         pending = self._pending_click
@@ -4218,6 +4740,14 @@ class InteractiveRecorder:
         idr = ev.get("idr")
         if idr:
             event["identifier_region"] = [int(v) for v in idr]
+        if kind == "click" and isinstance(ev.get("choice"), dict):
+            choice = dict(ev["choice"])
+            field = choice.get("field")
+            if isinstance(field, str) and field in self._param_fields:
+                choice["param"] = field
+            event["choice"] = choice
+        if kind in ("click", "double_click") and isinstance(ev.get("dialog"), dict):
+            event["dialog"] = dict(ev["dialog"])
         after_png = ev.pop("_oaflow_after_frame", None)
         structural_after = ev.pop("_oaflow_structural_after", None)
         self.recorder.record_observed(

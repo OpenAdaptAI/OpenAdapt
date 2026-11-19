@@ -152,9 +152,53 @@ def test_contenteditable_records_typed_text(fixture_url: str, tmp_path: Path) ->
     assert type_event["text"] == "hello notes"
 
 
-def test_native_select_refuses_the_recording(fixture_url: str, tmp_path: Path) -> None:
+def test_a_native_select_change_is_recorded_as_a_choice(
+    fixture_url: str, tmp_path: Path
+) -> None:
+    # A person's change to a visible select (trusted keyboard input here; a
+    # mouse pick produces the same change) becomes one native choice, and
+    # the click that focused the select folds into it (docs/CHOICES.md).
     def drive(page, pump) -> None:
         page.wait_for_selector("#sel", state="visible", timeout=20000)
+        page.locator("#sel").click()
+        _settle(pump)
+        page.keyboard.type("Label Alpha")
+        page.keyboard.press("Enter")
+        _settle(pump)
+
+    rec = record_interactive(
+        fixture_url,
+        tmp_path / "rec",
+        headless=True,
+        script=drive,
+        param_fields=("sel",),
+    )
+    events = [
+        json.loads(line) for line in (rec / "events.jsonl").read_text().splitlines()
+    ]
+    choices = [e["choice"] for e in events if e.get("choice")]
+    assert choices == [
+        {
+            "kind": "native_select",
+            "label": "Label Alpha",
+            "value": "v-alpha",
+            "field": "sel",
+            "readback": "select",
+            "param": "sel",
+        }
+    ]
+    assert not any(e.get("kind") == "key" and e.get("key") == "Enter" for e in events)
+
+
+def test_an_unattributed_change_to_a_focused_select_refuses(
+    fixture_url: str, tmp_path: Path
+) -> None:
+    # A change with no input the page can attribute to the person, on the
+    # select they are working in, may be their choice: refuse, never drop it.
+    def drive(page, pump) -> None:
+        page.wait_for_selector("#sel", state="visible", timeout=20000)
+        page.locator("#sel").click()
+        _settle(pump)
         page.locator("#sel").select_option(label="Label Alpha")
         _settle(pump)
 
