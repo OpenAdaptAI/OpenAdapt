@@ -94,12 +94,13 @@ class HostedAuthorityError(ValueError):
     """The admitted program cannot run under a hosted admission authority."""
 
 
-#: Admission digests :func:`managed_admission_refusal` verified in this
-#: process. The replayer's input edges accept a dispatch with no
-#: qualification admission only when its ``approval_source`` names one of
-#: them (:func:`program_admission_edge_refusal`). Only a successful
-#: verification adds to it; nothing else can.
-_VERIFIED_ADMISSIONS: set[str] = set()
+#: (admission SHA-256, bundle content digest) pairs that
+#: :func:`managed_admission_refusal` verified in this process. The replayer's
+#: input edges accept a dispatch with no qualification admission only when its
+#: ``approval_source`` and ``bundle_content_digest`` name one of these pairs
+#: (:func:`program_admission_edge_refusal`). Only a successful verification
+#: adds to it.
+_VERIFIED_ADMISSIONS: set[tuple[str, str]] = set()
 
 
 def _admission_file(bundle_dir: Path | str) -> Path:
@@ -278,7 +279,13 @@ def managed_admission_refusal(
         return "the bundled read-back check is not the one the admission binds"
     if getattr(authorization, "approval_source", None) != approval_source(digest):
         return "the run authorization does not name this program's admission"
-    _VERIFIED_ADMISSIONS.add(digest)
+    content = getattr(getattr(workflow, "manifest", None), "content_digest", None)
+    if (
+        not isinstance(content, str)
+        or getattr(authorization, "bundle_content_digest", None) != content
+    ):
+        return "the run authorization does not name this bundle"
+    _VERIFIED_ADMISSIONS.add((digest, content))
     return None
 
 
@@ -302,8 +309,12 @@ def program_admission_edge_refusal(authorization: Any) -> Optional[str]:
     source = getattr(authorization, "approval_source", None)
     if not isinstance(source, str) or not source.startswith(APPROVAL_PREFIX):
         return "the run authorization names no program admission"
-    if source[len(APPROVAL_PREFIX) :] not in _VERIFIED_ADMISSIONS:
-        return "the program admission was not verified in this run"
+    pair = (
+        source[len(APPROVAL_PREFIX) :],
+        getattr(authorization, "bundle_content_digest", None),
+    )
+    if pair not in _VERIFIED_ADMISSIONS:
+        return "the program admission was not verified for this bundle in this run"
     return None
 
 

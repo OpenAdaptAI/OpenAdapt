@@ -15,6 +15,31 @@
 
 <!-- version list -->
 
+## v3.4.0 (2026-11-19)
+
+### Fixes
+
+- A managed run of an admitted program (`openadapt wrap publish`) no longer
+  stops before its first input. `openadapt-flow run` verified the program's
+  signed admission at the start, but the replayer's own start check and every
+  input-edge check still asked for a qualification admission, which such a
+  program never has, so every hosted run halted with "Production qualification
+  could not be verified before execution". The checks now accept the dispatch
+  when its authorization names the exact admission and bundle that `run`
+  verified in the same process (`hosted_authority.program_admission_edge_refusal`).
+  An edge with no verified admission, another admission or another bundle
+  still refuses, and every delivery still needs Cloud's v2 permit and receipt.
+
+### Features
+
+- `openadapt wrap publish` refuses, before anything is uploaded, a program
+  admitted in a mode a hosted run cannot verify (`ADMISSION_MODE_UNSUPPORTED`).
+  Hosted runs verify a person's admission or one made with a CI admitter key.
+- For an admitter-key admission, publish checks that the organization has
+  registered that admitter key (`GET /api/v1/org/{org}/admitter-keys`) and
+  otherwise refuses with `ADMITTER_KEY_UNREGISTERED`, naming the principal id
+  and public key an owner or admin must register.
+
 ## v3.3.0 (2026-11-19)
 
 ### Fixes

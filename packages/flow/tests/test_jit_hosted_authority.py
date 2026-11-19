@@ -389,6 +389,12 @@ def test_cli_admits_the_published_shape_through_the_managed_gate(
     assert _matches(program["shape"], authorization)
     # The replay reads back through the bundled verify.yaml.
     assert runner["effects"].kind == "rest"
+    # The input edges of the replay accept exactly this admission and bundle
+    # (test_jit_hosted_managed_replay.py drives them).
+    assert (
+        program["shape"]["admission_sha256"],
+        program["shape"]["bundle_content_digest"],
+    ) in ha._VERIFIED_ADMISSIONS
 
 
 @pytest.mark.parametrize(
