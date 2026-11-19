@@ -46,15 +46,22 @@ def relativize_clock_texts(
 ) -> tuple[list[Step], list[str]]:
     """``workflow``'s steps with each clock-derived text check templated.
 
-    Exact checks (``Postcondition.exact``, the empty-result markers) and
-    checks that already carry a template are left alone. ``workflow`` is not
-    changed.
+    Exact checks (``Postcondition.exact``, the empty-result markers), checks
+    that already carry a template, and texts that carry a parameter's
+    demonstrated value (a typed date the step checks back is the run's input,
+    not the clock: the miner excludes those too) are left alone. ``workflow``
+    is not changed.
 
     Returns:
         The new steps, and ``"<step id>: <recorded text> -> <template>"`` for
         each change.
     """
 
+    typed = [
+        str(value).casefold()
+        for value in (workflow.params or {}).values()
+        if value is not None and len(str(value).strip()) >= 3
+    ]
     steps: list[Step] = []
     changed: list[str] = []
     for step in workflow.steps:
@@ -65,6 +72,7 @@ def relativize_clock_texts(
                 or not condition.text
                 or condition.exact
                 or condition.text_clock is not None
+                or any(value in condition.text.casefold() for value in typed)
             ):
                 continue
             template = clock_text_template(condition.text, recorded_on)

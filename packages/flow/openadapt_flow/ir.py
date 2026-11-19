@@ -753,7 +753,7 @@ class Postcondition(BaseModel):
 
     #: TEXT_PRESENT / TEXT_ABSENT: the clock template of a ``text`` read from
     #: the clock (:mod:`openadapt_flow.clock_text`); checked as rendered from
-    #: the run's clock, digit for digit. ``text`` keeps the recorded literal.
+    #: the run's clock, field for field. ``text`` keeps the recorded literal.
     text_clock: Optional[str] = Field(default=None, min_length=1, max_length=256)
 
     @model_validator(mode="after")

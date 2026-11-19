@@ -11,6 +11,9 @@ from typing import Any, Callable, Optional
 
 from openadapt_flow import clock_text as _clock_text
 
+#: The OCR confidence a clock text's line needs (as the exact text check).
+MIN_CONFIDENCE = 0.8
+
 
 def run_today(clock: Optional[Callable[[], datetime]]) -> date:
     """The run clock's local date (``clock``, else the system clock)."""
@@ -34,27 +37,35 @@ def clock_texts(
     return _clock_text.renderings(template, _clock_text.run_clock_dates(now))
 
 
-def clock_text_shown(
-    vision: Any,
-    dom_text_visible: Callable[[str], bool],
-    text: str,
-    template: str,
-    frame_png: bytes,
-) -> bool:
-    """A clock-rendered text is on screen, read exactly (never fuzzily).
+def clock_text_shown(vision: Any, text: str, frame_png: bytes) -> bool:
+    """A clock-rendered text is a whole OCR line, field for field.
 
-    The fuzzy OCR match would take "October 2025" for "October 2026", so a
-    clock text passes only when OCR reads it exactly (case, spaces and
-    punctuation aside) as a line, or the DOM proves it rendered. The DOM check
-    is a substring match, so it is used only when the text cannot be the
-    inside of a longer number ("Nov 3" inside "Nov 30"): see
-    :func:`clock_text.substring_safe`. A vision with no exact reader and no
-    usable DOM fails closed.
+    The fuzzy OCR match would take "October 2025" for "October 2026", and a
+    letters-and-digits key or a substring reads "11/3/2026" in "1/13/2026" or
+    "Nov 03" in "Nov 03, 1990". So a clock text passes only when one
+    confidently read OCR line has exactly its field tokens
+    (:func:`clock_text.field_tokens`), on the frame or, when the frame reads
+    none, at 2x. The DOM's substring proof is never used. A vision without
+    OCR fails closed.
     """
-    counter = getattr(vision, "exact_text_count", None)
-    if callable(counter) and counter(frame_png, text) >= 1:
-        return True
-    return _clock_text.substring_safe(template) and dom_text_visible(text)
+    reader = getattr(vision, "ocr", None)
+    if not callable(reader):
+        return False
+    want = _clock_text.field_tokens(text)
+    if not want:
+        return False
+    upscale = getattr(vision, "upscale_png", None)
+    frames = [frame_png]
+    if callable(upscale):
+        frames.append(upscale(frame_png, 2))
+    for png in frames:
+        for line in reader(png):
+            if (
+                getattr(line, "confidence", 0.0) >= MIN_CONFIDENCE
+                and _clock_text.field_tokens(line.text) == want
+            ):
+                return True
+    return False
 
 
 def first_local_consequential(authorization: Any, step: Any, workflow: Any) -> bool:
@@ -97,7 +108,8 @@ def clock_text_check(
 ) -> Optional[bool]:
     """A clock-derived text postcondition's verdict, or None for any other.
 
-    ``text_present``: some rendering is read exactly (:func:`clock_text_shown`).
+    ``text_present``: some rendering is a whole OCR line, field for field
+    (:func:`clock_text_shown`).
     ``text_absent``: no rendering is present, by the fuzzy reader (a near
     reading counts as present, the safe direction).
     """
@@ -108,12 +120,7 @@ def clock_text_check(
         return None
     if kind == "text_absent":
         return not any(replayer.vision.text_present(frame_png, t) for t in texts)
-    return any(
-        clock_text_shown(
-            replayer.vision, replayer._dom_text_visible, t, pc.text_clock, frame_png
-        )
-        for t in texts
-    )
+    return any(clock_text_shown(replayer.vision, t, frame_png) for t in texts)
 
 
 def describe(pc: Any, clock: Optional[Callable[[], datetime]]) -> Optional[str]:

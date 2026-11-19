@@ -24,9 +24,12 @@
   text shows (a date picker's "October 2026", a pre-filled "10/20/2026", a
   "Tuesday, Oct 20" header), compiles to a clock template
   (`Postcondition.text_clock`, `openadapt_flow/clock_text.py`). The run
-  renders it from its own clock (local date, and the UTC date around
-  midnight) and checks that exact date: OCR must read it exactly, never by
-  the fuzzy match, so "October 2025" or another month still fails. Before,
+  renders it from its own clock and checks that date: one confidently read
+  OCR line must carry exactly its fields (runs of letters and digits, so
+  "11/3/2026" never matches "1/13/2026" or "Nov 03, 1990"), never the fuzzy
+  match or the DOM's substring proof, so "October 2025" or another month
+  still fails. Around midnight the local date and the UTC date are both the
+  run's clock, a one-day window. Before,
   the certified OpenEMR referral program checked the literal
   "October-2026-" and halted every referral from 1 November. OCR-joined
   month dates ("October-2026-", "Oct/2026") now classify as dates too.

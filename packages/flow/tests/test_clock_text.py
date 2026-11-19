@@ -113,18 +113,21 @@ class TestRender:
         assert len(ct.run_clock_dates(noon)) == 1
 
     @pytest.mark.parametrize(
-        "template,safe",
+        "a,b,same",
         [
-            ("{Month}-{YYYY}-", True),
-            ("{Mon} {D?}", False),  # "Nov 3" inside "Nov 30"
-            ("{M}/{D}/{YYYY}", False),  # "1/3/2026" inside "11/3/2026"
-            ("{MM}/{DD}/{YYYY}", True),
-            ("({D?} {Mon})", False),
-            ("Day {DD}", True),
+            ("October-2026-", "October 2026", True),
+            ("October2026", "OCTOBER 2026", True),
+            ("11/3/2026", "11-3-2026", True),
+            ("11/3/2026", "1/13/2026", False),  # same letters-and-digits key
+            ("2026-11-3", "2026-1-13", False),
+            ("11/3/2026", "1132026", False),  # a lost separator matches nothing
+            ("Nov 03", "Nov 03, 1990", False),  # not a whole-line match
         ],
     )
-    def test_substring_safety(self, template: str, safe: bool) -> None:
-        assert ct.substring_safe(template) is safe
+    def test_field_tokens_keep_date_fields_apart(
+        self, a: str, b: str, same: bool
+    ) -> None:
+        assert (ct.field_tokens(a) == ct.field_tokens(b)) is same
 
 
 class TestPostconditionField:
@@ -147,10 +150,8 @@ class _Vision:
     def __init__(self, lines: list[str]) -> None:
         self.lines = lines
 
-    def exact_text_count(self, _png: bytes, text: str) -> int:
-        from openadapt_flow.vision.ocr import text_key
-
-        return sum(1 for line in self.lines if text_key(line) == text_key(text))
+    def ocr(self, _png: bytes) -> list[SimpleNamespace]:
+        return [SimpleNamespace(text=line, confidence=0.99) for line in self.lines]
 
     def text_present(self, _png: bytes, text: str) -> bool:
         # Deliberately fuzzy, like OCR: 'October 2025' reads as 'October 2026'.
@@ -210,15 +211,42 @@ class TestReplayCheck:
         replayer = _replayer(["November-2026-"], NOV)
         assert not replayer._postcondition_passes(literal, b"", None)
 
-    def test_dom_substring_proof_is_not_used_for_open_ended_numbers(self) -> None:
+    def test_the_dom_substring_proof_is_never_used(self) -> None:
+        """The DOM finds "Nov 03" inside "Nov 03, 1990"; a clock text needs OCR."""
         pc = Postcondition(
             kind=PostconditionKind.TEXT_PRESENT,
             text="Oct 20",
-            text_clock="{Mon} {D?}",
+            text_clock="{Mon} {DD}",
         )
         replayer = _replayer([], datetime(2026, 11, 3, 12, tzinfo=timezone.utc))
         replayer.backend = SimpleNamespace(visible_text_present=lambda _t: True)
         assert not replayer._postcondition_passes(pc, b"", None)
+
+    @pytest.mark.parametrize(
+        "screen",
+        [
+            ["1/13/2026"],  # regroups to the same letters-and-digits key
+            ["11/30/2026"],
+            ["Due 11/3/2026"],  # not the whole line
+            ["1132026"],
+        ],
+    )
+    def test_numeric_dates_are_matched_field_for_field(self, screen) -> None:
+        pc = Postcondition(
+            kind=PostconditionKind.TEXT_PRESENT,
+            text="10/20/2026",
+            text_clock="{M?}/{D?}/{YYYY}",
+        )
+        at = datetime(2026, 11, 3, 12, tzinfo=timezone.utc)
+        assert _replayer(["11/3/2026"], at)._postcondition_passes(pc, b"", None)
+        assert not _replayer(screen, at)._postcondition_passes(pc, b"", None)
+
+    def test_a_low_confidence_line_does_not_count(self) -> None:
+        replayer = _replayer(["November-2026-"], NOV)
+        replayer.vision.ocr = lambda _png: [
+            SimpleNamespace(text="November-2026-", confidence=0.5)
+        ]
+        assert not replayer._postcondition_passes(PICKER, b"", None)
 
     def test_text_absent_must_be_absent_in_every_rendering(self) -> None:
         pc = Postcondition(
@@ -257,6 +285,8 @@ class TestBundlePass:
             )
         ]
         workflow = Workflow(name="w", steps=steps)
+        typed = Workflow(name="w", steps=steps, params={"appt": "October-2026-"})
+        assert clock_pass.relativize_clock_texts(typed, RECORDED)[1] == []
         new_steps, changes = clock_pass.relativize_clock_texts(workflow, RECORDED)
         assert changes == ["step_001: 'October-2026-' -> '{Month}-{YYYY}-'"]
         clocks = [pc.text_clock for pc in new_steps[0].expect]

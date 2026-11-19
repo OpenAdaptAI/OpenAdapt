@@ -11,7 +11,12 @@ patient is made up.
 - Bundle: `benchmark/openemr_local/referral_program/program/`, content digest
   `10e4594523362a0c79a8a533742a71b5b73178d32378c7bc934b51a2b006bc1c`.
   Re-saving it under compiler 3.2.0 also writes two additive fields as `null`
-  (`Anchor.form_identity`, `TokenTemplate.bearing`); nothing else changed.
+  (`Anchor.form_identity`, `TokenTemplate.bearing`). Qualifying it against
+  the current `verify.yaml` also records that file's stored-form rules on
+  step_040's effects (`stored: capitalize_words` for the names), and the
+  certification binds compiler 3.2.0, project revision 102 and the current
+  environment contract. Risks, action classifications, cases and action
+  paths are unchanged.
 - Command: `python -m scripts.openemr_qualification --bundle-src <passed
   bundle> --out <dir> --fixture-state … --lock … --ui-url … --api-url …`
   (`clinical-write`, 3 trials per case, SQL second oracle on).

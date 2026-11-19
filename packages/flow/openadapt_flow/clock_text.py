@@ -371,37 +371,19 @@ def compile_clock_text(text: str, recorded_on: Optional[date]) -> Optional[str]:
     return template
 
 
-# Tokens whose rendering can be the inside of a longer number on screen: an
-# unpadded "3" inside "13" or "30", a two-digit year "26" inside "2026".
-_OPEN_ENDED = frozenset({"M", "M?", "D", "D?", "YY"})
+_FIELD_RE = re.compile(r"[^\W\d_]+|\d+")
 
 
-def substring_safe(template: str) -> bool:
-    """Whether a substring match of a rendering can only be that date.
+def field_tokens(text: str) -> tuple[str, ...]:
+    """A text's runs of letters and runs of digits, lowercased, in order.
 
-    A substring reader (the DOM's visible-text check) finds "Nov 3" inside
-    "Nov 30" and "1/3/2026" inside "11/3/2026". That happens only when the
-    template starts or ends with a number token of open width; such a
-    template must be read exactly, as a whole line.
+    The fields of a date are kept apart: "11/3/2026" is ("11", "3", "2026")
+    and "1/13/2026" is ("1", "13", "2026"), while case, spacing and the
+    choice of separator ("October-2026-", "October 2026", "October2026")
+    drop. Two texts with the same tokens name the same date; a reading that
+    lost a separator between two numbers ("1132026") matches neither.
     """
-    parts = [
-        (literal, field)
-        for literal, field, _spec, _conversion in string.Formatter().parse(template)
-    ]
-    first_literal, first_field = parts[0]
-    if not first_literal and first_field in _OPEN_ENDED:
-        return False
-    last_literal, last_field = parts[-1]
-    if last_field is None:
-        # The template ends in literal text after its last token.
-        trailing_field = parts[-2][1] if len(parts) > 1 else None
-        if not any(c.isalnum() for c in last_literal) and trailing_field in _OPEN_ENDED:
-            return False
-    elif last_field in _OPEN_ENDED:
-        return False
-    if not any(c.isalnum() for c in first_literal) and first_field in _OPEN_ENDED:
-        return False
-    return True
+    return tuple(_FIELD_RE.findall(text.lower()))
 
 
 def check_postcondition(pc: Any) -> Any:

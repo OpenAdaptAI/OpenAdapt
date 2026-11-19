@@ -75,3 +75,43 @@ def test_a_certified_run_checks_against_its_admitted_policy(calls) -> None:
 def test_every_other_run_needs_a_current_certification(calls, auth) -> None:
     assert first_local_consequential(auth, object(), object()) is True
     assert calls == [(True, None)]
+
+
+def test_the_real_rule_on_the_certified_referral_program(tmp_path) -> None:
+    """No stand-ins: the shipped program, the real ``is_consequential``.
+
+    step_039 (Create New Patient) is reversible only by the operator's
+    confirmed classification. Without the admitted policy digest, or with a
+    different one, the fence treats it as a write; with the digest the
+    certification was made under, the decision counts.
+    """
+    import shutil
+    from pathlib import Path
+
+    from openadapt_flow.ir import Workflow
+
+    program = (
+        Path(__file__).resolve().parents[1]
+        / "benchmark"
+        / "openemr_local"
+        / "referral_program"
+        / "program"
+    )
+    shutil.copytree(program, tmp_path / "bundle")
+    workflow = Workflow.load(tmp_path / "bundle")
+    step = next(s for s in workflow.steps if s.id == "step_039")
+    certification = workflow.qualification.last_certification
+    digest = certification.policy_contract_sha256
+
+    def auth(policy_digest):
+        return SimpleNamespace(
+            qualification_case_id=None,
+            admitted_policy_contract_sha256=policy_digest,
+            _qualification_binding_error=lambda _wf: None,
+        )
+
+    assert first_local_consequential(None, step, workflow) is True
+    assert first_local_consequential(auth("0" * 64), step, workflow) is True
+    assert first_local_consequential(auth(digest), step, workflow) is False
+    save = next(s for s in workflow.steps if s.id == "step_040")
+    assert first_local_consequential(auth(digest), save, workflow) is True
