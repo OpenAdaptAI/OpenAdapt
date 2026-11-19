@@ -168,7 +168,7 @@ def _assert_refused(result: dict, check: str, tmp_path: Path) -> None:
     assert result["failed_checks"] == [check]
     # The agent never sees the bundle path or the qualified address.
     text = json.dumps(result)
-    assert str(tmp_path) not in text and "8765" not in text
+    assert str(tmp_path) not in text and "127.0.0.1" not in text
 
 
 def _flow_started(tmp_path: Path) -> bool:
@@ -282,3 +282,54 @@ def test_a_qualified_skill_without_an_address_is_refused(tmp_path):
 
     _assert_refused(_run_workflow(bridge), "app_target_missing", tmp_path)
     assert not _flow_started(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "policy",
+    ["permissive", "record-write", "clinical-write.yaml.missing", "policy.yaml", None],
+)
+def test_only_the_policy_skill_qualify_used_passes(tmp_path, monkeypatch, policy):
+    """The lock names the policy; naming another one, or none, never passes."""
+
+    dest = _qualified(tmp_path)
+    assert skills.pulled_skill_refusal(dest, target_url=ORIGIN) is None
+    lock = skills.read_lock(dest)
+    if policy is None:
+        del lock["qualified"]["policy"]
+    else:
+        lock["qualified"]["policy"] = policy
+    if policy == "policy.yaml":
+        # A relative path never loads, even when a file of that name exists.
+        monkeypatch.chdir(tmp_path)
+        shutil.copy(ROOT / "openadapt_flow/policies/clinical-write.yaml", "policy.yaml")
+    (dest / skills.LOCK).write_text(json.dumps(lock))
+    assert "no current certification" in skills.pulled_skill_refusal(
+        dest, target_url=ORIGIN
+    )
+
+
+def test_a_published_bundle_cannot_ship_a_qualified_lock(tmp_path):
+    """The index refuses a lock inside a bundle; pull writes its own."""
+
+    qualified = _qualified(tmp_path / "first")
+    lock = skills.read_lock(qualified)
+    assert lock["qualified"]["policy"] == "clinical-write"
+    reg = tmp_path / "registry"
+    shutil.copytree(ROOT / "registry", reg)
+    bundle = reg / "bundles/openemr/new-referral"
+    shutil.rmtree(bundle)
+    shutil.copytree(qualified, bundle)
+    (bundle / skills.BINDING).unlink()
+    index = json.loads((reg / "index.json").read_text())
+    for item in index["workflows"]:
+        if item["id"] == "openemr/new-referral":
+            item["files"] = registry.build_entry_files(bundle)
+            item.update(version="1.0.0", app_license="GPL-3.0")
+    (reg / "index.json").write_text(json.dumps(index))
+    with pytest.raises(registry.RegistryError, match="not a file a public bundle"):
+        registry.pull(
+            "openemr/new-referral",
+            tmp_path / "bundles" / "again",
+            index_url=str(reg / "index.json"),
+            allow_unsigned=True,
+        )

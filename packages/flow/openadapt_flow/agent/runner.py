@@ -863,6 +863,17 @@ class FlowRunner:
             refusal = "a pulled skill runs only with an app address (--url)"
         if refusal is None:
             return None
+        return self._skill_refusal(workflow, run_id, refusal, check=check)
+
+    @staticmethod
+    def _skill_refusal(
+        workflow: str,
+        run_id: Optional[str],
+        refusal: str,
+        *,
+        check: str = "skill_not_qualified",
+        exit_code: Optional[int] = None,
+    ) -> RunOutcome:
         _LOG.warning("refused workflow %s before it started: %s", workflow, refusal)
         return RunOutcome(
             status="refused",
@@ -877,6 +888,7 @@ class FlowRunner:
                 "this app address yet. The operator qualifies it with "
                 "openadapt-flow skill qualify. Nothing was executed."
             ),
+            exit_code=exit_code,
         )
 
     def _run(
@@ -1011,16 +1023,12 @@ class FlowRunner:
             # say so, never "not sure if saved".
             from openadapt_flow.skills import pulled_skill_refusal
 
-            refusal = pulled_skill_refusal(
-                Path(bundle_dir), target_url=url or self.target_url()
-            )
+            target = url or self.target_url()
+            refusal = pulled_skill_refusal(Path(bundle_dir), target_url=target)
             if refusal is not None and f"REFUSED: {refusal}" in (proc.stderr or ""):
-                refused = self._pulled_skill_refusal(
-                    workflow, Path(bundle_dir), None, run_id
+                return self._skill_refusal(
+                    workflow, run_id, refusal, exit_code=proc.returncode
                 )
-                if refused is not None:
-                    refused.exit_code = proc.returncode
-                    return refused
 
         outcome = classify_outcome(
             workflow,
