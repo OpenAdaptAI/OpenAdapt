@@ -875,6 +875,18 @@ class FlowRunner:
         exit_code: Optional[int] = None,
     ) -> RunOutcome:
         _LOG.warning("refused workflow %s before it started: %s", workflow, refusal)
+        if check == "app_target_missing":
+            detail = (
+                "This workflow was pulled from a registry, and the run setup "
+                "doesn't say which app address to use. The operator sets one "
+                "with --url or backend.url. Nothing was executed."
+            )
+        else:
+            detail = (
+                "This workflow was pulled from a registry and isn't qualified on "
+                "this app address yet. The operator qualifies it with "
+                "openadapt-flow skill qualify. Nothing was executed."
+            )
         return RunOutcome(
             status="refused",
             workflow=workflow,
@@ -882,12 +894,10 @@ class FlowRunner:
             reason="not_ready_to_run",
             failed_checks=[check],
             refused_before_start=True,
-            process_started=False,
-            detail=(
-                "This workflow was pulled from a registry and isn't qualified on "
-                "this app address yet. The operator qualifies it with "
-                "openadapt-flow skill qualify. Nothing was executed."
-            ),
+            # With an exit code, Flow started and its own gate refused it
+            # before any step, as an admission refusal is reported.
+            process_started=exit_code is not None,
+            detail=detail,
             exit_code=exit_code,
         )
 

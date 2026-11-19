@@ -208,6 +208,9 @@ def test_the_clis_own_pulled_skill_refusal_reaches_the_agent_typed(tmp_path):
     assert outcome.status == "refused"
     assert outcome.reason == "not_ready_to_run"
     assert outcome.failed_checks == ["skill_not_qualified"]
+    # Flow did start here; its own gate refused before any step.
+    assert outcome.process_started is True
+    assert outcome.refused_before_start is True
 
 
 def test_stripping_the_provenance_is_still_refused(tmp_path):
@@ -277,16 +280,46 @@ def test_a_url_override_to_another_address_is_refused(tmp_path):
 
 
 def test_a_qualified_skill_without_an_address_is_refused(tmp_path):
-    _qualified(tmp_path)
+    dest = _qualified(tmp_path)
     bridge = _bridge(tmp_path)
 
     _assert_refused(_run_workflow(bridge), "app_target_missing", tmp_path)
+    assert not _flow_started(tmp_path)
+    runner = FlowRunner(RunnerConfig(runs_dir=tmp_path / "runs"))
+    outcome = runner._pulled_skill_refusal("w", dest, None, None)
+    assert outcome is not None and "which app address" in outcome.detail
+
+
+def test_the_deployment_configs_address_is_the_target(tmp_path):
+    """With no --url, backend.url in the deployment config is the address."""
+
+    dest = _qualified(tmp_path)
+    other = tmp_path / "other.yaml"
+    other.write_text(f"backend:\n  url: {OTHER}/\n")
+    same = tmp_path / "same.yaml"
+    same.write_text(f"backend:\n  url: {ORIGIN}/\n")
+
+    runner = FlowRunner(
+        RunnerConfig(runs_dir=tmp_path / "runs", deployment_config=str(same))
+    )
+    assert runner.target_url() == f"{ORIGIN}/"
+    assert runner._pulled_skill_refusal("w", dest, None, None) is None
+
+    bridge = _bridge(tmp_path, deployment_config=str(other))
+    _assert_refused(_run_workflow(bridge), "skill_not_qualified", tmp_path)
     assert not _flow_started(tmp_path)
 
 
 @pytest.mark.parametrize(
     "policy",
-    ["permissive", "record-write", "clinical-write.yaml.missing", "policy.yaml", None],
+    [
+        "permissive",
+        "record-write",
+        "clinical-write.yaml.missing",
+        "policy.yaml",
+        "absolute-permissive",
+        None,
+    ],
 )
 def test_only_the_policy_skill_qualify_used_passes(tmp_path, monkeypatch, policy):
     """The lock names the policy; naming another one, or none, never passes."""
@@ -302,6 +335,12 @@ def test_only_the_policy_skill_qualify_used_passes(tmp_path, monkeypatch, policy
         # A relative path never loads, even when a file of that name exists.
         monkeypatch.chdir(tmp_path)
         shutil.copy(ROOT / "openadapt_flow/policies/clinical-write.yaml", "policy.yaml")
+    if policy == "absolute-permissive":
+        # An absolute path loads, but a weaker policy than the certified one
+        # never reproduces the certification.
+        weaker = tmp_path / "weaker.yaml"
+        shutil.copy(ROOT / "openadapt_flow/policies/permissive.yaml", weaker)
+        lock["qualified"]["policy"] = str(weaker)
     (dest / skills.LOCK).write_text(json.dumps(lock))
     assert "no current certification" in skills.pulled_skill_refusal(
         dest, target_url=ORIGIN
