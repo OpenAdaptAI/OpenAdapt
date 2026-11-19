@@ -159,7 +159,11 @@ def show_seconds(steps: Sequence[DemoStep]) -> float:
     return steps[-1].seconds if steps else 0.0
 
 
-def compile_seconds(outcome: Outcome) -> float:
+def compile_seconds(outcome: Outcome, scene: Scene = MOCKMED) -> float:
+    # A live demonstration is timed inside Act 1; a recorded one (OpenEMR)
+    # carries the recording's own times, so Act 1 is the compile alone.
+    if not scene.act1_live:
+        return outcome.act1_seconds
     return max(0.0, outcome.act1_seconds - show_seconds(outcome.demo_steps))
 
 
@@ -168,7 +172,7 @@ def program_detail(outcome: Outcome, scene: Scene) -> str:
     detail = f"{outcome.program_steps} {noun}"
     if outcome.program_name:
         detail += f", {outcome.program_name}"
-    return detail if scene.act1_live else f"{detail}, certified"
+    return detail if scene.act1_live else f"{detail}, certified under clinical-write"
 
 
 def run_heading(subtitle: str) -> tuple[str, str]:
@@ -527,7 +531,7 @@ class PlainView(_Base):
         self._step(
             3,
             f"{self.marks.ok} Turn it into a program {self.marks.dot} "
-            f"{program_detail(outcome, self.scene)}  {seconds(compile_seconds(outcome))}",
+            f"{program_detail(outcome, self.scene)}  {seconds(compile_seconds(outcome, self.scene))}",
         )
 
     def running(self, total: int, parallel: int):
@@ -864,7 +868,7 @@ class RichView(_Base):
             "green",
             "Turn it into a program",
             program_detail(outcome, self.scene),
-            compile_seconds(outcome),
+            compile_seconds(outcome, self.scene),
         )
 
     # Act 2: every run's row is on screen from the start and resolves.
@@ -1042,10 +1046,18 @@ class RichView(_Base):
         self._pause(0.25)
         self._verdicts(broken)
 
+    def _record_text(self, broken: BreakFacts) -> str:
+        """The record's line: a red cross only where the screen claimed a save."""
+
+        line = _escape(database_line(broken, self.scene))
+        if self.scene.screen_claims_success:
+            return f"[bold red]{self.marks.no} {line}[/]"
+        return f"[bold]{line}[/]"
+
     def _record_lines(self, broken: BreakFacts) -> list[str]:
         return [
             f"[bold]{_escape(self.scene.record_title)}[/]",
-            f"[bold red]{self.marks.no} {_escape(database_line(broken, self.scene))}[/]",
+            self._record_text(broken),
         ]
 
     def _side_by_side(self, broken: BreakFacts) -> None:
@@ -1063,10 +1075,10 @@ class RichView(_Base):
             padding=(1, 2),
         )
         record = Panel(
-            f"[bold red]{self.marks.no} {_escape(database_line(broken, scene))}[/]",
+            self._record_text(broken),
             title=f"[bold]{_escape(scene.record_title)}[/]",
             title_align="left",
-            border_style="red",
+            border_style="red" if scene.screen_claims_success else "dim",
             padding=(1, 2),
         )
         self.console.print()
@@ -1108,6 +1120,12 @@ class RichView(_Base):
         reconcile = reconcile_line(broken)
         if reconcile:
             self.console.print(f"[dim]{_escape(reconcile)}[/]")
+        # Where the screen showed no false success (OpenEMR), the side by
+        # side doesn't say what replaying the clicks would have done.
+        aha = None if scene.screen_claims_success else aha_line(broken, scene)
+        if aha:
+            self.console.print()
+            self.console.print(_escape(aha))
 
     def _draw_beside_screenshot(self, broken: BreakFacts, right: list[str]) -> bool:
         from openadapt.quickstart.images import beside_image, crop_png, image_sequence

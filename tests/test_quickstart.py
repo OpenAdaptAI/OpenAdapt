@@ -344,7 +344,9 @@ def test_more_lists_every_other_next_step(root):
     )
     joined = "\n".join(lines)
     assert "Try it on your own app: openadapt flow record --backend web" in joined
-    assert "Check every Seal again: openadapt seal verify openadapt-quickstart" in joined
+    assert (
+        "Check every Seal again: openadapt seal verify openadapt-quickstart" in joined
+    )
     assert "Open your Seal (offline): openadapt-quickstart/run-1/seal.html" in joined
     assert "https://openadapt.ai/seals" in joined
 
@@ -500,7 +502,9 @@ def test_the_finale_names_the_persons_own_seal_then_the_real_ones(root):
         "    opened in your browser; it checks the signature in your browser, "
         "offline; nothing is uploaded"
     )
-    assert finale[at + 2] == "  Real Seals from OpenEMR runs: https://openadapt.ai/seals"
+    assert (
+        finale[at + 2] == "  Real Seals from OpenEMR runs: https://openadapt.ai/seals"
+    )
     # The person's own Seal opens; the side-by-side page does not.
     assert opened == [root / "run-1" / "seal.html"]
     assert outcome.seal_page_opened
@@ -1154,3 +1158,64 @@ def test_sealing_the_stopped_run_signs_its_report(tmp_path, monkeypatch):
     broken.run_dir.mkdir(parents=True)
     assert FlowEngine(tmp_path, visible=False).seal_broken(broken) is True
     assert sealed == ["run-broken"]
+
+
+# ---------------------------------------------------------------------------
+# Review fixes: the at-rest opt-out, recorded compile time, the Seal page
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("environ", "applied"),
+    [
+        ({}, True),
+        ({"OPENADAPT_BUNDLE_KEY": "k"}, False),
+        ({"OPENADAPT_RECORDING_KEY": "k"}, False),
+        ({"OPENADAPT_FLOW_AT_REST": "strict"}, False),
+        ({"OPENADAPT_FLOW_AT_REST": " Strict "}, False),
+        ({"OPENADAPT_FLOW_PLAINTEXT_AT_REST": "operator reason"}, False),
+    ],
+)
+def test_the_plaintext_opt_out_applies_only_when_nothing_is_configured(
+    monkeypatch, environ, applied
+):
+    for name in (
+        "OPENADAPT_BUNDLE_KEY",
+        "OPENADAPT_RECORDING_KEY",
+        "OPENADAPT_FLOW_AT_REST",
+        "OPENADAPT_FLOW_PLAINTEXT_AT_REST",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in environ.items():
+        monkeypatch.setenv(name, value)
+    before = os.environ.get("OPENADAPT_FLOW_PLAINTEXT_AT_REST")
+    with cli._synthetic_scrub_off():
+        inside = os.environ.get("OPENADAPT_FLOW_PLAINTEXT_AT_REST")
+    assert (inside == "synthetic quickstart data") is applied
+    if not applied:
+        assert inside == before
+    # Restored afterwards: it never outlives the quickstart.
+    assert os.environ.get("OPENADAPT_FLOW_PLAINTEXT_AT_REST") == before
+
+
+def test_a_recorded_demonstration_times_the_compile_alone():
+    from openadapt.quickstart.scene import OPENEMR
+    from openadapt.quickstart.view import compile_seconds
+
+    outcome = Outcome(root=Path("qs"))
+    outcome.act1_seconds = 0.5
+    outcome.demo_steps = [DemoStep(label="Click Save", seconds=36.8)]
+    assert compile_seconds(outcome, OPENEMR) == 0.5
+    outcome.act1_seconds = 2.0
+    outcome.demo_steps = [DemoStep(label="Click Save", seconds=1.6)]
+    assert compile_seconds(outcome) == pytest.approx(0.4)
+
+
+def test_a_captured_stream_never_opens_the_seal_page():
+    """Under pytest -s stdout can be a terminal; the stream decides, not stdout."""
+
+    import openadapt.quickstart as quickstart
+
+    assert quickstart._shown(io.StringIO(), lambda: True) is False
+    assert quickstart._shown(_Terminal(), lambda: True) is True
+    assert quickstart._shown(_Terminal(), lambda: False) is False

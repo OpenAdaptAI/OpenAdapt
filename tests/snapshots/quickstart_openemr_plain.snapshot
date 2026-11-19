@@ -8,7 +8,7 @@ Synthetic data only. Files go to openadapt-quickstart
       ✓ First name: "OpenAdapt"                  5.2s
       ✓ Click Create New Patient                 34.5s
       ✓ Click Confirm Create New Patient         36.8s
-[3/5] ✓ Turn it into a program · 29 steps, openemr-create-synthetic-patient, certified  0.0s
+[3/5] ✓ Turn it into a program · 29 steps, openemr-create-synthetic-patient, certified under clinical-write  0.5s
 [4/5] Run it on 5 new referrals · all at once
       1/5  Ines Carvalho                      ✓ checked in OpenEMR's record  30.1s
       2/5  Theo Lindqvist                     ✓ checked in OpenEMR's record  30.2s
