@@ -188,8 +188,8 @@ export function Sample({
           <section className="sample-next">
             <h2>Now try your own workflow</h2>
             <p>
-              Show OpenAdapt a workflow in the app where you already do it.
-              Use a test record.
+              Do a workflow once in the app where it's normally done, or have
+              an AI agent do it. Use a test record.
             </p>
             <div className="row">
               <Button variant="primary" onClick={onShow}>

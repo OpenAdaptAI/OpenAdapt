@@ -877,7 +877,7 @@ export function Qualification({
                     className="input"
                     value={environmentLabel}
                     onChange={(event) => setEnvironmentLabel(event.target.value)}
-                    placeholder="clinic-test-citrix-vda"
+                    placeholder="test-citrix-vda"
                   />
                   <span className="page-sub">
                     SHA-256 of the trimmed UTF-8 identifier. Configure the

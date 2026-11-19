@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.30.3 (2026-11-19)
+
+### Bug Fixes
+
+- **desktop**: describe OpenAdapt for any app on the welcome screen
+
+
+
 ## v0.30.2 (2026-11-18)
 
 ### Bug Fixes

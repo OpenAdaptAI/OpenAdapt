@@ -406,7 +406,7 @@ export function RecordReview({
           label={firstWorkflow ? "What does this workflow do?" : "Workflow description"}
           hint={
             firstWorkflow
-              ? "For example: Add a claim status note. This name shows on the workflow's card."
+              ? "For example: Add a note to a customer record. This name shows on the workflow's card."
               : "Optional. Saved with the recording. OpenAdapt doesn't send it anywhere unless you choose to upload the recording."
           }
           htmlFor={`${fieldPrefix}-record-task`}
@@ -421,7 +421,7 @@ export function RecordReview({
             onChange={(event) => setTask(event.target.value)}
             placeholder={
               firstWorkflow
-                ? "Add a claim status note"
+                ? "Add a note to a customer record"
                 : undefined
             }
           />
@@ -584,7 +584,7 @@ export function RecordReview({
                 engineInvoke(CMD.SCRUB_CAPTURE, { capture_id: lastCapture })
               }
             >
-              Remove patient data and review
+              Remove personal data and review
             </Button>
             {presentationStatus?.ready && (
               <Button
