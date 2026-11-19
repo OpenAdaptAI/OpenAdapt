@@ -28,16 +28,6 @@
         "data": "synthetic",
         "source": "benchmark/openemr_local (made-up patients)"
       }
-    },
-    {
-      "id": "openimis/claim-intake",
-      "title": "Enter a health-facility claim in openIMIS",
-      "app": "openIMIS (AGPL-3.0), upstream demo dataset",
-      "path": "bundles/openimis/claim-intake",
-      "status": "planned",
-      "certification": null,
-      "evidence": "benchmark/openimis_claims holds the pinned reference environment. A packaged bundle is not published yet.",
-      "params": []
     }
   ]
 }
