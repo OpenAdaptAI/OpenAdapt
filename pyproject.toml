@@ -59,9 +59,9 @@ dependencies = [
     # The quickstart's terminal view (MIT). Pure Python; the engine doesn't
     # depend on it. Gated like the engine: without it the quickstart can't run.
     "rich>=13.0.0; python_version < '3.13'",
-    # Every Flow floor is 3.2.0: `openadapt seal publish` needs its
-    # public_seal module, and the quickstart keeps its checkpoints encrypted
-    # because 3.2 derives the at-rest key once per store
+    # Every Flow floor is 3.3.0: the OpenEMR quickstart's referral program
+    # checks its date picker against the run's clock, which 3.3 reads; 3.2
+    # added public Seals and the at-rest key derived once per store
     # (tests/test_flow_floor.py). Flow 3
     # moved its vision stack to the `vision` extra; its `browser` and other
     # surface extras include it, and the `flow` extra below names it.

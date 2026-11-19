@@ -1136,7 +1136,7 @@ _CHROMIUM_SYSTEM_LIBS_COMMAND = (
 def _supported_flow_version(value: str) -> bool:
     """Return whether a stable Flow version is in the launcher's supported range."""
     parsed = _release_tuple(value)
-    return parsed is not None and (3, 2, 0) <= parsed < (4, 0, 0)
+    return parsed is not None and (3, 3, 0) <= parsed < (4, 0, 0)
 
 
 # The Python modules each native or remote Flow backend imports when its
@@ -2169,11 +2169,18 @@ def _unpublish_seal(argv: list[str]) -> int:
         prog="openadapt seal unpublish",
         description=(
             "Take down a run's hosted Seal with the delete token saved in "
-            "RUN_DIR/seal.publish.json. The link then shows that it was deleted."
+            "RUN_DIR/seal.publish.json. The link then shows that it was deleted. "
+            "Taking a Seal down never asks, so --yes (accepted to match "
+            "`openadapt seal publish`) changes nothing."
         ),
         allow_abbrev=False,
     )
     parser.add_argument("run_dir", type=Path, help="the run folder you published")
+    parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="accepted for scripts that also publish; unpublish never asks",
+    )
     parser.add_argument("--endpoint", default=None, help="the Cloud origin")
     options = parser.parse_args(argv)
     try:
