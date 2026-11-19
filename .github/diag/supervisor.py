@@ -1,7 +1,8 @@
 """Run one arm and sample any child of it that lives longer than a moment."""
 import os, subprocess, sys, time
 
-python, arm, count, outdir = sys.argv[1:5]
+arm, outdir = sys.argv[1:3]
+command_line = sys.argv[3:]
 os.makedirs(outdir, exist_ok=True)
 STUCK_AFTER = 20.0
 
@@ -22,8 +23,11 @@ def children(parent):
     return rows
 
 
-here = os.path.dirname(os.path.abspath(__file__))
-proc = subprocess.Popen([python, os.path.join(here, "fork_arm.py"), arm, count], close_fds=False)
+proc = subprocess.Popen(command_line, close_fds=False)
+time.sleep(3)
+own = [c for p_, c in [(0, l.split(None, 2)[2]) for l in run(["/bin/ps", "-axo", "pid=,ppid=,command="]).splitlines() if l.split(None, 2)[0] == str(proc.pid)]]
+own_command = own[0] if own else ""
+print(f"supervising {proc.pid}: {own_command[:160]}", flush=True)
 seen: dict[int, float] = {}
 stalls = 0
 while proc.poll() is None:
@@ -34,6 +38,8 @@ while proc.poll() is None:
         if pid not in current:
             del seen[pid]
     for pid, command in current.items():
+        if command != own_command:
+            continue  # a real program (git, uv, ffmpeg); only a copy of the parent is a fork before exec
         first = seen.setdefault(pid, now)
         if now - first < STUCK_AFTER:
             continue

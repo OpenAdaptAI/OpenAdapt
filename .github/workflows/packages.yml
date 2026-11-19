@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   fork-stall:
-    name: fork stall (${{ matrix.arm }} ${{ matrix.copy }}, py${{ matrix.python-version }})
+    name: fork stall in the old suite (${{ matrix.copy }}, py${{ matrix.python-version }})
     runs-on: macos-latest
     timeout-minutes: 50
     strategy:
@@ -17,40 +17,44 @@ jobs:
       max-parallel: 3
       matrix:
         include:
-          - { arm: bare, copy: a, python-version: "3.12" }
-          - { arm: imports, copy: a, python-version: "3.12" }
-          - { arm: imports, copy: b, python-version: "3.11" }
-          - { arm: spawn, copy: a, python-version: "3.12" }
-    defaults:
-      run:
-        working-directory: packages/desktop
+          - { copy: a, python-version: "3.11" }
+          - { copy: b, python-version: "3.12" }
+          - { copy: c, python-version: "3.11" }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: 9eaa37539
+          path: old
       - name: Install uv
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
-          cache-dependency-glob: packages/desktop/uv.lock
-      - name: Set up Python
-        run: uv python install ${{ matrix.python-version }}
-      - name: Install locked dependencies
-        run: uv sync --locked --python ${{ matrix.python-version }} --extra dev --extra build
+          cache-dependency-glob: old/packages/desktop/uv.lock
+      - name: Install the suite as it was before the git calls stopped forking
+        working-directory: old/packages/desktop
+        run: |
+          uv python install ${{ matrix.python-version }}
+          uv sync --locked --python ${{ matrix.python-version }} --extra dev --extra build
+          .venv/bin/python ../../scripts/ci/locked_install.py --lock 'packages/desktop[dev,build]' --editable packages/types --editable packages/flow
       - name: Machine and sampling check
         run: |
           sw_vers
-          uname -a
-          sysctl -n hw.ncpu
           /bin/sleep 30 &
-          /usr/bin/sample $! 1 -mayDie | head -20
-      - name: Run the arm under the supervisor
+          /usr/bin/sample $! 1 -mayDie | head -12
+      - name: Run the old suite under the supervisor
+        working-directory: old/packages/desktop
+        env:
+          OPENADAPT_DESKTOP_FLOW_CONTRACT: source
         run: |
-          /usr/bin/python3 ../../.github/diag/supervisor.py "$PWD/.venv/bin/python" "${{ matrix.arm }}" 400000 "$RUNNER_TEMP/fork-stall"
+          /usr/bin/python3 "$GITHUB_WORKSPACE/.github/diag/supervisor.py" suite "$RUNNER_TEMP/fork-stall" "$PWD/.venv/bin/python" -m pytest tests/ -q -p no:cacheprovider || true
       - name: Upload samples
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: fork-stall-${{ matrix.arm }}-${{ matrix.copy }}
+          name: fork-stall-suite-${{ matrix.copy }}
           path: ${{ runner.temp }}/fork-stall
           if-no-files-found: ignore
