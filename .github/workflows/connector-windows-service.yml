@@ -107,6 +107,9 @@ jobs:
           if ($svc.StartName -ne 'NT SERVICE\OpenAdaptConnector') { throw "service account is $($svc.StartName)" }
           if ($svc.StartMode -ne 'Auto') { throw "start mode is $($svc.StartMode)" }
           if (-not $svc.DelayedAutoStart) { throw 'delayed auto start is off' }
+          # The directory no longer inherits from %ProgramData%; its files
+          # inherit the locked-down directory ACL.
+          if ((Get-Acl $env:CONNECTOR_DIR).AreAccessRulesProtected -ne $true) { throw 'config dir still inherits from its parent' }
           $failure = sc.exe qfailure OpenAdaptConnector | Out-String
           $failure
           if ($failure -notmatch 'RESTART') { throw 'no restart recovery action' }
@@ -117,7 +120,6 @@ jobs:
             $extra = $ids | Where-Object { $allowed -notcontains $_ }
             if ($extra) { throw "unexpected ACL entries on ${path}: $($extra -join ', ')" }
             if ($ids -notcontains 'NT SERVICE\OpenAdaptConnector') { throw "service account missing on $path" }
-            if ((Get-Acl $path).AreAccessRulesProtected -ne $true) { throw "$path still inherits" }
           }
           $rules = (Get-NetFirewallRule | Measure-Object).Count
           if ($rules -ne [int]$env:FIREWALL_RULES_BEFORE) { throw "firewall rules changed: $env:FIREWALL_RULES_BEFORE -> $rules" }
