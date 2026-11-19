@@ -627,3 +627,63 @@ def test_unlabelled_field_click_followed_by_matching_anchored_typing_is_a_local_
     (edit,) = local_edits(steps, _events(2), network=[])
     assert edit.step_id == "step_000"
     assert edit.pattern == "focus_field"
+
+
+# -- a linear run's dropdown check sees the run's parameters ---------------------
+
+
+def test_the_field_value_check_reads_a_linear_runs_parameters():
+    # A linear run keeps its parameters in ``_run_params``; only a program
+    # run sets ``_current_params``. The check failed closed on every linear
+    # run before it read the run's own parameters.
+    pc = Postcondition(kind=PostconditionKind.FIELD_VALUE, param="state")
+    replayer = _replayer(_Backend())
+    replayer._current_params = {}
+    replayer._run_params = {"state": "Massachusetts"}
+    assert replayer._postcondition_passes(pc, b"", None, START) is True
+    replayer._run_params = {"state": "Maine"}
+    assert replayer._postcondition_passes(pc, b"", None, START) is False
+
+
+def test_a_linear_run_passes_its_dropdown_check_end_to_end(tmp_path):
+    from openadapt_flow.ir import ActionKind, Step, Workflow
+    from openadapt_flow.runtime.replayer import Replayer
+    from tests.test_replayer import FakeBackend, FakeVision
+
+    class _DropdownBackend(FakeBackend):
+        def focused_select_label(self):
+            return "Massachusetts"
+
+    def run(value):
+        workflow = Workflow(
+            name="dropdown-commit",
+            params={"state": "Massachusetts"},
+            steps=[
+                Step(
+                    id="commit",
+                    intent="press Enter",
+                    action=ActionKind.KEY,
+                    key="Enter",
+                    expect=[
+                        Postcondition(
+                            kind=PostconditionKind.FIELD_VALUE,
+                            param="state",
+                            timeout_s=0.3,
+                        )
+                    ],
+                )
+            ],
+        )
+        bundle = tmp_path / f"bundle-{value}"
+        (bundle / "templates").mkdir(parents=True)
+        return Replayer(_DropdownBackend(), vision=FakeVision()).run(
+            workflow,
+            params={"state": value},
+            bundle_dir=bundle,
+            run_dir=tmp_path / f"run-{value}",
+        )
+
+    assert run("Massachusetts").results[0].postconditions_ok is True
+    report = run("Maine")
+    assert report.success is False
+    assert report.results[0].postconditions_ok is False

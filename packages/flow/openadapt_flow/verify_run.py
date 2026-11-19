@@ -355,6 +355,31 @@ def _record_effects(record: Any) -> list[Effect]:
     return list(record_effects(cast(Any, SimpleNamespace(record=parsed))))
 
 
+#: How a confirmed new-record check describes itself in its ``probe``.
+NEW_RECORD_PROBE_PREFIX = "exactly one new record with "
+
+
+def new_record_probe(match: Mapping[str, Any], confirmed_by: str) -> str:
+    """The ``probe`` text of a confirmed new-record check.
+
+    It is rendered only from the check's ``match`` and the confirming
+    principal, so a sanitizer can re-derive it instead of guessing at it.
+    """
+    return (
+        NEW_RECORD_PROBE_PREFIX
+        + ", ".join(
+            f"{key}="
+            + (
+                f"parameter {value['param']!r}"
+                if value.get("param")
+                else repr(value.get("literal"))
+            )
+            for key, value in match.items()
+        )
+        + f" (confirmed by {confirmed_by})"
+    )
+
+
 def parse_verify_config(data: Any, *, source: str = "verify config") -> VerifyConfig:
     """Validate a parsed ``verify.yaml`` the way verify-run reads it.
 

@@ -49,6 +49,7 @@ from openadapt_flow.receipt import (
     _hour_utc,
     _over_halt_count,
     _receipt_builder_version,
+    authority_basis,
     build_receipt,
 )
 from openadapt_flow.transaction import (
@@ -405,6 +406,13 @@ class ProductionRunReceipt(ClosedSignedModel):
         pattern=_SHA256_RE,
         exclude_if=lambda value: value is None,
     )
+    #: The run's authority basis when it is not a qualification admission or
+    #: a production authority (``receipt.authority_basis``). Left out when
+    #: absent, so receipts signed before it existed still verify.
+    authority_basis: Literal["customer-attested-program-admission"] | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+    )
 
     @model_validator(mode="after")
     def _closed_receipt(self) -> "ProductionRunReceipt":
@@ -577,6 +585,7 @@ def project_production_run_receipt(receipt: RunReceipt) -> ProductionRunReceipt:
             "source_receipt_digest": receipt.receipt_digest,
             "source_receipt_sha256": _sha256(source),
             "generated_at": receipt.generated_at,
+            "authority_basis": receipt.authority_basis,
         }
     )
 
@@ -696,6 +705,7 @@ def project_production_terminal_run_receipt(
                     if report.managed_result_loss is not None
                     else None
                 ),
+                "authority_basis": authority_basis(report.governed_approval_source),
             }
         )
     except (TypeError, ValueError) as exc:

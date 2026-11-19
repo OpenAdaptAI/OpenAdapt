@@ -90,7 +90,7 @@ def test_the_finale_prints_keep_it_and_the_shadow_warning(
 ) -> None:
     import io
 
-    from openadapt.quickstart.view import PlainView
+    from openadapt.quickstart.view import PlainView, more_lines
 
     monkeypatch.setattr(sys, "prefix", UVX_PREFIX)
     steps = next_steps(
@@ -106,12 +106,17 @@ def test_the_finale_prints_keep_it_and_the_shadow_warning(
     stream = io.StringIO()
     PlainView(stream).finale(Outcome(root=Path(tmp_path / "qs")), steps)
     lines = stream.getvalue().splitlines()
-    assert lines[-2].startswith("Keep it: uv tool install --python ")
+    # The shadow warning stays on screen; installing for good is behind --more.
     assert lines[-1].startswith(
         "Your shell's openadapt is 1.5.1 at /opt/conda/bin/openadapt"
     )
-    finale = lines[lines.index("Receipt") :]
-    assert len(finale) <= 12
+    assert lines[-2].startswith("Done in ")
+    assert any(line.startswith("More next steps: uvx --python ") for line in lines)
+    assert any(
+        line.startswith("Keep it installed: uv tool install --python ")
+        for line in more_lines(steps, tmp_path / "qs", None)
+    )
+    assert len(lines) <= 12
 
 
 def test_version_check_never_recurses(monkeypatch) -> None:

@@ -4,6 +4,8 @@
     python scripts/build_registry_index.py --check    # fail when it is stale
     python scripts/build_registry_index.py --archives DIR --asset-base URL --out PATH
     python scripts/build_registry_index.py --archives DIR --asset-base URL --out PATH --stamp
+    python scripts/build_registry_index.py --check --release
+    python scripts/build_registry_index.py ... --stamp --restamp-of registry/index.json
 
 ``--archives`` writes each bundle as a reproducible ``.tar.gz`` into DIR and
 points its entry at ``<URL><name>`` (the registry release's assets).
@@ -12,6 +14,14 @@ Each archive carries a NOTICE naming the app's license. ``--stamp`` writes
 release workflow does that, then attests the index and the archives with
 GitHub's keyless artifact attestations (``actions/attest``); there is no
 signing key.
+
+``--release`` (implied by ``--stamp``) refuses an entry with status
+``planned``: a release publishes only entries that have a bundle.
+``--restamp-of PATH`` refuses a build that differs from the attested index at
+PATH in anything but ``issued_at``, ``expires_at``, ``serial`` and each
+archive's URL (which names the release tag). A ``registry-restamp-*`` release
+uses it, so a re-stamp renews the expiry of what was already published and
+nothing else.
 """
 
 from __future__ import annotations
@@ -57,6 +67,53 @@ def build(archives: Optional[Path] = None, asset_base: Optional[str] = None) -> 
     return sources
 
 
+def release_problems(index: dict) -> list[str]:
+    """Why ``index`` may not be released, or an empty list."""
+
+    return [
+        f"{item['id']}: status 'planned' has no bundle and is never released"
+        for item in index["workflows"]
+        if item.get("status") == "planned"
+    ]
+
+
+#: What a re-stamp may change. An archive's URL names the release tag; its
+#: sha256 may not change.
+RESTAMP_FIELDS = INDEX_FRESHNESS_FIELDS
+
+
+def _restamp_view(index: dict) -> dict:
+    view = {k: v for k, v in index.items() if k not in RESTAMP_FIELDS}
+    workflows = []
+    for item in view.get("workflows", []):
+        item = dict(item)
+        archive = item.get("archive")
+        if isinstance(archive, dict):
+            item["archive"] = {k: v for k, v in archive.items() if k != "url"}
+        workflows.append(item)
+    view["workflows"] = workflows
+    return view
+
+
+def restamp_problem(previous: dict, index: dict) -> Optional[str]:
+    """Why ``index`` is not a re-stamp of the attested ``previous``, or None."""
+
+    if not isinstance(previous.get("serial"), int):
+        return (
+            "the committed index carries no serial, so no attested release "
+            "exists to re-stamp; release it with a plain suffix first"
+        )
+    if any("archive" not in item for item in previous.get("workflows", [])):
+        return "the committed index has an entry with no archive; it is not attested"
+    if _restamp_view(previous) != _restamp_view(index):
+        return (
+            "the registry changed since the attested index; a re-stamp may "
+            "change only issued_at, expires_at, serial and archive URLs. "
+            "Release it with a plain suffix instead"
+        )
+    return None
+
+
 def check_shipped_contract(item: dict) -> None:
     """Refuse a bundle whose shipped record check could run code or write.
 
@@ -90,11 +147,27 @@ def main() -> int:
     parser.add_argument("--asset-base")
     parser.add_argument("--out", type=Path)
     parser.add_argument("--stamp", action="store_true")
+    parser.add_argument("--release", action="store_true")
+    parser.add_argument("--restamp-of", type=Path)
     args = parser.parse_args()
+    if args.restamp_of and not args.stamp:
+        parser.error("--restamp-of needs --stamp")
     if args.archives:
         args.archives.mkdir(parents=True, exist_ok=True)
     out = args.out or ROOT / "registry/index.json"
+    # Read before the output is written: --out may be the same file.
+    previous = json.loads(args.restamp_of.read_text()) if args.restamp_of else None
     index = build(args.archives, args.asset_base)
+    if args.release or args.stamp:
+        problems = release_problems(index)
+        if problems:
+            print("the registry may not be released:\n  " + "\n  ".join(problems))
+            return 1
+    if previous is not None:
+        problem = restamp_problem(previous, index)
+        if problem:
+            print(f"not a re-stamp: {problem}")
+            return 1
     if args.stamp:
         stamp_index(index)
     text = json.dumps(index, indent=2, sort_keys=True) + "\n"

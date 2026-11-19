@@ -74,6 +74,13 @@ class Scene:
     )
     #: The one-line summary for a screen that doesn't claim success.
     aha_stopped: str = ""
+    #: The first step's line once the app is up, and its dim detail.
+    ready: str = "Clinic app ready"
+    ready_detail: str = "synthetic data, on this computer"
+    #: Act 3's step line.
+    break_title: str = "Break the next save"
+    #: The record's side in Act 3's side-by-side ("The database").
+    record_title: str = "The database"
 
     def compiled_line(self, steps: int) -> str:
         return self.compiled_template.format(steps=steps)
@@ -202,7 +209,7 @@ MOCKMED = Scene(
     breaking="Running the program once more, checking the database",
     record_label="What the database showed",
     record_noun="record",
-    stopped="Stopped before reporting success",
+    stopped="Stopped. Not marked done.",
     receipt_where="in the database",
 )
 
@@ -242,6 +249,10 @@ OPENEMR = Scene(
     ),
     screen_default="OpenEMR's duplicate check, listing a matching chart",
     screen_crop=(204, 30, 1078, 262),
+    ready="OpenEMR ready",
+    ready_detail="OpenEMR 8.0.0.3 in Docker, synthetic data",
+    break_title="Try a referral that matches a chart",
+    record_title="OpenEMR's record",
 )
 
 SCENES = {"mockmed": MOCKMED, "openemr": OPENEMR}
