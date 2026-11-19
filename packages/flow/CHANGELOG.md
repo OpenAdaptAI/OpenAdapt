@@ -15,7 +15,7 @@
 
 <!-- version list -->
 
-## Unreleased
+## v3.3.0 (2026-11-19)
 
 ### Fixes
 
