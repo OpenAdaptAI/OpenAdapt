@@ -78,7 +78,7 @@ vision = [
     # distributions that own the same cv2 package. Use the one provider that
     # RapidOCR's published metadata requires, and enforce this in the clean
     # wheel lifecycle on every supported OS.
-    "opencv-python>=4.9",
+    "opencv-python>=4.9,<5.1",
     "pillow>=10.0",
     "rapidocr-onnxruntime>=1.3",
 ]
@@ -109,7 +109,7 @@ browser = [
 dev = [
     # The test suite exercises record, compile and replay.
     "numpy>=1.26",
-    "opencv-python>=4.9",
+    "opencv-python>=4.9,<5.1",
     "pillow>=10.0",
     "rapidocr-onnxruntime>=1.3",
     "pytest>=8",
