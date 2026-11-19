@@ -89,7 +89,9 @@ def _recorded_on(value: Optional[str], workflow: Workflow) -> date:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("bundle", type=Path)
     parser.add_argument("out", type=Path)
     parser.add_argument("--recorded-on", default=None)
