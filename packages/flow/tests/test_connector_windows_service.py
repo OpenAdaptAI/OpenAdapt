@@ -120,8 +120,9 @@ def test_service_command_line_quotes_paths(tmp_path: Path) -> None:
     assert f'--config-dir "{tmp_path / "a b"}"' in line
 
 
-def test_acl_grants_only_system_admins_and_the_service(tmp_path: Path) -> None:
-    commands = ws.acl_commands(tmp_path)
+def test_acl_grants_only_system_admins_and_the_service() -> None:
+    config = Path("C:/cfg")
+    commands = ws.acl_commands(config)
     top = commands[0]
     assert "/inheritance:r" in top and "/grant:r" in top
     grants = [a for a in top if a.endswith(")F") or a.endswith(")RX")]
@@ -132,7 +133,7 @@ def test_acl_grants_only_system_admins_and_the_service(tmp_path: Path) -> None:
     ]
     flat = " ".join(" ".join(c) for c in commands)
     assert "Users" not in flat and "Everyone" not in flat
-    assert commands[2][1] == str(tmp_path / "logs")
+    assert commands[2][1] == str(config / "logs")
 
 
 def test_recovery_restarts_and_never_touches_the_firewall() -> None:
