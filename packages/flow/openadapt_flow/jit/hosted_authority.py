@@ -63,6 +63,7 @@ __all__ = [
     "hosted_readback",
     "is_admitted_program",
     "managed_admission_refusal",
+    "program_admission_edge_refusal",
     "readback_effects",
     "readback_sha256",
     "run_shape",
@@ -91,6 +92,14 @@ _CONFIRMED_PROBE = " (confirmed by "
 
 class HostedAuthorityError(ValueError):
     """The admitted program cannot run under a hosted admission authority."""
+
+
+#: Admission digests :func:`managed_admission_refusal` verified in this
+#: process. The replayer's input edges accept a dispatch with no
+#: qualification admission only when its ``approval_source`` names one of
+#: them (:func:`program_admission_edge_refusal`). Only a successful
+#: verification adds to it; nothing else can.
+_VERIFIED_ADMISSIONS: set[str] = set()
 
 
 def _admission_file(bundle_dir: Path | str) -> Path:
@@ -269,6 +278,32 @@ def managed_admission_refusal(
         return "the bundled read-back check is not the one the admission binds"
     if getattr(authorization, "approval_source", None) != approval_source(digest):
         return "the run authorization does not name this program's admission"
+    _VERIFIED_ADMISSIONS.add(digest)
+    return None
+
+
+def program_admission_edge_refusal(authorization: Any) -> Optional[str]:
+    """Why an input edge of a managed run may not rest on a program admission.
+
+    ``openadapt-flow run`` verified the admission once, before the replayer
+    started (:func:`managed_admission_refusal`). Each later input edge checks
+    that the authorization still names that verified admission, under the
+    Standard profile, with no qualification admission. Revocation is the
+    cloud's: every delivery still needs a fresh managed delivery permit, which
+    the cloud refuses once the admission key is revoked.
+    """
+
+    if authorization is None:
+        return "the managed dispatch carries no run authorization"
+    if getattr(authorization, "qualification_admission", None) is not None:
+        return "the dispatch carries a qualification admission"
+    if getattr(authorization, "execution_profile", None) != "standard":
+        return "an admitted program runs hosted only under the Standard profile"
+    source = getattr(authorization, "approval_source", None)
+    if not isinstance(source, str) or not source.startswith(APPROVAL_PREFIX):
+        return "the run authorization names no program admission"
+    if source[len(APPROVAL_PREFIX) :] not in _VERIFIED_ADMISSIONS:
+        return "the program admission was not verified in this run"
     return None
 
 
