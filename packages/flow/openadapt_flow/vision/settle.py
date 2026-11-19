@@ -278,7 +278,28 @@ def _page_settled(
                 captured_at=time.monotonic(),
                 mode="page",
             )
-        time.sleep(PAGE_POLL_S)
+        time.sleep(_next_page_poll_s(backend, deadline))
+
+
+def _next_page_poll_s(backend: Backend, deadline: float) -> float:
+    """How long to wait before the next quiescence probe.
+
+    The page probe can report when the latest change becomes a full window
+    old; no probe can answer quiet before then, so polling sooner only spends
+    calls. Waiting until then never delays a quiet answer, and the probe that
+    follows judges every signal as before. Without a hint, poll every
+    :data:`PAGE_POLL_S`. Never past the deadline.
+    """
+    wait = PAGE_POLL_S
+    hint_of = getattr(backend, "page_quiet_retry_after", None)
+    if callable(hint_of):
+        try:
+            hint = hint_of()
+        except Exception:
+            hint = 0.0
+        if isinstance(hint, (int, float)) and not isinstance(hint, bool) and hint > wait:
+            wait = hint
+    return max(0.0, min(wait, deadline - time.monotonic()))
 
 
 @timed_span("settle")
