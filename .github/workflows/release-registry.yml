@@ -12,6 +12,8 @@
 #
 # - tag (manual dispatch from the tip of main) tags the commit registry-<suffix>
 #   with the openadapt-release App. The tag push starts this workflow again.
+#   A re-stamp (dispatch with restamp: true, or the schedule below) tags it
+#   registry-restamp-<YYYYMMDD> instead.
 # - check (the tag push, no privileges) installs the engine and runs the
 #   registry's repository checks: no private-tier file and only allowlisted
 #   files in any bundle.
@@ -26,16 +28,38 @@
 #   the index and its attestation (index.sigstore.json), and opens a pull
 #   request that updates packages/flow/registry/ to them.
 #
+# - alarm opens, or comments on, one "Registry release failed" issue when a
+#   scheduled run or a registry tag's run fails.
+#
 # The index expires 30 days after it is stamped, so run this at least monthly.
+#
+# Re-stamps. A registry-restamp-* tag renews the expiry of the index already
+# on main and changes nothing else: the attest job builds with --restamp-of
+# and refuses an index that differs from the committed attested one in
+# anything but issued_at, expires_at, serial and archive URLs. Pulls read the
+# index from main, so the re-stamp takes effect when the pull request the
+# publish job opens is merged.
+#
+# The schedule is off. To run re-stamps unattended, uncomment the schedule
+# block below. Twice a month keeps every gap under the 30-day lifetime; the
+# 1st of each month alone would leave a 31-day gap.
 name: Release registry
 
 on:
   workflow_dispatch:
     inputs:
       suffix:
-        description: "Release tag suffix (the tag is registry-<suffix>), e.g. 2026-10-28"
-        required: true
+        description: "Release tag suffix (the tag is registry-<suffix>), e.g. 2026-10-28. Leave empty for a re-stamp."
+        required: false
+        default: ""
         type: string
+      restamp:
+        description: "Re-stamp the attested index on main (tag registry-restamp-<YYYYMMDD>)"
+        required: false
+        default: false
+        type: boolean
+  # schedule:
+  #   - cron: "17 6 1,16 * *"
   push:
     tags:
       - "registry-*"
@@ -49,28 +73,48 @@ concurrency:
 
 jobs:
   tag:
-    name: tag registry-${{ inputs.suffix }}
-    if: github.event_name == 'workflow_dispatch'
+    name: tag
+    if: >-
+      github.repository == 'OpenAdaptAI/OpenAdapt'
+      && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: release-identity
     permissions:
       contents: read
     steps:
-      - name: Require the tip of main and a plain suffix
+      - name: Require the tip of main and choose the tag
+        id: tag
         env:
           REF: ${{ github.ref }}
+          EVENT: ${{ github.event_name }}
           SUFFIX: ${{ inputs.suffix }}
+          RESTAMP: ${{ inputs.restamp }}
         run: |
           set -euo pipefail
           if [ "$REF" != "refs/heads/main" ]; then
             echo "Releases run only from refs/heads/main, not $REF." >&2
             exit 1
           fi
+          if [ "$EVENT" = schedule ] || [ "$RESTAMP" = true ]; then
+            if [ -n "$SUFFIX" ]; then
+              echo "A re-stamp names its own tag; leave the suffix empty." >&2
+              exit 1
+            fi
+            SUFFIX="restamp-$(date -u +%Y%m%d)"
+          else
+            case "$SUFFIX" in
+              restamp-*)
+                echo "registry-restamp-* tags are re-stamps; set restamp: true instead." >&2
+                exit 1
+                ;;
+            esac
+          fi
           if ! printf '%s' "$SUFFIX" | grep -Eq '^[0-9A-Za-z][0-9A-Za-z.-]{0,40}$'; then
             echo "The suffix must be letters, digits, dots and dashes." >&2
             exit 1
           fi
+          echo "tag=registry-$SUFFIX" >> "$GITHUB_OUTPUT"
       - name: Create a repository-scoped release App token
         id: release-app
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
@@ -95,7 +139,7 @@ jobs:
           token: ${{ steps.release-app.outputs.token }}
       - name: Tag the commit
         env:
-          TAG: registry-${{ inputs.suffix }}
+          TAG: ${{ steps.tag.outputs.tag }}
         run: |
           set -euo pipefail
           git -c user.name="openadapt-release[bot]" \
@@ -122,9 +166,23 @@ jobs:
           python scripts/ci/locked_install.py --lock 'packages/flow[dev]' \
             --editable packages/types --editable packages/flow
       - name: Check the bundles
+        env:
+          TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          python packages/flow/scripts/build_registry_index.py --check
+          # A release never carries a planned entry.
+          python packages/flow/scripts/build_registry_index.py --check --release
+          case "$TAG" in
+            registry-restamp-*)
+              scratch="$(mktemp -d)"
+              python packages/flow/scripts/build_registry_index.py \
+                --archives "$scratch" \
+                --asset-base "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/" \
+                --out "$scratch/index.json" \
+                --stamp \
+                --restamp-of packages/flow/registry/index.json
+              ;;
+          esac
           python -m pytest -q \
             packages/flow/tests/test_skills_registry.py::test_no_registry_bundle_in_the_repo_holds_a_private_tier_file \
             packages/flow/tests/test_skills_registry.py::test_every_file_of_a_registry_bundle_in_the_repo_is_allowlisted
@@ -185,11 +243,16 @@ jobs:
       - name: Build the archives and the stamped index
         run: |
           set -euo pipefail
+          # A re-stamp may change only the freshness fields and archive URLs.
+          restamp=()
+          case "$TAG" in
+            registry-restamp-*) restamp=(--restamp-of packages/flow/registry/index.json) ;;
+          esac
           python packages/flow/scripts/build_registry_index.py \
             --archives dist-registry \
             --asset-base "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/" \
             --out dist-registry/index.json \
-            --stamp
+            --stamp ${restamp[@]+"${restamp[@]}"}
       - name: Attest the index and every archive
         id: attest
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
@@ -298,3 +361,36 @@ jobs:
           gh pr create --base main --head "$branch" \
             --title "registry: attested index for $TAG" \
             --body "The attested index the $TAG release published. Bundles are its release assets."
+
+  alarm:
+    name: registry release failed issue
+    needs: [tag, check, attest, publish]
+    # A missed re-stamp lets the index expire, and every remote pull then
+    # fails, so a failed scheduled run or registry tag run opens an issue.
+    if: >-
+      failure()
+      && (github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/registry-'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Open, or comment on, the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          WHAT: ${{ github.event_name }} ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          title="Registry release failed"
+          body="The registry release run for ${WHAT} failed: ${RUN_URL}
+
+          The attested index expires 30 days after it is stamped. Until a release succeeds and its pull request is merged, remote pulls fail once it expires."
+          number="$(gh issue list -R "$GITHUB_REPOSITORY" --state open \
+            --search "\"$title\" in:title" --json number,title \
+            -q "map(select(.title == \"$title\")) | .[0].number // empty")"
+          if [ -n "$number" ]; then
+            gh issue comment "$number" -R "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create -R "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+          fi
