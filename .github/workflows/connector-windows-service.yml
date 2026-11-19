@@ -61,12 +61,16 @@ jobs:
           New-Item -ItemType Directory -Force -Path $env:EVIDENCE_DIR | Out-Null
           $portFile = Join-Path $env:EVIDENCE_DIR 'stub-port.txt'
           $log = Join-Path $env:EVIDENCE_DIR 'stub-requests.json'
-          $p = Start-Process -FilePath python -PassThru -WindowStyle Hidden `
-            -RedirectStandardOutput (Join-Path $env:EVIDENCE_DIR 'stub-stdout.txt') `
-            -RedirectStandardError (Join-Path $env:EVIDENCE_DIR 'stub-stderr.txt') `
-            -ArgumentList @('packages/flow/tests/connector_stub/stub_control_plane.py',
-                            '--log', "`"$log`"", '--port-file', "`"$portFile`"",
-                            '--empty-polls', '3')
+          # Actions ends a step's child processes when the step ends, so
+          # start the stub through WMI, outside the step's job object.
+          $python = (Get-Command python).Source
+          $stub = Join-Path $env:GITHUB_WORKSPACE 'packages\flow\tests\connector_stub\stub_control_plane.py'
+          $out = Join-Path $env:EVIDENCE_DIR 'stub-stdout.txt'
+          $err = Join-Path $env:EVIDENCE_DIR 'stub-stderr.txt'
+          $cmd = "cmd.exe /c `"`"$python`" `"$stub`" --log `"$log`" --port-file `"$portFile`" --empty-polls 3 > `"$out`" 2> `"$err`"`""
+          $r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = $cmd; CurrentDirectory = $env:GITHUB_WORKSPACE }
+          if ($r.ReturnValue -ne 0) { throw "Win32_Process.Create returned $($r.ReturnValue)" }
+          $p = [pscustomobject]@{ Id = $r.ProcessId }
           for ($i = 0; $i -lt 60 -and -not (Test-Path $portFile); $i++) { Start-Sleep -Milliseconds 500 }
           if (-not (Test-Path $portFile)) { throw 'stub did not start' }
           $port = (Get-Content $portFile).Trim()
@@ -127,6 +131,8 @@ jobs:
       - name: Start the service
         run: |
           $ErrorActionPreference = 'Stop'
+          $tcp = [Net.Sockets.TcpClient]::new()
+          try { $tcp.Connect('127.0.0.1', [int]$env:STUB_PORT) } catch { throw 'the stub control plane is not running' } finally { $tcp.Dispose() }
           openadapt-flow connector service start
           if ($LASTEXITCODE -ne 0) { throw "start exited $LASTEXITCODE" }
           openadapt-flow connector service status
@@ -181,7 +187,7 @@ jobs:
             Out-File (Join-Path $env:EVIDENCE_DIR 'application-events.txt')
           $logs = Join-Path $env:CONNECTOR_DIR 'logs'
           if (Test-Path $logs) { Copy-Item "$logs\*" $env:EVIDENCE_DIR -ErrorAction SilentlyContinue }
-          if ($env:STUB_PID) { Stop-Process -Id $env:STUB_PID -ErrorAction SilentlyContinue }
+          if ($env:STUB_PID) { taskkill /T /F /PID $env:STUB_PID 2>&1 | Out-Null }
           Get-ChildItem $env:EVIDENCE_DIR | Format-Table Name, Length
           Get-Content (Join-Path $env:EVIDENCE_DIR 'connector.log') -ErrorAction SilentlyContinue
           $hits = Get-ChildItem $env:EVIDENCE_DIR -File | Select-String -SimpleMatch $env:CI_CONNECTOR_TOKEN
