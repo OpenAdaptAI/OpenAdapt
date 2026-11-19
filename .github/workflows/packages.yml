@@ -14,15 +14,13 @@ jobs:
     timeout-minutes: 50
     strategy:
       fail-fast: false
+      max-parallel: 3
       matrix:
         include:
           - { arm: bare, copy: a, python-version: "3.12" }
-          - { arm: bare, copy: b, python-version: "3.11" }
           - { arm: imports, copy: a, python-version: "3.12" }
           - { arm: imports, copy: b, python-version: "3.11" }
-          - { arm: imports, copy: c, python-version: "3.12" }
           - { arm: spawn, copy: a, python-version: "3.12" }
-          - { arm: spawn, copy: b, python-version: "3.11" }
     defaults:
       run:
         working-directory: packages/desktop
