@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.30.2 (2026-11-18)
+
+### Bug Fixes
+
+- **desktop**: let the installed app's sample run on a fresh Mac
+- **desktop**: stop the release-intent tests hanging on macOS (#2237)
+
+
+
 ## v0.30.1 (2026-11-12)
 
 ### Bug Fixes
