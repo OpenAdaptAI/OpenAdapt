@@ -49,7 +49,7 @@ class TeeView:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0], allow_abbrev=False)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--widths", default="100,60")
     parser.add_argument("--run-dir", type=Path, default=None)
