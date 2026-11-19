@@ -43,7 +43,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Final, Literal, Mapping, Optional
+from typing import TYPE_CHECKING, Annotated, Any, Final, Literal, Mapping, Optional
 
 from openadapt_types.seal import canonical_json, seal_key_id
 from pydantic import (
@@ -53,6 +53,7 @@ from pydantic import (
     StrictBool,
     StrictInt,
     StrictStr,
+    ValidationError,
     model_validator,
 )
 
@@ -74,16 +75,23 @@ PUBLIC_SEAL_FILE: Final = "public-seal.json"
 #: Largest public Seal, in bytes of canonical JSON (what is written and sent).
 MAX_BYTES: Final = 4096
 MAX_STEPS: Final = 64
+#: Largest count a card holds: the largest integer a JavaScript number holds
+#: exactly, so Python and a TypeScript verifier agree on every count.
+MAX_COUNT: Final = 2**53 - 1
 
 _SHA256_HEX = r"^[a-f0-9]{64}$"
 _OUTCOME = r"^[A-Z][A-Z_]{0,31}$"
 _NAME_PATTERN = r"^[A-Za-z0-9 ._-]{1,48}$"
-_NAME = re.compile(_NAME_PATTERN)
+_NAME = re.compile(_NAME_PATTERN[1:-1])
 _LOGIN_PATTERN = r"^[A-Za-z0-9-]{1,39}$"
-_LOGIN = re.compile(_LOGIN_PATTERN)
+_LOGIN = re.compile(_LOGIN_PATTERN[1:-1])
 _SEMVER = r"^\d{1,4}\.\d{1,4}\.\d{1,6}$"
 _HOUR = r"^\d{4}-\d{2}-\d{2}T\d{2}:00:00Z$"
-_PUBLIC_RUN_ID = r"^p-[a-f0-9]{16}$"
+_PUBLIC_RUN_ID = re.compile(r"p-[a-f0-9]{16}")
+_SHA256 = re.compile(r"[a-f0-9]{64}")
+_OUTCOME_RE = re.compile(r"[A-Z][A-Z_]{0,31}")
+
+Count = Annotated[StrictInt, Field(ge=0, le=MAX_COUNT)]
 
 #: How each step's target was found. ``none``: no resolution was recorded
 #: (the step was skipped, or stopped before it found its target).
@@ -130,8 +138,8 @@ class PublicStep(_Closed):
 
 
 class CheckCount(_Closed):
-    required: StrictInt = Field(ge=0)
-    confirmed: StrictInt = Field(ge=0)
+    required: Count
+    confirmed: Count
 
 
 class PublicChecks(_Closed):
@@ -156,11 +164,11 @@ class PublicCardV1(_Closed):
     report_sha256: StrictStr = Field(pattern=_SHA256_HEX)
     bundle_digest: StrictStr = Field(pattern=_SHA256_HEX)
     steps: list[PublicStep] = Field(max_length=MAX_STEPS)
-    steps_total: StrictInt = Field(ge=0)
-    steps_ok: StrictInt = Field(ge=0)
-    heals: StrictInt = Field(ge=0)
-    model_calls: StrictInt = Field(ge=0)
-    duration_ms: StrictInt = Field(ge=0)
+    steps_total: Count
+    steps_ok: Count
+    heals: Count
+    model_calls: Count
+    duration_ms: Count
     external_network_calls: NetworkObservation
     checks: PublicChecks
     provenance: Provenance
@@ -199,7 +207,7 @@ class PublicSealV1(_Closed):
     def _seal_names_the_card(self) -> "PublicSealV1":
         if self.seal.subject_kind != "public-card":
             raise ValueError("the Seal is not over a public card")
-        if not re.match(_PUBLIC_RUN_ID, self.seal.run_id):
+        if not _PUBLIC_RUN_ID.fullmatch(self.seal.run_id):
             raise ValueError("a public Seal's run_id is a hash, p-<16 hex>")
         if self.seal.outcome != self.card.outcome:
             raise ValueError("the Seal and the card state different outcomes")
@@ -234,11 +242,11 @@ def public_seal_bytes(doc: Mapping[str, Any]) -> bytes:
 
 
 def name_ok(value: str) -> bool:
-    return bool(_NAME.match(value))
+    return bool(_NAME.fullmatch(value))
 
 
 def login_ok(value: str) -> bool:
-    return bool(_LOGIN.match(value))
+    return bool(_LOGIN.fullmatch(value))
 
 
 # -- reading the run --------------------------------------------------------
@@ -303,7 +311,7 @@ def _int(value: Any) -> int:
     if isinstance(value, bool):
         return 0
     try:
-        return max(0, int(round(float(value))))
+        return min(MAX_COUNT, max(0, int(round(float(value)))))
     except (TypeError, ValueError):
         return 0
 
@@ -412,14 +420,14 @@ def build_card(
     run_dir = Path(run_dir)
     private, report = _verified_private_seal(run_dir)
     bundle_digest = report.get("bundle_content_digest")
-    if not (isinstance(bundle_digest, str) and re.match(_SHA256_HEX, bundle_digest)):
+    if not (isinstance(bundle_digest, str) and _SHA256.fullmatch(bundle_digest)):
         raise PublicSealError("no_bundle_digest", "the report names no bundle digest")
     if github is not None and not login_ok(github):
         raise PublicSealError(
             "bad_login", "a GitHub login is 1-39 letters, digits or dashes"
         )
     outcome = report.get("execution_outcome")
-    if not (isinstance(outcome, str) and re.match(_OUTCOME, outcome)):
+    if not (isinstance(outcome, str) and _OUTCOME_RE.fullmatch(outcome)):
         outcome = "UNKNOWN"
     results = report.get("results")
     results = (
@@ -457,7 +465,12 @@ def build_card(
     }
     if github is not None:
         card["identity_claim"] = {"kind": "github", "login": github}
-    return PublicCardV1.model_validate(card).wire(), private
+    try:
+        checked = PublicCardV1.model_validate(card)
+    except ValidationError as exc:
+        # For example a development Flow version that is not plain semver.
+        raise PublicSealError("card_invalid", str(exc).splitlines()[0]) from exc
+    return checked.wire(), private
 
 
 # -- signing ------------------------------------------------------------------
@@ -580,6 +593,15 @@ def verify_public_seal(data: bytes | str | Mapping[str, Any]) -> PublicSealVerif
         doc = PublicSealV1.model_validate(parsed)
     except Exception as exc:
         return PublicSealVerification(False, "malformed", detail=str(exc)[:200])
+    # Defaults are for building, not reading: a received card or Seal must
+    # spell out every field it signs, as a strict TypeScript reader requires.
+    card_in, seal_in = parsed["card"], parsed["seal"]
+    if "schema" not in card_in or not {"schema", "issuer", "algorithm"} <= set(seal_in):
+        return PublicSealVerification(False, "malformed", detail="missing field")
+    if "identity_claim" in card_in and card_in["identity_claim"] is None:
+        return PublicSealVerification(
+            False, "malformed", detail="identity_claim is null; leave it out"
+        )
     # Hash the card as it arrived, not as re-serialized, so nothing is dropped.
     if card_sha256(parsed["card"]) != doc.seal.subject_sha256:
         return PublicSealVerification(False, "card_mismatch")
@@ -598,6 +620,7 @@ def verify_public_seal(data: bytes | str | Mapping[str, Any]) -> PublicSealVerif
 
 __all__ = [
     "MAX_BYTES",
+    "MAX_COUNT",
     "MAX_STEPS",
     "PUBLIC_CARD_SCHEMA",
     "PUBLIC_SEAL_FILE",

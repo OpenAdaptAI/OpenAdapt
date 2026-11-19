@@ -438,6 +438,44 @@ def _vectors(tmp_path: Path) -> dict:
         ("seal_outcome_differs", canonical_json(resigned_outcome), "malformed")
     )
 
+    newline_id = json.loads(text(base))
+    newline_seal = _resign(newline_id, signer, run_id=base["seal"]["run_id"] + "\n")
+    cases.append(("run_id_trailing_newline", canonical_json(newline_seal), "malformed"))
+
+    no_schema = json.loads(text(base))
+    del no_schema["card"]["schema"]
+    cases.append(
+        ("card_schema_missing", canonical_json(_resign(no_schema, signer)), "malformed")
+    )
+
+    no_issuer = json.loads(text(base))
+    no_issuer_seal = {k: v for k, v in no_issuer["seal"].items() if k != "issuer"}
+    cases.append(
+        (
+            "seal_issuer_missing",
+            canonical_json(
+                _resign({"card": no_issuer["card"], "seal": no_issuer_seal}, signer)
+            ),
+            "malformed",
+        )
+    )
+
+    null_claim = json.loads(text(base))
+    null_claim["card"]["identity_claim"] = None
+    cases.append(
+        (
+            "identity_claim_null",
+            canonical_json(_resign(null_claim, signer)),
+            "malformed",
+        )
+    )
+
+    huge = json.loads(text(base))
+    huge["card"]["duration_ms"] = 2**53
+    cases.append(
+        ("count_over_2_53", canonical_json(_resign(huge, signer)), "malformed")
+    )
+
     padded = body[:-1] + " " * (MAX_BYTES + 1 - len(body)) + "}"
     assert len(padded.encode()) == MAX_BYTES + 1
     cases.append(("too_large_4097", padded, "too_large"))
@@ -473,3 +511,17 @@ def test_golden_vectors_verify_as_labelled(tmp_path):
     assert {c["name"] for c in committed["cases"]} == {
         c["name"] for c in vectors["cases"]
     }
+
+
+def test_a_development_flow_version_is_a_closed_refusal(tmp_path):
+    run = _sealed_run(tmp_path, _report(2), _signer(), "dev")
+    with pytest.raises(PublicSealError) as caught:
+        build_public_seal(run, signer=_signer(), now=NOW, flow_version="3.1.0.dev4")
+    assert caught.value.code == "card_invalid"
+
+
+def test_names_with_a_trailing_newline_are_refused():
+    from openadapt_flow.public_seal import login_ok, name_ok
+
+    assert name_ok("MockMed") and not name_ok("MockMed\n")
+    assert login_ok("octo-cat") and not login_ok("octo-cat\n")

@@ -35,7 +35,8 @@ ENV_ENDPOINT = "OPENADAPT_SEAL_ENDPOINT"
 PUBLISH_FILE = "seal.publish.json"
 API_PATH = "/api/public/local-seals"
 TIMEOUT_S = 15.0
-_ID = re.compile(r"^[A-Za-z0-9_-]{43}$")
+_ID = re.compile(r"^[A-Za-z0-9_-]{43}\Z")
+_QUICKSTART_ROOT = re.compile(r"openadapt-quickstart(-[0-9]+)?")
 
 #: The exact consent question; ``{host}`` is the endpoint's host.
 PROMPT = (
@@ -183,13 +184,18 @@ def tutorial_provenance(run_dir: Path) -> Optional[str]:
     """``synthetic-tutorial`` when this run or a sibling run says it is the tutorial.
 
     The quickstart's stopped run has no receipt of its own, but it sits next
-    to the checked runs, whose receipts say ``synthetic-tutorial``.
+    to the checked runs, whose receipts say ``synthetic-tutorial``. Siblings
+    count only inside a quickstart folder (``openadapt-quickstart[-N]``), so a
+    real run kept next to a tutorial run is not called practice.
     """
     folders = [run_dir]
-    try:
-        folders += [p for p in run_dir.parent.iterdir() if p.is_dir() and p != run_dir]
-    except OSError:
-        pass
+    if _QUICKSTART_ROOT.fullmatch(run_dir.parent.name):
+        try:
+            folders += [
+                p for p in run_dir.parent.iterdir() if p.is_dir() and p != run_dir
+            ]
+        except OSError:
+            pass
     for folder in folders:
         try:
             receipt = json.loads((folder / "receipt.json").read_text(encoding="utf-8"))
@@ -368,11 +374,18 @@ def unpublish(run_dir: Path, *, origin: Optional[str], transport: Transport) -> 
         raise PublishError(
             f"Not unpublished: could not reach {host_of(origin)} ({exc})."
         )
-    if response.status in (204, 404, 410):
+    if response.status in (204, 410):
         (run_dir / PUBLISH_FILE).unlink(missing_ok=True)
         if response.status == 204:
             return f"Unpublished. {link_for(origin, seal_id)} no longer shows the Seal."
         return f"Already gone: {link_for(origin, seal_id)} shows no Seal."
+    if response.status == 404:
+        # Keep the token: a 404 can be the wrong server, not a missing Seal,
+        # and the file is the only copy of it.
+        raise PublishError(
+            f"Not unpublished: {host_of(origin)} has no Seal {seal_id}. "
+            f"The delete token stays in {run_dir / PUBLISH_FILE}."
+        )
     if response.status == 403:
         raise PublishError("Not unpublished: the saved delete token was refused.")
     raise PublishError(f"Not unpublished: {_reason(response)}.")

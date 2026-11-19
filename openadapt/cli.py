@@ -835,6 +835,8 @@ def _quickstart_publish_offer():
             say(str(exc))
         except (KeyboardInterrupt, EOFError):
             say("Not published.")
+        except Exception as exc:  # noqa: BLE001 - the run already succeeded
+            say(f"Not published: {exc}")
 
     return offer
 
@@ -2172,11 +2174,15 @@ def _is_seal_link(value: str) -> bool:
 
 def _verify_seal_link(url: str, extra: list[str]) -> int:
     """`openadapt seal verify <link>`: fetch a hosted Seal and check it here."""
-    from openadapt.seal_publish import check_link, urllib_transport
+    from openadapt.seal_publish import PublishError, check_link, urllib_transport
 
     if extra:
         raise click.UsageError("A Seal link takes no other options.")
-    return check_link(url, transport=urllib_transport, say=click.echo)
+    try:
+        return check_link(url, transport=urllib_transport, say=click.echo)
+    except PublishError as exc:
+        click.echo(str(exc), err=True)
+        return exc.exit_code
 
 
 def _sealed_run_dirs(folder: Path) -> list[Path]:

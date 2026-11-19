@@ -361,6 +361,38 @@ def test_unpublish_with_a_refused_token_keeps_it(make_run, tmp_path):
     assert (run / "seal.publish.json").exists()
 
 
+def test_unpublish_on_a_404_keeps_the_only_copy_of_the_token(make_run, tmp_path):
+    run = make_run()
+    _publish(run, Recorder(created()), yes=True, interactive=False)
+    with pytest.raises(PublishError) as caught:
+        unpublish(run, origin=None, transport=Recorder(Response(404, {}, b"")))
+    assert "stays in" in str(caught.value)
+    assert (run / "seal.publish.json").exists()
+
+
+def test_unpublish_on_a_410_forgets_the_token(make_run, tmp_path):
+    run = make_run()
+    _publish(run, Recorder(created()), yes=True, interactive=False)
+    line = unpublish(run, origin=None, transport=Recorder(Response(410, {}, b"")))
+    assert line.startswith("Already gone")
+    assert not (run / "seal.publish.json").exists()
+
+
+def test_a_tutorial_sibling_marks_practice_only_inside_a_quickstart_folder(tmp_path):
+    from openadapt.seal_publish import tutorial_provenance
+
+    receipt = json.dumps({"provenance": "synthetic-tutorial"})
+    for parent in ("runs", "openadapt-quickstart-2"):
+        (tmp_path / parent / "tutorial").mkdir(parents=True)
+        (tmp_path / parent / "tutorial" / "receipt.json").write_text(receipt)
+        (tmp_path / parent / "mine").mkdir()
+    assert tutorial_provenance(tmp_path / "runs" / "mine") is None
+    assert (
+        tutorial_provenance(tmp_path / "openadapt-quickstart-2" / "mine")
+        == "synthetic-tutorial"
+    )
+
+
 def _hosted(run: Path, **identity) -> Response:
     from openadapt_flow.offline_seal import seal_sha256
 
