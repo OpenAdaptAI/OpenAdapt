@@ -143,12 +143,17 @@ def _git(root: Path, *args: str) -> str:
     return _run_git(root, *args, check=True).stdout.decode("utf-8").strip()
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="the hang this prevents is on macOS")
-def test_git_never_forks_on_macos() -> None:
-    """The _no_fork guard is only active when Python can spawn without forking."""
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows has no fork")
+def test_a_subprocess_that_would_fork_pytest_fails(tmp_path: Path) -> None:
+    """The guard is active on macOS and stops the call pattern that stalled there."""
 
-    assert subprocess._USE_POSIX_SPAWN
-    assert callable(subprocess._fork_exec)
+    if sys.platform == "darwin":
+        assert subprocess._USE_POSIX_SPAWN
+    if not subprocess._USE_POSIX_SPAWN:
+        pytest.skip("this Python cannot start a process without forking")
+    with pytest.raises(AssertionError, match="would fork pytest"):
+        subprocess.run(["git", "--version"], cwd=tmp_path, capture_output=True)
+    assert prepare_release.run_git(tmp_path, "--version").stdout.startswith(b"git version")
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="the stand-in git is a shell script")
