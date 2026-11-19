@@ -25,7 +25,8 @@ except ModuleNotFoundError:  # pragma: no cover - exercised on Python 3.10 CI
 
 ROOT = Path(__file__).resolve().parents[1]
 # Launcher 1.22 requires Flow 3.2 (public Seals, the at-rest key derived once
-# per store). Keep every earlier rejection case, including the former 2.7 floor.
+# per store); 1.23 requires Flow 3.3 (the OpenEMR quickstart's clock-relative
+# date-picker check). Keep every earlier rejection case, including the former 2.7 floor.
 BELOW_FLOOR = [
     "1.29.0",
     "1.35.1",
@@ -40,8 +41,9 @@ BELOW_FLOOR = [
     "2.7.1",
     "3.0.0",
     "3.1.0",
+    "3.2.0",
 ]
-ACCEPTED = "3.2.0"
+ACCEPTED = "3.3.0"
 
 
 def _flow_requirements() -> list[Requirement]:

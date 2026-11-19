@@ -1123,8 +1123,10 @@ _SECRET_REFERENCE = re.compile(r"^(?:env:[A-Z][A-Z0-9_]*|keychain:[^/\s]+/[^/\s]
 # they refuse to download Chromium on hosts that have them. 1.35.0 fixed it.
 # Launcher 1.22 requires Flow 3.2: `openadapt seal publish` uses its
 # public_seal module, and the quickstart's encrypted checkpoints rely on its
-# key derivation once per store.
-_SUPPORTED_FLOW_RANGE = ">=3.2.0,<4.0.0"
+# key derivation once per store. Launcher 1.23 requires Flow 3.3: the OpenEMR
+# quickstart's referral program checks its date picker against the run's
+# clock (`Postcondition.text_clock`), which Flow 3.2 ignores.
+_SUPPORTED_FLOW_RANGE = ">=3.3.0,<4.0.0"
 _RDP_INSTALL_COMMAND = _pip_install("openadapt[rdp]")
 _CHROMIUM_SYSTEM_LIBS_COMMAND = (
     f"{shlex.quote(sys.executable)} -m playwright install-deps chromium"
