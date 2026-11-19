@@ -15,7 +15,38 @@
 
 <!-- version list -->
 
-## Unreleased
+## v3.2.0 (2026-11-19)
+
+### Faster screen steps and encrypted checkpoints
+
+- A checkpoint store derives its at-rest key once, under one salt, instead
+  of running scrypt on every sealed checkpoint read and write. Derived keys
+  stay in memory, bounded, and are reused only for the same passphrase and
+  work factors. The container format is unchanged: each container records
+  its salt and gets a fresh nonce, and wrong-key refusal and tamper
+  detection are unchanged. The MockMed tutorial ran 131 scrypt derivations
+  before and 1 after (40.8 s to 14.7 s median, N = 10 each).
+- The frame descent behind structural lookups, identity reads and field
+  read-backs reads each frame boundary in one browser call. On the OpenEMR
+  referral this cut Playwright calls per run from about 3,970 to 2,390, and
+  the median wall time from 23.2 s to 20.1 s (N = 14 each, identical
+  checks). After a busy quiescence probe, the settle waits until a quiet
+  window is possible instead of probing every 20 ms.
+
+### Fixes
+
+- The dropdown (`field_value`) check of a linear run reads the run's
+  parameters. Before, it read only a program run's parameters, so every
+  linear run with a dropdown commit stopped at that step.
+- The agent bridge (`openadapt_flow.agent`) refuses an unqualified pulled
+  skill before Flow starts (`not_ready_to_run` with `skill_not_qualified`, or
+  `app_target_missing` when the skill has no address). The qualification
+  check recomputes the certification against the policy recorded in the
+  lock; before, no qualified pulled skill could run.
+
+### Requirements
+
+- `opencv-python` is capped below 5.1, which adds about 105 MB to an install.
 
 ### Public Seals
 
