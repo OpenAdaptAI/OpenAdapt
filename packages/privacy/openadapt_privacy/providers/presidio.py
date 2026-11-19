@@ -80,6 +80,24 @@ _FIELD_LABELS = frozenset(
 )
 _FIELD_LABEL_SEPARATORS = " \t:#"
 
+# The name of a sign-in field is never an identifier, wherever it appears: the
+# NER model reads a lone "Username" as a LOCATION and "Password" as an
+# ORGANIZATION, which redacts the labels of every sign-in form. Unlike
+# _FIELD_LABELS these are kept even with nothing after them, so only words that
+# are not also names belong here ("Email" stays out: "Ask Email").
+_SIGN_IN_LABELS = frozenset(
+    {
+        "passcode",
+        "passphrase",
+        "password",
+        "user id",
+        "user name",
+        "userid",
+        "username",
+    }
+)
+_SIGN_IN_LABEL_EDGES = " \t:#*'\"()[]"
+
 # Presidio scores an unvalidated, context-free digit run at 0.01-0.05. Below
 # this floor a pattern recognizer is guessing too, and must not take a label
 # away from the NER result.
@@ -207,6 +225,18 @@ def _keep_field_labels(text: str, analyzer_results: list) -> list:
             rest = text[result.end :]
             next_start = result.end + len(rest) - len(rest.lstrip(_FIELD_LABEL_SEPARATORS))
             if label in _FIELD_LABELS and next_start in starts:
+                continue
+        kept.append(result)
+    return kept
+
+
+def _keep_sign_in_labels(text: str, analyzer_results: list) -> list:
+    """Drop NER findings whose whole span names a sign-in field (``Username``)."""
+    kept = []
+    for result in analyzer_results:
+        if result.entity_type in {"PERSON", "ORGANIZATION", "LOCATION"}:
+            label = text[result.start : result.end].strip(_SIGN_IN_LABEL_EDGES).lower()
+            if " ".join(label.split()) in _SIGN_IN_LABELS:
                 continue
         kept.append(result)
     return kept
@@ -417,6 +447,7 @@ class PresidioScrubbingProvider(ScrubbingProvider, TextScrubbingMixin):
         analyzer_results = _filter_automation_false_positives(text, analyzer_results)
         analyzer_results = _prefer_deterministic_identifier_labels(text, analyzer_results)
         analyzer_results = _keep_field_labels(text, analyzer_results)
+        analyzer_results = _keep_sign_in_labels(text, analyzer_results)
 
         logger.debug(f"analyzer_results: {analyzer_results}")
 
