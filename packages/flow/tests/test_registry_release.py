@@ -192,5 +192,6 @@ def test_the_schedule_is_off_and_every_guard_stays() -> None:
     )
     assert "--restamp-of packages/flow/registry/index.json" in build["run"]
     assert "registry-restamp-*" in build["run"]
+    assert "registry_attest.verify_sigstore" in build["run"]
     assert jobs["alarm"]["permissions"] == {"issues": "write"}
     assert "failure()" in jobs["alarm"]["if"]

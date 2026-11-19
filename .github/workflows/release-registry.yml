@@ -246,7 +246,26 @@ jobs:
           # A re-stamp may change only the freshness fields and archive URLs.
           restamp=()
           case "$TAG" in
-            registry-restamp-*) restamp=(--restamp-of packages/flow/registry/index.json) ;;
+            registry-restamp-*)
+              # Only an index the release workflow attested may be re-stamped.
+              python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          from openadapt_flow import registry_attest
+
+          here = Path("packages/flow/registry")
+          signer, subjects = registry_attest.verify_sigstore(
+              json.loads((here / "index.sigstore.json").read_text())
+          )
+          digest = hashlib.sha256((here / "index.json").read_bytes()).hexdigest()
+          if subjects.get("index.json") != digest:
+              raise SystemExit("the committed attestation does not name the committed index")
+          print(f"re-stamping the index attested by {signer}")
+          PY
+              restamp=(--restamp-of packages/flow/registry/index.json)
+              ;;
           esac
           python packages/flow/scripts/build_registry_index.py \
             --archives dist-registry \
