@@ -1166,41 +1166,40 @@ def test_sealing_the_stopped_run_signs_its_report(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Review fixes: the at-rest opt-out, recorded compile time, the Seal page
+# Review fixes: encryption at rest, recorded compile time, the Seal page
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
-    ("environ", "applied"),
+    "environ",
     [
-        ({}, True),
-        ({"OPENADAPT_BUNDLE_KEY": "k"}, False),
-        ({"OPENADAPT_RECORDING_KEY": "k"}, False),
-        ({"OPENADAPT_FLOW_AT_REST": "strict"}, False),
-        ({"OPENADAPT_FLOW_AT_REST": " Strict "}, False),
-        ({"OPENADAPT_FLOW_PLAINTEXT_AT_REST": "operator reason"}, False),
+        {},
+        {"OPENADAPT_BUNDLE_KEY": "k"},
+        {"OPENADAPT_FLOW_AT_REST": "strict"},
+        {"OPENADAPT_FLOW_PLAINTEXT_AT_REST": "operator reason"},
     ],
 )
-def test_the_plaintext_opt_out_applies_only_when_nothing_is_configured(
-    monkeypatch, environ, applied
-):
-    for name in (
+def test_the_quickstart_keeps_flows_encryption_at_rest(monkeypatch, environ):
+    """Checkpoints are encrypted by Flow's default; the quickstart sets no opt-out."""
+    names = (
         "OPENADAPT_BUNDLE_KEY",
         "OPENADAPT_RECORDING_KEY",
         "OPENADAPT_FLOW_AT_REST",
         "OPENADAPT_FLOW_PLAINTEXT_AT_REST",
-    ):
+        "OPENADAPT_FLOW_SCRUB",
+    )
+    for name in names:
         monkeypatch.delenv(name, raising=False)
     for name, value in environ.items():
         monkeypatch.setenv(name, value)
-    before = os.environ.get("OPENADAPT_FLOW_PLAINTEXT_AT_REST")
+    before = {name: os.environ.get(name) for name in names}
     with cli._synthetic_scrub_off():
-        inside = os.environ.get("OPENADAPT_FLOW_PLAINTEXT_AT_REST")
-    assert (inside == "synthetic quickstart data") is applied
-    if not applied:
-        assert inside == before
-    # Restored afterwards: it never outlives the quickstart.
-    assert os.environ.get("OPENADAPT_FLOW_PLAINTEXT_AT_REST") == before
+        inside = {name: os.environ.get(name) for name in names}
+    assert inside.pop("OPENADAPT_FLOW_SCRUB") == "off"
+    before_scrub = before.pop("OPENADAPT_FLOW_SCRUB")
+    assert inside == before
+    # Restored afterwards: the scrub-off never outlives the quickstart.
+    assert os.environ.get("OPENADAPT_FLOW_SCRUB") == before_scrub
 
 
 def test_a_recorded_demonstration_times_the_compile_alone():
