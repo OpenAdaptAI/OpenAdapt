@@ -585,10 +585,12 @@ def _terminal(monkeypatch) -> None:
 
 
 def test_the_quickstart_offer_exists_only_in_a_terminal_outside_ci(monkeypatch):
-    def no_status(*_args):
-        raise AssertionError("checked the status where no offer can be made")
-
-    monkeypatch.setattr(seal_publish, "urllib_transport", no_status)
+    # The status check runs only when the offer is called, never when it is
+    # made, so building (or not building) the offer sends nothing.
+    calls: list = []
+    monkeypatch.setattr(
+        seal_publish, "urllib_transport", lambda *args: calls.append(args)
+    )
     _terminal(monkeypatch)
     assert cli._quickstart_publish_offer() is not None
     monkeypatch.setenv("CI", "1")
@@ -599,6 +601,7 @@ def test_the_quickstart_offer_exists_only_in_a_terminal_outside_ci(monkeypatch):
     monkeypatch.setattr(cli, "_public_seals_available", lambda: True)
     monkeypatch.setattr(sys.stdin, "isatty", lambda: False, raising=False)
     assert cli._quickstart_publish_offer() is None
+    assert calls == []
 
 
 @pytest.mark.parametrize(
@@ -616,11 +619,10 @@ def test_the_quickstart_offers_nothing_unless_cloud_is_live(
     run = make_run()
     _terminal(monkeypatch)
 
+    seen: list = []
+
     def transport(method, url, body, headers, *_timeout):
-        assert (method, url) == (
-            "GET",
-            f"{seal_publish.DEFAULT_ENDPOINT}/api/public/local-seals/status",
-        )
+        seen.append((method, url))
         if isinstance(status, Exception):
             raise status
         return status
@@ -635,6 +637,10 @@ def test_the_quickstart_offers_nothing_unless_cloud_is_live(
     assert offer(run, said.append, ask) is False
     assert said == []
     assert not (run / "public-seal.json").exists()
+    # One status check, to production's status route, and nothing else.
+    assert seen == [
+        ("GET", f"{seal_publish.DEFAULT_ENDPOINT}/api/public/local-seals/status")
+    ]
 
 
 def test_the_quickstart_offer_shows_the_card_then_asks_once(
