@@ -29,11 +29,11 @@ import httpx
 import pytest
 
 from openadapt_flow.connector import (
+    MANAGED_QUALIFICATION_AUTHORITY_CAPABILITY,
     ConnectorClient,
     ConnectorSettings,
     ExecutionResult,
     InMemoryCustomerStorage,
-    MANAGED_QUALIFICATION_AUTHORITY_CAPABILITY,
     build_run_argv,
     execute_job,
     load_settings,
@@ -44,7 +44,10 @@ from openadapt_flow.connector import (
     status_from_report,
 )
 from openadapt_flow.connector.executor import RunOutcome, precise_outcome_from_report
-from openadapt_flow.connector.protocol import ByocGovernanceError
+from openadapt_flow.connector.protocol import (
+    FLOW_DISPATCH_WIRE_KEYS,
+    ByocGovernanceError,
+)
 from openadapt_flow.connector.storage import LocalCustomerStorage
 from openadapt_flow.failure_signals import automation_failure_signal
 from openadapt_flow.runner.dispatch_envelope import ManagedDispatchEnvelope
@@ -88,7 +91,7 @@ def _payload(**overrides):
         "target_url": "https://emr.internal/app",
         "allowed_hosts": ["cdn.internal"],
         "params": {"vendor": "ACME", "target_kind": "web"},
-        "secrets_ref": "emr-secrets",
+        "secrets_ref": None,
         "run_token": "a" * 64,
         "bundle_version_id": "bv_1",
         "runtime_validation_id": "rv_1",
@@ -116,7 +119,19 @@ def _managed_dispatch(*, run_id: str | None = None) -> dict:
         authorization=authorization,
         dispatch_binding_sha256=dispatch_binding_sha256(exact_run_id, authorization),
     )
-    return envelope.model_dump(mode="json")
+    # Cloud's dispatch: the six Flow wire keys plus the authority reference.
+    qualification = {"schema_version": "test", "campaign": "synthetic"}
+    return {
+        **envelope.model_dump(mode="json"),
+        "qualification_admission": qualification,
+        "qualification_admission_sha256": hashlib.sha256(
+            json.dumps(qualification, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest(),
+    }
+
+
+def _wire(dispatch: dict) -> dict:
+    return {key: dispatch[key] for key in FLOW_DISPATCH_WIRE_KEYS}
 
 
 def _fake_success_runner(report):
@@ -196,7 +211,7 @@ def test_execute_job_consumes_exact_managed_dispatch_through_private_child_bound
 
     assert result.status == "success"
     assert observed["mode"] == 0o600
-    assert observed["envelope"] == managed_dispatch
+    assert observed["envelope"] == _wire(managed_dispatch)
     assert observed["authority_url"] == authority_url
     assert observed["authority_token"] == token
     assert observed["parent_token"] == "stale-parent-token"
@@ -870,7 +885,11 @@ def test_full_loop_dispatch_execute_callback_ack():
     )
     assert result["status"] == "success"
     assert cp.poll_bodies == [
-        {"wait": 0, "capabilities": [MANAGED_QUALIFICATION_AUTHORITY_CAPABILITY]}
+        {
+            "wait": 0,
+            "capabilities": [MANAGED_QUALIFICATION_AUTHORITY_CAPABILITY],
+            "active_job_ids": [],
+        }
     ]
 
     # A PHI-free callback carrying the run-scoped token was posted.
@@ -912,6 +931,7 @@ def test_callback_rejection_is_retried_but_never_acked(callback_status, monkeypa
         "job_id": "bjob_1",
         "run_id": _payload()["run_id"],
         "status": "success",
+        "error_code": None,
         "callback_accepted": False,
     }
     assert cp.callback_attempts == 3

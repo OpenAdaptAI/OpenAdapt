@@ -13390,7 +13390,35 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument(
         "--once", action="store_true", help="Poll once then exit (cron-style)"
     )
+    pr.add_argument(
+        "--secrets-dir",
+        help="Local secret store: <dir>/<secrets_ref>.env, mode 0600 (or BYOC_SECRETS_DIR)",
+    )
+    pr.add_argument(
+        "--trusted-admission-keys",
+        help=(
+            "Comma-separated Ed25519 public keys of the program admitters this "
+            "runner trusts (or BYOC_TRUSTED_ADMISSION_KEYS)"
+        ),
+    )
+    pr.add_argument(
+        "--egress-audit-log",
+        help="Append every request body sent to this local JSONL file",
+    )
+    pr.add_argument(
+        "--max-workers", type=int, help="Local ceiling on parallel jobs (1-16)"
+    )
     pr.set_defaults(func=_cmd_connector)
+
+    pt = csub.add_parser(
+        "rotate-token",
+        help="Swap this connector's token now and persist the new one (0600)",
+        allow_abbrev=False,
+    )
+    pt.add_argument(
+        "--control-plane-url", help="Control plane base URL (or CONTROL_PLANE_URL)"
+    )
+    pt.set_defaults(func=_cmd_connector)
 
     from openadapt_flow.cli_admit import register_admit_parser
     from openadapt_flow.cli_api import register_api_parser
@@ -13750,6 +13778,10 @@ def _connector_flags(args: argparse.Namespace) -> dict[str, object]:
         "storage_backend",
         "storage_root",
         "poll_wait",
+        "secrets_dir",
+        "trusted_admission_keys",
+        "egress_audit_log",
+        "max_workers",
     )
     return {
         k: getattr(args, k, None) for k in keys if getattr(args, k, None) is not None
@@ -13808,6 +13840,36 @@ def _cmd_connector(args: argparse.Namespace) -> int:
         )
         return 0
 
+    from openadapt_flow.connector.config import connector_config_path
+
+    def persist_token(new_token: str) -> None:
+        settings.token = new_token
+        save_enrollment(settings)
+
+    can_persist = connector_config_path().is_file()
+
+    if verb == "rotate-token":
+        if not settings.token or not can_persist:
+            print(
+                "connector rotate-token: needs an enrolled connector.toml "
+                f"({connector_config_path()}) holding the current token."
+            )
+            return 2
+        client = ConnectorClient(settings.control_plane_url, token=settings.token)
+        try:
+            data = client.rotate()
+            persist_token(data["token"])
+        except ConnectorClientError as exc:
+            print(f"connector rotate-token failed: {exc}")
+            return 1
+        finally:
+            client.close()
+        print(
+            "token rotated and persisted (0600); the previous token stops "
+            f"working at {data.get('previous_token_valid_until', 'once replaced')}."
+        )
+        return 0
+
     # verb == "run"
     if not settings.token:
         print(
@@ -13816,13 +13878,18 @@ def _cmd_connector(args: argparse.Namespace) -> int:
             "BYOC_CONNECTOR_TOKEN."
         )
         return 2
-    client = ConnectorClient(settings.control_plane_url, token=settings.token)
+    client = ConnectorClient(
+        settings.control_plane_url,
+        token=settings.token,
+        egress_audit_log=settings.egress_audit_log,
+    )
     try:
         return run_loop(
             client,
             settings,
             runner=_subprocess_runner,
             once=bool(getattr(args, "once", False)),
+            persist_token=persist_token if can_persist else None,
         )
     finally:
         client.close()
