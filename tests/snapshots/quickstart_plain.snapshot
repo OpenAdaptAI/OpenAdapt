@@ -41,6 +41,7 @@ Your Seal: Signed
   Open it: openadapt-quickstart/run-1/seal.html
     checks the signature in your browser, offline; nothing is uploaded
   Real Seals from OpenEMR runs: https://openadapt.ai/seals
+  Put it online: openadapt seal publish openadapt-quickstart/run-1
 
 Next: Give your agent this task as a tool
   claude mcp add openadapt -- openadapt agent serve --allow-run

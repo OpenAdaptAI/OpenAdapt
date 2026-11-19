@@ -763,6 +763,7 @@ def quickstart(
         openemr is None and _agent_serves_tutorial(),
         keep=_keep_command(),
         shadow=_shadowing_openadapt if _under_uvx() else None,
+        offer_publish=_quickstart_publish_offer(),
     )
     try:
         with _synthetic_scrub_off():
@@ -794,6 +795,39 @@ def quickstart(
         outcome.broken is not None and not outcome.broken.stopped
     ):
         raise click.exceptions.Exit(1)
+
+
+def _quickstart_publish_offer():
+    """The finale's one publish question, or None outside a terminal or under CI."""
+    from openadapt.seal_publish import in_ci
+
+    if in_ci() or not (sys.stdin.isatty() and sys.stdout.isatty()):
+        return None
+
+    def offer(run_dir: Path, say, ask) -> None:
+        from openadapt.seal_publish import PublishError, publish
+
+        say(
+            f"Put this Seal online? The upload is {run_dir / 'public-seal.json'}: "
+            "the counts above, each step's check, digests, and the program and "
+            "app names."
+        )
+        try:
+            publish(
+                run_dir,
+                interactive=True,
+                ask=ask,
+                say=say,
+                show_card=False,
+                provenance="synthetic-tutorial",
+                command=_hint,
+            )
+        except PublishError as exc:
+            say(str(exc))
+        except (KeyboardInterrupt, EOFError):
+            say("Not published.")
+
+    return offer
 
 
 def _last_quickstart_root(cwd: Optional[Path] = None) -> Optional[Path]:
@@ -1872,14 +1906,24 @@ def seal(command_ctx: click.Context) -> None:
     A folder is a run folder (or a folder of them, such as the quickstart's)
     signed on this computer; each run's report is checked against its
     `seal.json`. `openadapt seal view RUN_DIR` writes the run's Seal as one
-    offline page (`RUN_DIR/seal.html`) and opens it. Also `openadapt seal keys
-    pin` to pin Cloud's Seal keys after a person confirms them. Every other
-    argument passes to `openadapt-agent seal` unchanged.
+    offline page (`RUN_DIR/seal.html`) and opens it. `openadapt seal publish
+    [RUN_DIR]` uploads the run's public Seal (counts, outcomes and digests
+    only) after you say yes and prints its link; `openadapt seal unpublish
+    RUN_DIR` takes it down, and `openadapt seal verify <link>` checks a hosted
+    Seal's signature here. Also `openadapt seal keys pin` to pin Cloud's Seal
+    keys after a person confirms them. Every other argument passes to
+    `openadapt-agent seal` unchanged.
     """
     _require_supported_python()
     args = list(command_ctx.args)
     if args[:1] == ["view"]:
         sys.exit(_view_sealed_runs(args[1:]))
+    if args[:1] == ["publish"]:
+        sys.exit(_publish_seal(args[1:]))
+    if args[:1] == ["unpublish"]:
+        sys.exit(_unpublish_seal(args[1:]))
+    if len(args) >= 2 and args[0] == "verify" and _is_seal_link(args[1]):
+        sys.exit(_verify_seal_link(args[1], args[2:]))
     if len(args) >= 2 and args[0] == "verify" and Path(args[1]).is_dir():
         sys.exit(_verify_sealed_runs(Path(args[1]), args[2:]))
     agent_main = _optional_engine_entrypoint(
@@ -1969,6 +2013,161 @@ def _view_sealed_runs(argv: list[str]) -> int:
         if display_available():
             open_page(pages[0])
     return 0 if len(pages) == len(runs) else 1
+
+
+def _seal_publish_parser() -> argparse.ArgumentParser:
+    """``openadapt seal publish``: build, show, ask, upload."""
+    parser = argparse.ArgumentParser(
+        prog="openadapt seal publish",
+        description=(
+            "Upload a run's public Seal and print its link. The public Seal is "
+            "RUN_DIR/public-seal.json: counts, outcomes, the step strip, digests, "
+            "the program and app names and the hour the run started, signed by "
+            "this computer's Seal key. It never holds inputs, typed values, "
+            "screenshots or record contents. Nothing is uploaded until you say "
+            "yes: at the prompt, or with --yes when there is no terminal."
+        ),
+        allow_abbrev=False,
+    )
+    parser.add_argument(
+        "run_dir",
+        type=Path,
+        nargs="?",
+        default=None,
+        help="a sealed run folder (default: the newest sealed run of the last quickstart here)",
+    )
+    parser.add_argument("--yes", action="store_true", help="publish without asking")
+    parser.add_argument(
+        "--allow-ci",
+        action="store_true",
+        help="with --yes, publish even when CI is set",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="write and print public-seal.json; upload nothing",
+    )
+    parser.add_argument(
+        "--github",
+        metavar="LOGIN",
+        default=None,
+        help="claim this GitHub login; the page shows whether github.com/LOGIN.keys lists your Seal key",
+    )
+    parser.add_argument(
+        "--no-names", action="store_true", help="leave the program and app names out"
+    )
+    parser.add_argument(
+        "--endpoint",
+        default=None,
+        help="the Cloud origin (default: $OPENADAPT_SEAL_ENDPOINT, else https://app.openadapt.ai)",
+    )
+    return parser
+
+
+def _newest_sealed_run() -> Optional[Path]:
+    """The newest sealed run folder of the last quickstart in this folder."""
+    root = _last_quickstart_root()
+    if root is None:
+        return None
+    runs = _sealed_run_dirs(root)
+    if not runs:
+        return None
+    return max(runs, key=lambda run: (run / "seal.json").stat().st_mtime)
+
+
+def _ask_line(prompt: str) -> str:
+    """One answer typed at the terminal; Ctrl-C or end of input means No."""
+    try:
+        return click.prompt(
+            prompt.rstrip(), default="", show_default=False, prompt_suffix=" "
+        )
+    except click.Abort:
+        click.echo()
+        return ""
+
+
+def _publish_seal(argv: list[str]) -> int:
+    """`openadapt seal publish [RUN_DIR]`."""
+    from openadapt.seal_publish import PublishError, publish
+
+    options = _seal_publish_parser().parse_args(argv)
+    run_dir = options.run_dir or _newest_sealed_run()
+    if run_dir is None:
+        click.echo(
+            "No sealed run here. Name one: openadapt seal publish RUN_DIR", err=True
+        )
+        return 2
+    run_dir = run_dir.expanduser().resolve()
+    if not (run_dir / "seal.json").is_file():
+        click.echo(f"Not published: {run_dir} has no seal.json.", err=True)
+        return 2
+    try:
+        publish(
+            run_dir,
+            yes=options.yes,
+            allow_ci=options.allow_ci,
+            dry_run=options.dry_run,
+            no_names=options.no_names,
+            github=options.github,
+            endpoint_value=options.endpoint,
+            say=click.echo,
+            ask=_ask_line,
+            command=_hint,
+        )
+    except PublishError as exc:
+        click.echo(str(exc), err=True)
+        return exc.exit_code
+    return 0
+
+
+def _unpublish_seal(argv: list[str]) -> int:
+    """`openadapt seal unpublish RUN_DIR`: delete the hosted Seal."""
+    from openadapt.seal_publish import (
+        PublishError,
+        endpoint,
+        unpublish,
+        urllib_transport,
+    )
+
+    parser = argparse.ArgumentParser(
+        prog="openadapt seal unpublish",
+        description=(
+            "Take down a run's hosted Seal with the delete token saved in "
+            "RUN_DIR/seal.publish.json. The link then shows that it was deleted."
+        ),
+        allow_abbrev=False,
+    )
+    parser.add_argument("run_dir", type=Path, help="the run folder you published")
+    parser.add_argument("--endpoint", default=None, help="the Cloud origin")
+    options = parser.parse_args(argv)
+    try:
+        origin = endpoint(options.endpoint) if options.endpoint else None
+        click.echo(
+            unpublish(
+                options.run_dir.expanduser().resolve(),
+                origin=origin,
+                transport=urllib_transport,
+            )
+        )
+    except PublishError as exc:
+        click.echo(str(exc), err=True)
+        return exc.exit_code
+    return 0
+
+
+def _is_seal_link(value: str) -> bool:
+    from openadapt.seal_publish import parse_link
+
+    return parse_link(value) is not None
+
+
+def _verify_seal_link(url: str, extra: list[str]) -> int:
+    """`openadapt seal verify <link>`: fetch a hosted Seal and check it here."""
+    from openadapt.seal_publish import check_link, urllib_transport
+
+    if extra:
+        raise click.UsageError("A Seal link takes no other options.")
+    return check_link(url, transport=urllib_transport, say=click.echo)
 
 
 def _sealed_run_dirs(folder: Path) -> list[Path]:

@@ -109,6 +109,14 @@ class NextSteps:
     shadow: Optional[str] = None
     #: The command that checks one run folder, for its Seal page.
     verify_run: Optional[Callable[[Path], str]] = None
+    #: The command that puts one run's public Seal online.
+    publish: Optional[Callable[[Path], str]] = None
+    #: In a terminal and outside CI only: asks once whether to publish the
+    #: run's public Seal, and does so on a yes. Called as
+    #: ``offer_publish(run_dir, say, ask)``.
+    offer_publish: Optional[
+        Callable[[Path, Callable[[str], None], Callable[[str], str]], None]
+    ] = None
 
 
 @dataclass
