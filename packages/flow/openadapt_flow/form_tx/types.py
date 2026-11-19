@@ -427,12 +427,14 @@ class ObservedControl(BaseModel):
     options: tuple[ObservedOption, ...] = ()
     is_secret: bool = False
 
-    @field_validator("current_value")
-    @classmethod
-    def _scrub_if_secret(cls, val: str, info: Any) -> str:
-        if info.data.get("is_secret") and val:
-            return "<secret>"
-        return val
+    @model_validator(mode="after")
+    def _scrub_secret_fields(self) -> "ObservedControl":
+        secret_detected = self.is_secret or self.input_type.lower() == "password"
+        if secret_detected:
+            object.__setattr__(self, "is_secret", True)
+            if self.current_value and self.current_value != "<secret>":
+                object.__setattr__(self, "current_value", "<secret>")
+        return self
 
 
 class ObservedEntityRow(BaseModel):
