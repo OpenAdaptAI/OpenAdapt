@@ -15,6 +15,29 @@
 
 <!-- version list -->
 
+## Unreleased
+
+### Fixes
+
+- A desktop approval no longer halts on a form that did not change
+  ([#2189](https://github.com/OpenAdaptAI/OpenAdapt/issues/2189)). On the
+  hosted Windows governed run, two reads of the same Patient Notes window
+  gave different OCR words (the caret in the search box, the title bar's
+  close button, a selected grid row), so every resumed approval stopped
+  with `form_changed_after_approval`. The win_agent has a new typed read,
+  `window-form-fields` (capability `window_form_fields_v1`): the approval
+  window's frame, its title bar, and every on-screen text field, label,
+  button and list or grid cell whose text UI Automation reads, with toggle
+  and selection state. The approval's form state (kind `window_fields`)
+  reads those controls by value, paints them out of the window crop, and
+  reads the rest of the window by OCR. A changed value still changes the
+  digest through either channel. Cells count only by value, never by a
+  positional name. The agent answers no window when the app shows any other
+  window or the walk is incomplete, and the window is then read by OCR as
+  before; a request and a recheck read through different channels never
+  match. The governed run now resumes to `VERIFIED` with the note on the
+  target row only.
+
 ## v3.3.0 (2026-11-19)
 
 ### Fixes

@@ -946,6 +946,13 @@ What is not:
 - Values chosen by clicking (not typing), drag and drop, and WebSocket
   traffic are checked only by the write adapter or the read-back, if at all.
 - The instruction detector on approval forms is a heuristic display aid.
+- On Windows, a desktop approval reads the app window's text fields, labels,
+  buttons and grid cells by their UI Automation value or name and paints them
+  out of the OCR read. It trusts that a standard control draws the text UI
+  Automation reports; a control that paints other text under the same
+  rectangle would hide a change there. Custom-drawn text that UI Automation
+  does not expose stays in the OCR read, and any other window of the app
+  sends the whole window back to OCR alone.
 - No live model has been run against these fixtures yet; the live-model test
   is off by default because it costs money.
 
