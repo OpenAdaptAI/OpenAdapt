@@ -40,6 +40,8 @@ from typing import Callable, Literal, cast
 
 from loguru import logger
 
+from openadapt_desktop import child_process
+
 FLOW_BIN = "openadapt-flow"
 #: The exact Flow release Desktop is built and tested against. It equals the
 #: ``openadapt-flow`` pin in the ``build`` extra of pyproject.toml, which the
@@ -608,8 +610,8 @@ class FlowBridge:
     def __init__(
         self,
         flow_bin: str = FLOW_BIN,
-        runner=subprocess.run,
-        popen=subprocess.Popen,
+        runner=child_process.run,
+        popen=child_process.popen,
         approver_keychain=None,
     ) -> None:
         self.flow_bin = flow_bin
