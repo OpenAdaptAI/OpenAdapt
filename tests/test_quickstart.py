@@ -1076,6 +1076,8 @@ def test_seal_verify_names_a_folder_with_no_sealed_run(tmp_path):
     reason="set OPENADAPT_REAL_QUICKSTART=1 to drive a real browser (~30 s)",
 )
 def test_real_quickstart(tmp_path, monkeypatch):
+    from openadapt.quickstart.engine import FlowEngine
+
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("OPENADAPT_SEAL_HOME", str(tmp_path / "seal"))
     root = tmp_path / "openadapt-quickstart"
@@ -1090,12 +1092,15 @@ def test_real_quickstart(tmp_path, monkeypatch):
         interactive=False,
     )
     output = stream.getvalue()
-    assert outcome.checked == len(RUN_NOTES), output
+    # The quickstart runs the program on FlowEngine.inputs (one new note).
+    runs = len(FlowEngine.inputs)
+    assert outcome.checked == runs, output
     assert outcome.model_calls == 0
     assert outcome.broken is not None and outcome.broken.stopped
     assert outcome.broken.new_records == 0
-    assert f"{len(RUN_NOTES)} of {len(RUN_NOTES)} saved and checked" in output
-    for index in range(1, len(RUN_NOTES) + 1):
+    assert outcome.broken.transaction_outcome == "RECONCILIATION_REQUIRED"
+    assert f"{runs} of {runs} saved and checked" in output
+    for index in range(1, runs + 1):
         report = json.loads((root / f"run-{index}" / "report.json").read_text())
         assert report["execution_outcome"] == "VERIFIED"
         assert report["params"]["note"] in output
