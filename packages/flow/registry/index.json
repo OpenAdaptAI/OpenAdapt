@@ -76,17 +76,6 @@
       "status": "example",
       "title": "Create the patient chart from a new referral in OpenEMR",
       "usage": "Start signed in to OpenEMR on Patient > New (/interface/new/new_comprehensive.php) at 1280x800. benchmark/openemr_local in this repository brings up a matching synthetic copy."
-    },
-    {
-      "app": "openIMIS (AGPL-3.0), upstream demo dataset",
-      "certification": null,
-      "evidence": "benchmark/openimis_claims holds the pinned reference environment. A packaged bundle is not published yet.",
-      "files": {},
-      "id": "openimis/claim-intake",
-      "params": [],
-      "path": "bundles/openimis/claim-intake",
-      "status": "planned",
-      "title": "Enter a health-facility claim in openIMIS"
     }
   ]
 }

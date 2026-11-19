@@ -518,11 +518,18 @@ def test_the_lock_records_the_index_serial(tmp_path, monkeypatch):
 
 
 def test_an_entry_dropped_from_an_attested_index_is_refused(tmp_path):
-    index = _attest(_index(tmp_path))
+    index = _index(tmp_path)
+    data = json.loads(index.read_text())
+    data["workflows"].append(
+        {"id": "openimis/claim-intake", "status": "planned", "certification": None}
+    )
+    index.write_text(json.dumps(data))
+    index = _attest(index)
     data = json.loads(index.read_text())
     data["workflows"] = [
         i for i in data["workflows"] if i["id"] != "openimis/claim-intake"
     ]
+    assert len(data["workflows"]) == 1
     index.write_text(json.dumps(data))
     with pytest.raises(registry.RegistryError, match="does not name this index"):
         registry.pull(

@@ -30,9 +30,9 @@
   `REPORT.md`.
 - The quickstart runs the program on one new note instead of five, and asks
   Flow not to encrypt the synthetic run's checkpoints (Flow's recorded
-  `OPENADAPT_FLOW_PLAINTEXT_AT_REST` opt-out, which
-  `OPENADAPT_FLOW_AT_REST=strict` and a configured `OPENADAPT_BUNDLE_KEY`
-  override). Encrypting the checkpoints derived a scrypt key on every read
+  `OPENADAPT_FLOW_PLAINTEXT_AT_REST` opt-out, which is not set under
+  `OPENADAPT_FLOW_AT_REST=strict` or a configured `OPENADAPT_BUNDLE_KEY` or
+  `OPENADAPT_RECORDING_KEY`). Encrypting the checkpoints derived a scrypt key on every read
   and write, which made one run take 11 s instead of 3 s. A full run takes
   about 23 s again, down from 66 to 79 s.
 

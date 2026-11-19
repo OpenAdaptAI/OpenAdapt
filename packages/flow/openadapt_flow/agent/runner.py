@@ -770,6 +770,11 @@ class FlowRunner:
         digest was checked after copying, never the live directory, and is
         told the digest so it refuses any other bytes itself.
         """
+        refused = self._pulled_skill_refusal(
+            workflow, Path(bundle_dir), url_override, run_id
+        )
+        if refused is not None:
+            return refused
         if admitted_bundle_sha256 is None:
             return self._run(
                 workflow=workflow,
@@ -809,6 +814,92 @@ class FlowRunner:
             )
         finally:
             shutil.rmtree(snapshot_root, ignore_errors=True)
+
+    def target_url(self, url_override: Optional[str] = None) -> Optional[str]:
+        """The app address a run aims at, as ``openadapt-flow run`` sees it.
+
+        An allowed override, else the server's ``--url``, else the deployment
+        config's ``backend.url``. None when nothing names one.
+        """
+        if url_override and self.config.allow_url_override:
+            return url_override
+        if self.config.url:
+            return self.config.url
+        if self.config.deployment_config:
+            try:
+                from openadapt_flow.deployment import load_deployment
+
+                deployment = load_deployment(self.config.deployment_config)
+            except Exception:  # noqa: BLE001 - the CLI reports a bad config
+                return None
+            return getattr(deployment.backend, "url", None) or None
+        return None
+
+    def _pulled_skill_refusal(
+        self,
+        workflow: str,
+        bundle_dir: Path,
+        url_override: Optional[str],
+        run_id: Optional[str],
+    ) -> Optional[RunOutcome]:
+        """Refuse a pulled skill not qualified for this run's app address.
+
+        The same check ``openadapt-flow run`` makes (``skills.
+        pulled_skill_refusal``), made here first so the agent gets a typed
+        refusal and no process starts. A pulled skill also needs an address:
+        with none, nothing proves it is the instance it was qualified on.
+        The reason names the bundle path and the qualified address, which the
+        agent never sees; it goes to the operator's log.
+        """
+        from openadapt_flow.skills import is_pulled_skill, pulled_skill_refusal
+
+        if url_override and not self.config.allow_url_override:
+            return None  # _run refuses the override itself
+        target = self.target_url(url_override)
+        check = "skill_not_qualified"
+        refusal = pulled_skill_refusal(bundle_dir, target_url=target)
+        if refusal is None and target is None and is_pulled_skill(bundle_dir):
+            check = "app_target_missing"
+            refusal = "a pulled skill runs only with an app address (--url)"
+        if refusal is None:
+            return None
+        return self._skill_refusal(workflow, run_id, refusal, check=check)
+
+    @staticmethod
+    def _skill_refusal(
+        workflow: str,
+        run_id: Optional[str],
+        refusal: str,
+        *,
+        check: str = "skill_not_qualified",
+        exit_code: Optional[int] = None,
+    ) -> RunOutcome:
+        _LOG.warning("refused workflow %s before it started: %s", workflow, refusal)
+        if check == "app_target_missing":
+            detail = (
+                "This workflow was pulled from a registry, and the run setup "
+                "doesn't say which app address to use. The operator sets one "
+                "with --url or backend.url. Nothing was executed."
+            )
+        else:
+            detail = (
+                "This workflow was pulled from a registry and isn't qualified on "
+                "this app address yet. The operator qualifies it with "
+                "openadapt-flow skill qualify. Nothing was executed."
+            )
+        return RunOutcome(
+            status="refused",
+            workflow=workflow,
+            run_id=run_id if run_id and is_safe_run_id(run_id) else None,
+            reason="not_ready_to_run",
+            failed_checks=[check],
+            refused_before_start=True,
+            # With an exit code, Flow started and its own gate refused it
+            # before any step, as an admission refusal is reported.
+            process_started=exit_code is not None,
+            detail=detail,
+            exit_code=exit_code,
+        )
 
     def _run(
         self,
@@ -936,6 +1027,18 @@ class FlowRunner:
                 report = json.loads(report_path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError):
                 report = None
+
+        if report is None and proc.returncode != 0:
+            # The CLI's own pulled-skill gate (SystemExit, exit 1) refused it:
+            # say so, never "not sure if saved".
+            from openadapt_flow.skills import pulled_skill_refusal
+
+            target = url or self.target_url()
+            refusal = pulled_skill_refusal(Path(bundle_dir), target_url=target)
+            if refusal is not None and f"REFUSED: {refusal}" in (proc.stderr or ""):
+                return self._skill_refusal(
+                    workflow, run_id, refusal, exit_code=proc.returncode
+                )
 
         outcome = classify_outcome(
             workflow,

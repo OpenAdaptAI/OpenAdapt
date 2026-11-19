@@ -121,12 +121,19 @@ def run_quickstart(
                 break_it=break_it,
                 interactive=interactive,
                 verbose=verbose,
-                open_page=open_page if display_available() else None,
+                # Only when this output is the terminal a person is reading:
+                # a captured or redirected stream never opens a browser.
+                open_page=open_page if _shown(stream, display_available) else None,
             )
         finally:
             close = getattr(view, "close", None)
             if close is not None:
                 close()
+
+
+def _shown(stream: IO[str], display_available: Callable[[], bool]) -> bool:
+    isatty = getattr(stream, "isatty", None)
+    return bool(callable(isatty) and isatty()) and display_available()
 
 
 __all__ = ["next_steps", "run_quickstart"]

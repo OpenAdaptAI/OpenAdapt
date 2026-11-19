@@ -83,7 +83,6 @@ it is given. See
 | Workflow | App | Status |
 |---|---|---|
 | `openemr/new-referral` | OpenEMR 8.0.0.3 | example, not certified |
-| `openimis/claim-intake` | openIMIS | planned |
 
 ## Status labels
 
@@ -92,7 +91,9 @@ it is given. See
 - `certified`: passed `certify` against the policy named in the entry's
   `certification` record. The index validator rejects this label without
   that record.
-- `planned`: no files yet.
+- `planned`: no files yet. A release refuses an index with a planned entry
+  (`build_registry_index.py --release`), so planned entries stay out of
+  `sources.json`.
 
 ## Releases
 
@@ -109,6 +110,27 @@ it is given. See
 
 There is no signing key to keep. The index expires 30 days after it is
 stamped, so the workflow runs at least that often.
+
+To release, dispatch the workflow from `main` with a plain suffix:
+
+```bash
+gh workflow run release-registry.yml --ref main -f suffix=2026-11-18
+```
+
+To renew the expiry of the index on `main` without changing it, dispatch a
+re-stamp. It tags `registry-restamp-<YYYYMMDD>`, and the build refuses an
+index that differs from the committed attested one in anything but
+`issued_at`, `expires_at`, `serial` and the archive URLs (which name the tag):
+
+```bash
+gh workflow run release-registry.yml --ref main -f restamp=true
+```
+
+`pull` reads the index from `main`, so a release or re-stamp takes effect
+when its pull request is merged. The workflow has a commented-out schedule
+that runs re-stamps twice a month; it runs only once that block is
+uncommented. A failed scheduled run or registry tag run opens a "Registry
+release failed" issue.
 
 After the first attested release, only that workflow writes `index.json`;
 `build_registry_index.py --check` confirms it still matches `sources.json`.
