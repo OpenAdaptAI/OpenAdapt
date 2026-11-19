@@ -232,6 +232,26 @@ def _pixel_box(value: object) -> Optional[dict[str, int]]:
     return {k: int(value[k]) for k in ("x", "y", "w", "h")}
 
 
+def _window_frame(
+    window: Any, hwnd: int, pid: int
+) -> Optional[tuple[int, int, int, int]]:
+    """The ``bounds`` of a typed window answer for exactly ``(hwnd, pid)``."""
+    if not isinstance(window, dict) or set(window) != {"hwnd", "pid", "bounds"}:
+        return None
+    bounds = window["bounds"]
+    if (
+        window["hwnd"] != hwnd
+        or window["pid"] != pid
+        or not isinstance(bounds, list)
+        or len(bounds) != 4
+        or any(isinstance(v, bool) or not isinstance(v, int) for v in bounds)
+        or bounds[2] <= 0
+        or bounds[3] <= 0
+    ):
+        return None
+    return (bounds[0], bounds[1], bounds[2], bounds[3])
+
+
 def _window_pair(raw: object) -> Optional[tuple[int, int]]:
     """``(hwnd, pid)`` from an agent's ``{hwnd, pid}``, or None when off-shape."""
     if not isinstance(raw, dict) or set(raw) != {"hwnd", "pid"}:
@@ -1005,6 +1025,19 @@ class WindowsBackend:
         verified, when steps were seen in different windows, when the window
         is gone, or when the agent cannot say. Never raises.
         """
+        found = self._approval_window(exclude_step, points)
+        if found is None:
+            return None
+        hwnd, pid = found
+        typed = self._post_typed_read("/window/bounds", {"hwnd": hwnd, "pid": pid})
+        window = typed.payload.get("window") if typed.payload is not None else None
+        return _window_frame(window, hwnd, pid)
+
+    def _approval_window(
+        self, exclude_step: Optional[str], points: Sequence[tuple[int, int]]
+    ) -> Optional[tuple[int, int]]:
+        """``(hwnd, pid)`` of the one window the run's verified steps (apart
+        from ``exclude_step``) were in, or None."""
         captures = {
             capture
             for step_id, capture in self._verified_windows.items()
@@ -1023,23 +1056,64 @@ class WindowsBackend:
             captures = {c for c in found if c is not None}
         if len(captures) != 1:
             return None
-        hwnd, pid = next(iter(captures))
-        typed = self._post_typed_read("/window/bounds", {"hwnd": hwnd, "pid": pid})
-        window = typed.payload.get("window") if typed.payload is not None else None
-        if not isinstance(window, dict) or set(window) != {"hwnd", "pid", "bounds"}:
+        return next(iter(captures))
+
+    def approval_form_fields(
+        self,
+        exclude_step: Optional[str] = None,
+        points: Sequence[tuple[int, int]] = (),
+    ) -> Optional[dict[str, Any]]:
+        """The approval window's frame and its text fields, read through UI
+        Automation, for an approval's form state.
+
+        Returns ``{"bounds": (x, y, w, h), "fields": [{"kind", "rect",
+        "text"}, ...]}``: the same window :meth:`approval_form_region` names,
+        its title bar and every on-screen text field whose value UIA reads,
+        in tree order. The caller reads those fields by value and the rest of
+        the window by OCR, so a blinking caret or a hovered title-bar button
+        no longer changes the digest. None when the agent cannot say, when
+        the app shows another window, or on any doubt. Never raises.
+        """
+        try:
+            found = self._approval_window(exclude_step, points)
+            if found is None:
+                return None
+            hwnd, pid = found
+            typed = self._post_typed_read(
+                "/window/form-fields", {"hwnd": hwnd, "pid": pid}
+            )
+            payload = typed.payload
+            if payload is None or set(payload) != {"status", "window", "fields"}:
+                return None
+            bounds = _window_frame(payload["window"], hwnd, pid)
+            fields = payload["fields"]
+            if bounds is None or not isinstance(fields, list):
+                return None
+            checked: list[dict[str, Any]] = []
+            for field in fields:
+                if not isinstance(field, dict) or set(field) != {
+                    "kind",
+                    "rect",
+                    "text",
+                }:
+                    return None
+                rect, text = field["rect"], field["text"]
+                if (
+                    field["kind"] not in ("title_bar", "edit")
+                    or not isinstance(text, str)
+                    or not isinstance(rect, list)
+                    or len(rect) != 4
+                    or any(isinstance(v, bool) or not isinstance(v, int) for v in rect)
+                    or rect[2] <= 0
+                    or rect[3] <= 0
+                ):
+                    return None
+                checked.append(
+                    {"kind": field["kind"], "rect": tuple(rect), "text": text}
+                )
+            return {"bounds": bounds, "fields": checked}
+        except Exception:  # noqa: BLE001 - no answer is no fields
             return None
-        bounds = window["bounds"]
-        if (
-            window["hwnd"] != hwnd
-            or window["pid"] != pid
-            or not isinstance(bounds, list)
-            or len(bounds) != 4
-            or any(isinstance(v, bool) or not isinstance(v, int) for v in bounds)
-            or bounds[2] <= 0
-            or bounds[3] <= 0
-        ):
-            return None
-        return (bounds[0], bounds[1], bounds[2], bounds[3])
 
     def window_root_at(self, x: int, y: int) -> Optional[tuple[int, int]]:
         """``(hwnd, pid)`` of the foreground app's top-level window at (x, y).

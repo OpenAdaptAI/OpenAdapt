@@ -2232,8 +2232,157 @@ def _window_operation(
     return {"status": "ok", "window": owned}
 
 
+#: Control types whose on-screen text is their UIA value: an approval reads
+#: the value and leaves their pixels out of the OCR (a caret blinks there).
+_FORM_VALUE_TYPES = frozenset({"EditControl", "DocumentControl"})
+_MAX_FORM_FIELDS = 256
+
+
+def _form_field_value(control: object) -> tuple[bool, Optional[str]]:
+    """``(readable, value)`` of a text field through its Value pattern."""
+    method = _control_value(control, "GetValuePattern", None)
+    if not callable(method):
+        return False, None
+    try:
+        pattern = method()
+        value = getattr(pattern, "Value", None) if pattern is not None else None
+    except Exception:  # noqa: BLE001 - pattern not supported
+        return False, None
+    if not isinstance(value, str):
+        return False, None
+    return True, value[:_MAX_READ_TEXT]
+
+
+def _window_form_fields(
+    auto: Any, hwnd: int
+) -> tuple[Optional[list[dict[str, Any]]], bool]:
+    """The window's title bar and on-screen text fields, in tree order.
+
+    Each field is ``{"kind", "rect": [x, y, w, h], "text"}``: ``title_bar``
+    with the window's title, ``edit`` with the field's value. A field whose
+    value cannot be read (a password box, an unsupported pattern) or that is
+    off screen is left out, so its pixels stay in the caller's OCR read.
+    ``(None, False)`` when UIA cannot open the window; ``truncated`` when the
+    walk hit its bounds.
+    """
+    from_handle = getattr(auto, "ControlFromHandle", None)
+    if not callable(from_handle):
+        return None, False
+    try:
+        window = from_handle(hwnd)
+    except Exception:  # noqa: BLE001 - provider failure is no answer
+        return None, False
+    if window is None:
+        return None, False
+    title = " ".join(str(_control_value(window, "Name", "") or "").split())
+    fields: list[dict[str, Any]] = []
+    stack: list[tuple[Any, int]] = [(c, 1) for c in reversed(_children(window))]
+    visited = 0
+    while stack:
+        control, depth = stack.pop()
+        visited += 1
+        if visited > _MAX_UIA_NODES or len(fields) > _MAX_FORM_FIELDS:
+            return fields, True
+        control_type = str(_control_value(control, "ControlTypeName", ""))
+        bounds = _bounds(control)
+        if control_type == "TitleBarControl":
+            if bounds is not None:
+                fields.append(
+                    {
+                        "kind": "title_bar",
+                        "rect": [
+                            bounds[0],
+                            bounds[1],
+                            bounds[2] - bounds[0],
+                            bounds[3] - bounds[1],
+                        ],
+                        "text": title[:_MAX_READ_TEXT],
+                    }
+                )
+            continue
+        if control_type in _FORM_VALUE_TYPES:
+            offscreen = _control_value(control, "IsOffscreen", True)
+            readable, value = _form_field_value(control)
+            if bounds is not None and offscreen is False and readable:
+                fields.append(
+                    {
+                        "kind": "edit",
+                        "rect": [
+                            bounds[0],
+                            bounds[1],
+                            bounds[2] - bounds[0],
+                            bounds[3] - bounds[1],
+                        ],
+                        "text": value,
+                    }
+                )
+            continue
+        if depth < _MAX_UIA_DEPTH:
+            stack.extend((c, depth + 1) for c in reversed(_children(control)))
+    return fields, False
+
+
+def _window_form_fields_operation(
+    payload: dict[str, Any], user32: Any, auto_loader: Callable[[], Any]
+) -> dict[str, Any]:
+    """``window-form-fields``: the window's frame (as ``window-bounds``) and
+    its text fields' values, for an approval's form state.
+
+    Answers ``window: None`` whenever the read could hide something on the
+    screen: the window is not one ``window-bounds`` names, the app shows any
+    other window (it could sit over a field whose pixels the caller leaves
+    out), or UIA cannot read the window completely.
+    """
+    framed = _window_operation("window-bounds", payload, user32)
+    window = framed.get("window")
+    if window is None:
+        return {"status": "ok", "window": None, "fields": []}
+    hwnd, pid = window["hwnd"], window["pid"]
+    for candidate in user32.top_level_windows():
+        if candidate == hwnd or user32.pid_of(candidate) != pid:
+            continue
+        if not user32.is_visible(candidate):
+            continue
+        cloaked = user32.is_cloaked(candidate)
+        if cloaked is None or not cloaked:
+            return {"status": "ok", "window": None, "fields": []}
+    auto = auto_loader()
+    with auto.UIAutomationInitializerInThread():
+        fields, truncated = _window_form_fields(auto, hwnd)
+    if fields is None or truncated:
+        return {"status": "ok", "window": None, "fields": []}
+    return {"status": "ok", "window": window, "fields": fields}
+
+
+def _load_uiautomation() -> Any:
+    try:
+        import uiautomation as auto  # noqa: PLC0415 - Windows-only, lazy
+    except Exception as exc:  # noqa: BLE001
+        raise AgentRequestError(
+            503, "uia_unavailable", "UI Automation is unavailable"
+        ) from exc
+    if os.name == "nt":
+        import comtypes.client  # noqa: PLC0415
+
+        comtypes.client.gen_dir = None
+    return auto
+
+
 def _perform_uia(operation: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Perform one typed UIA operation on one COM-affine server thread."""
+    if operation == "window-form-fields":
+        if os.name != "nt":
+            raise AgentRequestError(503, "uia_unavailable", "Win32 is unavailable")
+        try:
+            return _window_form_fields_operation(
+                payload, _user32_factory(), _load_uiautomation
+            )
+        except AgentRequestError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - bounded, never a crash
+            raise AgentRequestError(
+                503, "uia_unavailable", "window state is unavailable"
+            ) from exc
     if operation in _WINDOW_OPERATIONS:
         if os.name != "nt":
             raise AgentRequestError(503, "uia_unavailable", "Win32 is unavailable")
@@ -2866,6 +3015,7 @@ def make_handler_class(
                             "uia_v1",
                             "uia_read_v1",
                             "window_bounds_v1",
+                            "window_form_fields_v1",
                             "uia_authoring_tree_v1",
                             *(
                                 ["legacy_waa_input_v1"]
@@ -2908,6 +3058,7 @@ def make_handler_class(
                 "/window/root-at": ("uia", "window-root-at"),
                 "/window/owned-over": ("uia", "owned-window-over"),
                 "/window/bounds": ("uia", "window-bounds"),
+                "/window/form-fields": ("uia", "window-form-fields"),
                 "/uia/text-at-point": ("uia", "text-at-point"),
                 "/uia/focused-field-label": ("uia", "focused-field-label"),
                 "/uia/identity-candidates-at": ("uia", "identity-candidates-at"),
