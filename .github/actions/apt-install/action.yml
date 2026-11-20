@@ -1,0 +1,138 @@
+# Install Ubuntu packages on a hosted runner without depending on a mirror.
+#
+# GitHub's default Ubuntu mirror goes down, and sometimes DNS for every Ubuntu
+# host fails at once. Every job that ran `apt-get update` then failed or hung.
+# This action, in order:
+#
+#   1. Restores the .deb files an earlier run downloaded for the same package
+#      list (the exact runner image build, or failing that the newest older
+#      build) and installs them with `apt-get install --no-download`. No
+#      `apt-get update` runs and nothing touches the network. This is the
+#      primary defense; apt-cache-seed.yml keeps the caches warm from main.
+#   2. Only for packages the cache did not cover: writes an apt.conf.d file
+#      (Acquire::Retries=5, http/https timeouts) and tries the runner's
+#      default mirror, then archive.ubuntu.com and security.ubuntu.com, then
+#      mirror://mirrors.ubuntu.com/mirrors.txt, rewriting the deb822
+#      ubuntu.sources file or the legacy sources.list. Cached files are reused,
+#      so only the missing ones download.
+#   3. Resolves `playwright-deps` from the caller's pinned Playwright without
+#      the network, so `playwright install-deps` never has to reach a mirror.
+#   4. Fails with an ::error:: that names the cause (DNS, mirror unreachable,
+#      package not found, or dpkg failure), so an outage reads differently
+#      from a test failure.
+#
+# Release workflows pass `use-cache: "false"`: they install from the network
+# on a clean runner (see tests/test_release_workflows_cache_free.py).
+name: Install Ubuntu packages
+description: apt-get install with cached .deb files, retries and mirror fallback.
+
+inputs:
+  packages:
+    description: Space- or newline-separated package names.
+    required: false
+    default: ""
+  playwright-deps:
+    description: >-
+      A Playwright browser (for example `chromium`) whose system dependencies to
+      install, read from the pinned Playwright that `playwright-python` imports.
+    required: false
+    default: ""
+  playwright-python:
+    description: Command that runs the Python with the pinned Playwright, for example `uv run --locked python`.
+    required: false
+    default: python
+  working-directory:
+    description: Directory to run `playwright-python` in.
+    required: false
+    default: "."
+  install-recommends:
+    description: '"true" installs Recommends, like plain `apt-get install`; "false" passes --no-install-recommends.'
+    required: false
+    default: "false"
+  use-cache:
+    description: '"false" skips the .deb cache (release workflows).'
+    required: false
+    default: "true"
+  refresh-index:
+    description: >-
+      "true" also runs a successful `apt-get update` (with mirror fallback)
+      when everything is already installed, so later apt calls in the job
+      start from a mirror that answered.
+    required: false
+    default: "false"
+  cache-key-suffix:
+    description: Extra text for the cache key (the self-test uses it to stay isolated).
+    required: false
+    default: ""
+
+outputs:
+  packages:
+    description: The sorted package list that was installed.
+    value: ${{ steps.plan.outputs.packages }}
+  source:
+    description: cache, network or already-installed.
+    value: ${{ steps.install.outputs.source }}
+  mirror:
+    description: The mirror stage that worked, when the network was used.
+    value: ${{ steps.install.outputs.mirror }}
+  reason:
+    description: On failure, dns-unreachable, mirror-unreachable, package-not-found or install-failed.
+    value: ${{ steps.install.outputs.reason }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve the package list
+      id: plan
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        PACKAGES: ${{ inputs.packages }}
+        PLAYWRIGHT_DEPS: ${{ inputs.playwright-deps }}
+        PLAYWRIGHT_PYTHON: ${{ inputs.playwright-python }}
+        RECOMMENDS: ${{ inputs.install-recommends }}
+        KEY_SUFFIX: ${{ inputs.cache-key-suffix }}
+      run: >-
+        python3 "$GITHUB_ACTION_PATH/apt_install.py" plan
+        --packages "$PACKAGES"
+        --playwright-deps "$PLAYWRIGHT_DEPS"
+        --playwright-python "$PLAYWRIGHT_PYTHON"
+        --recommends "$RECOMMENDS"
+        --cache-root "$RUNNER_TEMP/apt-install"
+        --key-suffix "$KEY_SUFFIX"
+
+    - name: Restore cached .deb files
+      id: restore
+      if: inputs.use-cache == 'true'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.plan.outputs.dir }}
+        key: ${{ steps.plan.outputs.key }}
+        # A cache from an older runner image build is still a good start:
+        # files the new image already has at a newer version are skipped.
+        restore-keys: ${{ steps.plan.outputs.restore-prefix }}
+
+    - name: Install
+      id: install
+      shell: bash
+      env:
+        PACKAGES: ${{ steps.plan.outputs.packages }}
+        RECOMMENDS: ${{ inputs.install-recommends }}
+        CACHE_DIR: ${{ steps.plan.outputs.dir }}
+        CACHE_HIT: ${{ steps.restore.outputs.cache-hit == 'true' && 'exact' || steps.restore.outputs.cache-matched-key != '' && 'partial' || 'none' }}
+        REFRESH: ${{ inputs.refresh-index }}
+      run: >-
+        python3 "$GITHUB_ACTION_PATH/apt_install.py" install
+        --packages "$PACKAGES"
+        --recommends "$RECOMMENDS"
+        --cache-dir "$CACHE_DIR"
+        --cache-hit "$CACHE_HIT"
+        --refresh-index "$REFRESH"
+        --result "$RUNNER_TEMP/apt-install-result.json"
+
+    - name: Save downloaded .deb files
+      if: inputs.use-cache == 'true' && steps.install.outputs.save == 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.plan.outputs.dir }}
+        key: ${{ steps.plan.outputs.key }}

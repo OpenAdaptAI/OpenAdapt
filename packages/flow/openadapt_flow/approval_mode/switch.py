@@ -52,6 +52,7 @@ from openadapt_flow.approval_mode.model import (
     OffReason,
     SwitchThresholds,
 )
+from openadapt_flow.private_file import open_binary
 
 SWITCH_RECORD_SCHEMA: Literal["openadapt.approval-mode-switch/v1"] = (
     "openadapt.approval-mode-switch/v1"
@@ -615,7 +616,7 @@ class SwitchLog:
         # O_BINARY: on Windows a plain os.open writes in text mode and turns
         # each "\n" into "\r\n", so the line would no longer be canonical.
         flags = os.O_CREAT | os.O_WRONLY | os.O_APPEND | getattr(os, "O_BINARY", 0)
-        descriptor = os.open(self.path, flags, 0o600)
+        descriptor = open_binary(self.path, flags, 0o600)
         try:
             written = os.write(descriptor, line)
             if written != len(line):
@@ -629,7 +630,7 @@ class SwitchLog:
     def _lock(self) -> Iterator[None]:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         lock_path = self.path.with_name(self.path.name + ".lock")
-        descriptor = os.open(
+        descriptor = open_binary(
             lock_path, os.O_CREAT | os.O_RDWR | getattr(os, "O_BINARY", 0), 0o600
         )
         try:
