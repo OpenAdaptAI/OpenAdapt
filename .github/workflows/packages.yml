@@ -1185,7 +1185,7 @@ jobs:
           persist-credentials: false
       - name: Install X11, D-Bus, GTK3 and AT-SPI
         timeout-minutes: 15
-        uses: OpenAdaptAI/OpenAdapt/.github/actions/apt-install@1194087e1409c89a19970d0675bd15a631690316
+        uses: OpenAdaptAI/OpenAdapt/.github/actions/apt-install@94f724c7dc0b0995a7108b7b99bbb53f0749cb68
         with:
           install-recommends: "true"
           packages: >-
@@ -1258,13 +1258,13 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
       - name: Install system dependencies
         timeout-minutes: 10
-        uses: OpenAdaptAI/OpenAdapt/.github/actions/apt-install@1194087e1409c89a19970d0675bd15a631690316
+        uses: OpenAdaptAI/OpenAdapt/.github/actions/apt-install@94f724c7dc0b0995a7108b7b99bbb53f0749cb68
         with:
           install-recommends: "true"
           packages: ffmpeg libportaudio2
       - name: Install native AT-SPI build and smoke dependencies
         if: matrix.python-version == '3.10'
-        uses: OpenAdaptAI/OpenAdapt/.github/actions/apt-install@1194087e1409c89a19970d0675bd15a631690316
+        uses: OpenAdaptAI/OpenAdapt/.github/actions/apt-install@94f724c7dc0b0995a7108b7b99bbb53f0749cb68
         with:
           install-recommends: "true"
           packages: >-

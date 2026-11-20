@@ -96,7 +96,7 @@ jobs:
           if [ "$VERSION" != latest ]; then spec="playwright==$VERSION"; fi
           "$RUNNER_TEMP/playwright-deps/bin/python" -m pip install --disable-pip-version-check -q "$spec"
       - name: Seed the cache
-        uses: OpenAdaptAI/OpenAdapt/.github/actions/apt-install@1194087e1409c89a19970d0675bd15a631690316
+        uses: OpenAdaptAI/OpenAdapt/.github/actions/apt-install@94f724c7dc0b0995a7108b7b99bbb53f0749cb68
         with:
           packages: ${{ matrix.packages }}
           install-recommends: ${{ matrix.recommends }}
