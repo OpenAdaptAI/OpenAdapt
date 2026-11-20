@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import fcntl
+import hashlib
 import importlib.util
 import json
 import os
@@ -112,7 +113,18 @@ def main() -> None:
             )
             for stubborn in (False, True)
         ]
-    print(json.dumps({"result": "PASS", "cases": results}, indent=2))
+    print(
+        json.dumps(
+            {
+                "result": "PASS",
+                "helper_sha256": hashlib.sha256(
+                    Path(helper.__file__).read_bytes()
+                ).hexdigest(),
+                "cases": results,
+            },
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":
