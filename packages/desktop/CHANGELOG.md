@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.30.7 (2026-11-19)
+
+### Bug Fixes
+
+- **desktop**: require Capture 1.4 for core recorder imports
+- preserve raw evidence bytes on Windows
+
+
+
 ## v0.30.6 (2026-11-19)
 
 ### Bug Fixes
