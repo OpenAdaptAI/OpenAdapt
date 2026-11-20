@@ -108,14 +108,11 @@ def _loads_strict_json(raw: bytes) -> dict[str, Any]:
     return parsed
 
 
-def task_key_for(task_id: str) -> str:
-    """Use a keyed opaque directory identity, including for low-entropy request IDs."""
-    from openadapt_flow import at_rest, crypto
+def task_key_for(task_id: str, *, workdir: Path | str) -> str:
+    """Opaque request identity bound to durable state, independent of rotating keys."""
+    from openadapt_flow.tx.request_index import RequestIndex
 
-    key = (crypto.resolve_key(None) or at_rest.local_key()).encode("utf-8")
-    return "task-" + salted_sha256(
-        key, {"domain": "tx-task-directory/v1", "task": task_id}
-    )
+    return RequestIndex(workdir).task_key(task_id)
 
 
 def write_private_bytes(path: Path, data: bytes, *, overwrite: bool = True) -> None:
@@ -299,7 +296,9 @@ def issue_tx_receipt(
     root = Path(workdir)
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
 
-    resolved_key = task_key if task_key is not None else task_key_for(task_id)
+    resolved_key = (
+        task_key if task_key is not None else task_key_for(task_id, workdir=root)
+    )
     if not _SAFE_KEY_RE.fullmatch(resolved_key) or resolved_key in _RESERVED_DIR_NAMES:
         raise ValueError(f"unsafe task_key: {resolved_key!r}")
 
@@ -310,7 +309,7 @@ def issue_tx_receipt(
     if r0 is not None:
         undo_bytes = _canonical_json_bytes(dict(r0)) + b"\n"
         write_private_record(task_dir / "undo_r0.json", undo_bytes, overwrite=False)
-        primary_dir = root / task_key_for(task_id)
+        primary_dir = root / resolved_key
         if primary_dir != task_dir:
             write_private_record(
                 primary_dir / "undo_r0.json", undo_bytes, overwrite=False

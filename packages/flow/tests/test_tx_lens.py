@@ -568,7 +568,7 @@ def test_replace_mode_update_preserves_untouched_fields_in_o1_reads(
         assert after[col] == before[col], f"field {col} was clobbered"
 
     # Private salt.bin + undo_r0.json have 0o600 mode, and public receipt has zero PII
-    task_dir = workdir / task_key_for(task.task_id)
+    task_dir = workdir / task_key_for(task.task_id, workdir=workdir)
     salt_file = task_dir / "salt.bin"
     undo_file = task_dir / "undo_r0.json"
     assert salt_file.is_file() and len(salt_file.read_bytes()) == 32

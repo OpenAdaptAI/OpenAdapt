@@ -293,9 +293,9 @@ def test_low_entropy_task_id_is_absent_from_paths_and_public_commitment(tmp_path
     receipt = Path(result.receipt_path).read_bytes().decode("latin-1")
     assert "PT-100" not in receipt and "task_id_sha256" not in receipt
     assert "task_id_hmac_sha256" in receipt
-    assert task_key_for("PT-100") != "PT-100" and "PT-100" not in str(
-        Path(result.receipt_path)
-    )
+    assert task_key_for(
+        "PT-100", workdir=engine.workdir
+    ) != "PT-100" and "PT-100" not in str(Path(result.receipt_path))
     assert not any(
         "PT-100" in str(p.relative_to(engine.workdir))
         for p in engine.workdir.rglob("*")

@@ -237,7 +237,10 @@ def test_saved_har_and_undo_preimage_are_encrypted(live_app, tmp_path):
     )
     assert result.outcome == "UNCERTAIN"
     preimage = (
-        tmp_path / "encrypted-state" / task_key_for("encrypted-state") / "undo_r0.json"
+        tmp_path
+        / "encrypted-state"
+        / task_key_for("encrypted-state", workdir=tmp_path / "encrypted-state")
+        / "undo_r0.json"
     )
     assert crypto.is_encrypted(preimage.read_bytes())
     assert b"First1" not in preimage.read_bytes()

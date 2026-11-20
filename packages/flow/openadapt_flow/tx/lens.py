@@ -30,12 +30,15 @@ from openadapt_flow.tx.receipt import (
     issue_tx_receipt,
     load_or_create_signing_key,
     read_private_record,
-    task_key_for,
     write_private_record,
+)
+from openadapt_flow.tx.request_index import (
+    RequestIndex,
+    RequestIndexHeld,
+    default_request_workdir,
 )
 from openadapt_flow.tx.sqlite_authority import SQLiteAtomicRowAuthority
 from openadapt_flow.tx.types import (
-    ENTITY_LENS_SCHEMA,
     CertifiedLensPack,
     EndpointTemplate,
     EntityLensSpec,
@@ -861,10 +864,7 @@ class TransactionalCommitEngine:
         if workdir is None:
             from openadapt_flow.at_rest import local_key_path
 
-            namespace = canonical_sha256(
-                {"base_url": self.lens.base_url, "entity_name": self.lens.entity_name}
-            )
-            self.workdir = local_key_path().parent.parent / "tx" / namespace
+            self.workdir = default_request_workdir(local_key_path().parent.parent)
         else:
             self.workdir = Path(workdir)
         self.workdir.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -876,15 +876,16 @@ class TransactionalCommitEngine:
             headers=headers,
             timeout_s=timeout_s,
         )
-        self._signing_key: Ed25519PrivateKey = (
-            signing_key
-            if signing_key is not None
-            else load_or_create_signing_key(self.workdir)
-        )
         self._ledger: Ledger = (
             ledger
             if ledger is not None
             else Ledger(FileLedger(self.workdir / "ledger"))
+        )
+        self._request_index = RequestIndex(self.workdir, self._ledger.backend)
+        self._signing_key: Ed25519PrivateKey = (
+            signing_key
+            if signing_key is not None
+            else load_or_create_signing_key(self.workdir)
         )
         self.pre_send_reread = pre_send_reread
 
@@ -980,16 +981,7 @@ class TransactionalCommitEngine:
         return None
 
     def _ledger_key(self, task: TxTask) -> str:
-        contract_digest = canonical_sha256(
-            {
-                "schema": ENTITY_LENS_SCHEMA,
-                "base_url": self.lens.base_url,
-                "entity_name": self.lens.entity_name,
-            }
-        )
-        return self._ledger.key_for(
-            contract_digest, {}, write_key=task_key_for(task.task_id)
-        )
+        return self._request_index.ledger_key(task.task_id)
 
     def _acquire_gate_or_block(
         self,
@@ -1069,7 +1061,7 @@ class TransactionalCommitEngine:
         entity_id: Optional[str],
         r0: Optional[Mapping[str, Any]],
     ) -> None:
-        base_dir = self.workdir / task_key_for(task_id)
+        base_dir = self.workdir / self._request_index.task_key(task_id)
         base_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         if r0 is not None:
             r0_bytes = (
@@ -1530,7 +1522,9 @@ class TransactionalCommitEngine:
             "automatic_execution_allowed": can_compensate,
         }
         write_private_record(
-            self.workdir / task_key_for(task.task_id) / "undo_postcommit.json",
+            self.workdir
+            / self._request_index.task_key(task.task_id)
+            / "undo_postcommit.json",
             json.dumps(postimage, sort_keys=True).encode("utf-8"),
         )
 
@@ -1581,6 +1575,7 @@ class TransactionalCommitEngine:
             wire_summary=wire_summary,
             rows_read=rows_read,
             private_key=self._signing_key,
+            task_key=self._request_index.task_key(task.task_id),
             qualification_state="atomic_row_enforced"
             if atomic_enforced
             else "unqualified",
@@ -1684,7 +1679,9 @@ class TransactionalCommitEngine:
                 if self.atomic_authority is not None and task.operation == "update"
                 else self._build_write_payload(task, r0)
             )
-            attempt_id = f"{task_key_for(task.task_id)}-{secrets.token_hex(6)}"
+            attempt_id = (
+                f"{self._request_index.task_key(task.task_id)}-{secrets.token_hex(6)}"
+            )
             self._ledger.begun(ledger_key, attempt_id, write_key_bound=True)
 
             atomic_postimage = None
@@ -1812,7 +1809,9 @@ class TransactionalCommitEngine:
             if early_block is not None:
                 return early_block
 
-            attempt_id = f"{task_key_for(task.task_id)}-{secrets.token_hex(6)}"
+            attempt_id = (
+                f"{self._request_index.task_key(task.task_id)}-{secrets.token_hex(6)}"
+            )
             self._ledger.begun(ledger_key, attempt_id, write_key_bound=True)
 
             if self.wire_tap is not None:
@@ -1877,7 +1876,10 @@ class TransactionalCommitEngine:
 
     def compensation_proposal(self, task_id: str) -> Optional[Path]:
         """Retain an encrypted review proposal; this path grants no mutation authority."""
-        task_dir = self.workdir / task_key_for(task_id)
+        try:
+            task_dir = self.workdir / self._request_index.task_key(task_id)
+        except RequestIndexHeld:
+            return None
         try:
             meta = json.loads(read_private_record(task_dir / "undo_meta.json"))
             post = json.loads(read_private_record(task_dir / "undo_postcommit.json"))
@@ -1909,7 +1911,10 @@ class TransactionalCommitEngine:
         if self.atomic_authority is None:
             self.compensation_proposal(task_id)
             return False
-        task_dir = self.workdir / task_key_for(task_id)
+        try:
+            task_dir = self.workdir / self._request_index.task_key(task_id)
+        except RequestIndexHeld:
+            return False
         try:
             meta = json.loads(read_private_record(task_dir / "undo_meta.json"))
             post = json.loads(read_private_record(task_dir / "undo_postcommit.json"))
