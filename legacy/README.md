@@ -19,7 +19,7 @@
 >
 > **Migration guide:** See [docs/LEGACY_FREEZE.md](../docs/LEGACY_FREEZE.md) for migration instructions.
 >
-> **Legacy users:** This codebase remains available. Install with `pip install openadapt==0.46.0`
+> **Legacy users:** This codebase remains available. Install it with the steps in [Last Known Working Version](../docs/LEGACY_FREEZE.md#last-known-working-version).
 
 ---
 
@@ -91,9 +91,9 @@ repository layout, from before the code moved under `legacy/`. They are kept as
 historical reference and are not maintained against the current repository, so
 this page no longer gives a command that runs them.
 
-To use the legacy app, install the frozen release with
-`pip install openadapt==0.46.0`. For current work, use the packages listed in
-the notice at the top of this page.
+To use the legacy app, install the frozen release with the steps in
+[Last Known Working Version](../docs/LEGACY_FREEZE.md#last-known-working-version).
+For current work, use the packages listed in the notice at the top of this page.
 
 <br/>
 
