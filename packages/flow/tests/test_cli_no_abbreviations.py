@@ -44,10 +44,17 @@ def test_every_cli_parser_rejects_all_undeclared_long_option_prefixes():
 
     from openadapt_flow.__main__ import build_parser as flow_parser
     from openadapt_flow.agent.cli import build_parser as agent_parser
+    from openadapt_flow.form_tx.cli import build_parser as form_tx_parser
     from openadapt_flow.wrap.cli import build_parser as wrap_parser
 
     assert compatibility_agent_parser is agent_parser
-    roots = (flow_parser(), agent_parser(), _seal_view_parser(), wrap_parser())
+    roots = (
+        flow_parser(),
+        agent_parser(),
+        _seal_view_parser(),
+        wrap_parser(),
+        form_tx_parser(),
+    )
     launcher = roots[2].parse_args(
         ["synthetic-run", "--keys", "keys.json", "--bundle", "bundle", "--no-open"]
     )
@@ -372,3 +379,21 @@ def test_process_permission_errors_use_the_full_canonical_flag(permissions, mess
     with pytest.raises(SystemExit) as refused:
         cmd_process(args)
     assert str(refused.value).startswith(message)
+
+
+@pytest.mark.parametrize("flag", ["--ppr-delay", "--json-o"])
+def test_form_benchmark_refuses_prefix_before_starting_work(monkeypatch, flag):
+    import importlib
+
+    source = Path(__file__).resolve().parents[1] / "benchmark"
+    monkeypatch.syspath_prepend(str(source))
+    runner = importlib.import_module("form_tx_portals.runner")
+    assert Path(runner.__file__).resolve() == source / "form_tx_portals" / "runner.py"
+
+    def unexpected_run(**kwargs):
+        pytest.fail("an undeclared option prefix started the benchmark")
+
+    monkeypatch.setattr(runner, "run_portal_benchmark", unexpected_run)
+    with pytest.raises(SystemExit) as refused:
+        runner.main([flag, "0"])
+    assert refused.value.code == 2

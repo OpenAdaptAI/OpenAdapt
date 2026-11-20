@@ -193,6 +193,11 @@ b0fd15ee8584cc3b646ae9bab04b4f9acbc59292:packages/flow/tests/fixtures/bundle_com
 # PR #2239: a synthetic skill task key in a test admission body, not a key.
 ed329274d4cea9c0d1c939b7a453ba81acb30565:packages/flow/tests/test_sanitized_artifact.py:generic-api-key:1367
 
+# PR #2308: exact historical Python type annotations, reviewed as source code.
+e0b16824b36b96f65b416b607a3d065205fd94af:packages/flow/openadapt_flow/form_tx/receipt.py:generic-api-key:57
+e0b16824b36b96f65b416b607a3d065205fd94af:packages/flow/openadapt_flow/form_tx/receipt.py:generic-api-key:120
+e0b16824b36b96f65b416b607a3d065205fd94af:packages/flow/openadapt_flow/form_tx/receipt.py:generic-api-key:132
+e0b16824b36b96f65b416b607a3d065205fd94af:packages/flow/openadapt_flow/form_tx/reconciler.py:generic-api-key:102
 # PR #2295: synthetic privacy sentinel, never a credential. Later source builds
 # the same test value at runtime; this pins only the historical false positive.
 e4ebb9330cf3fcbf3de89a76d912cf3609163b22:packages/flow/tests/test_choice_widgets_e2e.py:generic-api-key:201
