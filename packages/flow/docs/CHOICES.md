@@ -80,6 +80,11 @@ boundary is opaque, stops recording before it is retained.
 6. The original control and field must remain connected and agree after the
    page settles. Replaced elements do not inherit the old proof by position.
 
+Native DOM selection sends no extra focus action. It validates the selected
+option again after the page handles `input`, before emitting `change`. Drift
+at that boundary stops the operation with uncertain delivery: the first
+event has already been sent, so the runtime cannot claim that nothing happened.
+
 Otherwise the step halts with a code and nothing after it runs:
 
 | Code | Meaning |

@@ -781,3 +781,95 @@ def test_an_ambiguous_dialog_scope_refuses_the_step_before_input(
         assert page.evaluate("inputEdges") == 0
     finally:
         page.close()
+
+
+@pytest.mark.parametrize("trigger", ["focus", "blur"])
+def test_native_dom_selection_does_not_invoke_unrelated_focus_callbacks(
+    server: Server, browser: Any, trigger: str
+) -> None:
+    def prepare(page: Any) -> None:
+        page.evaluate(
+            """trigger => {
+          const select = document.querySelector('#department');
+          const prior = document.querySelector('#patient_name');
+          window.callbackCount = 0; window.nativeChanges = [];
+          const mutate = () => {
+            callbackCount++;
+            select.querySelector('[value=CARD]').value = 'WRONG';
+          };
+          (trigger === 'focus' ? select : prior).addEventListener(trigger, mutate);
+          select.addEventListener('change', () => nativeChanges.push(select.value));
+          if (trigger === 'blur') prior.focus();
+        }""",
+            trigger,
+        )
+
+    observations: list[dict[str, Any]] = []
+    outcome, value, confirmed = _choose(
+        server,
+        browser,
+        "native",
+        "Cardiology",
+        prepare=prepare,
+        check=lambda page: observations.append(
+            page.evaluate("""() => ({
+          callbacks:callbackCount, changes:nativeChanges
+        })""")
+        ),
+    )
+    assert isinstance(outcome, dict), outcome
+    assert value == "CARD"
+    assert confirmed
+    assert observations == [{"callbacks": 0, "changes": ["CARD"]}]
+
+
+@pytest.mark.parametrize(
+    "fault", ["value", "label", "disabled", "duplicate", "replaced"]
+)
+def test_native_input_callback_drift_stops_before_change_with_uncertain_delivery(
+    server: Server, browser: Any, fault: str
+) -> None:
+    from openadapt_flow.backend import ActionDeliveryUncertain
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+    page = browser.new_page(viewport={"width": 1280, "height": 800})
+    try:
+        page.goto(server.base + "/w/native")
+        page.evaluate(
+            """fault => {
+          const select = document.querySelector('#department');
+          window.nativeInputs = []; window.nativeChanges = [];
+          select.addEventListener('input', () => {
+            nativeInputs.push(select.value);
+            const option = select.selectedOptions[0];
+            if (fault === 'value') option.value = 'WRONG';
+            else if (fault === 'label') option.label = 'Wrong department';
+            else if (fault === 'disabled') option.disabled = true;
+            else if (fault === 'duplicate') select.appendChild(option.cloneNode(true));
+            else select.replaceWith(select.cloneNode(true));
+          });
+          select.addEventListener('change', () => nativeChanges.push(select.value));
+        }""",
+            fault,
+        )
+        box = page.locator("#department").bounding_box()
+        point = (int(box["x"] + box["width"] / 2), int(box["y"] + box["height"] / 2))
+        backend = PlaywrightBackend(page)
+        with pytest.raises(ActionDeliveryUncertain) as error:
+            backend.choose_option(
+                OptionChoice(
+                    kind="native_select",
+                    label="Cardiology",
+                    value="CARD",
+                    readback="select",
+                ),
+                "Cardiology",
+                point=point,
+            )
+        assert error.value.operation == "choice_select"
+        assert error.value.cause_type == "NativeChoiceChangedAfterInput"
+        assert page.evaluate("nativeInputs") == ["CARD"]
+        assert page.evaluate("nativeChanges") == []
+        assert not backend.confirm_choice()
+    finally:
+        page.close()

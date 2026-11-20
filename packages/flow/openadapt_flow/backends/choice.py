@@ -361,6 +361,8 @@ class BrowserChoice:
         chosen = matches[0]
         try:
             delivered = self._commit_native(handle, chosen, want, wanted)
+        except ActionDeliveryUncertain:
+            raise
         except Exception as exc:
             raise ActionDeliveryUncertain(
                 operation="choice_select",
@@ -393,35 +395,49 @@ class BrowserChoice:
     def _commit_native(
         handle: Any, chosen: dict[str, Any], want: str, wanted: str
     ) -> bool:
-        # Recheck and select in one page-side operation. No input/change
-        # event may be dispatched from a stale census. Selecting the exact
-        # semantic option also handles different labels sharing one value.
-        return bool(
-            handle.evaluate(
-                "(el, args) => {"
-                + _HELPERS
-                + r"""
-                  const [label, value, want, wanted] = args;
-                  const sel = el.closest('select');
-                  if (!sel || sel.multiple || sel.matches(':disabled')
-                      || sel.closest('[inert],[aria-disabled=true]')) return false;
-                  const matches = Array.from(sel.options).filter(o => o.value !== ''
-                    && (norm(o.label || o.text) === want || o.value === wanted));
-                  if (matches.length !== 1) return false;
-                  const option = matches[0];
-                  if (option.disabled || option.closest('optgroup[disabled]')
-                      || option.value !== value || norm(option.label || option.text) !== label) {
-                    return false;
-                  }
-                  sel.focus();
-                  option.selected = true;
-                  sel.dispatchEvent(new Event('input', {bubbles: true}));
-                  sel.dispatchEvent(new Event('change', {bubbles: true}));
-                  return true;
-                }""",
-                [chosen["label"], chosen["value"], want, wanted],
-            )
+        # DOM selection does not need focus. Avoid unrelated focus/blur
+        # callbacks, and check again after input before emitting change.
+        outcome = handle.evaluate(
+            "(el, args) => {"
+            + _HELPERS
+            + r"""
+              const [label, value, want, wanted] = args;
+              const sel = el.closest('select');
+              const matchingOption = () => {
+                if (!sel || !sel.isConnected || sel.multiple || sel.matches(':disabled')
+                    || sel.closest('[inert],[aria-disabled=true]')) return null;
+                const matches = Array.from(sel.options).filter(o => o.value !== ''
+                  && (norm(o.label || o.text) === want || o.value === wanted));
+                if (matches.length !== 1) return null;
+                const option = matches[0];
+                return option.disabled || option.closest('optgroup[disabled]')
+                  || option.value !== value || norm(option.label || option.text) !== label
+                  ? null : option;
+              };
+              const option = matchingOption();
+              if (!option) return false;
+              option.selected = true;
+              const stillSelected = () => matchingOption() === option
+                && sel.selectedOptions.length === 1 && sel.selectedOptions[0] === option
+                && sel.value === value;
+              if (!stillSelected()) return false;
+              sel.dispatchEvent(new Event('input', {bubbles: true}));
+              if (!stillSelected()) return 'input_changed';
+              sel.dispatchEvent(new Event('change', {bubbles: true}));
+              return true;
+            }""",
+            [chosen["label"], chosen["value"], want, wanted],
         )
+        if outcome == "input_changed":
+            raise ActionDeliveryUncertain(
+                operation="choice_select",
+                native=False,
+                target_fingerprint=None,
+                cause_type="NativeChoiceChangedAfterInput",
+            )
+        if not isinstance(outcome, bool):
+            raise ValueError("invalid native choice commit result")
+        return outcome
 
     # -- listed options ------------------------------------------------------
 
