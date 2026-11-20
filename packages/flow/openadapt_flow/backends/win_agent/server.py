@@ -2272,7 +2272,9 @@ def _form_field_value(control: object) -> tuple[bool, Optional[str]]:
         return False, None
     if not isinstance(value, str):
         return False, None
-    return True, value[:_MAX_READ_TEXT]
+    # This is approval evidence, not a display preview: truncating a value
+    # before its rectangle is hidden would lose edits beyond the prefix.
+    return True, value
 
 
 def _form_field_state(control: object, control_type: str) -> Optional[str]:
@@ -2331,7 +2333,17 @@ def _window_form_fields(
         return None, False
     title = " ".join(str(_control_value(window, "Name", "") or "").split())
     fields: list[dict[str, Any]] = []
-    stack: list[tuple[Any, int]] = [(c, 1) for c in reversed(_children(window))]
+
+    def children_of(control: Any) -> list[Any]:
+        # The general preview helper treats a provider error as no children.
+        # Here that could make a container look like a leaf and hide text we
+        # never read, so an incomplete walk must refuse the projection.
+        return list(control.GetChildren())
+
+    try:
+        stack: list[tuple[Any, int]] = [(c, 1) for c in reversed(children_of(window))]
+    except Exception:  # noqa: BLE001 - incomplete UIA is no projection
+        return None, False
     visited = 0
     while stack:
         control, depth = stack.pop()
@@ -2341,18 +2353,22 @@ def _window_form_fields(
         control_type = str(_control_value(control, "ControlTypeName", ""))
         bounds = _bounds(control)
         on_screen = _control_value(control, "IsOffscreen", True) is False
+        try:
+            children = children_of(control)
+        except Exception:  # noqa: BLE001 - an unknown subtree is not a leaf
+            return None, False
         if control_type == "TitleBarControl":
             if bounds is not None:
                 fields.append(
                     {
                         "kind": "title_bar",
                         "rect": _rect(bounds),
-                        "text": title[:_MAX_READ_TEXT],
+                        "text": title,
                         "state": None,
                     }
                 )
             continue
-        if control_type in _FORM_VALUE_TYPES:
+        if control_type in _FORM_VALUE_TYPES and not children:
             readable, value = _form_field_value(control)
             if bounds is not None and on_screen and readable:
                 fields.append(
@@ -2364,14 +2380,18 @@ def _window_form_fields(
                     }
                 )
             continue
-        children = _children(control)
         state = _form_field_state(control, control_type)
+        if control_type in {"CheckBoxControl", "RadioButtonControl", "TabItemControl"}:
+            if state is None:
+                # The label alone does not account for the control's state.
+                # Keep these pixels in the OCR read when UIA cannot name it.
+                continue
         if not children and control_type in _FORM_NAMED_TYPES | _FORM_ITEM_TYPES:
             readable, value = _form_field_value(control)
             text = value if readable and value else None
             if text is None and control_type in _FORM_NAMED_TYPES:
                 name = " ".join(str(_control_value(control, "Name", "") or "").split())
-                text = name[:_MAX_READ_TEXT] or None
+                text = name or None
             if bounds is not None and on_screen and text:
                 fields.append(
                     {
@@ -2386,7 +2406,9 @@ def _window_form_fields(
             fields.append(
                 {"kind": "state", "rect": _rect(bounds), "text": "", "state": state}
             )
-        if depth < _MAX_UIA_DEPTH:
+        if children:
+            if depth >= _MAX_UIA_DEPTH:
+                return fields, True
             stack.extend((c, depth + 1) for c in reversed(children))
     return fields, False
 

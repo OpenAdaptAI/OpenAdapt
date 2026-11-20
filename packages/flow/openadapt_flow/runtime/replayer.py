@@ -13127,11 +13127,9 @@ class Replayer:
         from openadapt_flow.approval_mode import form_state as fs
 
         try:
-            results = getattr(self._approval_report, "results", ())
+            prior = getattr(self._approval_report, "results", ())
             step, backend = self._approval_form_step_id, self.backend
-            return fs.approval_form_state(
-                backend, self.vision, frame_png, step, results
-            )
+            return fs.approval_form_state(backend, self.vision, frame_png, step, prior)
         except Exception:  # noqa: BLE001 - unreadable is never "unchanged"
             return None
 

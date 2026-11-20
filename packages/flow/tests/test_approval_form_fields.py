@@ -603,3 +603,97 @@ def test_the_agent_refuses_a_window_uia_cannot_open(monkeypatch):
     perform = _agent(monkeypatch, None)
     assert perform("window-form-fields", {"hwnd": 7, "pid": 10})["window"] is None
     assert perform("window-form-fields", {"hwnd": 7, "pid": 11})["window"] is None
+
+
+@pytest.mark.parametrize(
+    "control_type,source",
+    [
+        ("EditControl", "value"),
+        ("DocumentControl", "value"),
+        ("DataItemControl", "value"),
+        ("TextControl", "name"),
+        ("ButtonControl", "name"),
+        ("TitleBarControl", "title"),
+    ],
+)
+def test_every_masked_text_source_retains_an_edit_beyond_preview_length(
+    monkeypatch, control_type, source
+):
+    # Same visible prefix, different stored suffix: the projection must not
+    # turn these distinct forms into the same approval digest.
+    import openadapt_flow.backends.win_agent.server as agent_server
+
+    prefix = "x" * agent_server._MAX_READ_TEXT
+    control = _Control(control_type, bounds=(20, 44, 500, 70))
+    window = _window(control)
+    perform = _agent(monkeypatch, window)
+    frame = io.BytesIO()
+    Image.new("RGB", SIZE, "white").save(frame, format="PNG")
+    no_words = SimpleNamespace(ocr=lambda _png: [])
+
+    def read(suffix):
+        value = prefix + suffix
+        if source == "title":
+            window.Name = value
+        elif source == "name":
+            control.Name = value
+        else:
+            control._value = value
+        answer = perform("window-form-fields", {"hwnd": 7, "pid": 10})
+        assert answer["fields"][0]["text"] == value
+        return window_fields_state(
+            no_words,
+            frame.getvalue(),
+            {"bounds": WINDOW, "fields": answer["fields"]},
+        )
+
+    before, after = read("a"), read("b")
+    assert before is not None and after is not None and before != after
+
+
+@pytest.mark.parametrize(
+    "control_type", ["CheckBoxControl", "RadioButtonControl", "TabItemControl"]
+)
+def test_a_stateful_control_with_unreadable_state_keeps_its_pixels(
+    monkeypatch, control_type
+):
+    control = _Control(control_type, name="Choice", bounds=(20, 44, 500, 70))
+    perform = _agent(monkeypatch, _window(control))
+    answer = perform("window-form-fields", {"hwnd": 7, "pid": 10})
+    assert answer["window"] is not None
+    assert answer["fields"] == []
+
+
+@pytest.mark.parametrize("failed_at", ["window", "control"])
+def test_a_failed_child_read_never_turns_an_unknown_subtree_into_a_mask(
+    monkeypatch, failed_at
+):
+    control = _Control("TextControl", name="Summary", bounds=(20, 44, 500, 70))
+    window = _window(control)
+
+    def failed():
+        raise RuntimeError("provider cannot enumerate this subtree")
+
+    (window if failed_at == "window" else control).GetChildren = failed
+    perform = _agent(monkeypatch, window)
+    assert perform("window-form-fields", {"hwnd": 7, "pid": 10})["window"] is None
+
+
+def test_a_value_container_does_not_hide_its_descendant_fields(monkeypatch):
+    child = _Control("EditControl", value="actual field", bounds=(20, 44, 500, 70))
+    document = _Control(
+        "DocumentControl", value="summary", bounds=(0, 30, 1024, 720), children=[child]
+    )
+    perform = _agent(monkeypatch, _window(document))
+    answer = perform("window-form-fields", {"hwnd": 7, "pid": 10})
+    assert [field["text"] for field in answer["fields"]] == ["actual field"]
+
+
+def test_a_depth_limited_form_walk_is_incomplete(monkeypatch):
+    import openadapt_flow.backends.win_agent.server as agent_server
+
+    monkeypatch.setattr(agent_server, "_MAX_UIA_DEPTH", 1)
+    child = _Control("EditControl", value="unseen field")
+    pane = _Control("PaneControl", children=[child])
+    perform = _agent(monkeypatch, _window(pane))
+    assert perform("window-form-fields", {"hwnd": 7, "pid": 10})["window"] is None
