@@ -240,3 +240,70 @@ def test_concurrent_consumers_cannot_lower_the_publisher_high_water_mark():
     assert "accepted" in results
     assert registry._read_state()["serials"]["publisher"] == 9
     assert registry.serial_problem("publisher", 8) is not None
+
+
+@pytest.mark.parametrize(
+    "url,options,reason",
+    [
+        ("http://registry.example/index.json", {}, "plain http"),
+        (
+            "http://registry.example/index.json",
+            {"allow_unsigned": True},
+            "plain http",
+        ),
+        (
+            "https://registry.example/index.json",
+            {"allow_unsigned": True},
+            "only to an index on the local disk",
+        ),
+        (
+            "https://registry.example/index.json",
+            {"allow_test_key": True},
+            "only to an index on the local disk",
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "consumer", ["snapshot", "index", "api_pull", "cli_list", "cli_pull", "bytes"]
+)
+def test_consumer_transport_policy_precedes_all_io_and_parsing(
+    url, options, reason, consumer, monkeypatch, capsys
+):
+    from openadapt_flow import registry_snapshot
+
+    def no_io(*args, **kwargs):
+        raise AssertionError("refused source policy must precede every read")
+
+    monkeypatch.setattr(registry, "_read", no_io)
+    monkeypatch.setattr(registry_snapshot, "attestation_bytes", no_io)
+    if consumer.startswith("cli_"):
+        args = _args(url, **options)
+        if consumer == "cli_pull":
+            args.list, args.workflow = False, "synthetic/observe"
+        assert registry.cmd_pull(args) == 1
+        output = capsys.readouterr()
+        assert output.out == ""
+        assert reason in output.err
+        return
+    with pytest.raises(registry.RegistryError, match=reason):
+        if consumer == "snapshot":
+            registry_snapshot.load_snapshot(url, **options)
+        elif consumer == "index":
+            registry.load_index(url, **options)
+        elif consumer == "api_pull":
+            registry.pull("synthetic/observe", index_url=url, **options)
+        else:
+            registry_snapshot.verify_snapshot(
+                b"invalid index JSON", b"invalid proof JSON", index_url=url, **options
+            )
+
+
+def test_catalog_transport_policy_precedes_all_io(monkeypatch):
+    from openadapt_flow.registry_catalog import export_catalog
+
+    def no_io(*args, **kwargs):
+        raise AssertionError("refused catalog transport must precede every read")
+
+    monkeypatch.setattr(registry, "_read", no_io)
+    with pytest.raises(registry.RegistryError, match="plain http"):
+        export_catalog("http://registry.example/index.json")

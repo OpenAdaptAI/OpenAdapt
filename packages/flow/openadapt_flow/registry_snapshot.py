@@ -105,17 +105,10 @@ def attestation_bytes(index_url: str) -> Optional[bytes]:
         raise registry.RegistryError("the index's attestation cannot be read") from exc
 
 
-def verify_snapshot(
-    index_bytes: bytes,
-    proof_bytes: Optional[bytes],
-    *,
-    index_url: str,
-    allow_unsigned: bool = False,
-    allow_test_key: bool = False,
-    identity: Any = None,
-    trusted_root: Optional[Path] = None,
-    now: Optional[datetime] = None,
-) -> RegistrySnapshot:
+def _source_policy(
+    index_url: str, *, allow_unsigned: bool, allow_test_key: bool
+) -> bool:
+    """Refuse unsupported source policy before any fetch or parsing."""
     remote = registry._remote(index_url)
     if remote and not index_url.startswith("https://"):
         raise registry.RegistryError("plain http is refused; use https")
@@ -127,6 +120,23 @@ def verify_snapshot(
             raise registry.RegistryError(
                 f"{flag} applies only to an index on the local disk"
             )
+    return remote
+
+
+def verify_snapshot(
+    index_bytes: bytes,
+    proof_bytes: Optional[bytes],
+    *,
+    index_url: str,
+    allow_unsigned: bool = False,
+    allow_test_key: bool = False,
+    identity: Any = None,
+    trusted_root: Optional[Path] = None,
+    now: Optional[datetime] = None,
+) -> RegistrySnapshot:
+    remote = _source_policy(
+        index_url, allow_unsigned=allow_unsigned, allow_test_key=allow_test_key
+    )
     if len(index_bytes) > registry.MAX_FILE_BYTES:
         raise registry.RegistryError("index exceeds its byte limit")
     data = json_object(index_bytes, "index")
@@ -189,12 +199,9 @@ def load_snapshot(
     trusted_root: Optional[Path] = None,
     now: Optional[datetime] = None,
 ) -> RegistrySnapshot:
-    # Reject local-authoring flags before even fetching a remote index.
-    if registry._remote(index_url) and (allow_unsigned or allow_test_key):
-        flag = "--allow-unsigned" if allow_unsigned else "--allow-test-key"
-        raise registry.RegistryError(
-            f"{flag} applies only to an index on the local disk"
-        )
+    _source_policy(
+        index_url, allow_unsigned=allow_unsigned, allow_test_key=allow_test_key
+    )
     return verify_snapshot(
         registry._read(index_url),
         attestation_bytes(index_url),
