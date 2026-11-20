@@ -858,29 +858,17 @@ def _check_public_target(url: str) -> str:
 # -- one review of what will be uploaded ----------------------------------------
 
 
-def _derive(source: Path, destination: Path, kind: str) -> dict[str, Any]:
-    """The sanitized derivative of ``source``, reused while ``source`` is unchanged."""
+def _derive(source: Path, destination: Path, kind: str) -> tuple[Path, dict[str, Any]]:
+    """Reuse the current transformation or create a separate unapproved generation."""
     from openadapt_flow import safe_errors
     from openadapt_flow.sanitized_artifact import (
         SanitizationError,
-        load_and_verify_derivative,
-        sanitize_artifact,
-        source_tree_sha256,
+        ensure_current_derivative,
     )
 
-    if destination.is_symlink():
-        raise PublishError("BUNDLE_UNSAFE", "the publish directory is a symbolic link")
     label = "program" if kind == "bundle" else "recording"
     try:
-        if destination.exists():
-            try:
-                manifest = load_and_verify_derivative(destination)
-                if manifest.get("source_tree_sha256") == source_tree_sha256(source):
-                    return manifest
-            except SanitizationError:
-                pass
-            shutil.rmtree(destination)
-        return sanitize_artifact(source, destination, kind=kind)
+        return ensure_current_derivative(source, destination, kind=kind)
     except SanitizationError as exc:
         raise PublishError(
             "SANITIZATION_FAILED",
@@ -1180,7 +1168,9 @@ def run(args: argparse.Namespace) -> int:
         route = upload_route(org_id, args.workflow_id)
 
         bundle_derivative = program.record_dir / "sanitized-bundle"
-        bundle_manifest = _derive(program.staged, bundle_derivative, "bundle")
+        bundle_derivative, bundle_manifest = _derive(
+            program.staged, bundle_derivative, "bundle"
+        )
         if bundle_manifest.get("execution_semantics") != "preserved":
             raise PublishError(
                 "SANITIZATION_CHANGED_PROGRAM",
@@ -1191,7 +1181,9 @@ def run(args: argparse.Namespace) -> int:
         derivatives = [(bundle_derivative, program.staged)]
         recording_derivative = program.record_dir / "sanitized-recording"
         if evidence is not None:
-            _derive(evidence.recording, recording_derivative, "recording")
+            recording_derivative, _ = _derive(
+                evidence.recording, recording_derivative, "recording"
+            )
             derivatives.append((recording_derivative, evidence.recording))
 
         summary = review_summary(

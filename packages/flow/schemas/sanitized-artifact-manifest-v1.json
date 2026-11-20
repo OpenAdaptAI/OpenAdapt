@@ -27,6 +27,8 @@
   "properties": {
     "schema_version": { "const": 1 },
     "policy_version": { "type": "string", "minLength": 1 },
+    "transformation_sha256": { "$ref": "#/$defs/sha256" },
+    "transformation": { "$ref": "#/$defs/transformation" },
     "scrubber_version": { "type": "string", "minLength": 1 },
     "created_at": { "type": "string", "format": "date-time" },
     "updated_at": { "type": "string", "format": "date-time" },
@@ -69,7 +71,86 @@
       "items": { "type": "string" }
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "policy_version": {
+            "const": "outbound-phi-v2"
+          }
+        },
+        "required": [
+          "policy_version"
+        ]
+      },
+      "then": {
+        "required": [
+          "transformation_sha256",
+          "transformation"
+        ]
+      }
+    }
+  ],
   "$defs": {
+    "transformation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "source_tree_sha256",
+        "kind",
+        "policy_revision",
+        "implementation_sha256",
+        "scrubber",
+        "manual_overrides"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "openadapt.sanitization-transformation/v1"
+        },
+        "source_tree_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "kind": {
+          "enum": [
+            "recording",
+            "bundle"
+          ]
+        },
+        "policy_revision": {
+          "type": "string",
+          "minLength": 1
+        },
+        "implementation_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "manual_overrides": {
+          "type": "boolean"
+        },
+        "scrubber": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "class",
+            "version",
+            "config_sha256"
+          ],
+          "properties": {
+            "class": {
+              "type": "string",
+              "minLength": 1
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1
+            },
+            "config_sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        }
+      }
+    },
     "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "file": {
       "type": "object",

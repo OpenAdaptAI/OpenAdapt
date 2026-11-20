@@ -52,6 +52,9 @@ from openadapt_flow.sanitized_artifact import (
 
 
 class FakeScrubber:
+    def sanitization_config(self):
+        return {}
+
     def scrub_text(self, text: str, is_separated: bool = False) -> str:
         return text.replace("Jane Doe", "[PERSON]").replace("MRN-123", "[MRN]")
 
@@ -63,6 +66,9 @@ class FakeScrubber:
 
 class SyntaxHostileScrubber:
     """Model current Presidio false positives on serialized runtime data."""
+
+    def sanitization_config(self):
+        return {}
 
     def scrub_text(self, text: str, is_separated: bool = False) -> str:
         if text.startswith("<") and text.endswith(">"):
@@ -895,7 +901,7 @@ def test_raw_push_creates_derivative_and_pauses_for_review(tmp_path, monkeypatch
         "source_tree_sha256": result["local_binding"]["source_tree_sha256"],
         "derivative_tree_sha256": result["local_binding"]["derivative_tree_sha256"],
         "approved_archive_sha256": None,
-        "sanitization_policy": "outbound-phi-v1",
+        "sanitization_policy": "outbound-phi-v2",
     }
     assert Path(result["sanitized_path"], MANIFEST_NAME).is_file()
     assert source.name not in Path(result["sanitized_path"]).name
@@ -1268,6 +1274,9 @@ class PresidioLikeScrubber:
     all rewritten. Real PHI is replaced too. Placeholders are left alone, so a
     second pass is stable.
     """
+
+    def sanitization_config(self):
+        return {}
 
     def scrub_text(self, text: str, is_separated: bool = False) -> str:
         text = text.replace("Jane Doe", "<PERSON>").replace("MRN-123", "<MRN>")
@@ -1758,6 +1767,9 @@ def test_declared_wrap_file_names_and_schemas_match_their_owners():
 
 class AuthSyntaxScrubber(FakeScrubber):
     """Model NER false positives on auth references, while catching literals."""
+
+    def sanitization_config(self):
+        return {}
 
     def scrub_text(self, text: str, is_separated: bool = False) -> str:
         for value in (
