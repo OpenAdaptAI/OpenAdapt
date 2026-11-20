@@ -39,6 +39,8 @@ openadapt-vocab-lint = "openadapt_types.vocabulary.lint:main"
 Homepage = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/types"
 Repository = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/types"
 Issues = "https://github.com/OpenAdaptAI/OpenAdapt/issues"
+Documentation = "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/types/README.md"
+Changelog = "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/types/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [
