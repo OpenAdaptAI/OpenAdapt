@@ -15,10 +15,65 @@
 
 <!-- version list -->
 
-## v3.4.0 (2026-11-19)
+## v3.4.0 (2026-11-20)
+
+### Features
+
+- Dropdowns, searchable selects, type-aheads and native selects are recorded,
+  compiled and run as one model, a choice (`OptionChoice` on a
+  `SELECT_OPTION` step, docs/CHOICES.md). A click on an option of a list the
+  previous action opened is a choice when the control showed the option
+  afterwards; recording judges this from behaviour (an option role, or
+  same-shaped siblings that appeared after the previous press), never from a
+  widget library. Replay opens the control, types the wanted value when the
+  person searched, waits for the options to settle, clicks the one enabled
+  option whose label or value matches, and reads the control back against an
+  independent named field and an
+  exact expected committed value. A new label with no observable code mapping
+  stops before selection. Search folding requires causal opener/input-session
+  evidence and preserves the opening control's identity guards. A
+  missing, duplicate or disabled option, or a control that does not show the
+  choice, halts before the next step (`choice_missing`, `choice_ambiguous`,
+  `choice_disabled`, `choice_changed`, `choice_unverified`). The option is
+  resolved again by label or value before actuation, so a reordered list cannot
+  redirect a saved position. Native selection revalidates the semantic
+  option atomically before emitting change events and selects that exact
+  option even when different labels share a value. It avoids extra focus
+  callbacks and revalidates after `input` before emitting `change`. Native and
+  listed read-back require one stable shown/committed state inside a fixed
+  deadline. Failures after any backend-owned mutation retain uncertain
+  delivery, including opening, search and final confirmation. Native selects respect
+  disabled option groups and fieldsets. A choice on a field passed to
+  `--param` becomes that parameter. Interactive and attached recording no
+  longer refuse a native `<select>`, and lists that choose on press or on
+  release (where the browser sends no click to the option) are no longer
+  silently missing from the recording.
+- Browser `alert`/`confirm` answers are recorded in interactive and attached
+  recording, from the value the page received, and attached to the click
+  that raised them in the same producer document. The compiled answer also
+  requires the recorded dialog kind; a matching message on a different kind
+  is dismissed. A dialog from a different document stops recording.
+  A headed recording leaves the dialog for the person instead of letting
+  Playwright dismiss it. A program recorded this way stops on a dialog no
+  step expects (`dialog_unexpected`), including a before-unload warning
+  that would otherwise discard unsaved edits.
+- `openadapt wrap publish` refuses, before anything is uploaded, a program
+  admitted in a mode a hosted run cannot verify (`ADMISSION_MODE_UNSUPPORTED`).
+  Hosted runs verify a person's admission or one made with a CI admitter key.
+- For an admitter-key admission, publish checks that the organization has
+  registered that admitter key (`GET /api/v1/org/{org}/admitter-keys`) and
+  otherwise refuses with `ADMITTER_KEY_UNREGISTERED`, naming the principal id
+  and public key an owner or admin must register.
 
 ### Fixes
 
+- Choice labels, values, shape metadata and browser-dialog messages are
+  checked against declared secrets before capture. A matching or opaque
+  secret boundary stops recording before that text reaches its artifacts.
+- A screenshot interrupted by a navigation inside an iframe or by an open
+  browser dialog is retried instead of failing the recording or run.
+- A click on a `<label>` and the click the browser forwards to its control
+  record as one action.
 - Managed runs of an admitted program carry verification for that exact
   dispatch through the CLI, public `Replayer` and deployment API. The proof
   binds the admission, bundle, inputs, policy, run, dispatch session and
@@ -30,16 +85,13 @@
   before another request starts. A delayed permit, expired deadline or missing
   receipt halts the run. Late completion evidence is retained as a separate
   nonauthorizing uncertainty observation and cannot produce VERIFIED.
-
-### Features
-
-- `openadapt wrap publish` refuses, before anything is uploaded, a program
-  admitted in a mode a hosted run cannot verify (`ADMISSION_MODE_UNSUPPORTED`).
-  Hosted runs verify a person's admission or one made with a CI admitter key.
-- For an admitter-key admission, publish checks that the organization has
-  registered that admitter key (`GET /api/v1/org/{org}/admitter-keys`) and
-  otherwise refuses with `ADMITTER_KEY_UNREGISTERED`, naming the principal id
-  and public key an owner or admin must register.
+- A governed MCP tool call no longer accepts an old or copied run report as a
+  new successful run. Each call binds its report to a fresh challenge and the
+  deployment that actually ran, and a missing or invalid completion after
+  launch is reported as uncertain, never as success (#2335).
+- Passphrase-derived keys, attended run keys and opened sealed sets are no
+  longer cached for the whole process. Each independent operation
+  authenticates again; caller-owned handles still reuse their key (#2341).
 
 ## v3.3.0 (2026-11-19)
 

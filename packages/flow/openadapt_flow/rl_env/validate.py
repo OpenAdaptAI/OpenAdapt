@@ -115,7 +115,8 @@ def run_episode(client: Any, task: Task, agent: str, seed: int) -> dict[str, Any
     else:
         for action in scripted(task):
             if agent == "screen_trusting" and action["kind"] == "done":
-                action = {"kind": "done", "claim": "success"}
+                # Keep any reply (an answer the task asks for); claim success.
+                action = {**action, "claim": "success"}
             result = client.step(action)
             obs = result.observation
             steps += 1
@@ -171,8 +172,13 @@ def summarize(env: EnvDirectory, rows: list[dict[str, Any]]) -> dict[str, Any]:
         floor = by_agent["random"]["mean_reward"]
         checks["random_floor_margin"] = round(1.0 - floor, 4) >= FLOOR_MARGIN
     if "lazy_failure" in by_agent:
+        # Under whole-record grading a task that cannot be done as asked has
+        # nothing to try: reporting failure with nothing changed is the honest
+        # run, so lazy_failure earns exactly those tasks and nothing else.
+        honest_noop = sum(not t.feasible and bool(t.grade) for t in env.tasks)
+        expected_lazy = round(honest_noop / len(env.tasks), 4) if env.tasks else 0.0
         checks["lazy_failure_earns_nothing"] = (
-            by_agent["lazy_failure"]["mean_reward"] == 0.0
+            by_agent["lazy_failure"]["mean_reward"] == expected_lazy
         )
     if "screen_trusting" in by_agent:
         checks["screen_trusting_paid_only_on_feasible"] = (

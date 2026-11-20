@@ -1,11 +1,8 @@
-"""Encrypted checkpoints stretch the passphrase a bounded number of times.
+"""Checkpoint crypto derives per operation without a process-global verifier.
 
-Before, every sealed checkpoint write and read ran scrypt (about 130 times on
-one MockMed run, 10.9 s instead of 3.3 s). A store now seals its containers
-under one salt, and a process keeps derived keys in memory, so a run derives
-once for writes and reuses that key for reads. The container format, its
-per-container salt field and random nonce, wrong-key refusal and tamper
-detection are unchanged.
+The former cross-operation cache optimization is intentionally removed.
+Wire, readback, wrong-key and tamper controls remain; explicit SetKey handles
+reuse their owned AEAD within a sealed-set operation.
 """
 
 from __future__ import annotations
@@ -26,6 +23,19 @@ KEY = "correct horse battery staple"
 WRONG = "incorrect horse battery staple"
 
 
+@pytest.fixture
+def derivation_requests(monkeypatch):
+    requests = []
+    original = crypto._derive
+
+    def counting(*args, **kwargs):
+        requests.append(1)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(crypto, "_derive", counting)
+    return requests
+
+
 def _checkpoint(i: int) -> RunCheckpoint:
     return RunCheckpoint(
         workflow_name="w",
@@ -37,31 +47,31 @@ def _checkpoint(i: int) -> RunCheckpoint:
     )
 
 
-def test_a_run_derives_its_key_a_bounded_number_of_times(tmp_path):
+def test_a_run_derives_once_per_crypto_operation(tmp_path, derivation_requests):
     before = crypto.derivations
     store = CheckpointStore(tmp_path / "run", key=KEY)
     store.write_manifest(RunManifest(workflow_name="w", bundle_dir="b"))
-    for i in range(40):
+    for i in range(3):
         store.write_checkpoint(_checkpoint(i))
         store.continuation_state_digest()
         assert store.last_checkpoint().step_id == f"s{i}"
-    # One for this store's salt. (The process cache may already hold it.)
-    assert crypto.derivations - before <= 1
+    assert crypto.derivations - before == len(derivation_requests)
+    assert len(derivation_requests) > 3
 
 
-def test_a_resumed_store_reads_with_one_more_derivation(tmp_path):
+def test_resumed_store_reads_derive_per_operation(tmp_path, derivation_requests):
     run = tmp_path / "run"
     writer = CheckpointStore(run, key=KEY)
     for i in range(5):
         writer.write_checkpoint(_checkpoint(i))
-    crypto._DERIVED.clear()
+    before_requests = len(derivation_requests)
     before = crypto.derivations
     reader = CheckpointStore(run, key=KEY)
     for _ in range(10):
         assert len(reader.checkpoints()) == 5
     reader.write_checkpoint(_checkpoint(5))
-    # One to read the writer's salt, one for the reader's own salt.
-    assert crypto.derivations - before <= 2
+    assert crypto.derivations - before == len(derivation_requests) - before_requests
+    assert crypto.derivations - before == 51
 
 
 def test_containers_keep_the_format_with_one_salt_and_fresh_nonces(tmp_path):
@@ -84,7 +94,7 @@ def test_a_cached_key_never_opens_for_another_passphrase(tmp_path):
     run = tmp_path / "run"
     store = CheckpointStore(run, key=KEY)
     store.write_checkpoint(_checkpoint(0))
-    assert store.last_checkpoint() is not None  # key now cached for this salt
+    assert store.last_checkpoint() is not None  # prior independent successful read
     with pytest.raises(crypto.DecryptionError):
         CheckpointStore(run, key=WRONG).last_checkpoint()
 
@@ -107,17 +117,22 @@ def test_an_explicit_salt_must_be_sixteen_bytes():
         crypto.encrypt_bytes(b"x", KEY, aad=crypto.CHECKPOINT_AAD, salt=b"short")
 
 
-def test_the_cache_is_bounded(monkeypatch):
-    monkeypatch.setattr(crypto, "_DERIVED_LIMIT", 3)
-    for _ in range(6):
-        crypto.encrypt_bytes(b"x", KEY, aad=crypto.CHECKPOINT_AAD)
-    assert len(crypto._DERIVED) <= 3
+def test_repeated_payload_operations_do_not_use_a_global_cache():
+    before = crypto.derivations
+    salt = b"s" * 16
+    containers = [
+        crypto.encrypt_bytes(b"x", KEY, aad=crypto.CHECKPOINT_AAD, salt=salt)
+        for _ in range(2)
+    ]
+    for container in containers:
+        assert crypto.decrypt_bytes(container, KEY, aad=crypto.CHECKPOINT_AAD) == b"x"
+    assert crypto.derivations - before == 4
+    assert not hasattr(crypto, "_DERIVED")
 
 
-def test_a_durable_run_derives_its_key_a_bounded_number_of_times(tmp_path):
-    # A whole durable run, checkpoints sealed under a key: every checkpoint
-    # write and the run's own reads of them share one derivation. Before the
-    # fix each one ran scrypt again.
+def test_durable_run_derives_per_operation(tmp_path, derivation_requests):
+    # Keep the original synthetic durable readback workload; its independent
+    # crypto operations now each derive, rather than sharing a global verifier.
     from openadapt_flow.ir import Workflow
     from openadapt_flow.runtime.replayer import Replayer
     from tests.test_durable_runtime import _key_step, _vision_ok
@@ -129,7 +144,6 @@ def test_a_durable_run_derives_its_key_a_bounded_number_of_times(tmp_path):
     )
     bundle, run_dir = tmp_path / "bundle", tmp_path / "run"
     workflow.save(bundle)
-    crypto._DERIVED.clear()
     before = crypto.derivations
     report = Replayer(
         FakeBackend(),
@@ -140,4 +154,5 @@ def test_a_durable_run_derives_its_key_a_bounded_number_of_times(tmp_path):
     ).run(workflow, bundle_dir=bundle, run_dir=run_dir)
     assert report.success is True
     assert len(CheckpointStore(run_dir, key=KEY).checkpoints()) == 12
-    assert crypto.derivations - before <= 3
+    assert crypto.derivations - before == len(derivation_requests)
+    assert len(derivation_requests) > 3

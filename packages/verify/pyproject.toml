@@ -34,6 +34,10 @@ openadapt-verify = "openadapt_verify.cli:main"
 
 [project.urls]
 Repository = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/verify"
+Homepage = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/verify"
+Documentation = "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/verify/README.md"
+Changelog = "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/verify/CHANGELOG.md"
+Issues = "https://github.com/OpenAdaptAI/OpenAdapt/issues"
 
 [tool.hatch.build]
 dev-mode-dirs = ["src"]

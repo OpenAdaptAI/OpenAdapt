@@ -69,6 +69,8 @@ def model(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
         observer=Observer(),
         key_dir=None,
         _jit=lambda: jit,
+        # Dispatch model only; signed privacy provenance has separate coverage.
+        require_credential_withholding=lambda: None,
     )
     compiler.out_dir.mkdir()
     server = compiler.out_dir / "server.py"

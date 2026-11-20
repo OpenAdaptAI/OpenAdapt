@@ -32,6 +32,8 @@ def diagnostic_host(monkeypatch):
     )
     monkeypatch.setattr(_browser_setup, "_missing_chromium_system_libs", lambda: [])
     monkeypatch.setattr(_browser_setup, "_chromium_present", lambda: False)
+    monkeypatch.setattr(_browser_setup, "installed_browser_channel", lambda: None)
+    monkeypatch.delenv("OPENADAPT_FLOW_BROWSER", raising=False)
     monkeypatch.setattr(subprocess, "run", _forbidden)
 
 
@@ -40,8 +42,53 @@ def test_plain_doctor_does_not_install_or_launch_a_browser(options):
     result = CliRunner().invoke(cli.main, ["doctor", *options])
 
     assert result.exit_code == 0, result.output
-    assert "will try to download" in result.output
+    assert "headless Chromium will be downloaded once if missing" in result.output
     assert "[INSTALL]" not in result.output
+
+
+@pytest.mark.parametrize("channel,name", [("chrome", "Chrome"), ("msedge", "Edge")])
+def test_doctor_reports_installed_browser(monkeypatch, channel, name):
+    monkeypatch.setattr(_browser_setup, "installed_browser_channel", lambda: channel)
+
+    result = CliRunner().invoke(cli.main, ["doctor", "--backend", "web"])
+
+    assert result.exit_code == 0, result.output
+    assert f"OpenAdapt will use {name}. Nothing will be downloaded" in result.output
+    assert "if it starts successfully" in result.output
+    assert "headless Chromium will be downloaded" not in result.output
+
+
+@pytest.mark.parametrize(
+    "choice,expected",
+    [
+        ("auto", "OpenAdapt will use Chrome"),
+        (" MSEDGE ", "OpenAdapt will use Edge"),
+        ("chrome", "OpenAdapt will use Chrome"),
+        ("bundled", "headless Chromium will be downloaded once if missing"),
+        ("", "OpenAdapt will use Chrome"),
+        ("invalid", "Flow will reject this OPENADAPT_FLOW_BROWSER value"),
+        ("   ", "Flow will reject this OPENADAPT_FLOW_BROWSER value"),
+    ],
+)
+def test_doctor_reports_browser_override(monkeypatch, choice, expected):
+    monkeypatch.setenv("OPENADAPT_FLOW_BROWSER", choice)
+    monkeypatch.setattr(_browser_setup, "installed_browser_channel", lambda: "chrome")
+
+    result = CliRunner().invoke(cli.main, ["doctor", "--backend", "web"])
+
+    assert result.exit_code == 0, result.output
+    assert f"OPENADAPT_FLOW_BROWSER is set to {choice!r}" in result.output
+    assert expected in result.output
+    assert "[INSTALL]" not in result.output
+
+
+def test_doctor_guards_missing_browser_selection_helper(monkeypatch):
+    monkeypatch.delattr(_browser_setup, "installed_browser_channel")
+
+    result = CliRunner().invoke(cli.main, ["doctor", "--backend", "web"])
+
+    assert result.exit_code != 0
+    assert "[MISSING] Browser: the installed Flow version cannot check" in result.output
 
 
 def test_explicit_install_uses_the_active_python_and_rechecks_presence(monkeypatch):

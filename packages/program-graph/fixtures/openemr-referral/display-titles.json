@@ -1,0 +1,59 @@
+{
+  "source": "Approved website labels from the archived October referral display; apply only to exactly matching compiled node groups.",
+  "groups": [
+    {
+      "title": "Name",
+      "nodes": [
+        "for_each::s::step_000",
+        "for_each::s::step_001",
+        "for_each::s::step_003",
+        "for_each::s::step_005",
+        "for_each::s::step_006",
+        "for_each::s::step_008"
+      ]
+    },
+    {
+      "title": "Date of birth and sex",
+      "nodes": [
+        "for_each::s::step_009",
+        "for_each::s::step_011",
+        "for_each::s::step_012",
+        "for_each::s::step_013"
+      ]
+    },
+    {
+      "title": "Address",
+      "nodes": [
+        "for_each::s::step_015",
+        "for_each::s::step_016",
+        "for_each::s::step_017",
+        "for_each::s::step_018",
+        "for_each::s::step_020",
+        "for_each::s::step_021",
+        "for_each::s::step_023",
+        "for_each::s::step_024",
+        "for_each::s::step_025",
+        "for_each::s::step_027",
+        "for_each::s::step_029"
+      ]
+    },
+    {
+      "title": "Phone, email and country",
+      "nodes": [
+        "for_each::s::step_030",
+        "for_each::s::step_032",
+        "for_each::s::step_033",
+        "for_each::s::step_035",
+        "for_each::s::step_036",
+        "for_each::s::step_037"
+      ]
+    },
+    {
+      "title": "Create the chart",
+      "nodes": [
+        "for_each::s::step_039",
+        "for_each::s::step_040"
+      ]
+    }
+  ]
+}

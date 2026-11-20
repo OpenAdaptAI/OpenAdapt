@@ -94,7 +94,6 @@ tests/test_loop_shapes.py::test_a_row_without_a_note_skips_the_note  # 6s
 tests/test_loop_shapes.py::test_hashed_identity_still_verifies_each_row  # 23s
 tests/test_loop_shapes.py::test_held_out_rows_each_write_their_own_record  # 13s
 tests/test_loop_shapes.py::test_one_demonstration_of_several_rows_is_enough  # 12s
-tests/test_mcp_teach_surfaces.py::test_teach_on_a_remote_window  # 32s
 tests/test_multi_surface_attach.py::test_cdp_attach_records_a_popup_and_a_tab_as_surfaces  # 10s
 tests/test_multi_surface_backends.py::test_compiles_a_typed_backend_switch  # 7s
 tests/test_multi_surface_backends.py::test_switch_to_a_windows_app_that_is_not_the_recorded_one_halts  # 8s

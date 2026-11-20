@@ -580,11 +580,11 @@ async () => {
 }
 """
 
-#: Installed in every document the session loads after sign-in, before the
-#: page's own scripts run. It refuses fetch, XHR, beacons, and form posts that
-#: are not reads, inside the page itself, so a write never reaches the network
-#: even when the network-layer guard would see it late. ``__CONFIG__`` is
-#: replaced with the record origin and the declared read-POST paths.
+#: Installed before the first document and its scripts. Mutation transports
+#: are suppressed in-page; only the selected submitter can consume one native
+#: auth-form exception in its current document. The network token independently
+#: enforces actual delivery authority, including after page interference.
+#: ``__CONFIG__`` carries read paths and the declared native auth endpoint.
 _NO_WRITES_SCRIPT = """
 (() => {
   const config = __CONFIG__;
@@ -603,6 +603,46 @@ _NO_WRITES_SCRIPT = """
       return false;
     }
   };
+  const nativeDetails = __NATIVE_SIGN_IN_FORM__;
+  const formOf = e => {
+    const prototype = e instanceof HTMLButtonElement ? HTMLButtonElement.prototype :
+      e instanceof HTMLInputElement ? HTMLInputElement.prototype : null;
+    return prototype && Object.getOwnPropertyDescriptor(prototype, 'form').get.call(e);
+  };
+  const readForm = (form, submitter = null) => {
+    try {
+      if (!(form instanceof HTMLFormElement)) return false;
+      if (submitter && formOf(submitter) !== form) return false;
+      const d = submitter ? nativeDetails(submitter) : {
+        method: Object.getOwnPropertyDescriptor(HTMLFormElement.prototype, 'method').get.call(form),
+        action: Object.getOwnPropertyDescriptor(HTMLFormElement.prototype, 'action').get.call(form)
+      };
+      return !!d && allowed(d.method, d.action);
+    } catch (_) { return false; }
+  };
+  const matchesAuth = e => {
+    try {
+      const d = nativeDetails(e), u = new URL(d.action), expected = new URL(config.nativeAuthPostUrl);
+      return d.method === 'post' && ['', '_self'].includes(d.target) &&
+        !u.username && !u.password && !u.hash && u.href === expected.href;
+    } catch (_) { return false; }
+  };
+  let armedForm = null, armedSubmitter = null, armUsed = false, ready = false;
+  const controller = Object.freeze({arm: e => {
+    if (!ready || armUsed) return false;
+    armUsed = true;
+    if (!e || e.ownerDocument !== document || !e.isConnected || !matchesAuth(e)) return false;
+    armedForm = formOf(e); armedSubmitter = e;
+    return !!armedForm;
+  }});
+  Object.defineProperty(window, '__openadaptReadbackAuth', {value: controller});
+  const consumeNative = (form, submitter) => {
+    if (form !== armedForm || submitter !== armedSubmitter || !submitter) return false;
+    armedForm = armedSubmitter = null;
+    return submitter.ownerDocument === document && submitter.isConnected &&
+      formOf(submitter) === form && matchesAuth(submitter);
+  };
+
   const realFetch = window.fetch;
   if (realFetch) {
     window.fetch = function (input, init) {
@@ -639,19 +679,21 @@ _NO_WRITES_SCRIPT = """
   }
   document.addEventListener('submit', (event) => {
     const form = event.target;
-    if (form && !allowed(form.method, form.action)) {
+    if (form && !readForm(form, event.submitter) &&
+        !consumeNative(form, event.submitter)) {
       blocked += 1;
       event.preventDefault();
     }
   }, true);
   const submit = HTMLFormElement.prototype.submit;
   HTMLFormElement.prototype.submit = function () {
-    if (!allowed(this.method, this.action)) {
+    if (!readForm(this)) {
       blocked += 1;
       return undefined;
     }
     return submit.apply(this, arguments);
   };
+  ready = true;
 })();
 """
 
@@ -660,8 +702,11 @@ def _no_writes_script(target: "ResolvedReadback") -> str:
     config = {
         "origin": _origin(target.record_url),
         "readPostPaths": list(target.spec.read_post_paths),
+        "nativeAuthPostUrl": target.spec.sign_in.post_url,
     }
-    return _NO_WRITES_SCRIPT.replace("__CONFIG__", json.dumps(config))
+    return _NO_WRITES_SCRIPT.replace("__CONFIG__", json.dumps(config)).replace(
+        "__NATIVE_SIGN_IN_FORM__", _NATIVE_SIGN_IN_FORM
+    )
 
 
 def _reader_payload(reader: FieldReader) -> dict[str, Optional[str]]:
@@ -776,6 +821,9 @@ class _PlaywrightSession:
             )
             fresh = self._context.cookies() == []
             self._context.set_default_timeout(timeout_ms)
+            # Protect the first document too. Registration after authentication
+            # cannot affect scripts already running in the landing document.
+            self._context.add_init_script(_no_writes_script(self._target))
             self._context.route("**/*", self._guard)
             self._page = self._context.new_page()
             self._page.goto(spec.sign_in.url, wait_until="domcontentloaded")
@@ -843,12 +891,10 @@ class _PlaywrightSession:
                         ) from None
                     if attempt == _SIGN_IN_ATTEMPTS - 1:
                         raise
-            # From here on the session is read-only. The network guard
-            # (``_guard``) refuses every non-read request; the init script
-            # refuses them inside each page before they are sent.
+            # The preinstalled browser gate and network guard remain read-only;
+            # no native form exception survives into a new document.
             self._auth_allowance = None
             self._phase = "read"
-            self._context.add_init_script(_no_writes_script(self._target))
         except ReadbackSessionError:
             self._close()
             raise
@@ -919,6 +965,16 @@ class _PlaywrightSession:
         ):
             raise ReadbackSessionError(
                 "the selected native sign-in form does not match its declared POST"
+            )
+        # This suppresses incidental page traffic, not grants wire authority.
+        # A page-callable controller cannot authenticate its caller; the
+        # frame/attempt/endpoint token below remains the authorization boundary.
+        if (
+            submitter.evaluate("e => window.__openadaptReadbackAuth?.arm(e) === true")
+            is not True
+        ):
+            raise ReadbackSessionError(
+                "the selected native submitter could not be armed"
             )
         self._auth_frame = frame
         self._auth_allowance = (

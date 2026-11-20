@@ -67,6 +67,8 @@ import threading
 import time
 from typing import Any, Mapping, Optional, Sequence, Union
 
+from openadapt_flow.private_file import open_binary
+
 ENV_MODE = "OPENADAPT_NO_OUTBOUND"
 ENV_ALLOW = "OPENADAPT_NO_OUTBOUND_ALLOW"
 ENV_LOG = "OPENADAPT_NO_OUTBOUND_LOG"
@@ -269,7 +271,7 @@ def _record(event: str, host: Any, port: Any) -> None:
         sort_keys=True,
     )
     try:
-        fd = os.open(_log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        fd = open_binary(_log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
         try:
             os.write(fd, (line + "\n").encode("utf-8"))
         finally:

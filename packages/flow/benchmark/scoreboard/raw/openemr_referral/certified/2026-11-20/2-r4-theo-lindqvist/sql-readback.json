@@ -1,0 +1,20 @@
+{
+  "new_charts": 1,
+  "changed_charts": 0,
+  "new_chart_fields": {
+    "id": "2",
+    "pid": "2",
+    "title": "Mr.",
+    "fname": "Theo",
+    "lname": "Lindqvist",
+    "DOB": "1983-07-26",
+    "sex": "Male",
+    "street": "63 FERRY STREET",
+    "city": "EXAMPLETON",
+    "state": "MA",
+    "postal_code": "02139",
+    "phone_home": "555-0136",
+    "email": "theo.lindqvist@example.invalid",
+    "country_code": "USA"
+  }
+}

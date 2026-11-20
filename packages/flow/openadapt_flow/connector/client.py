@@ -46,7 +46,11 @@ CONTROL_HEADER = "x-oa-connector-control"
 
 
 class ConnectorClientError(HostedError):
-    """An outbound control-plane call failed."""
+    """An outbound call failed. HTTP errors omit untrusted response bodies.
+
+    A remote error can echo credentials or fragments of them, so truncating
+    that body before a downstream log filter cannot make it safe to render.
+    """
 
 
 class RunsStopped(ConnectorClientError):
@@ -205,7 +209,7 @@ class ConnectorClient:
             "/api/connector/register", body, signed=False, extra_headers=headers
         )
         if resp.status_code != 200:
-            raise ConnectorClientError(f"enroll refused: {resp.status_code}")
+            raise ConnectorClientError(f"enroll refused: HTTP {resp.status_code}")
         data = resp.json()
         token = data.get("token")
         if token:
@@ -235,9 +239,7 @@ class ConnectorClient:
             self.control.runs_stopped = True
             raise RunsStopped("organization runs are stopped by an administrator")
         if resp.status_code != 200:
-            raise ConnectorClientError(
-                f"poll failed: {resp.status_code} {str(data.get('error', ''))[:80]}"
-            )
+            raise ConnectorClientError(f"poll failed: HTTP {resp.status_code}")
         self._absorb_control(resp, data)
         return data.get("job")
 
@@ -259,7 +261,7 @@ class ConnectorClient:
         )
         # 409 = the lease was already released or reaped; not fatal, move on.
         if resp.status_code not in (200, 409):
-            raise ConnectorClientError(f"ack failed: {resp.status_code}")
+            raise ConnectorClientError(f"ack failed: HTTP {resp.status_code}")
         return resp.json() if resp.content else {}
 
     def rotate(self, new_token: Optional[str] = None) -> dict[str, Any]:
@@ -298,7 +300,7 @@ class ConnectorClient:
             extra_headers=headers,
         )
         if not 200 <= resp.status_code < 300:
-            raise ConnectorClientError(f"run-callback failed: {resp.status_code}")
+            raise ConnectorClientError(f"run-callback failed: HTTP {resp.status_code}")
 
 
 def mint_token() -> str:

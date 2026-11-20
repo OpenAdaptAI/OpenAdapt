@@ -63,6 +63,7 @@ from openadapt_flow.runtime.durable.checkpoint import (
 from openadapt_flow.runtime.durable.program_checkpoint import (
     TOP_GRAPH_ID,
     ProgramCheckpoint,
+    ProgramDeliveryCursor,
     bundle_version,
     history_hash,
 )
@@ -747,6 +748,65 @@ def _validate_first_local_tail(
     return workflow, checkpoints
 
 
+def _validate_first_local_program_tail(
+    *,
+    run_dir: Path,
+    store: CheckpointStore,
+    pending: PendingEscalation,
+    manifest: RunManifest,
+    bundle_dir: Path,
+    live_bundle_version: str,
+    key: Optional[str],
+) -> tuple[Workflow, list[ProgramCheckpoint]]:
+    """Require the one exact independently verified native program successor."""
+    try:
+        checkpoints = store.program_checkpoints()
+        if (
+            manifest.delivery_authority_kind != "customer_local"
+            or not pending.program
+            or pending.delivery_uncertainty is None
+            or pending.deferred_readback is not None
+            or store.checkpoints()
+            or len(checkpoints) != pending.program_checkpoint_seq + 1
+        ):
+            raise StateDiverged(_FIRST_LOCAL_DELIVERY_HOLD)
+        tail = checkpoints[-1]
+        if (
+            tail.first_local_pause_sha256 != approval_pause_digest(pending)
+            or tail.delivery_attempted is not True
+            or tail.skipped
+            or not tail.new_effect_keys
+            or not tail.new_effect_evidence
+            or tail.new_unverified_effect_keys
+            or tail.new_unverified_effects
+            or tail.attended_transition is not None
+            or tail.attended_capability_digest is not None
+            or tail.delivery_uncertainty is not None
+            or tail.actuation not in {None, "api", *AUTOMATED_GUI_ACTUATIONS}
+            or (tail.actuation == "api") == pending.delivery_uncertainty.native
+            or ProgramDeliveryCursor.from_pending(
+                pending, bundle_version=live_bundle_version
+            )
+            != ProgramDeliveryCursor.from_checkpoint(tail)
+        ):
+            raise StateDiverged(_FIRST_LOCAL_DELIVERY_HOLD)
+        workflow = Workflow.load(bundle_dir, key=key)
+        if workflow.program is None or workflow.name != manifest.workflow_name:
+            raise StateDiverged(_FIRST_LOCAL_DELIVERY_HOLD)
+        frozen, _ = _program_resume_checkpoints(
+            run_dir=run_dir,
+            checkpoints=checkpoints,
+            pending=pending,
+            manifest=manifest,
+            workflow=workflow,
+            live_bundle_version=live_bundle_version,
+            first_local_tail=True,
+        )
+        return workflow, frozen
+    except (ValueError, TypeError) as exc:
+        raise StateDiverged(_FIRST_LOCAL_DELIVERY_HOLD) from exc
+
+
 def _program_resume_checkpoints(
     *,
     run_dir: Path,
@@ -755,18 +815,22 @@ def _program_resume_checkpoints(
     manifest: RunManifest,
     workflow: Workflow,
     live_bundle_version: str,
+    first_local_tail: bool = False,
 ) -> tuple[list[ProgramCheckpoint], Optional[ProgramCheckpoint]]:
     """Validate and freeze the complete program history for one pause."""
 
-    continuing = pending.status == "continuing"
+    continuing = pending.status == "continuing" and not first_local_tail
     attended_tail = (
-        bool(checkpoints)
+        not first_local_tail
+        and bool(checkpoints)
         and pending.status in {"approved", "continuing"}
         and checkpoints[-1].attended_transition is not None
         and checkpoints[-1].seq == pending.program_checkpoint_seq + 1
         and checkpoints[-1].verified_state_id == (pending.state_id or pending.step_id)
     )
-    expected_count = pending.program_checkpoint_seq + (1 if attended_tail else 0)
+    expected_count = pending.program_checkpoint_seq + (
+        1 if attended_tail or first_local_tail else 0
+    )
     valid_count = (
         len(checkpoints) >= pending.program_checkpoint_seq
         if continuing
@@ -825,7 +889,9 @@ def _program_resume_checkpoints(
     pause_validated = False
     for position, checkpoint in enumerate(checkpoints, start=1):
         if position == pending.program_checkpoint_seq + 1:
-            transition_history = _validate_pause_history(transition_history)
+            pause_history = _validate_pause_history(transition_history)
+            if not first_local_tail:
+                transition_history = pause_history
             pause_validated = True
         transition_history = _validate_checkpoint_history(
             checkpoint,
@@ -837,6 +903,7 @@ def _program_resume_checkpoints(
     for position, checkpoint in enumerate(checkpoints, start=1):
         is_post_pause = continuing and position > pending.program_checkpoint_seq
         is_attended_tail = attended_tail and position == len(checkpoints)
+        is_first_local_tail = first_local_tail and position == len(checkpoints)
         if (
             checkpoint.schema_version != 2
             or checkpoint.seq != position
@@ -873,7 +940,7 @@ def _program_resume_checkpoints(
             )
         valid_time = (
             _created_later(checkpoint.created_at, pending.created_at)
-            if is_post_pause or is_attended_tail
+            if is_post_pause or is_attended_tail or is_first_local_tail
             else _created_no_later(checkpoint.created_at, pending.created_at)
         )
         if not valid_time:
@@ -1222,7 +1289,9 @@ def _resume_under_lease(
     )
 
     first_local = is_first_local_delivery(pending.delivery_uncertainty)
-    first_local_deferred = first_local and pending.deferred_readback is not None
+    first_local_deferred = (
+        first_local and not pending.program and pending.deferred_readback is not None
+    )
     first_local_history = (
         _validate_first_local_tail(
             run_dir=run_dir,
@@ -1233,7 +1302,21 @@ def _resume_under_lease(
             live_bundle_version=live_bundle_version,
             key=key,
         )
-        if first_local and not first_local_deferred
+        if first_local and not pending.program and not first_local_deferred
+        else None
+    )
+
+    first_local_program_history = (
+        _validate_first_local_program_tail(
+            run_dir=run_dir,
+            store=store,
+            pending=pending,
+            manifest=manifest,
+            bundle_dir=resolved_bundle,
+            live_bundle_version=live_bundle_version,
+            key=key,
+        )
+        if first_local and pending.program
         else None
     )
 
@@ -1335,6 +1418,8 @@ def _resume_under_lease(
     workflow = (
         first_local_history[0]
         if first_local_history is not None
+        else first_local_program_history[0]
+        if first_local_program_history is not None
         else Workflow.load(resolved_bundle, key=key)
     )
     if workflow.name != manifest.workflow_name:
@@ -1366,14 +1451,19 @@ def _resume_under_lease(
             raise StateDiverged(
                 "a program continuation contains linear checkpoint artifacts"
             )
-        program_checkpoints, program_checkpoint = _program_resume_checkpoints(
-            run_dir=run_dir,
-            checkpoints=store.program_checkpoints(),
-            pending=pending,
-            manifest=manifest,
-            workflow=workflow,
-            live_bundle_version=live_bundle_version,
-        )
+        program_checkpoint: Optional[ProgramCheckpoint]
+        if first_local_program_history is not None:
+            program_checkpoints = first_local_program_history[1]
+            program_checkpoint = program_checkpoints[-1]
+        else:
+            program_checkpoints, program_checkpoint = _program_resume_checkpoints(
+                run_dir=run_dir,
+                checkpoints=store.program_checkpoints(),
+                pending=pending,
+                manifest=manifest,
+                workflow=workflow,
+                live_bundle_version=live_bundle_version,
+            )
         for retained_checkpoint in program_checkpoints:
             replayer.revalidate_program_checkpoint_effects(
                 retained_checkpoint,

@@ -280,7 +280,7 @@ def test_encrypted_file_moved_to_another_path_or_replaced_is_refused(
     assert AttendedActionStore(run).read() == capability
 
 
-# -- one key derivation per run, and no downgrade (real filesystem) ----------
+# -- operation-owned derivation and no downgrade (real filesystem) ----------
 
 SYNTHETIC_KEY = "synthetic-attended-test-passphrase"
 
@@ -293,10 +293,8 @@ def _write(path: Path, data: bytes) -> None:
 
 @pytest.fixture
 def counted_scrypt(monkeypatch):
-    """Count every scrypt run, with the per-run key cache cleared."""
-    attended_state._RUN_KEYS.clear()
+    """Count derivation requests; only public salt metadata survives calls."""
     attended_state._JOURNAL_SALTS.clear()
-    attended_state._CACHE.clear()
     calls: list[int] = []
     real = crypto._derive
 
@@ -306,16 +304,14 @@ def counted_scrypt(monkeypatch):
 
     monkeypatch.setattr(crypto, "_derive", counting)
     yield calls
-    attended_state._RUN_KEYS.clear()
     attended_state._JOURNAL_SALTS.clear()
-    attended_state._CACHE.clear()
 
 
-def test_scrypt_runs_once_per_run_not_per_file_or_row(tmp_path, counted_scrypt):
+def test_independent_attended_operations_each_derive(tmp_path, counted_scrypt):
     root = tmp_path / "run"
     receipts = root / ".attended_program_receipts"
     receipts.mkdir(parents=True)
-    paths = [receipts / f"pause-{index}.json" for index in range(30)]
+    paths = [receipts / f"pause-{index}.json" for index in range(3)]
     for index, path in enumerate(paths):
         attended_state.write_bytes(
             root, path, f'{{"n":{index}}}'.encode(), SYNTHETIC_KEY, _write
@@ -328,7 +324,7 @@ def test_scrypt_runs_once_per_run_not_per_file_or_row(tmp_path, counted_scrypt):
             sequence=seq,
             run_dir=root,
         )
-        for seq in range(30)
+        for seq in range(3)
     ]
     for _ in range(3):
         for index, path in enumerate(paths):
@@ -346,7 +342,8 @@ def test_scrypt_runs_once_per_run_not_per_file_or_row(tmp_path, counted_scrypt):
                 )
                 == f'{{"seq":{seq}}}'
             )
-    assert len(counted_scrypt) == 1
+    expected = 1 + len(paths) + len(rows) + 3 * (2 * len(paths) + len(rows))
+    assert len(counted_scrypt) == expected
     for path in paths:
         container = attended_state.enc_path(path).read_bytes()
         assert container.startswith(crypto.SALTED_FILE_MAGIC)
@@ -481,13 +478,15 @@ def test_older_plaintext_run_converts_under_one_salt(tmp_path, counted_scrypt):
         root, root / "attended_capability.json", b"{}", SYNTHETIC_KEY, _write
     )
     assert not (root / "attended_decisions.json").exists()
+    before_reads = len(counted_scrypt)
+    assert before_reads == 2  # One conversion AEAD, then one payload write.
     for index in range(10):
         path = receipts / f"p{index}.json"
         assert not path.exists()
         assert attended_state.read_bytes(root, path, SYNTHETIC_KEY) == (
             f'{{"p":{index}}}'.encode()
         )
-    assert len(counted_scrypt) == 1
+    assert len(counted_scrypt) == before_reads + 10
 
 
 def test_salted_file_from_another_run_is_refused(tmp_path, counted_scrypt):
@@ -652,15 +651,17 @@ def test_replayer_classifies_with_its_own_checkpoint_key(monkeypatch, tmp_path):
     assert seen["transition_evidence_root"] == tmp_path
 
 
-def test_run_key_cache_never_reuses_a_key_for_another_passphrase(counted_scrypt):
+def test_independent_run_keys_keep_wrong_passphrase_refusal(counted_scrypt):
     salt = b"\x07" * crypto.SALT_LEN
     first = attended_state._run_keys("passphrase-one", salt)
-    assert attended_state._run_keys("passphrase-one", salt) is first
-    assert len(counted_scrypt) == 1
+    repeated = attended_state._run_keys("passphrase-one", salt)
+    assert repeated is not first
+    assert len(counted_scrypt) == 2
     other = attended_state._run_keys("passphrase-two", salt)
     assert other is not first
-    assert len(counted_scrypt) == 2
+    assert len(counted_scrypt) == 3
     nonce = b"\x00" * crypto.NONCE_LEN
     sealed = first[0].encrypt(nonce, b"attended", b"aad")
+    assert repeated[0].decrypt(nonce, sealed, b"aad") == b"attended"
     with pytest.raises(InvalidTag):
         other[0].decrypt(nonce, sealed, b"aad")

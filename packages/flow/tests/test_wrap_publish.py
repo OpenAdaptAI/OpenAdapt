@@ -464,10 +464,12 @@ def command(
         "kind": "web",
     }
 
-    def derive(source: Path, destination: Path, kind: str) -> dict[str, Any]:
+    def derive(
+        source: Path, destination: Path, kind: str
+    ) -> tuple[Path, dict[str, Any]]:
         destination.mkdir(parents=True, exist_ok=True)
         (destination / "workflow.json").write_text("{}")
-        return {
+        return destination, {
             "kind": kind,
             "execution_semantics": state["semantics"],
             "files": [{"path": "workflow.json", "changed": False}],
@@ -1076,6 +1078,9 @@ def test_admitted_program_attestation_binds_the_compiled_recording(
     from openadapt_flow.sanitized_artifact import approve_derivative, sanitize_artifact
 
     class IdentityScrubber:
+        def sanitization_config(self):
+            return {}
+
         def scrub_text(self, text: str, is_separated: bool = False) -> str:
             return text
 
@@ -1175,6 +1180,9 @@ def test_real_governed_push_sanitizes_the_staged_bundle_and_pauses(
 
     class IdentityScrubber:
         # Scrubbing quality is the privacy package's job; this checks the path.
+        def sanitization_config(self):
+            return {}
+
         def scrub_text(self, text: str, is_separated: bool = False) -> str:
             return text
 

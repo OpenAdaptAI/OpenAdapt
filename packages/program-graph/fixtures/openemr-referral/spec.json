@@ -119,11 +119,11 @@
       }
     ],
     "provenance": {
-      "compiler_version": "2.2.0",
+      "compiler_version": "3.3.0",
       "certified": false,
-      "certification_status": null,
+      "certification_status": "expired",
       "policy_name": null,
-      "expires_at": null,
+      "expires_at": "2026-11-20T02:29:00.620246+00:00",
       "content_digest": null,
       "source_recording_sha256": null
     }

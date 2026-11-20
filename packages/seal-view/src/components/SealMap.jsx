@@ -84,10 +84,10 @@ export default function SealMap({
                 theme="dark"
                 playhead={playhead}
                 selectedId={own || node || actions[0]}
-                onSelect={(id) => {
-                    // The map selects the step its playhead reaches on its own;
-                    // only a different step is the visitor picking one.
-                    if (id === node && !own) return
+                onSelect={(id, origin) => {
+                    // Following the playhead must not seek it. An explicit pick,
+                    // including the current step, still navigates to that step.
+                    if (origin === 'follow') return
                     // The folded card holding the Seal's step: that step, with its Seal card.
                     if (anchorId && groupOf[anchorId] === id && groups.some((g) => g.id === id)) {
                         setOwn(null)

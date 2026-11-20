@@ -109,6 +109,10 @@ def register_connector_parser(
     )
     pt.set_defaults(func=command)
 
+    from openadapt_flow.connector.windows_service import register_service_parser
+
+    register_service_parser(csub)
+
 
 def _connector_flags(args: argparse.Namespace) -> dict[str, object]:
     """Collect the connector CLI flags into the settings-resolution dict."""

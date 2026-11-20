@@ -1,0 +1,408 @@
+"""Owned command deadlines and evidence-based apt failure classification."""
+
+from __future__ import annotations
+
+import argparse
+import importlib.util
+import json
+import shlex
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+from test_apt_install_action import _module
+
+PROBE = Path(__file__).parent / "ci" / "apt_deadline_probe.py"
+
+
+@pytest.mark.parametrize("uid", [0, 1001])
+def test_deadline_sits_inside_the_command_privilege_boundary(monkeypatch, uid):
+    apt = _module()
+    monkeypatch.setattr(apt.os, "geteuid", lambda: uid)
+    monkeypatch.setattr(apt, "_gnu_timeout", lambda _privileged: "/usr/bin/timeout")
+    command = apt._deadline_command(apt._sudo(["apt-get", "update"]), 7)
+    prefix = ["sudo", "-n"] if uid else []
+    assert command == [
+        *prefix,
+        "/usr/bin/timeout",
+        "--signal=KILL",
+        "--",
+        "7s",
+        "apt-get",
+        "update",
+    ]
+    assert "--foreground" not in command
+
+
+@pytest.mark.parametrize("deadline", [0, -1])
+def test_invalid_deadline_cannot_disable_the_timer(deadline):
+    with pytest.raises(ValueError, match="positive"):
+        _module()._deadline_command(["synthetic"], deadline)
+
+
+def test_missing_timer_is_a_setup_refusal(monkeypatch):
+    apt = _module()
+    monkeypatch.setattr(apt, "sys", SimpleNamespace(platform="darwin"))
+    monkeypatch.setattr(apt.os, "geteuid", lambda: 501)
+    monkeypatch.setattr(apt.shutil, "which", lambda _name: None)
+    with pytest.raises(SystemExit, match="GNU timeout is required"):
+        apt._deadline_command(["synthetic"], 1)
+
+
+@pytest.mark.parametrize("stubborn", [False, True])
+def test_timed_command_releases_its_descendants_lock(tmp_path, stubborn):
+    spec = importlib.util.spec_from_file_location("apt_deadline_probe", PROBE)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    result = module.probe(
+        _module(), tmp_path / "case", real_sudo=False, stubborn=stubborn
+    )
+    assert result["lock_released_when_helper_returned"]
+
+
+@pytest.mark.parametrize(
+    "update,download,reason",
+    [
+        (
+            (100, "Temporary failure resolving 'archive.ubuntu.com'"),
+            None,
+            "dns-unreachable",
+        ),
+        ((100, "Could not connect to archive.ubuntu.com"), None, "mirror-unreachable"),
+        ((137, "interrupted"), None, "command-interrupted"),
+        ((100, "E: Read-only file system"), None, "index-update-failed"),
+        (
+            (0, "Hit:1 http://archive.ubuntu.com/ubuntu noble InRelease\n"),
+            (100, "E: Could not get lock: held by process"),
+            "download-failed",
+        ),
+        (
+            (0, "Hit:1 http://archive.ubuntu.com/ubuntu noble InRelease\n"),
+            (137, "interrupted"),
+            "download-failed",
+        ),
+        (
+            (0, "Hit:1 http://archive.ubuntu.com/ubuntu noble InRelease\n"),
+            (100, "Unable to locate package synthetic"),
+            "package-not-found",
+        ),
+    ],
+)
+def test_failure_reason_uses_observed_command_phase(
+    tmp_path, monkeypatch, capsys, update, download, reason
+):
+    apt = _module()
+    monkeypatch.setenv("RUNNER_OS", "Linux")
+    monkeypatch.setattr(apt.shutil, "which", lambda _name: "/fake/apt-get")
+    monkeypatch.setattr(apt, "_arch", lambda: "amd64")
+    monkeypatch.setattr(apt, "_write_root", lambda *_args: None)
+    monkeypatch.setattr(apt, "_missing", lambda packages: packages)
+    monkeypatch.setattr(apt, "third_party_hosts", lambda: set())
+    monkeypatch.setattr(
+        apt, "Sources", lambda: type("Sources", (), {"apply": lambda *_args: None})()
+    )
+    monkeypatch.setattr(
+        apt,
+        "_run",
+        lambda command, timeout=None: update if "update" in command else download,
+    )
+    result = tmp_path / "result.json"
+    code = apt.cmd_install(
+        argparse.Namespace(
+            packages="synthetic",
+            recommends="false",
+            cache_dir=str(tmp_path / "cache"),
+            result=str(result),
+            cache_hit="none",
+            refresh_index="false",
+        )
+    )
+    assert code == 1
+    assert json.loads(result.read_text())["reason"] == reason
+    output = capsys.readouterr().out
+    if reason in {"download-failed", "index-update-failed", "command-interrupted"}:
+        assert "infrastructure outage" not in output.lower()
+        assert "no Ubuntu mirror answered" not in output
+
+
+@pytest.mark.parametrize("stubborn", [False, True])
+def test_offline_playwright_resolution_owns_its_timed_descendants(
+    tmp_path, monkeypatch, stubborn
+):
+    apt = _module()
+    monkeypatch.setattr(apt, "PLAYWRIGHT_TIMEOUT", 1)
+    spec = importlib.util.spec_from_file_location("apt_resolver_deadline_probe", PROBE)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+
+    def invoke(command, timeout):
+        assert timeout == 1
+        with pytest.raises(SystemExit, match=r"exit (-9|137)") as raised:
+            apt.resolve_playwright(shlex.join(command), "chromium", str(tmp_path))
+        return 137, str(raised.value)
+
+    result = module.probe(
+        SimpleNamespace(_run=invoke),
+        tmp_path / "resolver",
+        real_sudo=False,
+        stubborn=stubborn,
+    )
+    assert result["lock_released_when_helper_returned"]
+
+
+def test_real_sudo_probe_refuses_an_ordinary_local_environment(tmp_path, monkeypatch):
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    spec = importlib.util.spec_from_file_location("apt_refused_sudo_probe", PROBE)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    with pytest.raises(RuntimeError, match="ephemeral GitHub Linux runner"):
+        module.probe(None, tmp_path / "refused", real_sudo=True, stubborn=False)
+    assert not (tmp_path / "refused").exists()
+
+
+def test_owned_download_interruption_can_recover_at_the_next_mirror(
+    tmp_path, monkeypatch
+):
+    apt = _module()
+    state = {"downloads": 0, "installed": False}
+    monkeypatch.setenv("RUNNER_OS", "Linux")
+    monkeypatch.setattr(apt.shutil, "which", lambda _name: "/fake/apt-get")
+    monkeypatch.setattr(apt, "_arch", lambda: "amd64")
+    monkeypatch.setattr(apt, "_write_root", lambda *_args: None)
+    monkeypatch.setattr(apt, "_prune_cache", lambda *_args: None)
+    monkeypatch.setattr(apt, "third_party_hosts", lambda: set())
+    monkeypatch.setattr(
+        apt, "_missing", lambda packages: [] if state["installed"] else packages
+    )
+    monkeypatch.setattr(
+        apt, "Sources", lambda: type("Sources", (), {"apply": lambda *_args: None})()
+    )
+
+    def run(command, timeout=None):
+        if "update" in command:
+            return 0, "Hit:1 http://archive.ubuntu.com/ubuntu noble InRelease\n"
+        if "--download-only" in command:
+            state["downloads"] += 1
+            return (
+                (137, "interrupted") if state["downloads"] == 1 else (0, "downloaded")
+            )
+        assert "--no-download" in command
+        state["installed"] = True
+        return 0, "installed"
+
+    monkeypatch.setattr(apt, "_run", run)
+    result = tmp_path / "result.json"
+    assert (
+        apt.cmd_install(
+            argparse.Namespace(
+                packages="synthetic",
+                recommends="false",
+                cache_dir=str(tmp_path / "cache"),
+                result=str(result),
+                cache_hit="none",
+                refresh_index="false",
+            )
+        )
+        == 0
+    )
+    record = json.loads(result.read_text())
+    assert state == {"downloads": 2, "installed": True}
+    assert record["source"] == "network"
+    assert record["mirror"] == "archive.ubuntu.com and security.ubuntu.com"
+    assert record["reason"] == ""
+
+
+def test_requested_refresh_failure_does_not_claim_available_packages_are_missing(
+    tmp_path, monkeypatch, capsys
+):
+    apt = _module()
+    monkeypatch.setenv("RUNNER_OS", "Linux")
+    monkeypatch.setattr(apt.shutil, "which", lambda _name: "/fake/apt-get")
+    monkeypatch.setattr(apt, "_arch", lambda: "amd64")
+    monkeypatch.setattr(apt, "_write_root", lambda *_args: None)
+    monkeypatch.setattr(apt, "_missing", lambda _packages: [])
+    monkeypatch.setattr(apt, "third_party_hosts", lambda: set())
+    monkeypatch.setattr(
+        apt, "Sources", lambda: type("Sources", (), {"apply": lambda *_args: None})()
+    )
+    monkeypatch.setattr(
+        apt, "_run", lambda *_args, **_kwargs: (100, "E: Read-only file system")
+    )
+    result = tmp_path / "result.json"
+    assert (
+        apt.cmd_install(
+            argparse.Namespace(
+                packages="synthetic",
+                recommends="false",
+                cache_dir=str(tmp_path / "cache"),
+                result=str(result),
+                cache_hit="none",
+                refresh_index="true",
+            )
+        )
+        == 1
+    )
+    assert json.loads(result.read_text())["reason"] == "index-update-failed"
+    output = capsys.readouterr().out
+    assert "Requested packages available: synthetic; index refresh failed." in output
+    assert "Packages not installed:" not in output
+
+
+@pytest.mark.parametrize("with_sudo", [False, True])
+def test_linux_timer_identity_is_independent_of_subject_path(monkeypatch, with_sudo):
+    apt = _module()
+    monkeypatch.setattr(apt, "sys", SimpleNamespace(platform="linux"))
+    monkeypatch.setattr(apt.os, "geteuid", lambda: 1001)
+    monkeypatch.setattr(apt.os, "access", lambda *_args: True)
+    monkeypatch.setattr(apt.shutil, "which", lambda _name: "/subject/timeout")
+    monkeypatch.setattr(
+        apt,
+        "_owned_run",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            returncode=0, stdout="timeout (GNU coreutils) 9.7\n"
+        ),
+    )
+    command = ["sudo", "-n", "synthetic"] if with_sudo else ["synthetic"]
+    bounded = apt._deadline_command(command, 1)
+    assert bounded[2 if with_sudo else 0] == "/usr/bin/gnutimeout"
+    assert "/subject/timeout" not in bounded
+
+
+def test_absent_system_timer_never_falls_back_to_subject_path(monkeypatch):
+    apt = _module()
+    monkeypatch.setattr(apt, "sys", SimpleNamespace(platform="linux"))
+    monkeypatch.setattr(apt.os, "geteuid", lambda: 1001)
+    monkeypatch.setattr(apt.os, "access", lambda *_args: False)
+    monkeypatch.setattr(apt.shutil, "which", lambda _name: "/subject/timeout")
+    with pytest.raises(SystemExit, match="GNU timeout is required"):
+        apt._deadline_command(["sudo", "-n", "synthetic"], 1)
+
+
+@pytest.mark.parametrize(
+    "versions,expected",
+    [
+        ({"/usr/bin/timeout": (0, "timeout (GNU coreutils) 9.4")}, "/usr/bin/timeout"),
+        (
+            {
+                "/usr/bin/gnutimeout": (0, "timeout (GNU coreutils) 9.7"),
+                "/usr/bin/timeout": (0, "timeout (uutils coreutils) 0.10"),
+            },
+            "/usr/bin/gnutimeout",
+        ),
+        (
+            {
+                "/usr/bin/gnutimeout": (1, "timeout (GNU coreutils) 9.7"),
+                "/usr/bin/timeout": (0, "timeout (GNU coreutils) 9.4"),
+            },
+            "/usr/bin/timeout",
+        ),
+        ({"/usr/bin/timeout": (0, "timeout (uutils coreutils) 0.10")}, None),
+        (
+            {
+                "/usr/bin/timeout": (
+                    0,
+                    "compatible timeout\nGNU coreutils documentation",
+                )
+            },
+            None,
+        ),
+        ({}, None),
+    ],
+)
+def test_provider_qualification_is_independent_of_utility_name(
+    monkeypatch, versions, expected
+):
+    apt = _module()
+    monkeypatch.setattr(apt, "sys", SimpleNamespace(platform="linux"))
+    monkeypatch.setattr(apt.os, "access", lambda path, _mode: path in versions)
+    monkeypatch.setattr(apt.shutil, "which", lambda _name: "/subject/timeout")
+    queried = []
+
+    def run(command, timeout, **kwargs):
+        assert timeout == 5
+        assert command[1:] == ["--version"]
+        queried.append(command[0])
+        code, output = versions[command[0]]
+        return SimpleNamespace(returncode=code, stdout=output)
+
+    monkeypatch.setattr(apt, "_owned_run", run)
+    if expected is None:
+        with pytest.raises(SystemExit, match="verified GNU timeout"):
+            apt._gnu_timeout(privileged=True)
+    else:
+        assert apt._gnu_timeout(privileged=True) == expected
+    assert all(path in apt.SYSTEM_TIMEOUTS for path in queried)
+    assert "/subject/timeout" not in queried
+
+
+@pytest.mark.parametrize("uid", [0, 1001])
+def test_same_identity_deadline_has_no_external_timer_dependency(monkeypatch, uid):
+    apt = _module()
+    monkeypatch.setattr(apt.os, "geteuid", lambda: uid)
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("same-identity commands must not need a GNU timer")
+
+    monkeypatch.setattr(apt, "_gnu_timeout", forbidden)
+    result = apt._owned_run([sys.executable, "-c", "print('owned')"], 2)
+    assert (result.returncode, result.stdout, result.stderr) == (0, "owned\n", "")
+
+
+def test_delegated_deadline_runs_inside_sudo_without_outer_direct_child_timeout(
+    monkeypatch,
+):
+    apt = _module()
+    monkeypatch.setattr(apt, "_gnu_timeout", lambda _privileged: "/usr/bin/gnutimeout")
+    observed = []
+
+    def run(command, **kwargs):
+        observed.append((command, kwargs))
+        return SimpleNamespace(returncode=137, stdout="interrupted")
+
+    monkeypatch.setattr(apt.subprocess, "run", run)
+    result = apt._owned_run(["sudo", "-n", "synthetic"], 2, merge_stderr=True)
+    assert result.returncode == 137
+    command, options = observed[0]
+    assert command == [
+        "sudo",
+        "-n",
+        "/usr/bin/gnutimeout",
+        "--signal=KILL",
+        "--",
+        "2s",
+        "synthetic",
+    ]
+    assert "timeout" not in options
+    assert options["stderr"] == apt.subprocess.STDOUT
+
+
+def test_successful_parent_cannot_hide_a_timed_out_descendant(tmp_path):
+    apt = _module()
+    command = [
+        sys.executable,
+        "-c",
+        "import subprocess,sys; "
+        "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(4)'])",
+    ]
+    result = apt._owned_run(command, 0.3)
+    assert result.returncode == 137
+
+
+def test_provider_version_probe_is_bounded_and_cannot_block_setup(monkeypatch):
+    apt = _module()
+    monkeypatch.setattr(apt.os, "access", lambda *_args: True)
+    queried = []
+
+    def interrupted(command, timeout):
+        queried.append((command, timeout))
+        return SimpleNamespace(returncode=137, stdout="timeout (GNU coreutils) 9.7")
+
+    monkeypatch.setattr(apt, "_owned_run", interrupted)
+    with pytest.raises(SystemExit, match="verified GNU timeout"):
+        apt._gnu_timeout(privileged=True)
+    assert len(queried) == len(apt.SYSTEM_TIMEOUTS)
+    assert all(timeout == 5 for _command, timeout in queried)
