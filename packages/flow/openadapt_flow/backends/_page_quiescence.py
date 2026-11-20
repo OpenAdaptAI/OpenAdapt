@@ -204,7 +204,9 @@ TREE_PROBE_JS = (
     if (busy) return { verdict: busy, windows, last, wait: ready + windowMs - nowAbs };
     const ticks = window.__oaflowQuiet.ticks || [0, 0];
     // Two rendered top-level frames after the last change in any frame.
-    if (!(ticks[0] > last)) return { verdict: 'busy:paint', windows, last };
+    if (window === window.top && !(ticks[0] > last)) {
+        return { verdict: 'busy:paint', windows, last };
+    }
     return { verdict: 'quiet', windows, last };
 }"""
 )
@@ -233,8 +235,10 @@ TOP_TICKS_JS = r"""() => (window.__oaflowQuiet && window.__oaflowQuiet.ticks) ||
 class PageQuiescence:
     """Network + DOM quiescence tracker bound to one Playwright page."""
 
-    def __init__(self, page: Any) -> None:
+    def __init__(self, page: Any, *, root_frame: Any = None) -> None:
         self._page = page
+        self._root_frame = root_frame
+        self._requests: dict[int, Any] = {}
         self._inflight: set[int] = set()
         self._last_network = time.monotonic()
         self._armed = False
@@ -257,17 +261,67 @@ class PageQuiescence:
         except Exception:
             self._armed = False
 
-    def _on_request(self, request: Any) -> None:
-        self._inflight.add(id(request))
+    def set_root_frame(self, frame: Any) -> None:
+        """Change the observed subtree without losing pending Page requests."""
+        if frame == self._root_frame:
+            return
+        self._root_frame = frame
+        self._inflight = {
+            key
+            for key, request in self._requests.items()
+            if self._request_in_scope(request)
+        }
         self._last_network = time.monotonic()
+        self.marker = None
+
+    def detach(self) -> None:
+        """Release the Page event subscriptions owned by this tracker."""
+        for event, callback in (
+            ("request", self._on_request),
+            ("requestfinished", self._on_done),
+            ("requestfailed", self._on_done),
+        ):
+            self._page.remove_listener(event, callback)
+        self._armed = False
+
+    def _frame_in_scope(self, frame: Any) -> bool:
+        if self._root_frame is None:
+            return True
+        while frame is not None:
+            if frame == self._root_frame:
+                return True
+            frame = frame.parent_frame
+        return False
+
+    def _request_in_scope(self, request: Any) -> bool:
+        if self._root_frame is None:
+            return True
+        try:
+            return self._frame_in_scope(request.frame)
+        except Exception:
+            return False
+
+    def _on_request(self, request: Any) -> None:
+        self._requests[id(request)] = request
+        if self._request_in_scope(request):
+            self._inflight.add(id(request))
+            self._last_network = time.monotonic()
 
     def _on_done(self, request: Any) -> None:
-        self._inflight.discard(id(request))
-        self._last_network = time.monotonic()
+        self._requests.pop(id(request), None)
+        if id(request) in self._inflight or self._request_in_scope(request):
+            self._inflight.discard(id(request))
+            self._last_network = time.monotonic()
 
     def _live_frames(self) -> Optional[list[Any]]:
         try:
-            return [f for f in self._page.frames if not f.is_detached()]
+            if self._root_frame is not None and self._root_frame.is_detached():
+                return None
+            return [
+                f
+                for f in self._page.frames
+                if not f.is_detached() and self._frame_in_scope(f)
+            ]
         except Exception:
             return None
 
@@ -306,7 +360,8 @@ class PageQuiescence:
             return None
         self.retry_after_s = 0.0
         try:
-            out = self._page.evaluate(TREE_PROBE_JS, window_ms)
+            target = self._root_frame if self._root_frame is not None else self._page
+            out = target.evaluate(TREE_PROBE_JS, window_ms)
         except Exception:
             return None
         verdict = out.get("verdict") if isinstance(out, dict) else None
@@ -327,6 +382,13 @@ class PageQuiescence:
             if verdict is None:
                 self.last_reason = "unavailable"
                 return None
+        if verdict == "quiet" and self._root_frame is not None:
+            try:
+                ticks = self._page.evaluate(TOP_TICKS_JS)
+            except Exception:
+                return None
+            if not ticks or not float(ticks[0]) > self._frame_last:
+                verdict = "busy:paint"
         self.last_reason = str(verdict)
         if verdict != "quiet":
             network_wait_s = window_s - (time.monotonic() - self._last_network)
