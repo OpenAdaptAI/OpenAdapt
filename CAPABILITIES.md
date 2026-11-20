@@ -1,9 +1,12 @@
 # What OpenAdapt can do
 
-OpenAdapt turns work that people or computer-use agents do in applications
-with no usable API (EMRs, payer portals, desktop and remote-desktop apps) into
-programs that make the same entry every time with no calls to a hosted AI model, check that
-the entry landed in the right record, and stop instead of guessing.
+OpenAdapt turns a task that a person or an AI agent does once in an
+application into a program that repeats it with new inputs. The program makes
+the same entry every time with no calls to a hosted AI model, checks that the
+entry landed in the right record by reading it back, and stops instead of
+guessing. It is for web, desktop and remote-desktop applications with no
+usable API. EMRs and payer portals are examples of highly regulated settings
+where those checks matter most.
 
 This page indexes what OpenAdapt implements, with the status, the evidence and
 the code for each capability:
