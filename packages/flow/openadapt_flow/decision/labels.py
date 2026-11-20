@@ -47,6 +47,7 @@ from openadapt_flow.judgment_cases import (
     JudgmentFactType,
     LocalEvidenceRefV1,
 )
+from openadapt_flow.private_file import open_binary
 
 LABEL_SCHEMA: Literal["openadapt.decision-label/v1"] = "openadapt.decision-label/v1"
 #: Where an item sat in the plan. ``unscored`` is every item when triage is
@@ -150,7 +151,7 @@ class LabelLog:
         flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND
         if hasattr(os, "O_NOFOLLOW"):
             flags |= os.O_NOFOLLOW
-        descriptor = os.open(self.path, flags, 0o600)
+        descriptor = open_binary(self.path, flags, 0o600)
         try:
             os.write(descriptor, line)
             os.fsync(descriptor)

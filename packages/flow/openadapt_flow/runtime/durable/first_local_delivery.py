@@ -11,6 +11,7 @@ from contextvars import ContextVar
 from pathlib import Path
 
 from openadapt_flow.ir import ActionDeliveryUncertainty
+from openadapt_flow.private_file import open_binary
 
 FIRST_LOCAL_DELIVERY = "first_local_delivery"
 FIRST_LOCAL_DELIVERY_CAUSE = "FirstLocalDeliveryWriteAhead"
@@ -53,7 +54,7 @@ def local_delivery_owner(run_dir: Path, *, create: bool = True) -> Iterator[None
         path = directory.parent / f".openadapt-first-delivery-{digest}.lock"
         if create:
             directory.parent.mkdir(parents=True, exist_ok=True)
-        fd = os.open(path, flags | (os.O_CREAT if create else 0), 0o600)
+        fd = open_binary(path, flags | (os.O_CREAT if create else 0), 0o600)
     except FileNotFoundError as exc:
         if create:
             raise FirstLocalDeliveryHeld("the local owner file is unavailable") from exc

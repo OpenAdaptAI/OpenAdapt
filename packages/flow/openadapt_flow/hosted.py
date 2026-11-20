@@ -58,6 +58,8 @@ from uuid import UUID
 import httpx
 import idna
 
+from openadapt_flow.private_file import open_binary
+
 __all__ = [
     "DEFAULT_HOST",
     "HostedError",
@@ -1953,7 +1955,7 @@ def _client_run_id(run_path: Path) -> str:
         # opened descriptor back to this exact directory entry before reading
         # any bytes; O_NOFOLLOW is an added symlink refusal where available.
         try:
-            fd = os.open(id_path, flags)
+            fd = open_binary(id_path, flags)
         except FileNotFoundError as exc:
             raise HostedError(
                 "run report id changed while it was being opened"
@@ -2050,7 +2052,7 @@ def _client_run_id(run_path: Path) -> str:
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
     try:
-        fd = os.open(id_path, flags, 0o600)
+        fd = open_binary(id_path, flags, 0o600)
     except FileExistsError:
         try:
             existing = id_path.lstat()
@@ -2092,7 +2094,7 @@ def _client_run_id(run_path: Path) -> str:
             directory_flags = os.O_RDONLY
             if hasattr(os, "O_DIRECTORY"):
                 directory_flags |= os.O_DIRECTORY
-            directory_fd = os.open(run_path, directory_flags)
+            directory_fd = open_binary(run_path, directory_flags)
             try:
                 os.fsync(directory_fd)
             finally:

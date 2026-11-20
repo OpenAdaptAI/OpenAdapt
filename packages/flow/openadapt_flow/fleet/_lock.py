@@ -12,12 +12,14 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
+from openadapt_flow.private_file import open_binary
+
 
 @contextmanager
 def exclusive_lock(path: Path) -> Iterator[None]:
     """Hold an exclusive lock on ``path`` (created if missing) while inside."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor = os.open(path, os.O_CREAT | os.O_RDWR, 0o600)
+    descriptor = open_binary(path, os.O_CREAT | os.O_RDWR, 0o600)
     try:
         if os.name == "nt":
             import msvcrt

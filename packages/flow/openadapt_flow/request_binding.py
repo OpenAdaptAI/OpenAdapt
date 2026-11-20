@@ -23,6 +23,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from openadapt_flow.private_file import open_binary
+
 CONTEXT_SCHEMA = "openadapt.request-context/1"
 BINDING_SCHEMA = "openadapt.receipt-binding/1"
 MCP_META_KEY = "ai.openadapt/request-context"
@@ -290,13 +292,15 @@ def _read_receipt_impl(path: object, under: Path) -> tuple[bytes, dict[str, Any]
     chain: list[tuple[int, str, os.stat_result]] = []
     primary: BaseException | None = None
     try:
-        directory = os.open(file.anchor, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        directory = open_binary(
+            file.anchor, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+        )
         descriptors.append(directory)
         for name in components[:-1]:
             before = os.stat(name, dir_fd=directory, follow_symlinks=False)
             if not stat.S_ISDIR(before.st_mode):
                 raise BindingError("receipt_owner")
-            child = os.open(
+            child = open_binary(
                 name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory
             )
             descriptors.append(child)
@@ -315,7 +319,7 @@ def _read_receipt_impl(path: object, under: Path) -> tuple[bytes, dict[str, Any]
             or not 0 < before.st_size <= MAX_RECEIPT_BYTES
         ):
             raise BindingError("receipt_header")
-        fd = os.open(
+        fd = open_binary(
             name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory
         )
         descriptors.append(fd)
