@@ -11,6 +11,9 @@ from openadapt_flow.jit import WebApp
 
 
 class _Backend:
+    def focused_field_credential(self):
+        return None
+
     def __init__(self, url: str) -> None:
         self.page = f"page-at:{url}"
 
