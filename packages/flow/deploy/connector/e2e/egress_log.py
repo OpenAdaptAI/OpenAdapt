@@ -14,7 +14,11 @@ import time
 
 from mitmproxy import http
 
-ALLOWED = {h.strip() for h in os.environ.get("EGRESS_ALLOWED_HOSTS", "").split(",") if h.strip()}
+ALLOWED = {
+    h.strip()
+    for h in os.environ.get("EGRESS_ALLOWED_HOSTS", "").split(",")
+    if h.strip()
+}
 LOG = os.environ.get("EGRESS_LOG", "/log/egress.jsonl")
 MASK = {"authorization", "x-run-token", "cookie", "x-api-key"}
 
@@ -30,11 +34,16 @@ def request(flow: http.HTTPFlow) -> None:
         "host": host,
         "port": flow.request.port,
         "path": flow.request.path,
-        "headers": {k: ("<masked>" if k.lower() in MASK else v) for k, v in flow.request.headers.items()},
+        "headers": {
+            k: ("<masked>" if k.lower() in MASK else v)
+            for k, v in flow.request.headers.items()
+        },
         "body_b64": base64.b64encode(body).decode(),
         "body_bytes": len(body),
     }
     with open(LOG, "a", encoding="utf-8") as fh:
         fh.write(json.dumps(entry) + "\n")
     if not allowed:
-        flow.response = http.Response.make(403, b"egress refused by pilot proxy", {"content-type": "text/plain"})
+        flow.response = http.Response.make(
+            403, b"egress refused by pilot proxy", {"content-type": "text/plain"}
+        )

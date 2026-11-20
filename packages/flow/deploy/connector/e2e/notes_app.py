@@ -39,13 +39,27 @@ PAGE = """<!doctype html><html><head><title>Notes</title>
 
 def records() -> list[dict]:
     if not STORE.exists():
-        seed = [
-            {"id": 1, "note": f"{CANARY}-1 synthetic patient Jane Roe DOB 1970-01-01", "list": "demo", "key": "clinic"},
-            {"id": 2, "note": f"{CANARY}-2 synthetic MRN 000-111-222", "list": "demo", "key": "clinic"},
-        ]
         STORE.parent.mkdir(parents=True, exist_ok=True)
-        STORE.write_text(json.dumps(seed))
+        STORE.write_text("[]")
     return json.loads(STORE.read_text())
+
+
+def seed_canaries() -> None:
+    """Add made-up records that hold canary strings. Run after the program is
+    published, as real records would exist only at run time."""
+    with LOCK:
+        current = records()
+        next_id = (current[-1]["id"] + 1) if current else 1
+        for n, text in enumerate(
+            (
+                f"{CANARY}-1 synthetic patient Jane Roe DOB 1970-01-01",
+                f"{CANARY}-2 synthetic MRN 000-111-222",
+            )
+        ):
+            current.append(
+                {"id": next_id + n, "note": text, "list": "demo", "key": "clinic"}
+            )
+        STORE.write_text(json.dumps(current))
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -59,7 +73,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def _page(self, msg: str = "") -> None:
         items = "".join(f"<li>{html.escape(r['note'])}</li>" for r in records())
-        self._send(200, PAGE.format(msg=msg, items=items).encode(), "text/html; charset=utf-8")
+        self._send(
+            200, PAGE.format(msg=msg, items=items).encode(), "text/html; charset=utf-8"
+        )
 
     def do_GET(self) -> None:  # noqa: N802
         if self.path == "/":
@@ -67,7 +83,9 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api/notes":
             if self.headers.get("x-api-key") != API_KEY:
                 return self._send(401, b'{"error":"unauthorized"}', "application/json")
-            return self._send(200, json.dumps({"records": records()}).encode(), "application/json")
+            return self._send(
+                200, json.dumps({"records": records()}).encode(), "application/json"
+            )
         self._send(404, b"not found", "text/plain")
 
     def do_POST(self) -> None:  # noqa: N802
@@ -78,7 +96,10 @@ class Handler(BaseHTTPRequestHandler):
         with LOCK:
             current = records()
             if note:
-                current.append({"id": current[-1]["id"] + 1, "note": note, "list": "demo", "key": "clinic"})
+                next_id = (current[-1]["id"] + 1) if current else 1
+                current.append(
+                    {"id": next_id, "note": note, "list": "demo", "key": "clinic"}
+                )
                 STORE.write_text(json.dumps(current[-500:]))
         self._page("<p>Saved!</p>")
 
@@ -96,4 +117,9 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+
+    if sys.argv[1:] == ["seed-canaries"]:
+        seed_canaries()
+    else:
+        main()

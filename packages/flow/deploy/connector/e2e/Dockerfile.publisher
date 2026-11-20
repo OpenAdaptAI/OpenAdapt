@@ -4,9 +4,10 @@
 FROM python:3.12-slim-bookworm
 ARG FLOW_VERSION=3.1.0
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright PIP_DISABLE_PIP_VERSION_CHECK=1
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libnss3-tools libatomic1 \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libnss3-tools libatomic1 tesseract-ocr \
  && python -m venv /opt/flow \
- && /opt/flow/bin/pip install --no-cache-dir "openadapt-flow[browser,vision]==${FLOW_VERSION}" \
+ && /opt/flow/bin/pip install --no-cache-dir "openadapt-flow[browser,vision,privacy]==${FLOW_VERSION}" \
+ && /opt/flow/bin/python -m spacy download en_core_web_sm \
  && /opt/flow/bin/python -m playwright install --with-deps chromium \
  && rm -rf /var/lib/apt/lists/*
 ENV PATH="/opt/flow/bin:${PATH}"
