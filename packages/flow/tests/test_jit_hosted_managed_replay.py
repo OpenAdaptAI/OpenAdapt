@@ -536,7 +536,9 @@ def test_cli_replay_consumes_the_same_verified_dispatch_authority(
     monkeypatch.setattr(
         browser_setup,
         "launch_chromium",
-        lambda *_a, **_k: _FakePlaywright().chromium.launch(),
+        lambda *_a, **_k: _FakePlaywright().chromium.launch(
+            args=browser_setup.chromium_launch_args()
+        ),
     )
     monkeypatch.setattr(browser_backend, "prepare_ws_guard", lambda _page: None)
 
