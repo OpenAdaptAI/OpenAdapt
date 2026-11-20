@@ -137,6 +137,13 @@ def test_preconstructed_and_mutated_models_refuse_before_runtime_output(
         workflow.model_dump()
 
 
+def test_runtime_refuses_missing_schema_before_output_or_backend_access(tmp_path):
+    replayer = Replayer.__new__(Replayer)
+    with pytest.raises(JobAuthoringError, match="unsupported bundle schema version"):
+        replayer.run(SimpleNamespace(), bundle_dir=tmp_path, run_dir=tmp_path / "run")
+    assert not (tmp_path / "run").exists()
+
+
 def test_old_consumer_shaped_object_cannot_claim_schema3_support(tmp_path):
     old = SimpleNamespace(
         schema_version=3,
