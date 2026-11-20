@@ -646,36 +646,39 @@ def test_run_checks_the_deployments_app_address(tmp_path, monkeypatch):
         main(["run", str(dest), "--config", str(deploy), "--profile", "standard"])
 
 
-def test_an_emitted_mcp_server_refuses_another_instance(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    "url",
+    ["https://production.example/", "https://emr.example.org/", ""],
+    ids=["other", "same", "empty"],
+)
+def test_an_emitted_mcp_server_refuses_another_instance(tmp_path, monkeypatch, url):
+    import asyncio
     import importlib.util
     import inspect
     import sys
-    import types
 
+    from openadapt_flow.emit import mcp_governed as adapter
     from openadapt_flow.emit.mcp_tool import emit_mcp_server
-
-    # The emitted server's own guard is under test, not the mcp package, whose
-    # 2.x line renamed FastMCP; stand in for it as test_emit does.
-    fastmcp = types.ModuleType("mcp.server.fastmcp")
-
-    class _FakeFastMCP:
-        def __init__(self, name: str) -> None:
-            self.name = name
-
-        def tool(self):  # noqa: ANN202 - mirrors FastMCP's decorator factory
-            return lambda func: func
-
-    fastmcp.FastMCP = _FakeFastMCP  # type: ignore[attr-defined]
-    for name in ("mcp", "mcp.server"):
-        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
-    monkeypatch.setitem(sys.modules, "mcp.server.fastmcp", fastmcp)
+    from tests._mcp_tools import call_generated_tool
+    from tests.test_mcp_governed import runner, setup
 
     dest = _qualified(tmp_path, monkeypatch)
+    # Reuse the existing Standard startup/transport fixture, not a real
+    # qualification authority. The actual CLI's instance gate is tested above.
+    _workflow, _bundle, options = setup(tmp_path / "startup")
+    config = Path(options["config"])
+    deployment = json.loads(config.read_text())
+    deployment["backend"]["url"] = "https://emr.example.org/"
+    config.write_text(json.dumps(deployment))
     server = emit_mcp_server(dest, tmp_path / "mcp" / "server.py")
     spec = importlib.util.spec_from_file_location("emitted_server", server)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, "emitted_server", module)
     spec.loader.exec_module(module)
+    module.DEPLOYMENT = options["config"]
+    module.PROFILE = options["profile"]
+    module.AUTHORITY_FILE = options["authority_file"]
     tool = next(
         fn
         for name, fn in vars(module).items()
@@ -684,9 +687,44 @@ def test_an_emitted_mcp_server_refuses_another_instance(tmp_path, monkeypatch):
         and "url" in inspect.signature(fn).parameters
     )
     params = {name: "x" for name in inspect.signature(tool).parameters if name != "url"}
-    out = tool(url="https://production.example/", **params)
-    assert out["outcome"] == "REFUSED"
-    assert "not https://production.example" in out["detail"]
+
+    # With no override, these same startup inputs reach only the controlled
+    # nonzero transport. Missing config cannot mask the legacy-URL assertion.
+    calls = runner(monkeypatch, None, returncode=1)
+    baseline = asyncio.run(call_generated_tool(module, params))
+    assert baseline["outcome"] == "UNCERTAIN"
+    assert baseline["runtime_reported"] is None
+    assert len(calls) == 1
+    argv = calls[0]
+    assert argv[argv.index("--config") + 1] == options["config"]
+    assert (
+        argv[argv.index("--config-sha256") + 1]
+        == hashlib.sha256(config.read_bytes()).hexdigest()
+    )
+    assert argv[argv.index("--profile") + 1] == "standard"
+    assert (
+        argv[argv.index("--qualification-authority-file") + 1]
+        == options["authority_file"]
+    )
+    assert "--url" not in argv
+
+    monkeypatch.setattr(
+        adapter.subprocess,
+        "run",
+        lambda *_a, **_k: pytest.fail("legacy URL must refuse before child launch"),
+    )
+    out = asyncio.run(call_generated_tool(module, {**params, "url": url}))
+    observation = adapter.MCPObservation.model_validate(out, strict=True)
+    assert observation.outcome == "REFUSED"
+    assert observation.success is False
+    assert observation.production_eligible is False
+    assert observation.retry_allowed is False
+    assert observation.execution_may_have_occurred is False
+    assert observation.transaction_outcome is None
+    assert observation.runtime_reported is None
+    assert observation.run_dir is None
+    assert observation.producer_assurance == "NOT_LAUNCHED"
+    assert len(calls) == 1
 
 
 # -- 8. a pulled skill qualifies with the contract it ships ------------------------------------
