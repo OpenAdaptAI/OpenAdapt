@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime
 import importlib.util
 import json
+import os
 import re
 import shutil
 import signal
@@ -52,7 +53,9 @@ check_release_consistency = _load("check_release_consistency")
 # release scripts under test. Each git call gets no terminal input, no editor,
 # pager, prompt or signing, and none of the machine's global or system Git
 # configuration, so a call either finishes or fails; it never waits for input.
-GIT_TIMEOUT = 120
+# Every call goes through prepare_release.run_git, which starts git without
+# forking pytest and stops a call that outlasts its own timeout.
+#
 # The slowest test here takes under 20 seconds on a hosted macOS runner. A test
 # that runs much longer is stuck, so it fails with a traceback that shows where
 # instead of using up the CI job's time limit.
@@ -113,27 +116,68 @@ def _test_deadline():
         signal.signal(signal.SIGALRM, previous)
 
 
-def _run_git(
-    root: Path, *args: str, check: bool = False, text: bool = False
-) -> subprocess.CompletedProcess:
-    try:
-        return subprocess.run(
-            ["git", *args],
-            cwd=root,
-            check=check,
-            capture_output=True,
-            text=text,
-            stdin=subprocess.DEVNULL,
-            timeout=GIT_TIMEOUT,
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise AssertionError(
-            f"git {' '.join(args)} did not finish within {GIT_TIMEOUT}s in {root}"
-        ) from exc
+def _run_git(root: Path, *args: str, check: bool = False) -> subprocess.CompletedProcess[bytes]:
+    return prepare_release.run_git(root, *args, check=check)
 
 
 def _git(root: Path, *args: str) -> str:
-    return _run_git(root, *args, check=True, text=True).stdout.strip()
+    """Return a git command's output as text, with every line ending as ``\n``.
+
+    A blob committed on Windows can hold CRLF, and writing that text back with
+    write_text there would turn each CRLF into CR CR LF.
+    """
+
+    text = _run_git(root, *args, check=True).stdout.decode("utf-8")
+    return text.replace("\r\n", "\n").replace("\r", "\n").strip()
+
+
+def _blob(root: Path, spec: str) -> bytes:
+    """The exact bytes of ``<commit>:<path>``."""
+
+    return _run_git(root, "show", spec, check=True).stdout
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows has no fork")
+def test_a_subprocess_that_would_fork_pytest_fails(tmp_path: Path) -> None:
+    """The guard is active on macOS and stops the call pattern that stalled there."""
+
+    if sys.platform == "darwin":
+        assert subprocess._USE_POSIX_SPAWN
+    if not subprocess._USE_POSIX_SPAWN:
+        pytest.skip("this Python cannot start a process without forking")
+    with pytest.raises(AssertionError, match="would fork pytest"):
+        subprocess.run(["git", "--version"], cwd=tmp_path, capture_output=True)
+    assert prepare_release.run_git(tmp_path, "--version").stdout.startswith(b"git version")
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows has no fork")
+def test_git_does_not_fork_when_standard_input_is_closed(tmp_path: Path) -> None:
+    """With descriptor 0 closed, git's pipes would be numbered low and Python would fork."""
+
+    saved = os.dup(0)
+    try:
+        os.close(0)
+        result = prepare_release.run_git(tmp_path, "--version")
+        with pytest.raises(OSError):
+            os.fstat(0)  # the call leaves the descriptor closed, as it found it
+    finally:
+        os.dup2(saved, 0)
+        os.close(saved)
+    assert result.stdout.startswith(b"git version")
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the stand-in git is a shell script")
+def test_a_stuck_git_command_fails_with_its_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stand_in = tmp_path / "bin" / "git"
+    stand_in.parent.mkdir()
+    stand_in.write_text("#!/bin/sh\nexec /bin/sleep 30\n", encoding="utf-8")
+    stand_in.chmod(0o755)
+    monkeypatch.setenv("PATH", str(stand_in.parent))
+    monkeypatch.setattr(prepare_release.native_release, "GIT_TIMEOUT", 0.5)
+    with pytest.raises(prepare_release.GitTimeout, match="git rev-parse HEAD did not finish"):
+        prepare_release.run_git(tmp_path, "rev-parse", "HEAD")
 
 
 def _commit(root: Path, message: str, touch: str | None = None) -> str:
@@ -681,7 +725,7 @@ def _merge_independent_release(repo: Path, main: str, feature: str, number: int)
     package.write_text(json.dumps(data) + "\n")
     base = _commit(repo, f"chore: independently prepare main {number}")
     _git(repo, "checkout", "-q", feature)
-    merged = _run_git(repo, "merge", "--no-ff", "--no-commit", main, text=True)
+    merged = _run_git(repo, "merge", "--no-ff", "--no-commit", main)
     assert merged.returncode in {0, 1}, merged.stderr
     if merged.returncode:
         assert _git(repo, "diff", "--name-only", "--diff-filter=U") == "package.json"
@@ -792,7 +836,7 @@ def _two_sided_history(repo: Path, subject: str, reverse: bool, *, conflict: boo
     host.write_text("".join(ambient))
     base = _commit(repo, "feat: independently change main host")
     _git(repo, "checkout", "-q", "two-sided-feature")
-    merged = _run_git(repo, "merge", "--no-ff", "--no-commit", main, text=True)
+    merged = _run_git(repo, "merge", "--no-ff", "--no-commit", main)
     assert merged.returncode == int(conflict), merged.stderr
     if not conflict:
         text = host.read_text()
@@ -909,7 +953,7 @@ def test_exact_reversion_after_combination_discards_merged_feature_intent(
 ) -> None:
     base, origin, host = _two_sided_history(repo, "feat", False)
     _commit(repo, "merge: combine independent host edits")
-    host.write_text(_git(repo, "show", base + ":src/host.txt") + "\n")
+    host.write_bytes(_blob(repo, base + ":src/host.txt"))
     _commit(repo, "chore: restore the exact ambient host")
     head = _commit(repo, f"{subject}: unrelated retained change", touch="src/retained.txt")
     commits = prepare_release.commits_for_net_diff(repo, base, head)
@@ -923,7 +967,7 @@ def test_test_merge_keeps_a_canceled_feature_out_of_surviving_intent(
 ) -> None:
     base, _origin, host = _two_sided_history(repo, "feat", False)
     _commit(repo, "merge: combine independent host edits")
-    host.write_text(_git(repo, "show", base + ":src/host.txt") + "\n")
+    host.write_bytes(_blob(repo, base + ":src/host.txt"))
     _commit(repo, "chore: restore exact ambient host")
     _commit(repo, f"{subject}: retained change", touch="src/retained.txt")
     branch = _git(repo, "branch", "--show-current")
@@ -1418,7 +1462,7 @@ def _resolve_version_merge(
         repo, "checkout", "-q", "-B", "release-resolution", feature if first == "feature" else main
     )
     other = main if first == "feature" else feature
-    result = _run_git(repo, "merge", "--no-ff", "--no-commit", other, text=True)
+    result = _run_git(repo, "merge", "--no-ff", "--no-commit", other)
     assert result.returncode in {0, 1}, result.stderr
     # Resolve only the generated version files. The independent runtime files
     # are the ordinary merge result; no source code is fabricated by the helper.

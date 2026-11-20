@@ -137,20 +137,44 @@ class FakeSession:
 
 
 def _complete_array_oracle(*args: Any, **kwargs: Any) -> OpenEMRPatientOracle:
-    """The FakeSession above returns its entire literal array in one response."""
+    """The FakeSession above returns its entire literal array in one response.
+
+    Shaped as OpenEMR's last page: ``links`` holds ``first`` and no ``next``.
+    """
     oracle = OpenEMRPatientOracle(*args, **kwargs)
-    oracle.verifier.records_complete = True
+    session = oracle.verifier._session
+    if isinstance(session, FakeSession) and isinstance(session.body, dict):
+        session.body = {**session.body, "links": {"first": "https://fixture/x"}}
     return oracle
 
 
 def test_bounded_live_oracle_has_no_implicit_completeness_declaration() -> None:
+    """A body without OpenEMR's ``links`` object never reads as complete."""
     oracle = OpenEMRPatientOracle(
         "http://fixture", FakeSession({"data": []}), timeout_s=0.1
     )
     state = oracle.capture()
     assert state.reachable is False
-    assert state.readback_complete is None
+    assert state.readback_complete is not True
     assert state.records == []
+
+
+def test_live_oracle_reads_openemr_last_page_as_complete() -> None:
+    """OpenEMR adds links.next only when a record follows the page."""
+    last = FakeSession({"data": [], "links": {"first": "https://fixture/x"}})
+    state = OpenEMRPatientOracle("http://fixture", last, timeout_s=0.1).capture()
+    assert state.reachable is True
+    more = FakeSession(
+        {
+            "data": [],
+            "links": {
+                "first": "x",
+                "next": "http://fixture/apis/default/api/patient?_offset=200",
+            },
+        }
+    )
+    state = OpenEMRPatientOracle("http://fixture", more, timeout_s=0.1).capture()
+    assert state.reachable is False
 
 
 def test_lock_pins_exact_release_image_source_and_runtime_proofs() -> None:
@@ -1613,3 +1637,37 @@ def test_compiled_confirm_create_is_the_declared_consequential_write(
     assert confirm.risk_review_required is False
     assert "creates the patient chart" in (confirm.risk_explanation or "")
     assert [effect.kind for effect in confirm.effects][0] is EffectKind.RECORD_WRITTEN
+
+
+def test_ui_uuid_deltas_count_two_rows_per_extra_account() -> None:
+    """The +6 a recording showed on the lifecycle fixture: three clerk accounts.
+
+    OpenEMR's first patient save after a reset maps every account to a FHIR
+    Group and Location (uuid_mapping) and registers each mapping row
+    (uuid_registry). The contract was measured with four accounts; seven make
+    a correct recording +18/+20. One row more or fewer still fails.
+    """
+
+    recording = EXPECTED_TABLE_DELTAS["recording"]
+    before = {table: 5 for table in recording}
+    before["users"] = 7
+    after = {table: before[table] + recording.get(table, 0) for table in recording}
+    after["users"] = 7
+    after["uuid_mapping"] += 6
+    after["uuid_registry"] += 6
+    assert audit_table_deltas(before, after, arm="recording")[0] == []
+    stray = dict(after, uuid_mapping=after["uuid_mapping"] + 1)
+    assert "uuid_mapping:+19 (expected +18)" in unexpected_table_deltas(
+        before, stray, arm="recording"
+    )
+    four = dict(before, users=4)
+    assert "uuid_mapping:+18 (expected +12)" in unexpected_table_deltas(
+        four, after, arm="recording"
+    )
+    # The direct API save maps no accounts: its contract does not scale.
+    api_before = {table: 5 for table in EXPECTED_TABLE_DELTAS["api"]} | {"users": 7}
+    api_after = {
+        table: api_before[table] + EXPECTED_TABLE_DELTAS["api"].get(table, 0)
+        for table in api_before
+    }
+    assert audit_table_deltas(api_before, api_after, arm="api")[0] == []

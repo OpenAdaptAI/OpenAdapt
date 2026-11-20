@@ -302,8 +302,10 @@ def live_case(case: dict[str, Any], work: Path, contract: str) -> dict[str, Any]
     patient = {
         "kind": "rest",
         "base_url": f.ui_base_url,
-        "records_path": "/apis/default/api/patient?_limit=1000",
+        "records_path": "/apis/default/api/patient?_limit=200",
         "records_key": "data",
+        "records_next_path": "links.next",
+        "records_next_absent_is_last": True,
         "auth": {"bearer_env": TOKEN_ENV},
     }
     read = {

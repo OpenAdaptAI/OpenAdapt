@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "content_digest": "ec096afa2b614326b00ec3155f256041c19d86f3998761ce9d772cfd911460b6",
+  "content_digest": "10e4594523362a0c79a8a533742a71b5b73178d32378c7bc934b51a2b006bc1c",
   "file_hashes": {
     "templates/identifiers/step_016.png": "457eccee597076f6e0d2b6fdd6b1fdd148dfc0eb72501442413c2020efc4ce15",
     "templates/layout_fingerprint.json": "d7727e415947aa17cb2fa007be88f5cd1e56b9e913a64354f61c62b580459e0a",
@@ -36,27 +36,28 @@
     "templates/step_040_expect.png": "194dcc5ba50edcfb2d4a5fb8a6e9ca1d6669654147c9f990715572992ddf8a6c"
   },
   "provenance": {
-    "compiler_version": "2.2.0",
+    "compiler_version": "3.2.0",
     "source_recording_sha256": "243fb7853b228a2e0fd93c51c1d43e7b84fff567f1aac917bdcd91a54d044894",
+    "sanitized_from_digest": null,
     "compiler_config_sha256": "a40fa088af6e27af7555bd066b216ac2b73da101e6e228470fb2dd994d754efd",
     "created_at": "2026-10-20T02:34:27.692587+00:00",
     "policy_name": "clinical-write",
     "certified": true,
     "certification_status": "certified",
-    "certified_at": "2026-10-20T02:56:35.080875+00:00",
+    "certified_at": "2026-11-19T16:41:54.597440+00:00",
     "expires_at": null,
     "certification_invalidated_at": null,
     "certification_invalidation_reason": null,
     "governed_authorization_template": {
       "schema_version": "openadapt.governed-authorization-template/v1",
-      "bundle_content_digest": "ec096afa2b614326b00ec3155f256041c19d86f3998761ce9d772cfd911460b6",
-      "workflow_contract_sha256": "6e121e781ace28b143a50e20381f120e2e3da269b92ecc78fddf0679b9427f9f",
+      "bundle_content_digest": "10e4594523362a0c79a8a533742a71b5b73178d32378c7bc934b51a2b006bc1c",
+      "workflow_contract_sha256": "af8451ab30e8d5120fd4b0562c6cec4ab235077f91282339a5d7d596718589e7",
       "qualification_project_id": "42abe878-ae09-4db1-84f1-0b487676098a",
-      "qualification_project_revision": 51,
-      "qualification_project_contract_sha256": "444b35017d26a85a86a35f05794756999b21f30cf44385c6d307edf778b3afa4",
-      "qualification_environment_contract_sha256": "66260fc857f5570d123ac120f0c03e9e7d7746d1d3348c780fde67193995d6d8",
-      "qualification_report_sha256": "679cb95559a88b86ec4541c2e0b826699da17d4e0774745c1e930562b7b96463",
-      "qualification_case_evidence_contract_sha256": "8343336b83784d2904667591334a239cb2cc5f9b1d0d6fcb4c8564f698a144db",
+      "qualification_project_revision": 102,
+      "qualification_project_contract_sha256": "06b9f4fb6b543d1df0ea6f7da3732c6aecffbd81289a867dc4b237b1db664f7b",
+      "qualification_environment_contract_sha256": "fdfbefb39092e2af7cf51a2b00055dda88b5b81b6281fcf41ded1454075d37b6",
+      "qualification_report_sha256": "ecff851740e9aee185029d728b74afcbecf99cfbec77aed57f3d14e24e9f2622",
+      "qualification_case_evidence_contract_sha256": "c972cdcad1898e03c6cf438a4e54af2d457ddc67d61acb1fbafac00f09701dde",
       "policy_name": "clinical-write",
       "policy_contract_sha256": "f35a6a94b3f2787165f071ce8571de07095169b9632d394e9df719b35da52c0f",
       "execution_profile": "standard",
@@ -255,7 +256,7 @@
         }
       ],
       "parameter_contract_sha256": "2a19e2c3ea6e0644cfe9a842aea8c53e036d18bed254b100cf23c88ea090d603",
-      "template_sha256": "074ac60fe06d201b0083c921b6c24b1d1b83b63b2b91cb140d55e319251d86cb"
+      "template_sha256": "8056cc8b928aa7cce159c88254b790b54e9fe292e4a7fb952cfe2b5635964165"
     }
   },
   "encrypted": false

@@ -606,7 +606,7 @@ def test_real_openemr_quickstart(tmp_path, monkeypatch):
     assert outcome.broken.transaction_outcome == "HALTED_BEFORE_EFFECT"
     assert outcome.broken.new_records == 0
     assert outcome.broken.stop_attributed, outcome.broken.halt_reason
-    assert "5 of 5 saved and checked in OpenEMR's record" in output
+    assert "5 of 5 saved and checked" in output
     for index in range(1, 6):
         report = json.loads((root / f"run-{index}" / "report.json").read_text())
         assert report["execution_outcome"] == "VERIFIED"

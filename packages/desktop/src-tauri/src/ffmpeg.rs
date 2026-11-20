@@ -846,8 +846,27 @@ async fn probe_executables(paths: &RuntimePaths, probe: &RuntimeProbe) -> Result
     Ok(())
 }
 
-async fn checked_output(path: &Path, args: &[&str]) -> Result<String, String> {
+/// Start a console program without giving it a console window.
+///
+/// The installed app is a GUI program (`windows_subsystem = "windows"`), so it
+/// has no console for a child to share. Without this flag Windows gives every
+/// console child a new visible console, and each one opened an empty terminal
+/// window on top of the app at first launch. Every child the shell starts goes
+/// through here; `tests/test_no_console_windows.py` holds that line.
+fn windowless_command(path: &Path) -> Command {
+    #[allow(unused_mut)]
     let mut command = Command::new(path);
+    #[cfg(windows)]
+    {
+        // CREATE_NO_WINDOW, from the Win32 process creation flags.
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    command
+}
+
+async fn checked_output(path: &Path, args: &[&str]) -> Result<String, String> {
+    let mut command = windowless_command(path);
     command.args(args).stdin(Stdio::null()).kill_on_drop(true);
     let output = tokio::time::timeout(PROBE_TIMEOUT, command.output())
         .await

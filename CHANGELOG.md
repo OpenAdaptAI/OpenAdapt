@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## v1.23.0 (2026-11-19)
+
+### Fixes
+
+- `openadapt quickstart --app openemr` saves and checks referrals again
+  after October. The certified referral program's date-picker check named
+  the month it was recorded in ("October 2026"), so from 1 November every
+  referral stopped before saving. The program was qualified again with that
+  check on the run's clock, and the launcher now requires Flow 3.3
+  (`>=3.3.0,<4.0.0`), the first Flow that reads it (#2280).
+- `openadapt seal unpublish` accepts `--yes`, like `openadapt seal publish`,
+  so a script can pass the same flag to both. Taking a Seal down still never
+  asks.
+
 ## v1.22.0 (2026-11-19)
 
 ### Features

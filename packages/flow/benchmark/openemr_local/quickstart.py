@@ -391,6 +391,9 @@ def point_qualify_hooks_here(fixture: QuickstartFixture) -> None:
     """
 
     lock = fixture.state_dir / "environment.lock.json"
+    # A first quickstart has no state folder yet (the fixture is set up after
+    # this): create it, or the first run on a new machine stops here.
+    lock.parent.mkdir(parents=True, exist_ok=True)
     text = json.dumps(fixture.lock, indent=2) + "\n"
     if not lock.is_file() or lock.read_text() != text:
         lock.write_text(text)
