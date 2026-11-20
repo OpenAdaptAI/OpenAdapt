@@ -7,7 +7,6 @@ Credential values and reviewer redaction literals never belong in this identity.
 from __future__ import annotations
 
 import hashlib
-import importlib
 import inspect
 import json
 from functools import lru_cache
@@ -76,14 +75,16 @@ def _implementation_identity(provider: Any) -> dict[str, Any]:
     # The complete engine source closure covers imported compiler, schema,
     # capture and privacy helpers, including helpers added in future changes.
     # A hand-maintained list could silently leave a new dependency unbound.
-    modules = {base.__module__ for base in type(provider).__mro__ if base is not object}
     sources = {}
-    for name in sorted(modules):
-        module = importlib.import_module(name)
-        path = inspect.getsourcefile(module)
+    for base in type(provider).__mro__:
+        if base is object:
+            continue
+        # The provider and its bases are already loaded. Inspect their source
+        # without giving a module-name string a fresh import capability.
+        path = inspect.getsourcefile(base)
         if path is None:
             raise ValueError("sanitizer implementation source is unavailable")
-        sources[name] = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+        sources[base.__module__] = hashlib.sha256(Path(path).read_bytes()).hexdigest()
     methods = {}
     for name in (
         "scrub_text",
