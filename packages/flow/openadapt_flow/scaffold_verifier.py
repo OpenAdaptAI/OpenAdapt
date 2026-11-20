@@ -31,7 +31,8 @@ Two read-first operator helpers live here.
     before those files change. A directory or symbolic link at one of those
     names occupies it too, and the link is not followed. One command shares a
     single snapshot, so a fresh refusal can still write its proof and TODO
-    draft together.
+    draft together. Every output directory in that plan is refused before the
+    first artifact is published.
 
 ``flow explain <run-dir>``
     Pure read-only plain-language outcome summary over a completed run's
@@ -720,20 +721,60 @@ def bind_record_check_proof(
         raise ScaffoldRefused("scaffold-verifier: a proof source requires --prove")
 
 
+def preflight_verifier_outputs(*generations: Optional[VerifierGeneration]) -> None:
+    """Refuse the whole output plan when any calculated destination is occupied.
+
+    Callers run this after proof-source binding and sealed/plaintext checks,
+    and before the first artifact is published. A fresh directory must not
+    receive a new proof after another destination in the same command was
+    already occupied.
+    """
+    seen: set[str] = set()
+    occupied: list[VerifierGeneration] = []
+    for generation in generations:
+        if generation is None:
+            continue
+        key = _directory_key(generation.destination)
+        if key in seen:
+            continue
+        seen.add(key)
+        if generation.prior:
+            occupied.append(generation)
+    if not occupied:
+        return
+    listed = "; ".join(
+        f"{', '.join(generation.prior)} in {generation.destination}"
+        for generation in occupied
+    )
+    raise ScaffoldRefused(
+        "scaffold-verifier REFUSED: the output directory already holds a "
+        f"verifier generation ({listed}). Nothing was written. Those entries "
+        "were kept unchanged. Use a new --out directory so a later result "
+        "cannot replace only part of an earlier one."
+    )
+
+
 def begin_verifier_outputs(
     source: Path,
     out_dir: Optional[Path],
     recording: Optional[Path] = None,
+    bundle: Optional[Path] = None,
     *,
     prove: Optional[str] = None,
     proof_source: Optional[Fixture] = None,
 ) -> tuple[Optional[VerifierGeneration], VerifierGeneration]:
-    """Snapshot output directories before scaffold-verifier writes anything.
+    """Plan output directories before scaffold-verifier writes anything.
 
     The proof source is bound before the target is classified, so a fixture
-    that does not match refuses without opening an output directory.
+    that does not match refuses without opening an output directory. Sealed
+    inputs then refuse a plaintext ``--out``. Only after that does the plan
+    refuse an occupied output directory. Input directories are not outputs
+    unless the plan names them.
     """
     bind_record_check_proof(prove, proof_source)
+    for candidate in (source, recording, bundle):
+        if candidate is not None:
+            _refuse_plaintext_output(candidate, out_dir)
     opened: dict[str, VerifierGeneration] = {}
 
     def one(directory: Path) -> VerifierGeneration:
@@ -743,10 +784,13 @@ def begin_verifier_outputs(
         return opened[key]
 
     check_dir = record_check_output_dir(source, out_dir, recording)
-    return (
+    draft_dir = out_dir or source
+    planned = (
         one(check_dir) if check_dir is not None else None,
-        one(out_dir or source),
+        one(draft_dir),
     )
+    preflight_verifier_outputs(*planned)
+    return planned
 
 
 def write_draft(

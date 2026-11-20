@@ -6290,14 +6290,14 @@ def _cmd_scaffold_verifier(args: argparse.Namespace) -> int:
 
     out_dir = optional_path("out")
     source = Path(args.source)
-    # Bind the proof source, then snapshot, before either writer runs. A
-    # mismatched fixture refuses without classifying the target. A fresh
-    # refusal's proof and TODO draft stay one generation, and an older
-    # generation is not partly replaced.
+    # Bind the proof source, refuse a plaintext copy of a sealed input, then
+    # refuse every occupied output directory before either writer runs. A
+    # fresh refusal's proof and TODO draft stay one generation.
     check_generation, draft_generation = begin_verifier_outputs(
         source,
         out_dir,
         optional_path("recording"),
+        bundle=optional_path("bundle"),
         prove=getattr(args, "prove", None),
         proof_source=getattr(args, "_record_check_proof_source", None),
     )

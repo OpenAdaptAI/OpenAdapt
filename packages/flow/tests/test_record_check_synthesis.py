@@ -30,6 +30,7 @@ import yaml
 
 from benchmark.record_check_proof import main, prove_live
 from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
+from openadapt_flow.ir import ActionKind, Step, Workflow
 from openadapt_flow.record_check_synthesis import (
     PROOF_NAME,
     PROPOSED_NAME,
@@ -44,7 +45,7 @@ from openadapt_flow.runtime.effects.surfaces import (
     SurfaceRoutedVerifier,
     surface_probe,
 )
-from openadapt_flow.scaffold_verifier import build_record_check
+from openadapt_flow.scaffold_verifier import CONTRACT_FILENAME, build_record_check
 from openadapt_flow.verify_run import VerifyRunError, parse_verify_config
 from tests._record_check_fixtures import (
     NOTE,
@@ -693,6 +694,84 @@ def test_cli_refuses_an_observed_partial_read_with_an_open_collateral_miss(
     assert proof["status"] == "refused"
     assert "collateral_unaudited" in proof["refusal_reason"]
     assert f"Recorded read REFUSED: {proof['refusal_reason']}" in out
+
+
+def _write_shaped_bundle(path: Path) -> Path:
+    Workflow(
+        name="triage demo",
+        steps=[
+            Step(
+                id="step_002",
+                intent="click Save encounter",
+                action=ActionKind.CLICK,
+                risk="irreversible",
+            )
+        ],
+    ).save(path)
+    return path
+
+
+def test_occupied_bundle_does_not_publish_into_the_fresh_recording(
+    tmp_path, e2e_service
+):
+    """A bundle plus --recording is one plan with two output directories.
+
+    An earlier draft in the bundle must refuse the command before a fresh
+    recording receives a refused proof.
+    """
+    rec = effect_e2e_recording(tmp_path / "rec", e2e_service.base_url)
+    bundle = _write_shaped_bundle(tmp_path / "bundle")
+    prior = b"prior-contract: true\n"
+    (bundle / CONTRACT_FILENAME).write_bytes(prior)
+    rec_before = _tree(rec)
+    bundle_before = _tree(bundle)
+    with pytest.raises(SystemExit, match="already holds a verifier generation"):
+        main(["scaffold-verifier", str(bundle), "--recording", str(rec)])
+    assert _tree(rec) == rec_before
+    assert _tree(bundle) == bundle_before
+    assert not (rec / PROOF_NAME).exists()
+    assert (bundle / CONTRACT_FILENAME).read_bytes() == prior
+
+
+def test_fresh_bundle_and_recording_publish_both_destinations(tmp_path, e2e_service):
+    rec = effect_e2e_recording(tmp_path / "rec", e2e_service.base_url)
+    bundle = _write_shaped_bundle(tmp_path / "bundle")
+    code = main(["scaffold-verifier", str(bundle), "--recording", str(rec)])
+    assert code == 0
+    proof = json.loads((rec / PROOF_NAME).read_text())
+    assert proof["status"] == "refused"
+    assert proof["approved"] is False
+    assert not (rec / PROPOSED_NAME).exists()
+    assert not (rec / CONTRACT_FILENAME).exists()
+    assert (bundle / CONTRACT_FILENAME).is_file()
+    assert not (bundle / PROOF_NAME).exists()
+
+
+def test_explicit_out_keeps_artifacts_that_stay_in_the_inputs(tmp_path, e2e_service):
+    rec = effect_e2e_recording(tmp_path / "rec", e2e_service.base_url)
+    bundle = _write_shaped_bundle(tmp_path / "bundle")
+    (bundle / CONTRACT_FILENAME).write_bytes(b"prior-contract: true\n")
+    (rec / PROOF_NAME).write_bytes(b'{"approved": false, "status": "draft"}\n')
+    rec_before = _tree(rec)
+    bundle_before = _tree(bundle)
+    out = tmp_path / "out"
+    code = main(
+        [
+            "scaffold-verifier",
+            str(bundle),
+            "--recording",
+            str(rec),
+            "--out",
+            str(out),
+        ]
+    )
+    assert code == 2
+    assert _tree(rec) == rec_before
+    assert _tree(bundle) == bundle_before
+    proof = json.loads((out / PROOF_NAME).read_text())
+    assert proof["status"] == "refused"
+    assert not (out / PROPOSED_NAME).exists()
+    assert (out / CONTRACT_FILENAME).is_file()
 
 
 def test_cli_exits_nonzero_for_a_draft(tmp_path, e2e_service, capsys):
