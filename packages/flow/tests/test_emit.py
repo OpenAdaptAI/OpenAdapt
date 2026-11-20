@@ -13,7 +13,6 @@ from PIL import Image
 
 from openadapt_flow.emit import emit_mcp_server, emit_skill
 from openadapt_flow.ir import Anchor, Step, Workflow
-from tests.browser_readiness import ReadyBrowserMixin
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -236,8 +235,10 @@ def test_emit_mcp_server_has_no_recorded_defaults(tmp_path: Path) -> None:
         for n in ast.walk(tree)
         if isinstance(n, ast.FunctionDef) and n.name == "run_triage_note"
     )
-    assert [a.arg for a in tool.args.args] == ["url", "note", "mrn"]
-    assert tool.args.defaults == []
+    assert [a.arg for a in tool.args.args] == ["note", "mrn", "url"]
+    assert len(tool.args.defaults) == 1
+    assert isinstance(tool.args.defaults[0], ast.Constant)
+    assert tool.args.defaults[0].value is None
 
 
 def test_emit_skill_no_params(tmp_path: Path) -> None:
@@ -265,7 +266,7 @@ def test_emit_mcp_server(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     # Generated source must be valid Python.
     tree = ast.parse(source)
 
-    # One FastMCP tool with url + typed workflow params.
+    # Required data params plus an optional, always-refused legacy URL field.
     assert "FastMCP" in source
     assert "from mcp.server.fastmcp import FastMCP" in source
     funcs = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)]
@@ -273,13 +274,15 @@ def test_emit_mcp_server(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     assert len(tool_funcs) == 1
     tool = tool_funcs[0]
     arg_names = [a.arg for a in tool.args.args]
-    assert arg_names == ["url", "note"]
+    assert arg_names == ["note", "url"]
     assert all(
         isinstance(a.annotation, ast.Name) and a.annotation.id == "str"
-        for a in tool.args.args
+        for a in tool.args.args[:-1]
     )
     # Every workflow parameter is required: no recorded example as default.
-    assert tool.args.defaults == []
+    assert len(tool.args.defaults) == 1
+    assert isinstance(tool.args.defaults[0], ast.Constant)
+    assert tool.args.defaults[0].value is None
     assert "Follow-up in 2 weeks" not in source
     assert ast.get_docstring(tool)
 
@@ -388,75 +391,66 @@ def test_emit_mcp_refuses_to_replace_a_different_workflow(tmp_path: Path) -> Non
 def _load_emitted_tool(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, report_fields: dict[str, object]
 ):
-    """Import an emitted server.py with the browser and replay stubbed out.
-
-    Returns the generated tool function. ``Replayer.run`` returns a RunReport
-    built from ``report_fields``, so the test checks only what the tool
-    reports for a given runtime outcome.
-    """
+    """Exercise the generated adapter with a SYNTHETIC governed child report."""
     import importlib.util
+    import json
     import types
-    from contextlib import contextmanager
 
-    from openadapt_flow.ir import RunReport
-    from openadapt_flow.runtime.replayer import Replayer
+    from openadapt_flow.qualification import workflow_contract_sha256
+    from openadapt_flow.runtime.authorization import runtime_inputs_digest
+    from tests._mcp_report import synthetic_production_report
 
     fastmcp = types.ModuleType("mcp.server.fastmcp")
 
     class _FakeFastMCP:
-        def __init__(self, name: str) -> None:
+        def __init__(self, name):
             self.name = name
 
-        def tool(self):  # noqa: ANN202 - mirrors FastMCP's decorator factory
+        def tool(self):
             return lambda func: func
 
-        def run(self) -> None:  # pragma: no cover - never called
+        def run(self):
             raise AssertionError("not used")
 
-    fastmcp.FastMCP = _FakeFastMCP  # type: ignore[attr-defined]
+    fastmcp.FastMCP = _FakeFastMCP
     for name in ("mcp", "mcp.server"):
         monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
     monkeypatch.setitem(sys.modules, "mcp.server.fastmcp", fastmcp)
-
-    class _Page:
-        def goto(self, url: str) -> None:
-            pass
-
-    class _Browser(ReadyBrowserMixin):
-        def new_page(self, **kwargs: object) -> _Page:
-            return _Page()
-
-        def close(self) -> None:
-            pass
-
-    @contextmanager
-    def _fake_sync_playwright():
-        yield types.SimpleNamespace(
-            chromium=types.SimpleNamespace(launch=lambda **kwargs: _Browser())
-        )
-
-    sync_api = pytest.importorskip("playwright.sync_api")
-    import openadapt_flow._browser_setup as browser_setup
-    import openadapt_flow.backends.playwright_backend as playwright_backend
-
-    monkeypatch.setattr(browser_setup, "ensure_chromium_installed", lambda: None)
-    monkeypatch.setattr(sync_api, "sync_playwright", _fake_sync_playwright)
-    monkeypatch.setattr(playwright_backend, "PlaywrightBackend", lambda page: page)
-
-    def _fake_run(self, workflow, **kwargs):  # noqa: ANN001, ANN202
-        return RunReport(
-            workflow_name=workflow.name,
-            started_at="2026-10-10T00:00:00Z",
-            **report_fields,
-        )
-
-    monkeypatch.setattr(Replayer, "run", _fake_run)
-
     out = emit_mcp_server(_make_bundle(tmp_path), tmp_path / "mcp" / "server.py")
+    workflow = Workflow.load(out.parent / "bundle")
+
+    def run(argv, **kwargs):
+        params = json.loads(Path(argv[argv.index("--params-file") + 1]).read_text())
+        report = synthetic_production_report(
+            workflow_name=workflow.name,
+            bundle_content_digest=workflow.manifest.content_digest,
+            workflow_contract_sha256=workflow_contract_sha256(workflow),
+            governed_runtime_inputs_digest=runtime_inputs_digest(workflow, params, {}),
+            params=params,
+        ).model_dump(mode="json")
+        # Planted legacy/coarse fields must not override the typed envelope.
+        report.update(report_fields)
+        run_dir = Path(argv[argv.index("--run-dir") + 1])
+        run_dir.mkdir(exist_ok=True)
+        (run_dir / "report.json").write_text(json.dumps(report))
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", run)
     spec = importlib.util.spec_from_file_location("emitted_server", out)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    config = tmp_path / "deploy.yaml"
+    config.write_text(
+        'backend: {kind: web, url: "https://synthetic.invalid/"}\nruntime: {profile: standard}\n'
+    )
+    authority = tmp_path / "not-an-authority.json"
+    authority.write_text('{"schema":"synthetic.not-authority"}')
+    module.DEPLOYMENT, module.PROFILE, module.AUTHORITY_FILE = (
+        str(config),
+        "standard",
+        str(authority),
+    )
     return module.run_triage_note
 
 
@@ -513,11 +507,15 @@ def test_emitted_mcp_tool_never_reports_success_for_unverified(
     """A screen-only completion (no record check) must not come back to the
     calling agent as success: only a VERIFIED outcome does."""
     tool = _load_emitted_tool(tmp_path, monkeypatch, fields)
-    out = tool(url="http://127.0.0.1:1/", note="synthetic note")
+    out = tool(note="synthetic note")
     assert out["success"] is expected_success
-    assert out["outcome"] == fields["execution_outcome"]
-    assert out["transaction_outcome"] == fields["transaction_outcome"]
-    assert out["production_eligible"] is bool(fields.get("production_eligible"))
+    if fields["execution_profile"] == "standard":
+        assert out["outcome"] == fields["execution_outcome"]
+        assert out["transaction_outcome"] == fields["transaction_outcome"]
+    else:
+        assert out["outcome"] == "HALTED"
+        assert out["transaction_outcome"] == "RECONCILIATION_REQUIRED"
+    assert out["production_eligible"] is expected_success
     assert out["run_dir"]
 
 

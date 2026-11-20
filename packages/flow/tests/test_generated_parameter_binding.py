@@ -24,13 +24,16 @@ from pydantic import BaseModel
 
 from openadapt_flow.compile_agent import pipeline
 from openadapt_flow.compile_agent.emit import emit_mcp
+from openadapt_flow.deployment import DeploymentConfig
 from openadapt_flow.emit import emit_mcp_server
 from openadapt_flow.ir import Step, Workflow
 from openadapt_flow.jit.compile_agent import WebApp
 from openadapt_flow.jit.compile_agent import compile_agent as make_jit
-
-from tests._mcp_tools import call_generated_tool
 from openadapt_flow.jit.signature import TaskSignature
+from openadapt_flow.qualification import workflow_contract_sha256
+from openadapt_flow.runtime.authorization import runtime_inputs_digest
+from tests._mcp_report import synthetic_production_report
+from tests._mcp_tools import call_generated_tool
 
 COMPILED_PARAMETERS = [
     ("value",),
@@ -108,48 +111,36 @@ PORTABLE_PARAMETERS = [
         "fd",
         "fh",
     ),
+    (
+        "run_governed",
+        "PROFILE",
+        "AUTHORITY_FILE",
+        "BUNDLE_DIGEST",
+        "WORKFLOW_CONTRACT",
+        "args",
+        "argparse",
+    ),
 ]
-# Independent template-boundary vocabulary from both generated server scopes.
+# Independent vocabulary of the current generated server's executable scope.
+# Old inline-browser names remain parameter cases above; they are ordinary data
+# now that the template imports only the shared governed adapter.
 TEMPLATE_BINDINGS = {
     "url",
-    "params",
     "mcp",
     "FastMCP",
+    "mcp_import_error",
     "Path",
-    "tempfile",
     "BUNDLE_DIR",
+    "BUNDLE_DIGEST",
+    "WORKFLOW_CONTRACT",
     "SURFACE",
     "DEPLOYMENT",
-    "_run_governed",
-    "_refused",
-    "workflow",
-    "page",
-    "browser",
-    "backend",
-    "run_dir",
-    "work",
-    "params_file",
-    "fd",
-    "fh",
-    "proc",
-    "report",
-    "report_path",
-    "refusal",
-    "pulled_skill_refusal",
-    "sync_playwright",
-    "launch_chromium",
-    "PlaywrightBackend",
-    "prepare_ws_guard",
-    "Workflow",
-    "Replayer",
-    "json",
-    "os",
-    "subprocess",
-    "sys",
+    "PROFILE",
+    "AUTHORITY_FILE",
+    "run_governed",
+    "argparse",
     "parser",
-    "detail",
-    "lines",
-    "line",
+    "args",
 }
 
 
@@ -526,26 +517,71 @@ def test_portable_templates_keep_injective_aliases_and_original_keys(
     assert not any(keyword.iskeyword(alias) for alias in aliases)
     values = {name: "actual:" + str(index) for index, name in enumerate(parameters)}
     arguments = {alias: values[name] for name, alias in zip(parameters, aliases)}
-    if surface == "web":
-        arguments["url"] = "https://synthetic.example.test/fixed-url"
-    bound = inspect.signature(function).bind(**arguments)
+    signature = inspect.signature(function)
+    assert signature.parameters["url"].default is None
+    assert len(signature.parameters) == len(parameters) + 1
+    bound = signature.bind(**arguments)
     assert {
         key.value: bound.arguments[value.id]
         for key, value in zip(mapping.keys, mapping.values)
     } == values
-    if surface == "web":
-        # Web replay has an inline browser lifecycle; inspect its actual input
-        # expression and SDK registration without executing that lifecycle.
-        assert bound.arguments["url"] == "https://synthetic.example.test/fixed-url"
-    else:
-        calls = []
-        monkeypatch.setattr(
-            module,
-            "_run_governed",
-            lambda params: calls.append(params) or {"outcome": "component"},
+    backend = {"kind": surface}
+    backend.update(
+        {"url": "https://synthetic.invalid/"}
+        if surface == "web"
+        else {"agent_url": "http://127.0.0.1:1"}
+    )
+    config = DeploymentConfig.model_validate(
+        {"backend": backend, "runtime": {"profile": "standard"}}
+    )
+    deployment = tmp_path / "deploy.yaml"
+    deployment.write_text(config.model_dump_json(exclude_unset=True))
+    authority = tmp_path / "not-an-authority.json"
+    # Only statted before the controlled subprocess seam: no admission is
+    # verified or fabricated, and no actual child/application is executed.
+    authority.write_text('{"fixture":"synthetic-transport-not-authority"}')
+    function.__globals__.update(
+        DEPLOYMENT=str(deployment), PROFILE="standard", AUTHORITY_FILE=str(authority)
+    )
+    expected_workflow = Workflow.load(bundle)
+    assert expected_workflow.manifest is not None
+    calls = []
+
+    def controlled_child(argv, **kwargs):
+        params_file = Path(argv[argv.index("--params-file") + 1])
+        observed = json.loads(params_file.read_text())
+        calls.append(observed)
+        run_dir = Path(argv[argv.index("--run-dir") + 1])
+        run_dir.mkdir(exist_ok=True)
+        report = synthetic_production_report(
+            profile="standard",
+            workflow_name=expected_workflow.name,
+            bundle_content_digest=expected_workflow.manifest.content_digest,
+            workflow_contract_sha256=workflow_contract_sha256(expected_workflow),
+            governed_runtime_inputs_digest=runtime_inputs_digest(
+                expected_workflow, observed, {}
+            ),
+            execution_target_kind=surface,
+            execution_origin="https://synthetic.invalid" if surface == "web" else None,
+            execution_entry_url="https://synthetic.invalid/"
+            if surface == "web"
+            else None,
+            params=observed,
         )
-        assert function(**arguments) == {"outcome": "component"}
-        assert calls == [values]
+        (run_dir / "report.json").write_text(report.model_dump_json())
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("subprocess.run", controlled_child)
+    result = function(**arguments)
+    assert result["success"] is True and result["outcome"] == "VERIFIED"
+    assert calls == [values]
+    # A raw workflow key named url was allocated a distinct data alias above.
+    # The actual legacy URL field never redirects either surface's target.
+    refused = function(**arguments, url="https://other.synthetic.invalid/")
+    assert refused["success"] is False and refused["outcome"] == "REFUSED"
+    assert refused["production_eligible"] is False
+    assert "No child ran" in refused["detail"]
+    assert calls == [values]
 
 
 @settings(max_examples=64, derandomize=True, deadline=None)
