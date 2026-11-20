@@ -337,3 +337,60 @@ def test_auth_rejection_is_retried_without_execution_or_token_in_logs(
     )
     assert requests == ["/api/connector/poll", "/api/connector/poll"]
     assert TOKEN not in ws.log_path(config).read_text()
+
+
+def test_stop_during_an_existing_job_reports_and_acks_before_exit(tmp_path):
+    import hashlib
+    import zipfile
+
+    from openadapt_flow.connector.executor import RunOutcome
+
+    config = tmp_path / "connector"
+    _write_config(config, "https://cp.example")
+    bundle = config / "storage/bundles/wf_stub/bundle.zip"
+    bundle.parent.mkdir(parents=True)
+    with zipfile.ZipFile(bundle, "w") as archive:
+        archive.writestr("workflow.json", "{}")
+    envelope = _load_stub().ungoverned_job()
+    envelope["payload"].update(
+        {
+            "target_kind": "web",
+            "safety": {"halt.on_ambiguous": True},
+            "bundle_sha256": hashlib.sha256(bundle.read_bytes()).hexdigest(),
+        }
+    )
+    stop = threading.Event()
+    requests = []
+    runners = []
+
+    def handler(request):
+        requests.append(request.url.path)
+        if request.url.path == "/api/connector/poll":
+            return httpx.Response(200, json={"job": envelope})
+        return httpx.Response(200, json={"ok": True})
+
+    def runner(*args):
+        runners.append(True)
+        stop.set()
+        return RunOutcome(
+            0, {"execution_target_kind": "web", "success": True, "model_calls": 0}
+        )
+
+    logger, redactor = ws.build_logger(config, name="test.ws.finish")
+    assert (
+        ws.serve(
+            config,
+            stop,
+            logger,
+            redactor=redactor,
+            runner=runner,
+            client_kwargs={"transport": httpx.MockTransport(handler)},
+        )
+        == 0
+    )
+    assert len(runners) == 1
+    assert requests == [
+        "/api/connector/poll",
+        "/api/internal/run-callback",
+        "/api/connector/ack",
+    ]
