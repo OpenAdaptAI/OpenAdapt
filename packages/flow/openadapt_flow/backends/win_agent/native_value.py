@@ -15,7 +15,8 @@ from dataclasses import asdict, dataclass
 from typing import Any, Callable, Protocol
 
 MAX_UTF16_UNITS = 65536
-PROOF_SCHEMA = "openadapt.native-value-completeness/v2"
+PROOF_SCHEMA = "openadapt.native-value-completeness/v3"
+IS_PASSWORD_PROPERTY = 30019
 
 
 def utf16_bytes(value: str) -> bytes:
@@ -183,7 +184,12 @@ def require_non_sensitive_value(control: Any) -> None:
     result or negotiated protocol version is never authority for a later read.
     """
     try:
-        allowed = control.IsPassword is False
+        # CurrentIsPassword/Control.IsPassword can return a default FALSE for
+        # unsupported status. Request the raw property with defaults ignored;
+        # a reserved unsupported object is unknown, not non-sensitive.
+        method = getattr(control, "GetPropertyValueEx", None)
+        raw = method(IS_PASSWORD_PROPERTY, 1) if callable(method) else None
+        allowed = type(raw) is bool and raw is False
     except Exception:
         allowed = False
     if not allowed:

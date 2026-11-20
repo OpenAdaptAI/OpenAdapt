@@ -36,6 +36,12 @@ def control(value=""):
         GetValuePattern=lambda: pattern,
         Name="never use Name",
     )
+
+    def property_ex(property_id, ignore_default):
+        assert property_id == 30019 and ignore_default == 1
+        return target.IsPassword
+
+    target.GetPropertyValueEx = property_ex
     return target, pattern
 
 
@@ -362,6 +368,10 @@ def test_shared_sensitive_guard_refuses_before_any_source_or_capability_getter(s
                 raise RuntimeError("status unavailable")
             return status
 
+        def GetPropertyValueEx(self, property_id, ignore_default):
+            assert property_id == 30019 and ignore_default == 1
+            return self.IsPassword
+
         def __getattr__(self, name):
             self.calls.append(name)
             raise AssertionError("no source or capability access is allowed")
@@ -415,6 +425,7 @@ def test_status_changes_during_capability_calls_never_reach_value_getter(stage, 
             return factory
 
     target = Target(**{k: v for k, v in vars(target).items() if k != "GetValuePattern"})
+    target.GetPropertyValueEx = lambda property_id, ignore_default: target.IsPassword
     result = observe(target, Reader("exact"))
     assert not result.complete and result.value is None
     assert result.reason == "password_or_password_status_unavailable"
@@ -446,8 +457,9 @@ def test_previous_proof_version_is_not_compatible_with_pre_read_sensitive_guard(
     result = observe(target, Reader("exact"))
     assert result.complete and result.proof.schema == PROOF_SCHEMA
     proof = result.proof.payload()
-    proof["schema"] = "openadapt.native-value-completeness/v1"
-    assert not valid_value_proof("exact", proof)
+    for previous in ("v1", "v2"):
+        proof["schema"] = "openadapt.native-value-completeness/" + previous
+        assert not valid_value_proof("exact", proof)
 
 
 @pytest.mark.parametrize("stage", ["extent", "full", "value"])
@@ -464,6 +476,7 @@ def test_editability_metadata_cannot_invalidate_final_sensitive_guard(stage, sta
 
     base, _ = control("")
     target = Target(**{k: v for k, v in vars(base).items() if k != "ControlTypeName"})
+    target.GetPropertyValueEx = lambda property_id, ignore_default: target.IsPassword
     accesses = []
 
     class StagedReader(Reader):
@@ -492,3 +505,55 @@ def test_editability_metadata_cannot_invalidate_final_sensitive_guard(stage, sta
     assert not result.complete and result.value is None
     assert result.reason == "password_or_password_status_unavailable"
     assert stage not in accesses
+
+
+@pytest.mark.parametrize("raw", [None, object(), 0, 1, "false", True])
+def test_defaulted_false_password_wrapper_is_not_known_nonsensitive_status(raw):
+    target, _ = control("")
+    # The friendly wrapper says False even when the raw ignored-default
+    # property is unavailable or unsupported. Only the raw result qualifies.
+    target.IsPassword = False
+    queries = []
+
+    def property_ex(property_id, ignore_default):
+        queries.append((property_id, ignore_default))
+        return raw
+
+    target.GetPropertyValueEx = property_ex
+    target.GetValuePattern = lambda: pytest.fail(
+        "unknown raw status must not read value"
+    )
+    reader = Reader()
+    result = observe(target, reader)
+    assert (
+        not result.complete
+        and result.reason == "password_or_password_status_unavailable"
+    )
+    assert queries == [(30019, 1)] and reader.reads == 0
+
+
+@pytest.mark.parametrize("fault", ["missing", "lookup", "call"])
+def test_unavailable_raw_password_status_refuses_without_wrapper_or_text_access(fault):
+    class Target:
+        @property
+        def GetPropertyValueEx(self):
+            if fault == "missing":
+                return None
+            if fault == "lookup":
+                raise RuntimeError("raw status lookup failed")
+            return lambda *_: (_ for _ in ()).throw(RuntimeError("raw query failed"))
+
+        @property
+        def IsPassword(self):
+            pytest.fail("coerced/defaulted wrapper is not an authority source")
+
+        def GetValuePattern(self):
+            pytest.fail("missing raw status must not read value")
+
+    result = observe_complete_value(
+        Target(), identity=lambda: "bound", native_reader=Reader()
+    )
+    assert (
+        not result.complete
+        and result.reason == "password_or_password_status_unavailable"
+    )
