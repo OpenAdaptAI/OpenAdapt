@@ -320,3 +320,75 @@ def test_native_frame_navigation_and_keepalive_use_owner_events(app: Any) -> Non
     assert surface.snapshot().url_origin_and_path == app.origin + "/form"
     assert surface.ping_keepalive("/heartbeat") == 200
     assert surface.mutation_count == 0
+
+
+def test_route_waits_for_delayed_allowed_replacement_after_action(app: Any) -> None:
+    app.pages["/summary"] = (
+        "<!doctype html><title>Saved</title><body data-authenticated>Saved"
+    )
+    frame = load(
+        app, FORM + '<button id="next" onclick="parent.finish()">Finish</button>'
+    )
+    # The shell owns the replacement timer, just as it owns iframe lifetimes.
+    # A callback owned by a removed Frame's realm is discarded by Chromium.
+    app.page.evaluate("""() => { window.finish = () => {
+        fetch('/save', {method:'POST'});
+        setTimeout(() => {
+            const next = document.createElement('iframe');
+            next.src='/summary'; document.body.append(next);
+        }, 600);
+        document.querySelector('iframe').remove();
+    }; }""")
+    surface = PlaywrightFormSurface(
+        app.page,
+        profile(),
+        base_origin=app.origin,
+        frame_path_patterns=(r"/form", r"/summary"),
+    )
+    first = surface.snapshot()
+    start = time.monotonic()
+    surface.click("#next")
+    saved = surface.snapshot()
+    assert time.monotonic() - start >= 0.55
+    assert frame.is_detached()
+    assert saved.title == "Saved"
+    assert saved.context_id != first.context_id
+    assert surface.mutation_count == 1
+
+
+def test_missing_routed_successor_times_out_without_reading_shell(app: Any) -> None:
+    load(app)
+    surface = PlaywrightFormSurface(
+        app.page, profile(250), base_origin=app.origin, frame_path_patterns=(r"/form",)
+    )
+    surface.snapshot()
+    app.page.locator("iframe").evaluate("el => el.remove()")
+    start = time.monotonic()
+    with pytest.raises(SurfaceContextError, match="settle deadline"):
+        surface.snapshot()
+    assert 0.2 <= time.monotonic() - start < 1
+    assert surface.mutation_count == 0
+
+
+def test_foreign_priority_match_cannot_fall_back_to_lower_route(app: Any) -> None:
+    load(app)
+    foreign = app.origin.replace("127.0.0.1", "localhost") + "/confirm"
+    with app.page.expect_event(
+        "framenavigated", predicate=lambda frame: frame.url == foreign
+    ):
+        app.page.evaluate(
+            """url => {
+            const frame=document.createElement('iframe'); frame.src=url;
+            document.body.append(frame);
+        }""",
+            foreign,
+        )
+    surface = PlaywrightFormSurface(
+        app.page,
+        profile(),
+        base_origin=app.origin,
+        frame_path_patterns=(r"/confirm", r"/form"),
+    )
+    with pytest.raises(SurfaceContextError, match="untrusted origin"):
+        surface.snapshot()
+    assert app.posts == []

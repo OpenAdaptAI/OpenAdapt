@@ -49,6 +49,10 @@ class SurfaceContextError(RuntimeError):
     """The selected browser document is closed, detached, ambiguous or stale."""
 
 
+class _NoMatchingFrameError(SurfaceContextError):
+    """A routed surface has no candidate yet; a settle barrier may wait for one."""
+
+
 class PopupContractError(RuntimeError):
     """Raised when a child popup window fails to open or violates URL/title contracts."""
 
@@ -1026,9 +1030,15 @@ class PlaywrightFormSurface:
                     frame
                     for frame in self._owner_page.frames
                     if not frame.is_detached()
-                    and self._url_origin(frame.url) == self._frame_origin
                     and pattern.fullmatch(urlsplit(frame.url).path or "/")
                 ]
+                if any(
+                    self._url_origin(frame.url) != self._frame_origin
+                    for frame in matches
+                ):
+                    raise SurfaceContextError(
+                        "Allowed frame path is on an untrusted origin"
+                    )
                 if len(matches) > 1:
                     raise SurfaceContextError("Allowed frame path is ambiguous")
                 if matches:
@@ -1037,7 +1047,7 @@ class PlaywrightFormSurface:
                     self._quiescence.set_root_frame(self._page)
                     break
             else:
-                raise SurfaceContextError(
+                raise _NoMatchingFrameError(
                     "No attached frame matches the allowed origin and paths"
                 )
         self._assert_available()
@@ -1173,7 +1183,7 @@ class PlaywrightFormSurface:
 
     def wait_for_quiescence(self) -> None:
         """Block until debounce grace elapses, busy selectors clear, and DOM+network settle."""
-        self._refresh_target()
+        self._assert_available(check_frame=False)
 
         max_settle_s = self._ui_profile.max_settle_ms / 1000.0
         deadline = time.monotonic() + max_settle_s
@@ -1189,7 +1199,17 @@ class PlaywrightFormSurface:
         fallback_since: float = 0.0
 
         while time.monotonic() < deadline:
-            self._refresh_target()
+            try:
+                self._refresh_target()
+            except _NoMatchingFrameError:
+                # A navigation may detach a dialog before attaching its allowed
+                # successor. No document is read or acted on during that gap.
+                last_reason = "busy:no_matching_frame"
+                fallback_sig = None
+                self._sleep_ms(
+                    min(25.0, max(1.0, (deadline - time.monotonic()) * 1000.0))
+                )
+                continue
 
             try:
                 dom_state = self._read_dom_state(busy_selectors)
@@ -1291,6 +1311,10 @@ class PlaywrightFormSurface:
                 min(step_ms, max(1.0, (deadline - time.monotonic()) * 1000.0))
             )
 
+        if last_reason == "busy:no_matching_frame":
+            raise SurfaceContextError(
+                "No allowed frame became available before the settle deadline"
+            )
         self._assert_available()
         raise SurfaceSettleTimeoutError(
             f"Form surface failed to reach quiescence within {self._ui_profile.max_settle_ms}ms "
