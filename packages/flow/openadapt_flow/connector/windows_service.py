@@ -585,7 +585,9 @@ def _act(action: str, config_dir: Path, timeout_s: float) -> int:  # pragma: no 
             return 1
         if state != win32service.SERVICE_STOPPED:
             win32serviceutil.StopService(SERVICE_NAME)
-            _wait_for(win32service.SERVICE_STOPPED, timeout_s)
+            if not _wait_for(win32service.SERVICE_STOPPED, timeout_s):
+                print(f"{SERVICE_NAME} did not stop; the service was not removed")
+                return 1
         win32serviceutil.RemoveService(SERVICE_NAME)
         print(
             f"removed {SERVICE_NAME}; {config_dir} (with the token) was kept, "

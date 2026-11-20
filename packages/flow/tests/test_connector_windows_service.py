@@ -394,3 +394,35 @@ def test_stop_during_an_existing_job_reports_and_acks_before_exit(tmp_path):
         "/api/internal/run-callback",
         "/api/connector/ack",
     ]
+
+
+@pytest.mark.parametrize("action", ["start", "stop", "remove"])
+@pytest.mark.parametrize("reaches_state", [False, True])
+def test_lifecycle_timeout_never_reports_success_or_removes_running_service(
+    action, reaches_state, monkeypatch, tmp_path
+):
+    from types import SimpleNamespace
+
+    calls = []
+    monkeypatch.setattr(ws, "_require_pywin32", lambda: None)
+    monkeypatch.setattr(ws, "_service_pid", lambda: 42)
+    monkeypatch.setattr(
+        ws,
+        "win32service",
+        SimpleNamespace(SERVICE_STOPPED=1, SERVICE_RUNNING=4),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        ws,
+        "win32serviceutil",
+        SimpleNamespace(
+            QueryServiceStatus=lambda _name: (None, 4),
+            StartService=lambda _name: calls.append("start"),
+            StopService=lambda _name: calls.append("stop"),
+            RemoveService=lambda _name: calls.append("remove"),
+        ),
+    )
+    monkeypatch.setattr(ws, "_wait_for", lambda *_args: reaches_state)
+
+    assert ws._act(action, tmp_path, 0.01) == (0 if reaches_state else 1)
+    assert ("remove" in calls) == (action == "remove" and reaches_state)
