@@ -21,11 +21,19 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Mapping
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    model_serializer,
+    model_validator,
+)
 
 from openadapt_flow.ir import (
     ActionDeliveryReceipt,
@@ -165,6 +173,161 @@ def bound_params_sha256(params: Mapping[str, RuntimeParamScalar]) -> str:
         params, sort_keys=True, separators=(",", ":"), ensure_ascii=False
     ).encode("utf-8")
     return hashlib.sha256(canonical).hexdigest()
+
+
+_DELIVERY_CURSOR_FIELDS = (
+    "run_id",
+    "workflow_name",
+    "bundle_version",
+    "step_id",
+    "state_id",
+    "params",
+    "program_frames",
+    "program_checkpoint_seq",
+    "program_history_hash",
+    "program_parent_history_hash",
+    "program_history_delta",
+    "program_history",
+    "program_transition_evidence_delta",
+    "business_decision_evidence_delta",
+    "program_exception_evidence_delta",
+)
+
+
+@dataclass(frozen=True)
+class ProgramDeliveryCursor:
+    """Immutable pre-callback binding using existing program checkpoint fields.
+
+    Nested models and rows are serialized immediately; neither a borrowed alias
+    nor a later decoded copy can change the captured cursor. This is an in-memory
+    snapshot, not another durable journal or input format.
+    """
+
+    snapshot_json: str = field(repr=False)
+
+    @classmethod
+    def capture(cls, **fields: Any) -> "ProgramDeliveryCursor":
+        if set(fields) != set(_DELIVERY_CURSOR_FIELDS):
+            raise ValueError("incomplete program delivery cursor")
+
+        def plain(value: Any) -> Any:
+            # Pydantic's serializer can render a mutated bool index as int0/1.
+            # Read these existing cursor models' raw attributes first, before
+            # any serializer or parser can erase that type distinction.
+            if isinstance(value, GraphFrame):
+                return plain(
+                    {
+                        "graph_id": value.graph_id,
+                        "state_id": value.state_id,
+                        "params": value.params,
+                        "loop": value.loop,
+                    }
+                )
+            if isinstance(value, LoopCursor):
+                if type(value.row_index) is not int:
+                    raise ValueError(
+                        "program delivery loop index is not an exact integer"
+                    )
+                return plain(
+                    {
+                        "loop_state_id": value.loop_state_id,
+                        "relation": value.relation,
+                        "row_index": value.row_index,
+                        "rows": value.rows,
+                    }
+                )
+            if isinstance(value, BaseModel):
+                return plain(value.model_dump(mode="json"))
+            if isinstance(value, Mapping):
+                return {key: plain(item) for key, item in value.items()}
+            if isinstance(value, (list, tuple)):
+                return [plain(item) for item in value]
+            return value
+
+        payload = plain(fields)
+        # Check raw types before model parsing can coerce True/1.0 into row1.
+        for raw in payload["program_frames"]:
+            if not isinstance(raw, dict):
+                raise ValueError("program delivery frame is invalid")
+            loop = raw.get("loop")
+            if loop is not None and (
+                not isinstance(loop, dict) or type(loop.get("row_index")) is not int
+            ):
+                raise ValueError("program delivery loop index is not an exact integer")
+        try:
+            frames = [
+                GraphFrame.model_validate(frame) for frame in payload["program_frames"]
+            ]
+        except (ValueError, TypeError):
+            raise ValueError("program delivery frame is invalid") from None
+        seq = payload["program_checkpoint_seq"]
+        history, delta = payload["program_history"], payload["program_history_delta"]
+        prefix = history[: -len(delta)] if delta else list(history)
+        if (
+            not frames
+            or type(seq) is not int
+            or seq < 0
+            or frames[-1].state_id != payload["state_id"]
+            or bound_params_sha256(payload["program_frames"][-1]["params"])
+            != bound_params_sha256(payload["params"])
+            or not history
+            or history != [*prefix, *delta]
+            or payload["program_history_hash"] != history_hash(history)
+            or payload["program_parent_history_hash"] != history_hash(prefix)
+        ):
+            raise ValueError("program delivery cursor is inconsistent")
+        return cls(
+            json.dumps(
+                payload,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+                allow_nan=False,
+            )
+        )
+
+    def fields(self) -> dict[str, Any]:
+        """Return an independent decoded copy; the immutable binding stays private."""
+        return json.loads(self.snapshot_json)
+
+    def pending_fields(self) -> dict[str, Any]:
+        fields = self.fields()
+        fields.pop("bundle_version")
+        fields["program"] = True
+        return fields
+
+    @classmethod
+    def from_pending(
+        cls, pending: Any, *, bundle_version: str
+    ) -> "ProgramDeliveryCursor":
+        fields = {
+            name: getattr(pending, name)
+            for name in _DELIVERY_CURSOR_FIELDS
+            if name != "bundle_version"
+        }
+        return cls.capture(bundle_version=bundle_version, **fields)
+
+    @classmethod
+    def from_checkpoint(
+        cls, checkpoint: "ProgramCheckpoint"
+    ) -> "ProgramDeliveryCursor":
+        return cls.capture(
+            run_id=checkpoint.run_id,
+            workflow_name=checkpoint.workflow_name,
+            bundle_version=checkpoint.bundle_version,
+            step_id=checkpoint.step_id,
+            state_id=checkpoint.verified_state_id,
+            params=checkpoint.bound_params,
+            program_frames=checkpoint.frames,
+            program_checkpoint_seq=checkpoint.seq - 1,
+            program_history_hash=checkpoint.transition_history_hash,
+            program_parent_history_hash=checkpoint.transition_parent_hash,
+            program_history_delta=checkpoint.transition_delta,
+            program_history=checkpoint.transition_history,
+            program_transition_evidence_delta=checkpoint.program_transition_evidence_delta,
+            business_decision_evidence_delta=checkpoint.business_decision_evidence_delta,
+            program_exception_evidence_delta=checkpoint.program_exception_evidence_delta,
+        )
 
 
 class ProgramTransitionReceipt(BaseModel):
@@ -324,6 +487,19 @@ class ProgramCheckpoint(BaseModel):
     #: Content hash of the bundle this checkpoint was captured against.
     bundle_version: str = ""
     created_at: str = Field(default_factory=_now)
+
+    #: Exact first-local pause settled by this independently verified action.
+    #: Omitted when absent so historical checkpoint and authority digests stay stable.
+    first_local_pause_sha256: Optional[str] = Field(
+        default=None, pattern=r"^sha256:[0-9a-f]{64}$"
+    )
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: SerializerFunctionWrapHandler) -> Any:
+        data = handler(self)
+        if isinstance(data, dict) and data.get("first_local_pause_sha256") is None:
+            data.pop("first_local_pause_sha256", None)
+        return data
 
     @model_validator(mode="after")
     def _leaf_matches_verified_state(self) -> "ProgramCheckpoint":
