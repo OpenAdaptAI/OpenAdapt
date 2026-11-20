@@ -3,7 +3,7 @@
 Local signatures bind this process's evidence. They do not authenticate the
 remote server or prove that all server-side effects have been observed.
 
-Public receipts follow ``openadapt.tx-receipt/v1`` and contain zero raw PII/PHI:
+Public receipts follow ``openadapt.tx-receipt/v2`` and contain zero raw PII/PHI:
 all entity snapshots (``r0``, ``r1``) and ``intended_delta`` are bound via
 per-run 256-bit HMAC-SHA256 commitments whose random salt stays private
 (``0o600``) alongside ``undo_r0.json`` (``0o600``).
@@ -62,11 +62,11 @@ _EMPTY_MAP: Mapping[str, Any] = MappingProxyType({})
 
 
 class TxReceiptPayload(BaseModel):
-    """Validated schema for ``openadapt.tx-receipt/v1`` public statements."""
+    """Validated schema for ``openadapt.tx-receipt/v2`` public statements."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    schema_version: Literal["openadapt.tx-receipt/v1"] = "openadapt.tx-receipt/v1"
+    schema_version: Literal["openadapt.tx-receipt/v2"] = "openadapt.tx-receipt/v2"
     issued_at: str
     task_id_hmac_sha256: str
     entity_name: str

@@ -1132,11 +1132,13 @@ def test_duck_typed_playwright_route_interception_and_abort(
     assert r_local.continued is True
     assert tap.summary().total_requests == 0
 
-    # Allowed GET via continue_()
+    # Allowed GET uses a fetch with max_redirects=0 before fulfillment.
     r_get = page.dispatch(
-        _DuckRoute(_DuckRequest(f"{upstream_app.base_url}/records/42", "GET"))
+        _DuckRoute(
+            _DuckRequest(f"{upstream_app.base_url}/records/42", "GET"), use_fetch=True
+        )
     )
-    assert r_get.continued is True
+    assert r_get.fulfilled is True and r_get.continued is False
     assert r_get.aborted is False
 
     # Allowed 1st POST via fetch()/fulfill() duck-type path
@@ -1272,8 +1274,12 @@ def test_wire_tap_generality_and_import_boundaries(tmp_path: Path) -> None:
             and len(node.names) == 1
             and node.names[0].name == "crypto"
         )
+        exact_redaction = node.module == "openadapt_flow.secret_redaction" and {
+            name.name for name in node.names
+        } <= {"MASK", "credential_header", "mask_header"}
         return (
             exact_crypto
+            or exact_redaction
             or node.module.split(".")[0] in stdlib_names
             or node.module in allowed_non_stdlib
         )
@@ -1283,8 +1289,17 @@ def test_wire_tap_generality_and_import_boundaries(tmp_path: Path) -> None:
         "from openadapt_flow import recorder",
         "from openadapt_flow import crypto, recorder",
         "from openadapt_flow import *",
+        "from openadapt_flow.secret_redaction import recorder",
+        "from openadapt_flow.secret_redaction import *",
     ):
         assert not permitted_from_import(ast.parse(unknown).body[0])
+
+    redaction_source = WIRE_TAP_PATH.parent.parent / "secret_redaction.py"
+    for node in ast.walk(ast.parse(redaction_source.read_text())):
+        if isinstance(node, ast.Import):
+            assert all(alias.name.split(".")[0] in stdlib_names for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            assert node.module.split(".")[0] in stdlib_names
 
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):

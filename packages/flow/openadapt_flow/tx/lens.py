@@ -844,6 +844,20 @@ class TransactionalCommitEngine:
         self.atomic_authority = atomic_authority
         self.allow_unqualified_prototype = allow_unqualified_prototype
 
+        # Fail before reads, writes or local state when receipt integrity is unavailable.
+        import importlib
+
+        try:
+            importlib.import_module("cbor2")
+            importlib.import_module("cwt")
+            from openadapt_flow.receipt_log import decode_sign1, encode_sign1
+
+            decode_sign1(encode_sign1({}, {}, b"codec-readiness", lambda _: bytes(64)))
+        except (ImportError, ValueError, TypeError, AttributeError) as exc:
+            raise RuntimeError(
+                "Transaction receipts require compatible openadapt-flow[receipts] dependencies; install that extra before executing writes"
+            ) from exc
+
         if workdir is None:
             from openadapt_flow.at_rest import local_key_path
 
@@ -1511,7 +1525,7 @@ class TransactionalCommitEngine:
             "lens_sha256": canonical_sha256(self.lens.model_dump()),
             "record": dict(atomic_postimage) if atomic_postimage is not None else r1,
             "atomic_binding": self.atomic_authority.binding_sha256
-            if can_compensate
+            if can_compensate and self.atomic_authority is not None
             else None,
             "automatic_execution_allowed": can_compensate,
         }
@@ -1663,7 +1677,13 @@ class TransactionalCommitEngine:
                         t0=t0,
                     )
 
-            payload = self._build_write_payload(task, r0)
+            # Native storage enforces the caller's exact delta, independently of
+            # candidate HTTP payload transformations or metadata author hints.
+            payload = (
+                dict(task.intended_delta)
+                if self.atomic_authority is not None and task.operation == "update"
+                else self._build_write_payload(task, r0)
+            )
             attempt_id = f"{task_key_for(task.task_id)}-{secrets.token_hex(6)}"
             self._ledger.begun(ledger_key, attempt_id, write_key_bound=True)
 

@@ -16,8 +16,10 @@ from openadapt_flow.tx import (
     EntityLensClient,
     EntityLensSpec,
     FrameAndIntentJudge,
+    LensProbeReport,
     SafeNormalizedEntailmentOracle,
     SessionWireTap,
+    SQLiteAtomicRowAuthority,
     TransactionalCommitEngine,
     TxCommitResult,
     TxTask,
@@ -34,6 +36,8 @@ __all__ = [
     "EntityLensClient",
     "EntityLensSpec",
     "FrameAndIntentJudge",
+    "LensProbeReport",
+    "SQLiteAtomicRowAuthority",
     "SafeNormalizedEntailmentOracle",
     "SessionWireTap",
     "TransactionalCommitEngine",
@@ -64,7 +68,7 @@ def load_lens_or_pack(
     else:
         raise TypeError(f"Unsupported lens source: {type(source)!r}")
 
-    if "lens" in data and "certified" in data:
+    if "lens" in data:
         return CertifiedLensPack.model_validate(data)
     return EntityLensSpec.model_validate(data)
 

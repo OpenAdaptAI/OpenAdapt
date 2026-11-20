@@ -90,6 +90,8 @@ class SQLiteAtomicRowAuthority:
             if not info or any(int(row[6]) != 0 for row in info):
                 raise AtomicRowError("ordinary stored columns are required")
             columns = {str(row[1]) for row in info}
+            if any(not _IDENTIFIER.fullmatch(column) for column in columns):
+                raise AtomicRowError("unsupported atomic column identifier")
             primary = [str(row[1]) for row in info if int(row[5]) != 0]
             if primary != [id_column] or revision_column not in columns:
                 raise AtomicRowError(

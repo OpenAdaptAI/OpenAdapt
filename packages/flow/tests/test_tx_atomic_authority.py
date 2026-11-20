@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import subprocess
+import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -484,3 +486,92 @@ def test_browser_route_without_redirect_control_never_continues_network():
     page.handler(route)
     assert route.aborted and not route.continued
     assert tap.summary().mutations[0].response_status is None
+
+
+@pytest.mark.parametrize("missing", ["cbor2", "cwt"])
+def test_missing_receipt_dependency_refuses_before_network_or_local_state(
+    tmp_path, missing
+):
+    state = tmp_path / "must-not-create"
+    script = """
+import sys
+from pathlib import Path
+class MissingReceiptDependency:
+    def find_spec(self, name, path=None, target=None):
+        if name.partition(".")[0] == sys.argv[1]:
+            raise ModuleNotFoundError("receipts dependency deliberately unavailable")
+sys.meta_path.insert(0, MissingReceiptDependency())
+from openadapt_flow.tx import EntityLensClient, EntityLensSpec, EndpointTemplate, TransactionalCommitEngine, TxTask
+def forbid_network(*args, **kwargs):
+    raise AssertionError("network reached without receipt integrity")
+EntityLensClient._request = forbid_network
+lens = EntityLensSpec(entity_name="row", base_url="http://127.0.0.1:1",
+    get_one=EndpointTemplate(method="GET",path_template="/rows/{id}"),
+    write_endpoint=EndpointTemplate(method="PATCH",path_template="/rows/{id}"))
+try:
+    engine = TransactionalCommitEngine(lens,workdir=sys.argv[2],allow_unqualified_prototype=True)
+    engine.execute(TxTask(task_id="missing-receipt",operation="update",entity_id="r1",intended_delta={"note":"new"}))
+except RuntimeError as exc:
+    assert "openadapt-flow[receipts]" in str(exc)
+else:
+    raise AssertionError("missing receipt dependency was admitted")
+assert not Path(sys.argv[2]).exists()
+"""
+    completed = subprocess.run(
+        [sys.executable, "-c", script, missing, str(state)],
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    assert completed.returncode == 0, completed.stderr
+
+
+def test_candidate_author_hints_cannot_expand_the_enforced_task_delta(tmp_path):
+    from openadapt_flow.tx.types import JudgeVerdict
+
+    authority = _db(tmp_path)
+    base_lens = _lens()
+    candidate = base_lens.model_copy(
+        update={
+            "volatile_fields": ("note", "other"),
+            "write_endpoint": base_lens.write_endpoint.model_copy(
+                update={"author_field": "other"}
+            ),
+            "expected_author": "candidate-injected",
+        }
+    )
+
+    class AcceptEverything:
+        def evaluate(self, *args, **kwargs):
+            return JudgeVerdict(
+                passed=True, frame_preserved=True, intent_satisfied=True
+            )
+
+    engine = TransactionalCommitEngine(
+        candidate,
+        atomic_authority=authority,
+        judge=AcceptEverything(),
+        workdir=tmp_path / "state",
+    )
+    result = engine.execute(
+        TxTask(
+            task_id="candidate-policy",
+            operation="update",
+            entity_id="r1",
+            intended_delta={"note": "requested"},
+        )
+    )
+    assert result.outcome == "UNCERTAIN"
+    assert "concurrent_author_mismatch" in result.reasons
+    assert authority.read("r1")["note"] == "requested"
+    assert authority.read("r1")["other"] == "preserve"
+
+
+def test_atomic_profile_refuses_unsupported_column_identifiers(tmp_path):
+    database = tmp_path / "unsupported.sqlite"
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            'CREATE TABLE entries (id TEXT PRIMARY KEY, version INTEGER, "unusual column" TEXT)'
+        )
+    with pytest.raises(AtomicRowError, match="column identifier"):
+        SQLiteAtomicRowAuthority(database, table="entries")

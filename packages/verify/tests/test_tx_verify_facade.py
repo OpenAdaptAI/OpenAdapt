@@ -473,3 +473,26 @@ def test_tx_verified_decorator(tmp_path: Path) -> None:
         assert "action_error:wire_evidence_missing" in res.reasons
         assert res.rows_read == 2
         assert os.path.isfile(res.receipt_path or "")
+
+
+def test_facade_exports_enforcing_backend_and_unqualified_report_defaults():
+    from openadapt_flow.tx import LensProbeReport as FlowReport
+    from openadapt_flow.tx import SQLiteAtomicRowAuthority as FlowAuthority
+
+    from openadapt_verify.tx import (
+        LensProbeReport,
+        SQLiteAtomicRowAuthority,
+        load_lens_or_pack,
+    )
+
+    assert LensProbeReport is FlowReport and SQLiteAtomicRowAuthority is FlowAuthority
+    lens = EntityLensSpec(
+        entity_name="row",
+        base_url="http://127.0.0.1:1",
+        get_one=EndpointTemplate(method="GET", path_template="/rows/{id}"),
+        write_endpoint=EndpointTemplate(method="PATCH", path_template="/rows/{id}"),
+    )
+    report = load_lens_or_pack(
+        {"lens": lens.model_dump(), "sensitivity": 0, "specificity": 0}
+    )
+    assert isinstance(report, LensProbeReport) and report.certified is False
