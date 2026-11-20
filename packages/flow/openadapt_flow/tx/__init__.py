@@ -27,6 +27,7 @@ from openadapt_flow.tx.network_bridge import (
 )
 from openadapt_flow.tx.receipt import (
     TxReceiptPayload,
+    audit_legacy_tx_receipt,
     issue_tx_receipt,
     load_or_create_signing_key,
     verify_tx_receipt,
@@ -119,5 +120,6 @@ __all__ = [
     "salted_sha256",
     "strict_equal",
     "strip_readonly_volatile",
+    "audit_legacy_tx_receipt",
     "verify_tx_receipt",
 ]

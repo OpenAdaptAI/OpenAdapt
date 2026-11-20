@@ -16,7 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 ENTITY_LENS_SCHEMA = "openadapt.entity-lens/v1"
 LENS_PROBE_REPORT_SCHEMA = "openadapt.lens-probe-report/v1"
 CERTIFIED_LENS_PACK_SCHEMA = LENS_PROBE_REPORT_SCHEMA
-TX_RECEIPT_SCHEMA = "openadapt.tx-receipt/v2"
+TX_RECEIPT_SCHEMA = "openadapt.tx-receipt/v3"
 
 TxOutcome = Literal["CONFIRMED", "REFUTED", "UNCERTAIN", "BLOCKED_PRECOMMIT"]
 OCCStatus = Literal[

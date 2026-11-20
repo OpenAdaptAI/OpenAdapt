@@ -21,6 +21,7 @@ from typing import Any, Callable, Iterator, Optional
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
+from openadapt_flow import crypto
 from openadapt_flow.tx.lens import (
     EntityLensClient,
     TransactionalCommitEngine,
@@ -28,6 +29,7 @@ from openadapt_flow.tx.lens import (
 )
 from openadapt_flow.tx.receipt import (
     issue_tx_receipt,
+    read_private_record,
     task_key_for,
     verify_tx_receipt,
 )
@@ -567,11 +569,13 @@ def test_replace_mode_update_preserves_untouched_fields_in_o1_reads(
     for col in untouched_six:
         assert after[col] == before[col], f"field {col} was clobbered"
 
-    # Private salt.bin + undo_r0.json have 0o600 mode, and public receipt has zero PII
+    # The commitment key and undo record are encrypted, private files.
     task_dir = workdir / task_key_for(task.task_id, workdir=workdir)
     salt_file = task_dir / "salt.bin"
     undo_file = task_dir / "undo_r0.json"
-    assert salt_file.is_file() and len(salt_file.read_bytes()) == 32
+    assert salt_file.is_file()
+    assert crypto.is_encrypted(salt_file.read_bytes())
+    assert len(read_private_record(salt_file)) == 32
     assert undo_file.is_file()
     assert stat.S_IMODE(salt_file.stat().st_mode) == 0o600
     assert stat.S_IMODE(undo_file.stat().st_mode) == 0o600
@@ -582,8 +586,11 @@ def test_replace_mode_update_preserves_untouched_fields_in_o1_reads(
     assert verified["outcome"] == "UNCERTAIN"
     assert verified["occ_status"] == "UNKNOWN"
     assert verified["rows_read"] == 2
-    assert "r0_salted_sha256" in verified
-    assert "r1_salted_sha256" in verified
+    assert "r0_hmac_sha256" in verified
+    assert "r1_hmac_sha256" in verified
+    assert verified["commitment_algorithm"] == "HMAC-SHA-256"
+    assert "r0_salted_sha256" not in verified
+    assert "r1_salted_sha256" not in verified
     raw_receipt_text = Path(result.receipt_path).read_bytes().decode("latin-1")
     assert "First2500" not in raw_receipt_text
     assert "person2500@example.test" not in raw_receipt_text

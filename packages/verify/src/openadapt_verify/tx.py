@@ -24,6 +24,7 @@ from openadapt_flow.tx import (
     TxCommitResult,
     TxTask,
     WirePolicy,
+    audit_legacy_tx_receipt,
     certify_lens_on_sandbox,
     induce_lens_from_har,
     load_har,
@@ -49,6 +50,7 @@ __all__ = [
     "load_lens_or_pack",
     "load_network_capture_as_har",
     "tx_verified",
+    "audit_legacy_tx_receipt",
     "verify_tx_receipt",
 ]
 

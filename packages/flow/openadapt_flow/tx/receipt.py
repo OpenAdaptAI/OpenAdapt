@@ -3,10 +3,11 @@
 Local signatures bind this process's evidence. They do not authenticate the
 remote server or prove that all server-side effects have been observed.
 
-Public receipts follow ``openadapt.tx-receipt/v2`` and contain zero raw PII/PHI:
-all entity snapshots (``r0``, ``r1``) and ``intended_delta`` are bound via
-per-run 256-bit HMAC-SHA256 commitments whose random salt stays private
-(``0o600``) alongside ``undo_r0.json`` (``0o600``).
+Public v3 statements bind task and entity labels, snapshots, intended changes
+and the private wire ledger through domain-separated HMAC-SHA-256 commitments.
+The per-receipt commitment key is encrypted in private ``salt.bin`` state.
+Legacy v1/v2 receipts support a separate integrity-only audit; they do not pass
+the current privacy schema or export their original payload through that audit.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Literal, Mapping, Optional
+from typing import Annotated, Any, Literal, Mapping, Optional
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
@@ -27,7 +28,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
     Ed25519PublicKey,
 )
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from openadapt_flow.receipt_log import (
     ALG,
@@ -59,30 +60,78 @@ _LOG_LEAVES_FILENAME = "leaves"
 _SAFE_KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$")
 _RESERVED_DIR_NAMES = frozenset({"log", "ledger", ".", ".."})
 _EMPTY_MAP: Mapping[str, Any] = MappingProxyType({})
+_COMMITMENT_PROFILE = "openadapt.tx-public-commitments/v1"
+_LEGACY_SCHEMAS = frozenset({"openadapt.tx-receipt/v1", "openadapt.tx-receipt/v2"})
+_HMACDigest = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$", strict=True)]
+_CommitmentDomain = Literal[
+    "task-id",
+    "entity-name",
+    "intended-delta",
+    "record-before",
+    "record-after",
+    "wire-ledger",
+]
+
+
+def _public_commitment(key: bytes, domain: _CommitmentDomain, value: Any) -> str:
+    """Blind every sensitive public evidence value under one explicit profile."""
+    if len(key) != 32:
+        raise ValueError("public_commitment_key_must_be_256_bits")
+    return salted_sha256(
+        key, {"profile": _COMMITMENT_PROFILE, "domain": domain, "value": value}
+    )
 
 
 class TxReceiptPayload(BaseModel):
-    """Validated schema for ``openadapt.tx-receipt/v2`` public statements."""
+    """Strict v3 statement; old raw or differently computed commitments refuse."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
-    schema_version: Literal["openadapt.tx-receipt/v2"] = "openadapt.tx-receipt/v2"
-    issued_at: str
-    task_id_hmac_sha256: str
-    entity_name: str
+    schema_version: Literal["openadapt.tx-receipt/v3"]
+    commitment_algorithm: Literal["HMAC-SHA-256"]
+    commitment_profile: Literal["openadapt.tx-public-commitments/v1"]
+    issued_at: Annotated[str, Field(pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")]
+    task_id_hmac_sha256: _HMACDigest
+    entity_name_hmac_sha256: _HMACDigest
     operation: Literal["create", "update"]
     outcome: TxOutcome
     occ_status: OCCStatus
-    r0_salted_sha256: Optional[str] = None
-    r1_salted_sha256: Optional[str] = None
-    intended_delta_salted_sha256: str
-    wire_ledger_sha256: Optional[str] = None
+    r0_hmac_sha256: Optional[_HMACDigest] = None
+    r1_hmac_sha256: Optional[_HMACDigest] = None
+    intended_delta_hmac_sha256: _HMACDigest
+    wire_ledger_hmac_sha256: Optional[_HMACDigest] = None
     wire_mutations_allowed: Optional[int] = Field(default=None, ge=0)
     wire_collateral_mutations: Optional[int] = Field(default=None, ge=0)
     rows_read: int = Field(ge=0)
     verification_scope: Literal["target_record"] = "target_record"
     collateral_effects_verified: Literal[False] = False
     qualification_state: Literal["unqualified", "atomic_row_enforced"] = "unqualified"
+
+    @field_validator("issued_at")
+    @classmethod
+    def _canonical_utc_timestamp(cls, value: str) -> str:
+        datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")
+        return value
+
+    @field_validator("collateral_effects_verified", mode="before")
+    @classmethod
+    def _exact_unverified_collateral(cls, value: Any) -> bool:
+        if value is not False:
+            raise ValueError("collateral_effects_verified_must_be_literal_false")
+        return False
+
+    @model_validator(mode="after")
+    def _coherent_wire_commitment(self) -> "TxReceiptPayload":
+        fields = (
+            self.wire_ledger_hmac_sha256,
+            self.wire_mutations_allowed,
+            self.wire_collateral_mutations,
+        )
+        if any(value is None for value in fields) and not all(
+            value is None for value in fields
+        ):
+            raise ValueError("wire_commitment_and_counts_must_be_present_together")
+        return self
 
 
 def _utc_now_iso() -> str:
@@ -289,8 +338,9 @@ def issue_tx_receipt(
 ) -> tuple[str, Path]:
     """Issue a signed COSE_Sign1 + SCITT Merkle-logged ``tx-receipt.cose``.
 
-    Saves ``salt.bin`` (``0o600``) and, when ``r0`` is present, private
-    ``undo_r0.json`` (``0o600``) under ``<workdir>/<task_key>/``.
+    Saves the encrypted per-receipt commitment key in ``salt.bin`` and, when
+    ``r0`` is present, encrypted ``undo_r0.json`` under the private task directory.
+    Both files have ``0o600`` permissions. No key is embedded in public artifacts.
     Returns ``(receipt_id_hex, receipt_path)``.
     """
     root = Path(workdir)
@@ -304,7 +354,7 @@ def issue_tx_receipt(
 
     task_dir = _allocate_run_dir(root, resolved_key)
     salt = secrets.token_bytes(32)
-    write_private_bytes(task_dir / "salt.bin", salt, overwrite=True)
+    write_private_record(task_dir / "salt.bin", salt, overwrite=True)
 
     if r0 is not None:
         undo_bytes = _canonical_json_bytes(dict(r0)) + b"\n"
@@ -325,24 +375,32 @@ def issue_tx_receipt(
 
     statement_dict: dict[str, Any] = {
         "schema_version": TX_RECEIPT_SCHEMA,
+        "commitment_algorithm": "HMAC-SHA-256",
+        "commitment_profile": _COMMITMENT_PROFILE,
         "issued_at": issued_at or _utc_now_iso(),
-        "task_id_hmac_sha256": salted_sha256(
-            salt, {"domain": "tx-public-task/v1", "task": task_id}
-        ),
-        "entity_name": entity_name,
+        "task_id_hmac_sha256": _public_commitment(salt, "task-id", task_id),
+        "entity_name_hmac_sha256": _public_commitment(salt, "entity-name", entity_name),
         "operation": operation,
         "outcome": outcome,
         "occ_status": occ_status,
-        "intended_delta_salted_sha256": salted_sha256(salt, dict(intended_delta)),
-        "rows_read": int(rows_read),
+        "intended_delta_hmac_sha256": _public_commitment(
+            salt, "intended-delta", dict(intended_delta)
+        ),
+        "rows_read": rows_read,
         "qualification_state": qualification_state,
     }
     if r0 is not None:
-        statement_dict["r0_salted_sha256"] = salted_sha256(salt, dict(r0))
+        statement_dict["r0_hmac_sha256"] = _public_commitment(
+            salt, "record-before", dict(r0)
+        )
     if r1 is not None:
-        statement_dict["r1_salted_sha256"] = salted_sha256(salt, dict(r1))
+        statement_dict["r1_hmac_sha256"] = _public_commitment(
+            salt, "record-after", dict(r1)
+        )
     if wire_summary is not None:
-        statement_dict["wire_ledger_sha256"] = wire_summary.ledger_sha256
+        statement_dict["wire_ledger_hmac_sha256"] = _public_commitment(
+            salt, "wire-ledger", wire_summary.ledger_sha256
+        )
         statement_dict["wire_mutations_allowed"] = wire_summary.mutations_allowed
         statement_dict["wire_collateral_mutations"] = wire_summary.collateral_mutations
 
@@ -374,15 +432,12 @@ def issue_tx_receipt(
     return receipt_id(witnessed_cose), receipt_path
 
 
-def verify_tx_receipt(
+def _verify_receipt_envelope(
     receipt_path: Path | str,
     public_key: Ed25519PublicKey | bytes,
-    log_dir: Optional[Path | str] = None,
-) -> dict[str, Any]:
-    """Verify Ed25519 signature, schema, and LocalLog SCITT Merkle inclusion proof.
-
-    Raises ``ValueError`` on any byte tampering, key mismatch, or missing proof.
-    """
+    log_dir: Optional[Path | str],
+) -> tuple[dict[str, Any], bytes]:
+    """Verify canonical signed bytes and inclusion without trusting payload claims."""
     path = Path(receipt_path)
     try:
         data = path.read_bytes()
@@ -417,7 +472,6 @@ def verify_tx_receipt(
         raw_obj = _loads_strict_json(payload_bytes)
         if _canonical_json_bytes(raw_obj) != payload_bytes:
             raise ValueError("receipt payload is not canonical JSON")
-        validated = TxReceiptPayload.model_validate(raw_obj)
     except Exception as exc:  # noqa: BLE001
         raise ValueError(f"invalid tx-receipt payload: {exc}") from exc
 
@@ -447,4 +501,52 @@ def verify_tx_receipt(
         if lines[leaf_idx] != leaf_of(data).hex():
             raise ValueError("receipt leaf hash does not match local transparency log")
 
+    return raw_obj, data
+
+
+def verify_tx_receipt(
+    receipt_path: Path | str,
+    public_key: Ed25519PublicKey | bytes,
+    log_dir: Optional[Path | str] = None,
+) -> dict[str, Any]:
+    """Verify the strict current public schema, signature and inclusion proof.
+
+    Legacy v1/v2 statements refuse current verification. Their original files
+    remain intact and can be checked with ``audit_legacy_tx_receipt`` instead.
+    No private commitment key is needed to verify public artifact integrity.
+    """
+    raw_obj, _ = _verify_receipt_envelope(receipt_path, public_key, log_dir)
+    source_schema = raw_obj.get("schema_version")
+    if isinstance(source_schema, str) and source_schema in _LEGACY_SCHEMAS:
+        raise ValueError("legacy_tx_receipt_is_integrity_audit_only")
+    try:
+        validated = TxReceiptPayload.model_validate(raw_obj)
+    except Exception as exc:  # noqa: BLE001
+        raise ValueError(f"invalid current tx-receipt payload: {exc}") from exc
     return validated.model_dump(exclude_none=True)
+
+
+def audit_legacy_tx_receipt(
+    receipt_path: Path | str,
+    public_key: Ed25519PublicKey | bytes,
+    log_dir: Optional[Path | str] = None,
+) -> dict[str, Any]:
+    """Audit legacy integrity without exporting old payload or current trust labels.
+
+    This checks only original Ed25519 bytes and their local inclusion proof.
+    It neither converts an old receipt to v3 nor marks its commitments private.
+    The original signed artifact and any old private files are left unchanged.
+    """
+    raw_obj, data = _verify_receipt_envelope(receipt_path, public_key, log_dir)
+    source_schema = raw_obj.get("schema_version")
+    if not isinstance(source_schema, str) or source_schema not in _LEGACY_SCHEMAS:
+        raise ValueError("legacy_tx_receipt_audit_requires_known_legacy_schema")
+    return {
+        "schema_version": "openadapt.legacy-tx-receipt-audit/v1",
+        "source_schema": source_schema,
+        "receipt_id": receipt_id(data),
+        "signature_valid": True,
+        "inclusion_verified": True,
+        "privacy_safe": False,
+        "current_schema_accepted": False,
+    }
