@@ -18,6 +18,8 @@ def _expect_comment(expect: list[Postcondition]) -> list[str]:
         parts = [f"expect {pc.kind.value}"]
         if pc.text is not None:
             parts.append(f"text={pc.text!r}")
+        if pc.text_clock is not None:
+            parts.append(f"from the run's clock as {pc.text_clock!r}")
         if pc.region is not None:
             parts.append(f"region={pc.region}")
         if pc.phash is not None:

@@ -1,4 +1,4 @@
-# OpenAdapt: review brief for openadapt-flow 3.2.0
+# OpenAdapt: review brief for openadapt-flow 3.3.0
 
 This file describes the current OpenAdapt release. It is generated from the repository (scripts/build_llms_full.py) and refreshed with every release. Pages, posts and repositories that describe earlier versions are outdated; where they disagree with this file, this file is current.
 
@@ -327,7 +327,7 @@ the right record is on screen, makes the entry, and reads the record back.
 - **Binds each approval to exactly what will be saved**, with one-tap answers on a paired phone.
 - **Repairs itself when the app changes**, probing a fix up to the save and asking a person to approve it (qualified on browser runs and end to end on native macOS).
 - **Works as a safety layer under any agent**: MCP tools, a guarded save, Agent Skills and a CLI.
-- **Runs locally**: no calls to a hosted AI model on healthy runs, patient data redacted, signed receipts.
+- **Runs locally**: no calls to a hosted AI model on healthy runs, personal and health data redacted, signed receipts.
 
 [CAPABILITIES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CAPABILITIES.md) has the evidence and code for each.
 
@@ -434,10 +434,13 @@ Maintained by [OpenAdaptAI](https://github.com/OpenAdaptAI) under the
 
 # What OpenAdapt can do
 
-OpenAdapt turns work that people or computer-use agents do in applications
-with no usable API (EMRs, payer portals, desktop and remote-desktop apps) into
-programs that make the same entry every time with no calls to a hosted AI model, check that
-the entry landed in the right record, and stop instead of guessing.
+OpenAdapt turns a task that a person or an AI agent does once in an
+application into a program that repeats it with new inputs. The program makes
+the same entry every time with no calls to a hosted AI model, checks that the
+entry landed in the right record by reading it back, and stops instead of
+guessing. It is for web, desktop and remote-desktop applications with no
+usable API. EMRs and payer portals are examples of highly regulated settings
+where those checks matter most.
 
 This page indexes what OpenAdapt implements, with the status, the evidence and
 the code for each capability:
@@ -704,6 +707,8 @@ improvising or retrying when something is off.
 | Run a worklist on several workers at once, one signed-in session each, each item claimed once, with a stop on any worker stopping all | Released ([#1296](https://github.com/OpenAdaptAI/OpenAdapt/pull/1296)) | Synthetic patients on a local OpenEMR test copy | `--workers`, [THROUGHPUT.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/THROUGHPUT.md) |
 | Read a save back while the next item runs (pipelined read-back, REST, FHIR, GraphQL or SQL record checks) | Released ([#1296](https://github.com/OpenAdaptAI/OpenAdapt/pull/1296)) | Synthetic | `--readback-window`, [THROUGHPUT.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/THROUGHPUT.md) |
 | Read a paged REST or FHIR record list whole (FHIR `next` links and `total`, REST `records_next_path`), or not at all: a page elsewhere, a failed page, a redirect or a count that doesn't match the total is unreadable | Released ([#1538](https://github.com/OpenAdaptAI/OpenAdapt/pull/1538)) | Synthetic (local FHIR and REST servers) | `effects: kind: rest` `records_next_path`, `kind: fhir`; [EFFECT_KIT.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/EFFECT_KIT.md) |
+| Read a REST list whose last page leaves the next link out (`records_next_absent_is_last` with `records_next_path`): the page is the whole read only when the link's parent object is there without it; a page with a next link still needs snapshot semantics | On main | Real app (local OpenEMR 8.0.0.3, synthetic patients: one 200-row page read complete; a 2-row page with a next link refused) and unit tests | `effects: kind: rest` `records_next_absent_is_last`; `benchmark/openemr_local/verify.yaml` |
+| Check screen text read from the clock (a date picker's month, a pre-filled date) against the run's clock instead of the recorded literal; another date still fails (a whole OCR line, field for field) | On main | Real app (the OpenEMR referral program, recorded in October, qualified in November) and a headless browser test that records today and replays next month and next January | `Postcondition.text_clock`, `openadapt_flow/clock_text.py`, `python -m openadapt_flow.compiler.clock_pass` |
 | A faster speed profile that keeps every check (one insert per plain text field, shorter page-quiet wait) | Released ([#1296](https://github.com/OpenAdaptAI/OpenAdapt/pull/1296)) | Synthetic | `runtime.speed: fast`, [THROUGHPUT.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/THROUGHPUT.md) |
 | Fewer browser calls per screen step: one call per frame boundary in every DOM proof | On main | Real app (local OpenEMR 8.0.0.3, synthetic referrals): median 23.2 s to 20.1 s per referral, N = 14 each, interleaved, same checks at every step; about 3,970 to 2,390 Playwright calls per run | [screen_path_speed](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/screen_path_speed/README.md) |
 | Derive the at-rest key once per checkpoint store instead of once per checkpoint, with the container format unchanged | On main | Real app (local OpenEMR 8.0.0.3, synthetic referrals, encrypted durable run to the save): 2,667 to 2 scrypt runs, about 520 s to 14 s; synthetic (MockMed tutorial): 131 to 1, 40.8 s to 14.7 s median (N = 10 each) | [screen_path_speed](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/screen_path_speed/README.md#mockmed-tutorial-the-at-rest-key-fix) |
@@ -2361,57 +2366,52 @@ automation into an independently certified transaction system.
 
 ---
 
-<!-- Changelog: openadapt-flow 3.2.0 -->
+<!-- Changelog: openadapt-flow 3.3.0 -->
 
-## What changed in openadapt-flow 3.2.0
-
-### Faster screen steps and encrypted checkpoints
-
-- A checkpoint store derives its at-rest key once, under one salt, instead
-  of running scrypt on every sealed checkpoint read and write. Derived keys
-  stay in memory, bounded, and are reused only for the same passphrase and
-  work factors. The container format is unchanged: each container records
-  its salt and gets a fresh nonce, and wrong-key refusal and tamper
-  detection are unchanged. The MockMed tutorial ran 131 scrypt derivations
-  before and 1 after (40.8 s to 14.7 s median, N = 10 each).
-- The frame descent behind structural lookups, identity reads and field
-  read-backs reads each frame boundary in one browser call. On the OpenEMR
-  referral this cut Playwright calls per run from about 3,970 to 2,390, and
-  the median wall time from 23.2 s to 20.1 s (N = 14 each, identical
-  checks). After a busy quiescence probe, the settle waits until a quiet
-  window is possible instead of probing every 20 ms.
+## What changed in openadapt-flow 3.3.0
 
 ### Fixes
 
-- The dropdown (`field_value`) check of a linear run reads the run's
-  parameters. Before, it read only a program run's parameters, so every
-  linear run with a dropdown commit stopped at that step.
-- The agent bridge (`openadapt_flow.agent`) refuses an unqualified pulled
-  skill before Flow starts (`not_ready_to_run` with `skill_not_qualified`, or
-  `app_target_missing` when the skill has no address).
-- The pulled-skill qualification check (`skills.pulled_skill_refusal`, used
-  by the CLI, the agent bridge and the MCP emitter) recomputes the
-  certification against the policy recorded in the lock. Before, no
-  qualified pulled skill could run.
-
-### Requirements
-
-- `opencv-python` in the `vision` and `dev` extras is capped below 5.1, which
-  adds about 105 MB to an install with those extras.
-
-### Public Seals
-
-- `openadapt-flow local-seal public RUN_DIR` writes `public-seal.json`
-  (`openadapt.public-seal/v1`): an allow-listed card of the run (counts,
-  outcomes, each step's rung and strongest check, digests, the hour it
-  started, and the program name only with `--names` or for the synthetic
-  tutorial) and an offline Seal over the card with the new subject kind
-  `public-card`. Its `run_id` is a hash. It never holds parameters, intents,
-  identity readings, URLs, screenshots, halt text or an app name, and works
-  for stopped runs. At most 4,096 bytes; the step strip is all steps or none.
-  `openadapt_flow.public_seal.verify_public_seal` checks one without a key
-  registry and accepts only the engine's canonical bytes. Golden vectors for
-  other verifiers (29 cases) are in
-  `tests/fixtures/public_seal/golden_vectors.json`.
-- Offline Seal timestamps (`issued_at`) must use ASCII digits; pydantic's
-  `\d` also matched other scripts' digits.
+- Screen text read from the clock is checked against the run's clock. A
+  text check whose dates all equal the recording date, at the precision the
+  text shows (a date picker's "October 2026", a pre-filled "10/20/2026", a
+  "Tuesday, Oct 20" header), compiles to a clock template
+  (`Postcondition.text_clock`, `openadapt_flow/clock_text.py`). The run
+  renders it from its own clock and checks that date: one confidently read
+  OCR line must carry exactly its fields (runs of letters and digits, so
+  "11/3/2026" never matches "1/13/2026" or "Nov 03, 1990"), never the fuzzy
+  match or the DOM's substring proof, so "October 2025" or another month
+  still fails. Around midnight the local date and the UTC date are both the
+  run's clock, a one-day window. Before,
+  the certified OpenEMR referral program checked the literal
+  "October-2026-" and halted every referral from 1 November. OCR-joined
+  month dates ("October-2026-", "Oct/2026") now classify as dates too.
+  `python -m openadapt_flow.compiler.clock_pass BUNDLE OUT --recorded-on
+  DATE` applies the same rule to a bundle compiled before this; the result
+  must be qualified again.
+- A REST read can declare that its endpoint leaves the next link out of a
+  still-present parent object on the last page
+  (`records_next_absent_is_last: true`, with `records_next_path`). A body
+  without that parent object, or a page that has a next link and no
+  snapshot semantics, stays indeterminate. The OpenEMR recipes use it with
+  `_limit=200` (OpenEMR's page cap), so their read-back is complete again
+  since #2041 instead of "REST read completeness was not established".
+- The first-local delivery fence (#2209) counts the qualification
+  project's operator-confirmed risk decisions in a qualification case bound
+  to the bundle's own project, as the outcome classifier already did. Before,
+  a campaign could not qualify a program whose write-shaped but reversible
+  step the operator had classified. A certified run now checks the
+  operator's decisions against the policy it was admitted under; without
+  that digest no certification reproduced, so the OpenEMR quickstart's
+  certified runs stopped at "Create New Patient" too.
+- `qualify --certify` with business rules saves the certified bundle while
+  the rule trials' copy still exists. A save moves a loaded workflow's
+  verified source to where it saved (#1993), so the final save found the
+  removed copy's assets missing and every such campaign failed after its
+  rule trials passed.
+- The certified OpenEMR referral program behind `openadapt quickstart --app
+  openemr` was qualified again with its date-picker check on the run's
+  clock (content digest `10e45945…`; evidence in
+  `benchmark/scoreboard/raw/openemr_referral/requalified/2026-11-19/`), and
+  a first OpenEMR quickstart on a new machine creates its state folder
+  instead of stopping on the missing lock file.

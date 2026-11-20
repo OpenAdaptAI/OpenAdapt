@@ -100,19 +100,24 @@ DATE_RE = re.compile(
 # these, and OpenEMR's post-login calendar renders exactly this class: a
 # mined 'July 2026' header would false-halt every replay the next month.
 # A bare month WORD is not a date ('May I help you'): at least one of
-# day/year must be attached. Whitespace between tokens is optional (OCR).
+# day/year must be attached. Between tokens OCR may read a space, nothing,
+# or punctuation: a date picker's 'October 2026' header was read as
+# 'October-2026-', which the whitespace-only pattern took for a bare month
+# word, so it was mined as a literal and halted every run a month later.
 _MONTH_PAT = (
     r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?"
     r"|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?"
     r"|nov(?:ember)?|dec(?:ember)?)"
 )
 _WEEKDAY_PAT = r"(?:mon|tues?|wed(?:nes)?|thu(?:rs?)?|fri|sat(?:ur)?|sun)(?:day)?"
+_DATE_SEP = r"[\s\-/.,]*"
 MONTH_DATE_RE = re.compile(
-    rf"\b(?:{_WEEKDAY_PAT}[,\s]*)?"
-    rf"(?:(?<!\d)(?P<d1>\d{{1,2}})(?:st|nd|rd|th)?[\s.]*)?"
+    rf"\b(?:(?P<wd>{_WEEKDAY_PAT}){_DATE_SEP})?"
+    rf"(?:(?<!\d)(?P<d1>\d{{1,2}})(?:st|nd|rd|th)?{_DATE_SEP})?"
     rf"(?P<mon>{_MONTH_PAT})\.?"
-    rf"(?:\s*(?P<d2>\d{{1,2}})(?:st|nd|rd|th)?)?"
-    rf"(?:,?\s*(?P<yr>\d{{4}}))?\b",
+    rf"(?:{_DATE_SEP}(?P<d2>\d{{1,2}})(?!\d)(?:st|nd|rd|th)?)?"
+    rf"(?:{_DATE_SEP}(?P<yr>\d{{4}})(?!\d))?"
+    r"(?![a-z])",
     re.IGNORECASE,
 )
 
@@ -164,6 +169,27 @@ _MONTH_NUMBERS = {
 }
 
 
+_WEEKDAY_NUMBERS = {
+    "mon": 0,
+    "tue": 1,
+    "wed": 2,
+    "thu": 3,
+    "fri": 4,
+    "sat": 5,
+    "sun": 6,
+}
+
+
+def month_number(name: str) -> int:
+    """1-12 for an English month name or abbreviation (``Oct``, ``October``)."""
+    return _MONTH_NUMBERS[name.lower()[:3]]
+
+
+def weekday_number(name: str) -> int:
+    """0 (Monday) to 6 for an English weekday name or abbreviation."""
+    return _WEEKDAY_NUMBERS[name.lower()[:3]]
+
+
 def _squash(text: str) -> str:
     return "".join(text.lower().split())
 
@@ -194,6 +220,11 @@ def _candidate_dates(fragment: str) -> list[date]:
         except ValueError:
             continue
     return dates
+
+
+def month_fragments(text: str) -> list[re.Match]:
+    """Public name of :func:`_month_fragments` (shared with ``clock_text``)."""
+    return _month_fragments(text)
 
 
 def _month_fragments(text: str) -> list[re.Match]:
@@ -286,6 +317,20 @@ def _residual_reason(squashed: str) -> Optional[str]:
     if len(set(squashed)) < MIN_DISTINCT_CHARS:
         return "low_entropy"
     return None
+
+
+def residual_reason(text: str) -> Optional[str]:
+    """The length, digit-dominance and entropy floor alone, on raw text.
+
+    None when ``text`` carries enough letters and distinct characters to be
+    screen semantics; else ``too_short``, ``digit_dominated`` or
+    ``low_entropy``. A clock-derived date (see ``clock_text``) must still
+    pass it.
+    """
+    squashed = _squash(text)
+    if len(squashed) < MIN_SQUASHED_LEN:
+        return "too_short"
+    return _residual_reason(squashed)
 
 
 def classify_text(text: str, *, reference_date: Optional[date] = None) -> Optional[str]:

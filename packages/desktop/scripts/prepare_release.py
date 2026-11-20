@@ -25,11 +25,8 @@ import ast
 import copy
 import datetime
 import difflib
-import functools
 import json
-import os
 import re
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -81,53 +78,9 @@ class Commit:
         return bool(match and match.group("bang")) or "BREAKING CHANGE:" in self.body
 
 
-# Every git call here is a local read of history. The slowest takes well under a
-# second, so one that runs this long is stuck.
-GIT_TIMEOUT = 120
-
-
-class GitTimeout(RuntimeError):
-    """A git command did not finish in time."""
-
-
-@functools.lru_cache(maxsize=None)
-def _git_executable(search_path: str | None) -> str:
-    found = shutil.which("git", path=search_path)
-    if found is None:
-        raise FileNotFoundError("git is not on PATH")
-    return os.path.abspath(found)
-
-
-def run_git(
-    root: Path, *args: str, check: bool = True, input: bytes | None = None
-) -> subprocess.CompletedProcess[bytes]:
-    """Run one git command in ``root`` without forking this process.
-
-    On macOS a forked copy of a Python process that has loaded system
-    frameworks can stop before it ever runs git, and the parent then waits
-    inside Popen where no timeout applies. Python starts the child with
-    posix_spawn instead of fork when the program path is absolute, no working
-    directory is passed and inherited descriptors are left alone, so git gets
-    its directory from ``-C``. Python opens its own descriptors close-on-exec,
-    so git still inherits only its three pipes. The timeout then covers the
-    whole call, and a stuck command fails with its name.
-    """
-
-    command = [_git_executable(os.environ.get("PATH")), "-C", str(root), *args]
-    try:
-        return subprocess.run(
-            command,
-            check=check,
-            capture_output=True,
-            input=input,
-            stdin=subprocess.DEVNULL if input is None else None,
-            close_fds=os.name != "posix",
-            timeout=GIT_TIMEOUT,
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise GitTimeout(
-            f"git {' '.join(args)} did not finish within {GIT_TIMEOUT}s in {root}"
-        ) from exc
+# One helper starts every git process here and in the tests; see its docstring.
+GitTimeout = native_release.GitTimeout
+run_git = native_release.run_git
 
 
 def _git(root: Path, *args: str) -> str:

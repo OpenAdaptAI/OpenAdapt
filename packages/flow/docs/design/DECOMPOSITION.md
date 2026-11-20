@@ -598,10 +598,12 @@ that:
 
 PR #2239 raised `__main__.py` and `terminal_verification_v2.py`: its review fixes added authority scoping and `authority_basis`.
 
+PR #2280 raised `replayer.py` by 12 lines: the call sites of the clock-text check and the first-local fence's risk view, whose bodies live in `runtime/clock_checks.py`.
+
 <!-- size-ratchet:begin -->
 | File | Line budget |
 |---|---:|
-| `packages/flow/openadapt_flow/runtime/replayer.py` | 20082 |
+| `packages/flow/openadapt_flow/runtime/replayer.py` | 20094 |
 | `packages/flow/openadapt_flow/__main__.py` | 14570 |
 | `packages/flow/openadapt_flow/qualification.py` | 5963 |
 | `packages/flow/openadapt_flow/ir.py` | 6711 |
