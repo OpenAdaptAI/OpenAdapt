@@ -1428,7 +1428,7 @@ def _read_control_value(control: object, name: str, default: Any) -> Any:
 # backend modules imported it and could falsely advertise a newer parser when
 # only this local server module was replaced. Mixed old modules must fail import.
 # Updating a helper beside an older server cannot advertise a new read policy.
-SERVER_VALUE_READ_CONTRACT = "openadapt.native-value-read/v2"
+SERVER_VALUE_READ_CONTRACT = "openadapt.native-value-read/v3"
 _EXPECTED_VALUE_PROOF_SCHEMA = "openadapt.native-value-completeness/v3"
 
 
@@ -2499,26 +2499,103 @@ _TOGGLE_STATES = {0: "off", 1: "on", 2: "indeterminate"}
 _UIA_IS_VALUE_PATTERN_AVAILABLE = 30043
 
 
-def _form_boolean_property(control: object, property_id: int) -> Optional[bool]:
-    """An exact supported UIA boolean property, or unknown; never default.
+_FORM_PROPERTY_NAMES = {
+    30041: "toggle",
+    30036: "selection_item",
+    30043: "value",
+    30022: "offscreen",
+}
+_FORM_PROPERTY_PHASES = {
+    "guard_before_lookup": frozenset({"guard_refused"}),
+    "lookup": frozenset({"lookup_unavailable", "lookup_error"}),
+    "guard_before_query": frozenset({"guard_refused"}),
+    "query": frozenset({"query_error"}),
+    "guard_after_query": frozenset({"guard_refused"}),
+    "result_kind": frozenset({"none", "non_bool"}),
+}
 
-    UIA's availability property is VT_BOOL. Ignore default values so a missing
-    property yields the reserved unsupported object, not a default False that
-    could authorize Name fallback. Provider failures remain unknown. The probe
-    itself never touches a Value/Legacy/Name getter.
+
+def _valid_form_property_detail(value: object) -> bool:
+    if type(value) is not dict or set(value) != {"property", "phase", "outcome"}:
+        return False
+    if any(type(item) is not str for item in value.values()):
+        return False
+    return value["property"] in _FORM_PROPERTY_NAMES.values() and value[
+        "outcome"
+    ] in _FORM_PROPERTY_PHASES.get(value["phase"], ())
+
+
+@dataclass(frozen=True)
+class _FormPropertyDetail:
+    property: str
+    phase: str
+    outcome: str
+
+    def payload(self) -> dict[str, str]:
+        value = {
+            "property": self.property,
+            "phase": self.phase,
+            "outcome": self.outcome,
+        }
+        if not _valid_form_property_detail(value):
+            raise ValueError("invalid non-content property detail")
+        return value
+
+
+@dataclass(frozen=True)
+class _FormBooleanObservation:
+    value: Optional[bool]
+    detail: Optional[_FormPropertyDetail] = None
+
+
+def _form_boolean_observation(
+    control: object, property_id: int
+) -> _FormBooleanObservation:
+    """One existing raw-property probe, with closed failure attribution only.
+
+    This never queries again to diagnose an unknown. Each guard/lookup/query
+    runs at most once; an already-unknown lookup/result stops immediately.
+    No provider text, type name, exception
+    value or representation enters the request-local result.
     """
-    guard = _native_value_api().require_non_sensitive_value
+    name = _FORM_PROPERTY_NAMES.get(property_id) if type(property_id) is int else None
+    if name is None:
+        return _FormBooleanObservation(None)
+
+    def refused(phase: str, outcome: str) -> _FormBooleanObservation:
+        return _FormBooleanObservation(None, _FormPropertyDetail(name, phase, outcome))
+
+    try:
+        guard = _native_value_api().require_non_sensitive_value
+        guard(control)
+    except Exception:  # noqa: BLE001 - no provider exception data
+        return refused("guard_before_lookup", "guard_refused")
+    try:
+        method = getattr(control, "GetPropertyValueEx", None)
+    except Exception:  # noqa: BLE001 - no diagnostic lookup after failure
+        return refused("lookup", "lookup_error")
+    if not callable(method):
+        return refused("lookup", "lookup_unavailable")
     try:
         guard(control)
-        method = _control_value(control, "GetPropertyValueEx", None)
-        guard(control)
-        if not callable(method):
-            return None
+    except Exception:  # noqa: BLE001 - no raw query after guard refusal
+        return refused("guard_before_query", "guard_refused")
+    try:
         available = method(property_id, 1)
+    except Exception:  # noqa: BLE001 - do not stringify COM/provider errors
+        return refused("query", "query_error")
+    if type(available) is not bool:
+        return refused("result_kind", "none" if available is None else "non_bool")
+    try:
         guard(control)
-        return available if type(available) is bool else None
-    except Exception:  # noqa: BLE001 - unknown capability is not absence
-        return None
+    except Exception:  # noqa: BLE001 - no post-refusal diagnostic getter
+        return refused("guard_after_query", "guard_refused")
+    return _FormBooleanObservation(available)
+
+
+def _form_boolean_property(control: object, property_id: int) -> Optional[bool]:
+    """An exact supported boolean, or unknown; never default or absence."""
+    return _form_boolean_observation(control, property_id).value
 
 
 def _form_exposes_value(control: object) -> Optional[bool]:
@@ -2598,15 +2675,11 @@ class _FormStateObservation:
     complete: bool
     state: Optional[str]
     reason: Optional[str] = None
+    detail: Optional[_FormPropertyDetail] = None
 
 
 def _form_field_state(control: object) -> _FormStateObservation:
-    """Distinguish known absent state patterns from unknown observations.
-
-    This describes the two state patterns in the declared form projection;
-    it does not establish element absence, record identity or a business value.
-    Composite toggle+selection state has no wire representation and refuses.
-    """
+    """Known absent patterns differ from unknown, with first-refusal detail."""
     guard = _native_value_api().require_non_sensitive_value
 
     def read(capability: str, attribute: str) -> Any:
@@ -2622,38 +2695,54 @@ def _form_field_state(control: object) -> _FormStateObservation:
         return value
 
     try:
-        toggle = _form_boolean_property(control, 30041)
-        selection = _form_boolean_property(control, 30036)
-        if toggle is None or selection is None:
-            return _FormStateObservation(False, None, "state_capability_unknown")
+        toggle_probe = _form_boolean_observation(control, 30041)
+        if toggle_probe.value is None:
+            return _FormStateObservation(
+                False, None, "state_capability_unknown", toggle_probe.detail
+            )
+        selection_probe = _form_boolean_observation(control, 30036)
+        if selection_probe.value is None:
+            return _FormStateObservation(
+                False, None, "state_capability_unknown", selection_probe.detail
+            )
+        toggle, selection = toggle_probe.value, selection_probe.value
         if toggle and selection:
             return _FormStateObservation(False, None, "composite_state_unrepresented")
 
-        def unchanged() -> bool:
-            return (
-                _form_boolean_property(control, 30041),
-                _form_boolean_property(control, 30036),
-            ) == (toggle, selection)
+        def recheck() -> tuple[bool, Optional[_FormPropertyDetail]]:
+            for property_id, expected in ((30041, toggle), (30036, selection)):
+                current = _form_boolean_observation(control, property_id)
+                if current.value is None:
+                    return False, current.detail
+                if current.value != expected:
+                    return False, None
+            return True, None
 
         if toggle:
             value = read("GetTogglePattern", "ToggleState")
             if type(value) is not int or value not in _TOGGLE_STATES:
                 return _FormStateObservation(False, None, "toggle_state_unavailable")
-            if not unchanged():
-                return _FormStateObservation(False, None, "state_capability_changed")
+            complete, detail = recheck()
+            if not complete:
+                return _FormStateObservation(
+                    False, None, "state_capability_changed", detail
+                )
             return _FormStateObservation(True, _TOGGLE_STATES[value])
         if selection:
             value = read("GetSelectionItemPattern", "IsSelected")
             if type(value) is not bool:
                 return _FormStateObservation(False, None, "selection_state_unavailable")
-            if not unchanged():
-                return _FormStateObservation(False, None, "state_capability_changed")
+            complete, detail = recheck()
+            if not complete:
+                return _FormStateObservation(
+                    False, None, "state_capability_changed", detail
+                )
             return _FormStateObservation(True, "selected" if value else "unselected")
-        complete = unchanged()
+        complete, detail = recheck()
         return _FormStateObservation(
-            complete, None, None if complete else "state_capability_changed"
+            complete, None, None if complete else "state_capability_changed", detail
         )
-    except Exception:  # noqa: BLE001 - no sensitive/unknown state fallback
+    except Exception:  # noqa: BLE001 - non-boolean failures have no property detail
         return _FormStateObservation(False, None, "state_observation_unavailable")
 
 
@@ -2661,7 +2750,7 @@ def _rect(bounds: list[int]) -> list[int]:
     return [bounds[0], bounds[1], bounds[2] - bounds[0], bounds[3] - bounds[1]]
 
 
-FORM_REFUSAL_SCHEMA = "openadapt.native-form-projection-refusal/v1"
+FORM_REFUSAL_SCHEMA = "openadapt.native-form-projection-refusal/v2"
 _FORM_VALUE_REFUSAL_REASONS = frozenset(
     {
         "value_unavailable",
@@ -2727,9 +2816,25 @@ _FORM_REFUSAL_MODEL = {
     for key, reasons in _FORM_REFUSAL_MODEL.items()
 }
 _FORM_REFUSAL_REASONS = frozenset().union(*_FORM_REFUSAL_MODEL.values())
+_FORM_PROPERTY_DETAIL_SCOPE = {
+    ("observation", "visibility", "visibility_unknown"): frozenset({"offscreen"}),
+    ("observation", "state", "state_capability_unknown"): frozenset(
+        {"toggle", "selection_item"}
+    ),
+    ("observation", "state", "state_capability_changed"): frozenset(
+        {"toggle", "selection_item"}
+    ),
+    ("observation", "value_capability", "value_capability_unknown"): frozenset(
+        {"value"}
+    ),
+    ("observation", "caption", "caption_capability_changed"): frozenset({"value"}),
+}
 
 
-def valid_form_projection_refusal(
+# Do not export the legacy unversioned validator: a client must import the
+# parser schema it actually implements, not silently borrow a newer/older one
+# from a separately replaced local server module.
+def valid_form_projection_refusal_v2(
     payload: object, *, window: Optional[tuple[int, int]] = None
 ) -> bool:
     """Closed non-content receipt. It cannot authorize a projection or retry."""
@@ -2740,6 +2845,7 @@ def valid_form_projection_refusal(
         "reason",
         "ordinal",
         "window",
+        "detail",
     }:
         return False
     if type(payload["schema"]) is not str or payload["schema"] != FORM_REFUSAL_SCHEMA:
@@ -2749,6 +2855,14 @@ def valid_form_projection_refusal(
     allowed = _FORM_REFUSAL_MODEL.get((payload["stage"], payload["channel"]))
     if allowed is None or payload["reason"] not in allowed:
         return False
+    detail = payload["detail"]
+    if detail is not None:
+        if not _valid_form_property_detail(detail):
+            return False
+        if detail["property"] not in _FORM_PROPERTY_DETAIL_SCOPE.get(
+            (payload["stage"], payload["channel"], payload["reason"]), ()
+        ):
+            return False
     ordinal = payload["ordinal"]
     if ordinal is not None and (
         type(ordinal) is not int or not 0 <= ordinal <= _MAX_UIA_NODES + 1
@@ -2776,6 +2890,7 @@ class _FormProjectionRefusal:
     channel: str
     reason: str
     ordinal: Optional[int] = None
+    detail: Optional[_FormPropertyDetail] = None
 
     def payload(self, window: Optional[tuple[int, int]] = None) -> dict[str, Any]:
         # Never serialize controls, provider errors, names or partial fields.
@@ -2785,11 +2900,12 @@ class _FormProjectionRefusal:
             "channel": self.channel,
             "reason": self.reason,
             "ordinal": self.ordinal,
+            "detail": self.detail.payload() if self.detail is not None else None,
             "window": {"hwnd": window[0], "pid": window[1]}
             if window is not None
             else None,
         }
-        if not valid_form_projection_refusal(value):
+        if not valid_form_projection_refusal_v2(value):
             raise ValueError("invalid non-content projection refusal")
         return value
 
@@ -2801,7 +2917,11 @@ class _FormProjectionObservation:
 
 
 def _form_refused(
-    stage: str, channel: str, reason: object, ordinal: Optional[int] = None
+    stage: str,
+    channel: str,
+    reason: object,
+    ordinal: Optional[int] = None,
+    detail: Optional[_FormPropertyDetail] = None,
 ) -> _FormProjectionObservation:
     # Only enum values cross the wire. Do not str/repr an unknown reason, even
     # if a provider injected its exception into an incomplete observation.
@@ -2812,7 +2932,7 @@ def _form_refused(
         else "projection_unavailable"
     )
     return _FormProjectionObservation(
-        None, _FormProjectionRefusal(stage, channel, fixed, ordinal)
+        None, _FormProjectionRefusal(stage, channel, fixed, ordinal, detail)
     )
 
 
@@ -2887,10 +3007,15 @@ def _window_form_fields(
             return _form_refused("traversal", "limits", "field_limit", visited)
         control_type = _control_value(control, "ControlTypeName", None)
         bounds = _bounds(control)
-        offscreen = _form_boolean_property(control, 30022)
+        visibility = _form_boolean_observation(control, 30022)
+        offscreen = visibility.value
         if offscreen is None:
             return _form_refused(
-                "observation", "visibility", "visibility_unknown", visited
+                "observation",
+                "visibility",
+                "visibility_unknown",
+                visited,
+                visibility.detail,
             )
         on_screen = not offscreen
         if on_screen and bounds is None:
@@ -2913,16 +3038,24 @@ def _window_form_fields(
             observed_state = _form_field_state(control)
             if not observed_state.complete:
                 return _form_refused(
-                    "observation", "state", observed_state.reason, visited
+                    "observation",
+                    "state",
+                    observed_state.reason,
+                    visited,
+                    observed_state.detail,
                 )
             state = observed_state.state
-            capability = _form_exposes_value(control)
+            value_probe = _form_boolean_observation(
+                control, _UIA_IS_VALUE_PATTERN_AVAILABLE
+            )
+            capability = value_probe.value
             if capability is None:
                 return _form_refused(
                     "observation",
                     "value_capability",
                     "value_capability_unknown",
                     visited,
+                    value_probe.detail,
                 )
             exposes = capability
 
@@ -3024,12 +3157,16 @@ def _window_form_fields(
                         str(_control_value(control, "Name", "") or "").split()
                     )
                     guard(control)
-                    if _form_exposes_value(control) is not False:
+                    caption_probe = _form_boolean_observation(
+                        control, _UIA_IS_VALUE_PATTERN_AVAILABLE
+                    )
+                    if caption_probe.value is not False:
                         return _form_refused(
                             "observation",
                             "caption",
                             "caption_capability_changed",
                             visited,
+                            caption_probe.detail,
                         )
                 except Exception:  # noqa: BLE001 - no sensitive/unknown fallback
                     return _form_refused(

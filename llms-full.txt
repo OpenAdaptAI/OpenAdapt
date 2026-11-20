@@ -2248,9 +2248,12 @@ What is not:
   endpoints, with fresh fixed-control identity during reads, not continuously
   or as authority for a later write. Current complete-value Flow/save and
   held-out application qualification remain pending. Unavailable form reads
-  carry a closed request-local refusal receipt with fixed non-content codes;
-  it does not establish a specific provider cause beyond the observed channel,
-  does not collect extra source data after refusal and never permits retry.
+  carry a closed request-local refusal receipt with fixed non-content codes.
+  For the existing raw boolean probes it names only the property category,
+  guard/query phase and result category; this does not establish a provider
+  cause. It collects no extra source data after refusal and never permits
+  retry. Read-v3 client/server declarations are independent of helper proof-v3;
+  older incompatible consumers refuse before source getters.
 - No live model has been run against these fixtures yet; the live-model test
   is off by default because it costs money.
 

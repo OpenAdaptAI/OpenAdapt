@@ -48,7 +48,7 @@ import requests
 from openadapt_flow.approval_mode.window_fields import valid_form_field
 from openadapt_flow.backend import ActionDeliveryUncertain, StructuralResolutionRefused
 from openadapt_flow.backends.win_agent.server import (
-    valid_form_projection_refusal,
+    valid_form_projection_refusal_v2,
 )
 from openadapt_flow.backends.win_agent.value_protocol import (
     locator_scope,
@@ -64,7 +64,7 @@ from openadapt_flow.runtime.step_timing import timed_span
 DEFAULT_SERVER_URL = "http://localhost:5001"
 # The client advertises only the wire semantics implemented by THIS module.
 # Never import a version from a possibly newer local server/helper module.
-CLIENT_VALUE_READ_CONTRACT = "openadapt.native-value-read/v2"
+CLIENT_VALUE_READ_CONTRACT = "openadapt.native-value-read/v3"
 
 # Hosts treated as loopback: plaintext HTTP to these never leaves the machine,
 # so it is permitted in dev (with a warning) even when TLS is not required.
@@ -1113,7 +1113,7 @@ class WindowsBackend:
                 if (
                     payload["window"] is not None
                     or payload["fields"] != []
-                    or not valid_form_projection_refusal(
+                    or not valid_form_projection_refusal_v2(
                         payload["refusal"], window=(hwnd, pid)
                     )
                 ):
