@@ -27,6 +27,7 @@ from urllib.parse import parse_qsl, unquote, urlsplit
 
 from pydantic import BaseModel, ConfigDict
 
+from openadapt_flow.secret_redaction import MASK, credential_header, mask_header
 from openadapt_flow.tx.receipt import write_private_record
 from openadapt_flow.tx.types import (
     WireMutationRecord,
@@ -573,8 +574,13 @@ def _encode_har_body(
         text = decoded_bytes.decode("utf-8")
         return (_mask_if_needed(text, secrets), None)
     except UnicodeDecodeError:
-        b64 = base64.b64encode(decoded_bytes).decode("ascii")
-        return (_mask_if_needed(b64, secrets), "base64")
+        safe_bytes = (
+            MASK.encode("utf-8")
+            if carries_secret(decoded_bytes, secrets)
+            else decoded_bytes
+        )
+        b64 = base64.b64encode(safe_bytes).decode("ascii")
+        return (b64, "base64")
 
 
 def _build_har_entry(
@@ -601,8 +607,8 @@ def _build_har_entry(
     ]
     req_hdr_list = [
         {
-            "name": k,
-            "value": _mask_if_needed(v, secrets),
+            "name": _mask_if_needed(k, secrets),
+            "value": mask_header(k, v, secrets),
         }
         for k, v in request_headers
     ]
@@ -634,8 +640,8 @@ def _build_har_entry(
     resp_bytes = response_body or b""
     resp_hdr_list = [
         {
-            "name": k,
-            "value": _mask_if_needed(v, secrets),
+            "name": _mask_if_needed(k, secrets),
+            "value": mask_header(k, v, secrets),
         }
         for k, v in response_headers
     ]
@@ -682,14 +688,35 @@ def _build_har_entry(
 
 
 def _scrub_har_value(obj: Any, secrets: tuple[str, ...]) -> Any:
-    if not secrets:
-        return obj
     if isinstance(obj, str):
         return mask_secrets(obj, secrets)
     if isinstance(obj, list):
         return [_scrub_har_value(item, secrets) for item in obj]
     if isinstance(obj, dict):
-        return {k: _scrub_har_value(v, secrets) for k, v in obj.items()}
+        scrubbed = {
+            _mask_if_needed(k, secrets) if isinstance(k, str) else k: (
+                MASK
+                if isinstance(k, str) and credential_header(k)
+                else _scrub_har_value(v, secrets)
+            )
+            for k, v in obj.items()
+        }
+        name = obj.get("name")
+        if isinstance(name, str) and credential_header(name) and "value" in obj:
+            scrubbed["value"] = MASK
+        if obj.get("encoding") == "base64" and isinstance(obj.get("text"), str):
+            if carries_secret(obj["text"], secrets):
+                scrubbed["text"] = base64.b64encode(MASK.encode("utf-8")).decode(
+                    "ascii"
+                )
+        if isinstance(obj.get("cookies"), list):
+            scrubbed["cookies"] = [
+                {**_scrub_har_value(cookie, secrets), "value": MASK}
+                if isinstance(cookie, dict)
+                else MASK
+                for cookie in obj["cookies"]
+            ]
+        return scrubbed
     return obj
 
 
