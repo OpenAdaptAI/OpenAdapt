@@ -1,5 +1,5 @@
 {
-  "label": "after 194666af960f0c577115d07a91a10f026a7c8c09",
+  "label": "after d32bb311339e04d2cd370e343a65197132576878",
   "results": [
     {
       "cases": {
@@ -16,21 +16,21 @@
           ],
           "run_success": true,
           "score": "verified",
-          "seconds": 4.9
+          "seconds": 4.5
         },
         "disabled": {
           "detail": "step_003: Step 'step_003' (choose <department>) stopped before continuing: choice_disabled; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 7.9
+          "seconds": 3.4
         },
         "duplicate": {
           "detail": "step_003: Step 'step_003' (choose <department>) stopped before continuing: choice_ambiguous; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 7.7
+          "seconds": 3.5
         },
         "heldout": {
           "detail": "",
@@ -45,14 +45,14 @@
           ],
           "run_success": true,
           "score": "verified",
-          "seconds": 4.2
+          "seconds": 3.9
         },
         "missing": {
           "detail": "step_003: Step 'step_003' (choose <department>) stopped before continuing: choice_missing; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 11.4
+          "seconds": 11.1
         },
         "reorder_late": {
           "detail": "",
@@ -67,21 +67,21 @@
           ],
           "run_success": true,
           "score": "verified",
-          "seconds": 4.2
+          "seconds": 3.8
         },
         "surprise_confirm": {
           "detail": "step_003: Step 'step_003' (choose <department>) stopped before continuing: choice_unverified; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 6.7
+          "seconds": 3.5
         },
         "surprise_modal": {
           "detail": "step_004: Step 'step_004' (click 'Save'): the recorded browser dialog did not appear (dialog_missing); run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 10.9
+          "seconds": 8.8
         }
       },
       "kind": "native",
@@ -124,21 +124,21 @@
           ],
           "run_success": true,
           "score": "verified",
-          "seconds": 4.1
+          "seconds": 3.9
         },
         "disabled": {
           "detail": "step_003: Step 'step_003' (choose <department>) stopped before continuing: choice_disabled; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 4.5
+          "seconds": 3.7
         },
         "duplicate": {
           "detail": "step_003: Step 'step_003' (choose <department>) stopped before continuing: choice_ambiguous; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 4.0
+          "seconds": 3.8
         },
         "heldout": {
           "detail": "",
@@ -153,14 +153,14 @@
           ],
           "run_success": true,
           "score": "verified",
-          "seconds": 4.6
+          "seconds": 3.9
         },
         "missing": {
           "detail": "step_003: Step 'step_003' (choose <department>) stopped before continuing: choice_missing; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 11.5
+          "seconds": 11.4
         },
         "reorder_late": {
           "detail": "",
@@ -175,21 +175,21 @@
           ],
           "run_success": true,
           "score": "verified",
-          "seconds": 4.4
+          "seconds": 4.1
         },
         "surprise_confirm": {
           "detail": "step_003: Step 'step_003' (choose <department>) stopped before continuing: choice_unverified; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 7.8
+          "seconds": 6.6
         },
         "surprise_modal": {
           "detail": "step_004: Step 'step_004' (click 'Save'): the recorded browser dialog did not appear (dialog_missing); run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 9.1
+          "seconds": 8.8
         }
       },
       "kind": "aria_listbox",
@@ -232,21 +232,21 @@
           ],
           "run_success": true,
           "score": "verified",
-          "seconds": 4.9
+          "seconds": 4.5
         },
         "disabled": {
           "detail": "step_003: Step 'step_003' (choose <department>) stopped before continuing: choice_disabled; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 4.1
+          "seconds": 3.9
         },
         "duplicate": {
           "detail": "step_003: Step 'step_003' (choose <department>) stopped before continuing: choice_ambiguous; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 4.7
+          "seconds": 3.8
         },
         "heldout": {
           "detail": "",
@@ -261,14 +261,14 @@
           ],
           "run_success": true,
           "score": "verified",
-          "seconds": 4.8
+          "seconds": 5.0
         },
         "missing": {
           "detail": "step_003: Step 'step_003' (choose <department>) stopped before continuing: choice_missing; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 12.2
+          "seconds": 11.4
         },
         "reorder_late": {
           "detail": "",
@@ -283,21 +283,21 @@
           ],
           "run_success": true,
           "score": "verified",
-          "seconds": 4.9
+          "seconds": 4.2
         },
         "surprise_confirm": {
           "detail": "step_003: Identity check failed for step 'step_003' (choose <department>): a target was found positionally (rung 'template', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Select.. Department' (coverage 0.53) \u2014 refusing to act; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 3.2
+          "seconds": 3.1
         },
         "surprise_modal": {
           "detail": "step_003: Identity check failed for step 'step_003' (choose <department>): a target was found positionally (rung 'template', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Select.. Department' (coverage 0.53) \u2014 refusing to act; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 3.2
+          "seconds": 3.1
         }
       },
       "kind": "div_dropdown",
@@ -340,21 +340,21 @@
           ],
           "run_success": true,
           "score": "verified",
-          "seconds": 4.3
+          "seconds": 4.2
         },
         "disabled": {
           "detail": "step_004: Step 'step_004' (choose <department>) stopped before continuing: choice_disabled; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 4.2
+          "seconds": 3.9
         },
         "duplicate": {
           "detail": "step_004: Step 'step_004' (choose <department>) stopped before continuing: choice_ambiguous; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 4.2
+          "seconds": 11.6
         },
         "heldout": {
           "detail": "",
@@ -369,14 +369,14 @@
           ],
           "run_success": true,
           "score": "verified",
-          "seconds": 4.2
+          "seconds": 4.0
         },
         "missing": {
           "detail": "step_004: Step 'step_004' (choose <department>) stopped before continuing: choice_missing; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 11.5
+          "seconds": 11.4
         },
         "reorder_late": {
           "detail": "",
@@ -391,21 +391,21 @@
           ],
           "run_success": true,
           "score": "verified",
-          "seconds": 4.3
+          "seconds": 4.1
         },
         "surprise_confirm": {
           "detail": "step_004: Step 'step_004' (choose <department>) stopped before continuing: choice_unverified; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 8.5
+          "seconds": 6.7
         },
         "surprise_modal": {
           "detail": "step_005: Step 'step_005' (click 'Save'): the recorded browser dialog did not appear (dialog_missing); run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 11.5
+          "seconds": 9.1
         }
       },
       "kind": "select2",
@@ -448,21 +448,21 @@
           ],
           "run_success": true,
           "score": "verified",
-          "seconds": 6.8
+          "seconds": 4.4
         },
         "disabled": {
           "detail": "step_004: Step 'step_004' (choose <department>) stopped before continuing: choice_missing; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 14.1
+          "seconds": 11.5
         },
         "duplicate": {
           "detail": "step_004: Step 'step_004' (choose <department>) stopped before continuing: choice_ambiguous; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 5.3
+          "seconds": 3.8
         },
         "heldout": {
           "detail": "",
@@ -477,14 +477,14 @@
           ],
           "run_success": true,
           "score": "verified",
-          "seconds": 4.5
+          "seconds": 4.3
         },
         "missing": {
           "detail": "step_004: Step 'step_004' (choose <department>) stopped before continuing: choice_missing; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 11.9
+          "seconds": 11.4
         },
         "reorder_late": {
           "detail": "",
@@ -499,21 +499,21 @@
           ],
           "run_success": true,
           "score": "verified",
-          "seconds": 4.7
+          "seconds": 4.5
         },
         "surprise_confirm": {
           "detail": "step_004: Step 'step_004' (choose <department>) stopped before continuing: choice_unverified; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 7.5
+          "seconds": 7.2
         },
         "surprise_modal": {
           "detail": "step_005: Step 'step_005' (click 'Save'): the recorded browser dialog did not appear (dialog_missing); run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 9.4
+          "seconds": 9.6
         }
       },
       "kind": "chosen",
@@ -556,27 +556,39 @@
           ],
           "run_success": true,
           "score": "verified",
-          "seconds": 5.0
+          "seconds": 4.7
         },
         "disabled": {
-          "detail": "step_004: Step 'step_004' (choose 'Cardiology') stopped before continuing: choice_disabled; run aborted",
+          "detail": "step_004: Step 'step_004' (choose <department>) stopped before continuing: choice_disabled; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
           "seconds": 4.4
         },
         "duplicate": {
-          "detail": "step_004: Step 'step_004' (choose 'Cardiology') stopped before continuing: choice_ambiguous; run aborted",
+          "detail": "step_004: Step 'step_004' (choose <department>) stopped before continuing: choice_ambiguous; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 4.6
+          "seconds": 4.5
         },
         "heldout": {
-          "score": "unbindable"
+          "detail": "",
+          "records": [
+            {
+              "department": "ORTH",
+              "id": "R0023",
+              "kind": "registration",
+              "patient_name": "Case heldout tom_select",
+              "task": "tom_select"
+            }
+          ],
+          "run_success": true,
+          "score": "verified",
+          "seconds": 4.7
         },
         "missing": {
-          "detail": "step_004: Step 'step_004' (choose 'Cardiology') stopped before continuing: choice_missing; run aborted",
+          "detail": "step_004: Step 'step_004' (choose <department>) stopped before continuing: choice_missing; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
@@ -587,7 +599,7 @@
           "records": [
             {
               "department": "CARD",
-              "id": "R0023",
+              "id": "R0024",
               "kind": "registration",
               "patient_name": "Case reorder_late tom_select",
               "task": "tom_select"
@@ -595,25 +607,26 @@
           ],
           "run_success": true,
           "score": "verified",
-          "seconds": 5.5
+          "seconds": 5.9
         },
         "surprise_confirm": {
-          "detail": "step_004: Step 'step_004' (choose 'Cardiology') stopped before continuing: choice_unverified; run aborted",
+          "detail": "step_004: Step 'step_004' (choose <department>) stopped before continuing: choice_unverified; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 7.4
+          "seconds": 7.9
         },
         "surprise_modal": {
           "detail": "step_005: Step 'step_005' (click 'Save'): the recorded browser dialog did not appear (dialog_missing); run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 11.5
+          "seconds": 9.8
         }
       },
       "kind": "tom_select",
       "params": [
+        "department",
         "patient_name"
       ],
       "pipeline": "ok",
@@ -628,7 +641,7 @@
         },
         {
           "action": "select_option",
-          "intent": "choose 'Cardiology'"
+          "intent": "choose <department>"
         },
         {
           "action": "click",
@@ -643,7 +656,7 @@
           "records": [
             {
               "department": "CARD",
-              "id": "R0025",
+              "id": "R0026",
               "kind": "registration",
               "patient_name": "Case demo async_combobox",
               "task": "async_combobox"
@@ -654,24 +667,36 @@
           "seconds": 4.3
         },
         "disabled": {
-          "detail": "step_004: Step 'step_004' (choose 'Cardiology') stopped before continuing: choice_disabled; run aborted",
+          "detail": "step_004: Step 'step_004' (choose <department>) stopped before continuing: choice_disabled; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
           "seconds": 3.9
         },
         "duplicate": {
-          "detail": "step_004: Step 'step_004' (choose 'Cardiology') stopped before continuing: choice_ambiguous; run aborted",
+          "detail": "step_004: Step 'step_004' (choose <department>) stopped before continuing: choice_ambiguous; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 3.9
+          "seconds": 4.1
         },
         "heldout": {
-          "score": "unbindable"
+          "detail": "",
+          "records": [
+            {
+              "department": "ORTH",
+              "id": "R0027",
+              "kind": "registration",
+              "patient_name": "Case heldout async_combobox",
+              "task": "async_combobox"
+            }
+          ],
+          "run_success": true,
+          "score": "verified",
+          "seconds": 4.3
         },
         "missing": {
-          "detail": "step_004: Step 'step_004' (choose 'Cardiology') stopped before continuing: choice_missing; run aborted",
+          "detail": "step_004: Step 'step_004' (choose <department>) stopped before continuing: choice_missing; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
@@ -682,7 +707,7 @@
           "records": [
             {
               "department": "CARD",
-              "id": "R0026",
+              "id": "R0028",
               "kind": "registration",
               "patient_name": "Case reorder_late async_combobox",
               "task": "async_combobox"
@@ -690,10 +715,10 @@
           ],
           "run_success": true,
           "score": "verified",
-          "seconds": 5.1
+          "seconds": 5.2
         },
         "surprise_confirm": {
-          "detail": "step_004: Step 'step_004' (choose 'Cardiology'): the page showed a browser dialog the demonstration did not (dialog_unexpected); it was dismissed, not answered; run aborted",
+          "detail": "step_004: Step 'step_004' (choose <department>): the page showed a browser dialog the demonstration did not (dialog_unexpected); it was dismissed, not answered; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
@@ -704,11 +729,12 @@
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 9.3
+          "seconds": 9.2
         }
       },
       "kind": "async_combobox",
       "params": [
+        "department",
         "patient_name"
       ],
       "pipeline": "ok",
@@ -723,7 +749,7 @@
         },
         {
           "action": "select_option",
-          "intent": "choose 'Cardiology'"
+          "intent": "choose <department>"
         },
         {
           "action": "click",
@@ -739,7 +765,7 @@
             {
               "department": "CARD",
               "doctor": "D11",
-              "id": "R0028",
+              "id": "R0030",
               "kind": "registration",
               "patient_name": "Case demo cascade",
               "task": "cascade"
@@ -747,21 +773,21 @@
           ],
           "run_success": true,
           "score": "verified",
-          "seconds": 4.7
+          "seconds": 4.5
         },
         "disabled": {
           "detail": "step_003: Step 'step_003' (choose <department>) stopped before continuing: choice_disabled; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 3.6
+          "seconds": 3.7
         },
         "duplicate": {
           "detail": "step_003: Step 'step_003' (choose <department>) stopped before continuing: choice_ambiguous; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 3.5
+          "seconds": 3.7
         },
         "heldout": {
           "detail": "",
@@ -769,7 +795,7 @@
             {
               "department": "ORTH",
               "doctor": "D21",
-              "id": "R0029",
+              "id": "R0031",
               "kind": "registration",
               "patient_name": "Case heldout cascade",
               "task": "cascade"
@@ -777,14 +803,14 @@
           ],
           "run_success": true,
           "score": "verified",
-          "seconds": 4.6
+          "seconds": 4.5
         },
         "missing": {
           "detail": "step_003: Step 'step_003' (choose <department>) stopped before continuing: choice_missing; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 11.1
+          "seconds": 11.2
         },
         "reorder_late": {
           "detail": "",
@@ -792,7 +818,7 @@
             {
               "department": "CARD",
               "doctor": "D11",
-              "id": "R0030",
+              "id": "R0032",
               "kind": "registration",
               "patient_name": "Case reorder_late cascade",
               "task": "cascade"
@@ -814,7 +840,7 @@
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 9.6
+          "seconds": 9.5
         }
       },
       "kind": "cascade",
@@ -853,7 +879,7 @@
           "detail": "",
           "records": [
             {
-              "id": "R0032",
+              "id": "R0034",
               "kind": "registration",
               "patient_name": "Case demo datepicker",
               "task": "datepicker",
@@ -862,7 +888,7 @@
           ],
           "run_success": true,
           "score": "verified",
-          "seconds": 3.9
+          "seconds": 4.1
         },
         "disabled": {
           "score": "n/a"
@@ -880,7 +906,7 @@
           "detail": "",
           "records": [
             {
-              "id": "R0033",
+              "id": "R0035",
               "kind": "registration",
               "patient_name": "Case reorder_late datepicker",
               "task": "datepicker",
@@ -895,7 +921,7 @@
           "detail": "",
           "records": [
             {
-              "id": "R0034",
+              "id": "R0036",
               "kind": "registration",
               "patient_name": "Case surprise_confirm datepicker",
               "task": "datepicker",
@@ -911,7 +937,7 @@
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 9.0
+          "seconds": 9.1
         }
       },
       "kind": "datepicker",
@@ -949,62 +975,9 @@
               "department": "CARD",
               "doctor": "D11",
               "gender": "M",
-              "id": "R0037",
-              "kind": "registration",
-              "patient_name": "Case demo register",
-              "task": "register",
-              "title": "MR",
-              "visit_date": "2026-11-15"
-            },
-            {
-              "followup_in": "1W",
-              "id": "R0038",
-              "kind": "followup",
-              "registration": "R0037",
-              "task": "register"
-            }
-          ],
-          "run_success": true,
-          "score": "verified",
-          "seconds": 11.9
-        },
-        "disabled": {
-          "detail": "step_010: Step 'step_010' (choose <department>) stopped before continuing: choice_disabled; run aborted",
-          "records": [],
-          "run_success": false,
-          "score": "safe_halt",
-          "seconds": 6.4
-        },
-        "duplicate": {
-          "detail": "step_010: Step 'step_010' (choose <department>) stopped before continuing: choice_ambiguous; run aborted",
-          "records": [],
-          "run_success": false,
-          "score": "safe_halt",
-          "seconds": 6.2
-        },
-        "heldout": {
-          "detail": "city",
-          "score": "unbindable"
-        },
-        "missing": {
-          "detail": "step_010: Step 'step_010' (choose <department>) stopped before continuing: choice_missing; run aborted",
-          "records": [],
-          "run_success": false,
-          "score": "safe_halt",
-          "seconds": 13.9
-        },
-        "reorder_late": {
-          "detail": "",
-          "records": [
-            {
-              "blood_group": "BP",
-              "city": "BLR",
-              "department": "CARD",
-              "doctor": "D11",
-              "gender": "M",
               "id": "R0039",
               "kind": "registration",
-              "patient_name": "Case reorder_late register",
+              "patient_name": "Case demo register",
               "task": "register",
               "title": "MR",
               "visit_date": "2026-11-15"
@@ -1019,26 +992,104 @@
           ],
           "run_success": true,
           "score": "verified",
-          "seconds": 13.7
+          "seconds": 11.2
+        },
+        "disabled": {
+          "detail": "step_010: Step 'step_010' (choose <department>) stopped before continuing: choice_disabled; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 6.3
+        },
+        "duplicate": {
+          "detail": "step_010: Step 'step_010' (choose <department>) stopped before continuing: choice_ambiguous; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 6.6
+        },
+        "heldout": {
+          "detail": "",
+          "records": [
+            {
+              "blood_group": "ON",
+              "city": "MYS",
+              "department": "ORTH",
+              "doctor": "D21",
+              "gender": "F",
+              "id": "R0041",
+              "kind": "registration",
+              "patient_name": "Case heldout register",
+              "task": "register",
+              "title": "MRS",
+              "visit_date": "2026-11-15"
+            },
+            {
+              "followup_in": "1M",
+              "id": "R0042",
+              "kind": "followup",
+              "registration": "R0041",
+              "task": "register"
+            }
+          ],
+          "run_success": true,
+          "score": "verified",
+          "seconds": 11.4
+        },
+        "missing": {
+          "detail": "step_010: Step 'step_010' (choose <department>) stopped before continuing: choice_missing; run aborted",
+          "records": [],
+          "run_success": false,
+          "score": "safe_halt",
+          "seconds": 14.1
+        },
+        "reorder_late": {
+          "detail": "",
+          "records": [
+            {
+              "blood_group": "BP",
+              "city": "BLR",
+              "department": "CARD",
+              "doctor": "D11",
+              "gender": "M",
+              "id": "R0043",
+              "kind": "registration",
+              "patient_name": "Case reorder_late register",
+              "task": "register",
+              "title": "MR",
+              "visit_date": "2026-11-15"
+            },
+            {
+              "followup_in": "1W",
+              "id": "R0044",
+              "kind": "followup",
+              "registration": "R0043",
+              "task": "register"
+            }
+          ],
+          "run_success": true,
+          "score": "verified",
+          "seconds": 14.3
         },
         "surprise_confirm": {
           "detail": "step_005: Step 'step_005' (choose <gender>) stopped before continuing: choice_unverified; run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 7.3
+          "seconds": 7.5
         },
         "surprise_modal": {
           "detail": "step_018: Step 'step_018' (click 'Save'): the recorded browser dialog did not appear (dialog_missing); run aborted",
           "records": [],
           "run_success": false,
           "score": "safe_halt",
-          "seconds": 14.2
+          "seconds": 14.4
         }
       },
       "kind": "register",
       "params": [
         "blood_group",
+        "city",
         "department",
         "doctor",
         "followup_in",
@@ -1078,7 +1129,7 @@
         },
         {
           "action": "select_option",
-          "intent": "choose 'Bengaluru'"
+          "intent": "choose <city>"
         },
         {
           "action": "select_option",
@@ -1119,7 +1170,7 @@
         "demo": "verified",
         "disabled": "safe_halt",
         "duplicate": "safe_halt",
-        "heldout": "unbindable",
+        "heldout": "verified",
         "missing": "safe_halt",
         "reorder_late": "verified",
         "surprise_confirm": "safe_halt",
@@ -1179,7 +1230,7 @@
         "demo": "verified",
         "disabled": "safe_halt",
         "duplicate": "safe_halt",
-        "heldout": "unbindable",
+        "heldout": "verified",
         "missing": "safe_halt",
         "reorder_late": "verified",
         "surprise_confirm": "safe_halt",
@@ -1199,7 +1250,7 @@
         "demo": "verified",
         "disabled": "safe_halt",
         "duplicate": "safe_halt",
-        "heldout": "unbindable",
+        "heldout": "verified",
         "missing": "safe_halt",
         "reorder_late": "verified",
         "surprise_confirm": "safe_halt",
@@ -1209,8 +1260,7 @@
     "totals": {
       "n/a": 4,
       "safe_halt": 46,
-      "unbindable": 3,
-      "verified": 27
+      "verified": 30
     }
   }
 }

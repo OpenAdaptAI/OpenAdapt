@@ -17,7 +17,7 @@ from typing import Any, Iterator
 import pytest
 
 from benchmark.choice_widgets.app import ChoiceApp, Server
-from openadapt_flow.backends.choice import ChoiceRefused
+from openadapt_flow.backends.choice import BrowserChoice, ChoiceRefused
 from openadapt_flow.ir import ChoiceOptionShape, OptionChoice, Step
 
 sync_api = pytest.importorskip("playwright.sync_api")
@@ -95,7 +95,13 @@ def browser() -> Iterator[Any]:
 
 
 def _choose(
-    server: Server, browser: Any, kind: str, wanted: str, query: str = ""
+    server: Server,
+    browser: Any,
+    kind: str,
+    wanted: str,
+    query: str = "",
+    prepare: Any = None,
+    check: Any = None,
 ) -> tuple[dict[str, Any] | ChoiceRefused, str, bool]:
     from openadapt_flow.backends.playwright_backend import PlaywrightBackend
 
@@ -106,6 +112,8 @@ def _choose(
         page.goto(f"{server.base}/w/{kind}" + (f"?{query}" if query else ""))
         page.wait_for_selector("#patient_name", state="visible")
         page.wait_for_timeout(200)
+        if prepare is not None:
+            prepare(page)
         box = page.locator(selector).first.bounding_box()
         assert box is not None
         point = (int(box["x"] + box["width"] / 2), int(box["y"] + box["height"] / 2))
@@ -119,6 +127,8 @@ def _choose(
         page.wait_for_timeout(300)
         confirmed = backend.confirm_choice()
         value = page.evaluate("document.querySelector('[name=department]').value")
+        if check is not None:
+            check(page)
         return outcome, value, confirmed
     finally:
         page.close()
@@ -179,6 +189,98 @@ def test_refuses_instead_of_guessing(
     assert outcome.code == code
     assert "Cardiology" not in str(outcome)
     # Nothing was chosen.
+    assert value in ("", None)
+    assert not confirmed
+
+
+@pytest.mark.parametrize("kind", ["aria_listbox", "div_dropdown", "chosen"])
+@pytest.mark.parametrize("fault", ["reorder", "duplicate", "disabled", "removed"])
+def test_rechecks_the_semantic_option_after_the_list_settles(
+    server: Server,
+    browser: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    kind: str,
+    fault: str,
+) -> None:
+    # Mutate the real DOM in the gap between the census and actuation. A
+    # reordered list still chooses the intended element; an invalidated
+    # choice never dispatches a pointer event to an option.
+    original = BrowserChoice._settled_matches
+
+    def mutate(self: Any, scope: Any, shape: Any, *args: Any) -> Any:
+        result = original(self, scope, shape, *args)
+        scope.evaluate(
+            """([shape, fault]) => {
+              const selector = shape.role ? '[role="' + shape.role + '"]'
+                : shape.tag + shape.classes.map(c => '.' + CSS.escape(c)).join('');
+              const items = Array.from(document.querySelectorAll(selector));
+              const target = items.find(el => el.textContent.trim() === 'Cardiology');
+              if (fault === 'reorder') {
+                for (const el of items.reverse()) el.parentElement.appendChild(el);
+              } else if (fault === 'duplicate') {
+                target.parentElement.appendChild(target.cloneNode(true));
+              } else if (fault === 'disabled') {
+                target.setAttribute('aria-disabled', 'true');
+              } else {
+                target.remove();
+              }
+              window.optionPresses = 0;
+              for (const el of document.querySelectorAll(selector)) {
+                el.addEventListener('mousedown', () => window.optionPresses++);
+              }
+            }""",
+            [shape, fault],
+        )
+        return result
+
+    monkeypatch.setattr(BrowserChoice, "_settled_matches", mutate)
+    presses: list[int] = []
+    outcome, value, confirmed = _choose(
+        server,
+        browser,
+        kind,
+        "Cardiology",
+        check=lambda page: presses.append(page.evaluate("window.optionPresses")),
+    )
+    if fault == "reorder":
+        assert presses == [1]
+        assert isinstance(outcome, dict), outcome
+        assert value == "CARD"
+        assert confirmed
+    else:
+        assert isinstance(outcome, ChoiceRefused), outcome
+        assert outcome.code == "choice_changed"
+        assert presses == [0]
+        assert value in ("", None)
+        assert not confirmed
+
+
+@pytest.mark.parametrize("container", ["optgroup", "fieldset"])
+def test_native_select_respects_inherited_disabled_state(
+    server: Server, browser: Any, container: str
+) -> None:
+    def prepare(page: Any) -> None:
+        page.evaluate(
+            """(container) => {
+              const select = document.querySelector('#department');
+              const group = document.createElement(container);
+              group.disabled = true;
+              if (container === 'optgroup') {
+                select.appendChild(group);
+                group.appendChild(select.querySelector('[value=CARD]'));
+              } else {
+                select.parentElement.appendChild(group);
+                group.appendChild(select);
+              }
+            }""",
+            container,
+        )
+
+    outcome, value, confirmed = _choose(
+        server, browser, "native", "Cardiology", prepare=prepare
+    )
+    assert isinstance(outcome, ChoiceRefused), outcome
+    assert outcome.code == "choice_disabled"
     assert value in ("", None)
     assert not confirmed
 

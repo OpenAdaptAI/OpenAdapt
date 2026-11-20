@@ -30,7 +30,10 @@
   option whose label or value matches, and reads the control back. A
   missing, duplicate or disabled option, or a control that does not show the
   choice, halts before the next step (`choice_missing`, `choice_ambiguous`,
-  `choice_disabled`, `choice_unverified`). A choice on a field passed to
+  `choice_disabled`, `choice_changed`, `choice_unverified`). The option is
+  resolved again by label or value before actuation, so a reordered list cannot
+  redirect a saved position. Native selects respect disabled option groups
+  and fieldsets. A choice on a field passed to
   `--param` becomes that parameter. Interactive and attached recording no
   longer refuse a native `<select>`, and lists that choose on press or on
   release (where the browser sends no click to the option) are no longer

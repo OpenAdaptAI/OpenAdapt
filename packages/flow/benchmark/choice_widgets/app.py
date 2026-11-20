@@ -703,7 +703,9 @@ def _handler_for(app: ChoiceApp) -> type[http.server.BaseHTTPRequestHandler]:
 def main(argv: Optional[list[str]] = None) -> int:
     import argparse
 
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        allow_abbrev=False, description=__doc__.splitlines()[0]
+    )
     parser.add_argument("--port", type=int, default=9601)
     args = parser.parse_args(argv)
     server = ChoiceApp().serve(args.port)

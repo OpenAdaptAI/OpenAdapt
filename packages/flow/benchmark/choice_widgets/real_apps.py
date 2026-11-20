@@ -619,7 +619,9 @@ def measure(app_name: str, label: str, port: int) -> dict[str, Any]:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        allow_abbrev=False, description=__doc__.splitlines()[0]
+    )
     parser.add_argument("--app", choices=sorted(APPS), required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--label", default="")

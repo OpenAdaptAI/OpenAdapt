@@ -476,7 +476,9 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        allow_abbrev=False, description=__doc__.splitlines()[0]
+    )
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--kinds", default="")
     parser.add_argument("--label", default="")

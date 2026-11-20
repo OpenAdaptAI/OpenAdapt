@@ -703,16 +703,6 @@ def infer_step_risk(
             (action_evidence, f"file_write:{file_write}"),
         )
 
-    if step.action is ActionKind.SELECT_OPTION and step.choice is not None:
-        # A choice fills one field and reads it back (docs/CHOICES.md); the
-        # record it belongs to is committed by a later step. The opening
-        # click's surrounding text can name the form's save, so it is not
-        # evidence about the choice itself.
-        return RiskInference(
-            "reversible",
-            "choosing a dropdown option fills a field; a later step saves it",
-            (action_evidence, "choice"),
-        )
     if step.action is ActionKind.SELECT_OPTION:
         if write_keyword is not None:
             return RiskInference(

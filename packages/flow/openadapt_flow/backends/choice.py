@@ -77,8 +77,8 @@ const optionValue = (el) => {
   const v = el.getAttribute('data-value') ?? el.getAttribute('value');
   return v === null ? null : String(v);
 };
-const optionDisabled = (el) => el.getAttribute('aria-disabled') === 'true'
-  || el.hasAttribute('disabled')
+const optionDisabled = (el) => !!el.closest('[aria-disabled=true]')
+  || el.matches(':disabled')
   || Array.from(el.classList).some((c) => /disabled/i.test(c));
 const shownText = (root, shape) => {
   // The text a person sees in ``root``: visible text nodes only, and never
@@ -120,10 +120,11 @@ _NATIVE_CENSUS_JS = (
   const sel = el && el.closest ? el.closest('select') : null;
   if (!sel || sel.multiple) return null;
   return {
-    disabled: sel.disabled,
+    disabled: sel.matches(':disabled'),
     value: sel.value,
     options: Array.from(sel.options).map((o) => ({
-      value: o.value, label: norm(o.label || o.text), disabled: o.disabled,
+      value: o.value, label: norm(o.label || o.text),
+      disabled: o.disabled || !!o.closest('optgroup[disabled]'),
       placeholder: o.value === '',
     })),
   };
@@ -171,17 +172,16 @@ _CANDIDATES_JS = (
 }"""
 )
 
-_CANDIDATE_AT_JS = (
-    "([shape, mark, index]) => {"
+_UNIQUE_CANDIDATE_JS = (
+    "([shape, mark, want, wanted]) => {"
     + _HELPERS
     + r"""
-  let i = 0;
-  for (const el of document.querySelectorAll(queryShape(shape))) {
-    if (!matchesShape(el, shape) || el.hasAttribute(mark) || !visible(el)) continue;
-    if (i === index) return el;
-    i++;
-  }
-  return null;
+  // Resolve again by meaning, never by the old position in the census.
+  // The list may have changed between settling and this lookup.
+  const matches = Array.from(document.querySelectorAll(queryShape(shape))).filter(
+    (el) => matchesShape(el, shape) && !el.hasAttribute(mark) && visible(el)
+      && (optionLabel(el) === want || optionValue(el) === wanted));
+  return matches.length === 1 && !optionDisabled(matches[0]) ? matches[0] : null;
 }"""
 )
 
@@ -387,20 +387,20 @@ class BrowserChoice:
                         "choice_search_missing", "no search box took focus"
                     )
                 self._page.keyboard.type(search_text(contract, wanted))
-            matches, index = self._settled_matches(
-                scope, shape, mark, want, wanted, contract
-            )
+            matches = self._settled_matches(scope, shape, mark, want, wanted, contract)
             try:
                 self._decide(matches)
             except ChoiceRefused:
                 self._close()
                 raise
             option = scope.evaluate_handle(
-                _CANDIDATE_AT_JS, [shape, mark, index]
+                _UNIQUE_CANDIDATE_JS, [shape, mark, want, wanted]
             ).as_element()
             if option is None:
                 self._close()
-                raise ChoiceRefused("choice_missing", "the option left the list")
+                raise ChoiceRefused(
+                    "choice_changed", "the option changed after the list settled"
+                )
             chosen = matches[0]
             try:
                 option.click(timeout=5000)
@@ -443,7 +443,7 @@ class BrowserChoice:
         want: str,
         wanted: str,
         contract: OptionChoice,
-    ) -> tuple[list[dict[str, Any]], int]:
+    ) -> list[dict[str, Any]]:
         deadline = time.monotonic() + contract.settle_s
         last: Any = None
         stable_since = time.monotonic()
@@ -453,18 +453,18 @@ class BrowserChoice:
             key = tuple((c["label"], c["value"], c["disabled"]) for c in candidates)
             if key != last:
                 last, stable_since = key, now
-            indexed = [
-                (i, c)
-                for i, c in enumerate(candidates)
+            matches = [
+                c
+                for c in candidates
                 if c["label"] == want
                 or (c["value"] is not None and c["value"] == wanted)
             ]
-            if now - stable_since >= _STABLE_S and candidates and indexed:
+            if now - stable_since >= _STABLE_S and candidates and matches:
                 break
             if now >= deadline:
                 break
             time.sleep(_POLL_S)
-        return [c for _i, c in indexed], (indexed[0][0] if indexed else -1)
+        return matches
 
     @staticmethod
     def _decide(matches: list[dict[str, Any]]) -> None:

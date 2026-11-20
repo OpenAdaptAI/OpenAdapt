@@ -182,25 +182,34 @@ def _choice_contract(choice: dict, query: Optional[str]) -> Optional[OptionChoic
                 else None,
                 readback="select",
             )
-        shape = choice.get("shape") if isinstance(choice.get("shape"), dict) else {}
+        shape_data = choice.get("shape")
+        shape: dict[str, Any] = shape_data if isinstance(shape_data, dict) else {}
         label = str(choice.get("label") or "")
-        return OptionChoice(
-            kind="listed_option",
-            label=str(choice.get("label") or ""),
-            value=choice.get("value") if isinstance(choice.get("value"), str) else None,
-            query=(
-                "none"
-                if query is None
-                else ("words" if _search_words(query, label) else "label")
-            ),
-            query_words=_search_words(query, label) if query is not None else None,
-            option={
-                "role": shape.get("role"),
-                "tag": shape.get("tag"),
-                "classes": tuple(shape.get("classes") or ()),
-            },
-            readback=choice.get("readback"),
-            shows=choice.get("shows") if isinstance(choice.get("shows"), str) else None,
+        return OptionChoice.model_validate(
+            {
+                "kind": "listed_option",
+                "label": label,
+                "value": choice.get("value")
+                if isinstance(choice.get("value"), str)
+                else None,
+                "query": (
+                    "none"
+                    if query is None
+                    else ("words" if _search_words(query, label) else "label")
+                ),
+                "query_words": _search_words(query, label)
+                if query is not None
+                else None,
+                "option": {
+                    "role": shape.get("role"),
+                    "tag": shape.get("tag"),
+                    "classes": tuple(shape.get("classes") or ()),
+                },
+                "readback": choice.get("readback"),
+                "shows": choice.get("shows")
+                if isinstance(choice.get("shows"), str)
+                else None,
+            }
         )
     except Exception:
         return None

@@ -54,7 +54,9 @@ The label is then never asserted in any postcondition.
    the server, a list that reloads after another choice). It waits up to
    `settle_s` seconds, 8 by default.
 4. Exactly one enabled option must show the wanted label or carry it as its
-   `value`. Then it is clicked, with real pointer input, so lists that choose
+   `value`. Flow resolves that unique enabled option by label or value again
+   immediately before actuation; a change in position cannot redirect the click.
+   Then it is clicked, with real pointer input, so lists that choose
    on press, on release or on click all work.
 5. The control must show the chosen label, and still show it once the page
    settles.
@@ -65,7 +67,8 @@ Otherwise the step halts with a code and nothing after it runs:
 | --- | --- |
 | `choice_missing` | No option shows the wanted value |
 | `choice_ambiguous` | More than one option shows it |
-| `choice_disabled` | The only match, or the select itself, is disabled |
+| `choice_disabled` | The only match, its option group, or the select (including a disabled fieldset) is disabled |
+| `choice_changed` | The unique enabled option disappeared, duplicated, or became disabled after the list settled |
 | `choice_search_missing` | The person searched, but no search box took focus |
 | `choice_control_missing` | No control at the resolved point |
 | `choice_unverified` | The control does not show the choice afterwards |
@@ -123,8 +126,11 @@ screen and the run halts before any input; sign in again and rerun.
 - Governed and qualified runs that require a typed delivery receipt for
   every action refuse choice steps for now: a choice is proven by its
   read-back, not by a receipt.
-- A list that saves as soon as an option is picked (a write in the same
-  action) stays a click under the write rules, not a choice.
+- Reading the selected label proves the input, not the absence of an
+  auto-save or another business effect. Choice steps keep the existing
+  option-commit risk policy: consequential context is irreversible, and an
+  otherwise ambiguous option commit requires review. Qualification must
+  establish any business effects independently.
 - A segmented date field (separate day, month and year parts) is not
   measured.
 
