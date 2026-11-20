@@ -172,7 +172,7 @@ class ProgramDispatchAuthority:
         *,
         bundle_dir: Path,
         params: Mapping[str, Any] | None,
-        worklists: Mapping[str, Any] | None,
+        worklists: dict[str, list[dict[str, str]]] | None,
         interstitials: list[Any],
     ) -> str | None:
         """Consume this verified handoff once, including a resumed leg."""
@@ -203,7 +203,7 @@ def verify_program_dispatch(
     bundle_dir: Path | str,
     workflow: Any,
     params: Mapping[str, Any] | None,
-    worklists: Mapping[str, Any] | None = None,
+    worklists: Mapping[str, list[dict[str, str]]] | None = None,
     policy_source: str,
     effect_verifier: Any,
     api_actuator: Any = None,
@@ -315,7 +315,7 @@ def claim_program_execution(
     *,
     bundle_dir: Path,
     params: Mapping[str, Any] | None,
-    worklists: Mapping[str, Any] | None,
+    worklists: dict[str, list[dict[str, str]]] | None,
 ) -> None:
     """The shared runtime consumes the proof before any backend callback."""
     binding = replayer.managed_dispatch_binding
