@@ -42,9 +42,12 @@ def probe(helper: Any, temporary: Path, *, real_sudo: bool, stubborn: bool) -> d
         and os.environ.get("RUNNER_OS") == "Linux"
     ):
         raise RuntimeError("real sudo probe requires an ephemeral GitHub Linux runner")
+    if real_sudo:
+        assert os.geteuid() != 0, "start the privilege probe as the unprivileged runner"
     temporary.mkdir()
     lock, ready = temporary / "lock", temporary / "ready.json"
-    lock.touch()  # The runner owns this file even when its child runs as root.
+    lock.touch()  # The runner owns these files even when its child runs as root.
+    ready.touch()
     nonce = uuid.uuid4().hex
     child = (
         "import fcntl,json,os,pathlib,signal,sys,time; "
@@ -58,7 +61,7 @@ def probe(helper: Any, temporary: Path, *, real_sudo: bool, stubborn: bool) -> d
         "import pathlib,subprocess,sys,time\n"
         f"child={child!r}\n"
         "subprocess.Popen([sys.executable,'-c',child,*sys.argv[1:]])\n"
-        "while not pathlib.Path(sys.argv[2]).exists(): time.sleep(.01)\n"
+        "while not pathlib.Path(sys.argv[2]).stat().st_size: time.sleep(.01)\n"
         "print('synthetic lock holder ready',flush=True)\n"
         "time.sleep(3)\n"
     )
@@ -71,6 +74,7 @@ def probe(helper: Any, temporary: Path, *, real_sudo: bool, stubborn: bool) -> d
         elapsed = time.monotonic() - started
         identity = json.loads(ready.read_text())
         assert identity["nonce"] == nonce
+        assert ready.stat().st_uid == os.geteuid()
         assert identity["uid"] == (0 if real_sudo else os.geteuid())
         available = lock_available(lock)
         assert code == 137, (code, "the bounded process group must be terminated")

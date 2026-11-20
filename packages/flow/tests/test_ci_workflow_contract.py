@@ -218,7 +218,10 @@ def test_root_ci_runs_the_linux_atspi_qualification() -> None:
         step = job[step_start : step_end if step_end != -1 else len(job)]
         assert f"timeout-minutes: {timeout_minutes}" in step, step_name
     assert job.index(
-        "uses: OpenAdaptAI/OpenAdapt/.github/actions/apt-install@960b2513030ecb751d38ea7b6012bae86cfbd00b"
+        (
+            "uses: OpenAdaptAI/OpenAdapt/.github/actions/apt-install@"
+            "960b2513030ecb751d38ea7b6012bae86cfbd00b"
+        )
     ) < job.index("scripts/qualify_linux_atspi.py")
     assert "xvfb-run -a" in job and "dbus-run-session --" in job
     assert job.index("xvfb-run -a") < job.index("dbus-run-session --")
