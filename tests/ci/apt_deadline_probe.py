@@ -88,6 +88,9 @@ def probe(helper: Any, temporary: Path, *, real_sudo: bool, stubborn: bool) -> d
             "code": code,
             "elapsed_seconds": round(elapsed, 3),
             "real_sudo": real_sudo,
+            "deadline_controller": (
+                helper._gnu_timeout(True) if real_sudo else "owned POSIX session"
+            ),
             "child_uid": identity["uid"],
             "child_ignores_TERM": stubborn,
             "lock_released_when_helper_returned": available,

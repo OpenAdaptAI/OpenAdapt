@@ -6,6 +6,7 @@ import argparse
 import importlib.util
 import json
 import shlex
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -260,11 +261,9 @@ def test_linux_timer_identity_is_independent_of_subject_path(monkeypatch, with_s
     monkeypatch.setattr(apt.shutil, "which", lambda _name: "/subject/timeout")
     monkeypatch.setattr(
         apt,
-        "subprocess",
-        SimpleNamespace(
-            run=lambda *_args, **_kwargs: SimpleNamespace(
-                returncode=0, stdout="timeout (GNU coreutils) 9.7\n"
-            )
+        "_owned_run",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            returncode=0, stdout="timeout (GNU coreutils) 9.7\n"
         ),
     )
     command = ["sudo", "-n", "synthetic"] if with_sudo else ["synthetic"]
@@ -323,13 +322,14 @@ def test_provider_qualification_is_independent_of_utility_name(
     monkeypatch.setattr(apt.shutil, "which", lambda _name: "/subject/timeout")
     queried = []
 
-    def run(command, **kwargs):
+    def run(command, timeout, **kwargs):
+        assert timeout == 5
         assert command[1:] == ["--version"]
         queried.append(command[0])
         code, output = versions[command[0]]
         return SimpleNamespace(returncode=code, stdout=output)
 
-    monkeypatch.setattr(apt, "subprocess", SimpleNamespace(run=run))
+    monkeypatch.setattr(apt, "_owned_run", run)
     if expected is None:
         with pytest.raises(SystemExit, match="verified GNU timeout"):
             apt._gnu_timeout(privileged=True)
@@ -337,3 +337,72 @@ def test_provider_qualification_is_independent_of_utility_name(
         assert apt._gnu_timeout(privileged=True) == expected
     assert all(path in apt.SYSTEM_TIMEOUTS for path in queried)
     assert "/subject/timeout" not in queried
+
+
+@pytest.mark.parametrize("uid", [0, 1001])
+def test_same_identity_deadline_has_no_external_timer_dependency(monkeypatch, uid):
+    apt = _module()
+    monkeypatch.setattr(apt.os, "geteuid", lambda: uid)
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("same-identity commands must not need a GNU timer")
+
+    monkeypatch.setattr(apt, "_gnu_timeout", forbidden)
+    result = apt._owned_run([sys.executable, "-c", "print('owned')"], 2)
+    assert (result.returncode, result.stdout, result.stderr) == (0, "owned\n", "")
+
+
+def test_delegated_deadline_runs_inside_sudo_without_outer_direct_child_timeout(
+    monkeypatch,
+):
+    apt = _module()
+    monkeypatch.setattr(apt, "_gnu_timeout", lambda _privileged: "/usr/bin/gnutimeout")
+    observed = []
+
+    def run(command, **kwargs):
+        observed.append((command, kwargs))
+        return SimpleNamespace(returncode=137, stdout="interrupted")
+
+    monkeypatch.setattr(apt.subprocess, "run", run)
+    result = apt._owned_run(["sudo", "-n", "synthetic"], 2, merge_stderr=True)
+    assert result.returncode == 137
+    command, options = observed[0]
+    assert command == [
+        "sudo",
+        "-n",
+        "/usr/bin/gnutimeout",
+        "--signal=KILL",
+        "--",
+        "2s",
+        "synthetic",
+    ]
+    assert "timeout" not in options
+    assert options["stderr"] == apt.subprocess.STDOUT
+
+
+def test_successful_parent_cannot_hide_a_timed_out_descendant(tmp_path):
+    apt = _module()
+    command = [
+        sys.executable,
+        "-c",
+        "import subprocess,sys; "
+        "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(4)'])",
+    ]
+    result = apt._owned_run(command, 0.3)
+    assert result.returncode == 137
+
+
+def test_provider_version_probe_is_bounded_and_cannot_block_setup(monkeypatch):
+    apt = _module()
+    monkeypatch.setattr(apt.os, "access", lambda *_args: True)
+    queried = []
+
+    def interrupted(command, timeout):
+        queried.append((command, timeout))
+        return SimpleNamespace(returncode=137, stdout="timeout (GNU coreutils) 9.7")
+
+    monkeypatch.setattr(apt, "_owned_run", interrupted)
+    with pytest.raises(SystemExit, match="verified GNU timeout"):
+        apt._gnu_timeout(privileged=True)
+    assert len(queried) == len(apt.SYSTEM_TIMEOUTS)
+    assert all(timeout == 5 for _command, timeout in queried)

@@ -28,6 +28,7 @@ import os
 import re
 import shlex
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -252,9 +253,7 @@ def _gnu_timeout(privileged: bool) -> str:
         if not os.access(timer, os.X_OK):
             continue
         try:
-            version = subprocess.run(
-                [timer, "--version"], text=True, capture_output=True
-            )
+            version = _owned_run([timer, "--version"], 5)
         except OSError:
             continue
         first_line = (version.stdout or "").partition("\n")[0]
@@ -284,6 +283,69 @@ def _deadline_command(command: list[str], timeout: float) -> list[str]:
     return [*deadline, *command]
 
 
+def _owned_run(
+    command: list[str],
+    timeout: float,
+    *,
+    cwd: str | None = None,
+    env: dict[str, str] | None = None,
+    merge_stderr: bool = False,
+) -> subprocess.CompletedProcess:
+    """Bound a trusted command at the identity that can kill its descendants.
+
+    Same-identity POSIX commands run in a new owned session. Delegated sudo
+    commands need a qualified system timer inside sudo, because an ordinary
+    caller cannot kill root children. Children must remain in the owned group;
+    this is lifecycle management, not containment for a program escaping it.
+
+    Return code 137 describes an operation forcibly stopped by this controller,
+    including a parent that exited while descendants kept its pipes open. It
+    must never turn that incomplete operation into a successful parent exit.
+    """
+    if timeout <= 0:
+        raise ValueError("the command deadline must be positive")
+    stderr = subprocess.STDOUT if merge_stderr else subprocess.PIPE
+    if command[:2] == ["sudo", "-n"]:
+        return subprocess.run(
+            _deadline_command(command, timeout),
+            cwd=cwd,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=stderr,
+        )
+    proc = subprocess.Popen(
+        command,
+        cwd=cwd,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=stderr,
+        start_new_session=True,
+    )
+
+    def stop_group() -> None:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass  # The complete owned group already exited.
+
+    try:
+        stdout, error = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        stop_group()
+        stdout, error = proc.communicate()
+        return subprocess.CompletedProcess(command, 137, stdout, error)
+    except BaseException as primary:
+        try:
+            stop_group()
+            proc.communicate()
+        except BaseException as cleanup:
+            raise primary from cleanup
+        raise
+    return subprocess.CompletedProcess(command, proc.returncode, stdout, error)
+
+
 def resolve_playwright(python_cmd: str, target: str, cwd: str) -> list[str]:
     """Ask the pinned Playwright which packages it would install, offline.
 
@@ -305,13 +367,7 @@ def resolve_playwright(python_cmd: str, target: str, cwd: str) -> list[str]:
         env["PATH"] = f"{shim_dir}{os.pathsep}{env.get('PATH', '')}"
         env["OPENADAPT_APT_SHIM_LOG"] = str(log)
         command = shlex.split(python_cmd) + ["-m", "playwright", "install-deps", target]
-        result = subprocess.run(
-            _deadline_command(command, PLAYWRIGHT_TIMEOUT),
-            cwd=cwd or None,
-            env=env,
-            text=True,
-            capture_output=True,
-        )
+        result = _owned_run(command, PLAYWRIGHT_TIMEOUT, cwd=cwd or None, env=env)
         packages = parse_shim_log(log.read_text())
         if result.returncode != 0 or not packages:
             sys.stderr.write(result.stdout + result.stderr)
@@ -333,15 +389,14 @@ def _sudo(command: list[str]) -> list[str]:
 
 
 def _run(command: list[str], timeout: float | None = None) -> tuple[int, str]:
-    bounded = _deadline_command(command, timeout) if timeout is not None else command
-    print("+ " + " ".join(shlex.quote(part) for part in bounded), flush=True)
+    print("+ " + " ".join(shlex.quote(part) for part in command), flush=True)
     try:
-        proc = subprocess.run(
-            bounded,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-        )
+        if timeout is None:
+            proc = subprocess.run(
+                command, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+            )
+        else:
+            proc = _owned_run(command, timeout, merge_stderr=True)
     except OSError as exc:
         raise SystemExit(f"::error title=CI command execution::{exc}") from exc
     print(proc.stdout, end="", flush=True)
