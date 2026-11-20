@@ -573,11 +573,43 @@ function MapPanel({
 
   // Keep the card the run is at in view while the trace plays or steps.
   const viewport = useRef<HTMLDivElement>(null);
+  // Playback may advance during a native press. Keep its hit target still until
+  // the browser has delivered click or cancellation; never activate on press.
+  const gestures = useRef(new Map<number, object>());
+  const [followRelease, setFollowRelease] = useState(0);
+  useEffect(() => {
+    const frames = new Set<number>();
+    const release = (event: PointerEvent) => {
+      const gesture = gestures.current.get(event.pointerId);
+      if (!gesture) return;
+      const frame = requestAnimationFrame(() => {
+        frames.delete(frame);
+        if (gestures.current.get(event.pointerId) !== gesture) return;
+        gestures.current.delete(event.pointerId);
+        if (!gestures.current.size) setFollowRelease((n) => n + 1);
+      });
+      frames.add(frame);
+    };
+    const blur = () => {
+      gestures.current.clear();
+      setFollowRelease((n) => n + 1);
+    };
+    window.addEventListener("pointerup", release);
+    window.addEventListener("pointercancel", release);
+    window.addEventListener("blur", blur);
+    return () => {
+      window.removeEventListener("pointerup", release);
+      window.removeEventListener("pointercancel", release);
+      window.removeEventListener("blur", blur);
+      for (const frame of frames) cancelAnimationFrame(frame);
+      gestures.current.clear();
+    };
+  }, []);
   const currentCard = traceState?.current ? display.ownerOf.get(traceState.current.node) : undefined;
   useEffect(() => {
     const box = viewport.current;
     const point = layout.nodes.find((node) => node.id === currentCard);
-    if (!box || !point) return;
+    if (!box || !point || gestures.current.size) return;
     // The canvas is centred in the viewport when it is narrower than it.
     const sizer = box.firstElementChild as HTMLElement | null;
     const offsetX = sizer?.offsetLeft ?? 0;
@@ -595,7 +627,7 @@ function MapPanel({
       box.scrollTop = top;
       box.scrollLeft = leftTarget;
     }
-  }, [currentCard, traceState?.cursor, layout, scale]);
+  }, [currentCard, traceState?.cursor, layout, scale, followRelease]);
 
   // Ctrl or Cmd with the wheel (and a trackpad pinch) zooms the stage.
   useEffect(() => {
@@ -769,6 +801,9 @@ function MapPanel({
         <div
           className="opg-canvas-viewport"
           ref={viewport}
+          onPointerDownCapture={(event) => {
+            if (event.button === 0 && event.isPrimary !== false) gestures.current.set(event.pointerId, {});
+          }}
           data-stage={staged || undefined}
           data-pan={compact || undefined}
           {...panHandlers}
