@@ -604,13 +604,13 @@ PR #2280 raised `replayer.py` by 12 lines: the call sites of the clock-text chec
 | File | Line budget |
 |---|---:|
 | `packages/flow/openadapt_flow/runtime/replayer.py` | 20094 |
-| `packages/flow/openadapt_flow/__main__.py` | 14570 |
+| `packages/flow/openadapt_flow/__main__.py` | 14571 |
 | `packages/flow/openadapt_flow/qualification.py` | 5963 |
 | `packages/flow/openadapt_flow/ir.py` | 6711 |
 | `packages/desktop/openadapt_desktop/dispatch.py` | 6524 |
 | `packages/capture/openadapt_capture/recorder.py` | 4836 |
 | `packages/flow/openadapt_flow/interactive_recorder.py` | 4620 |
-| `packages/flow/openadapt_flow/runtime/durable/attended.py` | 4367 |
+| `packages/flow/openadapt_flow/runtime/durable/attended.py` | 4368 |
 | `packages/flow/openadapt_flow/terminal_verification_v2.py` | 3673 |
 | `packages/flow/openadapt_flow/backends/playwright_backend.py` | 6727 |
 <!-- size-ratchet:end -->
@@ -665,3 +665,8 @@ Decided in review on 2026-10-24:
 4. **Resolution rungs:** no second ladder is planned, so `resolver.resolve()`
    stays one ladder. Checking identity against the system of record is a check
    source (S5), not a ladder.
+
+The binary descriptor policy adds one shared-helper import to `__main__.py`
+and `runtime/durable/attended.py`. Their budgets increase by one line each;
+byte-mode handling remains in the small private-file helper and the source
+contract checks every raw-reader/writer entry point.
