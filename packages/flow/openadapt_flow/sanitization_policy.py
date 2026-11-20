@@ -10,6 +10,7 @@ import hashlib
 import importlib
 import inspect
 import json
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -24,17 +25,58 @@ def identity_sha256(value: Any) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _implementation_identity(provider: Any) -> dict[str, Any]:
-    modules = {
-        "openadapt_flow.sanitization_policy",
-        "openadapt_flow.sanitized_artifact",
-        "openadapt_flow.privacy",
-        "openadapt_flow.evidence_files",
-        "openadapt_flow.report_redaction",
-    }
-    modules.update(
-        base.__module__ for base in type(provider).__mro__ if base is not object
+def _engine_source_root() -> Path:
+    return Path(__file__).resolve().parent
+
+
+def _source_inventory(root: Path) -> tuple[tuple[str, int, int, int, int], ...]:
+    rows = []
+    for path in sorted(root.rglob("*.py")):
+        stat = path.stat()
+        rows.append(
+            (
+                path.relative_to(root).as_posix(),
+                stat.st_mtime_ns,
+                stat.st_ctime_ns,
+                stat.st_size,
+                stat.st_ino,
+            )
+        )
+    if not rows:
+        raise ValueError("engine implementation source is unavailable")
+    return tuple(rows)
+
+
+@lru_cache(maxsize=16)
+def _source_snapshot_sha256(
+    root: str,
+    inventory: tuple[tuple[str, int, int, int, int], ...],
+) -> str:
+    # Metadata only selects a cached content digest. It never becomes exported
+    # identity material. Paths inside the package, and every source byte, bind
+    # the digest equally across checkout locations and operating systems.
+    return identity_sha256(
+        [
+            (rel, hashlib.sha256((Path(root) / rel).read_bytes()).hexdigest())
+            for rel, *_metadata in inventory
+        ]
     )
+
+
+def _engine_source_sha256() -> str:
+    root = _engine_source_root()
+    inventory = _source_inventory(root)
+    digest = _source_snapshot_sha256(str(root), inventory)
+    if inventory != _source_inventory(root):
+        raise ValueError("engine implementation changed during identity verification")
+    return digest
+
+
+def _implementation_identity(provider: Any) -> dict[str, Any]:
+    # The complete engine source closure covers imported compiler, schema,
+    # capture and privacy helpers, including helpers added in future changes.
+    # A hand-maintained list could silently leave a new dependency unbound.
+    modules = {base.__module__ for base in type(provider).__mro__ if base is not object}
     sources = {}
     for name in sorted(modules):
         module = importlib.import_module(name)
@@ -54,7 +96,11 @@ def _implementation_identity(provider: Any) -> dict[str, Any]:
             methods[name] = hashlib.sha256(
                 inspect.getsource(method).encode()
             ).hexdigest()
-    return {"modules": sources, "methods": methods}
+    return {
+        "engine_source_sha256": _engine_source_sha256(),
+        "provider_modules": sources,
+        "provider_methods": methods,
+    }
 
 
 def transformation_identity(
