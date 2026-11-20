@@ -1,0 +1,104 @@
+name: apt cache seed
+
+# Keeps the .github/actions/apt-install caches warm from the default branch.
+# A cache saved on main is readable by every pull request, merge-queue group
+# and rerun, so those jobs install their Ubuntu packages from cached .deb
+# files and never need a mirror. Each runner image update gets a fresh cache
+# within a day; until then the action starts from the previous image's cache.
+#
+# One entry per package set a cached workflow installs. Keep the lists exactly
+# as the workflows write them: tests/test_apt_install_action.py fails when a
+# workflow installs a set that has no seed entry here.
+on:
+  schedule:
+    - cron: "40 5 * * *" # daily 05:40 UTC
+  push:
+    branches: [main]
+    paths:
+      - .github/actions/apt-install/**
+      - .github/workflows/apt-cache-seed.yml
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  seed:
+    name: seed ${{ matrix.name }} (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: flow Linux AT-SPI
+            os: ubuntu-24.04
+            recommends: "true"
+            packages: >-
+              at-spi2-core dbus-x11 gir1.2-atspi-2.0 gir1.2-gtk-3.0 libatk-adaptor
+              libcairo2-dev libgirepository-2.0-dev openbox pkg-config xauth xvfb
+          - name: capture system dependencies
+            os: ubuntu-24.04
+            recommends: "true"
+            packages: ffmpeg libportaudio2
+          - name: capture system dependencies
+            os: ubuntu-22.04
+            recommends: "true"
+            packages: ffmpeg libportaudio2
+          - name: capture native AT-SPI
+            os: ubuntu-22.04
+            recommends: "true"
+            packages: >-
+              libgirepository1.0-dev libcairo2-dev pkg-config
+              gir1.2-atspi-2.0 gir1.2-gtk-3.0 at-spi2-core dbus-x11 xvfb
+          - name: FreeRDP replay
+            os: ubuntu-24.04
+            recommends: "false"
+            packages: xvfb freerdp3-x11 freerdp3-shadow-x11 xdotool imagemagick python3-tk
+          - name: Check-it GTK
+            os: ubuntu-24.04
+            recommends: "false"
+            packages: >-
+              at-spi2-core dbus-x11 gir1.2-atspi-2.0 gir1.2-gtk-3.0 libatk-adaptor
+              libcairo2-dev libgirepository-2.0-dev openbox pkg-config xauth xvfb
+          - name: Desktop Linux build
+            os: ubuntu-22.04
+            recommends: "false"
+            packages: >-
+              libayatana-appindicator3-dev patchelf librsvg2-dev xdg-utils
+              libwebkit2gtk-4.1-dev dbus xvfb
+          - name: Desktop sidecar Chromium
+            os: ubuntu-22.04
+            recommends: "false"
+            # The version packages/desktop/uv.lock pins.
+            playwright: "1.61.0"
+          - name: launcher quickstart Chromium
+            os: ubuntu-latest
+            recommends: "false"
+            # The quickstart's clean environment resolves the latest release.
+            playwright: latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the Playwright whose package list to seed
+        if: matrix.playwright != ''
+        env:
+          VERSION: ${{ matrix.playwright }}
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/playwright-deps"
+          spec=playwright
+          if [ "$VERSION" != latest ]; then spec="playwright==$VERSION"; fi
+          "$RUNNER_TEMP/playwright-deps/bin/python" -m pip install --disable-pip-version-check -q "$spec"
+      - name: Seed the cache
+        uses: ./.github/actions/apt-install
+        with:
+          packages: ${{ matrix.packages }}
+          install-recommends: ${{ matrix.recommends }}
+          playwright-deps: ${{ matrix.playwright != '' && 'chromium' || '' }}
+          playwright-python: ${{ runner.temp }}/playwright-deps/bin/python

@@ -754,37 +754,17 @@ jobs:
 
       - name: Install Linux bundle dependencies
         timeout-minutes: 10
-        run: |
-          set -uo pipefail
-          # The hosted runner resolves its Ubuntu mirror through
-          # /etc/apt/apt-mirrors.txt, which points at azure.archive.ubuntu.com.
-          # That mirror fails intermittently, and each failure costs minutes of
-          # apt retries. Prefer the canonical archive. Best-effort: an absent or
-          # already-canonical file changes nothing.
-          sudo sed -i \
-            's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
-            /etc/apt/apt-mirrors.txt 2>/dev/null || true
-          update_ok=""
-          for attempt in 1 2 3; do
-            if sudo apt-get update; then
-              update_ok=1
-              break
-            fi
-            echo "::warning::apt-get update failed (attempt ${attempt}/3); retrying"
-            sleep $((attempt * 10))
-          done
-          if [ -z "$update_ok" ]; then
-            echo "::error::apt-get update failed three times; the Ubuntu mirror is unreachable"
-            exit 1
-          fi
-          set -e
-          sudo apt-get install -y --no-install-recommends \
-            dbus \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            libwebkit2gtk-4.1-dev \
-            patchelf \
-            xdg-utils \
+        uses: ./.github/actions/apt-install
+        with:
+          # Release builds restore no cache; see the note at the top.
+          use-cache: "false"
+          packages: >-
+            dbus
+            libayatana-appindicator3-dev
+            librsvg2-dev
+            libwebkit2gtk-4.1-dev
+            patchelf
+            xdg-utils
             xvfb
 
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
@@ -813,7 +793,21 @@ jobs:
           python scripts/sync_frozen_dependencies.py
           uv run --locked python scripts/build_frozen_engine.py
           uv run --locked python scripts/verify_build_artifact.py sidecar
-          uv run --locked python -m playwright install-deps chromium
+
+      - name: Install Linux Chromium runtime libraries
+        uses: ./.github/actions/apt-install
+        with:
+          # The pinned Playwright's own list, through the mirror fallback
+          # instead of `playwright install-deps`. No cache in a release.
+          use-cache: "false"
+          playwright-deps: chromium
+          playwright-python: uv run --locked python
+          working-directory: packages/desktop
+
+      - name: Smoke-test the frozen sidecar and stage it for Tauri
+        shell: bash
+        run: |
+          set -euo pipefail
           sudo python scripts/alias_lowercase_x11_sonames.py
           uv run --locked python scripts/smoke_test_frozen_flow.py
           mkdir -p src-tauri/binaries
