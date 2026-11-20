@@ -22,7 +22,8 @@ from openadapt_flow.tx import (
     load_or_create_signing_key,
     verify_tx_receipt,
 )
-
+from openadapt_flow.tx.induce import certify_lens_on_sandbox
+from openadapt_flow.tx.types import CertifiedLensPack
 from openadapt_verify.cli import main as verify_cli_main
 from openadapt_verify.tx import tx_verified
 
@@ -50,7 +51,16 @@ def _replace_task_server() -> Iterator[tuple[str, sqlite3.Connection]]:
     for i in range(25):
         conn.execute(
             "INSERT INTO tasks VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (f"TSK-{i:04d}", f"Task {i}", "open", f"Desc {i}", "ops-1", 1000 + i, "seed", 1),
+            (
+                f"TSK-{i:04d}",
+                f"Task {i}",
+                "open",
+                f"Desc {i}",
+                "ops-1",
+                1000 + i,
+                "seed",
+                1,
+            ),
         )
     conn.commit()
     counter = [100]
@@ -73,7 +83,9 @@ def _replace_task_server() -> Iterator[tuple[str, sqlite3.Connection]]:
             if self.path.startswith("/api/tasks/"):
                 tid = self.path.rsplit("/", 1)[-1]
                 with lock:
-                    row = conn.execute("SELECT * FROM tasks WHERE id = ?", (tid,)).fetchone()
+                    row = conn.execute(
+                        "SELECT * FROM tasks WHERE id = ?", (tid,)
+                    ).fetchone()
                 if row is None:
                     self._send(404, {"error": "not_found"})
                     return
@@ -103,7 +115,9 @@ def _replace_task_server() -> Iterator[tuple[str, sqlite3.Connection]]:
                     ),
                 )
                 conn.commit()
-                row = dict(conn.execute("SELECT * FROM tasks WHERE id = ?", (tid,)).fetchone())
+                row = dict(
+                    conn.execute("SELECT * FROM tasks WHERE id = ?", (tid,)).fetchone()
+                )
             self._send(201, row, etag=f'"{tid}:v1"')
 
         def do_PUT(self) -> None:  # noqa: N802
@@ -112,7 +126,9 @@ def _replace_task_server() -> Iterator[tuple[str, sqlite3.Connection]]:
             payload = json.loads(self.rfile.read(length) or b"{}")
             actor = self.headers.get("X-Actor-Id") or "anonymous"
             with lock:
-                cur = conn.execute("SELECT * FROM tasks WHERE id = ?", (tid,)).fetchone()
+                cur = conn.execute(
+                    "SELECT * FROM tasks WHERE id = ?", (tid,)
+                ).fetchone()
                 if cur is None:
                     self._send(404, {"error": "not_found"})
                     return
@@ -136,7 +152,9 @@ def _replace_task_server() -> Iterator[tuple[str, sqlite3.Connection]]:
                     ),
                 )
                 conn.commit()
-                row = dict(conn.execute("SELECT * FROM tasks WHERE id = ?", (tid,)).fetchone())
+                row = dict(
+                    conn.execute("SELECT * FROM tasks WHERE id = ?", (tid,)).fetchone()
+                )
             self._send(200, row, etag=f'"{tid}:v{next_v}"')
 
         def do_DELETE(self) -> None:  # noqa: N802
@@ -158,13 +176,17 @@ def _replace_task_server() -> Iterator[tuple[str, sqlite3.Connection]]:
         conn.close()
 
 
-def test_end_to_end_network_capture_to_certified_pack_and_cli_tx_run(tmp_path: Path) -> None:
+def test_end_to_end_network_capture_to_certified_pack_and_cli_tx_run(
+    tmp_path: Path,
+) -> None:
     """Full pipeline: network.jsonl -> tx-induce (sandbox certify) -> tx-run -> COSE receipt verify."""
     with _replace_task_server() as (base_url, conn):
         rec_dir = tmp_path / "rec"
         rec_dir.mkdir()
         target_id = "TSK-0001"
-        initial = dict(conn.execute("SELECT * FROM tasks WHERE id = ?", (target_id,)).fetchone())
+        initial = dict(
+            conn.execute("SELECT * FROM tasks WHERE id = ?", (target_id,)).fetchone()
+        )
 
         network_lines = [
             json.dumps({"schema": "openadapt.network-capture/1", "exchanges": 3}),
@@ -271,8 +293,31 @@ def test_end_to_end_network_capture_to_certified_pack_and_cli_tx_run(tmp_path: P
         assert pack_data["specificity"] == 1.0
         assert pack_data["lens"]["write_mode"] == "replace"
 
+        # The fixture's author field is declared metadata, not a guessed exception
+        # inferred from an unrelated observed difference. Requalify that exact lens.
+        original_pack = CertifiedLensPack.model_validate(pack_data)
+        declared_lens = original_pack.lens.model_copy(
+            update={
+                "get_one": original_pack.lens.get_one.model_copy(
+                    update={"author_field": "last_author"}
+                ),
+                "write_endpoint": original_pack.lens.write_endpoint.model_copy(
+                    update={"author_field": "last_author"}
+                ),
+            }
+        )
+        reviewed_pack = certify_lens_on_sandbox(
+            declared_lens,
+            sample_record=json.loads(sample_rec_path.read_text()),
+            sample_update=json.loads(sample_upd_path.read_text()),
+        )
+        assert reviewed_pack.certified and not reviewed_pack.admission_errors()
+        pack_path.write_text(json.dumps(reviewed_pack.model_dump()))
+
         clean_id = "TSK-0005"
-        before_row = dict(conn.execute("SELECT * FROM tasks WHERE id = ?", (clean_id,)).fetchone())
+        before_row = dict(
+            conn.execute("SELECT * FROM tasks WHERE id = ?", (clean_id,)).fetchone()
+        )
         task_path = tmp_path / "task.json"
         state_dir = tmp_path / "tx_state"
         task_path.write_text(
@@ -299,7 +344,9 @@ def test_end_to_end_network_capture_to_certified_pack_and_cli_tx_run(tmp_path: P
             ]
         )
         assert rc_run == 0
-        after_row = dict(conn.execute("SELECT * FROM tasks WHERE id = ?", (clean_id,)).fetchone())
+        after_row = dict(
+            conn.execute("SELECT * FROM tasks WHERE id = ?", (clean_id,)).fetchone()
+        )
         assert after_row["status"] == "closed"
         assert after_row["description"] == before_row["description"]
         assert after_row["assignee"] == before_row["assignee"]
@@ -320,7 +367,9 @@ def test_end_to_end_network_capture_to_certified_pack_and_cli_tx_run(tmp_path: P
         rogue_target = "TSK-0010"
         rogue_collateral = "TSK-0011"
         collateral_before = dict(
-            conn.execute("SELECT * FROM tasks WHERE id = ?", (rogue_collateral,)).fetchone()
+            conn.execute(
+                "SELECT * FROM tasks WHERE id = ?", (rogue_collateral,)
+            ).fetchone()
         )
         rogue_task_path = tmp_path / "rogue_task.json"
         rogue_task_path.write_text(
@@ -363,7 +412,9 @@ def test_end_to_end_network_capture_to_certified_pack_and_cli_tx_run(tmp_path: P
         )
         assert rc_rogue == 4
         collateral_after = dict(
-            conn.execute("SELECT * FROM tasks WHERE id = ?", (rogue_collateral,)).fetchone()
+            conn.execute(
+                "SELECT * FROM tasks WHERE id = ?", (rogue_collateral,)
+            ).fetchone()
         )
         assert collateral_after == collateral_before
 
@@ -390,7 +441,11 @@ def test_tx_verified_decorator(tmp_path: Path) -> None:
 
         @tx_verified(lens, actor_id="tx-agent", workdir=tmp_path / "dec_state")
         def update_task_status(entity_id: str, status: str) -> None:
-            row = dict(conn.execute("SELECT * FROM tasks WHERE id = ?", (entity_id,)).fetchone())
+            row = dict(
+                conn.execute(
+                    "SELECT * FROM tasks WHERE id = ?", (entity_id,)
+                ).fetchone()
+            )
             body = json.dumps({**row, "status": status}).encode("utf-8")
             req = urllib.request.Request(
                 f"{base_url}/api/tasks/{entity_id}",
@@ -402,6 +457,7 @@ def test_tx_verified_decorator(tmp_path: Path) -> None:
                 pass
 
         res = update_task_status(entity_id=tid, status="closed")
-        assert res.outcome == "CONFIRMED"
+        assert res.outcome == "UNCERTAIN"
+        assert "action_error:wire_evidence_missing" in res.reasons
         assert res.rows_read == 2
         assert os.path.isfile(res.receipt_path or "")

@@ -10,11 +10,9 @@ idempotency, witnessed COSE_Sign1 receipts, and one-click compensation.
 from __future__ import annotations
 
 import copy
-import hashlib
 import json
 import re
 import secrets
-import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -32,8 +30,9 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
 from openadapt_flow.tx.receipt import (
     issue_tx_receipt,
     load_or_create_signing_key,
+    read_private_record,
     task_key_for,
-    write_private_bytes,
+    write_private_record,
 )
 from openadapt_flow.tx.types import (
     ENTITY_LENS_SCHEMA,
@@ -52,6 +51,7 @@ from openadapt_flow.tx.types import (
     WireSessionSummary,
     WireTapProtocol,
     canonical_sha256,
+    effective_volatile_fields,
 )
 from openadapt_flow.write_ledger import FileLedger, Lease, Ledger
 
@@ -144,24 +144,14 @@ def _codec_matches(
     codec: Optional[FieldCodec],
 ) -> tuple[bool, JudgeTier]:
     """Compare ``expected_val`` and ``actual_val`` exactly or via ``codec``."""
-    if actual_val == expected_val:
+    from openadapt_flow.tx.judge import apply_field_codec, strict_equal
+
+    if strict_equal(expected_val, actual_val):
         return True, "exact"
-    if codec is None or codec.kind == "exact":
+    if codec is None:
         return False, "failed"
-    if codec.kind == "bijection":
-        exp_s, act_s = str(expected_val), str(actual_val)
-        if codec.mapping.get(exp_s) == act_s:
-            return True, "codec"
-        # True bijection: allow inverse lookup only when mapping values are unique.
-        values = list(codec.mapping.values())
-        if len(set(values)) == len(values) and codec.mapping.get(act_s) == exp_s:
-            return True, "codec"
-        return False, "failed"
-    if _normalize_with_codec(expected_val, codec) == _normalize_with_codec(
-        actual_val, codec
-    ):
-        return True, "codec"
-    return False, "failed"
+    passed, _ = apply_field_codec(codec, expected_val, actual_val)
+    return passed, "codec" if passed else "failed"
 
 
 def _is_volatile_path(path: str, volatile_fields: tuple[str, ...]) -> bool:
@@ -636,8 +626,7 @@ class EntityLensClient:
             return None
         if endpoint.records_key:
             inner = body.get(endpoint.records_key)
-            if isinstance(inner, Mapping):
-                return dict(inner)
+            return dict(inner) if isinstance(inner, Mapping) else None
         return dict(body)
 
     def get_one(
@@ -657,6 +646,13 @@ class EntityLensClient:
         record = self.unwrap_single_record(endpoint, resp.json_body)
         if record is None:
             return resp, None, 0
+        found, actual_id = _get_path(record, self.lens.id_field)
+        if (
+            not found
+            or isinstance(actual_id, (bool, dict, list))
+            or str(actual_id) != entity_id
+        ):
+            return resp, None, 1
         return resp, record, 1
 
     def search_duplicates(
@@ -779,7 +775,9 @@ class EntityLensClient:
             extra_headers=extra_headers,
         )
 
-    def delete(self, entity_id: str) -> LensHttpResponse:
+    def delete(
+        self, entity_id: str, *, if_match: Optional[str] = None
+    ) -> LensHttpResponse:
         """Execute ``DELETE`` via ``lens.delete_endpoint`` for create compensation."""
         endpoint = self.lens.delete_endpoint
         if endpoint is None:
@@ -790,7 +788,11 @@ class EntityLensClient:
             self.lens.id_field: entity_id,
             endpoint.id_field: entity_id,
         }
-        return self._request(endpoint, context=ctx)
+        return self._request(
+            endpoint,
+            context=ctx,
+            extra_headers={"If-Match": if_match} if if_match else None,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -799,7 +801,11 @@ class EntityLensClient:
 
 
 class TransactionalCommitEngine:
-    """O(1) ACID-like execution and CUA/agent action wrapper over ``EntityLensSpec``."""
+    """Target-record checks, durable write holds and guarded compensation over a lens.
+
+    A confirmed target read does not establish complete server-side effects,
+    atomicity across systems or a remotely witnessed transaction.
+    """
 
     def __init__(
         self,
@@ -816,16 +822,22 @@ class TransactionalCommitEngine:
         timeout_s: float = 10.0,
     ) -> None:
         if isinstance(lens, CertifiedLensPack):
-            if not lens.certified:
+            errors = lens.admission_errors()
+            if errors:
                 raise ValueError(
-                    "Refusing to execute with uncertified CertifiedLensPack"
+                    "Refusing uncertified CertifiedLensPack: " + ",".join(errors)
                 )
             self.lens = lens.lens
         else:
             self.lens = lens
 
         if workdir is None:
-            self.workdir = Path(tempfile.mkdtemp(prefix="openadapt-tx-"))
+            from openadapt_flow.at_rest import local_key_path
+
+            namespace = canonical_sha256(
+                {"base_url": self.lens.base_url, "entity_name": self.lens.entity_name}
+            )
+            self.workdir = local_key_path().parent.parent / "tx" / namespace
         else:
             self.workdir = Path(workdir)
         self.workdir.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -864,16 +876,7 @@ class TransactionalCommitEngine:
     # -- internal helpers -----------------------------------------------------
 
     def _effective_volatile_fields(self) -> tuple[str, ...]:
-        extra: list[str] = list(self.lens.volatile_fields)
-        for candidate in (
-            self.lens.get_one.version_field,
-            self.lens.write_endpoint.version_field,
-            self.lens.get_one.author_field,
-            self.lens.write_endpoint.author_field,
-        ):
-            if candidate and candidate not in extra:
-                extra.append(candidate)
-        return tuple(extra)
+        return effective_volatile_fields(self.lens)
 
     def _version_field_name(
         self,
@@ -906,17 +909,14 @@ class TransactionalCommitEngine:
         return None
 
     def _ledger_key(self, task: TxTask) -> str:
-        target = task.entity_id or canonical_sha256(
-            task.expected_identity if task.expected_identity else task.intended_delta
+        contract_digest = canonical_sha256(
+            {
+                "schema": ENTITY_LENS_SCHEMA,
+                "base_url": self.lens.base_url,
+                "entity_name": self.lens.entity_name,
+            }
         )
-        contract_digest = hashlib.sha256(
-            f"{ENTITY_LENS_SCHEMA}:{self.lens.entity_name}".encode("utf-8")
-        ).hexdigest()
-        return self._ledger.key_for(
-            contract_digest,
-            {"entity_name": self.lens.entity_name, "target": target},
-            write_key=task.task_id,
-        )
+        return self._ledger.key_for(contract_digest, {}, write_key=task.task_id)
 
     def _acquire_gate_or_block(
         self,
@@ -999,7 +999,7 @@ class TransactionalCommitEngine:
                 json.dumps(dict(r0), sort_keys=True, separators=(",", ":"), default=str)
                 + "\n"
             ).encode("utf-8")
-            write_private_bytes(base_dir / "undo_r0.json", r0_bytes, overwrite=False)
+            write_private_record(base_dir / "undo_r0.json", r0_bytes, overwrite=True)
         meta = {
             "task_id": task_id,
             "entity_name": self.lens.entity_name,
@@ -1009,7 +1009,7 @@ class TransactionalCommitEngine:
         meta_bytes = (
             json.dumps(meta, sort_keys=True, separators=(",", ":")) + "\n"
         ).encode("utf-8")
-        write_private_bytes(base_dir / "undo_meta.json", meta_bytes, overwrite=True)
+        write_private_record(base_dir / "undo_meta.json", meta_bytes, overwrite=True)
 
     def _precommit_guard(
         self,
@@ -1208,8 +1208,52 @@ class TransactionalCommitEngine:
     ) -> TxCommitResult:
         reasons: list[str] = []
         unblocked_collateral = False
+        incomplete_wire = action_error == "wire_evidence_missing"
 
         if wire_summary is not None:
+            observed = tuple(m for m in wire_summary.mutations if not m.blocked)
+            incomplete_wire = (
+                wire_summary.session_id != task.task_id
+                or wire_summary.mutations_allowed != 1
+                or len(observed) != 1
+                or observed[0].response_status is None
+            )
+            if incomplete_wire:
+                reasons.append("wire_evidence_incomplete")
+
+            endpoint = (
+                self.lens.create_endpoint or self.lens.write_endpoint
+                if task.operation == "create"
+                else self.lens.write_endpoint
+            )
+            context = dict(task.intended_delta)
+            if task.entity_id is not None:
+                context.update(
+                    {
+                        "id": task.entity_id,
+                        "entity_id": task.entity_id,
+                        self.lens.id_field: task.entity_id,
+                        endpoint.id_field: task.entity_id,
+                    }
+                )
+            expected = urllib.parse.urlsplit(
+                EntityLensClient(self.lens)._build_url(endpoint, context)
+            )
+            for mutation in observed:
+                actual = urllib.parse.urlsplit(mutation.url)
+                if (
+                    mutation.method != endpoint.method
+                    or (actual.scheme, actual.netloc, actual.path, actual.query)
+                    != (expected.scheme, expected.netloc, expected.path, expected.query)
+                    or (
+                        task.operation == "update"
+                        and mutation.extracted_entity_id is not None
+                        and mutation.extracted_entity_id != task.entity_id
+                    )
+                ):
+                    unblocked_collateral = True
+                    reasons.append("wire_target_mismatch")
+
             if wire_summary.collateral_mutations > 0:
                 unblocked_collateral = True
                 reasons.append("wire_collateral_mutation")
@@ -1271,7 +1315,7 @@ class TransactionalCommitEngine:
                 wire_summary=wire_summary,
                 judge_verdict=None,
                 reasons=tuple(reasons),
-                can_compensate=bool(task.operation == "update" and r0 is not None),
+                can_compensate=False,
                 rows_read=rows_read,
                 t0=t0,
             )
@@ -1285,7 +1329,9 @@ class TransactionalCommitEngine:
             )
 
         # OCC & author attribution check
-        occ_status: OCCStatus = "UNCONTESTED"
+        occ_status: OCCStatus = (
+            "NOT_APPLICABLE" if task.operation == "create" else "UNKNOWN"
+        )
         if wire_summary is not None and any(
             (m.response_status in (409, 412)) and not m.blocked
             for m in wire_summary.mutations
@@ -1309,9 +1355,16 @@ class TransactionalCommitEngine:
             if found_v0 and found_v1:
                 int_v0 = _to_strict_int(raw_v0)
                 int_v1 = _to_strict_int(raw_v1)
-                if int_v0 is not None and int_v1 is not None and int_v1 > int_v0 + 1:
-                    occ_status = "CONCURRENT_MODIFICATION"
-                    reasons.append("concurrent_version_jump")
+                if int_v0 is not None and int_v1 is not None:
+                    if int_v1 != int_v0 + 1:
+                        occ_status = "CONCURRENT_MODIFICATION"
+                        reasons.append(
+                            "concurrent_version_jump"
+                            if int_v1 > int_v0 + 1
+                            else "concurrent_version_not_next"
+                        )
+                    elif occ_status != "CONCURRENT_MODIFICATION":
+                        occ_status = "UNCONTESTED"
 
         eval_kwargs: dict[str, Any] = {
             "volatile_fields": self._effective_volatile_fields(),
@@ -1320,8 +1373,13 @@ class TransactionalCommitEngine:
         if self.lens.create_defaults:
             import inspect as _inspect
 
-            if "allowed_server_defaults" in _inspect.signature(self.judge.evaluate).parameters:
-                eval_kwargs["allowed_server_defaults"] = self.lens.create_defaults
+            if (
+                "allowed_server_defaults"
+                in _inspect.signature(self.judge.evaluate).parameters
+            ):
+                eval_kwargs["allowed_server_defaults"] = tuple(
+                    dict.fromkeys((self.lens.id_field, *self.lens.create_defaults))
+                )
 
         verdict = self.judge.evaluate(
             r0,
@@ -1344,7 +1402,7 @@ class TransactionalCommitEngine:
             outcome = "UNCERTAIN"
         elif not verdict.passed:
             outcome = "REFUTED"
-        elif action_error is not None:
+        elif action_error is not None or incomplete_wire:
             outcome = "UNCERTAIN"
         else:
             outcome = "CONFIRMED"
@@ -1358,7 +1416,17 @@ class TransactionalCommitEngine:
         )
 
         can_compensate = False
-        if occ_status != "CONCURRENT_MODIFICATION":
+        strong_etag = bool(r1_resp.etag and not r1_resp.etag.startswith("W/"))
+        if occ_status != "CONCURRENT_MODIFICATION" and strong_etag:
+            postimage = {
+                "entity_id": entity_id,
+                "lens_sha256": canonical_sha256(self.lens.model_dump()),
+                "record": r1,
+            }
+            write_private_record(
+                self.workdir / task_key_for(task.task_id) / "undo_postcommit.json",
+                json.dumps(postimage, sort_keys=True).encode("utf-8"),
+            )
             if task.operation == "update" and r0 is not None:
                 can_compensate = True
             elif (
@@ -1537,7 +1605,7 @@ class TransactionalCommitEngine:
                     wire_summary=None,
                     judge_verdict=None,
                     reasons=("write_network_error",),
-                    can_compensate=bool(task.operation == "update" and r0 is not None),
+                    can_compensate=False,
                     rows_read=rows_read,
                     t0=t0,
                 )
@@ -1596,10 +1664,14 @@ class TransactionalCommitEngine:
             if self.wire_tap is not None:
                 self.wire_tap.reset_session(task.task_id)
 
-            action_error: Optional[str] = None
+            action_error: Optional[str] = (
+                "wire_evidence_missing" if self.wire_tap is None else None
+            )
             action_ret: Any = None
             try:
                 action_ret = action_fn()
+                if hasattr(action_ret, "returncode") and action_ret.returncode != 0:
+                    action_error = "external_exit_nonzero"
             except Exception as exc:  # noqa: BLE001
                 action_error = type(exc).__name__
 
@@ -1659,17 +1731,39 @@ class TransactionalCommitEngine:
         entity_id: Optional[str] = None
         if meta_path.is_file():
             try:
-                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                meta = json.loads(read_private_record(meta_path))
                 operation = meta.get("operation")
                 entity_id = meta.get("entity_id")
             except (OSError, ValueError):
                 return False
 
-        if operation == "update" or (operation is None and r0_path.is_file()):
+        # Refuse to erase changes made after the recorded operation. A fresh ETag alone
+        # would merely authorize overwriting a newer user's edit.
+        postimage_path = task_dir / "undo_postcommit.json"
+        try:
+            postimage = json.loads(read_private_record(postimage_path))
+        except (OSError, ValueError):
+            return False
+        if postimage.get("entity_id") != entity_id or postimage.get(
+            "lens_sha256"
+        ) != canonical_sha256(self.lens.model_dump()):
+            return False
+        current_resp, current_record, _ = self.client.get_one(entity_id or "")
+        from openadapt_flow.tx.judge import strict_equal
+
+        if (
+            current_record is None
+            or not strict_equal(current_record, postimage.get("record"))
+            or not current_resp.etag
+            or current_resp.etag.startswith("W/")
+        ):
+            return False
+
+        if operation == "update":
             if not r0_path.is_file():
                 return False
             try:
-                r0 = json.loads(r0_path.read_text(encoding="utf-8"))
+                r0 = json.loads(read_private_record(r0_path))
             except (OSError, ValueError):
                 return False
             if not isinstance(r0, dict):
@@ -1681,7 +1775,6 @@ class TransactionalCommitEngine:
             if not entity_id:
                 return False
 
-            current_resp, _, _ = self.client.get_one(entity_id)
             restore_payload = strip_readonly_volatile(
                 r0,
                 self._effective_volatile_fields(),
@@ -1718,7 +1811,7 @@ class TransactionalCommitEngine:
         if operation == "create":
             if not entity_id or self.lens.delete_endpoint is None:
                 return False
-            del_resp = self.client.delete(entity_id)
+            del_resp = self.client.delete(entity_id, if_match=current_resp.etag)
             if del_resp.status_code not in (200, 202, 204, 404):
                 return False
             check_resp, _, _ = self.client.get_one(entity_id)

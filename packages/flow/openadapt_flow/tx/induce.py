@@ -1,8 +1,10 @@
-"""Zero-YAML self-certifying lens compiler from HAR 1.2 traces and sandbox probes.
+"""Candidate lens induction from HAR traces with bounded sandbox probe checks.
 
 Induces declarative ``EntityLensSpec`` candidates from raw browser/HTTP HAR 1.2
 recordings and empirically falsifies/refines them against a live loopback
-sandbox into a SHA-256 signed ``CertifiedLensPack``.
+sandbox into a digest-bound ``CertifiedLensPack``. The digest is not a signature
+or evidence of a trusted certification authority. Passing six known probes does
+not establish completeness or performance on a third-party application.
 
 Zero vision/GUI imports. Zero application names. Stdlib + Pydantic + tx.types.
 """
@@ -27,10 +29,10 @@ from openadapt_flow.tx.types import (
     EndpointTemplate,
     EntityLensSpec,
     FieldCodec,
-    FieldVerdict,
     JudgeProtocol,
     JudgeVerdict,
     WriteMode,
+    effective_volatile_fields,
 )
 
 
@@ -254,49 +256,10 @@ def _capitalize_words_variants(value: str) -> tuple[str, str]:
 
 
 def apply_field_codec(codec: FieldCodec, intended: Any, stored: Any) -> bool:
-    """Return True when ``stored`` satisfies ``intended`` under ``codec``."""
-    if intended == stored:
-        return True
-    kind = codec.kind
-    if kind == "exact":
-        return False
-    if kind == "bijection":
-        raw_key = str(intended)
-        raw_stripped = intended.strip() if isinstance(intended, str) else raw_key
-        stored_str = stored.strip() if isinstance(stored, str) else str(stored)
-        mapped = codec.mapping.get(raw_key, codec.mapping.get(raw_stripped))
-        return mapped is not None and mapped == stored_str
-    if kind == "phone_digits":
-        d1 = _digits_only(str(intended))
-        d2 = _digits_only(str(stored))
-        if len(d1) < 7 or len(d2) < 7:
-            return False
-        if d1 == d2:
-            return True
-        if len(d1) == 11 and d1.startswith("1") and d1[1:] == d2:
-            return True
-        if len(d2) == 11 and d2.startswith("1") and d2[1:] == d1:
-            return True
-        return False
-    if kind == "iso_date":
-        dt1 = _parse_flexible_date(str(intended))
-        dt2 = _parse_flexible_date(str(stored))
-        return dt1 is not None and dt1 == dt2
-    if not isinstance(intended, str) or not isinstance(stored, str):
-        return False
-    if kind == "strip_whitespace":
-        return intended.strip() == stored or " ".join(intended.split()) == " ".join(
-            stored.split()
-        )
-    if kind == "upper":
-        return intended.strip().upper() == stored.strip()
-    if kind == "lower":
-        return intended.strip().lower() == stored.strip()
-    if kind == "capitalize_words":
-        return stored.strip() in _capitalize_words_variants(intended)
-    if kind == "casefold":
-        return intended.strip().casefold() == stored.strip().casefold()
-    return False
+    """Use the runtime comparison policy during qualification."""
+    from openadapt_flow.tx.judge import apply_field_codec as shared_apply
+
+    return shared_apply(codec, intended, stored)[0]
 
 
 def infer_field_codec(
@@ -304,71 +267,14 @@ def infer_field_codec(
     stored_value: Any,
     existing: Optional[FieldCodec] = None,
 ) -> Optional[FieldCodec]:
-    """Infer or refine a ``FieldCodec`` from an observed ``(raw_value, stored_value)`` pair."""
-    if raw_value is None or stored_value is None:
-        return existing
-    if isinstance(raw_value, (dict, list)) or isinstance(stored_value, (dict, list)):
-        return existing
-    if raw_value == stored_value:
-        return existing
+    """Infer only supported normalizations; an arbitrary observed difference is not a rule."""
+    from openadapt_flow.tx.judge import infer_field_codec as shared_infer
 
-    if isinstance(raw_value, str) and isinstance(stored_value, str):
-        if (
-            raw_value.strip() == stored_value
-            or " ".join(raw_value.split()) == stored_value
-        ):
-            return existing or FieldCodec(kind="strip_whitespace")
-
-        dt_raw = _parse_flexible_date(raw_value)
-        dt_stored = _parse_flexible_date(stored_value)
-        if (
-            dt_raw is not None
-            and dt_stored is not None
-            and dt_raw == dt_stored
-            and stored_value.strip().startswith(dt_stored.isoformat())
-        ):
-            return FieldCodec(kind="iso_date")
-
-        if _looks_like_phone_input(raw_value):
-            cand_phone = FieldCodec(kind="phone_digits")
-            if apply_field_codec(cand_phone, raw_value, stored_value):
-                return cand_phone
-
-        alpha_chars = [ch for ch in stored_value if ch.isalpha()]
-        raw_stripped = raw_value.strip()
-        stored_stripped = stored_value.strip()
-        if alpha_chars:
-            title_v, cap_v = _capitalize_words_variants(raw_stripped)
-            is_upper = raw_stripped.upper() == stored_stripped
-            is_lower = raw_stripped.lower() == stored_stripped
-            is_cap = stored_stripped in (title_v, cap_v)
-
-            if is_upper and (not is_cap or len(alpha_chars) > 1):
-                if existing is None or existing.kind == "upper":
-                    return FieldCodec(kind="upper")
-            if is_lower and any(ch.isupper() for ch in raw_stripped):
-                if existing is None or existing.kind == "lower":
-                    return FieldCodec(kind="lower")
-            if is_cap:
-                if existing is None or existing.kind in ("capitalize_words", "upper"):
-                    return FieldCodec(kind="capitalize_words")
-            if raw_stripped.casefold() == stored_stripped.casefold():
-                return existing or FieldCodec(kind="casefold")
-
-    raw_str = raw_value.strip() if isinstance(raw_value, str) else str(raw_value)
-    stored_str = (
-        stored_value.strip() if isinstance(stored_value, str) else str(stored_value)
-    )
-    if not raw_str or not stored_str:
-        return existing
-
-    merged_map: dict[str, str] = {}
-    if existing is not None and existing.kind == "bijection":
-        merged_map.update(existing.mapping)
-    merged_map[str(raw_value)] = stored_str
-    if raw_str != str(raw_value):
-        merged_map[raw_str] = stored_str
-    return FieldCodec(kind="bijection", mapping=merged_map)
+    if existing is not None:
+        return (
+            existing if apply_field_codec(existing, raw_value, stored_value) else None
+        )
+    return shared_infer(raw_value, stored_value)
 
 
 def _flatten_record(
@@ -396,7 +302,7 @@ def _is_path_volatile(path: str, volatile_set: set[str]) -> bool:
 
 
 class DefaultFrameAndIntentJudge:
-    """Deterministic two-law Pierce Lens verifier implementing ``JudgeProtocol``."""
+    """Compatibility wrapper around the runtime policy, with no qualification-only relaxations."""
 
     def evaluate(
         self,
@@ -406,150 +312,19 @@ class DefaultFrameAndIntentJudge:
         *,
         volatile_fields: tuple[str, ...] = (),
         field_codecs: Optional[Mapping[str, FieldCodec]] = None,
+        allowed_server_defaults: Optional[tuple[str, ...]] = None,
     ) -> JudgeVerdict:
-        flat_r0 = _flatten_record(r0) if r0 is not None else {}
-        flat_r1 = _flatten_record(r1)
-        flat_delta = _flatten_record(intended_delta)
-        codecs = dict(field_codecs or {})
-        volatile_set = set(volatile_fields)
+        from openadapt_flow.tx.judge import FrameAndIntentJudge
 
-        all_paths = sorted(set(flat_r0) | set(flat_r1) | set(flat_delta))
-        verdicts: list[FieldVerdict] = []
-        clobbered: list[str] = []
-        mismatched: list[str] = []
-        extra: list[str] = []
-
-        for path in all_paths:
-            if path in flat_delta:
-                expected_val = flat_delta[path]
-                actual_val = flat_r1.get(path, _MISSING)
-                codec = codecs.get(path) or codecs.get(path.split(".")[-1])
-                if actual_val is _MISSING:
-                    mismatched.append(path)
-                    verdicts.append(
-                        FieldVerdict(
-                            field_path=path,
-                            category="intended",
-                            passed=False,
-                            tier_used="failed",
-                            reason=f"Missing intended field {path!r} in read-back",
-                        )
-                    )
-                elif actual_val == expected_val:
-                    verdicts.append(
-                        FieldVerdict(
-                            field_path=path,
-                            category="intended",
-                            passed=True,
-                            tier_used="exact",
-                        )
-                    )
-                elif codec is not None and apply_field_codec(
-                    codec, expected_val, actual_val
-                ):
-                    verdicts.append(
-                        FieldVerdict(
-                            field_path=path,
-                            category="intended",
-                            passed=True,
-                            tier_used="codec",
-                            reason=f"Matched via {codec.kind}",
-                        )
-                    )
-                else:
-                    mismatched.append(path)
-                    verdicts.append(
-                        FieldVerdict(
-                            field_path=path,
-                            category="intended",
-                            passed=False,
-                            tier_used="failed",
-                            reason=(
-                                f"Intended {path!r}={expected_val!r}, "
-                                f"stored {actual_val!r}"
-                            ),
-                        )
-                    )
-            elif _is_path_volatile(path, volatile_set):
-                verdicts.append(
-                    FieldVerdict(
-                        field_path=path,
-                        category="volatile",
-                        passed=True,
-                        tier_used="volatile_skip",
-                    )
-                )
-            elif r0 is None:
-                verdicts.append(
-                    FieldVerdict(
-                        field_path=path,
-                        category="frame",
-                        passed=True,
-                        tier_used="frame_eq",
-                    )
-                )
-            else:
-                in_r0 = path in flat_r0
-                in_r1 = path in flat_r1
-                if not in_r0 and in_r1:
-                    extra.append(path)
-                    verdicts.append(
-                        FieldVerdict(
-                            field_path=path,
-                            category="frame",
-                            passed=False,
-                            tier_used="failed",
-                            reason=f"Unexpected extra field {path!r} appeared",
-                        )
-                    )
-                elif in_r0 and not in_r1:
-                    clobbered.append(path)
-                    verdicts.append(
-                        FieldVerdict(
-                            field_path=path,
-                            category="frame",
-                            passed=False,
-                            tier_used="failed",
-                            reason=f"Untouched frame field {path!r} was dropped",
-                        )
-                    )
-                elif flat_r0[path] == flat_r1[path]:
-                    verdicts.append(
-                        FieldVerdict(
-                            field_path=path,
-                            category="frame",
-                            passed=True,
-                            tier_used="frame_eq",
-                        )
-                    )
-                else:
-                    clobbered.append(path)
-                    verdicts.append(
-                        FieldVerdict(
-                            field_path=path,
-                            category="frame",
-                            passed=False,
-                            tier_used="failed",
-                            reason=(
-                                f"Untouched frame field {path!r} changed from "
-                                f"{flat_r0[path]!r} to {flat_r1[path]!r}"
-                            ),
-                        )
-                    )
-
-        frame_preserved = not clobbered and not extra
-        intent_satisfied = not mismatched
-        passed = frame_preserved and intent_satisfied
-        reasons = tuple(v.reason for v in verdicts if not v.passed and v.reason)
-        return JudgeVerdict(
-            passed=passed,
-            frame_preserved=frame_preserved,
-            intent_satisfied=intent_satisfied,
-            clobbered_fields=tuple(clobbered),
-            mismatched_fields=tuple(mismatched),
-            extra_fields=tuple(extra),
-            field_verdicts=tuple(verdicts),
-            reasons=reasons,
+        options: dict[str, Any] = {}
+        if allowed_server_defaults is not None:
+            options["allowed_server_defaults"] = allowed_server_defaults
+        return FrameAndIntentJudge(**options).evaluate(
+            r0,
+            r1,
+            intended_delta,
+            volatile_fields=volatile_fields,
+            field_codecs=field_codecs,
         )
 
 
@@ -1157,10 +932,7 @@ def induce_lens_from_har(
                     continue
                 # Auto-mutated server field: either echoed unchanged in request yet server
                 # changed it, or server metadata key not in user-supplied fields.
-                if (path in flat_req and flat_req[path] == old_val) or (
-                    path not in flat_req
-                    and _looks_like_metadata_or_volatile(path, new_val)
-                ):
+                if _looks_like_metadata_or_volatile(path, new_val):
                     if path not in volatile_list:
                         volatile_list.append(path)
                 elif (
@@ -1776,6 +1548,7 @@ def probe_put_semantics(
                             and path not in user_keys
                             and flat_r0.get(path, _MISSING) != m_val
                             and path not in volatile_list
+                            and _looks_like_metadata_or_volatile(path, m_val)
                         ):
                             volatile_list.append(path)
 
@@ -1837,7 +1610,6 @@ def certify_lens_on_sandbox(
     if not sample_update:
         raise ValueError("sample_update must be non-empty")
 
-    active_judge: JudgeProtocol = judge or DefaultFrameAndIntentJudge()
     lens = (
         probe_put_semantics(
             candidate,
@@ -1850,6 +1622,14 @@ def certify_lens_on_sandbox(
         else candidate
     )
 
+    from openadapt_flow.tx.judge import FrameAndIntentJudge
+
+    lens = lens.model_copy(update={"volatile_fields": effective_volatile_fields(lens)})
+    active_judge: JudgeProtocol = judge or FrameAndIntentJudge(
+        allowed_server_defaults=tuple(
+            dict.fromkeys((lens.id_field, *lens.create_defaults))
+        ),
+    )
     created_ids: list[str] = []
     probes: list[CertificationProbeResult] = []
     run_tag = uuid.uuid4().hex[:8]

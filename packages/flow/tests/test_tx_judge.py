@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
+
 from openadapt_flow.tx import judge as tx_judge_module
 from openadapt_flow.tx.judge import (
     FrameAndIntentJudge,
@@ -448,7 +449,7 @@ def test_phone_digits_and_bijection_case_insensitive_variants() -> None:
     ok_ci, _ = apply_field_codec(bijection, "massachusetts", "MA")
     ok_bad, _ = apply_field_codec(bijection, "Massachusetts", "CA")
     assert ok_exact is True
-    assert ok_ci is True
+    assert ok_ci is False
     assert ok_bad is False
 
 
@@ -692,16 +693,35 @@ def test_silent_noop_missing_new_intended_field_and_volatile_precedence() -> Non
         ("(617) 555-0188", "6175550188", "phone_digits"),
         ("+1 (617) 555-0188", "+16175550188", "phone_digits"),
         ("1958-03-22", "1958-03-22T00:00:00Z", "iso_date"),
-        ("Massachusetts", "MA", "bijection"),
-        ("California", "CA", "bijection"),
-        ("In Progress", "in_progress", "bijection"),
+        ("Massachusetts", "MA", None),
+        ("California", "CA", None),
+        ("In Progress", "in_progress", None),
         ("mcDonald", "McDonald", "casefold"),
     ],
 )
 def test_infer_field_codec_discovers_valid_codecs_and_roundtrips(
-    intended_val: str, stored_val: str, expected_kind: str
+    intended_val: str, stored_val: str, expected_kind: str | None
 ) -> None:
     codec = infer_field_codec(intended_val, stored_val)
+    if expected_kind is None:
+        assert codec is None
+        assert (
+            not FrameAndIntentJudge()
+            .evaluate({"f": "before"}, {"f": stored_val}, {"f": intended_val})
+            .passed
+        )
+        explicit = FieldCodec(kind="bijection", mapping={intended_val: stored_val})
+        assert (
+            FrameAndIntentJudge()
+            .evaluate(
+                {"f": "before"},
+                {"f": stored_val},
+                {"f": intended_val},
+                field_codecs={"f": explicit},
+            )
+            .passed
+        )
+        return
     assert codec is not None
     assert codec.kind == expected_kind
     if expected_kind == "bijection":

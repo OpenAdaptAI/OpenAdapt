@@ -1,3 +1,5 @@
+This historical measurement is unqualified. The original runner could replace failed qualification with an empty certified pack. Its measurements do not establish lens certification, independent application generalization, production reliability, or complete server side-effect coverage. Raw measurements are retained below for audit.
+
 # OpenAdapt Transactional Commit Layer (`tx`) — Production Realism Benchmark
 
 - **Rows Seeded per System of Record:** `50,000` (SQLite WAL mode)

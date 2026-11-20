@@ -1,8 +1,8 @@
 """Session-scoped HTTP wire tap, inline mutation gate, and HAR 1.2 utilities.
 
-Provides ``O(1)`` session-scoped write completeness and inline collateral-write
-blocking for any HTTP client, SDK, or browser session without whole-database
-snapshots or vision/GUI dependencies.
+Counts and gates requests routed through this observer. Traffic that bypasses
+this route and downstream server effects are outside its evidence scope.
+No vision/GUI dependencies are imported.
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ from urllib.parse import parse_qsl, unquote, urlsplit
 
 from pydantic import BaseModel, ConfigDict
 
+from openadapt_flow.tx.receipt import write_private_record
 from openadapt_flow.tx.types import (
     WireMutationRecord,
     WireSessionSummary,
@@ -1745,8 +1746,7 @@ def dump_har(
     payload = json.dumps(scrubbed, indent=2, sort_keys=False)
     if path is not None:
         out = Path(path)
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(payload, encoding="utf-8")
+        write_private_record(out, payload.encode("utf-8"))
     return payload
 
 
@@ -1756,19 +1756,31 @@ def load_har(
     secrets: Iterable[str] = (),
 ) -> dict[str, Any]:
     """Load, validate, and optionally secret-mask a HAR 1.2 structure."""
+
+    def parse_bytes(raw: bytes) -> Any:
+        from openadapt_flow import crypto
+
+        if crypto.is_encrypted(raw):
+            raw = crypto.decrypt_bytes(
+                raw,
+                crypto.resolve_read_key(None),
+                aad=b"openadapt-flow/tx-private-state",
+            )
+        return json.loads(raw.decode("utf-8"))
+
     data: Any
     if isinstance(source, Mapping):
         data = dict(source)
     elif isinstance(source, (bytes, bytearray)):
-        data = json.loads(bytes(source).decode("utf-8"))
+        data = parse_bytes(bytes(source))
     elif isinstance(source, Path):
-        data = json.loads(source.read_text(encoding="utf-8"))
+        data = parse_bytes(source.read_bytes())
     elif isinstance(source, str):
         stripped = source.lstrip()
         if stripped.startswith("{"):
             data = json.loads(source)
         else:
-            data = json.loads(Path(source).read_text(encoding="utf-8"))
+            data = parse_bytes(Path(source).read_bytes())
     else:
         raise TypeError(f"Unsupported HAR source type: {type(source)!r}")
 

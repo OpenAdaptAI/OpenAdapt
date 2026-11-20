@@ -134,7 +134,7 @@ def strict_equal(left: Any, right: Any) -> bool:
         if len(left) != len(right):
             return False
         return all(strict_equal(x, y) for x, y in zip(left, right))
-    return bool(left == right)
+    return type(left) is type(right) and bool(left == right)
 
 
 def _is_empty_server_default_value(value: Any) -> bool:
@@ -305,7 +305,9 @@ def _parse_iso_date(value: str) -> Optional[_ParsedIsoDate]:
 
     microsecond = 0
     if frac_s is not None:
-        padded = (frac_s[:6]).ljust(6, "0")
+        if len(frac_s) > 6:
+            return None
+        padded = frac_s.ljust(6, "0")
         microsecond = int(padded)
 
     tz_offset: Optional[datetime.timedelta] = None
@@ -370,8 +372,6 @@ def iso_dates_match(intended: str, stored: str) -> bool:
         return p_int.is_midnight and p_int.date == p_sto.date
 
     # Both include explicit time components.
-    if p_int.is_midnight and p_sto.is_midnight and p_int.date == p_sto.date:
-        return True
     utc_int = p_int.as_utc_datetime()
     utc_sto = p_sto.as_utc_datetime()
     if utc_int is not None and utc_sto is not None:
@@ -601,32 +601,13 @@ def apply_field_codec(
         )
 
     if kind == "bijection":
-        if intended_val in codec.mapping:
-            mapped = codec.mapping[intended_val]
-            if mapped == stored_val or mapped.casefold() == stored_val.casefold():
-                return True, f"bijection mapped {intended_val!r} -> {stored_val!r}"
-        int_norm = intended_val.strip().casefold()
-        for map_key, map_val in codec.mapping.items():
-            if map_key.strip().casefold() == int_norm:
-                if (
-                    map_val == stored_val
-                    or map_val.strip().casefold() == stored_val.strip().casefold()
-                ):
-                    return (
-                        True,
-                        f"bijection (case-insensitive) mapped {intended_val!r} -> {stored_val!r}",
-                    )
-        # Support inverse direction when codec.mapping is a true 1-to-1 bijection.
-        if codec.mapping and len(set(codec.mapping.values())) == len(codec.mapping):
-            for map_key, map_val in codec.mapping.items():
-                if map_val == intended_val and (
-                    map_key == stored_val or map_key.casefold() == stored_val.casefold()
-                ):
-                    return (
-                        True,
-                        f"inverse bijection mapped {intended_val!r} -> {stored_val!r}",
-                    )
-        return False, f"bijection lookup failed for {intended_val!r} -> {stored_val!r}"
+        matched = (
+            intended_val in codec.mapping and codec.mapping[intended_val] == stored_val
+        )
+        return (
+            matched,
+            "explicit mapping match" if matched else "explicit mapping mismatch",
+        )
 
     violated, violation_reason = violates_hard_safety_invariant(
         intended_val, stored_val, codec=codec
@@ -752,8 +733,6 @@ class SafeNormalizedEntailmentOracle(EntailmentOracle):
                 return True, "ISO-8601 midnight date canonical entailment"
             if canonical_phones_match(intended_value, stored_value):
                 return True, "E.164/NANP phone canonical entailment"
-            if iso_subdivisions_match(intended_value, stored_value):
-                return True, "ISO-3166-2 subdivision postal code entailment"
             if _normalize_whitespace_case(intended_value) == _normalize_whitespace_case(
                 stored_value
             ):
@@ -851,24 +830,70 @@ class SafeNormalizedEntailmentOracle(EntailmentOracle):
 
 
 _ISO_SUBDIVISION_MAP: dict[str, str] = {
-    "alabama": "AL", "alaska": "AK", "arizona": "AZ", "arkansas": "AR",
-    "california": "CA", "colorado": "CO", "connecticut": "CT", "delaware": "DE",
-    "district of columbia": "DC", "florida": "FL", "georgia": "GA", "hawaii": "HI",
-    "idaho": "ID", "illinois": "IL", "indiana": "IN", "iowa": "IA",
-    "kansas": "KS", "kentucky": "KY", "louisiana": "LA", "maine": "ME",
-    "maryland": "MD", "massachusetts": "MA", "michigan": "MI", "minnesota": "MN",
-    "mississippi": "MS", "missouri": "MO", "montana": "MT", "nebraska": "NE",
-    "nevada": "NV", "new hampshire": "NH", "new jersey": "NJ", "new mexico": "NM",
-    "new york": "NY", "north carolina": "NC", "north dakota": "ND", "ohio": "OH",
-    "oklahoma": "OK", "oregon": "OR", "pennsylvania": "PA", "rhode island": "RI",
-    "south carolina": "SC", "south dakota": "SD", "tennessee": "TN", "texas": "TX",
-    "utah": "UT", "vermont": "VT", "virginia": "VA", "washington": "WA",
-    "west virginia": "WV", "wisconsin": "WI", "wyoming": "WY",
-    "alberta": "AB", "british columbia": "BC", "manitoba": "MB",
-    "new brunswick": "NB", "newfoundland and labrador": "NL",
-    "northwest territories": "NT", "nova scotia": "NS", "nunavut": "NU",
-    "ontario": "ON", "prince edward island": "PE", "quebec": "QC",
-    "saskatchewan": "SK", "yukon": "YT",
+    "alabama": "AL",
+    "alaska": "AK",
+    "arizona": "AZ",
+    "arkansas": "AR",
+    "california": "CA",
+    "colorado": "CO",
+    "connecticut": "CT",
+    "delaware": "DE",
+    "district of columbia": "DC",
+    "florida": "FL",
+    "georgia": "GA",
+    "hawaii": "HI",
+    "idaho": "ID",
+    "illinois": "IL",
+    "indiana": "IN",
+    "iowa": "IA",
+    "kansas": "KS",
+    "kentucky": "KY",
+    "louisiana": "LA",
+    "maine": "ME",
+    "maryland": "MD",
+    "massachusetts": "MA",
+    "michigan": "MI",
+    "minnesota": "MN",
+    "mississippi": "MS",
+    "missouri": "MO",
+    "montana": "MT",
+    "nebraska": "NE",
+    "nevada": "NV",
+    "new hampshire": "NH",
+    "new jersey": "NJ",
+    "new mexico": "NM",
+    "new york": "NY",
+    "north carolina": "NC",
+    "north dakota": "ND",
+    "ohio": "OH",
+    "oklahoma": "OK",
+    "oregon": "OR",
+    "pennsylvania": "PA",
+    "rhode island": "RI",
+    "south carolina": "SC",
+    "south dakota": "SD",
+    "tennessee": "TN",
+    "texas": "TX",
+    "utah": "UT",
+    "vermont": "VT",
+    "virginia": "VA",
+    "washington": "WA",
+    "west virginia": "WV",
+    "wisconsin": "WI",
+    "wyoming": "WY",
+    "alberta": "AB",
+    "british columbia": "BC",
+    "manitoba": "MB",
+    "new brunswick": "NB",
+    "newfoundland and labrador": "NL",
+    "northwest territories": "NT",
+    "nova scotia": "NS",
+    "nunavut": "NU",
+    "ontario": "ON",
+    "prince edward island": "PE",
+    "quebec": "QC",
+    "saskatchewan": "SK",
+    "yukon": "YT",
 }
 
 
@@ -1196,7 +1221,11 @@ class FrameAndIntentJudge(JudgeProtocol):
         allowed_server_defaults: Optional[tuple[str, ...]] = None,
     ) -> JudgeVerdict:
         effective_defaults = (
-            tuple(dict.fromkeys(self._allowed_server_defaults + tuple(allowed_server_defaults)))
+            tuple(
+                dict.fromkeys(
+                    self._allowed_server_defaults + tuple(allowed_server_defaults)
+                )
+            )
             if allowed_server_defaults is not None
             else self._allowed_server_defaults
         )
@@ -1494,13 +1523,6 @@ def infer_field_codec(intended_val: Any, stored_val: Any) -> Optional[FieldCodec
 
     if has_alpha and intended_val.casefold() == stored_val.casefold():
         return FieldCodec(kind="casefold")
-
-    if (
-        _is_ordered_code_abbreviation(intended_val.strip(), stored_val.strip())
-        or _is_ordered_code_abbreviation(stored_val.strip(), intended_val.strip())
-        or _is_enum_slug_pair(intended_val.strip(), stored_val.strip())
-    ):
-        return FieldCodec(kind="bijection", mapping={intended_val: stored_val})
 
     return None
 

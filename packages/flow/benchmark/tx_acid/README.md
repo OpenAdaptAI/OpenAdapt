@@ -1,6 +1,12 @@
-# Transactional Commit Layer (`tx`) — 50,000-Row, 20-Worker Production Realism Benchmark
+# Synthetic transaction verification harness
 
-Head-to-head benchmark suite evaluating the OpenAdapt Transactional Commit Layer (`tx`) against ungoverned `2xx`-trusting agents and legacy whole-table contract verifiers across three multi-user HTTP + SQLite-WAL Systems of Record.
+This harness uses three purpose-built HTTP/SQLite servers. It does not run
+third-party EHR, ERP or claims products, and it does not establish production
+readiness or independent held-out application generalization.
+
+The original runner could replace a failed qualifier with an empty successful
+certificate. That fallback has been removed. Historical measurements are
+unqualified and must not be used as certification or production evidence.
 
 ## Systems of Record (`servers.py`)
 
@@ -14,7 +20,7 @@ Each server runs `http.server.ThreadingHTTPServer` backed by SQLite in `WAL` mod
 2. **`ReplaceTaskServer` (Replace-Style ERP/Task Archetype, `/api/tasks`):**
    - `PUT /api/tasks/{id}` replaces the entire record: omitted fields (`description`, `assignee`, `due_date`, `labels`, `budget_cents`, `department`) are silently overwritten with `""` or `0` while returning `200 OK`.
    - `POST /api/tasks` is non-idempotent (retrying creates duplicate rows).
-3. **`ClaimsLedgerServer` (Held-Out Regulated Ledger Archetype, `/api/claims`):**
+3. **`ClaimsLedgerServer` (Additional Synthetic Ledger Archetype, `/api/claims`):**
    - Enforces `ETag` / `If-Match` (`412 Precondition Failed` on stale precondition) and strictly increments `version`.
    - Computes server-side `updated_at` and monotonic `audit_seq`.
    - Normalizes phone numbers (`"(416) 555-0199" -> "+14165550199"`) and ISO dates (`"2026-11-19" -> "2026-11-19T00:00:00Z"`).
@@ -26,11 +32,11 @@ Each server runs `http.server.ThreadingHTTPServer` backed by SQLite in `WAL` mod
 
 ## Benchmark Arms (`baselines.py` & `runner.py`)
 
-| Arm | Mechanism | Failure Mode at Production Scale |
+| Arm | Mechanism | Scope of this harness |
 | :--- | :--- | :--- |
 | `naive_2xx` (`NaiveAgent2xxArm`) | Sends intended mutation directly and trusts HTTP `2xx` | Silently clobbers omitted fields on `PUT` and accepts 100% of planted faults |
 | `legacy_whole_table` (`LegacyWholeTableContractArm`) | Pre/post `GET ?_limit=200` snapshot diff + literal string equality + `<4`-char short-param halt | Refuses `INDETERMINATE` on `>200` rows or concurrent worker diffs; false-stops on `"Bo"`/`"Li"` and normalized fields |
-| `tx_acid` (`TransactionalCommitEngine` / `ReferenceTxArm`) | O(1) entity read-merge-write-verify + `SessionWireTap` completeness + `FieldCodec` Pierce Lens Judge + `If-Match` OCC | `100%` clean pass rate under 20 concurrent writers and `100%` fault catch rate in O(1) reads |
+| `tx_acid` (`TransactionalCommitEngine` / `ReferenceTxArm`) | Target-record read/merge/write checks, observed-request accounting, explicit codecs and conditional HTTP writes | Known synthetic fault cases; results depend on the selected backend and must retain qualification failures |
 
 ## Running the Suite
 

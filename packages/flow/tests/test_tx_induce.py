@@ -36,6 +36,7 @@ from openadapt_flow.tx.induce import (
     induce_lens_from_har,
     infer_field_codec,
 )
+from openadapt_flow.tx.judge import FrameAndIntentJudge
 from openadapt_flow.tx.types import (
     CERTIFIED_LENS_PACK_SCHEMA,
     ENTITY_LENS_SCHEMA,
@@ -813,8 +814,16 @@ def test_paginated_normalizing_2000_row_archetype_and_remote_refusal(
     # Verify induced codecs & discrete bijection!
     assert candidate.field_codecs["street"].kind == "upper"
     assert candidate.field_codecs["last_name"].kind == "capitalize_words"
-    assert candidate.field_codecs["state"].kind == "bijection"
-    assert candidate.field_codecs["state"].mapping["Massachusetts"] == "MA"
+    assert "state" not in candidate.field_codecs
+    # Tested data override supplied by this synthetic server's declared contract.
+    candidate = candidate.model_copy(
+        update={
+            "field_codecs": {
+                **candidate.field_codecs,
+                "state": FieldCodec(kind="bijection", mapping={"Massachusetts": "MA"}),
+            }
+        }
+    )
     assert candidate.field_codecs["first_name"].kind == "strip_whitespace"
     assert candidate.field_codecs["email"].kind == "lower"
 
@@ -1083,9 +1092,7 @@ def test_intended_inputs_codecs_phone_isodate_and_llm_proposer_veto(
     assert infer_field_codec("(617) 555-0199", "6175550199") == FieldCodec(
         kind="phone_digits"
     )
-    assert infer_field_codec("March 15, 2026", "2026-03-15") == FieldCodec(
-        kind="iso_date"
-    )
+    assert infer_field_codec("March 15, 2026", "2026-03-15") is None
 
     judge = DefaultFrameAndIntentJudge()
     verdict = judge.evaluate(
@@ -1094,7 +1101,7 @@ def test_intended_inputs_codecs_phone_isodate_and_llm_proposer_veto(
         {"phone": "+1 (617) 555-0199", "dob": "03/15/2026"},
         field_codecs={
             "phone": FieldCodec(kind="phone_digits"),
-            "dob": FieldCodec(kind="iso_date"),
+            "dob": FieldCodec(kind="bijection", mapping={"03/15/2026": "2026-03-15"}),
         },
     )
     assert verdict.passed is True
@@ -1119,8 +1126,17 @@ def test_intended_inputs_codecs_phone_isodate_and_llm_proposer_veto(
     assert create_lens.write_mode == "create"
     assert create_lens.get_one.path_template == "/api/tasks/{id}"
     assert create_lens.write_endpoint.method == "POST"
-    assert create_lens.field_codecs["title"].kind == "bijection"
-    assert create_lens.field_codecs["title"].mapping == {"Massachusetts": "MA"}
+    assert create_lens.field_codecs["title"].kind == "exact"
+    assert (
+        not FrameAndIntentJudge()
+        .evaluate(
+            None,
+            {"title": "MA"},
+            {"title": "Massachusetts"},
+            field_codecs=create_lens.field_codecs,
+        )
+        .passed
+    )
 
     pack_create = certify_lens_on_sandbox(
         create_lens,
@@ -1299,9 +1315,9 @@ def test_induce_generality_and_import_boundaries() -> None:
         "work" + "arena",
     )
     for token in banned_tokens:
-        assert token not in source_lower, (
-            f"Banned app name {token!r} found in induce.py"
-        )
+        assert (
+            token not in source_lower
+        ), f"Banned app name {token!r} found in induce.py"
 
     refused_modules = [
         "numpy",

@@ -1,4 +1,4 @@
-"""OpenAdapt Transactional Commit Layer (tx): O(1) wire-scoped ACID guarantees for AI agents."""
+"""Target-record verification and experimental transaction coordination primitives."""
 
 from openadapt_flow.tx.induce import (
     SandboxSafetyError,

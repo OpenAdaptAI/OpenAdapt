@@ -24,6 +24,7 @@ from openadapt_flow.tx import (
     WirePolicy,
     certify_lens_on_sandbox,
     induce_lens_from_har,
+    load_har,
     load_network_capture_as_har,
     verify_tx_receipt,
 )
@@ -79,7 +80,7 @@ def tx_verified(
 ) -> Callable[[F], F]:
     """Wrap a Python agent/tool write function in an O(1) TransactionalCommitEngine."""
     loaded = load_lens_or_pack(lens)
-    judge = FrameAndIntentJudge(entailment_oracle=SafeNormalizedEntailmentOracle())
+    judge = FrameAndIntentJudge()
     engine = TransactionalCommitEngine(
         loaded,
         workdir=workdir,
@@ -95,7 +96,9 @@ def tx_verified(
             bound.apply_defaults()
             call_map = dict(bound.arguments)
             entity_id = call_map.pop(id_arg, None)
-            task_id = str(call_map.pop(task_id_arg, f"{fn.__name__}-{entity_id or 'create'}"))
+            task_id = str(
+                call_map.pop(task_id_arg, f"{fn.__name__}-{entity_id or 'create'}")
+            )
             expected_identity = dict(call_map.pop("expected_identity", {}) or {})
             delta = dict(call_map.pop("intended_delta", call_map))
             op = "create" if operation == "create" else "update"
@@ -132,7 +135,7 @@ def run_cli_induce(
         har_doc = load_network_capture_as_har(recording_dir)
     else:
         assert har_path is not None
-        har_doc = json.loads(Path(har_path).read_text(encoding="utf-8"))
+        har_doc = load_har(Path(har_path))
 
     lens = induce_lens_from_har(har_doc)
     if sandbox_url:
@@ -203,7 +206,7 @@ def run_cli_tx(
     if cmd[:1] == ["--"]:
         cmd.pop(0)
 
-    judge = FrameAndIntentJudge(entailment_oracle=SafeNormalizedEntailmentOracle())
+    judge = FrameAndIntentJudge()
     if not cmd:
         engine = TransactionalCommitEngine(loaded, workdir=state_dir, judge=judge)
         res = engine.execute(task)

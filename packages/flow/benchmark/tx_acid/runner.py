@@ -281,41 +281,19 @@ class _AutoImportedOpenAdaptTxArm:
             except Exception:
                 pass
 
-        pack: Optional[CertifiedLensPack] = None
-        if callable(certify_fn):
-            try:
-                sample_rec = server.make_background_create_payload(999, 1)
-                _, sample_upd = server.make_background_update_payload(999, 1)
-                maybe_pack = certify_fn(
-                    lens,
-                    sample_record=sample_rec,
-                    sample_update=sample_upd,
-                    headers={"X-Actor-Id": "tx-certifier"},
-                )
-                if isinstance(maybe_pack, CertifiedLensPack) and maybe_pack.certified:
-                    pack = maybe_pack
-                    lens = pack.lens
-            except TypeError:
-                try:
-                    maybe_pack = certify_fn(
-                        lens,
-                        sample_record=sample_rec,
-                        sample_update=sample_upd,
-                    )
-                    if isinstance(maybe_pack, CertifiedLensPack) and maybe_pack.certified:
-                        pack = maybe_pack
-                        lens = pack.lens
-                except Exception:
-                    pack = None
-            except Exception:
-                pack = None
-        if pack is None:
-            pack = CertifiedLensPack(
-                lens=lens,
-                certified=True,
-                sensitivity=1.0,
-                specificity=1.0,
-            ).with_computed_digest()
+        if not callable(certify_fn):
+            raise RuntimeError("transaction benchmark requires the real qualifier")
+        sample_rec = server.make_background_create_payload(999, 1)
+        _, sample_upd = server.make_background_update_payload(999, 1)
+        pack = certify_fn(
+            lens,
+            sample_record=sample_rec,
+            sample_update=sample_upd,
+            auth_headers={"X-Actor-Id": "tx-certifier"},
+        )
+        if not isinstance(pack, CertifiedLensPack) or pack.admission_errors():
+            raise RuntimeError("transaction benchmark qualification failed")
+        lens = pack.lens
 
         tap = _instantiate_with_matching_kwargs(
             tap_cls,
@@ -331,9 +309,7 @@ class _AutoImportedOpenAdaptTxArm:
         elif hasattr(tap, "__enter__"):
             tap.__enter__()
 
-        from openadapt_flow.tx.judge import SafeNormalizedEntailmentOracle
-
-        judge = judge_cls(entailment_oracle=SafeNormalizedEntailmentOracle())
+        judge = judge_cls()
         engine = _instantiate_with_matching_kwargs(
             engine_cls,
             {
@@ -1303,7 +1279,8 @@ def render_markdown_report(report: BenchmarkSuiteReport) -> str:
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Run the 50k-row / 20-worker OpenAdapt tx ACID benchmark suite."
+        allow_abbrev=False,
+        description="Run the 50k-row / 20-worker OpenAdapt tx ACID benchmark suite.",
     )
     parser.add_argument("--seed-rows", type=int, default=50_000)
     parser.add_argument("--workers", type=int, default=20)

@@ -1,4 +1,7 @@
-"""Witnessed COSE_Sign1 + SCITT transparency receipts for Transactional Commit Layer (tx).
+"""Locally signed COSE receipts with a local Merkle inclusion log.
+
+Local signatures bind this process's evidence. They do not authenticate the
+remote server or prove that all server-side effects have been observed.
 
 Public receipts follow ``openadapt.tx-receipt/v1`` and contain zero raw PII/PHI:
 all entity snapshots (``r0``, ``r1``) and ``intended_delta`` are bound via
@@ -78,6 +81,8 @@ class TxReceiptPayload(BaseModel):
     wire_mutations_allowed: Optional[int] = Field(default=None, ge=0)
     wire_collateral_mutations: Optional[int] = Field(default=None, ge=0)
     rows_read: int = Field(ge=0)
+    verification_scope: Literal["target_record"] = "target_record"
+    collateral_effects_verified: Literal[False] = False
 
 
 def _utc_now_iso() -> str:
@@ -131,6 +136,31 @@ def write_private_bytes(path: Path, data: bytes, *, overwrite: bool = True) -> N
                 pass
     finally:
         tmp.unlink(missing_ok=True)
+
+
+def write_private_record(
+    path: Path, plaintext: bytes, *, overwrite: bool = True
+) -> None:
+    """Seal sensitive record/trace state under Flow's existing local at-rest key."""
+    from openadapt_flow import at_rest, crypto
+
+    key = crypto.resolve_key(None) or at_rest.local_key()
+    sealed = crypto.encrypt_bytes(
+        plaintext, key, aad=b"openadapt-flow/tx-private-state"
+    )
+    write_private_bytes(path, sealed, overwrite=overwrite)
+
+
+def read_private_record(path: Path) -> bytes:
+    """Load private state only after authenticated decryption."""
+    from openadapt_flow import crypto
+
+    raw = path.read_bytes()
+    if not crypto.is_encrypted(raw):
+        raise ValueError("transaction private state must be encrypted")
+    return crypto.decrypt_bytes(
+        raw, crypto.resolve_read_key(None), aad=b"openadapt-flow/tx-private-state"
+    )
 
 
 def load_or_create_signing_key(workdir: Path | str) -> Ed25519PrivateKey:
@@ -275,10 +305,10 @@ def issue_tx_receipt(
 
     if r0 is not None:
         undo_bytes = _canonical_json_bytes(dict(r0)) + b"\n"
-        write_private_bytes(task_dir / "undo_r0.json", undo_bytes, overwrite=False)
+        write_private_record(task_dir / "undo_r0.json", undo_bytes, overwrite=False)
         primary_dir = root / task_key_for(task_id)
         if primary_dir != task_dir:
-            write_private_bytes(
+            write_private_record(
                 primary_dir / "undo_r0.json", undo_bytes, overwrite=False
             )
 

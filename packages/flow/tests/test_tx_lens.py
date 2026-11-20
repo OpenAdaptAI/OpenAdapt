@@ -1247,8 +1247,30 @@ def test_identity_codec_opt_in_and_certified_pack_and_lazy_judge(
         sensitivity=1.0,
         specificity=1.0,
     ).with_computed_digest()
-    cert_engine = TransactionalCommitEngine(certified_pack, workdir=tmp_path / "cert")
-    assert cert_engine.lens == base_lens
+    with pytest.raises(ValueError, match="incomplete_probe_set"):
+        TransactionalCommitEngine(certified_pack, workdir=tmp_path / "cert")
+    # Real loopback qualification must supply the six complete probe results.
+    from openadapt_flow.tx.induce import certify_lens_on_sandbox
+
+    qualified_pack = certify_lens_on_sandbox(
+        base_lens,
+        sample_record={
+            "first_name": "Dana",
+            "last_name": "Lee",
+            "email": "qualified@example.test",
+            "phone": "555-9999",
+            "department": "Care",
+            "role": "Staff",
+            "notes": "keep",
+        },
+        sample_update={"phone": "555-4444"},
+    )
+    assert qualified_pack.certified
+    assert not qualified_pack.admission_errors()
+    cert_engine = TransactionalCommitEngine(
+        qualified_pack, workdir=tmp_path / "qualified"
+    )
+    assert cert_engine.lens == qualified_pack.lens
 
     # Lazy discovery of openadapt_flow.tx.judge.FrameAndIntentJudge when merged
     fake_judge_mod = types.ModuleType("openadapt_flow.tx.judge")

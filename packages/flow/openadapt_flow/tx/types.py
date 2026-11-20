@@ -135,8 +135,7 @@ class EntailmentOracle(Protocol):
         intended_value: Any,
         stored_value: Any,
         before_value: Any = None,
-    ) -> tuple[bool, str]:
-        ...
+    ) -> tuple[bool, str]: ...
 
 
 @runtime_checkable
@@ -151,8 +150,7 @@ class JudgeProtocol(Protocol):
         *,
         volatile_fields: tuple[str, ...] = (),
         field_codecs: Optional[Mapping[str, FieldCodec]] = None,
-    ) -> JudgeVerdict:
-        ...
+    ) -> JudgeVerdict: ...
 
 
 @runtime_checkable
@@ -160,14 +158,11 @@ class WireTapProtocol(Protocol):
     """Protocol implemented by SessionWireTap in tx.wire_tap."""
 
     @property
-    def base_url(self) -> str:
-        ...
+    def base_url(self) -> str: ...
 
-    def reset_session(self, session_id: Optional[str] = None) -> str:
-        ...
+    def reset_session(self, session_id: Optional[str] = None) -> str: ...
 
-    def summary(self) -> WireSessionSummary:
-        ...
+    def summary(self) -> WireSessionSummary: ...
 
 
 class EndpointTemplate(_FrozenModel):
@@ -213,6 +208,23 @@ class EntityLensSpec(_FrozenModel):
     expected_author: Optional[str] = None
 
 
+def effective_volatile_fields(lens: EntityLensSpec) -> tuple[str, ...]:
+    """Use only metadata fields explicitly declared by the lens, consistently."""
+    return tuple(
+        dict.fromkeys(
+            (
+                *lens.volatile_fields,
+                *(
+                    field
+                    for endpoint in (lens.get_one, lens.write_endpoint)
+                    for field in (endpoint.version_field, endpoint.author_field)
+                    if field
+                ),
+            )
+        )
+    )
+
+
 class TxTask(_FrozenModel):
     """Authorized write intent supplied by the caller/orchestrator (never the agent)."""
 
@@ -235,6 +247,8 @@ class TxCommitResult(_FrozenModel):
     judge_verdict: Optional[JudgeVerdict] = None
     reasons: tuple[str, ...] = ()
     can_compensate: bool = False
+    verification_scope: Literal["target_record"] = "target_record"
+    collateral_effects_verified: Literal[False] = False
     receipt_path: Optional[str] = None
     receipt_id: Optional[str] = None
     rows_read: int = 0
@@ -263,12 +277,45 @@ class CertifiedLensPack(_FrozenModel):
     probes: tuple[CertificationProbeResult, ...] = ()
     pack_sha256: str = ""
 
+    def admission_errors(self) -> tuple[str, ...]:
+        """Check the complete local probe record; this is not a trusted attestation."""
+        expected = {
+            "clean_roundtrip": "benign",
+            "benign_concurrent_other_record": "benign",
+            "fault_partial_clobber": "harmful",
+            "fault_wrong_value": "harmful",
+            "fault_wrong_record": "harmful",
+            "fault_no_persist": "harmful",
+        }
+        errors: list[str] = []
+        if not self.certified or self.sensitivity != 1.0 or self.specificity != 1.0:
+            errors.append("uncertified_probe_results")
+        if len(self.probes) != len(expected) or {
+            p.probe_name for p in self.probes
+        } != set(expected):
+            errors.append("incomplete_probe_set")
+        for probe in self.probes:
+            polarity = expected.get(probe.probe_name)
+            should_reject = polarity == "harmful"
+            if (
+                probe.polarity != polarity
+                or probe.expected_reject != should_reject
+                or probe.observed_reject != should_reject
+                or not probe.passed
+            ):
+                errors.append("failed_or_inconsistent_probe")
+        if self.pack_sha256 != self.with_computed_digest().pack_sha256:
+            errors.append("pack_digest_mismatch")
+        return tuple(dict.fromkeys(errors))
+
     def with_computed_digest(self) -> "CertifiedLensPack":
         data = self.model_dump(exclude={"pack_sha256"})
         digest = canonical_sha256(data)
         return self.model_copy(update={"pack_sha256": digest})
 
 
-def check_mapping_subset(actual: Mapping[str, Any], expected: Mapping[str, Any]) -> bool:
+def check_mapping_subset(
+    actual: Mapping[str, Any], expected: Mapping[str, Any]
+) -> bool:
     """Helper for exact identity subset checks."""
     return all(actual.get(k) == v for k, v in expected.items())

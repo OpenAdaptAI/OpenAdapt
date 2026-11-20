@@ -369,7 +369,12 @@ class BaseSorServer:
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Content-Length", str(len(payload)))
                 for hk, hv in resp_headers.items():
-                    self.send_header(hk, hv)
+                    if any(ch in str(hk) + str(hv) for ch in "\r\n"):
+                        raise ValueError("invalid HTTP response header")
+                    self.send_header(
+                        str(hk).replace("\r", "").replace("\n", ""),
+                        str(hv).replace("\r", "").replace("\n", ""),
+                    )
                 self.end_headers()
                 self.wfile.write(payload)
 
@@ -2532,7 +2537,12 @@ class FaultInjectingProxy:
                 self.send_response(status)
                 self.send_header("Content-Length", str(len(resp_body)))
                 for hk, hv in resp_headers.items():
-                    self.send_header(hk, hv)
+                    if any(ch in str(hk) + str(hv) for ch in "\r\n"):
+                        raise ValueError("invalid HTTP response header")
+                    self.send_header(
+                        str(hk).replace("\r", "").replace("\n", ""),
+                        str(hv).replace("\r", "").replace("\n", ""),
+                    )
                 self.end_headers()
                 self.wfile.write(resp_body)
 

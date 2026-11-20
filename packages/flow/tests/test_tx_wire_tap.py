@@ -646,9 +646,9 @@ def test_o1_write_completeness_with_10k_rows_and_5_concurrent_writers(
             w.join(timeout=5.0)
 
     assert not bg_errors
-    assert sum(bg_write_counts) >= 20, (
-        "Background writers must actively mutate SQLite concurrently"
-    )
+    assert (
+        sum(bg_write_counts) >= 20
+    ), "Background writers must actively mutate SQLite concurrently"
 
     # Zero interference from 10,000 seed rows or 5 concurrent background writers!
     assert summary.session_id == "tx-o1"
@@ -1122,9 +1122,9 @@ def test_duck_typed_playwright_route_interception_and_abort(
     page = _DuckPage()
     tap.attach_playwright_route(page)
     assert page.registered_pattern == "**/*"
-    assert tap._server is None, (
-        "attach_playwright_route must not require opening a proxy port"
-    )
+    assert (
+        tap._server is None
+    ), "attach_playwright_route must not require opening a proxy port"
 
     # Local scheme about:blank passes straight through uncounted
     r_local = page.dispatch(_DuckRoute(_DuckRequest("about:blank", "GET")))
@@ -1252,17 +1252,38 @@ def test_wire_tap_generality_and_import_boundaries(tmp_path: Path) -> None:
     source = WIRE_TAP_PATH.read_text(encoding="utf-8")
     lowered = source.lower()
     for app_name in FORBIDDEN_APP_NAMES:
-        assert app_name not in lowered, (
-            f"Forbidden app name {app_name!r} in wire_tap.py"
-        )
+        assert (
+            app_name not in lowered
+        ), f"Forbidden app name {app_name!r} in wire_tap.py"
 
     tree = ast.parse(source, filename=str(WIRE_TAP_PATH))
     allowed_non_stdlib = {
         "pydantic",
         "openadapt_flow.tx.types",
+        "openadapt_flow.tx.receipt",  # encrypted private-state writer, already import-light checked
         "openadapt_flow.wire_check",
     }
     stdlib_names = sys.stdlib_module_names
+
+    def permitted_from_import(node):
+        exact_crypto = (
+            node.module == "openadapt_flow"
+            and len(node.names) == 1
+            and node.names[0].name == "crypto"
+        )
+        return (
+            exact_crypto
+            or node.module.split(".")[0] in stdlib_names
+            or node.module in allowed_non_stdlib
+        )
+
+    assert permitted_from_import(ast.parse("from openadapt_flow import crypto").body[0])
+    for unknown in (
+        "from openadapt_flow import recorder",
+        "from openadapt_flow import crypto, recorder",
+        "from openadapt_flow import *",
+    ):
+        assert not permitted_from_import(ast.parse(unknown).body[0])
 
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -1273,7 +1294,7 @@ def test_wire_tap_generality_and_import_boundaries(tmp_path: Path) -> None:
         elif isinstance(node, ast.ImportFrom) and node.module:
             root = node.module.split(".")[0]
             assert root not in FORBIDDEN_IMPORT_ROOTS
-            assert root in stdlib_names or node.module in allowed_non_stdlib
+            assert permitted_from_import(node)
 
     # Verify in a clean subprocess with sys.meta_path refusing vision/ML/playwright
     probe = textwrap.dedent(
