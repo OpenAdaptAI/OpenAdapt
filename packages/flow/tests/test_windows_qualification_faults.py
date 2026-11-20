@@ -229,3 +229,21 @@ def test_backend_rejects_a_mismatched_receipt():
             backend = WindowsBackend(url, auth_token="test-token")
         with pytest.raises(RuntimeError, match="receipt is invalid"):
             backend.stage_qualification_fault("ambiguity", StructuralLocator(**LOCATOR))
+
+
+def test_failed_cleanup_retains_ownership_and_blocks_another_overlay():
+    surface = Surface()
+    controller = surface.controller()
+    receipt = controller.stage("ambiguity", LOCATOR)
+    original = surface.process.terminate
+
+    def unavailable():
+        raise OSError("process cleanup temporarily unavailable")
+
+    surface.process.terminate = unavailable
+    with pytest.raises(OSError):
+        controller.clear(receipt["mutation_id"])
+    with pytest.raises(FaultStagingError, match="mutation_active"):
+        controller.stage("wrong_identity", LOCATOR)
+    surface.process.terminate = original
+    assert controller.clear(receipt["mutation_id"])["cleared"]

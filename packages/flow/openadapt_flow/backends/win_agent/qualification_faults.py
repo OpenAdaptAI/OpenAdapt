@@ -147,7 +147,6 @@ class QualificationFaultController:
         active = self._active
         if active is None or active[0] != mutation_id:
             raise FaultStagingError("qualification_mutation_not_owned")
-        self._active = None
         process = active[1]
         if process.poll() is None:
             process.terminate()
@@ -156,6 +155,7 @@ class QualificationFaultController:
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait(timeout=5)
+        self._active = None
         return {"status": "ok", "cleared": True}
 
     def stage(self, kind: str, locator: dict[str, Any]) -> dict[str, Any]:
