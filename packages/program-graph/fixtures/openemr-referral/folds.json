@@ -2,7 +2,7 @@
   "groups": [
     {
       "id": "section:fields-step_000",
-      "title": "Who: title, first name, last name",
+      "title": "Name",
       "subtitle": "6 steps \u00b7 3 fields",
       "nodes": [
         "for_each::s::step_000",
@@ -15,7 +15,7 @@
     },
     {
       "id": "section:fields-step_009",
-      "title": "Who: date of birth, sex",
+      "title": "Date of birth and sex",
       "subtitle": "4 steps \u00b7 2 fields",
       "nodes": [
         "for_each::s::step_009",
@@ -26,7 +26,7 @@
     },
     {
       "id": "section:fields-step_015",
-      "title": "Contact: street, city, state, postal code",
+      "title": "Address",
       "subtitle": "11 steps \u00b7 4 fields",
       "nodes": [
         "for_each::s::step_015",
@@ -44,7 +44,7 @@
     },
     {
       "id": "section:fields-step_030",
-      "title": "Contact: home phone, email, country",
+      "title": "Phone, email and country",
       "subtitle": "6 steps \u00b7 3 fields",
       "nodes": [
         "for_each::s::step_030",
@@ -57,7 +57,7 @@
     },
     {
       "id": "section:save-step_039",
-      "title": "Create New Patient",
+      "title": "Create the chart",
       "subtitle": "2 steps \u00b7 reads the record back",
       "nodes": [
         "for_each::s::step_039",
@@ -80,6 +80,7 @@
       "display_bundle_content_digest": "a4640b1de38296299d772133532a47ea8538a1890af8b63294caaefe5df3f0db",
       "executed": false,
       "qualified": false,
+      "reviewed_display_titles_sha256": "178aab4b9f1c416eda18b414eba93f918648b07dfdbf5058c9eb82a8b58b1cc9",
       "worklist_source": "signed body-run params in summary order",
       "worklist_report_sha256": [
         "25470d647829c3dfa1a5c20a1fbd136ba7408504f54e76ab3c22675109084460",
