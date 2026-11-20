@@ -15,7 +15,11 @@ an opaque, process-local proof. Serialized envelopes never contain that proof.
 The proof binds the exact authorization, run id, dispatch-binding digest,
 resolved bundle path and content, workflow, input values and worklists, policy,
 admission, read-back configuration, trust registry, remote authority origin and
-dispatch session. Public `Replayer.run`, `deployment.build_replayer` and CLI
+dispatch session. The shared managed-envelope parser rejects unknown raw
+authorization fields before they can disappear into normalized historical
+models. This also covers structured API-step and write-approval child models.
+Declared string aliases and normal omitted defaults remain supported; duplicate
+or misspelled aliases refuse. Public `Replayer.run`, `deployment.build_replayer` and CLI
 execution use this same binding. A public runtime call claims it once, before
 backend callbacks. A second call must verify a new binding. Changing runner-local
 safety settings clears the proof and requires verification again.
@@ -49,14 +53,15 @@ stand in for observing the target that will receive input.
 
 Live delivery accepts only `openadapt.production-delivery-permit-artifact/v3` and payload
 `openadapt.production-delivery-permit-payload/v3`. The signed payload adds one
-exclusive UTC `delivery_not_after` deadline. Its signature domain is
+exclusive UTC `delivery_not_after` deadline, bounded by registry expiry and
+`registry_checked_at + 60 seconds`. Its signature domain is
 `openadapt.production-delivery-permit-payload.v3\0`.
 
 The receiver requires an exact retained pending permit, a matching live owner
 and protected progress, and current dispatch scope. It then samples its trusted
 clock immediately before the input call. That sample must be before both the
 signed deadline and the exact registry expiry, at or after issuance and the
-registry check, and at most 60 seconds after that check. Preparation, local trust
+registry check, and strictly less than 60 seconds after that check. Preparation, local trust
 reads and API form checks happen before this final sample. A denied input does
 not fetch another permit or mark itself delivered.
 
@@ -123,10 +128,16 @@ write with retained evidence, or a refusal that cannot become VERIFIED.
 
 ## Validation
 
-The sequential targeted run on 2026-11-20 passed 326 tests with one skip.
+The sequential targeted run on 2026-11-20 passed 410 tests with one skip.
 It included dispatch scope and stateful invalidation traces, actual CLI replay,
 durable resume, signed multi-request API delivery and process-crash controls,
 real HTTPS permit/ACK delays, continuation lock/read delays, and the existing
 API, durable, and import-surface regressions. Ruff formatting/lint, mypy for 11
 changed source modules, the file-size ratchet and generated review brief checks
 passed. The complete package suite is left to CI; this local run is targeted.
+
+After integration with current main, five CLI approval/authority helper bodies
+were moved to `cli_program_dispatch`; their `__main__` wrappers and dynamic
+admission-mode callback remain. An AST comparison found all five bodies
+unchanged, and the run included the existing approval-mode, admission-pipeline
+and intake regressions. The CLI shrank by 99 lines; its budget was lowered.

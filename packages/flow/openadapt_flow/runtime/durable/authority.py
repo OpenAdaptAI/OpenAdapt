@@ -2107,7 +2107,7 @@ class DurableAuthority:
             raise DurableAuthorityBusy(
                 "remote delivery permit is expired or from the future at input"
             )
-        if received - checked > MAX_PERMIT_SNAPSHOT_AGE:
+        if received - checked >= MAX_PERMIT_SNAPSHOT_AGE:
             raise DurableAuthorityBusy(
                 "remote delivery permit signer-registry check is stale at input"
             )

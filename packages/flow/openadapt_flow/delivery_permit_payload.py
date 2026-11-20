@@ -139,9 +139,13 @@ class ProductionDeliveryPermitV3Payload(_PermitPayload):
             self.qualification_signer_registry_expires_at,
             field="permit registry expires_at",
         )
-        if not issued < deadline <= expires:
+        checked = _parse_utc(
+            self.qualification_signer_registry_checked_at,
+            field="permit registry checked_at",
+        )
+        if not issued < deadline <= min(expires, checked + MAX_PERMIT_SNAPSHOT_AGE):
             raise ValueError(
-                "permit start deadline is not within its registry authority"
+                "permit start deadline is not within its registry and snapshot authority"
             )
         return self
 
