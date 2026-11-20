@@ -48,7 +48,7 @@ means the save was read back, and `HALTED` means it stopped. A warning that
 patient data isn't scrubbed is expected, because the sample's patients are
 made up.
 
-There is no trusted signed installer yet, so the desktop app runs from source. Install
+To run the desktop app from source, install
 [uv](https://docs.astral.sh/uv/), [Rust](https://rustup.rs), Node.js 22, and
 the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for your
 operating system. Then:
@@ -268,12 +268,6 @@ openadapt-flow, this file and openadapt-flow are current.
 
 ## Limits
 
-- Native installers on GitHub releases are still ad-hoc signed on macOS and
-  unsigned on Windows. Linux packages carry a GitHub attestation but no
-  package signature. They are not trusted downloads until Developer ID and
-  SignPath signing are in place, so run the app from source for now.
-  [Which release to download](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/desktop/RELEASES.md)
-  has the current rule.
 - Lists run one item at a time, as one Flow process per item.
 - Each app type needs its own driver. Windows apps run through an agent from
   openadapt-flow on the Windows computer, and Citrix needs the Citrix Workspace
