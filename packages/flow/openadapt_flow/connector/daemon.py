@@ -342,6 +342,9 @@ def run_loop(
     log(f"[connector] polling {settings.control_plane_url} (org {settings.org_id})")
 
     if once:
+        if settings.pending_token and persist_token is not None:
+            if not finish_rotation(client, settings.pending_token, persist_token, log):
+                return 1
         try:
             result = run_once(
                 client,
@@ -385,6 +388,13 @@ def run_loop(
     backoff = 1.0
     try:
         while True:
+            # A lost rotate response or failed local commit leaves one durable
+            # candidate. Confirm it before polling or minting another token.
+            if settings.pending_token and persist_token is not None:
+                if not finish_rotation(
+                    client, settings.pending_token, persist_token, log
+                ):
+                    return 1
             handled += active.reap(log)
             cap = min(settings.max_workers, client.control.max_concurrent_leases)
             if len(active.ids()) >= cap:
