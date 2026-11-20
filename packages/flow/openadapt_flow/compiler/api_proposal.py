@@ -58,6 +58,7 @@ from typing import Any, Literal, Optional
 
 from openadapt_flow import network_capture as nc
 from openadapt_flow import sealed_set as _sealed
+from openadapt_flow.bundle_validation import derive_authored_workflow
 from openadapt_flow.ir import (
     ActionKind,
     ApiAdmission,
@@ -1075,8 +1076,8 @@ def propose_api_step(
     new_steps = [
         s.model_copy(update={"api_binding": binding}) if s is save else s for s in steps
     ]
-    workflow = workflow.model_copy(update={"steps": new_steps})
-    return workflow, new_steps[-1], []
+    workflow = derive_authored_workflow(workflow, update={"steps": new_steps})
+    return workflow, workflow.steps[-1], []
 
 
 _UUID = re.compile(
@@ -1396,7 +1397,8 @@ def _propose_json(
     new_steps = [
         s.model_copy(update={"api_binding": binding}) if s is save else s for s in steps
     ]
-    return workflow.model_copy(update={"steps": new_steps}), new_steps[-1], []
+    updated = derive_authored_workflow(workflow, update={"steps": new_steps})
+    return updated, updated.steps[-1], []
 
 
 def proposed_api_steps(workflow: Workflow) -> list[Step]:
@@ -1631,4 +1633,4 @@ def admit_api_step(
         raise ApiProposalError(
             "no proposed API step to admit" + (f" on {step_id}" if step_id else "")
         )
-    return workflow.model_copy(update={"steps": steps}), admitted
+    return derive_authored_workflow(workflow, update={"steps": steps}), admitted

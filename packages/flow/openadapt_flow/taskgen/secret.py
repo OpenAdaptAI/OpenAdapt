@@ -18,6 +18,8 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+from openadapt_flow.private_file import open_binary
+
 SALT_ENV = "TASKGEN_SALT_FILE"
 SALT_CHECK_ENV = "TASKGEN_SALT_CHECK_FILE"
 CHECK_SCHEMA = "openadapt.taskgen-salt-check/v1"
@@ -55,7 +57,7 @@ def _read_salt_fd(fd: int, path: str) -> bytes:
 
 def _read_salt() -> bytes:
     path = _salt_path()
-    fd = os.open(path, os.O_RDONLY)  # the salt is only ever opened read-only
+    fd = open_binary(path, os.O_RDONLY)  # the salt is only ever opened read-only
     try:
         return _read_salt_fd(fd, path)
     finally:
@@ -138,7 +140,7 @@ def write_check(path: Path) -> None:
         )
     if os.path.realpath(out) == os.path.realpath(salt_path):
         raise CheckExists(f"{out} is the salt file itself: refusing")
-    fd = os.open(salt_path, os.O_RDONLY)  # read-only: the salt is never written
+    fd = open_binary(salt_path, os.O_RDONLY)  # read-only: the salt is never written
     try:
         salt = _read_salt_fd(fd, salt_path)
     finally:
@@ -148,7 +150,7 @@ def write_check(path: Path) -> None:
     tmp = out.with_name(f".{out.name}.{os.getpid()}.tmp")
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
     try:
-        tfd = os.open(tmp, flags, 0o600)
+        tfd = open_binary(tmp, flags, 0o600)
     except FileExistsError as exc:
         raise CheckExists(f"{tmp} exists: refusing to touch it") from exc
     try:

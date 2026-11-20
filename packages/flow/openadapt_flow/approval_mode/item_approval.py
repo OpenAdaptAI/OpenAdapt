@@ -91,6 +91,7 @@ from openadapt_flow.approval_mode.signed_policy import (
     verify_grant,
 )
 from openadapt_flow.approval_mode.switch import canonical_json
+from openadapt_flow.private_file import open_binary
 
 REQUEST_SCHEMA: Literal["openadapt.item-approval-request/v1"] = (
     "openadapt.item-approval-request/v1"
@@ -597,7 +598,7 @@ def _open_flags(base: int) -> int:
 
 
 def _read_regular(path: Path, *, limit: int = _MAX_FILE_BYTES) -> bytes:
-    descriptor = os.open(path, _open_flags(os.O_RDONLY))
+    descriptor = open_binary(path, _open_flags(os.O_RDONLY))
     try:
         info = os.fstat(descriptor)
         if not stat.S_ISREG(info.st_mode):
@@ -624,7 +625,9 @@ def _write_exclusive(path: Path, payload: bytes) -> None:
     """Create ``path`` once (0600), never replacing anything already there."""
 
     tmp = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
-    descriptor = os.open(tmp, _open_flags(os.O_WRONLY | os.O_CREAT | os.O_EXCL), 0o600)
+    descriptor = open_binary(
+        tmp, _open_flags(os.O_WRONLY | os.O_CREAT | os.O_EXCL), 0o600
+    )
     try:
         view = memoryview(payload)
         while view:
@@ -650,7 +653,7 @@ def _fsync_dir(path: Path) -> None:
     if hasattr(os, "O_DIRECTORY"):
         flags |= os.O_DIRECTORY
     try:
-        descriptor = os.open(path, flags)
+        descriptor = open_binary(path, flags)
     except OSError:
         return
     try:

@@ -23,6 +23,7 @@ Opt-in: skipped unless ``OAFLOW_WINDOWS_HOSTED_E2E=1`` on Windows.
 from __future__ import annotations
 
 import base64
+import io
 import json
 import os
 import shutil
@@ -98,6 +99,16 @@ class _Person:
         rows = json.loads(shown.stdout)["requests"]
         waiting = [r for r in rows if r["status"] in ("waiting", "timed_out")]
         for row in waiting:
+            # A byte-corrupt approval frame cannot be shown to the approver.
+            from PIL import Image
+
+            from openadapt_flow.approval_mode.item_approval import ItemApprovalStore
+
+            store = ItemApprovalStore(self.run_dir)
+            request = store.read_request(row["request_id"])
+            frame = store.read_frame(request)
+            with Image.open(io.BytesIO(frame)) as image:
+                image.verify()
             self.shown.append(row)
             answered = _flow(
                 "item-approval",
