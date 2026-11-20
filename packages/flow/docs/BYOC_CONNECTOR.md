@@ -113,7 +113,9 @@ service runs that installation's `python.exe`, and `install` refuses a venv.
 - **Token rotation.** For a file-enrolled connector, the service stores the
   active and pending rotation in its virtual account's Windows Credential
   Manager. The entry is local to the machine. The service retries the pending
-  candidate after restart before polling. If Cloud can no longer confirm it,
+  candidate after restart before polling. Clearing an old pending field in
+  the enrollment file preserves the committed rotation. The service waits
+  between failed confirmations. If Cloud can no longer confirm the candidate,
   replace the enrollment token as an administrator and restart the service.
   An environment override for the token, control-plane URL or organization
   leaves rotation with the operator.

@@ -278,6 +278,7 @@ def serve(
                 log=logger.info,
                 persist_token=rotation.persist_token if rotation else None,
                 persist_pending=rotation.persist_pending if rotation else None,
+                stop_requested=stop_event,
             )
             if stop_event.is_set():
                 break

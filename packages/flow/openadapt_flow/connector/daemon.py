@@ -328,6 +328,7 @@ def run_loop(
     persist_token: Optional[TokenPersister] = None,
     persist_pending: Optional[TokenPersister] = None,
     heartbeat_s: float = HEARTBEAT_S,
+    stop_requested: Optional[threading.Event] = None,
 ) -> int:
     """Poll -> execute -> callback -> ack until interrupted.
 
@@ -368,6 +369,7 @@ def run_loop(
 
     active = _ActiveJobs()
     stop = threading.Event()
+    retry_stop = stop_requested if stop_requested is not None else stop
     pool = ThreadPoolExecutor(
         max_workers=settings.max_workers, thread_name_prefix="oa-job"
     )
@@ -387,14 +389,16 @@ def run_loop(
     handled = 0
     backoff = 1.0
     try:
-        while True:
+        while not retry_stop.is_set():
             # A lost rotate response or failed local commit leaves one durable
             # candidate. Confirm it before polling or minting another token.
             if settings.pending_token and persist_token is not None:
                 if not finish_rotation(
-                    client, settings.pending_token, persist_token, log
+                    client, settings.pending_token, persist_token, log, attempts=1
                 ):
-                    return 1
+                    retry_stop.wait(backoff)
+                    backoff = min(MAX_BACKOFF_S, backoff * 2)
+                    continue
             handled += active.reap(log)
             cap = min(settings.max_workers, client.control.max_concurrent_leases)
             if len(active.ids()) >= cap:

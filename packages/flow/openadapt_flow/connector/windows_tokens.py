@@ -34,9 +34,15 @@ class ServiceTokenRotation:
             settings.control_plane_url,
             settings.org_id,
             settings.token,
-            settings.pending_token,
         ]
-        self.binding = hashlib.sha256(json.dumps(enrollment).encode()).hexdigest()
+        self.binding = (
+            "v2:" + hashlib.sha256(json.dumps(enrollment).encode()).hexdigest()
+        )
+        # The first format also included a mutable field from connector.toml.
+        # An exact match is enough to migrate. A mismatch is ambiguous.
+        self._legacy_binding = hashlib.sha256(
+            json.dumps([*enrollment, settings.pending_token]).encode()
+        ).hexdigest()
 
     def restore(self) -> None:
         try:
@@ -46,9 +52,13 @@ class ServiceTokenRotation:
                 return
             raise RuntimeError("service credential store unavailable") from None
         identity = cred.get("UserName")
-        if not isinstance(identity, str) or not re.fullmatch(r"[0-9a-f]{64}", identity):
-            raise RuntimeError("invalid service enrollment binding")
-        if identity != self.binding:
+        legacy = identity == self._legacy_binding
+        if not legacy and (
+            not isinstance(identity, str)
+            or not re.fullmatch(r"v2:[0-9a-f]{64}", identity)
+        ):
+            raise RuntimeError("unrecognized service enrollment binding")
+        if not legacy and identity != self.binding:
             # An administrator changed the enrollment. Its credentials take
             # precedence over any token saved for the previous destination.
             self.api.CredDelete(_TARGET, self.api.CRED_TYPE_GENERIC)
@@ -68,6 +78,9 @@ class ServiceTokenRotation:
             raise RuntimeError("invalid service rotation state") from None
         self.redact(active)
         self.redact(pending)
+        if legacy:
+            self._save(active or self.bootstrap, pending)
+            return
         self.settings.token = active or self.bootstrap
         self.settings.pending_token = pending
 

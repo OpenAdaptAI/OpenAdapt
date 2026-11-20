@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import os
 import threading
 
 import httpx
@@ -149,6 +150,119 @@ def test_store_write_failure_retains_durable_pending(tmp_path, monkeypatch):
     restarted = ConnectorSettings(token=BOOTSTRAP)
     ServiceTokenRotation(store, tmp_path, restarted, lambda _: None).restore()
     assert restarted.token == BOOTSTRAP and restarted.pending_token == CANDIDATE
+
+
+def test_clearing_file_pending_keeps_rotated_credential(tmp_path):
+    stale = "oaconn_" + "b" * 64
+    store = CredentialSet()
+    enrollment = ConnectorSettings(token=BOOTSTRAP, pending_token=stale)
+    journal = ServiceTokenRotation(store, tmp_path, enrollment, lambda _: None)
+    journal.persist_token(stale)
+    journal.persist_pending(CANDIDATE)
+    journal.persist_token(CANDIDATE)
+
+    # The administrator removes only the stale pending field from the file.
+    restarted = ConnectorSettings(token=BOOTSTRAP)
+    ServiceTokenRotation(store, tmp_path, restarted, lambda _: None).restore()
+    assert restarted.token == CANDIDATE and restarted.pending_token is None
+    assert store.entry is not None
+
+
+def test_confirmation_retries_same_candidate_until_success(tmp_path, monkeypatch):
+    config = tmp_path / "connector.toml"
+    config.write_text(
+        f'[connector]\ncontrol_plane_url = "https://cloud.example"\ntoken = "{BOOTSTRAP}"\n'
+        f'pending_token = "{CANDIDATE}"\n'
+    )
+    # A transient outage lasts longer than the original three-attempt limit.
+    monkeypatch.setattr("openadapt_flow.connector.daemon.time.sleep", lambda _: None)
+    monkeypatch.setattr("openadapt_flow.connector.daemon.MAX_BACKOFF_S", 0.01)
+    stop = threading.Event()
+    paths = []
+    digests = []
+
+    def handler(request):
+        paths.append(request.url.path)
+        if request.url.path.endswith("/rotate"):
+            digests.append(json.loads(request.content)["new_token_sha256"])
+            assert request.headers["Authorization"] == "Bearer " + BOOTSTRAP
+            return httpx.Response(503 if len(digests) <= 3 else 200, json={})
+        assert request.headers["Authorization"] == "Bearer " + CANDIDATE
+        stop.set()
+        return httpx.Response(204)
+
+    logger, redactor = ws.build_logger(tmp_path, name="test.service-rotation-retry")
+    assert (
+        ws.serve(
+            tmp_path,
+            stop,
+            logger,
+            redactor=redactor,
+            credential_api=CredentialSet(),
+            client_kwargs={"transport": httpx.MockTransport(handler)},
+        )
+        == 0
+    )
+    assert digests == [hashlib.sha256(CANDIDATE.encode()).hexdigest()] * 4
+    assert paths == ["/api/connector/rotate"] * 4 + ["/api/connector/poll"]
+
+
+@pytest.mark.parametrize("same_enrollment", [True, False])
+def test_legacy_record_requires_its_original_binding(tmp_path, same_enrollment):
+    old_file_pending = "oaconn_" + "b" * 64
+    original = ConnectorSettings(token=BOOTSTRAP, pending_token=old_file_pending)
+    store = CredentialSet()
+    journal = ServiceTokenRotation(store, tmp_path, original, lambda _: None)
+    journal.persist_token(CANDIDATE)
+    v1_fields = [
+        os.path.normcase(str(tmp_path.resolve())),
+        original.control_plane_url,
+        original.org_id,
+        BOOTSTRAP,
+        old_file_pending,
+    ]
+    store.entry["UserName"] = hashlib.sha256(json.dumps(v1_fields).encode()).hexdigest()
+    entry = store.entry.copy()
+    restarted = ConnectorSettings(
+        token=BOOTSTRAP, pending_token=old_file_pending if same_enrollment else None
+    )
+    journal = ServiceTokenRotation(store, tmp_path, restarted, lambda _: None)
+    if same_enrollment:
+        journal.restore()
+        assert restarted.token == CANDIDATE and restarted.pending_token is None
+        assert store.entry["UserName"] == journal.binding
+    else:
+        with pytest.raises(RuntimeError, match="enrollment binding"):
+            journal.restore()
+        assert restarted.token == BOOTSTRAP and store.entry == entry
+
+
+def test_operator_stop_interrupts_confirmation_backoff(tmp_path):
+    (tmp_path / "connector.toml").write_text(
+        f'[connector]\ncontrol_plane_url = "https://cloud.example"\ntoken = "{BOOTSTRAP}"\n'
+        f'pending_token = "{CANDIDATE}"\n'
+    )
+    stop = threading.Event()
+    paths = []
+
+    def handler(request):
+        paths.append(request.url.path)
+        stop.set()
+        return httpx.Response(503)
+
+    logger, redactor = ws.build_logger(tmp_path, name="test.service-rotation-stop")
+    assert (
+        ws.serve(
+            tmp_path,
+            stop,
+            logger,
+            redactor=redactor,
+            credential_api=CredentialSet(),
+            client_kwargs={"transport": httpx.MockTransport(handler)},
+        )
+        == 0
+    )
+    assert paths == ["/api/connector/rotate"]
 
 
 def test_environment_token_keeps_its_external_lifecycle(tmp_path, monkeypatch):
