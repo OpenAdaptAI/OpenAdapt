@@ -35,7 +35,7 @@ def test_native_windows_campaign_reads_back_normal_and_all_faults(
 ):
     from openadapt_flow.adapters.desktop_recorder import record_desktop_demo
     from openadapt_flow.compiler import compile_recording
-    from openadapt_flow.ir import ActionKind
+    from openadapt_flow.ir import ActionKind, StructuralLocator
     from openadapt_flow.qualify import QualifyHooks, parse_verify_config, qualify
 
     monkeypatch.setenv("OPENADAPT_BUNDLE_KEY", "synthetic-windows-qualification-key")
@@ -55,11 +55,21 @@ def test_native_windows_campaign_reads_back_normal_and_all_faults(
             rec.click(*points["searchButton"])
             time.sleep(0.4)
             rec.click(*points["noteBox"])
-            rec.type_text(DEMO_NOTE)
+            rec.type_text(DEMO_NOTE, param="note")
             rec.click(*points["saveButton"])
             time.sleep(0.4)
 
         recording = record_desktop_demo(backend, tmp_path / "recording", demonstrate)
+        # The demonstrator marks the record identity, just as record --identifier
+        # does. The real UIA rectangle supplies the crop; no identity gate is relaxed.
+        header = backend.locate_structural(
+            StructuralLocator(automation_id="patientHeader")
+        )
+        assert header is not None and header.region is not None
+        meta_path = recording / "meta.json"
+        metadata = json.loads(meta_path.read_text(encoding="utf-8"))
+        metadata["identifier_region"] = [int(value) for value in header.region]
+        meta_path.write_text(json.dumps(metadata), encoding="utf-8")
         assert (
             next(row for row in host.rows() if row["id"] == TARGET_ID)["note"]
             == DEMO_NOTE
@@ -68,7 +78,9 @@ def test_native_windows_campaign_reads_back_normal_and_all_faults(
         workflow = compile_recording(
             recording, bundle, name="native-qualification-fixture"
         )
-        save = [step for step in workflow.steps if step.action is ActionKind.CLICK][-1]
+        clicks = [step for step in workflow.steps if step.action is ActionKind.CLICK]
+        assert all(step.identity_armed for step in clicks)
+        save = clicks[-1]
         save.risk = "irreversible"
         workflow.save(bundle)
         config = parse_verify_config(

@@ -151,3 +151,66 @@ def test_update_supports_numeric_and_null_values_without_allowing_collateral_cha
         assert judge(BEFORE, after, effects)["passed"]
         after[1]["value"] = expected
         assert not judge(BEFORE, after, effects)["passed"]
+
+
+def test_record_readback_update_state_machine_preserves_the_declared_lens():
+    """The public wrapper and model agree across successive typed updates."""
+    from hypothesis import given, settings
+    from hypothesis import strategies as st
+
+    values = st.one_of(
+        st.text(max_size=16), st.none(), st.integers(min_value=-10, max_value=10)
+    )
+
+    @settings(max_examples=25, deadline=None)
+    @given(st.lists(values, min_size=1, max_size=8))
+    def transitions(sequence):
+        rows = deepcopy(BEFORE)
+        for value in sequence:
+            expression = (
+                ValueExpr(null=True)
+                if value is None
+                else ValueExpr(literal=str(value), number=True)
+                if isinstance(value, int)
+                else ValueExpr(literal=value)
+            )
+            effects = [
+                effect(
+                    EffectKind.FIELD_EQUALS,
+                    match={"id": ValueExpr(literal="1")},
+                    field="value",
+                    value=expression,
+                )
+            ]
+            expected = deepcopy(rows)
+            expected[0]["value"] = value
+            current = [rows]
+            readback = RecordReadback(
+                SimpleNamespace(_fetch_records=lambda: current[0]),
+                SimpleNamespace(effects=effects),
+                {},
+            )
+            readback.snapshot()
+            current[0] = list(reversed(expected))
+            assert readback.judge("exact_record", SimpleNamespace(success=True))[
+                "passed"
+            ]
+            for planted in [
+                expected + [dict(expected[1])],
+                [{**expected[0], "untouched": "unauthorized"}, expected[1]],
+                expected[:1],
+            ]:
+                current[0] = planted
+                assert not readback.judge(
+                    "exact_record", SimpleNamespace(success=True)
+                )["passed"]
+                assert not readback.judge(
+                    "no_mutation", SimpleNamespace(success=False)
+                )["passed"]
+            current[0] = rows
+            assert readback.judge("no_mutation", SimpleNamespace(success=False))[
+                "passed"
+            ]
+            rows = expected
+
+    transitions()
