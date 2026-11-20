@@ -1569,7 +1569,8 @@ _FIELD_CREDENTIAL_JS = r"""(el) => {
     if (el.tagName !== 'INPUT') {
         // Closed shadow roots expose only their focused host. An opaque
         // focused host is not evidence that the control is non-sensitive.
-        if (!el.matches('textarea, select, button') && el.matches(':focus')) {
+        if (!el.matches('textarea, select') &&
+                (el === el.ownerDocument.activeElement || el.matches(':focus-within'))) {
             return 'unknown';
         }
         return 'none';

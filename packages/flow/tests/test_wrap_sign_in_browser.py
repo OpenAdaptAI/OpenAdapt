@@ -144,20 +144,27 @@ def test_username_pairing_enters_open_shadow_roots(
     assert _kinds(browser, html, ["#u", "#p"]) == ["username", "password"]
 
 
+@pytest.mark.parametrize("tag", ["div", "span", "secret-widget"])
+@pytest.mark.parametrize("delegates_focus", [False, True])
 def test_closed_shadow_control_refuses_declared_input_before_recording(
     browser: Any,
     tmp_path: Any,
+    tag: str,
+    delegates_focus: bool,
 ) -> None:
     from openadapt_flow.backends.playwright_backend import PlaywrightBackend
     from openadapt_flow.recorder import CredentialFieldError, Recorder
 
     page = browser.new_page()
     try:
-        page.set_content("""<div id="host"></div><script>
-        const root = document.querySelector('#host').attachShadow({mode:'closed'});
-        root.innerHTML = '<input id="pw" type="password">';
-        window.focusSecret = () => root.querySelector('#pw').focus();
-        </script>""")
+        page.set_content(
+            f'<{tag} id="host"></{tag}>'
+            + "<script>const root = document.querySelector('#host').attachShadow("
+            + "{mode:'closed', delegatesFocus:"
+            + str(delegates_focus).lower()
+            + '});root.innerHTML = \'<input id="pw" type="password">\';'
+            + "window.focusSecret = () => root.querySelector('#pw').focus();</script>"
+        )
         page.evaluate("window.focusSecret()")
         backend = PlaywrightBackend(page)
         assert backend.focused_field_credential()["kind"] == "unknown"
@@ -165,7 +172,7 @@ def test_closed_shadow_control_refuses_declared_input_before_recording(
         recorder.withhold_credentials({"password": "closed-shadow-secret"})
         with pytest.raises(CredentialFieldError):
             recorder.type_text("closed-shadow-secret")
-        assert page.evaluate("document.activeElement.tagName") == "DIV"
+        assert page.evaluate("document.activeElement.tagName") == tag.upper()
         recorder.finish()
         assert all(
             b"closed-shadow-secret" not in p.read_bytes()
@@ -204,3 +211,8 @@ def test_ambiguous_password_pairing_refuses_before_any_declared_value_is_typed(
         )
     finally:
         page.close()
+
+
+def test_noneditable_focus_is_not_proof_of_an_ordinary_text_field(browser: Any) -> None:
+    html = '<button id="button">Continue</button><textarea id="note"></textarea>'
+    assert _kinds(browser, html, ["#button", "#note"]) == ["unknown", None]
