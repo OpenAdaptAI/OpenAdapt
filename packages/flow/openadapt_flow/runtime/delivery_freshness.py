@@ -56,7 +56,8 @@ def recheck_pending_delivery(
     from openadapt_flow.backend import StructuralResolutionRefused
 
     try:
-        if replayer.managed_dispatch_binding is not None:
+        # Only Replayer.__init__ sets the binding; absent means not managed.
+        if getattr(replayer, "managed_dispatch_binding", None) is not None:
             workflow = replayer._execution_workflow_source
             if workflow is None:
                 raise DurableAuthorityBusy("the managed execution snapshot is missing")

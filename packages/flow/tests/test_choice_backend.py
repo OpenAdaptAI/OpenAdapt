@@ -1086,6 +1086,8 @@ def test_pre_mutation_choice_refusal_preserves_earlier_delivery_scope(prior) -> 
 
     replay = Replayer.__new__(Replayer)
     replay._active_delivery_acknowledgers = ()
+    # An unmanaged run: the pre-input recheck has no dispatch binding to verify.
+    replay.managed_dispatch_binding = None
     result = StepResult(
         step_id="choice", intent="choose", ok=False, delivery_attempted=prior
     )
