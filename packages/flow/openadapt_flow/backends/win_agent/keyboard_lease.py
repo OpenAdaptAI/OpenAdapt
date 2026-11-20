@@ -208,6 +208,7 @@ class KeyboardLeaseController:
         clock: Callable[[], float] = time.monotonic,
         lifetime_s: float = 15.0,
         prepare: Callable[[dict[str, Any]], None] | None = None,
+        current_focus: Callable[[], dict[str, Any]] | None = None,
     ) -> None:
         self._uia, self._capture, self._context, self._deliver = (
             uia,
@@ -217,6 +218,7 @@ class KeyboardLeaseController:
         )
         self._clock, self._lifetime_s = clock, lifetime_s
         self._prepare = prepare
+        self._current_focus = current_focus or (lambda: self._uia("focused-target", {}))
         self._guard_checks, self._delivery_started = 0, 0.0
         self._delivering: tuple[dict[str, Any], dict[str, Any], float] | None = None
         self._pending: (
@@ -342,7 +344,7 @@ class KeyboardLeaseController:
         if self._clock() > deadline:
             uncertain("deadline_during_input")
         try:
-            current = _target(self._uia("focused-target", {}))
+            current = _target(self._current_focus())
         except KeyboardLeaseError:
             uncertain("focused_target_unavailable_during_input")
             return
@@ -355,3 +357,5 @@ class KeyboardLeaseController:
             return
         if current_context != context:
             uncertain("context_changed_during_input")
+        if self._clock() > deadline:
+            uncertain("deadline_during_input")

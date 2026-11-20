@@ -991,8 +991,15 @@ def _uia_field_label(control: object) -> Optional[str]:
     return name or None
 
 
-def _focused_target(auto: Any) -> Optional[dict[str, Any]]:
-    """The actual visible, uniquely named focused control, without its value."""
+def _focused_target(
+    auto: Any, *, verify_locator_uniqueness: bool = True
+) -> Optional[dict[str, Any]]:
+    """Read actual focus; census at observation/handoff, runtime identity at edges.
+
+    A lease already names one exact native runtime element. Per-edge checks
+    re-read focus twice, locator, RuntimeId/process/HWND/class, bounds and hit
+    test. They do not resolve a locator again or choose a replacement target.
+    """
     try:
         focused = auto.GetFocusedControl()
     except Exception:  # noqa: BLE001 - no observation, no target evidence
@@ -1011,17 +1018,20 @@ def _focused_target(auto: Any) -> Optional[dict[str, Any]]:
     candidate = _candidate(target)
     if candidate is None:
         return None
-    locator = {
-        key: candidate.get(key)
-        for key in ("automation_id", "role", "name", "window_name")
-    }
-    found, truncated = _find_candidates(locator, auto)
-    if (
-        truncated
-        or len(found) != 1
-        or not hmac.compare_digest(found[0][1]["fingerprint"], candidate["fingerprint"])
-    ):
-        return None
+    if verify_locator_uniqueness:
+        locator = {
+            key: candidate.get(key)
+            for key in ("automation_id", "role", "name", "window_name")
+        }
+        found, truncated = _find_candidates(locator, auto)
+        if (
+            truncated
+            or len(found) != 1
+            or not hmac.compare_digest(
+                found[0][1]["fingerprint"], candidate["fingerprint"]
+            )
+        ):
+            return None
     if not _hits_target(auto, target, candidate):
         return None
     # Focus may change while enumerating the tree: the second live read must
@@ -1636,9 +1646,14 @@ def _perform_uia_initialized(
             locator = None
         return {"status": "ok", "locator": locator}
 
-    if operation == "focused-target":
+    if operation in {"focused-target", "focused-runtime-target"}:
         _exact_object(payload, label=operation)
-        return {"status": "ok", "target": _focused_target(auto)}
+        return {
+            "status": "ok",
+            "target": _focused_target(
+                auto, verify_locator_uniqueness=operation == "focused-target"
+            ),
+        }
 
     if operation == "focused-field-label":
         _exact_object(payload, required=frozenset(), label=operation)
@@ -2968,6 +2983,7 @@ def make_handler_class(
             context_fn,
             deliver_keyboard,
             prepare=_prepare_keyboard_input if input_fn is _perform_input else None,
+            current_focus=lambda: uia_fn("focused-runtime-target", {}),
         )
 
     class AgentHandler(BaseHTTPRequestHandler):

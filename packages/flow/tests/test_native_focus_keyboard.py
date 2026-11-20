@@ -340,3 +340,45 @@ def test_recorder_declines_a_focus_observation_that_cannot_be_frozen(tmp_path):
     event = json.loads((recording / "events.jsonl").read_text().splitlines()[0])
     assert "focus_before" not in event
     assert backend.calls == [("key", "Enter")]
+
+
+def test_edge_probe_rechecks_actual_fingerprint_and_hit_test_without_locator_search(
+    monkeypatch,
+):
+    from openadapt_flow.backends.win_agent import server
+
+    auto, first = focused_auto()
+    admitted = _focused_target(auto)
+
+    def forbidden(*args):
+        raise AssertionError("an input edge cannot resolve a locator again")
+
+    monkeypatch.setattr(server, "_find_candidates", forbidden)
+
+    def read():
+        return _perform_uia_initialized(auto, "focused-runtime-target", {})["target"]
+
+    assert read() == admitted
+    first.runtime_id = (9, 9)
+    assert read()["fingerprint"] != admitted["fingerprint"]
+    first.runtime_id = (1, 2)
+    first.BoundingRectangle.left += 1
+    assert read()["fingerprint"] != admitted["fingerprint"]
+    auto.ControlFromPoint = lambda *_: _FakeControl("ButtonControl", runtime_id=(8, 8))
+    assert read() is None
+
+
+def test_edge_probe_refuses_focus_replacement_during_its_double_read():
+    auto, first = focused_auto()
+    other = _FakeControl(
+        "EditControl",
+        automation_id="entry",
+        name="Entry",
+        runtime_id=(9, 9),
+        bounds=(400, 200, 800, 300),
+    )
+    reads = iter([first, other])
+    auto.GetFocusedControl = lambda: next(reads)
+    assert (
+        _perform_uia_initialized(auto, "focused-runtime-target", {})["target"] is None
+    )

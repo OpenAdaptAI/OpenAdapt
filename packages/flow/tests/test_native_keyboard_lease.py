@@ -269,3 +269,53 @@ def test_http_uncertainty_diagnostics_never_attest_zero_input_or_expose_contents
         assert len(surface.calls) == 1
     finally:
         agent.close()
+
+
+@pytest.mark.parametrize("change", ["runtime_target", "context", "deadline"])
+def test_handoff_census_and_edge_observation_share_one_bound_identity(change):
+    from openadapt_flow.backends.win_agent.keyboard_lease import (
+        KeyboardDeliveryUncertain,
+    )
+    from openadapt_flow.backends.win_agent.server import _delivery_receipt
+
+    surface = Surface()
+    full, edges = [], []
+
+    def census(operation, data):
+        full.append(operation)
+        return surface.uia(operation, data)
+
+    def current():
+        edges.append(True)
+        return surface.uia("focused-target", {})
+
+    def deliver(payload):
+        surface.calls.append(payload)
+        surface.controller.require_current_target()
+        if change == "runtime_target":
+            surface.target["fingerprint"] = "f" * 64
+        elif change == "context":
+            surface.context["session"] = "f" * 64
+        else:
+            surface.now = 20
+        surface.controller.require_current_target()
+        return _delivery_receipt("physical_press", native=False)
+
+    surface.controller = KeyboardLeaseController(
+        census,
+        lambda: PNG,
+        lambda: dict(surface.context),
+        deliver,
+        clock=lambda: surface.now,
+        current_focus=current,
+    )
+    lease = surface.controller.issue()
+    with pytest.raises(KeyboardDeliveryUncertain) as error:
+        surface.controller.deliver(
+            lease["lease_id"],
+            lease["frame_sha256"],
+            {"action": "press", "keys": ["enter"]},
+        )
+    assert full == ["focused-target"] * 3
+    assert len(surface.calls) == 1 and edges
+    assert "no_keyboard_input_delivered" not in error.value.payload()

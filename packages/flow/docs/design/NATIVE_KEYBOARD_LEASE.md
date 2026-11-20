@@ -15,7 +15,12 @@ An authenticated agent that advertises `native_keyboard_lease_v1` issues one
 application/executable/session/environment and exact PNG bytes. Issuing a lease
 invalidates its predecessor. Delivery consumes it before checking bindings.
 Unicode clipboard preparation finishes before final checks. Every physical
-keyboard edge checks focus, context and the delivery deadline. Uncertain calls
+keyboard edge checks actual focus twice, the current locator, RuntimeId/process,
+HWND/class, bounds and hit-test, plus context and the delivery deadline. Full
+locator uniqueness census remains mandatory at issuance and final pre-input
+handoff. The edge check compares the already-bound runtime fingerprint; it
+never re-resolves the desktop or chooses another matching control. Replacement
+of a control or context during input becomes uncertain and cannot be retried. Uncertain calls
 release held keys and produce no positive acknowledgement. A key that
 intentionally changes focus can therefore be reported uncertain.
 
