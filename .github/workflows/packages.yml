@@ -492,12 +492,16 @@ jobs:
         # database drivers. The MySQL charset guard must refuse a latin1
         # result charset before anything is written.
         run: |
+          verify_wheels=("$RUNNER_TEMP"/dist/openadapt_verify-*.whl)
+          if [[ ${#verify_wheels[@]} -ne 1 || ! -f ${verify_wheels[0]} ]]; then
+            echo "Expected exactly one built openadapt-verify wheel" >&2
+            exit 1
+          fi
           python -m venv "$RUNNER_TEMP/tests"
           "$RUNNER_TEMP/tests/bin/python" -m pip install --quiet --no-cache-dir \
-            --find-links "$RUNNER_TEMP/dist" 'openadapt-verify[mysql]' \
+            --find-links "$RUNNER_TEMP/dist" "${verify_wheels[0]}[mysql]" \
             "$RUNNER_TEMP"/dist/openadapt_types-*.whl \
             "$RUNNER_TEMP"/dist/openadapt_flow-*.whl \
-            "$RUNNER_TEMP"/dist/openadapt_verify-*.whl \
             'psycopg[binary]' pytest==9.2.0
           cd packages/verify
           "$RUNNER_TEMP/tests/bin/python" -m pytest -q -p no:cacheprovider \
