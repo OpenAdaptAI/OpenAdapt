@@ -733,28 +733,48 @@ def test_occupied_bundle_does_not_publish_into_the_fresh_recording(
     assert (bundle / CONTRACT_FILENAME).read_bytes() == prior
 
 
-def test_fresh_bundle_and_recording_publish_both_destinations(tmp_path, e2e_service):
+def test_fresh_bundle_and_recording_publish_both_destinations(
+    tmp_path, e2e_service, capsys
+):
+    """Publish the proof and TODO draft, and report that published refusal.
+
+    The proof is in the recording and the TODO draft is in the bundle. The
+    cue and the exit status come from that proof, not from the bundle.
+    """
     rec = effect_e2e_recording(tmp_path / "rec", e2e_service.base_url)
     bundle = _write_shaped_bundle(tmp_path / "bundle")
     code = main(["scaffold-verifier", str(bundle), "--recording", str(rec)])
-    assert code == 0
+    out = capsys.readouterr().out
+    assert code == 2, out
     proof = json.loads((rec / PROOF_NAME).read_text())
     assert proof["status"] == "refused"
     assert proof["approved"] is False
+    reason = proof["refusal_reason"]
+    assert reason and "collateral_unaudited" in reason
+    proof_path = rec / PROOF_NAME
+    assert (
+        "Record check: REFUSED. A recorded read can't see the whole save, "
+        f"so no check was written: {reason} ({proof_path})."
+    ) in out
+    assert f"Recorded read REFUSED: {reason}. This is a TODO draft." in out
+    assert "No read in the recording" not in out
+    assert str(bundle / PROOF_NAME) not in out
     assert not (rec / PROPOSED_NAME).exists()
     assert not (rec / CONTRACT_FILENAME).exists()
     assert (bundle / CONTRACT_FILENAME).is_file()
     assert not (bundle / PROOF_NAME).exists()
 
 
-def test_explicit_out_keeps_artifacts_that_stay_in_the_inputs(tmp_path, e2e_service):
+def test_explicit_out_keeps_artifacts_that_stay_in_the_inputs(
+    tmp_path, e2e_service, capsys
+):
     rec = effect_e2e_recording(tmp_path / "rec", e2e_service.base_url)
     bundle = _write_shaped_bundle(tmp_path / "bundle")
     (bundle / CONTRACT_FILENAME).write_bytes(b"prior-contract: true\n")
     (rec / PROOF_NAME).write_bytes(b'{"approved": false, "status": "draft"}\n')
     rec_before = _tree(rec)
     bundle_before = _tree(bundle)
-    out = tmp_path / "out"
+    out_dir = tmp_path / "out"
     code = main(
         [
             "scaffold-verifier",
@@ -762,16 +782,25 @@ def test_explicit_out_keeps_artifacts_that_stay_in_the_inputs(tmp_path, e2e_serv
             "--recording",
             str(rec),
             "--out",
-            str(out),
+            str(out_dir),
         ]
     )
-    assert code == 2
+    text = capsys.readouterr().out
+    assert code == 2, text
     assert _tree(rec) == rec_before
     assert _tree(bundle) == bundle_before
-    proof = json.loads((out / PROOF_NAME).read_text())
+    proof = json.loads((out_dir / PROOF_NAME).read_text())
     assert proof["status"] == "refused"
-    assert not (out / PROPOSED_NAME).exists()
-    assert (out / CONTRACT_FILENAME).is_file()
+    reason = proof["refusal_reason"]
+    assert (
+        "Record check: REFUSED. A recorded read can't see the whole save, "
+        f"so no check was written: {reason} ({out_dir / PROOF_NAME})."
+    ) in text
+    assert f"Recorded read REFUSED: {reason}. This is a TODO draft." in text
+    assert str(rec / PROOF_NAME) not in text
+    assert "No read in the recording" not in text
+    assert not (out_dir / PROPOSED_NAME).exists()
+    assert (out_dir / CONTRACT_FILENAME).is_file()
 
 
 def test_cli_exits_nonzero_for_a_draft(tmp_path, e2e_service, capsys):

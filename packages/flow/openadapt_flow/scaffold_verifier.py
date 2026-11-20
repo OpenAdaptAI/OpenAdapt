@@ -32,7 +32,9 @@ Two read-first operator helpers live here.
     names occupies it too, and the link is not followed. One command shares a
     single snapshot, so a fresh refusal can still write its proof and TODO
     draft together. Every output directory in that plan is refused before the
-    first artifact is published.
+    first artifact is published. Fallback reporting reads the check
+    destination in that same plan, so the operator cue and the exit status
+    name the published record-check result.
 
 ``flow explain <run-dir>``
     Pure read-only plain-language outcome summary over a completed run's
@@ -1052,10 +1054,27 @@ def build_record_check(
 
 
 def report_draft_fallback(
-    source: Path, out_dir: Optional[Path], *, probe_reads: bool = False
+    check: Optional[VerifierGeneration],
+    *,
+    probe_reads: bool = False,
 ) -> Optional[str]:
-    """Print the fallback explanation and return any recorded-read refusal."""
-    destination = out_dir or source
+    """Read this command's check result and return a recorded-read refusal.
+
+    ``check`` is the record-check generation from
+    :func:`begin_verifier_outputs`. The proof and read discovery are read
+    from that destination, the same place publication used. No other
+    directory is consulted. ``None`` means no record-check output was
+    calculated, so there is no refusal to report.
+    """
+    if check is None:
+        if probe_reads:
+            print(
+                "Read discovery: UNAVAILABLE. No probed read confirmed the "
+                "written values, so no read was proposed; a person must name "
+                "one (no record-check output was calculated)."
+            )
+        return None
+    destination = check.destination
     if probe_reads:
         import json as _json
 

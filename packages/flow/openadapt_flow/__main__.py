@@ -6292,7 +6292,8 @@ def _cmd_scaffold_verifier(args: argparse.Namespace) -> int:
     source = Path(args.source)
     # Bind the proof source, refuse a plaintext copy of a sealed input, then
     # refuse every occupied output directory before either writer runs. A
-    # fresh refusal's proof and TODO draft stay one generation.
+    # fresh refusal's proof and TODO draft stay one generation. Fallback
+    # readback uses the check generation from that plan.
     check_generation, draft_generation = begin_verifier_outputs(
         source,
         out_dir,
@@ -6320,8 +6321,7 @@ def _cmd_scaffold_verifier(args: argparse.Namespace) -> int:
         print(built.summary)
         return 0 if built.working else 1
     refusal_reason = report_draft_fallback(
-        source,
-        out_dir,
+        check_generation,
         probe_reads=bool(getattr(args, "probe_reads", False)),
     )
     out, count = write_draft(source, out_dir, generation=draft_generation)
