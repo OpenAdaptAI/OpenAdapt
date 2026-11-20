@@ -19,6 +19,12 @@
 
 ### Fixes
 
+- Approval form projections retain complete control values, including edits
+  beyond the preview length. Empty, redacted or state-unreadable controls
+  stay in the OCR read. A failed or depth-limited UI Automation walk does
+  not certify a complete control read, and a container cannot hide its
+  unread descendants ([#2291](https://github.com/OpenAdaptAI/OpenAdapt/pull/2291)).
+
 - A desktop approval no longer halts on a form that did not change
   ([#2189](https://github.com/OpenAdaptAI/OpenAdapt/issues/2189)). On the
   hosted Windows governed run, two reads of the same Patient Notes window

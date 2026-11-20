@@ -2358,7 +2358,7 @@ def _window_form_fields(
         except Exception:  # noqa: BLE001 - an unknown subtree is not a leaf
             return None, False
         if control_type == "TitleBarControl":
-            if bounds is not None:
+            if bounds is not None and on_screen and title:
                 fields.append(
                     {
                         "kind": "title_bar",
@@ -2369,8 +2369,18 @@ def _window_form_fields(
                 )
             continue
         if control_type in _FORM_VALUE_TYPES and not children:
+            # A password provider may return an empty or redacted Value.
+            # Empty values and unknown password status also account for no
+            # visible text, so all of those pixels must stay in the OCR.
+            password = _control_value(control, "IsPassword", None)
             readable, value = _form_field_value(control)
-            if bounds is not None and on_screen and readable:
+            if (
+                bounds is not None
+                and on_screen
+                and password is False
+                and readable
+                and value
+            ):
                 fields.append(
                     {
                         "kind": "edit",

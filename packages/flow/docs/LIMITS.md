@@ -953,6 +953,9 @@ What is not:
   rectangle would hide a change there. Custom-drawn text that UI Automation
   does not expose stays in the OCR read, and any other window of the app
   sends the whole window back to OCR alone.
+  Values used to mask a control retain the complete text, rather than the
+  preview prefix. Password, empty and state-unreadable controls stay in OCR;
+  unknown subtrees are not treated as fully read controls.
 - No live model has been run against these fixtures yet; the live-model test
   is off by default because it costs money.
 

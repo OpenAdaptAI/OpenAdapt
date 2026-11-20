@@ -386,7 +386,9 @@ class _Control:
         children=(),
         selected=None,
         toggle=None,
+        password=False,
     ):
+        self.IsPassword = password
         self._selected = selected
         self._toggle = toggle
         self.ControlTypeName = control_type
@@ -697,3 +699,28 @@ def test_a_depth_limited_form_walk_is_incomplete(monkeypatch):
     pane = _Control("PaneControl", children=[child])
     perform = _agent(monkeypatch, _window(pane))
     assert perform("window-form-fields", {"hwnd": 7, "pid": 10})["window"] is None
+
+
+@pytest.mark.parametrize("control_type", ["EditControl", "DocumentControl"])
+@pytest.mark.parametrize(
+    "value,password",
+    [("", False), ("", True), ("redacted", True), ("value", None)],
+    ids=["empty", "empty-password", "redacted-password", "password-status-unknown"],
+)
+def test_an_empty_or_redacted_value_never_hides_the_visible_field(
+    monkeypatch, control_type, value, password
+):
+    control = _Control(
+        control_type, value=value, password=password, bounds=(20, 44, 500, 70)
+    )
+    perform = _agent(monkeypatch, _window(control))
+    answer = perform("window-form-fields", {"hwnd": 7, "pid": 10})
+    assert answer["window"] is not None
+    assert answer["fields"] == []
+
+
+def test_an_unreadable_title_never_hides_the_title_bar(monkeypatch):
+    window = _window(_Control("TitleBarControl", bounds=(0, 0, 1024, 30)))
+    window.Name = ""
+    perform = _agent(monkeypatch, window)
+    assert perform("window-form-fields", {"hwnd": 7, "pid": 10})["fields"] == []
