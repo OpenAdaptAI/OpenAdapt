@@ -747,8 +747,9 @@ def test_governed_run_argv_uses_the_fail_closed_run_verb():
     assert "--params-file" in argv
     assert argv[argv.index("--backend") + 1] == "web"
     assert "replay" not in argv
-    # Cloud-dispatched items have no per-item pause, and the run says so.
-    assert argv[argv.index("--approval-mode") + 1] == "not_gated"
+    # A dispatch transport cannot turn off the governed run's approval gate.
+    assert "--approval-mode" not in argv
+    assert "not_gated" not in argv
 
 
 def test_native_dispatch_routes_exact_first_class_target_kind():
@@ -964,3 +965,17 @@ def test_cross_org_isolation_connector_never_sees_another_orgs_job():
     assert result is None  # org_A connector sees no work; org_B's job stays queued
     assert cp.jobs[0]["status"] == "queued"
     assert cp.callbacks == []
+
+
+@pytest.mark.parametrize(
+    "target", ["web", "windows", "macos", "linux", "rdp", "citrix"]
+)
+def test_every_connector_substrate_preserves_the_governed_approval_default(target):
+    from openadapt_flow.approval_mode.model import ApprovalMode, resolve_approval_mode
+
+    job = parse_job(
+        _payload(target_kind=target, target_url=None, allowed_hosts=[], params={})
+    )
+    argv = build_run_argv(job, ConnectorSettings(), Path("/bundle"), Path("/run"), None)
+    assert "--approval-mode" not in argv
+    assert resolve_approval_mode(None) == ApprovalMode.EACH_ITEM
