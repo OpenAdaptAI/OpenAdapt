@@ -1,0 +1,67 @@
+{
+ "id": "DO-DU",
+ "app": "dolibarr",
+ "class": "duplicate",
+ "note": "The save is delivered twice.",
+ "agent_s": 36.7,
+ "cost_usd": 0.069874,
+ "claim": {
+  "status": "done",
+  "id": "Contact \"Claire Moreau\" created (Third-parties > Contacts/Addresses list)",
+  "note": "RESULT: DONE Contact \"Claire Moreau\" created (Third-parties > Contacts/Addresses list)",
+  "claim_line": true,
+  "final_text": "I added the contact Claire Moreau with job position Receptionist, business phone 555-0195 and email c.moreau@example.invalid. She isn't linked to any third party, and I left every other field as it was.\n\nThe contact page shows the phone as 5550195, without the dash. The three existing contacts display their numbers the same way, so I took this as Dolibarr's normal display. I couldn't see the browser address bar, so I don't have the record's id or URL.\n\nRESULT: DONE Contact \"Claire Moreau\" created (Third-parties > Contacts/Addresses list)",
+  "model_calls": 8,
+  "actions": 22,
+  "tokens_in": 92524,
+  "tokens_out": 1226,
+  "end_url": "http://127.0.0.1:9851/contact/card.php?id=102"
+ },
+ "oracle": {
+  "verdict": "wrong",
+  "reasons": [
+   "2 new records"
+  ],
+  "new": [
+   "102",
+   "103"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": true,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794429535.215,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 8
+  },
+  {
+   "t": 1794429568.798,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": [
+    "duplicate"
+   ],
+   "status": "302+302",
+   "ms": 22
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 3,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 6.5,
+  "end": 6.1,
+  "waited_s": 0
+ }
+}

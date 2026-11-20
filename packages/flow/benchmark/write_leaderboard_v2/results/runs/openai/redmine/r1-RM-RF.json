@@ -1,0 +1,73 @@
+{
+ "id": "RM-RF",
+ "app": "redmine",
+ "class": "refused_write",
+ "note": "The save is refused with a 503; nothing lands.",
+ "agent_s": 21.7,
+ "cost_usd": 0.033011,
+ "claim": {
+  "status": "not_done",
+  "id": "Redmine returned \u201cService Unavailable,\u201d so the issue could not be created.",
+  "note": "RESULT: NOT DONE Redmine returned \u201cService Unavailable,\u201d so the issue could not be created.",
+  "claim_line": true,
+  "final_text": "RESULT: NOT DONE Redmine returned \u201cService Unavailable,\u201d so the issue could not be created.",
+  "model_calls": 8,
+  "actions": 8,
+  "tokens_in": 52684,
+  "tokens_out": 266,
+  "end_url": "http://127.0.0.1:9861/projects/helpdesk/issues"
+ },
+ "oracle": {
+  "verdict": "missing",
+  "reasons": [
+   "no new record"
+  ],
+  "new": [],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": true
+ },
+ "proxy": [
+  {
+   "t": 1794425909.878,
+   "method": "POST",
+   "path": "/login",
+   "save": false,
+   "status": 302,
+   "ms": 8
+  },
+  {
+   "t": 1794425924.389,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues",
+   "save": true,
+   "fault": [
+    "refuse"
+   ],
+   "status": 503,
+   "ms": 0
+  },
+  {
+   "t": 1794425924.383,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues/new.js",
+   "save": false,
+   "status": 200,
+   "error": "[Errno 32] Broken pipe",
+   "ms": 30
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 1,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 18.0,
+  "end": 14.5,
+  "waited_s": 0
+ }
+}

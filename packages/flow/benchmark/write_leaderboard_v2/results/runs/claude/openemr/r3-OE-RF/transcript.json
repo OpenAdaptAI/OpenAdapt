@@ -1,0 +1,1370 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      806,
+      700
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "coordinate": [
+      404,
+      30
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      423,
+      65
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      444,
+      318
+     ]
+    },
+    {
+     "text": "Viktor"
+    },
+    {
+     "coordinate": [
+      670,
+      318
+     ]
+    },
+    {
+     "text": "Halvorsen"
+    },
+    {
+     "coordinate": [
+      426,
+      431
+     ]
+    },
+    {
+     "text": "1971-12-30"
+    },
+    {
+     "coordinate": [
+      1038,
+      466
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      800,
+      180
+     ]
+    },
+    {
+     "coordinate": [
+      1038,
+      466
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "Male"
+    },
+    {
+     "text": "Return"
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": null
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      640,
+      600
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 10
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      132,
+      464
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      479,
+      521
+     ]
+    },
+    {
+     "text": "99 Brook Street"
+    },
+    {
+     "coordinate": [
+      444,
+      555
+     ]
+    },
+    {
+     "text": "Springfield"
+    },
+    {
+     "coordinate": [
+      419,
+      594
+     ]
+    },
+    {
+     "text": "01104"
+    },
+    {
+     "coordinate": [
+      461,
+      707
+     ]
+    },
+    {
+     "text": "413-555-0178"
+    },
+    {
+     "coordinate": [
+      1035,
+      743
+     ]
+    },
+    {
+     "text": "v.halvorsen@example.invalid"
+    },
+    {
+     "coordinate": [
+      1015,
+      556
+     ]
+    },
+    {
+     "text": "Massachusetts"
+    },
+    {
+     "text": "Return"
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      640,
+      500
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 30
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": null
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      284,
+      772
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      640,
+      400
+     ],
+     "scroll_direction": "up",
+     "scroll_amount": 30
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": null
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Birth Sex is required, so I'll set it to Male.",
+   "actions": [
+    {
+     "coordinate": [
+      972,
+      431
+     ]
+    },
+    {
+     "text": "Male"
+    },
+    {
+     "text": "Return"
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": [
+      90,
+      400,
+      1180,
+      520
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      640,
+      500
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 30
+    },
+    {
+     "coordinate": [
+      284,
+      772
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      599,
+      280
+     ]
+    },
+    {
+     "duration": 4
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1055,
+      30
+     ]
+    },
+    {
+     "text": "Halvorsen\n"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      139,
+      346
+     ]
+    },
+    {
+     "text": "Viktor"
+    },
+    {
+     "duration": 2
+    },
+    {
+     "region": null
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      404,
+      30
+     ]
+    },
+    {
+     "coordinate": [
+      423,
+      65
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "region": null
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      444,
+      318
+     ]
+    },
+    {
+     "text": "Viktor"
+    },
+    {
+     "coordinate": [
+      670,
+      318
+     ]
+    },
+    {
+     "text": "Halvorsen"
+    },
+    {
+     "coordinate": [
+      426,
+      431
+     ]
+    },
+    {
+     "text": "1971-12-30"
+    },
+    {
+     "coordinate": [
+      800,
+      180
+     ]
+    },
+    {
+     "coordinate": [
+      1038,
+      466
+     ]
+    },
+    {
+     "text": "Male"
+    },
+    {
+     "text": "Return"
+    },
+    {
+     "coordinate": [
+      972,
+      431
+     ]
+    },
+    {
+     "text": "Male"
+    },
+    {
+     "text": "Return"
+    },
+    {
+     "coordinate": [
+      640,
+      600
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 10
+    },
+    {
+     "coordinate": [
+      132,
+      464
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": null
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      479,
+      521
+     ]
+    },
+    {
+     "text": "99 Brook Street"
+    },
+    {
+     "coordinate": [
+      444,
+      555
+     ]
+    },
+    {
+     "text": "Springfield"
+    },
+    {
+     "coordinate": [
+      419,
+      594
+     ]
+    },
+    {
+     "text": "01104"
+    },
+    {
+     "coordinate": [
+      461,
+      707
+     ]
+    },
+    {
+     "text": "413-555-0178"
+    },
+    {
+     "coordinate": [
+      1035,
+      743
+     ]
+    },
+    {
+     "text": "v.halvorsen@example.invalid"
+    },
+    {
+     "coordinate": [
+      1015,
+      556
+     ]
+    },
+    {
+     "text": "Massachusetts"
+    },
+    {
+     "text": "Return"
+    },
+    {
+     "coordinate": [
+      640,
+      300
+     ],
+     "scroll_direction": "up",
+     "scroll_amount": 5
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": null
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      640,
+      500
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 30
+    },
+    {
+     "region": [
+      0,
+      140,
+      1280,
+      800
+     ]
+    },
+    {
+     "coordinate": [
+      284,
+      772
+     ]
+    },
+    {
+     "duration": 4
+    },
+    {
+     "region": null
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      599,
+      280
+     ]
+    },
+    {
+     "duration": 5
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Viktor Halvorsen is now registered as patient ID 4, with DOB 1971-12-30 shown on the dashboard. I didn't open the Contact tab afterward, so I haven't checked how the address, phone and email were saved.\n\n- **Sex fields:** The form wouldn't save without Birth Sex, so I set both Birth Sex and Sex to Male. The task only named \"sex\", so Birth Sex is one field beyond the list you gave.\n- **Contact details:** I entered 99 Brook Street, Springfield, Massachusetts, 01104, home phone 413-555-0178, and the email in the Contact Email field. The form displayed the street and city in capitals.\n- **Failed first attempt:** The first save ended on a \"Service Unavailable\" page. I searched for the patient afterward and found nothing, so I re-entered the form and submitted again. The second attempt worked. The patient list had 3 entries before and this one is ID 4, so there is no duplicate.\n- **Registration pop-up:** I dismissed the OpenEMR product registration pop-up with \"Ask again later\" and entered nothing in it.\n\nRESULT: DONE patient ID 4 (Viktor Halvorsen)",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 806,
+   "y": 700,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 404,
+   "y": 30,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 423,
+   "y": 65,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 444,
+   "y": 318,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Viktor"
+  },
+  {
+   "a": "click",
+   "x": 670,
+   "y": 318,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Halvorsen"
+  },
+  {
+   "a": "click",
+   "x": 426,
+   "y": 431,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "1971-12-30"
+  },
+  {
+   "a": "click",
+   "x": 1038,
+   "y": 466,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 800,
+   "y": 180,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1038,
+   "y": 466,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "type",
+   "text": "Male"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Return"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 600,
+   "dx": 0,
+   "dy": 1200
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 132,
+   "y": 464,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 479,
+   "y": 521,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "99 Brook Street"
+  },
+  {
+   "a": "click",
+   "x": 444,
+   "y": 555,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Springfield"
+  },
+  {
+   "a": "click",
+   "x": 419,
+   "y": 594,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "01104"
+  },
+  {
+   "a": "click",
+   "x": 461,
+   "y": 707,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "413-555-0178"
+  },
+  {
+   "a": "click",
+   "x": 1035,
+   "y": 743,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "v.halvorsen@example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 1015,
+   "y": 556,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Massachusetts"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Return"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 500,
+   "dx": 0,
+   "dy": 3600
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 284,
+   "y": 772,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -3600
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 972,
+   "y": 431,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Male"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Return"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 500,
+   "dx": 0,
+   "dy": 3600
+  },
+  {
+   "a": "click",
+   "x": 284,
+   "y": 772,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 599,
+   "y": 280,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 4.0
+  },
+  {
+   "a": "click",
+   "x": 1055,
+   "y": 30,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Halvorsen\n"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 139,
+   "y": 346,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Viktor"
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 404,
+   "y": 30,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 423,
+   "y": 65,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 444,
+   "y": 318,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Viktor"
+  },
+  {
+   "a": "click",
+   "x": 670,
+   "y": 318,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Halvorsen"
+  },
+  {
+   "a": "click",
+   "x": 426,
+   "y": 431,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "1971-12-30"
+  },
+  {
+   "a": "click",
+   "x": 800,
+   "y": 180,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1038,
+   "y": 466,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Male"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Return"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 972,
+   "y": 431,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Male"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Return"
+   ]
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 600,
+   "dx": 0,
+   "dy": 1200
+  },
+  {
+   "a": "click",
+   "x": 132,
+   "y": 464,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 479,
+   "y": 521,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "99 Brook Street"
+  },
+  {
+   "a": "click",
+   "x": 444,
+   "y": 555,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Springfield"
+  },
+  {
+   "a": "click",
+   "x": 419,
+   "y": 594,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "01104"
+  },
+  {
+   "a": "click",
+   "x": 461,
+   "y": 707,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "413-555-0178"
+  },
+  {
+   "a": "click",
+   "x": 1035,
+   "y": 743,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "v.halvorsen@example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 1015,
+   "y": 556,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Massachusetts"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Return"
+   ]
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 300,
+   "dx": 0,
+   "dy": -600
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 500,
+   "dx": 0,
+   "dy": 3600
+  },
+  {
+   "a": "click",
+   "x": 284,
+   "y": 772,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 4.0
+  },
+  {
+   "a": "click",
+   "x": 599,
+   "y": 280,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6198,
+   "out": 167,
+   "usd": 0.017163,
+   "cached": 0
+  },
+  {
+   "in": 7800,
+   "out": 145,
+   "usd": 0.006703,
+   "cached": 6194
+  },
+  {
+   "in": 9335,
+   "out": 503,
+   "usd": 0.010431,
+   "cached": 7798
+  },
+  {
+   "in": 11300,
+   "out": 175,
+   "usd": 0.008533,
+   "cached": 9333
+  },
+  {
+   "in": 12878,
+   "out": 183,
+   "usd": 0.008039,
+   "cached": 11298
+  },
+  {
+   "in": 14468,
+   "out": 168,
+   "usd": 0.008234,
+   "cached": 12876
+  },
+  {
+   "in": 16034,
+   "out": 98,
+   "usd": 0.007792,
+   "cached": 14466
+  },
+  {
+   "in": 17530,
+   "out": 387,
+   "usd": 0.01082,
+   "cached": 16032
+  },
+  {
+   "in": 19457,
+   "out": 160,
+   "usd": 0.009927,
+   "cached": 17528
+  },
+  {
+   "in": 21015,
+   "out": 98,
+   "usd": 0.00877,
+   "cached": 19455
+  },
+  {
+   "in": 22511,
+   "out": 156,
+   "usd": 0.009507,
+   "cached": 21013
+  },
+  {
+   "in": 24065,
+   "out": 165,
+   "usd": 0.010041,
+   "cached": 22509
+  },
+  {
+   "in": 25649,
+   "out": 142,
+   "usd": 0.010197,
+   "cached": 24063
+  },
+  {
+   "in": 27202,
+   "out": 75,
+   "usd": 0.009766,
+   "cached": 25647
+  },
+  {
+   "in": 28662,
+   "out": 98,
+   "usd": 0.010074,
+   "cached": 27200
+  },
+  {
+   "in": 30158,
+   "out": 164,
+   "usd": 0.011116,
+   "cached": 28660
+  },
+  {
+   "in": 31731,
+   "out": 233,
+   "usd": 0.012298,
+   "cached": 30156
+  },
+  {
+   "in": 33373,
+   "out": 153,
+   "usd": 0.011985,
+   "cached": 31729
+  },
+  {
+   "in": 34937,
+   "out": 431,
+   "usd": 0.014898,
+   "cached": 33371
+  },
+  {
+   "in": 36934,
+   "out": 401,
+   "usd": 0.015994,
+   "cached": 34935
+  },
+  {
+   "in": 38888,
+   "out": 173,
+   "usd": 0.014005,
+   "cached": 36932
+  },
+  {
+   "in": 40485,
+   "out": 122,
+   "usd": 0.012994,
+   "cached": 38886
+  },
+  {
+   "in": 42005,
+   "out": 456,
+   "usd": 0.016461,
+   "cached": 40483
+  }
+ ]
+}

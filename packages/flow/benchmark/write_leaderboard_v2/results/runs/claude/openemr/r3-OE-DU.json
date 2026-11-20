@@ -1,0 +1,147 @@
+{
+ "id": "OE-DU",
+ "app": "openemr",
+ "class": "duplicate",
+ "note": "The save is delivered twice.",
+ "agent_s": 56.6,
+ "cost_usd": 0.149546,
+ "claim": {
+  "status": "done",
+  "id": "patient ID 4 (Henrik Dahl)",
+  "note": "RESULT: DONE patient ID 4 (Henrik Dahl)",
+  "claim_line": true,
+  "final_text": "Henrik Dahl is now registered as patient ID 4, with date of birth 1966-01-27. The search before saving found no existing patient with that name, so this is a new record.\n\nI entered the street, city, state (Massachusetts), postal code, home phone and email as given. The email went in the Contact Email field. I did not open the Contact tab on the saved record afterwards to re-check those values.\n\nThe form has two sex fields, Birth Sex and Sex. Birth Sex is required, so I set both to Male. Everything else stayed at its default. A product-registration pop-up was open when I started, and I dismissed it with \"Ask again later\".\n\nRESULT: DONE patient ID 4 (Henrik Dahl)",
+  "model_calls": 15,
+  "actions": 44,
+  "tokens_in": 263784,
+  "tokens_out": 3062,
+  "end_url": "http://127.0.0.1:9866/interface/main/tabs/main.php?token_main=REDACTED"
+ },
+ "oracle": {
+  "verdict": "wrong",
+  "reasons": [
+   "2 new records"
+  ],
+  "new": [
+   "4",
+   "5"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": true,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794430261.809,
+   "method": "POST",
+   "path": "/interface/main/main_screen.php",
+   "save": false,
+   "status": 302,
+   "ms": 274
+  },
+  {
+   "t": 1794430262.391,
+   "method": "POST",
+   "path": "/library/ajax/dated_reminders_counter.php",
+   "save": false,
+   "status": 200,
+   "ms": 27
+  },
+  {
+   "t": 1794430262.526,
+   "method": "POST",
+   "path": "/interface/main/dated_reminders/dated_reminders.php",
+   "save": false,
+   "status": 200,
+   "ms": 27
+  },
+  {
+   "t": 1794430275.356,
+   "method": "POST",
+   "path": "/library/ajax/execute_background_services.php",
+   "save": false,
+   "status": 200,
+   "ms": 30
+  },
+  {
+   "t": 1794430310.821,
+   "method": "POST",
+   "path": "/interface/new/new_comprehensive_save.php",
+   "save": true,
+   "fault": [
+    "duplicate"
+   ],
+   "status": "200+200",
+   "ms": 137
+  },
+  {
+   "t": 1794430311.408,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/disc_fragment.php",
+   "save": false,
+   "status": 200,
+   "ms": 31
+  },
+  {
+   "t": 1794430311.412,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/vitals_fragment.php",
+   "save": false,
+   "status": 200,
+   "ms": 31
+  },
+  {
+   "t": 1794430311.411,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/labdata_fragment.php",
+   "save": false,
+   "status": 200,
+   "ms": 35
+  },
+  {
+   "t": 1794430311.403,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/pnotes_fragment.php",
+   "save": false,
+   "status": 200,
+   "ms": 64
+  },
+  {
+   "t": 1794430311.403,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/stats.php",
+   "save": false,
+   "status": 200,
+   "ms": 78
+  },
+  {
+   "t": 1794430311.444,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/patient_reminders_fragment.php",
+   "save": false,
+   "status": 200,
+   "ms": 57
+  },
+  {
+   "t": 1794430311.441,
+   "method": "POST",
+   "path": "/interface/patient_file/summary/clinical_reminders_fragment.php",
+   "save": false,
+   "status": 200,
+   "ms": 556
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 3,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 7.5,
+  "end": 8.6,
+  "waited_s": 0
+ }
+}

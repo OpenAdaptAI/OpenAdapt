@@ -5,6 +5,12 @@
   browser is hidden in the recording; the output is otherwise the real command
   at real speed. Re-record with
   `PATH="$PWD/.venv/bin:$PATH" vhs docs/quickstart/quickstart.tape`.
+- `story/`: one real `openadapt quickstart` run as the terminal shows it at
+  the end, at 100 and 60 columns (`quickstart-*col.svg`, with PNG copies),
+  and the plain output that logs and CI get (`quickstart-plain.svg`).
+  Re-record with `python scripts/record_quickstart.py --out
+  docs/quickstart/story`. `quickstart.gif` predates the five-step story and
+  needs a fresh `vhs` take.
 - `inline-screenshot.png`: the third act on a terminal that draws images
   (WezTerm), with the halted run's screenshot beside the database's answer.
 - `timing-2026-10-20.json`: the engine tutorial with `--break-it` (what
@@ -55,9 +61,8 @@ about 22 seconds.
   born 1958-03-27), then runs a referral for a Rosa Delgado born 1958-03-22.
   OpenEMR's duplicate check lists the match, and the program stops before
   saving ("Stopped before saving: possible duplicate"). SQL finds 0 new charts.
-- **Finale.** The same receipt card and Seal. Every quickstart, in either app,
-  ends the receipt with "See real Seals from OpenEMR runs:
-  https://openadapt.ai/seals".
+- **Finale.** The same Seal card. Every quickstart, in either app, links
+  "Real Seals from OpenEMR runs: https://openadapt.ai/seals".
 
 To stop the fixture, run
 `docker compose -p openadapt-quickstart-openemr stop`. The next quickstart

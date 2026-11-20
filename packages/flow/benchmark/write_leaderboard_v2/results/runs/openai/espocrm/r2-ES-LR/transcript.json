@@ -1,0 +1,443 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0ffc66e535fe019d016af4cdbb9ec487d2a6959b806ac87aa6",
+     "call_id": "call_pWbuYWs0YVkJNpf3aA9xaVUO",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0ffc66e535fe019d016af4cdbe5a4087d2810f71c40d6bf84a",
+     "call_id": "call_IXe7eI9dnaPv0JRFvLuTB070",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 22,
+       "y": 165
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0ffc66e535fe019d016af4cdc0435087d2996bd426ff35e4e3",
+     "call_id": "call_SlB2RGau1GS0srmVBpnGg5o0",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0ffc66e535fe019d016af4cdc283cc87d293c43d1ed3119381",
+     "call_id": "call_RofC9RiF6dOM0obbE9C8xWhC",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1186,
+       "y": 62
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0ffc66e535fe019d016af4cdc4cc2087d2ba02a2825d620286",
+     "call_id": "call_WkskyHtWi7FZEdFvhd6vAeGO",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0ffc66e535fe019d016af4cdc6f8d487d2943bced3ec19de7c",
+     "call_id": "call_kQRACAkntjQqpQfGBB7G6F8H",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 221,
+       "y": 232
+      },
+      {
+       "text": "Heron Print Works",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 603,
+       "y": 232
+      },
+      {
+       "text": "heron.example.invalid",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 263,
+       "y": 699
+      },
+      {
+       "text": "Labels and packaging.",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 303,
+       "y": 620
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0ffc66e535fe019d016af4cdca37c087d280586a6c44488b29",
+     "call_id": "call_BM8ju6wsUXXVaWoSVj7lBJnV",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 125,
+       "y": 682
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 648,
+       "y": 619
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0ffc66e535fe019d016af4cdcc9d9c87d2bf5c9de36ffa382c",
+     "call_id": "call_d8pudNcMqma6E7pvUe40uFkU",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": 491,
+       "type": "scroll",
+       "x": 650,
+       "y": 511
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0ffc66e535fe019d016af4cdcfead887d29b80809033ff76ad",
+     "call_id": "call_e2xZHmiVylN6Ol2KCAQnYFPk",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 638,
+       "y": 612
+      },
+      {
+       "keys": [
+        "m"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0ffc66e535fe019d016af4cdd336f887d2994e099975359803",
+     "call_id": "call_mWP3mXl1BUAGAXkjJLiWXFxu",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 537,
+       "y": 548
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 96,
+       "y": 105
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0ffc66e535fe019d016af4cdd5ebd887d2ac7a2d71c734f2a7",
+     "call_id": "call_0UjUiRK569Y7TEVSQHlIN1hY",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE Saving failed with Error 504; account creation could not be confirmed.",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 22,
+   "y": 165,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1186,
+   "y": 62,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 221,
+   "y": 232,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Heron Print Works"
+  },
+  {
+   "a": "click",
+   "x": 603,
+   "y": 232,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "heron.example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 263,
+   "y": 699,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Labels and packaging."
+  },
+  {
+   "a": "click",
+   "x": 303,
+   "y": 620,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 125,
+   "y": 682,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 648,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 650,
+   "y": 511,
+   "dx": 0,
+   "dy": 491
+  },
+  {
+   "a": "click",
+   "x": 638,
+   "y": 612,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "m"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 537,
+   "y": 548,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 96,
+   "y": 105,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  }
+ ],
+ "usage": [
+  {
+   "in": 2204,
+   "out": 22,
+   "usd": 0.004628,
+   "cached": 0
+  },
+  {
+   "in": 3421,
+   "out": 31,
+   "usd": 0.00319,
+   "cached": 2201
+  },
+  {
+   "in": 4677,
+   "out": 18,
+   "usd": 0.003382,
+   "cached": 3418
+  },
+  {
+   "in": 5905,
+   "out": 32,
+   "usd": 0.003717,
+   "cached": 4674
+  },
+  {
+   "in": 7162,
+   "out": 15,
+   "usd": 0.00385,
+   "cached": 5902
+  },
+  {
+   "in": 8390,
+   "out": 112,
+   "usd": 0.005014,
+   "cached": 7159
+  },
+  {
+   "in": 9762,
+   "out": 47,
+   "usd": 0.004897,
+   "cached": 8387
+  },
+  {
+   "in": 11042,
+   "out": 37,
+   "usd": 0.004888,
+   "cached": 9759
+  },
+  {
+   "in": 12304,
+   "out": 57,
+   "usd": 0.005308,
+   "cached": 11039
+  },
+  {
+   "in": 13590,
+   "out": 47,
+   "usd": 0.005508,
+   "cached": 12301
+  },
+  {
+   "in": 14870,
+   "out": 15,
+   "usd": 0.005433,
+   "cached": 13587
+  },
+  {
+   "in": 16098,
+   "out": 41,
+   "usd": 0.005845,
+   "cached": 14867
+  }
+ ]
+}

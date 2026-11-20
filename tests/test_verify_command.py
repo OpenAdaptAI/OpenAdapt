@@ -130,3 +130,21 @@ def test_verify_ledger_lists_a_recheck_owed_until_it_runs(tmp_path) -> None:
     listed = runner.invoke(main, ["verify", "ledger", "list", "--ledger", str(folder)])
     assert "recheck-owed" not in listed.output
     assert "No rechecks owed." in listed.output
+
+
+def test_verify_serve_refuses_configured_protection_without_flow_support(
+    tmp_path, monkeypatch
+) -> None:
+    from openadapt_flow import write_ledger
+    from openadapt_flow.agent import cli as agent_cli
+
+    monkeypatch.setenv("OPENADAPT_LEDGER_AUTHORITY_CONFIG", "/unused-config.json")
+    monkeypatch.delattr(write_ledger, "PROTECTED_LEDGER_CONFIG_ENV", raising=False)
+    seen = []
+    monkeypatch.setattr(agent_cli, "main", lambda argv: seen.append(argv) or 0)
+
+    result = CliRunner().invoke(main, ["verify", "serve", "--contracts", str(tmp_path)])
+
+    assert result.exit_code != 0
+    assert "ledger_authority_unsupported" in result.output
+    assert seen == []

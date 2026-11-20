@@ -238,8 +238,8 @@ rel_build_release() {
     return 1
   }
   "$python" -m venv "$release_dir/venv" || return 1
-  local requirement='openadapt-flow[privacy]'
-  [[ -n "$version" ]] && requirement="openadapt-flow[privacy]==$version"
+  local requirement='openadapt-flow[privacy,vision]'
+  [[ -n "$version" ]] && requirement="openadapt-flow[privacy,vision]==$version"
   "$release_dir/venv/bin/pip" install --no-index --only-binary=:all: \
     --find-links "$wheelhouse" "$requirement"
 }

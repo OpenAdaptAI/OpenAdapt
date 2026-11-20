@@ -6,7 +6,7 @@ import { ChoiceButton } from "../ui/simple";
 const STEPS = [
   {
     title: "Show it",
-    body: "Do the workflow on test data, in the app where you already do it.",
+    body: "Do the workflow once on test data, or have an AI agent do it, in the app where it's normally done.",
   },
   {
     title: "Check it",
@@ -30,12 +30,14 @@ export function Welcome({
   return (
     <div className="content simple welcome">
       <section className="welcome-hero">
-        <h1>Hand off the last step of a workflow</h1>
+        <h1>Do a workflow once. OpenAdapt repeats it.</h1>
         <p className="welcome-lead">
-          OpenAdapt enters approved information into the apps you already use,
-          like EMRs, payer portals, and desktop or Citrix apps, and checks that
-          it saved. When something doesn't match, it stops and asks you instead
-          of guessing.
+          A person or an AI agent does a workflow once, in any app. OpenAdapt
+          turns it into a program that repeats the workflow with new inputs
+          and checks each save by reading it back. When something doesn't
+          match, it stops and asks instead of guessing. It suits highly
+          regulated work, such as medical records and insurance, where a wrong
+          entry matters.
         </p>
       </section>
 
@@ -57,12 +59,12 @@ export function Welcome({
         <ChoiceButton
           tone="primary"
           title="See it work on a sample app"
-          sub="About 2 minutes. Made-up patients. No account or permissions needed."
+          sub="About 2 minutes. Made-up data. No account or permissions needed."
           onClick={onSample}
         />
         <ChoiceButton
           title="Show OpenAdapt your workflow"
-          sub="Pick the app, then do the workflow while OpenAdapt watches."
+          sub="Pick the app, then do the workflow once, or have a connected AI agent do it."
           onClick={onShow}
         />
       </div>

@@ -1,0 +1,863 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+l"
+    },
+    {
+     "text": "localhost/#Account/create\n"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The browser seems to be in kiosk mode with no URL bar. I'll use the app UI instead.",
+   "actions": [
+    {
+     "coordinate": [
+      23,
+      166
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Let me check whether it already exists first.",
+   "actions": [
+    {
+     "coordinate": [
+      340,
+      113
+     ]
+    },
+    {
+     "text": "Elmstead\n"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1194,
+      63
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      263,
+      233
+     ]
+    },
+    {
+     "text": "Elmstead Bakery"
+    },
+    {
+     "coordinate": [
+      651,
+      233
+     ]
+    },
+    {
+     "text": "elmstead.example.invalid"
+    },
+    {
+     "coordinate": [
+      457,
+      702
+     ]
+    },
+    {
+     "text": "Bread for four cafes."
+    },
+    {
+     "coordinate": [
+      263,
+      619
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      121,
+      683
+     ]
+    },
+    {
+     "coordinate": [
+      651,
+      619
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The industry dropdown didn't open. Click again.",
+   "actions": [
+    {
+     "coordinate": [
+      651,
+      619
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      651,
+      500
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 10
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": [
+      0,
+      300,
+      1280,
+      650
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Scrolled too far; scroll up a bit.",
+   "actions": [
+    {
+     "coordinate": [
+      651,
+      500
+     ],
+     "scroll_direction": "up",
+     "scroll_amount": 4
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": [
+      0,
+      300,
+      1280,
+      650
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      512,
+      387
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": [
+      0,
+      140,
+      860,
+      760
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      95,
+      113
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      800
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      800
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      800
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The industry saved as Agriculture instead of Hospitality. I'll edit the record to fix it.",
+   "actions": [
+    {
+     "coordinate": [
+      95,
+      113
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      800
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      651,
+      619
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      800
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      651,
+      500
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 2
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      800
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      651,
+      500
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 3
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      800
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      512,
+      468
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": [
+      0,
+      540,
+      860,
+      740
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      95,
+      113
+     ]
+    },
+    {
+     "coordinate": [
+      1000,
+      700
+     ]
+    },
+    {
+     "duration": 6
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      800
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The account Elmstead Bakery now exists with website elmstead.example.invalid, type Customer, industry Hospitality and description \"Bread for four cafes.\" All other fields are empty.\n\nThe first save stored the industry as Agriculture instead of Hospitality, so I edited the record and saved again. The detail page now shows Hospitality. The browser has no address bar, so I couldn't read the record's ID or URL.\n\nRESULT: DONE Account \"Elmstead Bakery\" created (Accounts list, record detail page; ID not visible in the kiosk browser)",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "l"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "localhost/#Account/create\n"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 23,
+   "y": 166,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 340,
+   "y": 113,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Elmstead\n"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 1194,
+   "y": 63,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 263,
+   "y": 233,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Elmstead Bakery"
+  },
+  {
+   "a": "click",
+   "x": 651,
+   "y": 233,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "elmstead.example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 457,
+   "y": 702,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Bread for four cafes."
+  },
+  {
+   "a": "click",
+   "x": 263,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 121,
+   "y": 683,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 651,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 651,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "scroll",
+   "x": 651,
+   "y": 500,
+   "dx": 0,
+   "dy": 1200
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "scroll",
+   "x": 651,
+   "y": 500,
+   "dx": 0,
+   "dy": -480
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 512,
+   "y": 387,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 95,
+   "y": 113,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 95,
+   "y": 113,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 651,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "scroll",
+   "x": 651,
+   "y": 500,
+   "dx": 0,
+   "dy": 240
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "scroll",
+   "x": 651,
+   "y": 500,
+   "dx": 0,
+   "dy": 360
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 512,
+   "y": 468,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 95,
+   "y": 113,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "move",
+   "x": 1000,
+   "y": 700
+  },
+  {
+   "a": "wait",
+   "s": 6.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6143,
+   "out": 113,
+   "usd": 0.016486,
+   "cached": 0
+  },
+  {
+   "in": 7670,
+   "out": 139,
+   "usd": 0.006444,
+   "cached": 6139
+  },
+  {
+   "in": 9199,
+   "out": 75,
+   "usd": 0.00611,
+   "cached": 7668
+  },
+  {
+   "in": 10659,
+   "out": 140,
+   "usd": 0.006893,
+   "cached": 9197
+  },
+  {
+   "in": 12200,
+   "out": 99,
+   "usd": 0.006978,
+   "cached": 10657
+  },
+  {
+   "in": 13697,
+   "out": 75,
+   "usd": 0.006936,
+   "cached": 12198
+  },
+  {
+   "in": 15157,
+   "out": 244,
+   "usd": 0.008833,
+   "cached": 13695
+  },
+  {
+   "in": 16863,
+   "out": 129,
+   "usd": 0.00859,
+   "cached": 15155
+  },
+  {
+   "in": 18395,
+   "out": 123,
+   "usd": 0.008436,
+   "cached": 16861
+  },
+  {
+   "in": 19908,
+   "out": 135,
+   "usd": 0.008815,
+   "cached": 18393
+  },
+  {
+   "in": 21441,
+   "out": 152,
+   "usd": 0.009338,
+   "cached": 19906
+  },
+  {
+   "in": 22991,
+   "out": 112,
+   "usd": 0.009287,
+   "cached": 21439
+  },
+  {
+   "in": 24500,
+   "out": 114,
+   "usd": 0.009514,
+   "cached": 22989
+  },
+  {
+   "in": 26012,
+   "out": 91,
+   "usd": 0.009594,
+   "cached": 24498
+  },
+  {
+   "in": 27488,
+   "out": 121,
+   "usd": 0.010106,
+   "cached": 26010
+  },
+  {
+   "in": 28994,
+   "out": 197,
+   "usd": 0.011236,
+   "cached": 27486
+  },
+  {
+   "in": 30589,
+   "out": 114,
+   "usd": 0.01093,
+   "cached": 28992
+  },
+  {
+   "in": 32101,
+   "out": 135,
+   "usd": 0.011251,
+   "cached": 30587
+  },
+  {
+   "in": 33634,
+   "out": 135,
+   "usd": 0.011606,
+   "cached": 32099
+  },
+  {
+   "in": 35167,
+   "out": 120,
+   "usd": 0.011763,
+   "cached": 33632
+  },
+  {
+   "in": 36676,
+   "out": 175,
+   "usd": 0.012559,
+   "cached": 35165
+  },
+  {
+   "in": 38264,
+   "out": 215,
+   "usd": 0.013459,
+   "cached": 36674
+  }
+ ]
+}

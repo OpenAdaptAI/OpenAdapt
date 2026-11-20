@@ -85,9 +85,9 @@ def _resolve_wheel(pattern: str) -> Path:
 
 
 def _wheel_install_spec(wheel: Path, *, install_browser: bool) -> str:
-    """Install the optional browser runtime only for a browser lifecycle."""
+    """Install the vision stack, plus the browser runtime for a browser lifecycle."""
 
-    return f"{wheel}[browser]" if install_browser else str(wheel)
+    return f"{wheel}[vision,browser]" if install_browser else f"{wheel}[vision]"
 
 
 def _venv_python(root: Path) -> Path:

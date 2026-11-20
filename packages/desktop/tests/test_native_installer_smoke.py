@@ -591,13 +591,17 @@ def _fake_launcher(tmp_path: Path, name: str, python_body: str) -> Path:
     return launcher
 
 
-def test_launch_probe_accepts_a_process_that_stays_alive(tmp_path: Path) -> None:
+def test_launch_probe_accepts_a_process_that_stays_alive(
+    tmp_path: Path, forking_allowed: None
+) -> None:
     launcher = _fake_launcher(tmp_path, "healthy", "import time\ntime.sleep(60)\n")
 
     smoke._launch_probe(launcher, run_seconds=1.0, timeout=30.0)
 
 
-def test_launch_probe_rejects_a_startup_crash_and_retries_once(tmp_path: Path) -> None:
+def test_launch_probe_rejects_a_startup_crash_and_retries_once(
+    tmp_path: Path, forking_allowed: None
+) -> None:
     attempts = tmp_path / "attempts.log"
     body = (
         "import pathlib, sys\n"
@@ -618,7 +622,9 @@ def test_launch_probe_rejects_a_startup_crash_and_retries_once(tmp_path: Path) -
     assert attempts.read_text().count("attempt") == 2
 
 
-def test_launch_probe_reports_an_unlaunchable_executable(tmp_path: Path) -> None:
+def test_launch_probe_reports_an_unlaunchable_executable(
+    tmp_path: Path, forking_allowed: None
+) -> None:
     with pytest.raises(smoke.SmokeTestError, match="could not launch"):
         smoke._launch_probe(tmp_path / "absent", run_seconds=1.0, timeout=5.0)
 

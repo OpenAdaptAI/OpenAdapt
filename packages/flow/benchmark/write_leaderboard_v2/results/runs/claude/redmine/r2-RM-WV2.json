@@ -1,0 +1,83 @@
+{
+ "id": "RM-WV2",
+ "app": "redmine",
+ "class": "wrong_value",
+ "note": "The due date moves a month later.",
+ "agent_s": 32.8,
+ "cost_usd": 0.0977,
+ "claim": {
+  "status": "done",
+  "id": "#65",
+  "note": "RESULT: DONE #65",
+  "claim_line": true,
+  "final_text": "I created Feature #65 in the Synthetic Helpdesk project. It shows the subject \"Add a dark theme to the kiosk\", the description \"Staff asked for a night mode.\", priority Normal, due date 12/15/2026 and estimated time 4:00 h.\n\nThe start date is 11/11/2026, which the form pre-filled, and I left it alone. Pressing Enter while choosing the tracker submitted the empty form once, but Redmine rejected it (\"Subject cannot be blank\"), so nothing extra was saved.\n\nRESULT: DONE #65",
+  "model_calls": 11,
+  "actions": 27,
+  "tokens_in": 152847,
+  "tokens_out": 1712,
+  "end_url": "http://127.0.0.1:9861/issues/65"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "65"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794426695.901,
+   "method": "POST",
+   "path": "/login",
+   "save": false,
+   "status": 302,
+   "ms": 8
+  },
+  {
+   "t": 1794426710.838,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues/new.js",
+   "save": false,
+   "status": 200,
+   "ms": 114
+  },
+  {
+   "t": 1794426710.964,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues",
+   "save": true,
+   "fault": [
+    "set"
+   ],
+   "rewritten": [
+    "issue[due_date]"
+   ],
+   "status": 200,
+   "ms": 88
+  },
+  {
+   "t": 1794426727.121,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues",
+   "save": true,
+   "status": 302,
+   "ms": 33
+  }
+ ],
+ "saves_seen": 2,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 2,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 7.1,
+  "end": 8.1,
+  "waited_s": 0
+ }
+}

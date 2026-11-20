@@ -52,7 +52,7 @@ from collections import Counter
 from contextlib import ExitStack
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from typing import (
@@ -173,6 +173,7 @@ from openadapt_flow.qualification_faults import (
     verify_fault_mutation_receipt,
 )
 from openadapt_flow.run_gate import is_consequential
+from openadapt_flow.runtime import clock_checks as _clock_checks
 from openadapt_flow.runtime import heal as heal_mod
 from openadapt_flow.runtime import healing as healing_mod
 from openadapt_flow.runtime import identity as identity_mod
@@ -890,6 +891,8 @@ class Replayer:
     _render_scale_evidence: Optional[dict[str, Any]] = None
     identity_copy: Optional[looks_mod.IdentityCopyConfig] = None
     _identity_input_looks: bool = False
+    #: The run's clock (returns an aware datetime); None: the system clock.
+    clock: Optional[Callable[[], datetime]] = None
 
     def __init__(
         self,
@@ -7624,6 +7627,7 @@ class Replayer:
                     condition.kind is not PostconditionKind.TEXT_PRESENT
                     or not text
                     or "{" in text
+                    or condition.text_clock is not None
                 ):
                     continue
                 evidence = True
@@ -8233,7 +8237,9 @@ class Replayer:
 
         first_local_gui = (
             self._first_local_delivery_step is not None
-            and is_consequential(step, workflow)
+            and _clock_checks.first_local_consequential(
+                self.governed_authorization, step, workflow
+            )
         )
         if first_local_gui and first_local_effect_refusal(step, result, step.effects):
             result.elapsed_ms = (time.monotonic() - t0) * 1000.0
@@ -12923,7 +12929,9 @@ class Replayer:
             and self._first_local_delivery_step is not None
             and not interstitial
             and not api_delivery
-            and is_consequential(step, workflow)
+            and _clock_checks.first_local_consequential(
+                self.governed_authorization, step, workflow
+            )
         ):
             refusal = arm_first_local_delivery(self, step, params, actuation="gui")
         if refusal is not None:
@@ -15884,7 +15892,7 @@ class Replayer:
             anchor.region[2],
             anchor.region[3],
         )
-        today = date.today()
+        today = _clock_checks.run_today(self.clock)
 
         def observe(
             png: bytes,
@@ -16458,7 +16466,7 @@ class Replayer:
             # Count through the live row probe; the dialog itself proves
             # nothing about whether its target belongs to a record row.
             return self._structured_census(step, resolution.point)
-        today = date.today()
+        today = _clock_checks.run_today(self.clock)
         dialog_box = self.__dict__.get("_identity_dialog_box")
         try:
             lines = [
@@ -17027,7 +17035,7 @@ class Replayer:
             anchor.region[2],
             anchor.region[3],
         )
-        today = date.today()
+        today = _clock_checks.run_today(self.clock)
 
         def attempt(
             png: bytes,
@@ -19126,7 +19134,7 @@ class Replayer:
         """A natural-language expected-state for the drift-oracle, or None if
         the postcondition kind is not render-drift-rescuable."""
         kind = pc.kind.value if hasattr(pc.kind, "value") else pc.kind
-        if kind == "text_present" and pc.text:
+        if kind == "text_present" and pc.text and not pc.text_clock:
             return f"the text {pc.text!r} is visible on the screen"
         if kind == "region_stable":
             return "the content recorded in the highlighted region is present"
@@ -19399,7 +19407,14 @@ class Replayer:
         field's value must match exactly. Unobservable is a failure.
         """
 
-        params = getattr(self, "_current_params", None) or {}
+        # A program run tracks its parameters per state; a linear run keeps
+        # them in ``_run_params``. Without the fallback, every linear run's
+        # dropdown check failed (closed) because it saw no parameters.
+        params = (
+            getattr(self, "_current_params", None)
+            or getattr(self, "_run_params", None)
+            or {}
+        )
         if not pc.param or pc.param not in params:
             return False
         expected = runtime_param_text(params[pc.param])
@@ -19455,7 +19470,8 @@ class Replayer:
             return f"no_duplicate_candidate (no listed row has this run's {names})"
         if kind in ("text_present", "text_absent"):
             exact = " (exact)" if getattr(pc, "exact", False) else ""
-            return f"{kind}{exact} {pc.text!r}"
+            shown = _clock_checks.describe(pc, self.clock)
+            return f"{kind} {shown}" if shown else f"{kind}{exact} {pc.text!r}"
         if kind in ("url_changed", "title_changed", "new_tab_opened"):
             return f"{kind} (vs. the step's start state)"
         return f"{kind} region={tuple(pc.region) if pc.region else None}"
@@ -19500,6 +19516,9 @@ class Replayer:
     ) -> bool:
         """Evaluate a single postcondition against a frame."""
         kind = pc.kind.value if hasattr(pc.kind, "value") else pc.kind
+        clocked = _clock_checks.clock_text_check(self, pc, kind, frame_png)
+        if clocked is not None:
+            return clocked
         if kind == "local_edit":
             return self._local_edit_held(pc, start_state or {})
         if kind == "focus_on":

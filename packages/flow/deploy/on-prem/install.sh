@@ -246,14 +246,14 @@ if [[ -n "$WHEELHOUSE" ]]; then
   fi
   harden_release_control
   restore_audit_ownership
-  echo "  installed openadapt-flow[privacy] into $RELDIR/venv (offline)"
+  echo "  installed openadapt-flow[privacy,vision] into $RELDIR/venv (offline)"
   echo "  active engine path: $STORAGE_ROOT/current/venv/bin"
   echo "  NOTE: also install the spaCy NER model offline:"
   echo "    $STORAGE_ROOT/current/venv/bin/python -m spacy download en_core_web_trf   # model staged locally"
 else
   echo "== [STUB] engine install skipped (no --wheelhouse) =="
   echo "  Provide --wheelhouse ./wheels (built off-site with 'pip download"
-  echo "  openadapt-flow[privacy]') to install fully offline. Air-gapped hosts"
+  echo "  openadapt-flow[privacy,vision]') to install fully offline. Air-gapped hosts"
   echo "  must NOT install from PyPI."
 fi
 

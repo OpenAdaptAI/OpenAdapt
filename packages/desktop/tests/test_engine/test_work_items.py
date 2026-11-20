@@ -13,6 +13,7 @@ The safety contract these tests pin:
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -290,7 +291,8 @@ def test_item_values_reach_flow_only_through_a_private_file(task) -> None:
     assert result["item"]["status"] == "done"
     staged = bridge.calls[0]["params_file"]
     assert staged["values"] == {"member_id": "M-4821", "note": "Reviewed"}
-    assert staged["mode"] == "0o600"
+    if os.name != "nt":  # Windows has no POSIX owner-only mode bits
+        assert staged["mode"] == "0o600"
     assert not staged["path"].exists()
     assert "M-4821" not in json.dumps(events)
     assert "M-4821" not in repr(bridge.calls[0]["config"])
@@ -616,6 +618,27 @@ def test_the_sample_runs_without_a_recording_and_reports_plain_results(task) -> 
     assert dropped["record_checks_failed"] == 1
     assert [step["saves"] for step in dropped["steps"]] == [False, True]
     assert ("sample_progress", {"state": "done", "detail": ""}) in events
+
+
+def test_a_sample_that_exits_with_an_error_says_so(task) -> None:
+    """Flow's tutorial failed (for example, a download it needs was refused)."""
+
+    from openadapt_desktop.flow_bridge import FlowResult
+
+    disp, _db, events = task
+
+    class _FailedBridge(_SampleBridge):
+        def tutorial(self, out_dir: Path, *, break_it: bool = True, timeout=None):
+            return FlowResult(ok=False, returncode=1, stdout="", stderr="certificate verify failed")
+
+    disp.services._flow_bridge = _FailedBridge()
+
+    sample = disp.dispatch("run_sample", {})
+
+    assert sample["ok"] is False
+    assert "stopped before it finished" in sample["error"]
+    assert "internet connection" in sample["error"]
+    assert ("sample_progress", {"state": "failed", "detail": ""}) in events
 
 
 def test_an_interrupted_item_run_becomes_a_record_to_check(task) -> None:

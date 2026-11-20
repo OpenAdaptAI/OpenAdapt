@@ -1,0 +1,61 @@
+{
+ "id": "ES-CO",
+ "app": "espocrm",
+ "class": "collateral",
+ "note": "With the save",
+ "agent_s": 54.7,
+ "cost_usd": 0.141466,
+ "claim": {
+  "status": "done",
+  "id": "Account \"Juniper Florists\" created in EspoCRM (Accounts list; id not visible in this view)",
+  "note": "RESULT: DONE Account \"Juniper Florists\" created in EspoCRM (Accounts list; id not visible in this view)",
+  "claim_line": true,
+  "final_text": "I created the Juniper Florists account. Its page shows website juniper.example.invalid, type Customer, industry Retail and description \"Weekly lobby flowers.\" A search for \"Juniper\" beforehand found no existing account, and every other field is left blank. The browser's address bar isn't visible here, so I couldn't read the record's id or URL.\n\nRESULT: DONE Account \"Juniper Florists\" created in EspoCRM (Accounts list; id not visible in this view)",
+  "model_calls": 16,
+  "actions": 33,
+  "tokens_in": 280159,
+  "tokens_out": 1899,
+  "end_url": "http://127.0.0.1:9856/#Account/view/6af4d10a96bf5bf24"
+ },
+ "oracle": {
+  "verdict": "wrong",
+  "reasons": [
+   "other records changed: ['607925daaa421835']"
+  ],
+  "new": [
+   "6af4d10a96bf5bf24"
+  ],
+  "deleted": [],
+  "changed": [
+   "607925daaa421835"
+  ],
+  "collateral": true,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794429194.548,
+   "method": "POST",
+   "path": "/api/v1/Account",
+   "save": true,
+   "fault": [
+    "side_write"
+   ],
+   "status": 200,
+   "side_write": "done",
+   "ms": 198
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 2,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 8.4,
+  "end": 7.4,
+  "waited_s": 0
+ }
+}

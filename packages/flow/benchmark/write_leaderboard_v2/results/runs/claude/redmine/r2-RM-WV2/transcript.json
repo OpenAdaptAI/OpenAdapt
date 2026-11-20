@@ -1,0 +1,426 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      23,
+      95
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      52,
+      121
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Changing the tracker reloads the form, so I'll do that first.",
+   "actions": [
+    {
+     "coordinate": [
+      243,
+      177
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The layout shifted. I'll click the tracker dropdown again.",
+   "actions": [
+    {
+     "coordinate": [
+      243,
+      183
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "Escape"
+    },
+    {
+     "text": "Feature"
+    },
+    {
+     "text": "Return"
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      700,
+      280
+     ]
+    },
+    {
+     "text": "Add a dark theme to the kiosk"
+    },
+    {
+     "coordinate": [
+      700,
+      415
+     ]
+    },
+    {
+     "text": "Staff asked for a night mode."
+    },
+    {
+     "coordinate": [
+      845,
+      586
+     ]
+    },
+    {
+     "text": "12152026"
+    },
+    {
+     "coordinate": [
+      855,
+      620
+     ]
+    },
+    {
+     "text": "4"
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      840,
+      595
+     ]
+    },
+    {
+     "text": "12152026"
+    },
+    {
+     "region": [
+      640,
+      540,
+      1000,
+      680
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      843,
+      595
+     ]
+    },
+    {
+     "text": "20261215"
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      43,
+      791
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I created Feature #65 in the Synthetic Helpdesk project. It shows the subject \"Add a dark theme to the kiosk\", the description \"Staff asked for a night mode.\", priority Normal, due date 12/15/2026 and estimated time 4:00 h.\n\nThe start date is 11/11/2026, which the form pre-filled, and I left it alone. Pressing Enter while choosing the tracker submitted the empty form once, but Redmine rejected it (\"Subject cannot be blank\"), so nothing extra was saved.\n\nRESULT: DONE #65",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 23,
+   "y": 95,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 52,
+   "y": 121,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 243,
+   "y": 177,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 243,
+   "y": 183,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Escape"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Feature"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Return"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 280,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Add a dark theme to the kiosk"
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 415,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Staff asked for a night mode."
+  },
+  {
+   "a": "click",
+   "x": 845,
+   "y": 586,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "12152026"
+  },
+  {
+   "a": "click",
+   "x": 855,
+   "y": 620,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "4"
+  },
+  {
+   "a": "click",
+   "x": 840,
+   "y": 595,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "12152026"
+  },
+  {
+   "a": "click",
+   "x": 843,
+   "y": 595,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "20261215"
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 43,
+   "y": 791,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6163,
+   "out": 92,
+   "usd": 0.016325,
+   "cached": 0
+  },
+  {
+   "in": 7659,
+   "out": 98,
+   "usd": 0.005961,
+   "cached": 6159
+  },
+  {
+   "in": 9155,
+   "out": 128,
+   "usd": 0.006555,
+   "cached": 7657
+  },
+  {
+   "in": 10673,
+   "out": 128,
+   "usd": 0.00691,
+   "cached": 9153
+  },
+  {
+   "in": 12191,
+   "out": 167,
+   "usd": 0.007603,
+   "cached": 10671
+  },
+  {
+   "in": 13768,
+   "out": 305,
+   "usd": 0.009434,
+   "cached": 12189
+  },
+  {
+   "in": 15542,
+   "out": 168,
+   "usd": 0.008872,
+   "cached": 13766
+  },
+  {
+   "in": 17106,
+   "out": 176,
+   "usd": 0.008782,
+   "cached": 15540
+  },
+  {
+   "in": 18655,
+   "out": 144,
+   "usd": 0.008737,
+   "cached": 17104
+  },
+  {
+   "in": 20208,
+   "out": 121,
+   "usd": 0.008827,
+   "cached": 18653
+  },
+  {
+   "in": 21727,
+   "out": 185,
+   "usd": 0.009693,
+   "cached": 20206
+  }
+ ]
+}

@@ -1,0 +1,489 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      23,
+      166
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Let me check for an existing one first.",
+   "actions": [
+    {
+     "coordinate": [
+      340,
+      112
+     ]
+    },
+    {
+     "text": "Saltmarsh\n"
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1194,
+      63
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      263,
+      233
+     ]
+    },
+    {
+     "text": "Saltmarsh Bakery"
+    },
+    {
+     "coordinate": [
+      651,
+      233
+     ]
+    },
+    {
+     "text": "saltmarsh.example.invalid"
+    },
+    {
+     "coordinate": [
+      457,
+      702
+     ]
+    },
+    {
+     "text": "Bread for two cafes."
+    },
+    {
+     "coordinate": [
+      263,
+      619
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      121,
+      683
+     ]
+    },
+    {
+     "coordinate": [
+      651,
+      619
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Industry dropdown didn't open; click again.",
+   "actions": [
+    {
+     "coordinate": [
+      651,
+      619
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Try typing to select.",
+   "actions": [
+    {
+     "text": "Retail"
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      496,
+      656
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": [
+      64,
+      540,
+      852,
+      750
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      94,
+      113
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I created the Saltmarsh Bakery account, and its page shows the values you asked for. A search for \"Saltmarsh\" beforehand found no existing account, so this is a new record. I left every other field at its default.\n\n- **Name:** Saltmarsh Bakery\n- **Website:** saltmarsh.example.invalid\n- **Type:** Customer\n- **Industry:** Retail\n- **Description:** Bread for two cafes.\n\nI didn't capture the record's URL or id from the browser, so the result line below gives the page title instead.\n\nRESULT: DONE Account \"Saltmarsh Bakery\" created in Accounts (record page URL not captured)",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 23,
+   "y": 166,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 340,
+   "y": 112,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Saltmarsh\n"
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 1194,
+   "y": 63,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 263,
+   "y": 233,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Saltmarsh Bakery"
+  },
+  {
+   "a": "click",
+   "x": 651,
+   "y": 233,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "saltmarsh.example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 457,
+   "y": 702,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Bread for two cafes."
+  },
+  {
+   "a": "click",
+   "x": 263,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 121,
+   "y": 683,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 651,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 651,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "type",
+   "text": "Retail"
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 496,
+   "y": 656,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 94,
+   "y": 113,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6145,
+   "out": 92,
+   "usd": 0.01628,
+   "cached": 0
+  },
+  {
+   "in": 7641,
+   "out": 75,
+   "usd": 0.005727,
+   "cached": 6141
+  },
+  {
+   "in": 9101,
+   "out": 141,
+   "usd": 0.006592,
+   "cached": 7639
+  },
+  {
+   "in": 10643,
+   "out": 99,
+   "usd": 0.006669,
+   "cached": 9099
+  },
+  {
+   "in": 12140,
+   "out": 75,
+   "usd": 0.006625,
+   "cached": 10641
+  },
+  {
+   "in": 13600,
+   "out": 240,
+   "usd": 0.008482,
+   "cached": 12138
+  },
+  {
+   "in": 15310,
+   "out": 129,
+   "usd": 0.008289,
+   "cached": 13598
+  },
+  {
+   "in": 16842,
+   "out": 122,
+   "usd": 0.008116,
+   "cached": 15308
+  },
+  {
+   "in": 18354,
+   "out": 108,
+   "usd": 0.008232,
+   "cached": 16840
+  },
+  {
+   "in": 19850,
+   "out": 112,
+   "usd": 0.008534,
+   "cached": 18352
+  },
+  {
+   "in": 21359,
+   "out": 106,
+   "usd": 0.008806,
+   "cached": 19848
+  },
+  {
+   "in": 22855,
+   "out": 75,
+   "usd": 0.008765,
+   "cached": 21357
+  },
+  {
+   "in": 24315,
+   "out": 83,
+   "usd": 0.009055,
+   "cached": 22853
+  },
+  {
+   "in": 25775,
+   "out": 213,
+   "usd": 0.010647,
+   "cached": 24313
+  }
+ ]
+}

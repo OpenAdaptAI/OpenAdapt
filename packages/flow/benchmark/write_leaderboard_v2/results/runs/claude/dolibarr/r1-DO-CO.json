@@ -1,0 +1,69 @@
+{
+ "id": "DO-CO",
+ "app": "dolibarr",
+ "class": "collateral",
+ "note": "With the save",
+ "agent_s": 40.2,
+ "cost_usd": 0.079851,
+ "claim": {
+  "status": "done",
+  "id": "Contact \"Jiwoo Kim\" created in Contacts/Addresses (id not visible)",
+  "note": "RESULT: DONE Contact \"Jiwoo Kim\" created in Contacts/Addresses (id not visible)",
+  "claim_line": true,
+  "final_text": "I created the contact Jiwoo Kim, not linked to any third party. Its card shows job position Logistics planner and email j.kim@example.invalid. The professional phone is stored as 555-0198 (I checked in the edit form), though the card displays it as 5550198. I left every other field at its default.\n\nI couldn't see the contact's id or URL because the browser shows no address bar.\n\nRESULT: DONE Contact \"Jiwoo Kim\" created in Contacts/Addresses (id not visible)",
+  "model_calls": 9,
+  "actions": 25,
+  "tokens_in": 111892,
+  "tokens_out": 1445,
+  "end_url": "http://127.0.0.1:9851/contact/card.php?id=51"
+ },
+ "oracle": {
+  "verdict": "wrong",
+  "reasons": [
+   "other records changed: ['34']"
+  ],
+  "new": [
+   "51"
+  ],
+  "deleted": [],
+  "changed": [
+   "34"
+  ],
+  "collateral": true,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794426638.688,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 9
+  },
+  {
+   "t": 1794426663.571,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": [
+    "side_write"
+   ],
+   "status": 302,
+   "side_write": "done",
+   "ms": 130
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 1,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 6.6,
+  "end": 7.2,
+  "waited_s": 0
+ }
+}

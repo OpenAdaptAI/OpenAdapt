@@ -1,0 +1,61 @@
+{
+ "id": "ES-CO",
+ "app": "espocrm",
+ "class": "collateral",
+ "note": "With the save",
+ "agent_s": 102.5,
+ "cost_usd": 0.174767,
+ "claim": {
+  "status": "done",
+  "id": "Juniper Florists",
+  "note": "RESULT: DONE Juniper Florists",
+  "claim_line": true,
+  "final_text": "Created Juniper Florists with the five specified values; all other fields were left unchanged.\nRESULT: DONE Juniper Florists",
+  "model_calls": 27,
+  "actions": 28,
+  "tokens_in": 500617,
+  "tokens_out": 1148,
+  "end_url": "http://127.0.0.1:9856/#Account/view/6af4d81e8693fa695"
+ },
+ "oracle": {
+  "verdict": "wrong",
+  "reasons": [
+   "other records changed: ['47d1b5f396158e13']"
+  ],
+  "new": [
+   "6af4d81e8693fa695"
+  ],
+  "deleted": [],
+  "changed": [
+   "47d1b5f396158e13"
+  ],
+  "collateral": true,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794431006.424,
+   "method": "POST",
+   "path": "/api/v1/Account",
+   "save": true,
+   "fault": [
+    "side_write"
+   ],
+   "status": 200,
+   "side_write": "done",
+   "ms": 182
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 3,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 7.3,
+  "end": 7.2,
+  "waited_s": 0
+ }
+}

@@ -303,6 +303,15 @@ class TestProofPage:
         for text in _RECONCILE_OPTIONS:
             assert demo_proof.plain_choice(text) != text
 
+    def test_first_local_reconcile_option_has_plain_wording(self) -> None:
+        from openadapt_flow.runtime.durable.controller import (
+            FIRST_LOCAL_RECONCILE_OPTION,
+        )
+
+        plain = demo_proof.plain_choice(FIRST_LOCAL_RECONCILE_OPTION)
+        assert plain != FIRST_LOCAL_RECONCILE_OPTION
+        assert "try" not in plain  # the first local save is never resent
+
     def test_unknown_engine_option_is_shown_verbatim(self) -> None:
         text = "Do something the table doesn't know"
         assert demo_proof.plain_choice(text) == text

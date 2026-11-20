@@ -76,10 +76,10 @@ def test_clean_browser_lifecycle_installs_the_browser_extra(tmp_path):
     wheel = tmp_path / "openadapt_flow.whl"
 
     assert lifecycle._wheel_install_spec(wheel, install_browser=True).endswith(
-        "openadapt_flow.whl[browser]"
+        "openadapt_flow.whl[vision,browser]"
     )
     assert lifecycle._wheel_install_spec(wheel, install_browser=False).endswith(
-        "openadapt_flow.whl"
+        "openadapt_flow.whl[vision]"
     )
 
 

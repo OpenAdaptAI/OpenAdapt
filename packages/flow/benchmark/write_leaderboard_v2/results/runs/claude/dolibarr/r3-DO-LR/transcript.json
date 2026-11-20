@@ -1,0 +1,689 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+l"
+    },
+    {
+     "text": "localhost/contact/card.php?action=create\n"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      113,
+      28
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Let me check the existing contacts list first for duplicates.",
+   "actions": [
+    {
+     "coordinate": [
+      25,
+      397
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "No duplicate. Create new.",
+   "actions": [
+    {
+     "coordinate": [
+      85,
+      371
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Page may still be loading.",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      665,
+      165
+     ]
+    },
+    {
+     "text": "Petrov"
+    },
+    {
+     "coordinate": [
+      665,
+      198
+     ]
+    },
+    {
+     "text": "Anton"
+    },
+    {
+     "coordinate": [
+      665,
+      297
+     ]
+    },
+    {
+     "text": "Storekeeper"
+    },
+    {
+     "coordinate": [
+      685,
+      476
+     ]
+    },
+    {
+     "text": "555-0196"
+    },
+    {
+     "coordinate": [
+      685,
+      544
+     ]
+    },
+    {
+     "text": "a.petrov@example.invalid"
+    },
+    {
+     "coordinate": [
+      770,
+      600
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 15
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      720,
+      759
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "}": null
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {
+     "coordinate": [
+      640,
+      400
+     ]
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 5
+    },
+    {
+     "coordinate": [
+      640,
+      400
+     ]
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "alt+Left"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 10
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "alt+Home"
+    },
+    {
+     "duration": 4
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 30
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "alt+Left"
+    },
+    {
+     "duration": 5
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+l"
+    },
+    {
+     "text": "localhost/contact/list.php\n"
+    },
+    {
+     "duration": 5
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 30
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 5
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 60
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I filled in the new contact form and clicked Add, but I can't confirm the contact was saved. The browser went blank right after the click and stayed blank.\n\nI waited several minutes and tried going back, going to the home page, typing the contacts list address and reloading. Nothing changed, so I couldn't open the contact list or the new contact's page to check.\n\nThe form held exactly these values: last name Petrov, first name Anton, job position Storekeeper, business phone 555-0196, email a.petrov@example.invalid. No third party was selected and every other field was left at its default. Before submitting, the contact list showed three contacts, none of them Anton Petrov. I did not resubmit the form, to avoid creating a duplicate.\n\nRESULT: NOT DONE The browser went blank after clicking Add, so I could not confirm the contact was saved.",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "l"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "localhost/contact/card.php?action=create\n"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 113,
+   "y": 28,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 25,
+   "y": 397,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 85,
+   "y": 371,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 665,
+   "y": 165,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Petrov"
+  },
+  {
+   "a": "click",
+   "x": 665,
+   "y": 198,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Anton"
+  },
+  {
+   "a": "click",
+   "x": 665,
+   "y": 297,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Storekeeper"
+  },
+  {
+   "a": "click",
+   "x": 685,
+   "y": 476,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "555-0196"
+  },
+  {
+   "a": "click",
+   "x": 685,
+   "y": 544,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "a.petrov@example.invalid"
+  },
+  {
+   "a": "scroll",
+   "x": 770,
+   "y": 600,
+   "dx": 0,
+   "dy": 1800
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 720,
+   "y": 759,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "move",
+   "x": 640,
+   "y": 400
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "click",
+   "x": 640,
+   "y": 400,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 10.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Home"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 4.0
+  },
+  {
+   "a": "wait",
+   "s": 30.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "l"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "localhost/contact/list.php\n"
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "wait",
+   "s": 30.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "wait",
+   "s": 60.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6154,
+   "out": 118,
+   "usd": 0.016563,
+   "cached": 0
+  },
+  {
+   "in": 7686,
+   "out": 143,
+   "usd": 0.006499,
+   "cached": 6150
+  },
+  {
+   "in": 9219,
+   "out": 125,
+   "usd": 0.006623,
+   "cached": 7684
+  },
+  {
+   "in": 10734,
+   "out": 109,
+   "usd": 0.006725,
+   "cached": 9217
+  },
+  {
+   "in": 12241,
+   "out": 84,
+   "usd": 0.006758,
+   "cached": 10732
+  },
+  {
+   "in": 13710,
+   "out": 340,
+   "usd": 0.009524,
+   "cached": 12239
+  },
+  {
+   "in": 15560,
+   "out": 102,
+   "usd": 0.008391,
+   "cached": 13708
+  },
+  {
+   "in": 17060,
+   "out": 75,
+   "usd": 0.007616,
+   "cached": 15558
+  },
+  {
+   "in": 18520,
+   "out": 100,
+   "usd": 0.008066,
+   "cached": 17058
+  },
+  {
+   "in": 20020,
+   "out": 160,
+   "usd": 0.009058,
+   "cached": 18518
+  },
+  {
+   "in": 21578,
+   "out": 186,
+   "usd": 0.009763,
+   "cached": 20018
+  },
+  {
+   "in": 23152,
+   "out": 75,
+   "usd": 0.009004,
+   "cached": 21576
+  },
+  {
+   "in": 24612,
+   "out": 162,
+   "usd": 0.009904,
+   "cached": 23150
+  },
+  {
+   "in": 26170,
+   "out": 98,
+   "usd": 0.009801,
+   "cached": 24610
+  },
+  {
+   "in": 27653,
+   "out": 185,
+   "usd": 0.010795,
+   "cached": 26168
+  },
+  {
+   "in": 29234,
+   "out": 249,
+   "usd": 0.011977,
+   "cached": 27651
+  },
+  {
+   "in": 30890,
+   "out": 80,
+   "usd": 0.01079,
+   "cached": 29232
+  },
+  {
+   "in": 32355,
+   "out": 116,
+   "usd": 0.011004,
+   "cached": 30888
+  },
+  {
+   "in": 33867,
+   "out": 80,
+   "usd": 0.011055,
+   "cached": 32353
+  },
+  {
+   "in": 35332,
+   "out": 269,
+   "usd": 0.013129,
+   "cached": 33865
+  }
+ ]
+}

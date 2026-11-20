@@ -18,7 +18,14 @@ _UNHANDLED_RUNTIME_MARKERS = (
     "Task was destroyed but it is pending!",
     "Future exception was never retrieved",
 )
-_LAZY_BROWSER_INSTALL_NOTICE = "Downloading the Chromium browser OpenAdapt needs"
+# Flow prints this, word for word, before it downloads Playwright's headless
+# Chromium shell because no installed Chrome or Edge was found.
+_LAZY_BROWSER_INSTALL_NOTICE = (
+    "openadapt-flow: no Chrome or Edge found, so downloading Playwright's "
+    "headless Chromium once (about 90 MB). Later runs reuse it."
+)
+# Flow prints this before it downloads the full Chromium build (headed runs).
+_FULL_BROWSER_INSTALL_NOTICE = "Downloading the Chromium browser OpenAdapt needs"
 
 
 def _resolve_wheel(pattern: str, distribution: str) -> Path:
@@ -101,15 +108,22 @@ def _browser_present(
     cwd: Path,
     env: dict[str, str],
     log: Path,
+    only_shell: bool = True,
 ) -> bool:
-    """Inspect Flow's exact Playwright browser without launching it."""
+    """Inspect Flow's bundled Chromium without launching it.
+
+    The headless quickstart downloads only Playwright's headless shell, so that
+    is the build to probe by default. ``only_shell=False`` probes the full
+    Chromium build instead.
+    """
     result = _run(
         [
             str(python),
             "-c",
             (
-                "from openadapt_flow._browser_setup import _chromium_present; "
-                "print('present' if _chromium_present() else 'absent')"
+                "from openadapt_flow._browser_setup import _bundled_present; "
+                f"print('present' if _bundled_present(only_shell={only_shell}) "
+                "else 'absent')"
             ),
         ],
         cwd=cwd,
@@ -120,6 +134,34 @@ def _browser_present(
     if state not in {"present", "absent"}:
         raise AssertionError(f"unexpected Chromium probe output: {state!r}")
     return state == "present"
+
+
+def _installed_browser_channel(
+    python: Path,
+    *,
+    cwd: Path,
+    env: dict[str, str],
+    log: Path,
+) -> str | None:
+    """Return the installed Chrome or Edge channel Flow would use, or None."""
+    result = _run(
+        [
+            str(python),
+            "-c",
+            (
+                "from openadapt_flow._browser_setup import "
+                "installed_browser_channel; "
+                "print(installed_browser_channel() or 'none')"
+            ),
+        ],
+        cwd=cwd,
+        env=env,
+        log=log,
+    )
+    channel = result.stdout.strip()
+    if channel not in {"chrome", "msedge", "none"}:
+        raise AssertionError(f"unexpected browser channel probe output: {channel!r}")
+    return None if channel == "none" else channel
 
 
 def _install_browser_system_dependencies(
@@ -220,6 +262,7 @@ def run_lifecycle(
     flow_wheel: Path | None,
     browser_system_deps: bool,
     source_revision: str | None,
+    require_installed_browser: bool = False,
 ) -> dict[str, object]:
     if work_dir.exists():
         raise FileExistsError(f"work directory already exists: {work_dir}")
@@ -238,6 +281,9 @@ def run_lifecycle(
     env["PYTHONIOENCODING"] = "utf-8"
     env["OPENADAPT_FLOW_SCRUB"] = "off"
     env["PLAYWRIGHT_BROWSERS_PATH"] = str(work_dir / "playwright-browsers")
+    # Force the no-Chrome path so this pass proves the lazy download even on a
+    # runner image that ships Google Chrome.
+    env["OPENADAPT_FLOW_BROWSER"] = "bundled"
 
     summary: dict[str, object] = {
         "launcher_wheel": launcher_wheel.name,
@@ -362,6 +408,79 @@ def run_lifecycle(
             env=env,
             log=logs / "10-lint.log",
         )
+
+        # Second pass: the default browser setting, with an empty browser
+        # cache of its own. With Chrome or Edge installed it must download
+        # nothing.
+        auto_env = env.copy()
+        auto_env.pop("OPENADAPT_FLOW_BROWSER", None)
+        auto_env["PLAYWRIGHT_BROWSERS_PATH"] = str(
+            work_dir / "playwright-browsers-auto"
+        )
+        channel = _installed_browser_channel(
+            python,
+            cwd=artifacts,
+            env=auto_env,
+            log=logs / "10b-browser-channel.log",
+        )
+        if channel is None and require_installed_browser:
+            raise AssertionError(
+                "no installed Chrome or Edge found, but --require-installed-browser "
+                "is set; the default browser path cannot be checked"
+            )
+        auto_quickstart = artifacts / "openadapt-quickstart-auto"
+        auto_result = _run(
+            [str(console), "quickstart", "--out", str(auto_quickstart)],
+            cwd=artifacts,
+            env=auto_env,
+            log=logs / "10c-quickstart-auto.log",
+        )
+        # _inspect_quickstart raises unless every run is VERIFIED.
+        auto_outcome = _inspect_quickstart(auto_quickstart)
+        bundled_after_auto = _browser_present(
+            python,
+            cwd=artifacts,
+            env=auto_env,
+            log=logs / "10d-browser-after-auto.log",
+        )
+        full_after_auto = _browser_present(
+            python,
+            cwd=artifacts,
+            env=auto_env,
+            log=logs / "10e-full-browser-after-auto.log",
+            only_shell=False,
+        )
+        auto_notice_seen = any(
+            notice in auto_result.stdout
+            for notice in (_LAZY_BROWSER_INSTALL_NOTICE, _FULL_BROWSER_INSTALL_NOTICE)
+        )
+        auto_pass: dict[str, object] = {
+            "browser_setting": "auto",
+            "installed_browser_channel": channel,
+            "outcome": auto_outcome["outcome"],
+            "download_notice_seen": auto_notice_seen,
+            "bundled_present_after_quickstart": bundled_after_auto,
+            "full_chromium_present_after_quickstart": full_after_auto,
+            "no_download_checked": channel is not None,
+        }
+        summary["auto_browser_pass"] = auto_pass
+        if channel is None:
+            print(
+                "\nSKIP no-download check: this runner has no installed Chrome "
+                "or Edge, so the default browser setting correctly downloaded "
+                "Playwright's headless Chromium."
+            )
+        else:
+            if auto_notice_seen:
+                raise AssertionError(
+                    f"quickstart printed a browser download notice although "
+                    f"{channel} is installed"
+                )
+            if bundled_after_auto or full_after_auto:
+                raise AssertionError(
+                    f"quickstart downloaded Playwright's Chromium although "
+                    f"{channel} is installed"
+                )
     finally:
         if installed:
             _run(
@@ -415,6 +534,14 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Install Linux browser system packages without downloading Chromium",
     )
+    parser.add_argument(
+        "--require-installed-browser",
+        action="store_true",
+        help=(
+            "Fail instead of skipping the no-download check when no installed "
+            "Chrome or Edge is found"
+        ),
+    )
     parser.add_argument("--source-revision", default=None)
     return parser
 
@@ -429,6 +556,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         flow_wheel=flow_wheel,
         browser_system_deps=args.browser_system_deps,
         source_revision=args.source_revision,
+        require_installed_browser=args.require_installed_browser,
     )
     return 0
 

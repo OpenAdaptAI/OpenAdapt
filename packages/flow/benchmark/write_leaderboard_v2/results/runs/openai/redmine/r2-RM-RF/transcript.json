@@ -1,0 +1,229 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_09729a18b9b20ea9016af4c8add89887d2b6542c91cbe4aa28",
+     "call_id": "call_6pPHKEW4Ad5oj5k0NP7ig1BB",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_09729a18b9b20ea9016af4c8b0824887d2a32c3bf71c628fa5",
+     "call_id": "call_02PzeIvXOPRcFDd5njDVD3FS",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 23,
+       "y": 95
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_09729a18b9b20ea9016af4c8b3467887d2a6e29e7762112fc0",
+     "call_id": "call_bTioJWHHUeHuGZVeGbAs6uD7",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 52,
+       "y": 121
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_09729a18b9b20ea9016af4c8b7229087d29d24fb150b8a70bf",
+     "call_id": "call_UCJSwyzGeZ0hACxrBqpLol45",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 245,
+       "y": 179
+      },
+      {
+       "keys": [
+        "s"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ENTER"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_09729a18b9b20ea9016af4c8b95da887d2a3ba0c9c770b1db4",
+     "call_id": "call_MyWjso664SNQijBL8nn7bzxI",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "r"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_09729a18b9b20ea9016af4c8bb63a887d2936d52616f273b9b",
+     "call_id": "call_BnDSDkUsGxDJS2zkNtdDNVil",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "ALT",
+        "LEFT"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE Redmine shows \u201cService Unavailable\u201d; the issue could not be created.",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 23,
+   "y": 95,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 52,
+   "y": 121,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 245,
+   "y": 179,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "s"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ENTER"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "r"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ALT",
+    "LEFT"
+   ]
+  }
+ ],
+ "usage": [
+  {
+   "in": 2216,
+   "out": 19,
+   "usd": 0.000639,
+   "cached": 2213
+  },
+  {
+   "in": 3433,
+   "out": 31,
+   "usd": 0.001002,
+   "cached": 3430
+  },
+  {
+   "in": 4689,
+   "out": 31,
+   "usd": 0.003514,
+   "cached": 3430
+  },
+  {
+   "in": 5945,
+   "out": 49,
+   "usd": 0.003945,
+   "cached": 4686
+  },
+  {
+   "in": 7227,
+   "out": 26,
+   "usd": 0.004018,
+   "cached": 5942
+  },
+  {
+   "in": 8474,
+   "out": 26,
+   "usd": 0.004205,
+   "cached": 7224
+  },
+  {
+   "in": 9721,
+   "out": 23,
+   "usd": 0.004424,
+   "cached": 8471
+  }
+ ]
+}

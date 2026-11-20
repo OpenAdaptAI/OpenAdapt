@@ -1,0 +1,316 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      23,
+      95
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      52,
+      121
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Tracker is already Bug. Priority is a select; I'll use the keyboard.",
+   "actions": [
+    {
+     "coordinate": [
+      700,
+      211
+     ]
+    },
+    {
+     "text": "Printer drops scan jobs"
+    },
+    {
+     "coordinate": [
+      700,
+      345
+     ]
+    },
+    {
+     "text": "Scans over 20 pages vanish."
+    },
+    {
+     "coordinate": [
+      855,
+      549
+     ]
+    },
+    {
+     "text": "2.5"
+    },
+    {
+     "coordinate": [
+      846,
+      516
+     ]
+    },
+    {
+     "text": "12042026"
+    },
+    {
+     "coordinate": [
+      334,
+      482
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      841,
+      522
+     ]
+    },
+    {
+     "text": "20261204"
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Now priority.",
+   "actions": [
+    {
+     "coordinate": [
+      334,
+      488
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "High"
+    },
+    {
+     "text": "Return"
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I created Bug #84 in Synthetic Helpdesk with the subject \"Printer drops scan jobs\", the description \"Scans over 20 pages vanish.\", priority High, due date 2026-12-04 and estimated time 2.5 hours (shown as 2:30 h).\n\nThe Enter key I pressed to confirm the priority also submitted the form, so I didn't see the form again before it was created. The issue page confirms every value I set. Status (New), start date (the default 11/11/2026) and the other fields are as the form had them.\n\nThe page also lists Redmine Admin as a watcher, which Redmine added automatically.\n\nRESULT: DONE #84",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 23,
+   "y": 95,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 52,
+   "y": 121,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 211,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Printer drops scan jobs"
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 345,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Scans over 20 pages vanish."
+  },
+  {
+   "a": "click",
+   "x": 855,
+   "y": 549,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "2.5"
+  },
+  {
+   "a": "click",
+   "x": 846,
+   "y": 516,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "12042026"
+  },
+  {
+   "a": "click",
+   "x": 334,
+   "y": 482,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 841,
+   "y": 522,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "20261204"
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 334,
+   "y": 488,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "type",
+   "text": "High"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Return"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6162,
+   "out": 92,
+   "usd": 0.016323,
+   "cached": 0
+  },
+  {
+   "in": 7658,
+   "out": 98,
+   "usd": 0.005961,
+   "cached": 6158
+  },
+  {
+   "in": 9154,
+   "out": 302,
+   "usd": 0.008295,
+   "cached": 7656
+  },
+  {
+   "in": 10950,
+   "out": 199,
+   "usd": 0.008314,
+   "cached": 9152
+  },
+  {
+   "in": 12550,
+   "out": 112,
+   "usd": 0.007314,
+   "cached": 10948
+  },
+  {
+   "in": 14052,
+   "out": 196,
+   "usd": 0.008229,
+   "cached": 12548
+  },
+  {
+   "in": 15647,
+   "out": 212,
+   "usd": 0.008921,
+   "cached": 14050
+  }
+ ]
+}

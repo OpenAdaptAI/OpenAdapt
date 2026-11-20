@@ -1,0 +1,77 @@
+{
+ "id": "X01",
+ "app": "redmine",
+ "class": "clean",
+ "note": "",
+ "agent_s": 27.9,
+ "cost_usd": 0.039304,
+ "claim": {
+  "status": "done",
+  "id": "14",
+  "note": "RESULT: DONE 14",
+  "claim_line": true,
+  "final_text": "RESULT: DONE 14",
+  "model_calls": 9,
+  "actions": 19,
+  "tokens_in": 65652,
+  "tokens_out": 380,
+  "end_url": "http://127.0.0.1:9861/issues/14"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "14"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794423363.688,
+   "method": "POST",
+   "path": "/login",
+   "save": false,
+   "status": 302,
+   "ms": 27
+  },
+  {
+   "t": 1794423378.323,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues/new.js",
+   "save": false,
+   "status": 200,
+   "ms": 59
+  },
+  {
+   "t": 1794423378.334,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues",
+   "save": true,
+   "status": 200,
+   "ms": 114
+  },
+  {
+   "t": 1794423387.306,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues",
+   "save": true,
+   "status": 302,
+   "ms": 54
+  }
+ ],
+ "saves_seen": 2,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "practice",
+ "rep": 1,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 26.2,
+  "end": 25.1,
+  "waited_s": 0
+ }
+}

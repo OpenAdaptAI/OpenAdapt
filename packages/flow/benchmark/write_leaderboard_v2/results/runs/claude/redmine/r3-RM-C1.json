@@ -1,0 +1,61 @@
+{
+ "id": "RM-C1",
+ "app": "redmine",
+ "class": "clean",
+ "note": "A plain issue.",
+ "agent_s": 26.6,
+ "cost_usd": 0.063357,
+ "claim": {
+  "status": "done",
+  "id": "#84",
+  "note": "RESULT: DONE #84",
+  "claim_line": true,
+  "final_text": "I created Bug #84 in Synthetic Helpdesk with the subject \"Printer drops scan jobs\", the description \"Scans over 20 pages vanish.\", priority High, due date 2026-12-04 and estimated time 2.5 hours (shown as 2:30 h).\n\nThe Enter key I pressed to confirm the priority also submitted the form, so I didn't see the form again before it was created. The issue page confirms every value I set. Status (New), start date (the default 11/11/2026) and the other fields are as the form had them.\n\nThe page also lists Redmine Admin as a watcher, which Redmine added automatically.\n\nRESULT: DONE #84",
+  "model_calls": 7,
+  "actions": 22,
+  "tokens_in": 76173,
+  "tokens_out": 1211,
+  "end_url": "http://127.0.0.1:9861/issues/84"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "84"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794427525.484,
+   "method": "POST",
+   "path": "/login",
+   "save": false,
+   "status": 302,
+   "ms": 7
+  },
+  {
+   "t": 1794427549.027,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues",
+   "save": true,
+   "status": 302,
+   "ms": 41
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 3,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 10.1,
+  "end": 10.1,
+  "waited_s": 0
+ }
+}

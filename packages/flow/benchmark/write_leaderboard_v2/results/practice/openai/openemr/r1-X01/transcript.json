@@ -1,0 +1,1216 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_088ffe74a9c5acfe016af4ba412c5887d290449494d636effa",
+     "call_id": "call_A7N3fvKOHGH3HpkhRWqMChk1",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_088ffe74a9c5acfe016af4ba44542c87d28b5be15e6f1c0a99",
+     "call_id": "call_N4GGVsF0uVHvfjJkLva6p8LW",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 795,
+       "y": 701
+      },
+      {
+       "type": "move",
+       "x": 404,
+       "y": 31
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_088ffe74a9c5acfe016af4ba471ba487d2a509f60bad736d68",
+     "call_id": "call_D57FLOTat7sQZloFnz6MDD5r",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 404,
+       "y": 31
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_088ffe74a9c5acfe016af4ba49ee6487d298b55de191dcc1dd",
+     "call_id": "call_Hex44xYAmBY9RXVShttQ52xp",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 438,
+       "y": 64
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_088ffe74a9c5acfe016af4ba502a2c87d2a80bbfeee976ef2c",
+     "call_id": "call_nM27ueD5baajWSOoySLN2XmC",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 441,
+       "y": 316
+      },
+      {
+       "text": "Kofi",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 663,
+       "y": 318
+      },
+      {
+       "text": "Mensah",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 426,
+       "y": 431
+      },
+      {
+       "text": "1983-10-14",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1013,
+       "y": 465
+      },
+      {
+       "keys": [
+        "m"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ENTER"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_088ffe74a9c5acfe016af4ba6eac7087d2ad3d0069131700e2",
+     "call_id": "call_EsAwRgoDqJPzuXgGWtDw4r4o",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": 544,
+       "type": "scroll",
+       "x": 1121,
+       "y": 677
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_088ffe74a9c5acfe016af4ba72444487d28faa88824b31fe90",
+     "call_id": "call_w16zkwjq8Fl976JsAUVBxd8B",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 290,
+       "y": 465
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_088ffe74a9c5acfe016af4ba7809d887d29603f9f8594770a5",
+     "call_id": "call_uzxlQA4HyHEExVWJFa0twK3V",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 468,
+       "y": 521
+      },
+      {
+       "text": "77 Bay Road",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 445,
+       "y": 557
+      },
+      {
+       "text": "Springfield",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 421,
+       "y": 593
+      },
+      {
+       "text": "01108",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1005,
+       "y": 555
+      },
+      {
+       "keys": [
+        "m"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_088ffe74a9c5acfe016af4ba93b2d887d28ad4dc84882d4074",
+     "call_id": "call_7n6i4Z9YTRTQFbOu4elfJkdu",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "a"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "s"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ENTER"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_088ffe74a9c5acfe016af4baa1bb0c87d288a23188d7c4b110",
+     "call_id": "call_gQ17SYsGnaflMtDNUlloOaVX",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "m"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ARROWDOWN"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ARROWDOWN"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ENTER"
+       ],
+       "type": "keypress"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 459,
+       "y": 707
+      },
+      {
+       "text": "413-555-0145",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1018,
+       "y": 742
+      },
+      {
+       "text": "k.mensah@example.invalid",
+       "type": "type"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_088ffe74a9c5acfe016af4bab9c4c887d29f00077f8d78849a",
+     "call_id": "call_3IJdLBJ2DmgRX2mEHCt1czKF",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 491,
+       "y": 697
+      },
+      {
+       "keys": [
+        "CTRL",
+        "a"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "BACKSPACE"
+       ],
+       "type": "keypress"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 453,
+       "y": 628
+      },
+      {
+       "text": "413-555-0145",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1017,
+       "y": 660
+      },
+      {
+       "text": "k.mensah@example.invalid",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1017,
+       "y": 474
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_088ffe74a9c5acfe016af4bac12d7887d285c08f1bdd37bc62",
+     "call_id": "call_5tp0SVMMJYYdwMSw1FyijdrE",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 490,
+       "y": 696
+      },
+      {
+       "keys": [
+        "CTRL",
+        "A"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "BACKSPACE"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_088ffe74a9c5acfe016af4bac4f5a887d2b7e2621fe15a29af",
+     "call_id": "call_214KLUuEiWDYKIc13kj1X842",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 490,
+       "y": 696
+      },
+      {
+       "keys": [
+        "CTRL",
+        "A"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "BACKSPACE"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_088ffe74a9c5acfe016af4bac8d8d887d28e7a81b12594aed1",
+     "call_id": "call_oUyzq0gl7KJUTN0CmPPHoAa0",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_088ffe74a9c5acfe016af4bacc614887d2981c263b83a5a4f4",
+     "call_id": "call_BM84p70Vc7OKOuvbDWdbbzfg",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "Control",
+        "a"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "Backspace"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_088ffe74a9c5acfe016af4bad0095087d2a6b0166a51f146e2",
+     "call_id": "call_Lz2t4gH7bKW6ZRkdyUNle98S",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "a"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "BACKSPACE"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_088ffe74a9c5acfe016af4bad3fab887d292e3dae232de76b3",
+     "call_id": "call_pz2rx8IanlVMwnwlidCupK5V",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "a"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "BACKSPACE"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_088ffe74a9c5acfe016af4bad7a03c87d2a0eadb8cf0c9692c",
+     "call_id": "call_QmgM9qQ59Nuw5yAh3747GIJY",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "A"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "BACKSPACE"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_088ffe74a9c5acfe016af4badd77c487d2b4a0c473f8d64db1",
+     "call_id": "call_Gf78lOPme3qfCIfDUkRMZP6c",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "ctrl",
+        "a"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "BackSpace"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_088ffe74a9c5acfe016af4bae15a0c87d2922523f0cfa3f8d3",
+     "call_id": "call_LUukDjdXsBsp5kwUbuTTpheC",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "a"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "BACKSPACE"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_088ffe74a9c5acfe016af4bae5fcf487d2904596c2528b1910",
+     "call_id": "call_BL0PSJjUhAJN9fD66ujsBEMw",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "a"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "BACKSPACE"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_088ffe74a9c5acfe016af4baeafbdc87d2b72317602d50fb7e",
+     "call_id": "call_dlPTlhqGTAXIYwZRKwGmmVQv",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "right",
+       "type": "click",
+       "x": 480,
+       "y": 697
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE Unable to reliably enter and verify all requested values; the patient record was not saved.",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 795,
+   "y": 701,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "move",
+   "x": 404,
+   "y": 31
+  },
+  {
+   "a": "move",
+   "x": 404,
+   "y": 31
+  },
+  {
+   "a": "click",
+   "x": 438,
+   "y": 64,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 441,
+   "y": 316,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Kofi"
+  },
+  {
+   "a": "click",
+   "x": 663,
+   "y": 318,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Mensah"
+  },
+  {
+   "a": "click",
+   "x": 426,
+   "y": 431,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "1983-10-14"
+  },
+  {
+   "a": "click",
+   "x": 1013,
+   "y": 465,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "m"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ENTER"
+   ]
+  },
+  {
+   "a": "scroll",
+   "x": 1121,
+   "y": 677,
+   "dx": 0,
+   "dy": 544
+  },
+  {
+   "a": "click",
+   "x": 290,
+   "y": 465,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 468,
+   "y": 521,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "77 Bay Road"
+  },
+  {
+   "a": "click",
+   "x": 445,
+   "y": 557,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Springfield"
+  },
+  {
+   "a": "click",
+   "x": 421,
+   "y": 593,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "01108"
+  },
+  {
+   "a": "click",
+   "x": 1005,
+   "y": 555,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "m"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "s"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ENTER"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "m"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ARROWDOWN"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ARROWDOWN"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ENTER"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 459,
+   "y": 707,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "413-555-0145"
+  },
+  {
+   "a": "click",
+   "x": 1018,
+   "y": 742,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "k.mensah@example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 491,
+   "y": 697,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BACKSPACE"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 453,
+   "y": 628,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "413-555-0145"
+  },
+  {
+   "a": "click",
+   "x": 1017,
+   "y": 660,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "k.mensah@example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 1017,
+   "y": 474,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 490,
+   "y": 696,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "A"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BACKSPACE"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 490,
+   "y": 696,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "A"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BACKSPACE"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Control",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BACKSPACE"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BACKSPACE"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "A"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BACKSPACE"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BACKSPACE"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BACKSPACE"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 480,
+   "y": 697,
+   "button": "right",
+   "count": 1,
+   "mods": []
+  }
+ ],
+ "usage": [
+  {
+   "in": 2249,
+   "out": 19,
+   "usd": 0.004688,
+   "cached": 0
+  },
+  {
+   "in": 3466,
+   "out": 43,
+   "usd": 0.003319,
+   "cached": 2246
+  },
+  {
+   "in": 4742,
+   "out": 27,
+   "usd": 0.003521,
+   "cached": 3463
+  },
+  {
+   "in": 5994,
+   "out": 31,
+   "usd": 0.003768,
+   "cached": 4739
+  },
+  {
+   "in": 7250,
+   "out": 129,
+   "usd": 0.005006,
+   "cached": 5991
+  },
+  {
+   "in": 8648,
+   "out": 38,
+   "usd": 0.004631,
+   "cached": 7247
+  },
+  {
+   "in": 9911,
+   "out": 31,
+   "usd": 0.004571,
+   "cached": 8645
+  },
+  {
+   "in": 11167,
+   "out": 117,
+   "usd": 0.00567,
+   "cached": 9908
+  },
+  {
+   "in": 12549,
+   "out": 42,
+   "usd": 0.005423,
+   "cached": 11164
+  },
+  {
+   "in": 13820,
+   "out": 145,
+   "usd": 0.006507,
+   "cached": 12546
+  },
+  {
+   "in": 15222,
+   "out": 167,
+   "usd": 0.007243,
+   "cached": 13817
+  },
+  {
+   "in": 16654,
+   "out": 99,
+   "usd": 0.006904,
+   "cached": 15219
+  },
+  {
+   "in": 17986,
+   "out": 52,
+   "usd": 0.00652,
+   "cached": 16651
+  },
+  {
+   "in": 19271,
+   "out": 32,
+   "usd": 0.006493,
+   "cached": 17983
+  },
+  {
+   "in": 20513,
+   "out": 47,
+   "usd": 0.006814,
+   "cached": 19268
+  },
+  {
+   "in": 21785,
+   "out": 69,
+   "usd": 0.007342,
+   "cached": 20510
+  },
+  {
+   "in": 23079,
+   "out": 52,
+   "usd": 0.00747,
+   "cached": 21782
+  },
+  {
+   "in": 24356,
+   "out": 52,
+   "usd": 0.007695,
+   "cached": 23076
+  },
+  {
+   "in": 25633,
+   "out": 67,
+   "usd": 0.008101,
+   "cached": 24353
+  },
+  {
+   "in": 26925,
+   "out": 57,
+   "usd": 0.008286,
+   "cached": 25630
+  },
+  {
+   "in": 28207,
+   "out": 66,
+   "usd": 0.008614,
+   "cached": 26922
+  },
+  {
+   "in": 29498,
+   "out": 72,
+   "usd": 0.008949,
+   "cached": 28204
+  },
+  {
+   "in": 30795,
+   "out": 63,
+   "usd": 0.009129,
+   "cached": 29495
+  }
+ ]
+}

@@ -320,6 +320,131 @@ def test_an_unreadable_audit_never_reads_as_clean(tmp_path: Path) -> None:
     assert "the audit couldn't be read" in " ".join(sh.episodes[2].reasons)
 
 
+@pytest.mark.parametrize(
+    ("refused_session", "charset"),
+    [(None, "utf8mb4"), (0, "latin1"), (3, "latin1"), (0, None), (3, None)],
+    ids=["exact", "before-latin1", "after-latin1", "before-null", "after-null"],
+)
+def test_mysql_shadow_audit_checks_each_session_before_reading(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    refused_session: int | None,
+    charset: str | None,
+) -> None:
+    from openadapt_flow import verify_run
+    from openadapt_flow.runtime.effects.db_snapshot import Snapshot
+
+    probe = "SELECT @@SESSION.character_set_results"
+    readonly = "START TRANSACTION READ ONLY"
+    actor = "synthetic-agent"
+    audit_id = "entrée-1"
+    refusal = (
+        "the audit couldn't be read: MySQL reads require character_set_results=utf8mb4"
+    )
+    read = {"sql_driver": "pymysql", "sql_connect_args": {"database": "synthetic"}}
+    document = _contract(tmp_path / "unused.sqlite").config.model_dump(mode="json")
+    document["frame"]["database"].update(dialect="mysql", read=read)
+    route = Route(
+        None,  # type: ignore[arg-type] - actions are named, not matched
+        Contract.from_dict(document),
+        {"fname": "first", "lname": "last", "email": "email"},
+        "create_patient",
+    )
+
+    class Session:
+        def __init__(self, result_charset: str | None) -> None:
+            self.result_charset = result_charset
+            self.calls: list[Any] = []
+            self.query = ""
+
+        def cursor(self) -> Session:
+            self.calls.append("cursor")
+            return self
+
+        def execute(self, query: str, params: dict[str, str] | None = None) -> None:
+            self.query = query
+            self.calls.append((query, params))
+
+        def fetchall(self) -> list[tuple[str | None]]:
+            self.calls.append(("fetch", self.query))
+            if self.query == probe:
+                return [(self.result_charset,)]
+            assert self.query == AUDIT
+            return [(audit_id,)]
+
+        def rollback(self) -> None:
+            self.calls.append("rollback")
+
+        def close(self) -> None:
+            self.calls.append("close")
+
+    sessions: list[Session] = []
+    snapshot_session_counts: list[int] = []
+
+    def connect() -> Session:
+        session_charset = charset if len(sessions) == refused_session else "utf8mb4"
+        session = Session(session_charset)
+        sessions.append(session)
+        return session
+
+    def audit_connect(settings: dict[str, Any]) -> Any:
+        assert settings == read
+        return connect
+
+    def stable_snapshot(*_args: Any, **_kwargs: Any) -> Snapshot:
+        snapshot_session_counts.append(len(sessions))
+        return Snapshot(dialect="mysql")
+
+    # Supply fresh audit sessions and a stable frame. The real gap judge and
+    # admission guard must handle an unreadable audit on either boundary.
+    monkeypatch.setattr(verify_run, "_db_connect", audit_connect)
+    monkeypatch.setattr(verify_run, "_read_database", stable_snapshot)
+    sh = DatabaseShadow(
+        routes=[route],
+        actor_id=actor,
+        out=tmp_path / "out",
+        guard=True,
+        audit_sql=AUDIT,
+    )
+    try:
+        start, end = sh._mark(), sh._mark()
+        assert snapshot_session_counts == [1, 3]
+        assert len(sessions) == 4
+        audit_reads = (start.audit_before, start.audit, end.audit_before, end.audit)
+        for index, session in enumerate(sessions):
+            audit_read = audit_reads[index]
+            calls: list[Any] = ["cursor", (probe, None), ("fetch", probe)]
+            if index == refused_session:
+                assert audit_read is None
+            else:
+                calls.extend(
+                    [
+                        (readonly, None),
+                        (AUDIT, {"actor": actor}),
+                        ("fetch", AUDIT),
+                        "rollback",
+                    ]
+                )
+                assert audit_read == {audit_id}
+            assert session.calls == [*calls, "close"]
+
+        gap = sh._judge_gap(start, end)
+        if refused_session is None:
+            assert start.errors + end.errors == []
+            assert gap is None and sh.gaps_clean == 1
+        else:
+            assert start.errors + end.errors == [refusal]
+            assert gap is not None and gap.verdict == "UNCERTAIN"
+            assert "the audit couldn't be read" in " ".join(gap.reasons)
+            assert sh.gaps_clean == 0
+            status, reply = sh.begin({"action": "create_patient", "values": VALUES})
+            assert status == 409 and "UNCERTAIN" in reply["refused"]
+            assert sh.writes == [] and len(sessions) == 4
+    finally:
+        sh.server.server_close()
+        sh._pool.shutdown(wait=True, cancel_futures=True)
+
+
 def test_an_unreadable_database_is_uncertain_and_the_agent_goes_on(
     tmp_path: Path,
 ) -> None:

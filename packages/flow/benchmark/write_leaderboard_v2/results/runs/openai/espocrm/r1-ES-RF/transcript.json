@@ -1,0 +1,508 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_028a4143fba11866016af4c55a140487d2a995677f5927425f",
+     "call_id": "call_NKprlGxcmOtNgJHcdZekyASF",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_028a4143fba11866016af4c55cca6487d28fa248108503009a",
+     "call_id": "call_5MBUfBSMFFPwwLxjgYDjqY0i",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 22,
+       "y": 166
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_028a4143fba11866016af4c55ea3ac87d2824244f9f657ee16",
+     "call_id": "call_bljBzTiosZdfxEzQay4CuxEA",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_028a4143fba11866016af4c560e76c87d29086453958309d7c",
+     "call_id": "call_0LLwL7gLCKZX9XnqqPB0iJcc",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1194,
+       "y": 62
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_028a4143fba11866016af4c563a38087d299197c0bdc492376",
+     "call_id": "call_wWnaKbZQHd936sDKJOtzqZpO",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_028a4143fba11866016af4c56602b087d2bf2e4f2e64ef9699",
+     "call_id": "call_d2mjOWOjNAupTyU5TIJD8SjK",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 207,
+       "y": 233
+      },
+      {
+       "text": "Ironbark Legal",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 579,
+       "y": 233
+      },
+      {
+       "text": "ironbark.example.invalid",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 220,
+       "y": 702
+      },
+      {
+       "text": "Two partners.",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 279,
+       "y": 619
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_028a4143fba11866016af4c5697a7487d2b6a62e0e8a9a9047",
+     "call_id": "call_TvV03klLA8ugXEWMq554Wyfe",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_028a4143fba11866016af4c56c7a3887d2bb9ced80dc33ad1a",
+     "call_id": "call_4vwrcmYnnV37S7XCUxdUFovL",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 133,
+       "y": 683
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 624,
+       "y": 619
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_028a4143fba11866016af4c56ed12c87d2b25fe408bc440aba",
+     "call_id": "call_kgiGI3y8oggfC7v3BLV7cHeZ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_028a4143fba11866016af4c572235087d2aaeb0ed73cc78e43",
+     "call_id": "call_Zudk81Qn0m1BAu2jHGRxXPTS",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 824,
+       "y": 619
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_028a4143fba11866016af4c574267087d289fe04f303412aef",
+     "call_id": "call_AuKgHSl2vxQt2pisyGibWzOL",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": 447,
+       "type": "scroll",
+       "x": 661,
+       "y": 514
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_028a4143fba11866016af4c577250087d2b1fa6a430676f36f",
+     "call_id": "call_LWjDxfZVT1JDjsa5jNjJeAWQ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "scroll_x": 0,
+       "scroll_y": 238,
+       "type": "scroll",
+       "x": 656,
+       "y": 518
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_028a4143fba11866016af4c579e6f087d295ddde52e607625c",
+     "call_id": "call_U5b70Z5TJzhmX7YehLNh1mJ4",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 498,
+       "y": 435
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 94,
+       "y": 112
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_028a4143fba11866016af4c57c8b7087d2a2665a3370f499ee",
+     "call_id": "call_X1gLJyGVifvWg5gtR0taNBxX",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE EspoCRM returned Error 503 when saving the account; creation could not be confirmed.",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 22,
+   "y": 166,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1194,
+   "y": 62,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 207,
+   "y": 233,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Ironbark Legal"
+  },
+  {
+   "a": "click",
+   "x": 579,
+   "y": 233,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "ironbark.example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 220,
+   "y": 702,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Two partners."
+  },
+  {
+   "a": "click",
+   "x": 279,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 133,
+   "y": 683,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 624,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 824,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 661,
+   "y": 514,
+   "dx": 0,
+   "dy": 447
+  },
+  {
+   "a": "scroll",
+   "x": 656,
+   "y": 518,
+   "dx": 0,
+   "dy": 238
+  },
+  {
+   "a": "click",
+   "x": 498,
+   "y": 435,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 94,
+   "y": 112,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  }
+ ],
+ "usage": [
+  {
+   "in": 2204,
+   "out": 20,
+   "usd": 0.004608,
+   "cached": 0
+  },
+  {
+   "in": 3421,
+   "out": 31,
+   "usd": 0.00319,
+   "cached": 2201
+  },
+  {
+   "in": 4677,
+   "out": 18,
+   "usd": 0.003382,
+   "cached": 3418
+  },
+  {
+   "in": 5905,
+   "out": 32,
+   "usd": 0.003717,
+   "cached": 4674
+  },
+  {
+   "in": 7162,
+   "out": 15,
+   "usd": 0.00385,
+   "cached": 5902
+  },
+  {
+   "in": 8390,
+   "out": 112,
+   "usd": 0.005014,
+   "cached": 7159
+  },
+  {
+   "in": 9762,
+   "out": 15,
+   "usd": 0.004577,
+   "cached": 8387
+  },
+  {
+   "in": 10990,
+   "out": 47,
+   "usd": 0.004884,
+   "cached": 9759
+  },
+  {
+   "in": 12270,
+   "out": 15,
+   "usd": 0.004913,
+   "cached": 10987
+  },
+  {
+   "in": 13498,
+   "out": 31,
+   "usd": 0.005225,
+   "cached": 12267
+  },
+  {
+   "in": 14754,
+   "out": 37,
+   "usd": 0.005587,
+   "cached": 13495
+  },
+  {
+   "in": 16016,
+   "out": 37,
+   "usd": 0.00585,
+   "cached": 14751
+  },
+  {
+   "in": 17278,
+   "out": 47,
+   "usd": 0.006203,
+   "cached": 16013
+  },
+  {
+   "in": 18558,
+   "out": 15,
+   "usd": 0.006171,
+   "cached": 17275
+  },
+  {
+   "in": 19786,
+   "out": 48,
+   "usd": 0.006653,
+   "cached": 18555
+  }
+ ]
+}

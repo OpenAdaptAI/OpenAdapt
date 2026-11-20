@@ -25,7 +25,9 @@ from openadapt_flow.write_receipt import ReceiptError
 from openadapt_flow.write_receipt import Verification as PortableReceiptVerification
 from openadapt_flow.write_receipt import verify as verify_receipt
 
-__version__ = "0.1.0"
+from openadapt_verify.guard import checked_write, verified
+
+__version__ = "0.2.0"
 
 __all__ = [
     "Actor",
@@ -40,9 +42,11 @@ __all__ = [
     "WriteGuard",
     "WriteResult",
     "begin_write",
+    "checked_write",
     "issue_write_receipt",
     "recheck",
     "verify_local_seal",
+    "verified",
     "verify_receipt",
     "verify_write",
 ]

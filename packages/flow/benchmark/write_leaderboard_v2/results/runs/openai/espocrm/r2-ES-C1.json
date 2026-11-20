@@ -1,0 +1,53 @@
+{
+ "id": "ES-C1",
+ "app": "espocrm",
+ "class": "clean",
+ "note": "A plain account.",
+ "agent_s": 87.7,
+ "cost_usd": 0.17725,
+ "claim": {
+  "status": "done",
+  "id": "Copperleaf Dental",
+  "note": "RESULT: DONE Copperleaf Dental",
+  "claim_line": true,
+  "final_text": "Created Copperleaf Dental with the five requested values; all other fields were left unchanged.\n\nRESULT: DONE Copperleaf Dental",
+  "model_calls": 28,
+  "actions": 33,
+  "tokens_in": 537110,
+  "tokens_out": 1054,
+  "end_url": "http://127.0.0.1:9856/#Account/view/6af4c85be1d426117"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "6af4c85be1d426117"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794426971.78,
+   "method": "POST",
+   "path": "/api/v1/Account",
+   "save": true,
+   "status": 200,
+   "ms": 91
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 2,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 8.8,
+  "end": 7.5,
+  "waited_s": 0
+ }
+}

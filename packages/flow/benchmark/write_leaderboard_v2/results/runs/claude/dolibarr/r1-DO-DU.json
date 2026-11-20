@@ -1,0 +1,67 @@
+{
+ "id": "DO-DU",
+ "app": "dolibarr",
+ "class": "duplicate",
+ "note": "The save is delivered twice.",
+ "agent_s": 37.2,
+ "cost_usd": 0.063414,
+ "claim": {
+  "status": "done",
+  "id": "Contact \"Claire Moreau\" created (id not visible on screen; it's the newest entry in Third-parties > Contacts/Addresses list)",
+  "note": "RESULT: DONE Contact \"Claire Moreau\" created (id not visible on screen; it's the newest entry in Third-parties > Contacts/Addresses list)",
+  "claim_line": true,
+  "final_text": "I created the contact Claire Moreau. It isn't linked to any third party, and the job position is Receptionist, with email c.moreau@example.invalid. The professional phone shows as 5550195 on the card, without the dash I typed, the same way Dolibarr shows the existing contacts' numbers. I left every other field at its default. I couldn't read the record's id because the browser's address bar isn't visible.\n\nRESULT: DONE Contact \"Claire Moreau\" created (id not visible on screen; it's the newest entry in Third-parties > Contacts/Addresses list)",
+  "model_calls": 7,
+  "actions": 23,
+  "tokens_in": 75824,
+  "tokens_out": 1231,
+  "end_url": "http://127.0.0.1:9851/contact/card.php?id=45"
+ },
+ "oracle": {
+  "verdict": "wrong",
+  "reasons": [
+   "2 new records"
+  ],
+  "new": [
+   "45",
+   "46"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": true,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794426297.694,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 9
+  },
+  {
+   "t": 1794426331.884,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": [
+    "duplicate"
+   ],
+   "status": "302+302",
+   "ms": 19
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 1,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 6.7,
+  "end": 7.6,
+  "waited_s": 0
+ }
+}

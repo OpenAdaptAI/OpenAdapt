@@ -1,0 +1,489 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      23,
+      166
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Let me first check whether the account already exists.",
+   "actions": [
+    {
+     "coordinate": [
+      344,
+      113
+     ]
+    },
+    {
+     "text": "Juniper\n"
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1195,
+      63
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      263,
+      233
+     ]
+    },
+    {
+     "text": "Juniper Florists"
+    },
+    {
+     "coordinate": [
+      651,
+      233
+     ]
+    },
+    {
+     "text": "juniper.example.invalid"
+    },
+    {
+     "coordinate": [
+      457,
+      703
+     ]
+    },
+    {
+     "text": "Weekly lobby flowers."
+    },
+    {
+     "coordinate": [
+      263,
+      619
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      121,
+      683
+     ]
+    },
+    {
+     "coordinate": [
+      651,
+      619
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The industry dropdown didn't open; click again.",
+   "actions": [
+    {
+     "coordinate": [
+      651,
+      619
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "Retail"
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      496,
+      656
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": [
+      64,
+      530,
+      854,
+      750
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      95,
+      113
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I created the Juniper Florists account with website juniper.example.invalid, type Customer, industry Retail and description \"Weekly lobby flowers.\" I left every other field blank. A search for \"Juniper\" beforehand found no existing account. The record's detail page now shows these values. The browser doesn't show its address bar, so I couldn't read the record's ID or URL.\n\nRESULT: DONE Account \"Juniper Florists\" created (page: Accounts \u203a Juniper Florists; URL/id not visible)",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 23,
+   "y": 166,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 344,
+   "y": 113,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Juniper\n"
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 1195,
+   "y": 63,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 263,
+   "y": 233,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Juniper Florists"
+  },
+  {
+   "a": "click",
+   "x": 651,
+   "y": 233,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "juniper.example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 457,
+   "y": 703,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Weekly lobby flowers."
+  },
+  {
+   "a": "click",
+   "x": 263,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 121,
+   "y": 683,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 651,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 651,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "type",
+   "text": "Retail"
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 496,
+   "y": 656,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 95,
+   "y": 113,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6140,
+   "out": 92,
+   "usd": 0.016268,
+   "cached": 0
+  },
+  {
+   "in": 7636,
+   "out": 75,
+   "usd": 0.005726,
+   "cached": 6136
+  },
+  {
+   "in": 9096,
+   "out": 140,
+   "usd": 0.006581,
+   "cached": 7634
+  },
+  {
+   "in": 10637,
+   "out": 99,
+   "usd": 0.006665,
+   "cached": 9094
+  },
+  {
+   "in": 12134,
+   "out": 75,
+   "usd": 0.006624,
+   "cached": 10635
+  },
+  {
+   "in": 13594,
+   "out": 243,
+   "usd": 0.00851,
+   "cached": 12132
+  },
+  {
+   "in": 15299,
+   "out": 129,
+   "usd": 0.008275,
+   "cached": 13592
+  },
+  {
+   "in": 16831,
+   "out": 122,
+   "usd": 0.008113,
+   "cached": 15297
+  },
+  {
+   "in": 18343,
+   "out": 100,
+   "usd": 0.00815,
+   "cached": 16829
+  },
+  {
+   "in": 19831,
+   "out": 112,
+   "usd": 0.008512,
+   "cached": 18341
+  },
+  {
+   "in": 21340,
+   "out": 106,
+   "usd": 0.008802,
+   "cached": 19829
+  },
+  {
+   "in": 22836,
+   "out": 83,
+   "usd": 0.008842,
+   "cached": 21338
+  },
+  {
+   "in": 24296,
+   "out": 83,
+   "usd": 0.009051,
+   "cached": 22834
+  },
+  {
+   "in": 25756,
+   "out": 206,
+   "usd": 0.010573,
+   "cached": 24294
+  }
+ ]
+}

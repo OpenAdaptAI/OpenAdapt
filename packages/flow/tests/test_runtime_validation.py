@@ -177,6 +177,126 @@ def test_attestation_binds_real_evidence_and_matches_schema(tmp_path):
     assert value["replay"]["success"] is True
 
 
+@pytest.mark.parametrize(
+    ("severity", "attests"), [("info", True), ("warn", False), ("error", False)]
+)
+def test_strict_lint_fails_on_warn_and_error_but_not_on_info(
+    tmp_path, monkeypatch, severity, attests
+):
+    """Strict lint follows lint's own severity model (``lint --strict``).
+
+    An info finding such as ``missing_identifier_crop`` on a step whose
+    structured identity owns the check is advice; it must not refuse the
+    attestation. A warn or an error finding still must.
+    """
+    from openadapt_flow import policy, runtime_validation
+
+    real_lint = policy.lint_workflow
+
+    def lint_with_finding(workflow, **kwargs):
+        report = real_lint(workflow, **kwargs)
+        report.findings.append(
+            policy.Finding(
+                severity=severity,
+                code="missing_identifier_crop",
+                step_id="step_000",
+                message="injected finding",
+            )
+        )
+        return report
+
+    monkeypatch.setattr(runtime_validation, "lint_workflow", lint_with_finding)
+    if attests:
+        value, _ = _attestation(tmp_path)
+        assert value["lint"]["strict"] is True and value["lint"]["passed"] is True
+    else:
+        with pytest.raises(RuntimeValidationError, match="Strict lint failed"):
+            _attestation(tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("target_kind", "attests"),
+    [("rdp", False), ("citrix", False), ("windows", True), ("linux", True)],
+)
+def test_a_missing_identifier_crop_blocks_on_a_remote_display(
+    tmp_path, monkeypatch, target_kind, attests
+):
+    """On RDP or Citrix the crop is the only pixel identity evidence."""
+    from openadapt_flow import policy, runtime_validation
+
+    real_lint = policy.lint_workflow
+
+    def lint_with_finding(workflow, **kwargs):
+        report = real_lint(workflow, **kwargs)
+        report.findings.append(
+            policy.Finding(
+                severity="info",
+                code="missing_identifier_crop",
+                step_id="step_000",
+                message="injected finding",
+            )
+        )
+        return report
+
+    monkeypatch.setattr(runtime_validation, "lint_workflow", lint_with_finding)
+    recording, bundle, run_dir = _approved_artifacts(tmp_path, target_kind=target_kind)
+
+    def attest():
+        return create_runtime_validation_attestation(
+            recording_derivative=recording,
+            bundle_derivative=bundle,
+            run_dir=run_dir,
+            policy_source="permissive",
+            risk_class="low",
+            environment=f"qualified-{target_kind}-environment",
+            target_kind=target_kind,
+            host=hosted.DEFAULT_HOST,
+            token="oai_ingest_test",
+            challenge=_challenge(),
+        )
+
+    if attests:
+        assert attest()["lint"]["passed"] is True
+    else:
+        with pytest.raises(RuntimeValidationError, match="missing_identifier_crop"):
+            attest()
+
+
+def test_lint_blocking_findings_match_the_cli_thresholds():
+    from openadapt_flow.policy import Finding, LintReport
+
+    report = LintReport(
+        workflow_name="w",
+        n_steps=1,
+        findings=[
+            Finding(severity=level, code=level, message=level)
+            for level in ("info", "warn", "error")
+        ],
+    )
+    assert [f.severity for f in report.blocking_findings(strict=True)] == [
+        "warn",
+        "error",
+    ]
+    assert [f.severity for f in report.blocking_findings(strict=False)] == ["error"]
+    info_only = LintReport(
+        workflow_name="w",
+        n_steps=1,
+        findings=[Finding(severity="info", code="i", message="i")],
+    )
+    assert info_only.blocking_findings(strict=True) == []
+    crop = LintReport(
+        workflow_name="w",
+        n_steps=1,
+        findings=[
+            Finding(severity="info", code="missing_identifier_crop", message="c")
+        ],
+    )
+    assert crop.blocking_findings(strict=True) == []
+    assert [f.code for f in crop.blocking_findings(strict=True, pixel_replay=True)] == [
+        "missing_identifier_crop"
+    ]
+
+
 def test_cross_language_canonicalization_golden_vector():
     fixture = json.loads(
         (
@@ -260,6 +380,54 @@ def test_standard_attestation_refuses_missing_governed_template(tmp_path):
             token="oai_ingest_test",
             challenge=_challenge(),
         )
+
+
+@pytest.mark.parametrize("profile", ["standard", "regulated"])
+def test_template_optional_v2_is_standard_only(tmp_path, monkeypatch, profile):
+    """The admitted-program relaxation never covers a Regulated replay."""
+    from openadapt_flow import runtime_validation
+
+    real = runtime_validation._replay_attestation
+    monkeypatch.setattr(
+        runtime_validation,
+        "_replay_attestation",
+        lambda **kwargs: real(**{**kwargs, "template_required": False}),
+    )
+    recording, bundle, run_dir = _approved_artifacts(
+        tmp_path, execution_profile="standard"
+    )
+    if profile == "regulated":
+        # The fixture's runtime cannot complete a Regulated replay, so the
+        # VERIFIED Standard report is read as Regulated: only the profile
+        # differs.
+        parse = runtime_validation.RunReport.model_validate_json
+
+        def as_regulated(data, *args, **kwargs):
+            report = parse(data, *args, **kwargs)
+            return report.model_copy(update={"execution_profile": "regulated"})
+
+        monkeypatch.setattr(
+            runtime_validation.RunReport, "model_validate_json", as_regulated
+        )
+    kwargs = dict(
+        recording_derivative=recording,
+        bundle_derivative=bundle,
+        run_dir=run_dir,
+        policy_source="permissive",
+        risk_class="low",
+        environment=f"qualified-{profile}-web",
+        target_url=_TARGET_URL,
+        host=hosted.DEFAULT_HOST,
+        token="oai_ingest_test",
+        challenge=_challenge(),
+    )
+    if profile == "regulated":
+        with pytest.raises(RuntimeValidationError, match="requires an exact governed"):
+            create_runtime_validation_attestation(**kwargs)
+    else:
+        value = create_runtime_validation_attestation(**kwargs)
+        assert value["schema"] == "openadapt.runtime-validation/v2"
+        assert "governed_authorization_template_sha256" not in value
 
 
 @pytest.mark.parametrize("target_kind", ["windows", "macos", "linux", "rdp", "citrix"])

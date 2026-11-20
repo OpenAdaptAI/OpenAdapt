@@ -1,0 +1,520 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      23,
+      95
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      52,
+      121
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Changing the tracker reloads the form, so I'll set it first.",
+   "actions": [
+    {
+     "coordinate": [
+      243,
+      177
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Layout shifted; the dropdown may not have opened.",
+   "actions": [
+    {
+     "coordinate": [
+      243,
+      183
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "Support"
+    },
+    {
+     "text": "Return"
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      700,
+      216
+     ]
+    },
+    {
+     "text": "Order toner for floor 3"
+    },
+    {
+     "coordinate": [
+      700,
+      350
+     ]
+    },
+    {
+     "text": "Two black cartridges."
+    },
+    {
+     "coordinate": [
+      333,
+      488
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The dropdown popup doesn't render in screenshots; use typing.",
+   "actions": [
+    {
+     "text": "Low"
+    },
+    {
+     "text": "Return"
+    },
+    {
+     "duration": 1
+    },
+    {
+     "coordinate": [
+      843,
+      522
+     ]
+    },
+    {
+     "text": "12022026"
+    },
+    {
+     "coordinate": [
+      855,
+      556
+     ]
+    },
+    {
+     "text": "0.5"
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 5
+    },
+    {
+     "text": "alt+Left"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 5
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 30
+    },
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 5
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "alt+Home"
+    },
+    {
+     "duration": 5
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 60
+    },
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 5
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I couldn't confirm that the issue exists in Redmine, so I'm treating the task as not done.\n\nI filled in the new issue form with tracker Support, the subject and the description. Then I pressed Enter to pick \"Low\" in the priority dropdown, and the page changed to a plain \"Service Unavailable\" error. Retrying and reloading for a few minutes didn't bring the app back. The screen shows no address bar, so I couldn't navigate anywhere else.\n\nI don't know what that Enter did. It may have submitted the form early, which could have created an issue with only some of the values set (no due date or estimated time). Or the request may have failed and nothing was saved. Someone should check the project's issue list once Redmine is back, in case a partial or duplicate \"Order toner for floor 3\" issue was created.\n\nRESULT: NOT DONE Redmine returned \"Service Unavailable\" after the form was partly filled, so the issue could not be confirmed as created with all the requested values.",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 23,
+   "y": 95,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 52,
+   "y": 121,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 243,
+   "y": 177,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 243,
+   "y": 183,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "type",
+   "text": "Support"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Return"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 216,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Order toner for floor 3"
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 350,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Two black cartridges."
+  },
+  {
+   "a": "click",
+   "x": 333,
+   "y": 488,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "type",
+   "text": "Low"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Return"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 843,
+   "y": 522,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "12022026"
+  },
+  {
+   "a": "click",
+   "x": 855,
+   "y": 556,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "0.5"
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "wait",
+   "s": 30.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Home"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  },
+  {
+   "a": "wait",
+   "s": 60.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6156,
+   "out": 92,
+   "usd": 0.016308,
+   "cached": 0
+  },
+  {
+   "in": 7652,
+   "out": 98,
+   "usd": 0.005959,
+   "cached": 6152
+  },
+  {
+   "in": 9148,
+   "out": 128,
+   "usd": 0.006554,
+   "cached": 7650
+  },
+  {
+   "in": 10666,
+   "out": 125,
+   "usd": 0.006878,
+   "cached": 9146
+  },
+  {
+   "in": 12181,
+   "out": 149,
+   "usd": 0.007414,
+   "cached": 10664
+  },
+  {
+   "in": 13729,
+   "out": 196,
+   "usd": 0.00827,
+   "cached": 12179
+  },
+  {
+   "in": 15363,
+   "out": 226,
+   "usd": 0.009094,
+   "cached": 13727
+  },
+  {
+   "in": 17056,
+   "out": 178,
+   "usd": 0.009089,
+   "cached": 15361
+  },
+  {
+   "in": 18634,
+   "out": 130,
+   "usd": 0.00866,
+   "cached": 17054
+  },
+  {
+   "in": 20160,
+   "out": 144,
+   "usd": 0.008985,
+   "cached": 18632
+  },
+  {
+   "in": 21704,
+   "out": 155,
+   "usd": 0.009446,
+   "cached": 20158
+  },
+  {
+   "in": 23247,
+   "out": 219,
+   "usd": 0.010392,
+   "cached": 21702
+  },
+  {
+   "in": 24866,
+   "out": 314,
+   "usd": 0.011841,
+   "cached": 23245
+  }
+ ]
+}

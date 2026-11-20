@@ -1,0 +1,975 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07f3329b97d9f7b5016af4c2688d0c87d289213b381998304f",
+     "call_id": "call_wQQ4ASUhuH6ddNZZgCJJ0gcF",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07f3329b97d9f7b5016af4c26b625087d2b48b0841cd480ca6",
+     "call_id": "call_s2pejqUBc7wQhL1J9od4c6UA",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 24,
+       "y": 94
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07f3329b97d9f7b5016af4c26dc63087d28b99b537810b5074",
+     "call_id": "call_1aV4Us1YBgQj6uTYFTu7bXMg",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 51,
+       "y": 121
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07f3329b97d9f7b5016af4c270084887d29874074d95c934c1",
+     "call_id": "call_wod7IwkAdpCYZxdyV8uxwswq",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "text": "Door chime rings twice",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 344,
+       "y": 317
+      },
+      {
+       "text": "The front door chime repeats.",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 342,
+       "y": 484
+      },
+      {
+       "keys": [
+        "HOME"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ENTER"
+       ],
+       "type": "keypress"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 850,
+       "y": 551
+      },
+      {
+       "text": "0.5",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 847,
+       "y": 518
+      },
+      {
+       "keys": [
+        "ARROWUP"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07f3329b97d9f7b5016af4c2762bac87d2ac818a79cf12e865",
+     "call_id": "call_CZLT20Gr5akTymMjYhmfdZOb",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 777,
+       "y": 183
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07f3329b97d9f7b5016af4c278714487d2a46af2e19515b89c",
+     "call_id": "call_3nwqS3d8I75uXRmjIfiUX5oE",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 299,
+       "y": 204
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07f3329b97d9f7b5016af4c27abe9887d29f4f99bf4fc95ab9",
+     "call_id": "call_v9bb01v0hiEwF6zSkVgvLnzL",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 300,
+       "y": 222
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07f3329b97d9f7b5016af4c27ea02c87d2ab4171e8801d5a08",
+     "call_id": "call_RqcBOxnf16ZZrIkrTBeHHlCF",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "ArrowUp"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "Tab"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07f3329b97d9f7b5016af4c281bae887d295fabc20f24a712f",
+     "call_id": "call_yZPkyqhVHpm2M8cdK0B2NiU4",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 362,
+       "y": 221
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07f3329b97d9f7b5016af4c284ce6887d29e2b6052bf9d784e",
+     "call_id": "call_mXfvd8bbFy89GdJUGzDMwVal",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 362,
+       "y": 262
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07f3329b97d9f7b5016af4c2872cec87d2b154aa244e1bc879",
+     "call_id": "call_FMcMLZJvde1JmL55MLKP5VSD",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "UP"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07f3329b97d9f7b5016af4c28a422087d2b565579f568a2307",
+     "call_id": "call_7xFmxplhs38aE6SlhjB1H4sY",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "L"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07f3329b97d9f7b5016af4c28d192887d2860c191aa4b5d5e9",
+     "call_id": "call_F43GXIggoiAiMmwRXtfxSFO1",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 698,
+       "y": 370
+      },
+      {
+       "keys": [
+        "CTRL",
+        "a"
+       ],
+       "type": "keypress"
+      },
+      {
+       "text": "0:30",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 691,
+       "y": 335
+      },
+      {
+       "text": "2026",
+       "type": "type"
+      },
+      {
+       "keys": [
+        "RIGHT"
+       ],
+       "type": "keypress"
+      },
+      {
+       "text": "12",
+       "type": "type"
+      },
+      {
+       "keys": [
+        "RIGHT"
+       ],
+       "type": "keypress"
+      },
+      {
+       "text": "09",
+       "type": "type"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07f3329b97d9f7b5016af4c291b05487d29a6dc01a87aa8e47",
+     "call_id": "call_rM54VxnMGF51XUcHyQCucXwa",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 700,
+       "y": 370
+      },
+      {
+       "keys": [
+        "Control",
+        "a"
+       ],
+       "type": "keypress"
+      },
+      {
+       "text": "0:30",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 730,
+       "y": 336
+      },
+      {
+       "text": "12",
+       "type": "type"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07f3329b97d9f7b5016af4c295070c87d2813866f7fa1004d8",
+     "call_id": "call_EMhm34D7AiXBO8iD5MrX8X6u",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 700,
+       "y": 370
+      },
+      {
+       "keys": [
+        "ctrl",
+        "a"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07f3329b97d9f7b5016af4c298841c87d289fd9d2c9158b799",
+     "call_id": "call_cWD9l1WeD9CpZHxB5OfDQaA2",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL+A"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ],
+   "error": "Keyboard.press: Unknown key: \"CTRL\""
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07f3329b97d9f7b5016af4c29c9a6487d2b50e1ae9328fc87c",
+     "call_id": "call_7dJBI97uZDYslHzLUdLBNzIk",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "Control_L",
+        "a"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ],
+   "error": "Keyboard.press: Unknown key: \"Control_L\""
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07f3329b97d9f7b5016af4c2a1d4d487d2b5bb2e91d7c60f98",
+     "call_id": "call_zo2LhGmmPF319g57dKIcd4uV",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 700,
+       "y": 370
+      },
+      {
+       "keys": [
+        "CTRL",
+        "a"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07f3329b97d9f7b5016af4c2a647c087d2994957f778b6ef69",
+     "call_id": "call_286c7n3wkvINqCVfMUpLkc6C",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "path": [
+        {
+         "x": 677,
+         "y": 370
+        },
+        {
+         "x": 701,
+         "y": 370
+        },
+        {
+         "x": 730,
+         "y": 370
+        },
+        {
+         "x": 780,
+         "y": 370
+        },
+        {
+         "x": 850,
+         "y": 370
+        }
+       ],
+       "type": "drag"
+      },
+      {
+       "text": "0:30",
+       "type": "type"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07f3329b97d9f7b5016af4c2a9c16c87d28b93dcd2a14e39ba",
+     "call_id": "call_Rce2oKGKdPzHf7rALPV4en6x",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 44,
+       "y": 792
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: DONE 39",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 24,
+   "y": 94,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 51,
+   "y": 121,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Door chime rings twice"
+  },
+  {
+   "a": "click",
+   "x": 344,
+   "y": 317,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "The front door chime repeats."
+  },
+  {
+   "a": "click",
+   "x": 342,
+   "y": 484,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "HOME"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ENTER"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 850,
+   "y": 551,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "0.5"
+  },
+  {
+   "a": "click",
+   "x": 847,
+   "y": 518,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ARROWUP"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 777,
+   "y": 183,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 299,
+   "y": 204,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 300,
+   "y": 222,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ArrowUp"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Tab"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 362,
+   "y": 221,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 362,
+   "y": 262,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "UP"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "L"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 698,
+   "y": 370,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "a"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "0:30"
+  },
+  {
+   "a": "click",
+   "x": 691,
+   "y": 335,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "2026"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "RIGHT"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "12"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "RIGHT"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "09"
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 370,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Control",
+    "a"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "0:30"
+  },
+  {
+   "a": "click",
+   "x": 730,
+   "y": 336,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "12"
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 370,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL+A"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Control_L",
+    "a"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 370,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "a"
+   ]
+  },
+  {
+   "a": "drag",
+   "path": [
+    [
+     677,
+     370
+    ],
+    [
+     701,
+     370
+    ],
+    [
+     730,
+     370
+    ],
+    [
+     780,
+     370
+    ],
+    [
+     850,
+     370
+    ]
+   ]
+  },
+  {
+   "a": "type",
+   "text": "0:30"
+  },
+  {
+   "a": "click",
+   "x": 44,
+   "y": 792,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  }
+ ],
+ "usage": [
+  {
+   "in": 2218,
+   "out": 18,
+   "usd": 0.004616,
+   "cached": 0
+  },
+  {
+   "in": 3435,
+   "out": 31,
+   "usd": 0.003193,
+   "cached": 2215
+  },
+  {
+   "in": 4691,
+   "out": 31,
+   "usd": 0.003514,
+   "cached": 3432
+  },
+  {
+   "in": 5947,
+   "out": 144,
+   "usd": 0.004896,
+   "cached": 4688
+  },
+  {
+   "in": 7363,
+   "out": 48,
+   "usd": 0.004507,
+   "cached": 5944
+  },
+  {
+   "in": 8636,
+   "out": 31,
+   "usd": 0.004334,
+   "cached": 7360
+  },
+  {
+   "in": 9892,
+   "out": 31,
+   "usd": 0.004555,
+   "cached": 8633
+  },
+  {
+   "in": 11148,
+   "out": 65,
+   "usd": 0.005146,
+   "cached": 9889
+  },
+  {
+   "in": 12438,
+   "out": 31,
+   "usd": 0.005125,
+   "cached": 11145
+  },
+  {
+   "in": 13694,
+   "out": 40,
+   "usd": 0.005405,
+   "cached": 12435
+  },
+  {
+   "in": 14959,
+   "out": 24,
+   "usd": 0.005514,
+   "cached": 13691
+  },
+  {
+   "in": 16204,
+   "out": 24,
+   "usd": 0.005727,
+   "cached": 14956
+  },
+  {
+   "in": 17449,
+   "out": 111,
+   "usd": 0.006846,
+   "cached": 16201
+  },
+  {
+   "in": 18821,
+   "out": 89,
+   "usd": 0.007129,
+   "cached": 17446
+  },
+  {
+   "in": 20155,
+   "out": 58,
+   "usd": 0.007018,
+   "cached": 18818
+  },
+  {
+   "in": 21442,
+   "out": 39,
+   "usd": 0.007,
+   "cached": 20152
+  },
+  {
+   "in": 22702,
+   "out": 49,
+   "usd": 0.007304,
+   "cached": 21439
+  },
+  {
+   "in": 23972,
+   "out": 42,
+   "usd": 0.007506,
+   "cached": 22699
+  },
+  {
+   "in": 25243,
+   "out": 64,
+   "usd": 0.007982,
+   "cached": 23969
+  },
+  {
+   "in": 26536,
+   "out": 31,
+   "usd": 0.00795,
+   "cached": 25240
+  },
+  {
+   "in": 27792,
+   "out": 9,
+   "usd": 0.007915,
+   "cached": 26533
+  }
+ ]
+}

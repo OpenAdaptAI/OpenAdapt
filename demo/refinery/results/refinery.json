@@ -1,0 +1,950 @@
+{
+  "audit": {
+    "effect_at_claim": {
+      "description": "The store diff since reset equals the expected effect, both when the agent claims success and at the end.",
+      "false_accepts": [],
+      "false_rejects": [],
+      "families": [
+        {
+          "family": "unauthorized_side_effect",
+          "hits": 0,
+          "n": 3,
+          "polarity": "harmful",
+          "statuses": {
+            "CAUGHT": 3,
+            "FALSE_ACCEPT": 0
+          }
+        },
+        {
+          "family": "wrong_record",
+          "hits": 0,
+          "n": 3,
+          "polarity": "harmful",
+          "statuses": {
+            "CAUGHT": 3,
+            "FALSE_ACCEPT": 0
+          }
+        },
+        {
+          "family": "wrong_value",
+          "hits": 0,
+          "n": 3,
+          "polarity": "harmful",
+          "statuses": {
+            "CAUGHT": 3,
+            "FALSE_ACCEPT": 0
+          }
+        },
+        {
+          "family": "duplicate",
+          "hits": 0,
+          "n": 3,
+          "polarity": "harmful",
+          "statuses": {
+            "CAUGHT": 3,
+            "FALSE_ACCEPT": 0
+          }
+        },
+        {
+          "family": "partial_write",
+          "hits": 0,
+          "n": 0,
+          "polarity": "harmful",
+          "statuses": {
+            "CAUGHT": 0,
+            "FALSE_ACCEPT": 0,
+            "REFUSED": 3
+          }
+        },
+        {
+          "family": "late_write",
+          "hits": 0,
+          "n": 3,
+          "polarity": "harmful",
+          "statuses": {
+            "CAUGHT": 3,
+            "FALSE_ACCEPT": 0
+          }
+        },
+        {
+          "family": "optimistic_success",
+          "hits": 0,
+          "n": 3,
+          "polarity": "harmful",
+          "statuses": {
+            "CAUGHT": 3,
+            "FALSE_ACCEPT": 0
+          }
+        },
+        {
+          "family": "incidental_change",
+          "hits": 0,
+          "n": 3,
+          "polarity": "legitimate",
+          "statuses": {
+            "ACCEPTED": 3,
+            "FALSE_REJECT": 0
+          }
+        }
+      ],
+      "statuses": {
+        "ACCEPTED": 3,
+        "CAUGHT": 18,
+        "REFUSED": 3
+      },
+      "tasks_excluded": 0
+    },
+    "mined_postcondition": {
+      "description": "A row with the recorded field values exists in the final store (the record check mined from the capture's store diff).",
+      "false_accepts": [
+        {
+          "calls": [
+            {
+              "args": {
+                "note": "Synthetic follow-up in two weeks",
+                "patient_id": "p1",
+                "type": "Triage"
+              },
+              "kind": "write",
+              "name": "POST /api/encounter"
+            },
+            {
+              "args": {
+                "note": "Synthetic follow-up in two weeks",
+                "patient_id": "p2",
+                "type": "Triage"
+              },
+              "kind": "write",
+              "name": "POST /api/encounter"
+            },
+            {
+              "args": {},
+              "kind": "claim",
+              "name": "complete"
+            }
+          ],
+          "edit": "keep the task's writes; add a copy of call 0 (POST /api/encounter) aimed at patient_id='p2'",
+          "effect_diff": {
+            "extra": [
+              "{\"note\": \"Synthetic follow-up in two weeks\", \"op\": \"add\", \"patient_id\": \"p2\", \"type\": \"Triage\"}"
+            ],
+            "missing": []
+          },
+          "family": "unauthorized_side_effect",
+          "task": "refinery-mockmed-4bef171e31",
+          "verdict": "PASS"
+        },
+        {
+          "calls": [
+            {
+              "args": {
+                "note": "Synthetic follow-up in two weeks",
+                "patient_id": "p1",
+                "type": "Triage"
+              },
+              "kind": "write",
+              "name": "POST /api/encounter"
+            },
+            {
+              "args": {
+                "note": "Synthetic follow-up in two weeks",
+                "patient_id": "p1",
+                "type": "Triage"
+              },
+              "kind": "write",
+              "name": "POST /api/encounter"
+            },
+            {
+              "args": {},
+              "kind": "claim",
+              "name": "complete"
+            }
+          ],
+          "edit": "call 0 (POST /api/encounter) is sent twice",
+          "effect_diff": {
+            "extra": [
+              "{\"note\": \"Synthetic follow-up in two weeks\", \"op\": \"add\", \"patient_id\": \"p1\", \"type\": \"Triage\"}"
+            ],
+            "missing": []
+          },
+          "family": "duplicate",
+          "task": "refinery-mockmed-4bef171e31",
+          "verdict": "PASS"
+        },
+        {
+          "calls": [
+            {
+              "args": {},
+              "kind": "claim",
+              "name": "complete"
+            },
+            {
+              "args": {
+                "note": "Synthetic follow-up in two weeks",
+                "patient_id": "p1",
+                "type": "Triage"
+              },
+              "kind": "write",
+              "name": "POST /api/encounter"
+            }
+          ],
+          "edit": "call 0 (POST /api/encounter) is sent after the success claim",
+          "effect_diff": {
+            "extra": [],
+            "missing": [
+              "{\"note\": \"Synthetic follow-up in two weeks\", \"op\": \"add\", \"patient_id\": \"p1\", \"type\": \"Triage\"}"
+            ]
+          },
+          "family": "late_write",
+          "task": "refinery-mockmed-4bef171e31",
+          "verdict": "PASS"
+        },
+        {
+          "calls": [
+            {
+              "args": {
+                "note": "Synthetic blood pressure recheck",
+                "patient_id": "p2",
+                "type": "Triage"
+              },
+              "kind": "write",
+              "name": "POST /api/encounter"
+            },
+            {
+              "args": {
+                "note": "Synthetic blood pressure recheck",
+                "patient_id": "p1",
+                "type": "Triage"
+              },
+              "kind": "write",
+              "name": "POST /api/encounter"
+            },
+            {
+              "args": {},
+              "kind": "claim",
+              "name": "complete"
+            }
+          ],
+          "edit": "keep the task's writes; add a copy of call 0 (POST /api/encounter) aimed at patient_id='p1'",
+          "effect_diff": {
+            "extra": [
+              "{\"note\": \"Synthetic blood pressure recheck\", \"op\": \"add\", \"patient_id\": \"p1\", \"type\": \"Triage\"}"
+            ],
+            "missing": []
+          },
+          "family": "unauthorized_side_effect",
+          "task": "refinery-mockmed-5f707e1a31",
+          "verdict": "PASS"
+        },
+        {
+          "calls": [
+            {
+              "args": {
+                "note": "Synthetic blood pressure recheck",
+                "patient_id": "p2",
+                "type": "Triage"
+              },
+              "kind": "write",
+              "name": "POST /api/encounter"
+            },
+            {
+              "args": {
+                "note": "Synthetic blood pressure recheck",
+                "patient_id": "p2",
+                "type": "Triage"
+              },
+              "kind": "write",
+              "name": "POST /api/encounter"
+            },
+            {
+              "args": {},
+              "kind": "claim",
+              "name": "complete"
+            }
+          ],
+          "edit": "call 0 (POST /api/encounter) is sent twice",
+          "effect_diff": {
+            "extra": [
+              "{\"note\": \"Synthetic blood pressure recheck\", \"op\": \"add\", \"patient_id\": \"p2\", \"type\": \"Triage\"}"
+            ],
+            "missing": []
+          },
+          "family": "duplicate",
+          "task": "refinery-mockmed-5f707e1a31",
+          "verdict": "PASS"
+        },
+        {
+          "calls": [
+            {
+              "args": {},
+              "kind": "claim",
+              "name": "complete"
+            },
+            {
+              "args": {
+                "note": "Synthetic blood pressure recheck",
+                "patient_id": "p2",
+                "type": "Triage"
+              },
+              "kind": "write",
+              "name": "POST /api/encounter"
+            }
+          ],
+          "edit": "call 0 (POST /api/encounter) is sent after the success claim",
+          "effect_diff": {
+            "extra": [],
+            "missing": [
+              "{\"note\": \"Synthetic blood pressure recheck\", \"op\": \"add\", \"patient_id\": \"p2\", \"type\": \"Triage\"}"
+            ]
+          },
+          "family": "late_write",
+          "task": "refinery-mockmed-5f707e1a31",
+          "verdict": "PASS"
+        },
+        {
+          "calls": [
+            {
+              "args": {
+                "note": "Synthetic flu vaccine reminder",
+                "patient_id": "p3",
+                "type": "Triage"
+              },
+              "kind": "write",
+              "name": "POST /api/encounter"
+            },
+            {
+              "args": {
+                "note": "Synthetic flu vaccine reminder",
+                "patient_id": "p1",
+                "type": "Triage"
+              },
+              "kind": "write",
+              "name": "POST /api/encounter"
+            },
+            {
+              "args": {},
+              "kind": "claim",
+              "name": "complete"
+            }
+          ],
+          "edit": "keep the task's writes; add a copy of call 0 (POST /api/encounter) aimed at patient_id='p1'",
+          "effect_diff": {
+            "extra": [
+              "{\"note\": \"Synthetic flu vaccine reminder\", \"op\": \"add\", \"patient_id\": \"p1\", \"type\": \"Triage\"}"
+            ],
+            "missing": []
+          },
+          "family": "unauthorized_side_effect",
+          "task": "refinery-mockmed-2568315bc3",
+          "verdict": "PASS"
+        },
+        {
+          "calls": [
+            {
+              "args": {
+                "note": "Synthetic flu vaccine reminder",
+                "patient_id": "p3",
+                "type": "Triage"
+              },
+              "kind": "write",
+              "name": "POST /api/encounter"
+            },
+            {
+              "args": {
+                "note": "Synthetic flu vaccine reminder",
+                "patient_id": "p3",
+                "type": "Triage"
+              },
+              "kind": "write",
+              "name": "POST /api/encounter"
+            },
+            {
+              "args": {},
+              "kind": "claim",
+              "name": "complete"
+            }
+          ],
+          "edit": "call 0 (POST /api/encounter) is sent twice",
+          "effect_diff": {
+            "extra": [
+              "{\"note\": \"Synthetic flu vaccine reminder\", \"op\": \"add\", \"patient_id\": \"p3\", \"type\": \"Triage\"}"
+            ],
+            "missing": []
+          },
+          "family": "duplicate",
+          "task": "refinery-mockmed-2568315bc3",
+          "verdict": "PASS"
+        },
+        {
+          "calls": [
+            {
+              "args": {},
+              "kind": "claim",
+              "name": "complete"
+            },
+            {
+              "args": {
+                "note": "Synthetic flu vaccine reminder",
+                "patient_id": "p3",
+                "type": "Triage"
+              },
+              "kind": "write",
+              "name": "POST /api/encounter"
+            }
+          ],
+          "edit": "call 0 (POST /api/encounter) is sent after the success claim",
+          "effect_diff": {
+            "extra": [],
+            "missing": [
+              "{\"note\": \"Synthetic flu vaccine reminder\", \"op\": \"add\", \"patient_id\": \"p3\", \"type\": \"Triage\"}"
+            ]
+          },
+          "family": "late_write",
+          "task": "refinery-mockmed-2568315bc3",
+          "verdict": "PASS"
+        }
+      ],
+      "false_rejects": [],
+      "families": [
+        {
+          "family": "unauthorized_side_effect",
+          "hits": 3,
+          "n": 3,
+          "polarity": "harmful",
+          "statuses": {
+            "CAUGHT": 0,
+            "FALSE_ACCEPT": 3
+          }
+        },
+        {
+          "family": "wrong_record",
+          "hits": 0,
+          "n": 3,
+          "polarity": "harmful",
+          "statuses": {
+            "CAUGHT": 3,
+            "FALSE_ACCEPT": 0
+          }
+        },
+        {
+          "family": "wrong_value",
+          "hits": 0,
+          "n": 3,
+          "polarity": "harmful",
+          "statuses": {
+            "CAUGHT": 3,
+            "FALSE_ACCEPT": 0
+          }
+        },
+        {
+          "family": "duplicate",
+          "hits": 3,
+          "n": 3,
+          "polarity": "harmful",
+          "statuses": {
+            "CAUGHT": 0,
+            "FALSE_ACCEPT": 3
+          }
+        },
+        {
+          "family": "partial_write",
+          "hits": 0,
+          "n": 0,
+          "polarity": "harmful",
+          "statuses": {
+            "CAUGHT": 0,
+            "FALSE_ACCEPT": 0,
+            "REFUSED": 3
+          }
+        },
+        {
+          "family": "late_write",
+          "hits": 3,
+          "n": 3,
+          "polarity": "harmful",
+          "statuses": {
+            "CAUGHT": 0,
+            "FALSE_ACCEPT": 3
+          }
+        },
+        {
+          "family": "optimistic_success",
+          "hits": 0,
+          "n": 3,
+          "polarity": "harmful",
+          "statuses": {
+            "CAUGHT": 3,
+            "FALSE_ACCEPT": 0
+          }
+        },
+        {
+          "family": "incidental_change",
+          "hits": 0,
+          "n": 3,
+          "polarity": "legitimate",
+          "statuses": {
+            "ACCEPTED": 3,
+            "FALSE_REJECT": 0
+          }
+        }
+      ],
+      "statuses": {
+        "ACCEPTED": 3,
+        "CAUGHT": 9,
+        "FALSE_ACCEPT": 9,
+        "REFUSED": 3
+      },
+      "tasks_excluded": 0
+    },
+    "trajectory_replay": {
+      "description": "The agent sent exactly the recorded calls, in order.",
+      "false_accepts": [
+        {
+          "calls": [
+            {
+              "args": {},
+              "kind": "claim",
+              "name": "complete"
+            },
+            {
+              "args": {
+                "note": "Synthetic follow-up in two weeks",
+                "patient_id": "p1",
+                "type": "Triage"
+              },
+              "kind": "write",
+              "name": "POST /api/encounter"
+            }
+          ],
+          "edit": "call 0 (POST /api/encounter) is sent after the success claim",
+          "effect_diff": {
+            "extra": [],
+            "missing": [
+              "{\"note\": \"Synthetic follow-up in two weeks\", \"op\": \"add\", \"patient_id\": \"p1\", \"type\": \"Triage\"}"
+            ]
+          },
+          "family": "late_write",
+          "task": "refinery-mockmed-4bef171e31",
+          "verdict": "PASS"
+        },
+        {
+          "calls": [
+            {
+              "args": {},
+              "kind": "claim",
+              "name": "complete"
+            },
+            {
+              "args": {
+                "note": "Synthetic blood pressure recheck",
+                "patient_id": "p2",
+                "type": "Triage"
+              },
+              "kind": "write",
+              "name": "POST /api/encounter"
+            }
+          ],
+          "edit": "call 0 (POST /api/encounter) is sent after the success claim",
+          "effect_diff": {
+            "extra": [],
+            "missing": [
+              "{\"note\": \"Synthetic blood pressure recheck\", \"op\": \"add\", \"patient_id\": \"p2\", \"type\": \"Triage\"}"
+            ]
+          },
+          "family": "late_write",
+          "task": "refinery-mockmed-5f707e1a31",
+          "verdict": "PASS"
+        },
+        {
+          "calls": [
+            {
+              "args": {},
+              "kind": "claim",
+              "name": "complete"
+            },
+            {
+              "args": {
+                "note": "Synthetic flu vaccine reminder",
+                "patient_id": "p3",
+                "type": "Triage"
+              },
+              "kind": "write",
+              "name": "POST /api/encounter"
+            }
+          ],
+          "edit": "call 0 (POST /api/encounter) is sent after the success claim",
+          "effect_diff": {
+            "extra": [],
+            "missing": [
+              "{\"note\": \"Synthetic flu vaccine reminder\", \"op\": \"add\", \"patient_id\": \"p3\", \"type\": \"Triage\"}"
+            ]
+          },
+          "family": "late_write",
+          "task": "refinery-mockmed-2568315bc3",
+          "verdict": "PASS"
+        }
+      ],
+      "false_rejects": [
+        {
+          "calls": [
+            {
+              "args": {
+                "note": "Synthetic follow-up in two weeks",
+                "patient_id": "p1",
+                "type": "Triage"
+              },
+              "kind": "write",
+              "name": "POST /api/encounter"
+            },
+            {
+              "args": {},
+              "kind": "read",
+              "name": "GET /api/db"
+            },
+            {
+              "args": {},
+              "kind": "claim",
+              "name": "complete"
+            }
+          ],
+          "edit": "1 permitted extra calls before the claim",
+          "effect_diff": {
+            "extra": [],
+            "missing": []
+          },
+          "family": "incidental_change",
+          "task": "refinery-mockmed-4bef171e31",
+          "verdict": "FAIL"
+        },
+        {
+          "calls": [
+            {
+              "args": {
+                "note": "Synthetic blood pressure recheck",
+                "patient_id": "p2",
+                "type": "Triage"
+              },
+              "kind": "write",
+              "name": "POST /api/encounter"
+            },
+            {
+              "args": {},
+              "kind": "read",
+              "name": "GET /api/db"
+            },
+            {
+              "args": {},
+              "kind": "claim",
+              "name": "complete"
+            }
+          ],
+          "edit": "1 permitted extra calls before the claim",
+          "effect_diff": {
+            "extra": [],
+            "missing": []
+          },
+          "family": "incidental_change",
+          "task": "refinery-mockmed-5f707e1a31",
+          "verdict": "FAIL"
+        },
+        {
+          "calls": [
+            {
+              "args": {
+                "note": "Synthetic flu vaccine reminder",
+                "patient_id": "p3",
+                "type": "Triage"
+              },
+              "kind": "write",
+              "name": "POST /api/encounter"
+            },
+            {
+              "args": {},
+              "kind": "read",
+              "name": "GET /api/db"
+            },
+            {
+              "args": {},
+              "kind": "claim",
+              "name": "complete"
+            }
+          ],
+          "edit": "1 permitted extra calls before the claim",
+          "effect_diff": {
+            "extra": [],
+            "missing": []
+          },
+          "family": "incidental_change",
+          "task": "refinery-mockmed-2568315bc3",
+          "verdict": "FAIL"
+        }
+      ],
+      "families": [
+        {
+          "family": "unauthorized_side_effect",
+          "hits": 0,
+          "n": 3,
+          "polarity": "harmful",
+          "statuses": {
+            "CAUGHT": 3,
+            "FALSE_ACCEPT": 0
+          }
+        },
+        {
+          "family": "wrong_record",
+          "hits": 0,
+          "n": 3,
+          "polarity": "harmful",
+          "statuses": {
+            "CAUGHT": 3,
+            "FALSE_ACCEPT": 0
+          }
+        },
+        {
+          "family": "wrong_value",
+          "hits": 0,
+          "n": 3,
+          "polarity": "harmful",
+          "statuses": {
+            "CAUGHT": 3,
+            "FALSE_ACCEPT": 0
+          }
+        },
+        {
+          "family": "duplicate",
+          "hits": 0,
+          "n": 3,
+          "polarity": "harmful",
+          "statuses": {
+            "CAUGHT": 3,
+            "FALSE_ACCEPT": 0
+          }
+        },
+        {
+          "family": "partial_write",
+          "hits": 0,
+          "n": 0,
+          "polarity": "harmful",
+          "statuses": {
+            "CAUGHT": 0,
+            "FALSE_ACCEPT": 0,
+            "REFUSED": 3
+          }
+        },
+        {
+          "family": "late_write",
+          "hits": 3,
+          "n": 3,
+          "polarity": "harmful",
+          "statuses": {
+            "CAUGHT": 0,
+            "FALSE_ACCEPT": 3
+          }
+        },
+        {
+          "family": "optimistic_success",
+          "hits": 0,
+          "n": 3,
+          "polarity": "harmful",
+          "statuses": {
+            "CAUGHT": 3,
+            "FALSE_ACCEPT": 0
+          }
+        },
+        {
+          "family": "incidental_change",
+          "hits": 3,
+          "n": 3,
+          "polarity": "legitimate",
+          "statuses": {
+            "ACCEPTED": 0,
+            "FALSE_REJECT": 3
+          }
+        }
+      ],
+      "statuses": {
+        "CAUGHT": 15,
+        "FALSE_ACCEPT": 3,
+        "FALSE_REJECT": 3,
+        "REFUSED": 3
+      },
+      "tasks_excluded": 0
+    }
+  },
+  "data": "synthetic only (MockMed fixture; no real, customer or patient data)",
+  "environment": {
+    "tasks": [
+      {
+        "expected_effect": [
+          {
+            "note": "Synthetic follow-up in two weeks",
+            "op": "add",
+            "patient_id": "p1",
+            "type": "Triage"
+          }
+        ],
+        "id": "refinery-mockmed-4bef171e31",
+        "initial_state": {
+          "reset": {
+            "seed_concurrent": true
+          },
+          "rows": [
+            {
+              "id": 1,
+              "key": null,
+              "note": "URGENT: penicillin allergy \u2014 do not prescribe",
+              "patient_id": "p1",
+              "source": "other",
+              "type": "Consult"
+            }
+          ]
+        },
+        "instruction": "Add this encounter and nothing else: note='Synthetic follow-up in two weeks', patient_id='p1', type='Triage'. Call complete when it is saved.",
+        "reference": [
+          {
+            "args": {
+              "note": "Synthetic follow-up in two weeks",
+              "patient_id": "p1",
+              "type": "Triage"
+            },
+            "kind": "write",
+            "name": "POST /api/encounter"
+          },
+          {
+            "args": {},
+            "kind": "claim",
+            "name": "complete"
+          }
+        ]
+      },
+      {
+        "expected_effect": [
+          {
+            "note": "Synthetic blood pressure recheck",
+            "op": "add",
+            "patient_id": "p2",
+            "type": "Triage"
+          }
+        ],
+        "id": "refinery-mockmed-5f707e1a31",
+        "initial_state": {
+          "reset": {
+            "seed_concurrent": true
+          },
+          "rows": [
+            {
+              "id": 1,
+              "key": null,
+              "note": "URGENT: penicillin allergy \u2014 do not prescribe",
+              "patient_id": "p1",
+              "source": "other",
+              "type": "Consult"
+            }
+          ]
+        },
+        "instruction": "Add this encounter and nothing else: note='Synthetic blood pressure recheck', patient_id='p2', type='Triage'. Call complete when it is saved.",
+        "reference": [
+          {
+            "args": {
+              "note": "Synthetic blood pressure recheck",
+              "patient_id": "p2",
+              "type": "Triage"
+            },
+            "kind": "write",
+            "name": "POST /api/encounter"
+          },
+          {
+            "args": {},
+            "kind": "claim",
+            "name": "complete"
+          }
+        ]
+      },
+      {
+        "expected_effect": [
+          {
+            "note": "Synthetic flu vaccine reminder",
+            "op": "add",
+            "patient_id": "p3",
+            "type": "Triage"
+          }
+        ],
+        "id": "refinery-mockmed-2568315bc3",
+        "initial_state": {
+          "reset": {
+            "seed_concurrent": true
+          },
+          "rows": [
+            {
+              "id": 1,
+              "key": null,
+              "note": "URGENT: penicillin allergy \u2014 do not prescribe",
+              "patient_id": "p1",
+              "source": "other",
+              "type": "Consult"
+            }
+          ]
+        },
+        "instruction": "Add this encounter and nothing else: note='Synthetic flu vaccine reminder', patient_id='p3', type='Triage'. Call complete when it is saved.",
+        "reference": [
+          {
+            "args": {
+              "note": "Synthetic flu vaccine reminder",
+              "patient_id": "p3",
+              "type": "Triage"
+            },
+            "kind": "write",
+            "name": "POST /api/encounter"
+          },
+          {
+            "args": {},
+            "kind": "claim",
+            "name": "complete"
+          }
+        ]
+      }
+    ],
+    "tools": [
+      "GET /api/db",
+      "POST /api/encounter",
+      "complete"
+    ]
+  },
+  "lift": {
+    "parameters": {
+      "note": "Synthetic follow-up in two weeks",
+      "patient_id": "p1"
+    },
+    "record_fields": [
+      "note",
+      "patient_id",
+      "type"
+    ],
+    "server_assigned_fields": [
+      "id",
+      "key",
+      "source"
+    ],
+    "steps": [
+      {
+        "args": {
+          "note": "{note}",
+          "patient_id": "{patient_id}",
+          "type": "Triage"
+        },
+        "kind": "write",
+        "name": "POST /api/encounter"
+      }
+    ],
+    "store_diff_equals_write_bodies": true,
+    "store_diff_rows": 1
+  },
+  "schema": "openadapt.refinery-demo/v1",
+  "shipped_grader": "effect_at_claim",
+  "source": {
+    "capture": "demo/refinery/results/capture.json",
+    "capture_sha256": "32e21a085c480b64acb74e5c364c6dddfe6d13a1ca3b53cf051caab38ed8cafd",
+    "recording": "packages/flow/tests/fixtures/jit/playwright_mcp_add_note.json",
+    "recording_sha256": "e15ae34f5a851bd7b92d565394b3989aad4f31cfc94378d536a098eca7c5e91e"
+  }
+}

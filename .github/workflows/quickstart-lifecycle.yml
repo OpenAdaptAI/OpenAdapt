@@ -47,6 +47,7 @@ jobs:
           --launcher-wheel "lifecycle-dist/*.whl"
           --work-dir "runs/launcher-lifecycle"
           --browser-system-deps
+          --require-installed-browser
           --source-revision "${{ github.sha }}"
 
       - name: Upload lifecycle evidence

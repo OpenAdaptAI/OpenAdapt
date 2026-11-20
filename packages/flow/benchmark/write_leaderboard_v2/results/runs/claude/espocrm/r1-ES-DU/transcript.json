@@ -1,0 +1,547 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      23,
+      166
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I should check whether it already exists first.",
+   "actions": [
+    {
+     "coordinate": [
+      340,
+      112
+     ]
+    },
+    {
+     "text": "Granite\n"
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1195,
+      62
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      263,
+      232
+     ]
+    },
+    {
+     "text": "Granite Roofing"
+    },
+    {
+     "coordinate": [
+      651,
+      232
+     ]
+    },
+    {
+     "text": "granite.example.invalid"
+    },
+    {
+     "coordinate": [
+      457,
+      701
+     ]
+    },
+    {
+     "text": "Flat roofs and repairs."
+    },
+    {
+     "coordinate": [
+      263,
+      618
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      121,
+      683
+     ]
+    },
+    {
+     "coordinate": [
+      651,
+      618
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 1
+    },
+    {
+     "}": null
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "Escape"
+    },
+    {
+     "coordinate": [
+      1000,
+      500
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      651,
+      618
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Try typing to filter.",
+   "actions": [
+    {
+     "text": "Constr"
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      519,
+      656
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      95,
+      112
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I created the account Granite Roofing with website granite.example.invalid, type Customer, industry Construction and description \"Flat roofs and repairs.\". I searched for \"Granite\" first and found no existing account. The saved page shows all five values, and every other field is empty. The browser shows no address bar, so I couldn't read the record's ID or URL; the account is listed under Accounts as \"Granite Roofing\".\n\nRESULT: DONE Account \"Granite Roofing\" (Accounts list; ID/URL not visible in the browser)",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 23,
+   "y": 166,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 340,
+   "y": 112,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Granite\n"
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 1195,
+   "y": 62,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 263,
+   "y": 232,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Granite Roofing"
+  },
+  {
+   "a": "click",
+   "x": 651,
+   "y": 232,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "granite.example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 457,
+   "y": 701,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Flat roofs and repairs."
+  },
+  {
+   "a": "click",
+   "x": 263,
+   "y": 618,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 121,
+   "y": 683,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 651,
+   "y": 618,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Escape"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 1000,
+   "y": 500,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 651,
+   "y": 618,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "type",
+   "text": "Constr"
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 519,
+   "y": 656,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 95,
+   "y": 112,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6139,
+   "out": 92,
+   "usd": 0.016266,
+   "cached": 0
+  },
+  {
+   "in": 7635,
+   "out": 83,
+   "usd": 0.005806,
+   "cached": 6135
+  },
+  {
+   "in": 9095,
+   "out": 137,
+   "usd": 0.006551,
+   "cached": 7633
+  },
+  {
+   "in": 10633,
+   "out": 99,
+   "usd": 0.006658,
+   "cached": 9093
+  },
+  {
+   "in": 12130,
+   "out": 75,
+   "usd": 0.006623,
+   "cached": 10631
+  },
+  {
+   "in": 13590,
+   "out": 234,
+   "usd": 0.00842,
+   "cached": 12128
+  },
+  {
+   "in": 15294,
+   "out": 129,
+   "usd": 0.008272,
+   "cached": 13588
+  },
+  {
+   "in": 16826,
+   "out": 107,
+   "usd": 0.007962,
+   "cached": 15292
+  },
+  {
+   "in": 18318,
+   "out": 174,
+   "usd": 0.008839,
+   "cached": 16824
+  },
+  {
+   "in": 19893,
+   "out": 98,
+   "usd": 0.008585,
+   "cached": 18316
+  },
+  {
+   "in": 21389,
+   "out": 109,
+   "usd": 0.008812,
+   "cached": 19891
+  },
+  {
+   "in": 22886,
+   "out": 106,
+   "usd": 0.009084,
+   "cached": 21387
+  },
+  {
+   "in": 24382,
+   "out": 106,
+   "usd": 0.009381,
+   "cached": 22884
+  },
+  {
+   "in": 25878,
+   "out": 83,
+   "usd": 0.00945,
+   "cached": 24380
+  },
+  {
+   "in": 27338,
+   "out": 83,
+   "usd": 0.009659,
+   "cached": 25876
+  },
+  {
+   "in": 28798,
+   "out": 217,
+   "usd": 0.011291,
+   "cached": 27336
+  }
+ ]
+}

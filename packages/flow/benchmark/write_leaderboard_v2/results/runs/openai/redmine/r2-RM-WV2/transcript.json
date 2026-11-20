@@ -1,0 +1,816 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f16262af3a96295016af4c772633487d2a06762c945b31c7f",
+     "call_id": "call_eSo4uBuNuLnA2RF9S1XtW66A",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f16262af3a96295016af4c774fc8887d2976e3ace8d16a953",
+     "call_id": "call_WCXJ1YgId7zA4ozLF1TSuuHt",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 23,
+       "y": 95
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f16262af3a96295016af4c77737a487d2ba6d4dd5eca80e0a",
+     "call_id": "call_4psja4MjS3gBpAZdsANe0qBo",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 56,
+       "y": 123
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f16262af3a96295016af4c77a397887d2a2006b9ed3c619a4",
+     "call_id": "call_P7sr9XmfbujHqIylwpcgo6BP",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 246,
+       "y": 176
+      },
+      {
+       "keys": [
+        "f"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "ENTER"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f16262af3a96295016af4c77d66b087d2acc6b74a45364ed2",
+     "call_id": "call_RTyXpqvl7Pc6hp6qcf2J41aF",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 388,
+       "y": 217
+      },
+      {
+       "text": "Add a dark theme to the kiosk",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 383,
+       "y": 329
+      },
+      {
+       "text": "Staff asked for a night mode.",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 850,
+       "y": 556
+      },
+      {
+       "text": "4",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 850,
+       "y": 520
+      },
+      {
+       "keys": [
+        "ARROWUP"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f16262af3a96295016af4c7842c1487d2a2e138c21a891531",
+     "call_id": "call_65n818VWyD2ds0KEJN1Apaun",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 421,
+       "y": 396
+      },
+      {
+       "keys": [
+        "CTRL",
+        "a"
+       ],
+       "type": "keypress"
+      },
+      {
+       "text": "Staff asked for a night mode.",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 853,
+       "y": 559
+      },
+      {
+       "keys": [
+        "2"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "0"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "2"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "6"
+       ],
+       "type": "keypress"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 852,
+       "y": 628
+      },
+      {
+       "text": "4",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 851,
+       "y": 594
+      },
+      {
+       "keys": [
+        "2"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "0"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "2"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "6"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "RIGHT"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "1"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "2"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "RIGHT"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "1"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "5"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f16262af3a96295016af4c78a62e887d2b923abfd6b8ce2c5",
+     "call_id": "call_WRtEQrDRdNq8cAGRhZZtkttZ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 421,
+       "y": 397
+      },
+      {
+       "keys": [
+        "CTRL",
+        "A"
+       ],
+       "type": "keypress"
+      },
+      {
+       "text": "Staff asked for a night mode.",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 884,
+       "y": 594
+      },
+      {
+       "keys": [
+        "1"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "2"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f16262af3a96295016af4c78d429887d2a78e598bbeccd5e5",
+     "call_id": "call_szVN08yrUtQH8bBlVgMA0raX",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 430,
+       "y": 400
+      },
+      {
+       "keys": [
+        "Control",
+        "a"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f16262af3a96295016af4c78fde0c87d2913d6b9c4c100943",
+     "call_id": "call_CnbV8nxnFv9IyKgKWI2CZwsQ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "path": [
+        {
+         "x": 962,
+         "y": 357
+        },
+        {
+         "x": 800,
+         "y": 357
+        },
+        {
+         "x": 600,
+         "y": 357
+        },
+        {
+         "x": 400,
+         "y": 357
+        },
+        {
+         "x": 208,
+         "y": 357
+        }
+       ],
+       "type": "drag"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f16262af3a96295016af4c794ab5c87d287bfd6f8b1b75edd",
+     "call_id": "call_DpfTGwT8Y6PS5j0qdoomiXJH",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "text": "Staff asked for a night mode.",
+       "type": "type"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0f16262af3a96295016af4c797a2d087d2b65fddadfd38fb54",
+     "call_id": "call_omU7imFothK8lUrKmrOEsZqP",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 43,
+       "y": 794
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: DONE 66",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 23,
+   "y": 95,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 56,
+   "y": 123,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 246,
+   "y": 176,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "f"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ENTER"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 388,
+   "y": 217,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Add a dark theme to the kiosk"
+  },
+  {
+   "a": "click",
+   "x": 383,
+   "y": 329,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Staff asked for a night mode."
+  },
+  {
+   "a": "click",
+   "x": 850,
+   "y": 556,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "4"
+  },
+  {
+   "a": "click",
+   "x": 850,
+   "y": 520,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ARROWUP"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 421,
+   "y": 396,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "a"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Staff asked for a night mode."
+  },
+  {
+   "a": "click",
+   "x": 853,
+   "y": 559,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "2"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "0"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "2"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "6"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 852,
+   "y": 628,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "4"
+  },
+  {
+   "a": "click",
+   "x": 851,
+   "y": 594,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "2"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "0"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "2"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "6"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "RIGHT"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "1"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "2"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "RIGHT"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "1"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "5"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 421,
+   "y": 397,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "A"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Staff asked for a night mode."
+  },
+  {
+   "a": "click",
+   "x": 884,
+   "y": 594,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "1"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "2"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 430,
+   "y": 400,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Control",
+    "a"
+   ]
+  },
+  {
+   "a": "drag",
+   "path": [
+    [
+     962,
+     357
+    ],
+    [
+     800,
+     357
+    ],
+    [
+     600,
+     357
+    ],
+    [
+     400,
+     357
+    ],
+    [
+     208,
+     357
+    ]
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Staff asked for a night mode."
+  },
+  {
+   "a": "click",
+   "x": 43,
+   "y": 794,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  }
+ ],
+ "usage": [
+  {
+   "in": 2218,
+   "out": 15,
+   "usd": 0.000599,
+   "cached": 2215
+  },
+  {
+   "in": 3435,
+   "out": 31,
+   "usd": 0.001002,
+   "cached": 3432
+  },
+  {
+   "in": 4691,
+   "out": 31,
+   "usd": 0.001254,
+   "cached": 4688
+  },
+  {
+   "in": 5947,
+   "out": 49,
+   "usd": 0.003946,
+   "cached": 4688
+  },
+  {
+   "in": 7229,
+   "out": 126,
+   "usd": 0.005019,
+   "cached": 5944
+  },
+  {
+   "in": 8619,
+   "out": 268,
+   "usd": 0.006911,
+   "cached": 7226
+  },
+  {
+   "in": 10203,
+   "out": 111,
+   "usd": 0.006007,
+   "cached": 8616
+  },
+  {
+   "in": 11562,
+   "out": 62,
+   "usd": 0.005384,
+   "cached": 10200
+  },
+  {
+   "in": 12853,
+   "out": 57,
+   "usd": 0.00547,
+   "cached": 11559
+  },
+  {
+   "in": 14135,
+   "out": 29,
+   "usd": 0.00543,
+   "cached": 12850
+  },
+  {
+   "in": 15384,
+   "out": 31,
+   "usd": 0.00564,
+   "cached": 14132
+  },
+  {
+   "in": 16640,
+   "out": 9,
+   "usd": 0.005684,
+   "cached": 15381
+  }
+ ]
+}

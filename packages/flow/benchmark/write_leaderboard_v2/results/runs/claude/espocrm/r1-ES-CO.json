@@ -1,0 +1,61 @@
+{
+ "id": "ES-CO",
+ "app": "espocrm",
+ "class": "collateral",
+ "note": "With the save",
+ "agent_s": 54.0,
+ "cost_usd": 0.120692,
+ "claim": {
+  "status": "done",
+  "id": "Account \"Juniper Florists\" created (page: Accounts \u203a Juniper Florists; URL/id not visible)",
+  "note": "RESULT: DONE Account \"Juniper Florists\" created (page: Accounts \u203a Juniper Florists; URL/id not visible)",
+  "claim_line": true,
+  "final_text": "I created the Juniper Florists account with website juniper.example.invalid, type Customer, industry Retail and description \"Weekly lobby flowers.\" I left every other field blank. A search for \"Juniper\" beforehand found no existing account. The record's detail page now shows these values. The browser doesn't show its address bar, so I couldn't read the record's ID or URL.\n\nRESULT: DONE Account \"Juniper Florists\" created (page: Accounts \u203a Juniper Florists; URL/id not visible)",
+  "model_calls": 14,
+  "actions": 30,
+  "tokens_in": 223769,
+  "tokens_out": 1665,
+  "end_url": "http://127.0.0.1:9856/#Account/view/6af4c5afca5375ec9"
+ },
+ "oracle": {
+  "verdict": "wrong",
+  "reasons": [
+   "other records changed: ['fbe68c33c89e747d']"
+  ],
+  "new": [
+   "6af4c5afca5375ec9"
+  ],
+  "deleted": [],
+  "changed": [
+   "fbe68c33c89e747d"
+  ],
+  "collateral": true,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794426287.691,
+   "method": "POST",
+   "path": "/api/v1/Account",
+   "save": true,
+   "fault": [
+    "side_write"
+   ],
+   "status": 200,
+   "side_write": "done",
+   "ms": 202
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 1,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 5.9,
+  "end": 6.6,
+  "waited_s": 0
+ }
+}

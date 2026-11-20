@@ -15,7 +15,198 @@
 
 <!-- version list -->
 
-## Unreleased
+## v3.3.0 (2026-11-19)
+
+### Fixes
+
+- Screen text read from the clock is checked against the run's clock. A
+  text check whose dates all equal the recording date, at the precision the
+  text shows (a date picker's "October 2026", a pre-filled "10/20/2026", a
+  "Tuesday, Oct 20" header), compiles to a clock template
+  (`Postcondition.text_clock`, `openadapt_flow/clock_text.py`). The run
+  renders it from its own clock and checks that date: one confidently read
+  OCR line must carry exactly its fields (runs of letters and digits, so
+  "11/3/2026" never matches "1/13/2026" or "Nov 03, 1990"), never the fuzzy
+  match or the DOM's substring proof, so "October 2025" or another month
+  still fails. Around midnight the local date and the UTC date are both the
+  run's clock, a one-day window. Before,
+  the certified OpenEMR referral program checked the literal
+  "October-2026-" and halted every referral from 1 November. OCR-joined
+  month dates ("October-2026-", "Oct/2026") now classify as dates too.
+  `python -m openadapt_flow.compiler.clock_pass BUNDLE OUT --recorded-on
+  DATE` applies the same rule to a bundle compiled before this; the result
+  must be qualified again.
+- A REST read can declare that its endpoint leaves the next link out of a
+  still-present parent object on the last page
+  (`records_next_absent_is_last: true`, with `records_next_path`). A body
+  without that parent object, or a page that has a next link and no
+  snapshot semantics, stays indeterminate. The OpenEMR recipes use it with
+  `_limit=200` (OpenEMR's page cap), so their read-back is complete again
+  since #2041 instead of "REST read completeness was not established".
+- The first-local delivery fence (#2209) counts the qualification
+  project's operator-confirmed risk decisions in a qualification case bound
+  to the bundle's own project, as the outcome classifier already did. Before,
+  a campaign could not qualify a program whose write-shaped but reversible
+  step the operator had classified. A certified run now checks the
+  operator's decisions against the policy it was admitted under; without
+  that digest no certification reproduced, so the OpenEMR quickstart's
+  certified runs stopped at "Create New Patient" too.
+- `qualify --certify` with business rules saves the certified bundle while
+  the rule trials' copy still exists. A save moves a loaded workflow's
+  verified source to where it saved (#1993), so the final save found the
+  removed copy's assets missing and every such campaign failed after its
+  rule trials passed.
+- The certified OpenEMR referral program behind `openadapt quickstart --app
+  openemr` was qualified again with its date-picker check on the run's
+  clock (content digest `10e45945…`; evidence in
+  `benchmark/scoreboard/raw/openemr_referral/requalified/2026-11-19/`), and
+  a first OpenEMR quickstart on a new machine creates its state folder
+  instead of stopping on the missing lock file.
+
+## v3.2.0 (2026-11-19)
+
+### Faster screen steps and encrypted checkpoints
+
+- A checkpoint store derives its at-rest key once, under one salt, instead
+  of running scrypt on every sealed checkpoint read and write. Derived keys
+  stay in memory, bounded, and are reused only for the same passphrase and
+  work factors. The container format is unchanged: each container records
+  its salt and gets a fresh nonce, and wrong-key refusal and tamper
+  detection are unchanged. The MockMed tutorial ran 131 scrypt derivations
+  before and 1 after (40.8 s to 14.7 s median, N = 10 each).
+- The frame descent behind structural lookups, identity reads and field
+  read-backs reads each frame boundary in one browser call. On the OpenEMR
+  referral this cut Playwright calls per run from about 3,970 to 2,390, and
+  the median wall time from 23.2 s to 20.1 s (N = 14 each, identical
+  checks). After a busy quiescence probe, the settle waits until a quiet
+  window is possible instead of probing every 20 ms.
+
+### Fixes
+
+- The dropdown (`field_value`) check of a linear run reads the run's
+  parameters. Before, it read only a program run's parameters, so every
+  linear run with a dropdown commit stopped at that step.
+- The agent bridge (`openadapt_flow.agent`) refuses an unqualified pulled
+  skill before Flow starts (`not_ready_to_run` with `skill_not_qualified`, or
+  `app_target_missing` when the skill has no address).
+- The pulled-skill qualification check (`skills.pulled_skill_refusal`, used
+  by the CLI, the agent bridge and the MCP emitter) recomputes the
+  certification against the policy recorded in the lock. Before, no
+  qualified pulled skill could run.
+
+### Requirements
+
+- `opencv-python` in the `vision` and `dev` extras is capped below 5.1, which
+  adds about 105 MB to an install with those extras.
+
+### Public Seals
+
+- `openadapt-flow local-seal public RUN_DIR` writes `public-seal.json`
+  (`openadapt.public-seal/v1`): an allow-listed card of the run (counts,
+  outcomes, each step's rung and strongest check, digests, the hour it
+  started, and the program name only with `--names` or for the synthetic
+  tutorial) and an offline Seal over the card with the new subject kind
+  `public-card`. Its `run_id` is a hash. It never holds parameters, intents,
+  identity readings, URLs, screenshots, halt text or an app name, and works
+  for stopped runs. At most 4,096 bytes; the step strip is all steps or none.
+  `openadapt_flow.public_seal.verify_public_seal` checks one without a key
+  registry and accepts only the engine's canonical bytes. Golden vectors for
+  other verifiers (29 cases) are in
+  `tests/fixtures/public_seal/golden_vectors.json`.
+- Offline Seal timestamps (`issued_at`) must use ASCII digits; pydantic's
+  `\d` also matched other scripts' digits.
+
+## v3.1.0 (2026-11-14)
+
+### Wrap publish: the scrubber keeps a program's structure, and info lint is advice
+
+- The outbound scrubber no longer rewrites the generated files of a wrap
+  program. `admission.json`, `openadapt-wrap-publish.json`,
+  `readback/verify.yaml`, `sections.json`, `templates/layout_fingerprint.json`
+  and `jit_draft.json` declare each field as content (always scrubbed) or
+  structural (kept only with its declared machine shape); undeclared fields
+  are scrubbed. `workflow.json` keeps identity signal slots, the punctuation
+  policy and the compiler's identifier-crop reasons. Before, the NER scrub
+  turned `v1` and `step_002` into placeholders, and every wrap publish was
+  refused with `SANITIZATION_CHANGED_PROGRAM`.
+- Strict lint for hosted validation now fails on `warn` and `error` findings,
+  as `openadapt-flow lint --strict` does. An `info` finding such as
+  `missing_identifier_crop` on a step whose structured identity owns the check
+  no longer refuses every web program with `VALIDATION_FAILED`.
+
+### A hosted Standard run of an admitted program rests on its admission
+
+- `openadapt-flow run --managed-dispatch-file` under the Standard profile now
+  accepts a dispatch without a qualification admission for an admitted
+  agent-compiled program (`openadapt wrap`, `jit`). Its bundle must carry an
+  `admission.json` that verifies against the trusted admission key directory,
+  plus a valid `readback/verify.yaml`. The authorization's `approval_source`
+  must name that exact admission (`hosted:program-admission:<sha256>`). The
+  run reads back through the bundled `verify.yaml`. Regulated is refused.
+  See `openadapt_flow/jit/hosted_authority.py`.
+- `openadapt wrap publish` writes the program's value-free Standard run shape
+  into `openadapt-wrap-publish.json` (`run_authorization`). The new refusal
+  `RUN_SHAPE_UNAVAILABLE` covers an unknown policy.
+- `openadapt wrap publish` now finds the confirmed read-back checks where
+  the first run writes them (`compiled/verify.yaml`). Before, every real
+  task was refused with `NO_READ_BACK`. The person-signed teach
+  authorization stays local and is no longer staged for upload; the
+  sanitizer refused its `.sig` file.
+
+### Wrap publish: review fixes for hosted admitted-program runs
+
+- The bundled `readback/verify.yaml` replaces the deployment's effects
+  verifier only after the run's authority is decided: a managed dispatch
+  that rests on the program's own admission, with no production authority
+  file and no qualification admission. Before, any managed run of a bundle
+  with an `admission.json` and a `verify.yaml` used the bundled file, signed
+  or not.
+- The uploaded admission binds the SHA-256 of the bundled `verify.yaml`
+  (`hosted.readback_sha256`). The runner refuses a different file.
+- Person and record identifiers no longer reach the cloud. In the uploaded
+  `admission.json` and `verify.yaml`, a principal stays in plaintext only as
+  a `ci:`, `agent:` or `service:` handle or a key fingerprint. Anything else
+  becomes `hmac:<hex>`, keyed with a per-install key in
+  `<key_dir>/keys/principal-hmac.key`. The sanitizer replaces any other
+  principal with `<PRINCIPAL>`.
+- A run receipt, and its signed production projection, carry
+  `authority_basis: customer-attested-program-admission` when the run rested
+  on a program admission. Other receipts are unchanged.
+- Hosted strict lint keeps `missing_identifier_crop` blocking on an RDP or
+  Citrix target, where the crop is the only pixel identity evidence.
+- Removed the unused `shape_matches_authorization`.
+
+## v3.0.0 (2026-11-13)
+
+### Breaking: the vision stack is the `vision` extra (3.0.0)
+
+- `pip install openadapt-flow` no longer installs NumPy, OpenCV, Pillow or
+  RapidOCR. They are the new `vision` extra. The base install is the
+  record-check verifier, write ledger, protected journal, SQL, REST and FHIR
+  read paths and receipt signing: 17 distributions and 40 MB of site-packages
+  instead of 29 and 301 MB (uv install, Python 3.12, macOS arm64).
+  openadapt-verify depends on this base install.
+- The recording and replay extras (`browser`, `capture`, `windows`, `macos`,
+  `linux`, `rdp`, `native-ocr`, `local-grounding`, `openenv`) include
+  `vision`, so `pip install 'openadapt-flow[browser]'` installs what it did in
+  2.x. To record, compile or replay with none of those, install
+  `openadapt-flow[vision]`. Without it, those commands print that install
+  command and exit 2.
+- On the base install, `openadapt-flow --help`, `openadapt-flow receipt verify`
+  and `openadapt-flow verify-run` work. The perturbation harness, the repair
+  campaigns and `compile_recording` load Pillow and NumPy on first use instead
+  of when the CLI builds its parser. The `flow-base` CI smoke runs those
+  commands' help on the base install.
+- The on-prem release installs `openadapt-flow[privacy,vision]`.
+- `RemoteFrameContract` imports Pillow only when it hashes a frame, so loading
+  a deployment config no longer needs it.
+  `tests/test_verifier_import_boundary.py` refuses the vision modules and
+  checks that the verifier path imports and signs a receipt without them.
+- No verifier, ledger, journal or guard code changed. Fail-closed behavior is
+  unchanged.
+
+- SQL effect readback now requires opaque SQLite and PostgreSQL adapters to
+  declare `sql_dialect`. Native drivers are still recognized automatically.
 
 - Keep deferred typing, scrolling and click gestures tied to their emitting
   document. A known document change preserves both actions; uncertain ownership

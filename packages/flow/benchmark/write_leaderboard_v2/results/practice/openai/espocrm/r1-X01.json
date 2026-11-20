@@ -1,0 +1,53 @@
+{
+ "id": "X01",
+ "app": "espocrm",
+ "class": "clean",
+ "note": "",
+ "agent_s": 101.8,
+ "cost_usd": 0.204957,
+ "claim": {
+  "status": "done",
+  "id": "6af4ba76e89edd473",
+  "note": "RESULT: DONE 6af4ba76e89edd473",
+  "claim_line": true,
+  "final_text": "RESULT: DONE 6af4ba76e89edd473",
+  "model_calls": 30,
+  "actions": 34,
+  "tokens_in": 614197,
+  "tokens_out": 1199,
+  "end_url": "http://127.0.0.1:9856/#Account"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "6af4ba76e89edd473"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794423414.762,
+   "method": "POST",
+   "path": "/api/v1/Account",
+   "save": true,
+   "status": 200,
+   "ms": 241
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "practice",
+ "rep": 1,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 26.2,
+  "end": 21.2,
+  "waited_s": 0
+ }
+}

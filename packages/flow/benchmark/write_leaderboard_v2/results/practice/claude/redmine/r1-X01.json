@@ -1,0 +1,77 @@
+{
+ "id": "X01",
+ "app": "redmine",
+ "class": "clean",
+ "note": "",
+ "agent_s": 34.1,
+ "cost_usd": 0.078566,
+ "claim": {
+  "status": "done",
+  "id": "13",
+  "note": "RESULT: DONE 13",
+  "claim_line": true,
+  "final_text": "I created the issue in Synthetic Helpdesk as Support #13. It has the subject \"Projector in room 4 has no signal\", the description \"HDMI input shows nothing.\", priority Normal, due date 12/10/2026 and estimated time 1:00 h. Every other field was left at its default.\n\nAn early Enter press tried to submit the form before the subject was filled in, but Redmine rejected it with \"Subject cannot be blank\", so no extra issue was created.\n\nRESULT: DONE 13",
+  "model_calls": 9,
+  "actions": 22,
+  "tokens_in": 110877,
+  "tokens_out": 1360,
+  "end_url": "http://127.0.0.1:9861/issues/13"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "13"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794423228.879,
+   "method": "POST",
+   "path": "/login",
+   "save": false,
+   "status": 302,
+   "ms": 33
+  },
+  {
+   "t": 1794423248.867,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues/new.js",
+   "save": false,
+   "status": 200,
+   "ms": 77
+  },
+  {
+   "t": 1794423250.895,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues",
+   "save": true,
+   "status": 200,
+   "ms": 98
+  },
+  {
+   "t": 1794423261.375,
+   "method": "POST",
+   "path": "/projects/helpdesk/issues",
+   "save": true,
+   "status": 302,
+   "ms": 95
+  }
+ ],
+ "saves_seen": 2,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "practice",
+ "rep": 1,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 24.8,
+  "end": 29.0,
+  "waited_s": 0
+ }
+}

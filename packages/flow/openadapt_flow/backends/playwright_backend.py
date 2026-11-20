@@ -22,6 +22,13 @@ from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING, Any, Callable, Iterator, Literal, Optional, Sequence
 from urllib.parse import urlsplit
 
+from openadapt_flow.backends._frame_js import (  # noqa: F401 - re-exported
+    _FRAME_BOUNDARY_JS,
+    _FRAME_SELECTOR_JS,
+    _HAS_SHADOW_JS,
+    _HIT_TAG_JS,
+    _PROJECT_FRAME_POINT_JS,
+)
 from openadapt_flow.backends._page_quiescence import PageQuiescence
 from openadapt_flow.backends._server_responses import ServerResponseLog
 from openadapt_flow.runtime.step_timing import timed_span
@@ -1991,32 +1998,6 @@ _STRUCTURAL_LOCATOR_AT_JS = (
 }"""
 )
 
-_FRAME_SELECTOR_JS = r"""(el) => {
-    const doc = el.ownerDocument;
-    const unique = (selector) => {
-        try { return doc.querySelectorAll(selector).length === 1; }
-        catch (_) { return false; }
-    };
-    if (el.id) {
-        const byId = '#' + CSS.escape(el.id);
-        if (unique(byId)) return byId;
-    }
-    const segments = [];
-    let node = el;
-    while (node && node !== doc.documentElement) {
-        const tag = node.tagName.toLowerCase();
-        let index = 1;
-        for (let sibling = node.previousElementSibling; sibling;
-                sibling = sibling.previousElementSibling) {
-            if (sibling.tagName === node.tagName) index += 1;
-        }
-        segments.unshift(tag + ':nth-of-type(' + index + ')');
-        const candidate = segments.join(' > ');
-        if (unique(candidate)) return candidate;
-        node = node.parentElement;
-    }
-    return null;
-}"""
 
 # The active modal dialog holding the element under a viewport point. Walks the
 # hit-tested chain from the top document down through same-origin frames; the
@@ -2091,58 +2072,6 @@ _DIALOG_AT_JS = r"""([x, y]) => {
         win = hit.contentWindow;
     }
     return {status: 'unknown'};
-}"""
-
-
-_PROJECT_FRAME_POINT_JS = r"""(el, point) => {
-    const [px, py] = point;
-    if (document.elementFromPoint(px, py) !== el) return null;
-
-    // getBoundingClientRect can safely invert only positive axis-aligned
-    // scale/translation. Reject rotation, skew, mirroring, perspective, and
-    // 3-D transforms on the frame or any ancestor rather than guessing.
-    const epsilon = 1e-7;
-    for (let node = el; node; node = node.parentElement) {
-        const style = window.getComputedStyle(node);
-        if (style.perspective && style.perspective !== 'none') return null;
-        const rotate = style.rotate;
-        if (rotate && rotate !== 'none' && rotate !== '0deg') return null;
-        const scale = style.scale;
-        if (scale && scale !== 'none') {
-            const components = scale.trim().split(/\s+/).map(Number);
-            if (components.length < 1 || components.length > 2 ||
-                    components.some(value => !Number.isFinite(value) || value <= 0)) {
-                return null;
-            }
-        }
-        const transform = style.transform;
-        if (transform && transform !== 'none') {
-            let matrix;
-            try { matrix = new DOMMatrixReadOnly(transform); }
-            catch (_) { return null; }
-            if (!matrix.is2D || Math.abs(matrix.b) > epsilon ||
-                    Math.abs(matrix.c) > epsilon || matrix.a <= 0 || matrix.d <= 0) {
-                return null;
-            }
-        }
-    }
-
-    const rect = el.getBoundingClientRect();
-    const offsetWidth = Number(el.offsetWidth);
-    const offsetHeight = Number(el.offsetHeight);
-    if (!(rect.width > 0 && rect.height > 0 &&
-            offsetWidth > 0 && offsetHeight > 0)) return null;
-    const scaleX = rect.width / offsetWidth;
-    const scaleY = rect.height / offsetHeight;
-    if (!(Number.isFinite(scaleX) && Number.isFinite(scaleY) &&
-            scaleX > 0 && scaleY > 0)) return null;
-    const contentX = rect.left + Number(el.clientLeft) * scaleX;
-    const contentY = rect.top + Number(el.clientTop) * scaleY;
-    const localX = (px - contentX) / scaleX;
-    const localY = (py - contentY) / scaleY;
-    const inside = localX >= 0 && localY >= 0 &&
-        localX < Number(el.clientWidth) && localY < Number(el.clientHeight);
-    return inside ? {inside: true, x: localX, y: localY} : {inside: false};
 }"""
 
 
@@ -4120,7 +4049,10 @@ class PlaywrightBackend:
                     return None
                 candidate = None
                 try:
-                    tag = focused.evaluate("el => el.localName")
+                    # Tag, selector and the selector's uniqueness in one call
+                    # (see _FRAME_BOUNDARY_JS); no point, so no projection.
+                    boundary = focused.evaluate(_FRAME_BOUNDARY_JS, None)
+                    tag = boundary.get("tag") if isinstance(boundary, dict) else None
                     if tag not in {"iframe", "frame"}:
                         box = focused.bounding_box()
                         if not isinstance(box, dict) or not self._frame_chain_matches(
@@ -4134,21 +4066,25 @@ class PlaywrightBackend:
                         return focused.evaluate(js)
                     if len(frame_path) >= 8:
                         return None
-                    selector = focused.evaluate(_FRAME_SELECTOR_JS)
+                    selector = boundary.get("selector")
                     if (
                         not isinstance(selector, str)
                         or not selector
                         or len(selector) > 512
                     ):
                         return None
-                    matches = scope.locator(selector)
-                    if matches.count() != 1:
+                    unique = boundary.get("unique")
+                    if unique is False:
                         return None
-                    candidate = matches.element_handle()
-                    if candidate is None or not focused.evaluate(
-                        "(el, expected) => el === expected", candidate
-                    ):
-                        return None
+                    if unique is not True:
+                        matches = scope.locator(selector)
+                        if matches.count() != 1:
+                            return None
+                        candidate = matches.element_handle()
+                        if candidate is None or not focused.evaluate(
+                            "(el, expected) => el === expected", candidate
+                        ):
+                            return None
                     child = focused.content_frame()
                     if child is None:
                         return None
@@ -4183,17 +4119,30 @@ class PlaywrightBackend:
             hit = None
             candidate = None
             try:
+                # The tag first, without a handle: most descents end in a
+                # document whose hit is not a frame, and that answer needs
+                # nothing else (the point and scope are the result).
+                tag = scope.evaluate(_HIT_TAG_JS, [local_x, local_y])
+                if tag is None:
+                    return None
+                if tag not in {"iframe", "frame"}:
+                    return _FramePoint(scope, local_x, local_y, tuple(path))
                 hit = scope.evaluate_handle(
                     "([px, py]) => document.elementFromPoint(px, py)",
                     [local_x, local_y],
                 ).as_element()
                 if hit is None:
                     return None
-                tag = hit.evaluate("el => el.localName")
-                if tag not in {"iframe", "frame"}:
+                # Everything this boundary needs from the frame element, in
+                # one call. The projection re-checks that the element is
+                # still the hit, so a page that changed between the two calls
+                # is judged on the element actually there.
+                boundary = hit.evaluate(_FRAME_BOUNDARY_JS, [local_x, local_y])
+                if not isinstance(boundary, dict):
+                    return None
+                if boundary.get("tag") not in {"iframe", "frame"}:
                     return _FramePoint(scope, local_x, local_y, tuple(path))
-
-                projection = hit.evaluate(_PROJECT_FRAME_POINT_JS, [local_x, local_y])
+                projection = boundary.get("projection")
                 if not isinstance(projection, dict):
                     return None
                 # A hit on the frame's border belongs to the parent document.
@@ -4201,23 +4150,33 @@ class PlaywrightBackend:
                     return _FramePoint(scope, local_x, local_y, tuple(path))
                 if len(path) >= 8:
                     return None
-                selector = hit.evaluate(_FRAME_SELECTOR_JS)
+                selector = boundary.get("selector")
                 if not isinstance(selector, str) or not selector or len(selector) > 512:
                     return None
-                matches = scope.locator(selector)
-                if matches.count() != 1:
+                unique = boundary.get("unique")
+                if unique is False:
                     return None
-                candidate = matches.element_handle()
-                if candidate is None or not hit.evaluate(
-                    "(el, candidate) => el === candidate", candidate
-                ):
-                    return None
+                if unique is not True:
+                    # A shadow root in the document: Playwright's engine may
+                    # match more than the native query, so ask it.
+                    matches = scope.locator(selector)
+                    if matches.count() != 1:
+                        return None
+                    candidate = matches.element_handle()
+                    if candidate is None or not hit.evaluate(
+                        "(el, candidate) => el === candidate", candidate
+                    ):
+                        return None
                 child = hit.content_frame()
                 if child is None:
                     return None
-                child_width, child_height = child.evaluate(
-                    "() => [window.innerWidth, window.innerHeight]"
-                )
+                size = boundary.get("child")
+                if isinstance(size, list) and len(size) == 2:
+                    child_width, child_height = size
+                else:
+                    child_width, child_height = child.evaluate(
+                        "() => [window.innerWidth, window.innerHeight]"
+                    )
                 next_x = float(projection["x"])
                 next_y = float(projection["y"])
                 if not (
@@ -5807,6 +5766,14 @@ class PlaywrightBackend:
         if tracker is None:
             return None
         return tracker.probe(window_s)
+
+    def page_quiet_retry_after(self) -> float:
+        """After a busy :meth:`page_quiescent`, the seconds before which no
+        probe can answer quiet; 0.0 when unknown. A wait hint only: the next
+        probe still judges every signal."""
+        tracker = getattr(self, "_quiescence", None)
+        value = getattr(tracker, "retry_after_s", 0.0) if tracker is not None else 0.0
+        return float(value) if isinstance(value, (int, float)) else 0.0
 
     def _capture_across_navigation(self, options: dict[str, Any]) -> bytes:
         """Capture the viewport, retrying only failures caused by a navigation.

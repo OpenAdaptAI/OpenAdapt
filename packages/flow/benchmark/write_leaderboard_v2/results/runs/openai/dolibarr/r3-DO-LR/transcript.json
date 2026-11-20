@@ -1,0 +1,415 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0818b1594570ee2f016af4d32db49c87d28f6bdd47004ac786",
+     "call_id": "call_XeEuaOKRWhgdUxv39h7UFvxb",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0818b1594570ee2f016af4d330b4b087d2ad30baa11c817f3c",
+     "call_id": "call_ElwXaSVFMd3j6rbBXX4mTnul",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 114,
+       "y": 27
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0818b1594570ee2f016af4d332d2c887d29538936053ab0a49",
+     "call_id": "call_UvKXv57CR31HFdjhf9U7suDQ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 99,
+       "y": 371
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0818b1594570ee2f016af4d33512a487d2b7951200682a964f",
+     "call_id": "call_ANshFcUMNy99EClvhnCaV6i9",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "text": "Petrov",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 650,
+       "y": 198
+      },
+      {
+       "text": "Anton",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 658,
+       "y": 295
+      },
+      {
+       "text": "Storekeeper",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 678,
+       "y": 477
+      },
+      {
+       "text": "555-0196",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 668,
+       "y": 548
+      },
+      {
+       "text": "a.petrov@example.invalid",
+       "type": "type"
+      },
+      {
+       "scroll_x": 0,
+       "scroll_y": 485,
+       "type": "scroll",
+       "x": 1184,
+       "y": 672
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0818b1594570ee2f016af4d3397c6087d2a8f0630d47abd38b",
+     "call_id": "call_aQofKXQ3v1oRXRYEtxeucHPK",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 720,
+       "y": 759
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0818b1594570ee2f016af4d33b8f3487d29eed0c49d798759d",
+     "call_id": "call_rra7wUjdQPqT0s43zoTEWJqK",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0818b1594570ee2f016af4d33d5b9887d2a31ffe95129f98b7",
+     "call_id": "call_4AAOmdfCdbVKwHtcMakO0UjX",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0818b1594570ee2f016af4d340ae8487d2920d8c47e55c39a2",
+     "call_id": "call_aM4lfp7OqRXCkZTXCydm5u03",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      },
+      {
+       "keys": [
+        "CTRL",
+        "l"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0818b1594570ee2f016af4d344dcb087d29fa0364c44317d94",
+     "call_id": "call_blsNWOcnHuxbfcRG699QOKsV",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0818b1594570ee2f016af4d348035c87d29a604d45b13a47bf",
+     "call_id": "call_eTkl2NZoM6XjHG9F9TWBkgwd",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "ALT",
+        "LEFT"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE The app went blank after submitting the contact, so I couldn't verify creation or obtain its record ID.",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 114,
+   "y": 27,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 99,
+   "y": 371,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Petrov"
+  },
+  {
+   "a": "click",
+   "x": 650,
+   "y": 198,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Anton"
+  },
+  {
+   "a": "click",
+   "x": 658,
+   "y": 295,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Storekeeper"
+  },
+  {
+   "a": "click",
+   "x": 678,
+   "y": 477,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "555-0196"
+  },
+  {
+   "a": "click",
+   "x": 668,
+   "y": 548,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "a.petrov@example.invalid"
+  },
+  {
+   "a": "scroll",
+   "x": 1184,
+   "y": 672,
+   "dx": 0,
+   "dy": 485
+  },
+  {
+   "a": "click",
+   "x": 720,
+   "y": 759,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "l"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ALT",
+    "LEFT"
+   ]
+  }
+ ],
+ "usage": [
+  {
+   "in": 2218,
+   "out": 24,
+   "usd": 0.000689,
+   "cached": 2215
+  },
+  {
+   "in": 3435,
+   "out": 31,
+   "usd": 0.001002,
+   "cached": 3432
+  },
+  {
+   "in": 4691,
+   "out": 31,
+   "usd": 0.003514,
+   "cached": 3432
+  },
+  {
+   "in": 5947,
+   "out": 151,
+   "usd": 0.004966,
+   "cached": 4688
+  },
+  {
+   "in": 7375,
+   "out": 31,
+   "usd": 0.004361,
+   "cached": 5944
+  },
+  {
+   "in": 8631,
+   "out": 18,
+   "usd": 0.004172,
+   "cached": 7372
+  },
+  {
+   "in": 9859,
+   "out": 19,
+   "usd": 0.004378,
+   "cached": 8628
+  },
+  {
+   "in": 11099,
+   "out": 40,
+   "usd": 0.004857,
+   "cached": 9856
+  },
+  {
+   "in": 12364,
+   "out": 49,
+   "usd": 0.005245,
+   "cached": 11096
+  },
+  {
+   "in": 13634,
+   "out": 39,
+   "usd": 0.005408,
+   "cached": 12361
+  },
+  {
+   "in": 14894,
+   "out": 48,
+   "usd": 0.005732,
+   "cached": 13631
+  }
+ ]
+}

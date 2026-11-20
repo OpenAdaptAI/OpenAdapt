@@ -150,7 +150,7 @@ authorization to publish it. No one dispatches a release.
 
 - **Desktop** (`desktop-release.yml`) publishes its wheel, sdist and native
   installers as one release.
-- **types, flow, agent, capture, privacy and tray** publish through
+- **types, flow, agent, capture, privacy, tray and verify** publish through
   `release-package.yml`.
 
 Both start after each Packages run on main, every three hours, and on a
@@ -164,6 +164,8 @@ A package publishes only when all of these hold:
 - Its version is not on PyPI, is higher than every version there, and has no
   tag yet.
 - Its CHANGELOG.md starts with an entry for exactly that version.
+- PyPI already serves the lower bound of every package in this list that it
+  depends on. Verify waits for openadapt-flow 3.0.0 this way.
 
 Each package's GitHub environment (`pypi-<package>`) still gates its upload.
 The release builds main's tip, where the package is unchanged since that

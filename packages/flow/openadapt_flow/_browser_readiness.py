@@ -10,7 +10,13 @@ import time
 from collections.abc import Sequence
 from typing import Any
 
-READINESS_TIMEOUT_MS = 1000
+# The deadline bounds the host side of the check: three driver round trips
+# plus two compositor frames. Frames take tens of milliseconds, but on a
+# contended host the driver round trips alone have overrun 1000 ms (CI shards
+# running several Chromium processes per worker), refusing healthy browsers.
+# A longer bound changes no evidence rule: only advancing RAF timestamps pass,
+# and a stalled renderer still refuses once the deadline expires.
+READINESS_TIMEOUT_MS = 5000
 READINESS_CLEANUP_TIMEOUT_MS = 250
 _OWNED_BROWSER = object()
 _CHROMIUM_KEYCHAIN_ARGS = ("--use-mock-keychain", "--password-store=basic")
@@ -120,7 +126,7 @@ def require_rendering_ready(
     Unsupported/closed page association refuses without closing user resources.
     A background page that does not render refuses; it is never foregrounded.
 
-    Scheduling/observation share a 1000 ms host deadline; cancellation gets a
+    Scheduling/observation share a 5000 ms host deadline; cancellation gets a
     separate 250 ms host deadline. Closing the owned context cancels pending
     script. If an attached transport disappears, cleanup is unproved and the
     check refuses; the finite callback chain cannot become a polling observer.

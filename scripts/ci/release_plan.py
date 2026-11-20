@@ -10,7 +10,11 @@ every package and publishes a package when all of these hold:
   (scripts/ci/newest_green.py, the rule desktop-release.yml set);
 - the version in its pyproject.toml is not on PyPI, is higher than every
   version PyPI has, and has no tag yet;
-- its CHANGELOG.md starts with an entry for exactly that version.
+- its CHANGELOG.md starts with an entry for exactly that version;
+- PyPI already serves every package from this list it depends on, at the
+  lower bound it names (verify needs flow >= 3.0.0 on PyPI first). A
+  dependency released in the same run is not on PyPI yet, so the dependent
+  waits for the next run.
 
 A version is never republished. A half-published one is resumed, not
 rebuilt: re-run the failed jobs of the run that published it, which reuses
@@ -47,8 +51,10 @@ PACKAGES = {
     "capture": "openadapt-capture",
     "privacy": "openadapt-privacy",
     "tray": "openadapt-tray",
+    "verify": "openadapt-verify",
 }
 _HEADER = re.compile(r"^## v([^ ]+) \(\d{4}-\d{2}-\d{2}\)$", re.MULTILINE)
+_REQUIREMENT = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)\s*(?:\[[^\]]*\])?\s*(.*)$")
 
 
 def _newest_green():
@@ -84,6 +90,30 @@ def changelog_top(text: str) -> str | None:
     return match.group(1) if match else None
 
 
+def dependency_floors(dependencies: list[str]) -> dict[str, str]:
+    """Each released package a requirement list names, with its >= bound."""
+    floors = {}
+    for requirement in dependencies:
+        match = _REQUIREMENT.match(requirement.split(";")[0].strip())
+        if not match or match.group(1) not in PACKAGES.values():
+            continue
+        bound = re.search(r">=\s*([^,\s]+)", match.group(2))
+        if bound:
+            floors[match.group(1)] = bound.group(1)
+    return floors
+
+
+def unmet_floors(floors: dict[str, str], served: dict[str, list[str]]) -> list[str]:
+    """The floors no version PyPI serves meets, as `project>=version`."""
+    return [
+        f"{project}>={floor}"
+        for project, floor in sorted(floors.items())
+        if not any(
+            version_key(v) >= version_key(floor) for v in served.get(project, [])
+        )
+    ]
+
+
 def decide(
     *,
     version: str,
@@ -94,11 +124,13 @@ def decide(
     release_published: bool,
     green: bool,
     resume: bool,
+    unmet: list[str] | None = None,
 ) -> tuple[str, str]:
     """Return (action, reason). Action: release, resume, done, wait or refuse.
 
     `pypi_files` is None when PyPI has no such version. `tag_commit` is the
-    commit the package tag names, or None. `wait` means nothing to do yet;
+    commit the package tag names, or None. `unmet` lists the dependencies
+    PyPI does not serve yet (unmet_floors). `wait` means nothing to do yet;
     `refuse` means a person must act.
     """
     if pypi_files is not None:
@@ -130,6 +162,8 @@ def decide(
         )
     if tag_commit:
         return "refuse", f"tag for {version} exists but PyPI has no {version}"
+    if changelog is None:
+        return "wait", f"CHANGELOG.md has no dated entry; it must start with v{version}"
     if changelog != version:
         return "wait", f"CHANGELOG.md starts with v{changelog}, not v{version}"
     newer = [v for v in pypi_versions if version_key(v) >= version_key(version)]
@@ -138,6 +172,8 @@ def decide(
             "refuse",
             f"{version} is not higher than PyPI's {max(newer, key=version_key)}",
         )
+    if unmet:
+        return "wait", f"PyPI does not serve {', '.join(unmet)} yet"
     if not green:
         return "wait", "the newest commit that changed it has no green run on main yet"
     return "release", f"{version} is new"
@@ -217,6 +253,8 @@ def main(argv: list[str] | None = None) -> int:
         version = meta["project"]["version"]
         tag = f"{project}-v{version}"
         versions, files = _pypi(project, version)
+        floors = dependency_floors(meta["project"].get("dependencies", []))
+        served = {name: _pypi(name, floor)[0] for name, floor in floors.items()}
         tag_commit = _tag_commit(tag)
         published = bool(tag_commit) and _release_published(repo, tag)
         green = ng.main([package, "--tip", tip]) == 0 if files is None else False
@@ -231,6 +269,7 @@ def main(argv: list[str] | None = None) -> int:
             release_published=published,
             green=green,
             resume=args.resume,
+            unmet=unmet_floors(floors, served),
         )
         print(f"{project} {version}: {action}: {reason}", flush=True)
         if action in ("release", "resume"):

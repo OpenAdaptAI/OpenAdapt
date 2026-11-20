@@ -208,6 +208,11 @@ def verified_checkpoint(
     )
 
 
+#: The only option on a first local delivery's write-ahead pause. That
+#: delivery may have started and is never resent (an uncertain-retry approval
+#: is refused), so reconciling is the one way forward.
+FIRST_LOCAL_RECONCILE_OPTION = "reconcile without repeating delivery"
+
 _RECONCILE_OPTIONS = (
     "Reconcile the live application and independently verify whether "
     "the effect landed; the attended Continue path can checkpoint the "
@@ -757,7 +762,7 @@ class DurableRun:
                 intent=step.intent,
                 category="delivery_uncertain",
                 reason="the first local delivery may have started; never resend it",
-                proposed_options=["reconcile without repeating delivery"],
+                proposed_options=[FIRST_LOCAL_RECONCILE_OPTION],
                 resume_from_index=step_index,
                 resume_from_step_id=last.step_id if last is not None else None,
                 params=dict(params),

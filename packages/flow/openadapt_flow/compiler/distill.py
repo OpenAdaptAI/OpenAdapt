@@ -76,10 +76,12 @@ import re
 import shutil
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
-import numpy as np
-from PIL import Image
+if TYPE_CHECKING:
+    # NumPy and Pillow are Flow's vision extra; the frame helpers import them
+    # when called, so field_key stays importable on the base install.
+    import numpy as np
 
 __all__ = [
     "DistillReport",
@@ -126,6 +128,9 @@ class DistillReport:
 
 
 def _pixels(path: Path) -> Optional[np.ndarray]:
+    import numpy as np
+    from PIL import Image
+
     if not path.exists():
         return None
     with Image.open(io.BytesIO(path.read_bytes())) as image:
@@ -142,6 +147,8 @@ def frames_unchanged(
 
     ``tolerance`` ignores per-channel differences up to that many levels.
     """
+
+    import numpy as np
 
     if before is None or after is None or before.shape != after.shape:
         return False

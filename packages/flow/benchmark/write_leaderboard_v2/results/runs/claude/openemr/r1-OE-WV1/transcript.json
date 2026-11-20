@@ -1,0 +1,937 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      806,
+      700
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "coordinate": [
+      404,
+      30
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      423,
+      65
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      444,
+      318
+     ]
+    },
+    {
+     "text": "Samuel"
+    },
+    {
+     "coordinate": [
+      670,
+      318
+     ]
+    },
+    {
+     "text": "Okonkwo"
+    },
+    {
+     "coordinate": [
+      426,
+      431
+     ]
+    },
+    {
+     "text": "1979-03-08"
+    },
+    {
+     "text": "Tab"
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Select Sex dropdowns.",
+   "actions": [
+    {
+     "coordinate": [
+      972,
+      431
+     ]
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "Escape"
+    },
+    {
+     "text": "Ma"
+    },
+    {
+     "region": [
+      640,
+      410,
+      1180,
+      520
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1038,
+      466
+     ]
+    },
+    {
+     "text": "Escape"
+    },
+    {
+     "text": "Ma"
+    },
+    {
+     "coordinate": [
+      640,
+      600
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 10
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Contact section is collapsed; open it.",
+   "actions": [
+    {
+     "coordinate": [
+      131,
+      464
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      479,
+      521
+     ]
+    },
+    {
+     "text": "7 Cedar Lane"
+    },
+    {
+     "coordinate": [
+      444,
+      556
+     ]
+    },
+    {
+     "text": "Springfield"
+    },
+    {
+     "coordinate": [
+      419,
+      594
+     ]
+    },
+    {
+     "text": "01104"
+    },
+    {
+     "coordinate": [
+      461,
+      707
+     ]
+    },
+    {
+     "text": "413-555-0174"
+    },
+    {
+     "coordinate": [
+      1035,
+      743
+     ]
+    },
+    {
+     "text": "s.okonkwo@example.invalid"
+    },
+    {
+     "coordinate": [
+      1016,
+      556
+     ]
+    },
+    {
+     "text": "Escape"
+    },
+    {
+     "text": "Massachusetts"
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      640,
+      500
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 30
+    },
+    {
+     "region": [
+      0,
+      400,
+      1280,
+      800
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      284,
+      772
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      599,
+      280
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      820,
+      663
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {
+     "region": [
+      0,
+      160,
+      1280,
+      800
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      427,
+      586
+     ]
+    },
+    {
+     "text": "1979-03-08"
+    },
+    {
+     "text": "Tab"
+    },
+    {
+     "region": [
+      0,
+      560,
+      1280,
+      700
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      129,
+      277
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "region": [
+      0,
+      60,
+      1280,
+      300
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {
+     "region": [
+      0,
+      60,
+      1280,
+      300
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The header may not have refreshed. Expand Demographics to check.",
+   "actions": [
+    {
+     "coordinate": [
+      146,
+      664
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "coordinate": [
+      640,
+      500
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 5
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      430,
+      500
+     ],
+     "scroll_direction": "up",
+     "scroll_amount": 3
+    },
+    {
+     "region": [
+      0,
+      200,
+      860,
+      800
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      119,
+      669
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": [
+      0,
+      400,
+      860,
+      800
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      119,
+      469
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Samuel Okonkwo is now registered as patient 4. I checked the saved record on the Demographics panel and it matches what you asked for.\n\n- **Name and DOB:** Samuel Okonkwo, 1979-03-08.\n- **Sex:** Male.\n- **Address:** 7 Cedar Lane (shown in capitals, as OpenEMR displays it), Springfield, Massachusetts 01104.\n- **Contact:** home phone 413-555-0174, email s.okonkwo@example.invalid in the Contact Email field.\n\nSome things differ from a plain fill-in of your list:\n- **Birth Sex:** I also set it to Male, because the form requires it.\n- **DOB correction:** The first save stored the date of birth as 1979-08-03. I corrected it to 1979-03-08 and saved again. The patient header at the top of the dashboard still shows the old date, but the record itself has the right one.\n- **External ID:** it shows 4, which OpenEMR filled in on its own.\n- **Registration pop-up:** I dismissed the OpenEMR Product Registration pop-up with \"Ask again later\".\n\nRESULT: DONE pid 4 (Samuel Okonkwo)",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 806,
+   "y": 700,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 404,
+   "y": 30,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 423,
+   "y": 65,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 444,
+   "y": 318,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Samuel"
+  },
+  {
+   "a": "click",
+   "x": 670,
+   "y": 318,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Okonkwo"
+  },
+  {
+   "a": "click",
+   "x": 426,
+   "y": 431,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "1979-03-08"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Tab"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 972,
+   "y": 431,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Escape"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Ma"
+  },
+  {
+   "a": "click",
+   "x": 1038,
+   "y": 466,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Escape"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Ma"
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 600,
+   "dx": 0,
+   "dy": 1200
+  },
+  {
+   "a": "click",
+   "x": 131,
+   "y": 464,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 479,
+   "y": 521,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "7 Cedar Lane"
+  },
+  {
+   "a": "click",
+   "x": 444,
+   "y": 556,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Springfield"
+  },
+  {
+   "a": "click",
+   "x": 419,
+   "y": 594,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "01104"
+  },
+  {
+   "a": "click",
+   "x": 461,
+   "y": 707,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "413-555-0174"
+  },
+  {
+   "a": "click",
+   "x": 1035,
+   "y": 743,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "s.okonkwo@example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 1016,
+   "y": 556,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Escape"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Massachusetts"
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 500,
+   "dx": 0,
+   "dy": 3600
+  },
+  {
+   "a": "click",
+   "x": 284,
+   "y": 772,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 599,
+   "y": 280,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 820,
+   "y": 663,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 427,
+   "y": 586,
+   "button": "left",
+   "count": 3,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "1979-03-08"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Tab"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 129,
+   "y": 277,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 146,
+   "y": 664,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 500,
+   "dx": 0,
+   "dy": 600
+  },
+  {
+   "a": "scroll",
+   "x": 430,
+   "y": 500,
+   "dx": 0,
+   "dy": -360
+  },
+  {
+   "a": "click",
+   "x": 119,
+   "y": 669,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 119,
+   "y": 469,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6200,
+   "out": 192,
+   "usd": 0.017418,
+   "cached": 0
+  },
+  {
+   "in": 7827,
+   "out": 129,
+   "usd": 0.006606,
+   "cached": 6196
+  },
+  {
+   "in": 9354,
+   "out": 487,
+   "usd": 0.010256,
+   "cached": 7825
+  },
+  {
+   "in": 11297,
+   "out": 102,
+   "usd": 0.007752,
+   "cached": 9352
+  },
+  {
+   "in": 12777,
+   "out": 176,
+   "usd": 0.007723,
+   "cached": 11295
+  },
+  {
+   "in": 14348,
+   "out": 233,
+   "usd": 0.008816,
+   "cached": 12775
+  },
+  {
+   "in": 16002,
+   "out": 112,
+   "usd": 0.008128,
+   "cached": 14346
+  },
+  {
+   "in": 17512,
+   "out": 392,
+   "usd": 0.010899,
+   "cached": 16000
+  },
+  {
+   "in": 19432,
+   "out": 178,
+   "usd": 0.010086,
+   "cached": 17510
+  },
+  {
+   "in": 20996,
+   "out": 98,
+   "usd": 0.00878,
+   "cached": 19430
+  },
+  {
+   "in": 22492,
+   "out": 98,
+   "usd": 0.008923,
+   "cached": 20994
+  },
+  {
+   "in": 23988,
+   "out": 182,
+   "usd": 0.010062,
+   "cached": 22490
+  },
+  {
+   "in": 25568,
+   "out": 91,
+   "usd": 0.009661,
+   "cached": 23986
+  },
+  {
+   "in": 27044,
+   "out": 212,
+   "usd": 0.010927,
+   "cached": 25566
+  },
+  {
+   "in": 28665,
+   "out": 165,
+   "usd": 0.011115,
+   "cached": 27042
+  },
+  {
+   "in": 30228,
+   "out": 91,
+   "usd": 0.010554,
+   "cached": 28663
+  },
+  {
+   "in": 31704,
+   "out": 163,
+   "usd": 0.011369,
+   "cached": 30226
+  },
+  {
+   "in": 33278,
+   "out": 150,
+   "usd": 0.011779,
+   "cached": 31702
+  },
+  {
+   "in": 34814,
+   "out": 113,
+   "usd": 0.011629,
+   "cached": 33276
+  },
+  {
+   "in": 36325,
+   "out": 133,
+   "usd": 0.012074,
+   "cached": 34812
+  },
+  {
+   "in": 37856,
+   "out": 398,
+   "usd": 0.015076,
+   "cached": 36323
+  }
+ ]
+}

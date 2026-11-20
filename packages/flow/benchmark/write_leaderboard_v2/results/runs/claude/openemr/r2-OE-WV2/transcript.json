@@ -1,0 +1,659 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      806,
+      700
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "coordinate": [
+      404,
+      30
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      423,
+      65
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      444,
+      318
+     ]
+    },
+    {
+     "text": "Priya"
+    },
+    {
+     "coordinate": [
+      670,
+      318
+     ]
+    },
+    {
+     "text": "Raman"
+    },
+    {
+     "coordinate": [
+      426,
+      431
+     ]
+    },
+    {
+     "text": "1993-06-21"
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Now the selects.",
+   "actions": [
+    {
+     "coordinate": [
+      972,
+      431
+     ]
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      972,
+      431
+     ]
+    },
+    {
+     "}": null
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "Female"
+    },
+    {
+     "text": "Return"
+    },
+    {
+     "}": null
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Works. Now Sex too.",
+   "actions": [
+    {
+     "coordinate": [
+      1038,
+      466
+     ]
+    },
+    {
+     "text": "Female"
+    },
+    {
+     "text": "Return"
+    },
+    {
+     "coordinate": [
+      640,
+      600
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 10
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Contact section is collapsed; open it.",
+   "actions": [
+    {
+     "coordinate": [
+      132,
+      465
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      479,
+      521
+     ]
+    },
+    {
+     "text": "230 Main Street"
+    },
+    {
+     "coordinate": [
+      444,
+      556
+     ]
+    },
+    {
+     "text": "Springfield"
+    },
+    {
+     "coordinate": [
+      419,
+      594
+     ]
+    },
+    {
+     "text": "01103"
+    },
+    {
+     "coordinate": [
+      461,
+      707
+     ]
+    },
+    {
+     "text": "413-555-0175"
+    },
+    {
+     "coordinate": [
+      1035,
+      743
+     ]
+    },
+    {
+     "text": "p.raman@example.invalid"
+    },
+    {
+     "coordinate": [
+      1015,
+      556
+     ]
+    },
+    {
+     "text": "Massachusetts"
+    },
+    {
+     "text": "Return"
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      640,
+      400
+     ],
+     "scroll_direction": "up",
+     "scroll_amount": 5
+    },
+    {
+     "}": null
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      640,
+      500
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 30
+    },
+    {
+     "}": null
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      285,
+      772
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      599,
+      280
+     ]
+    },
+    {
+     "duration": 4
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I registered Priya Raman as a new patient (patient ID 4). The dashboard opened after saving and shows her name and DOB 1993-06-21.\n\nThe duplicate check before saving found no matches. I filled in the name, date of birth, sex, address, city, state, postal code, home phone and email as given, and left everything else alone. I put the email in the \"Contact Email\" field. I didn't open the Contact tab afterwards to confirm the saved address, phone and email.\n\nTwo things to know:\n- OpenEMR requires \"Birth Sex\", so I set both Birth Sex and Sex to Female.\n- A product registration pop-up was open when I started, and I clicked \"Ask again later\" to close it.\n\nRESULT: DONE patient id 4 (Priya Raman)",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 806,
+   "y": 700,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 404,
+   "y": 30,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 423,
+   "y": 65,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 444,
+   "y": 318,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Priya"
+  },
+  {
+   "a": "click",
+   "x": 670,
+   "y": 318,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Raman"
+  },
+  {
+   "a": "click",
+   "x": 426,
+   "y": 431,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "1993-06-21"
+  },
+  {
+   "a": "click",
+   "x": 972,
+   "y": 431,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 972,
+   "y": 431,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Female"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Return"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 1038,
+   "y": 466,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Female"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Return"
+   ]
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 600,
+   "dx": 0,
+   "dy": 1200
+  },
+  {
+   "a": "click",
+   "x": 132,
+   "y": 465,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 479,
+   "y": 521,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "230 Main Street"
+  },
+  {
+   "a": "click",
+   "x": 444,
+   "y": 556,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Springfield"
+  },
+  {
+   "a": "click",
+   "x": 419,
+   "y": 594,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "01103"
+  },
+  {
+   "a": "click",
+   "x": 461,
+   "y": 707,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "413-555-0175"
+  },
+  {
+   "a": "click",
+   "x": 1035,
+   "y": 743,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "p.raman@example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 1015,
+   "y": 556,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Massachusetts"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Return"
+   ]
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -600
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 500,
+   "dx": 0,
+   "dy": 3600
+  },
+  {
+   "a": "click",
+   "x": 285,
+   "y": 772,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 599,
+   "y": 280,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 4.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6190,
+   "out": 205,
+   "usd": 0.017523,
+   "cached": 0
+  },
+  {
+   "in": 7830,
+   "out": 98,
+   "usd": 0.006326,
+   "cached": 6186
+  },
+  {
+   "in": 9326,
+   "out": 470,
+   "usd": 0.01001,
+   "cached": 7828
+  },
+  {
+   "in": 11233,
+   "out": 97,
+   "usd": 0.007606,
+   "cached": 9324
+  },
+  {
+   "in": 12708,
+   "out": 115,
+   "usd": 0.007088,
+   "cached": 11231
+  },
+  {
+   "in": 14209,
+   "out": 130,
+   "usd": 0.007598,
+   "cached": 12706
+  },
+  {
+   "in": 15734,
+   "out": 170,
+   "usd": 0.008358,
+   "cached": 14207
+  },
+  {
+   "in": 17325,
+   "out": 112,
+   "usd": 0.008248,
+   "cached": 15732
+  },
+  {
+   "in": 18835,
+   "out": 364,
+   "usd": 0.010884,
+   "cached": 17323
+  },
+  {
+   "in": 20727,
+   "out": 144,
+   "usd": 0.009941,
+   "cached": 18833
+  },
+  {
+   "in": 22257,
+   "out": 107,
+   "usd": 0.009044,
+   "cached": 20725
+  },
+  {
+   "in": 23750,
+   "out": 98,
+   "usd": 0.009168,
+   "cached": 22255
+  },
+  {
+   "in": 25246,
+   "out": 75,
+   "usd": 0.009244,
+   "cached": 23748
+  },
+  {
+   "in": 26706,
+   "out": 98,
+   "usd": 0.009683,
+   "cached": 25244
+  },
+  {
+   "in": 28202,
+   "out": 249,
+   "usd": 0.011575,
+   "cached": 26704
+  }
+ ]
+}

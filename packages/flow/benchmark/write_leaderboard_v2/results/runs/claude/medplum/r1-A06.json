@@ -1,0 +1,204 @@
+{
+ "id": "A06",
+ "class": "wrong_value",
+ "type": "allergy",
+ "expect": "create",
+ "note": "The write path lowers criticality from high to low.",
+ "agent_s": 180.9,
+ "cost_usd": 0.535062,
+ "claim": {
+  "status": "done",
+  "id": "AllergyIntolerance/5ecbef2f-9149-41c1-b1b7-d518477cd8f5",
+  "note": "RESULT: DONE AllergyIntolerance/5ecbef2f-9149-41c1-b1b7-d518477cd8f5",
+  "claim_line": true,
+  "final_text": "Rosa Delgado (born 1979-06-14) had no allergy recorded, so I created one penicillin allergy for her. It is the only AllergyIntolerance on the server, so there is no duplicate.\n\nHer Patient record is Patient/41a7a131-65fe-4da8-969d-29a4fa68ebcb. It was the only patient matching the name, and I saw no similarly named patient.\n\nThe new record's code is SNOMED CT 91936005 (Allergy to penicillin), with clinical status active and verification status confirmed. When I first saved it, criticality came back as \"low\" instead of \"high\". I corrected it through the Edit tab, and it now shows high.\n\nThe record is AllergyIntolerance/5ecbef2f-9149-41c1-b1b7-d518477cd8f5.\n\nRESULT: DONE AllergyIntolerance/5ecbef2f-9149-41c1-b1b7-d518477cd8f5",
+  "model_calls": 41,
+  "actions": 427,
+  "tokens_in": 1543385,
+  "tokens_out": 6809,
+  "end_url": "http://localhost:9841/AllergyIntolerance?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated"
+ },
+ "verifier": {
+  "outcome": "created_verified",
+  "id": "5ecbef2f-9149-41c1-b1b7-d518477cd8f5",
+  "reasons": [
+   "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 1,
+   "agent_writes": 1,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "AllergyIntolerance"
+   ],
+   "versions": [
+    {
+     "version": "b9e44650-6f3a-4b49-8013-7bdef4a70364",
+     "author": "Practitioner/0b3375e6-7134-4baf-b11b-87a142cdd829"
+    },
+    {
+     "version": "6cc26ad1-f77d-4d48-af3d-a2c470a111ca",
+     "author": "Practitioner/0b3375e6-7134-4baf-b11b-87a142cdd829"
+    }
+   ],
+   "corrected": true,
+   "writes_to_record": 2,
+   "window_until": "2026-11-11T19:51:50+00:00"
+  },
+  "unreadable": false
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "the agent changed or deleted the record after creating it"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 1,
+   "agent_writes": 1,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "AllergyIntolerance"
+   ],
+   "versions": [
+    {
+     "version": "b9e44650-6f3a-4b49-8013-7bdef4a70364",
+     "author": "Practitioner/0b3375e6-7134-4baf-b11b-87a142cdd829"
+    },
+    {
+     "version": "6cc26ad1-f77d-4d48-af3d-a2c470a111ca",
+     "author": "Practitioner/0b3375e6-7134-4baf-b11b-87a142cdd829"
+    }
+   ],
+   "window_until": "2026-11-11T19:51:52+00:00"
+  },
+  "unreadable": false
+ },
+ "verify_s": 4.5,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "AllergyIntolerance/5ecbef2f-9149-41c1-b1b7-d518477cd8f5"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "AllergyIntolerance/5ecbef2f-9149-41c1-b1b7-d518477cd8f5": "created"
+  },
+  "collateral": false
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "AllergyIntolerance",
+   "write": 1,
+   "faulted": true
+  },
+  {
+   "fault": "mutate"
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "PUT",
+   "type": "AllergyIntolerance",
+   "write": 2,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "app": "medplum",
+ "attempts": 1,
+ "set": "public",
+ "rep": 1,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 7.6,
+  "end": 7.6,
+  "waited_s": 0
+ }
+}

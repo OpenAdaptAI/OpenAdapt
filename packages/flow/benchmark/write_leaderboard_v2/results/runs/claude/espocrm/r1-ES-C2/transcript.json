@@ -1,0 +1,583 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+l"
+    },
+    {
+     "text": "localhost/#Account/create\n"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The browser seems to be in kiosk mode with no URL bar. I'll use the UI instead.",
+   "actions": [
+    {
+     "coordinate": [
+      23,
+      166
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Let me check whether it already exists first.",
+   "actions": [
+    {
+     "coordinate": [
+      344,
+      113
+     ]
+    },
+    {
+     "text": "Driftwood\n"
+    },
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1195,
+      63
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      263,
+      232
+     ]
+    },
+    {
+     "text": "Driftwood Outfitters"
+    },
+    {
+     "coordinate": [
+      651,
+      232
+     ]
+    },
+    {
+     "text": "driftwood.example.invalid"
+    },
+    {
+     "coordinate": [
+      457,
+      702
+     ]
+    },
+    {
+     "text": "Outdoor gear in three towns."
+    },
+    {
+     "coordinate": [
+      263,
+      619
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      115,
+      764
+     ]
+    },
+    {
+     "coordinate": [
+      651,
+      619
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The industry dropdown didn't appear open. Click again.",
+   "actions": [
+    {
+     "coordinate": [
+      651,
+      619
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      651,
+      500
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 15
+    },
+    {
+     "duration": 1
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Retail is between Publishing... and Technology; scroll up a bit.",
+   "actions": [
+    {
+     "coordinate": [
+      651,
+      500
+     ],
+     "scroll_direction": "up",
+     "scroll_amount": 3
+    },
+    {
+     "duration": 1
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      496,
+      564
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": [
+      48,
+      140,
+      860,
+      750
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      94,
+      113
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I created the Driftwood Outfitters account, and its detail page now shows the values you asked for. A search for \"Driftwood\" beforehand found no existing account, so this isn't a duplicate.\n\n- **Website:** driftwood.example.invalid\n- **Type:** Reseller\n- **Industry:** Retail\n- **Description:** Outdoor gear in three towns.\n\nI left every other field blank. The browser shows no address bar, so I couldn't read the record's id or URL. It is the Accounts record named Driftwood Outfitters.\n\nRESULT: DONE Accounts record \"Driftwood Outfitters\" (id and URL not visible in this browser)",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "l"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "localhost/#Account/create\n"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 23,
+   "y": 166,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 344,
+   "y": 113,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Driftwood\n"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 1195,
+   "y": 63,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 263,
+   "y": 232,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Driftwood Outfitters"
+  },
+  {
+   "a": "click",
+   "x": 651,
+   "y": 232,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "driftwood.example.invalid"
+  },
+  {
+   "a": "click",
+   "x": 457,
+   "y": 702,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Outdoor gear in three towns."
+  },
+  {
+   "a": "click",
+   "x": 263,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 115,
+   "y": 764,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 651,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 651,
+   "y": 619,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "scroll",
+   "x": 651,
+   "y": 500,
+   "dx": 0,
+   "dy": 1800
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "scroll",
+   "x": 651,
+   "y": 500,
+   "dx": 0,
+   "dy": -360
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 496,
+   "y": 564,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 94,
+   "y": 113,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6146,
+   "out": 113,
+   "usd": 0.016493,
+   "cached": 0
+  },
+  {
+   "in": 7673,
+   "out": 130,
+   "usd": 0.006355,
+   "cached": 6142
+  },
+  {
+   "in": 9201,
+   "out": 75,
+   "usd": 0.006108,
+   "cached": 7671
+  },
+  {
+   "in": 10661,
+   "out": 137,
+   "usd": 0.006864,
+   "cached": 9199
+  },
+  {
+   "in": 12207,
+   "out": 99,
+   "usd": 0.006991,
+   "cached": 10659
+  },
+  {
+   "in": 13704,
+   "out": 75,
+   "usd": 0.006938,
+   "cached": 12205
+  },
+  {
+   "in": 15164,
+   "out": 240,
+   "usd": 0.008794,
+   "cached": 13702
+  },
+  {
+   "in": 16874,
+   "out": 126,
+   "usd": 0.008571,
+   "cached": 15162
+  },
+  {
+   "in": 18411,
+   "out": 122,
+   "usd": 0.008441,
+   "cached": 16872
+  },
+  {
+   "in": 19931,
+   "out": 124,
+   "usd": 0.008726,
+   "cached": 18409
+  },
+  {
+   "in": 21453,
+   "out": 148,
+   "usd": 0.009275,
+   "cached": 19929
+  },
+  {
+   "in": 22999,
+   "out": 112,
+   "usd": 0.009279,
+   "cached": 21451
+  },
+  {
+   "in": 24508,
+   "out": 98,
+   "usd": 0.009356,
+   "cached": 22997
+  },
+  {
+   "in": 26004,
+   "out": 80,
+   "usd": 0.009445,
+   "cached": 24506
+  },
+  {
+   "in": 27469,
+   "out": 80,
+   "usd": 0.009667,
+   "cached": 26002
+  },
+  {
+   "in": 28934,
+   "out": 241,
+   "usd": 0.01157,
+   "cached": 27467
+  }
+ ]
+}

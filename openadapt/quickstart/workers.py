@@ -91,6 +91,9 @@ def _worker_main(conn: Connection, visible: bool, browser: str = "") -> None:
     os.environ.setdefault(OCR_THREADS_ENV, "2")
     if browser:
         os.environ["OPENADAPT_FLOW_BROWSER"] = browser
+    from openadapt.quickstart.notices import quiet_in_worker
+
+    quiet_in_worker()
     # Workers get ready while the main process demonstrates and compiles.
     # Lower priority keeps them on spare cores then; in Act 2 the main
     # process only waits, so the workers have the computer to themselves.

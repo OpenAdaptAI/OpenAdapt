@@ -1,0 +1,562 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_062e7e45a2d782fb016af4d43b7de887d2837741e0292d2b44",
+     "call_id": "call_2Ym3ElYZEZXHLsTQeVKuqrJg",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_062e7e45a2d782fb016af4d43e5a0c87d2a0d79ea038268477",
+     "call_id": "call_fechsBEaTzfnypQY0AHVV7EB",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 115,
+       "y": 26
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_062e7e45a2d782fb016af4d440adb887d2a5a5e0b9ee119578",
+     "call_id": "call_bb2V2nYbFxlzXPtQ9sabjuJC",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 100,
+       "y": 371
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_062e7e45a2d782fb016af4d443176487d2bc4c2c0704186595",
+     "call_id": "call_I3D1EIEGwMF4efeB2Bu8eZIu",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "text": "Kim",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 658,
+       "y": 198
+      },
+      {
+       "text": "Jiwoo",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 660,
+       "y": 295
+      },
+      {
+       "text": "Logistics planner",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 670,
+       "y": 475
+      },
+      {
+       "text": "555-0198",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 676,
+       "y": 543
+      },
+      {
+       "text": "j.kim@example.invalid",
+       "type": "type"
+      },
+      {
+       "scroll_x": 0,
+       "scroll_y": 484,
+       "type": "scroll",
+       "x": 1177,
+       "y": 643
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_062e7e45a2d782fb016af4d447793887d299a28a8d8681c082",
+     "call_id": "call_M1502tKCNdllseWvTUZS3tLp",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 725,
+       "y": 759
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_062e7e45a2d782fb016af4d44aecb087d28427a979a6f37d6d",
+     "call_id": "call_1WagD8rfgnFTfXRfnkGjXB0d",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "l"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_062e7e45a2d782fb016af4d44d2e0887d296a7efc1f8848595",
+     "call_id": "call_W5gW7oTYRfvh9lq6xoLckDUR",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "F11"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_062e7e45a2d782fb016af4d4513ee487d284b73a9db75b5616",
+     "call_id": "call_Qy0ppzNNcbUbNr8thhhoJ1kT",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 411,
+       "y": 100
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_062e7e45a2d782fb016af4d453f61087d29e79d6605ac5326b",
+     "call_id": "call_Xn244V6LuhI60r1uZ8kRSYaL",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 26,
+       "y": 396
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_062e7e45a2d782fb016af4d45701dc87d2ac7915452a17d8bc",
+     "call_id": "call_yFQgYYl6lzo7XioUMykMvvmP",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 447,
+       "y": 354
+      },
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_062e7e45a2d782fb016af4d45baf2087d29d2f3582c8be66de",
+     "call_id": "call_xhwTJIVR7vVLtkO3Rp3rFzUF",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "l"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_062e7e45a2d782fb016af4d45f974887d2923e9c474c9f75ba",
+     "call_id": "call_zBlnTQUcFiwlUmkDazDKKDU0",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1199,
+       "y": 92
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_062e7e45a2d782fb016af4d463725887d29a2d30f0f296cdad",
+     "call_id": "call_qXHY1vIplffTJHDYI8cwQ4fQ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "right",
+       "type": "click",
+       "x": 447,
+       "y": 354
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_062e7e45a2d782fb016af4d466c00087d291f93293b5e8a91d",
+     "call_id": "call_VEK9JNz0h7uaIMErscQ2tVwx",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 444,
+       "y": 354
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "Created Jiwoo Kim with the requested details, not linked to any third party. Dolibarr normalized the phone to 5550198.\n\nRESULT: DONE /contact/card.php?id=4",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 115,
+   "y": 26,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 100,
+   "y": 371,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Kim"
+  },
+  {
+   "a": "click",
+   "x": 658,
+   "y": 198,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Jiwoo"
+  },
+  {
+   "a": "click",
+   "x": 660,
+   "y": 295,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Logistics planner"
+  },
+  {
+   "a": "click",
+   "x": 670,
+   "y": 475,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "555-0198"
+  },
+  {
+   "a": "click",
+   "x": 676,
+   "y": 543,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "j.kim@example.invalid"
+  },
+  {
+   "a": "scroll",
+   "x": 1177,
+   "y": 643,
+   "dx": 0,
+   "dy": 484
+  },
+  {
+   "a": "click",
+   "x": 725,
+   "y": 759,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "l"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "F11"
+   ]
+  },
+  {
+   "a": "move",
+   "x": 411,
+   "y": 100
+  },
+  {
+   "a": "click",
+   "x": 26,
+   "y": 396,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "move",
+   "x": 447,
+   "y": 354
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "l"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 1199,
+   "y": 92,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 447,
+   "y": 354,
+   "button": "right",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 444,
+   "y": 354,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  }
+ ],
+ "usage": [
+  {
+   "in": 2218,
+   "out": 20,
+   "usd": 0.000649,
+   "cached": 2215
+  },
+  {
+   "in": 3435,
+   "out": 31,
+   "usd": 0.001002,
+   "cached": 3432
+  },
+  {
+   "in": 4691,
+   "out": 31,
+   "usd": 0.003514,
+   "cached": 3432
+  },
+  {
+   "in": 5947,
+   "out": 152,
+   "usd": 0.004976,
+   "cached": 4688
+  },
+  {
+   "in": 7376,
+   "out": 31,
+   "usd": 0.004363,
+   "cached": 5944
+  },
+  {
+   "in": 8632,
+   "out": 58,
+   "usd": 0.004573,
+   "cached": 7373
+  },
+  {
+   "in": 9911,
+   "out": 37,
+   "usd": 0.00466,
+   "cached": 8629
+  },
+  {
+   "in": 11169,
+   "out": 53,
+   "usd": 0.005034,
+   "cached": 9908
+  },
+  {
+   "in": 12447,
+   "out": 43,
+   "usd": 0.005225,
+   "cached": 11166
+  },
+  {
+   "in": 13715,
+   "out": 41,
+   "usd": 0.005441,
+   "cached": 12444
+  },
+  {
+   "in": 14985,
+   "out": 44,
+   "usd": 0.005728,
+   "cached": 13712
+  },
+  {
+   "in": 16250,
+   "out": 47,
+   "usd": 0.006002,
+   "cached": 14982
+  },
+  {
+   "in": 17522,
+   "out": 68,
+   "usd": 0.006479,
+   "cached": 16247
+  },
+  {
+   "in": 18815,
+   "out": 59,
+   "usd": 0.006686,
+   "cached": 17519
+  },
+  {
+   "in": 20099,
+   "out": 42,
+   "usd": 0.006756,
+   "cached": 18812
+  }
+ ]
+}

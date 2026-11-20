@@ -1,0 +1,515 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a94552d63e81a5b016af4cebe463087d2ad64db103dfb6e90",
+     "call_id": "call_DkJYMs2KEbpJNPlNDYzvmbbS",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a94552d63e81a5b016af4cec1dc0887d283b3415a424c6014",
+     "call_id": "call_jaL6tiAnbfKg4BY57W8u1XS4",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 113,
+       "y": 27
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a94552d63e81a5b016af4cec3c9d887d280ce14f26191d967",
+     "call_id": "call_8ZoL9S2HqeT2CIJ68D2gUXRJ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 97,
+       "y": 372
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a94552d63e81a5b016af4cec5f8f887d2a54f8dc2ea859950",
+     "call_id": "call_lim01Xe99ZwZ9tURNeFNmdkv",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "text": "Kim",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 651,
+       "y": 199
+      },
+      {
+       "text": "Jiwoo",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 649,
+       "y": 298
+      },
+      {
+       "text": "Logistics planner",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 667,
+       "y": 478
+      },
+      {
+       "text": "555-0198",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 673,
+       "y": 546
+      },
+      {
+       "text": "j.kim@example.invalid",
+       "type": "type"
+      },
+      {
+       "scroll_x": 0,
+       "scroll_y": 490,
+       "type": "scroll",
+       "x": 1188,
+       "y": 655
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a94552d63e81a5b016af4cec9dff887d282d882b031df6662",
+     "call_id": "call_soCwHo0zYzC1zCLLKHXivlWp",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 721,
+       "y": 757
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a94552d63e81a5b016af4cecd58b487d28681a129c1584948",
+     "call_id": "call_0l3yE3r7RXU8osamejD8X1Jp",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "L"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a94552d63e81a5b016af4ced0690c87d2bf9bb4223cfec2a4",
+     "call_id": "call_YaDCCqcgXeV2JF9AKQ1HfLwE",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 539,
+       "y": 99
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a94552d63e81a5b016af4ced3e72c87d2b7385f647bf42943",
+     "call_id": "call_tiOcU3OvSKocsiA7CuVZpCyV",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 474,
+       "y": 158
+      },
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a94552d63e81a5b016af4ced83a3487d2835e0bb1699862e8",
+     "call_id": "call_3c60x9SGlFtLTEo6kaqwiIDw",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1126,
+       "y": 156
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a94552d63e81a5b016af4cedb258c87d2933ed58abf73472c",
+     "call_id": "call_CZYMghCUJQQ8UWoGudBkKUNW",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 445,
+       "y": 354
+      },
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a94552d63e81a5b016af4cedf5aa887d2b1ca1bc1a8e0edfa",
+     "call_id": "call_wRPzzNn8DNzIdxhEY2AZGngM",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "right",
+       "type": "click",
+       "x": 445,
+       "y": 353
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0a94552d63e81a5b016af4cee3b31087d28df1c6d20e3d9ce6",
+     "call_id": "call_euSjFK6tXm7Qe7p5PteF2C0R",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 443,
+       "y": 353
+      },
+      {
+       "keys": [
+        "CTRL",
+        "L"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: DONE Jiwoo Kim",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 113,
+   "y": 27,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 97,
+   "y": 372,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Kim"
+  },
+  {
+   "a": "click",
+   "x": 651,
+   "y": 199,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Jiwoo"
+  },
+  {
+   "a": "click",
+   "x": 649,
+   "y": 298,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Logistics planner"
+  },
+  {
+   "a": "click",
+   "x": 667,
+   "y": 478,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "555-0198"
+  },
+  {
+   "a": "click",
+   "x": 673,
+   "y": 546,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "j.kim@example.invalid"
+  },
+  {
+   "a": "scroll",
+   "x": 1188,
+   "y": 655,
+   "dx": 0,
+   "dy": 490
+  },
+  {
+   "a": "click",
+   "x": 721,
+   "y": 757,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "L"
+   ]
+  },
+  {
+   "a": "move",
+   "x": 539,
+   "y": 99
+  },
+  {
+   "a": "move",
+   "x": 474,
+   "y": 158
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 1126,
+   "y": 156,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "move",
+   "x": 445,
+   "y": 354
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 445,
+   "y": 353,
+   "button": "right",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 443,
+   "y": 353,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "L"
+   ]
+  }
+ ],
+ "usage": [
+  {
+   "in": 2218,
+   "out": 30,
+   "usd": 0.004736,
+   "cached": 0
+  },
+  {
+   "in": 3435,
+   "out": 31,
+   "usd": 0.003193,
+   "cached": 2215
+  },
+  {
+   "in": 4691,
+   "out": 31,
+   "usd": 0.003514,
+   "cached": 3432
+  },
+  {
+   "in": 5947,
+   "out": 152,
+   "usd": 0.004976,
+   "cached": 4688
+  },
+  {
+   "in": 7376,
+   "out": 31,
+   "usd": 0.004363,
+   "cached": 5944
+  },
+  {
+   "in": 8632,
+   "out": 41,
+   "usd": 0.004403,
+   "cached": 7373
+  },
+  {
+   "in": 9894,
+   "out": 39,
+   "usd": 0.004646,
+   "cached": 8629
+  },
+  {
+   "in": 11158,
+   "out": 42,
+   "usd": 0.004932,
+   "cached": 9891
+  },
+  {
+   "in": 12429,
+   "out": 44,
+   "usd": 0.005219,
+   "cached": 11155
+  },
+  {
+   "in": 13698,
+   "out": 31,
+   "usd": 0.005339,
+   "cached": 12426
+  },
+  {
+   "in": 14958,
+   "out": 58,
+   "usd": 0.005845,
+   "cached": 13695
+  },
+  {
+   "in": 16241,
+   "out": 85,
+   "usd": 0.006413,
+   "cached": 14955
+  },
+  {
+   "in": 17555,
+   "out": 51,
+   "usd": 0.006392,
+   "cached": 16238
+  }
+ ]
+}

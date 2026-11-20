@@ -1,0 +1,560 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_062d690318e347e5016af4d28ae15c87d2bfacb6f90bc8fe18",
+     "call_id": "call_ZW7UCf9kkjSZE5BcVJIgLGGb",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_062d690318e347e5016af4d28d863c87d2b4c31796e0d6cd17",
+     "call_id": "call_Vrkwfpoys6ecb5m7Goiszn9x",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 108,
+       "y": 27
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_062d690318e347e5016af4d28fcb1887d28406673310ceb431",
+     "call_id": "call_TSjPxpQmJqnmZeBZzlVy072Q",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 102,
+       "y": 370
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_062d690318e347e5016af4d291b90887d294493fe388ef61f3",
+     "call_id": "call_coXY0IJB1bsMP2JStUsTY4R8",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "text": "Moreau",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 662,
+       "y": 197
+      },
+      {
+       "text": "Claire",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 664,
+       "y": 295
+      },
+      {
+       "text": "Receptionist",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 677,
+       "y": 478
+      },
+      {
+       "text": "555-0195",
+       "type": "type"
+      },
+      {
+       "button": "left",
+       "type": "click",
+       "x": 674,
+       "y": 546
+      },
+      {
+       "text": "c.moreau@example.invalid",
+       "type": "type"
+      },
+      {
+       "scroll_x": 0,
+       "scroll_y": 484,
+       "type": "scroll",
+       "x": 1173,
+       "y": 671
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_062d690318e347e5016af4d295d6d887d2bc9d176636fbacbb",
+     "call_id": "call_CLMppaTLqkkWrc4Cttzhlots",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 719,
+       "y": 757
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_062d690318e347e5016af4d2988cb887d291881a5df150ec6d",
+     "call_id": "call_0YEw1Y5xFNdAZ7pwARZwExpm",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "L"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_062d690318e347e5016af4d29b589087d28bddaad23a923961",
+     "call_id": "call_YnO3PjBJUHn4qlHmOqVWVHk9",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "ESC"
+       ],
+       "type": "keypress"
+      },
+      {
+       "keys": [
+        "F11"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_062d690318e347e5016af4d29e87c487d28b72bdeb1ffcf7c9",
+     "call_id": "call_B5mfQna8PI4hVe1htHGl1iC4",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 489,
+       "y": 158
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_062d690318e347e5016af4d2a2d86887d288d73b0bc6f9c57b",
+     "call_id": "call_tTRyOzYGqBFlykBSJR8FNZu2",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 575,
+       "y": 159
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_062d690318e347e5016af4d2a59dc087d2a286880632bbd2bc",
+     "call_id": "call_AMqbsbOXNEjpfBNvou6Klc7x",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1128,
+       "y": 156
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_062d690318e347e5016af4d2a8fef087d28e542e7e1c4587fb",
+     "call_id": "call_6J4k5onisL2lQGfjbwNmz4DE",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "move",
+       "x": 465,
+       "y": 394
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_062d690318e347e5016af4d2ab1ae087d2b7e7a3d5b3d2100e",
+     "call_id": "call_VN2PoXwIEd2s9P4LhKbuctHb",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_062d690318e347e5016af4d2b0442c87d28229b561fc9b2597",
+     "call_id": "call_uXjFTEbKGCgiMJiPLQYE260K",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "right",
+       "type": "click",
+       "x": 456,
+       "y": 394
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_062d690318e347e5016af4d2b7116487d28ee2f8795452e7fe",
+     "call_id": "call_RuEKwKNg1rjA48JKfsLqDQ7K",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "Control",
+        "l"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: DONE /contact/list.php?search_lastname=Moreau&search_firstname=Claire",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 108,
+   "y": 27,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 102,
+   "y": 370,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Moreau"
+  },
+  {
+   "a": "click",
+   "x": 662,
+   "y": 197,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Claire"
+  },
+  {
+   "a": "click",
+   "x": 664,
+   "y": 295,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Receptionist"
+  },
+  {
+   "a": "click",
+   "x": 677,
+   "y": 478,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "555-0195"
+  },
+  {
+   "a": "click",
+   "x": 674,
+   "y": 546,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "c.moreau@example.invalid"
+  },
+  {
+   "a": "scroll",
+   "x": 1173,
+   "y": 671,
+   "dx": 0,
+   "dy": 484
+  },
+  {
+   "a": "click",
+   "x": 719,
+   "y": 757,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "L"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ESC"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "F11"
+   ]
+  },
+  {
+   "a": "move",
+   "x": 489,
+   "y": 158
+  },
+  {
+   "a": "click",
+   "x": 575,
+   "y": 159,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1128,
+   "y": 156,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "move",
+   "x": 465,
+   "y": 394
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 456,
+   "y": 394,
+   "button": "right",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Control",
+    "l"
+   ]
+  }
+ ],
+ "usage": [
+  {
+   "in": 2218,
+   "out": 22,
+   "usd": 0.000669,
+   "cached": 2215
+  },
+  {
+   "in": 3435,
+   "out": 31,
+   "usd": 0.001002,
+   "cached": 3432
+  },
+  {
+   "in": 4691,
+   "out": 31,
+   "usd": 0.003514,
+   "cached": 3432
+  },
+  {
+   "in": 5947,
+   "out": 151,
+   "usd": 0.004966,
+   "cached": 4688
+  },
+  {
+   "in": 7375,
+   "out": 31,
+   "usd": 0.004361,
+   "cached": 5944
+  },
+  {
+   "in": 8631,
+   "out": 48,
+   "usd": 0.004472,
+   "cached": 7372
+  },
+  {
+   "in": 9900,
+   "out": 57,
+   "usd": 0.00484,
+   "cached": 8628
+  },
+  {
+   "in": 11182,
+   "out": 53,
+   "usd": 0.005079,
+   "cached": 9897
+  },
+  {
+   "in": 12460,
+   "out": 45,
+   "usd": 0.005248,
+   "cached": 11179
+  },
+  {
+   "in": 13730,
+   "out": 46,
+   "usd": 0.005497,
+   "cached": 12457
+  },
+  {
+   "in": 15001,
+   "out": 27,
+   "usd": 0.005563,
+   "cached": 13727
+  },
+  {
+   "in": 16253,
+   "out": 19,
+   "usd": 0.0057,
+   "cached": 14998
+  },
+  {
+   "in": 17493,
+   "out": 76,
+   "usd": 0.006496,
+   "cached": 16250
+  },
+  {
+   "in": 18794,
+   "out": 115,
+   "usd": 0.007256,
+   "cached": 17490
+  },
+  {
+   "in": 20130,
+   "out": 24,
+   "usd": 0.006676,
+   "cached": 18791
+  }
+ ]
+}

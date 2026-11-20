@@ -1,0 +1,53 @@
+{
+ "id": "ES-C1",
+ "app": "espocrm",
+ "class": "clean",
+ "note": "A plain account.",
+ "agent_s": 47.2,
+ "cost_usd": 0.120721,
+ "claim": {
+  "status": "done",
+  "id": "Account \"Copperleaf Dental\" created (record ID/URL not visible; page is Accounts \u203a Copperleaf Dental)",
+  "note": "RESULT: DONE Account \"Copperleaf Dental\" created (record ID/URL not visible; page is Accounts \u203a Copperleaf Dental)",
+  "claim_line": true,
+  "final_text": "I created the Copperleaf Dental account. A search first showed no existing Copperleaf account. The saved record shows website copperleaf.example.invalid, type Customer, industry Healthcare and description \"Two chairs and one office.\" I left every other field empty. The browser's address bar isn't visible, so I can't read the record's ID or URL. The record page is titled \"Accounts \u203a Copperleaf Dental\".\n\nRESULT: DONE Account \"Copperleaf Dental\" created (record ID/URL not visible; page is Accounts \u203a Copperleaf Dental)",
+  "model_calls": 14,
+  "actions": 30,
+  "tokens_in": 223874,
+  "tokens_out": 1663,
+  "end_url": "http://127.0.0.1:9856/#Account/view/6af4c1c588d9c6b47"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "6af4c1c588d9c6b47"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794425285.256,
+   "method": "POST",
+   "path": "/api/v1/Account",
+   "save": true,
+   "status": 200,
+   "ms": 266
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 1,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 8.5,
+  "end": 30.0,
+  "waited_s": 0
+ }
+}

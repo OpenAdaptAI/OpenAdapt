@@ -1,0 +1,75 @@
+{
+ "id": "DO-WV1",
+ "app": "dolibarr",
+ "class": "wrong_value",
+ "note": "The phone's last two digits are swapped.",
+ "agent_s": 81.7,
+ "cost_usd": 0.142837,
+ "claim": {
+  "status": "done",
+  "id": "/contact/card.php?id=4",
+  "note": "RESULT: DONE /contact/card.php?id=4",
+  "claim_line": true,
+  "final_text": "RESULT: DONE /contact/card.php?id=4",
+  "model_calls": 23,
+  "actions": 38,
+  "tokens_in": 375101,
+  "tokens_out": 1309,
+  "end_url": "http://127.0.0.1:9851/contact/card.php?id=42&save_lastsearch_values=1"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "new": [
+   "42"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": false,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794425486.965,
+   "method": "POST",
+   "path": "/index.php",
+   "save": false,
+   "status": 302,
+   "ms": 8
+  },
+  {
+   "t": 1794425504.227,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": true,
+   "fault": [
+    "set"
+   ],
+   "rewritten": [
+    "phone_pro"
+   ],
+   "status": 302,
+   "ms": 10
+  },
+  {
+   "t": 1794425537.916,
+   "method": "POST",
+   "path": "/contact/card.php",
+   "save": false,
+   "status": 302,
+   "ms": 11
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 1,
+ "agent": "openai",
+ "model": "gpt-6.1-sol",
+ "host_load": {
+  "start": 7.9,
+  "end": 7.6,
+  "waited_s": 0
+ }
+}

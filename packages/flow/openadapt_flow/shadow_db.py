@@ -564,15 +564,21 @@ class DatabaseShadow(Shadow):
         try:
             conn = db_connect(self._watch_cfg.frame.database.read)()
             try:
-                cur = conn.cursor()
                 sql = audit_sql
                 dialect = self._watch_cfg.frame.database.dialect
-                if dialect == "sqlite":
-                    sql = sql.replace("%(actor)s", ":actor")
-                elif dialect == "mysql":
+                if dialect == "mysql":
+                    from openadapt_flow.runtime.effects._mysql_read import (
+                        mysql_utf8mb4_cursor,
+                    )
+
+                    cur = mysql_utf8mb4_cursor(conn)
                     cur.execute("START TRANSACTION READ ONLY")
                 else:
-                    cur.execute("SET TRANSACTION READ ONLY")
+                    cur = conn.cursor()
+                    if dialect == "sqlite":
+                        sql = sql.replace("%(actor)s", ":actor")
+                    else:
+                        cur.execute("SET TRANSACTION READ ONLY")
                 cur.execute(sql, {"actor": self.actor_id})
                 result = {str(row[0]) for row in cur.fetchall()}
                 conn.rollback()

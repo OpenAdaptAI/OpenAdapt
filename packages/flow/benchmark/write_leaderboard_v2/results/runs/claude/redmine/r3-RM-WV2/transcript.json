@@ -1,0 +1,573 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      23,
+      95
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      52,
+      121
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Changing the tracker reloads the form, so I'll do it first.",
+   "actions": [
+    {
+     "coordinate": [
+      243,
+      177
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The layout shifted, so the click may have missed the dropdown. I'll click it again.",
+   "actions": [
+    {
+     "coordinate": [
+      243,
+      183
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "Feature"
+    },
+    {
+     "text": "Return"
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      700,
+      217
+     ]
+    },
+    {
+     "text": "Add a dark theme to the kiosk"
+    },
+    {
+     "coordinate": [
+      700,
+      350
+     ]
+    },
+    {
+     "text": "Staff asked for a night mode."
+    },
+    {
+     "coordinate": [
+      845,
+      522
+     ]
+    },
+    {
+     "text": "12152026"
+    },
+    {
+     "coordinate": [
+      855,
+      555
+     ]
+    },
+    {
+     "text": "4"
+    },
+    {
+     "duration": 1
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      841,
+      522
+     ]
+    },
+    {
+     "text": "20261215"
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": [
+      640,
+      430,
+      1280,
+      610
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The fields look right: due date 2026-12-15, estimated time 4. I'll submit it.",
+   "actions": [
+    {
+     "coordinate": [
+      44,
+      722
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The due date was saved as 01/15/2027, not 2026-12-15, so I'll edit the issue to correct it.",
+   "actions": [
+    {
+     "coordinate": [
+      765,
+      188
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      686,
+      257
+     ]
+    },
+    {
+     "text": "2026"
+    },
+    {
+     "text": "Right"
+    },
+    {
+     "text": "12"
+    },
+    {
+     "text": "Right"
+    },
+    {
+     "text": "15"
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": [
+      540,
+      170,
+      960,
+      340
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      723,
+      257
+     ]
+    },
+    {
+     "text": "12"
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": [
+      540,
+      240,
+      960,
+      275
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      44,
+      714
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I created Feature #90, \"Add a dark theme to the kiosk\", in Synthetic Helpdesk. It has the description \"Staff asked for a night mode.\", priority Normal, due date 12/15/2026 and estimated time 4:00 hours. I left every other field at its default.\n\nThe due date was first saved wrongly as 01/15/2027 because of how I typed it into the date field. I corrected it by editing the issue, so #90's history now shows one \"Due date changed from 01/15/2027 to 12/15/2026\" entry.\n\nRESULT: DONE #90",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 23,
+   "y": 95,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 52,
+   "y": 121,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 243,
+   "y": 177,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 243,
+   "y": 183,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "type",
+   "text": "Feature"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Return"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 217,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Add a dark theme to the kiosk"
+  },
+  {
+   "a": "click",
+   "x": 700,
+   "y": 350,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Staff asked for a night mode."
+  },
+  {
+   "a": "click",
+   "x": 845,
+   "y": 522,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "12152026"
+  },
+  {
+   "a": "click",
+   "x": 855,
+   "y": 555,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "4"
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 841,
+   "y": 522,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "20261215"
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 44,
+   "y": 722,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 765,
+   "y": 188,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 686,
+   "y": 257,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "2026"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Right"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "12"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Right"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "15"
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 723,
+   "y": 257,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "12"
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 44,
+   "y": 714,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6163,
+   "out": 92,
+   "usd": 0.016325,
+   "cached": 0
+  },
+  {
+   "in": 7659,
+   "out": 98,
+   "usd": 0.005961,
+   "cached": 6159
+  },
+  {
+   "in": 9155,
+   "out": 128,
+   "usd": 0.006555,
+   "cached": 7657
+  },
+  {
+   "in": 10673,
+   "out": 134,
+   "usd": 0.00697,
+   "cached": 9153
+  },
+  {
+   "in": 12197,
+   "out": 189,
+   "usd": 0.007838,
+   "cached": 10671
+  },
+  {
+   "in": 13785,
+   "out": 250,
+   "usd": 0.008913,
+   "cached": 12195
+  },
+  {
+   "in": 15516,
+   "out": 187,
+   "usd": 0.008958,
+   "cached": 13783
+  },
+  {
+   "in": 17111,
+   "out": 137,
+   "usd": 0.008464,
+   "cached": 15514
+  },
+  {
+   "in": 18638,
+   "out": 262,
+   "usd": 0.009863,
+   "cached": 17109
+  },
+  {
+   "in": 20290,
+   "out": 277,
+   "usd": 0.010631,
+   "cached": 18636
+  },
+  {
+   "in": 22011,
+   "out": 224,
+   "usd": 0.010604,
+   "cached": 20288
+  },
+  {
+   "in": 23637,
+   "out": 130,
+   "usd": 0.009771,
+   "cached": 22009
+  },
+  {
+   "in": 25157,
+   "out": 185,
+   "usd": 0.010381,
+   "cached": 23635
+  }
+ ]
+}

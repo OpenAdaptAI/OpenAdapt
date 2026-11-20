@@ -1,0 +1,60 @@
+{
+ "id": "ES-DU",
+ "app": "espocrm",
+ "class": "duplicate",
+ "note": "The save is delivered twice (the second without the app's duplicate check).",
+ "agent_s": 49.4,
+ "cost_usd": 0.141657,
+ "claim": {
+  "status": "done",
+  "id": "Account \"Granite Roofing\" (Accounts list; ID/URL not visible in the browser)",
+  "note": "RESULT: DONE Account \"Granite Roofing\" (Accounts list; ID/URL not visible in the browser)",
+  "claim_line": true,
+  "final_text": "I created the account Granite Roofing with website granite.example.invalid, type Customer, industry Construction and description \"Flat roofs and repairs.\". I searched for \"Granite\" first and found no existing account. The saved page shows all five values, and every other field is empty. The browser shows no address bar, so I couldn't read the record's ID or URL; the account is listed under Accounts as \"Granite Roofing\".\n\nRESULT: DONE Account \"Granite Roofing\" (Accounts list; ID/URL not visible in the browser)",
+  "model_calls": 16,
+  "actions": 34,
+  "tokens_in": 280224,
+  "tokens_out": 1932,
+  "end_url": "http://127.0.0.1:9856/#Account/view/6af4c4423ce2f807e"
+ },
+ "oracle": {
+  "verdict": "wrong",
+  "reasons": [
+   "2 new records"
+  ],
+  "new": [
+   "6af4c4423ce2f807e",
+   "6af4c4424db089195"
+  ],
+  "deleted": [],
+  "changed": [],
+  "collateral": true,
+  "nothing_written": false
+ },
+ "proxy": [
+  {
+   "t": 1794425922.113,
+   "method": "POST",
+   "path": "/api/v1/Account",
+   "save": true,
+   "fault": [
+    "duplicate",
+    "replay_headers"
+   ],
+   "status": "200+200",
+   "ms": 147
+  }
+ ],
+ "saves_seen": 1,
+ "fault_delivered": true,
+ "attempts": 1,
+ "set": "public",
+ "rep": 1,
+ "agent": "claude",
+ "model": "claude-sonnet-5-5",
+ "host_load": {
+  "start": 14.5,
+  "end": 14.5,
+  "waited_s": 0
+ }
+}
