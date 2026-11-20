@@ -87,6 +87,7 @@ from urllib.parse import urlsplit
 
 from PIL import Image
 
+from openadapt_flow import choice_capture as _choice_capture
 from openadapt_flow import recorder_document as _documents
 from openadapt_flow import sealed_set as _sealed
 from openadapt_flow.backends.playwright_backend import (
@@ -423,6 +424,9 @@ def select_attached_page(
 # click of a double-click gesture can supersede it. Chromium's double-click
 # interval is 500 ms.
 _DOUBLE_CLICK_WINDOW_MS = 500
+#: How long an idle recording keeps the last click open for a browser dialog
+#: the page it loaded raises (the replayer waits as long for that dialog).
+_LATE_DIALOG_S = 5.0
 
 _INIT_JS = r"""
 (() => {
@@ -614,6 +618,7 @@ _INIT_JS = r"""
                            error: privacyBoundaryError}),
     registerExistingClosedShadowHost,
     structuralState: (secretSeenEarlier) => safePageState(secretSeenEarlier),
+    choiceCommit: (token) => choiceCommit(token),
   };
   window[CLEANUP_KEY] = {sessionId: SESSION_ID, stopEvents, cleanup};
 
@@ -1847,8 +1852,11 @@ _INIT_JS = r"""
     return event.target;
   }
 
+__CHOICE_CAPTURE_JS__
   let pointerDown = null;
   let suppressClick = false;
+  let lastLabelClick = null;
+  let clickTask = 0;
   listenOn(window, 'resize', () => {
     if (resizeTimer !== null) clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
@@ -1914,6 +1922,19 @@ _INIT_JS = r"""
       ),
       idr: composeRect(fs, identifierRect()),
     };
+    // A choice is judged on the list this press lands in, before a page that
+    // chooses on press (not on click) can remove it.
+    const choice = lastControl ? optionEvidence(target) : null;
+    const owner = choice && choiceGestureOwns(choice.el, choiceGesture) ? choiceGesture : null;
+    pointerChoiceLink = choice ? {} : choicePointerLink(target, e.isTrusted);
+    choiceDown = choice ? {
+      ...pointerDown, choice: choice, control: owner ? owner.control : lastControl,
+      openingGesture: owner ? owner.token : null,
+      searchInputSession: owner && !owner.ambiguous ? owner.searchSession : null,
+      fields: namedFieldValues(), consumed: false,
+    } : null;
+    if (!choice) lastControl = choiceGesture ? choiceGesture.control : target;
+    actionSeq += 1;
   });
 
   listen('pointerup', (e) => {
@@ -1924,7 +1945,23 @@ _INIT_JS = r"""
     if (fs === null) { refuseFrame(); return; }
     const endX = Math.round(e.clientX + fs.dx);
     const endY = Math.round(e.clientY + fs.dy);
-    if (Math.hypot(endX - start.x, endY - start.y) < 5) return;
+    if (Math.hypot(endX - start.x, endY - start.y) < 5) {
+      const pending = choiceDown;
+      if (pending) {
+        // A list that chooses on press or release removes the option before
+        // the click, and the browser then sends the click elsewhere or not
+        // at all. The choice is the press, so emit it once if no click on
+        // the option follows in this same input task.
+        setTimeout(() => {
+          if (pending.consumed) return;
+          pending.consumed = true;
+          if (choiceDown === pending) choiceDown = null;
+          emitInFrameSpace(choicePointerEvent(pending));
+        }, 0);
+      }
+      return;
+    }
+    choiceDown = null;
     suppressClick = true;
     setTimeout(() => { suppressClick = false; }, 0);
     const dragEvent = {
@@ -1981,6 +2018,35 @@ _INIT_JS = r"""
     const fs = frameSpace();
     if (fs === null) { refuseFrame(); return; }
     const target = deepEventTarget(e);
+    // A click on a <label> makes the browser click its control as well,
+    // in the same task. That second click is the label's effect, not a
+    // second action.
+    const labelClick = lastLabelClick;
+    lastLabelClick = null;
+    if (labelClick && labelClick.task === clickTask && target.labels
+        && Array.from(target.labels).indexOf(labelClick.label) >= 0) {
+      return;
+    }
+    const clickedLabel = target.closest ? target.closest('label') : null;
+    if (clickedLabel && clickedLabel.control) {
+      lastLabelClick = {label: clickedLabel, task: clickTask};
+      setTimeout(() => { clickTask += 1; }, 0);
+    }
+    const pendingChoice = choiceDown;
+    let choiceOfClick = null;
+    if (pendingChoice && !pendingChoice.consumed) {
+      pendingChoice.consumed = true;
+      choiceDown = null;
+      const el = pendingChoice.choice.el;
+      if (el === target || (el.contains && el.contains(target))) {
+        choiceOfClick = choicePointerEvent(pendingChoice).choice;
+      } else {
+        // The option went away before the click (chosen on press or
+        // release): the press was the action.
+        emitInFrameSpace(choicePointerEvent(pendingChoice));
+        return;
+      }
+    }
     const rowIdentity = structuredIdentityEvidence(e.clientX, e.clientY, target);
     const submitBinding = submitBindingEvidence(target);
     const pointerEvent = {
@@ -2000,7 +2066,10 @@ _INIT_JS = r"""
     if (submitBinding) pointerEvent.submit_binding = submitBinding;
     const section = sectionEvidence(target);
     if (section) pointerEvent.section = section;
+    if (choiceOfClick) pointerEvent.choice = choiceOfClick;
+    else if (e.isTrusted) Object.assign(pointerEvent, pointerChoiceLink);
     emitInFrameSpace(pointerEvent);
+    pointerChoiceLink = {};
   });
 
   listen('contextmenu', (e) => {
@@ -2035,14 +2104,26 @@ _INIT_JS = r"""
     // the moment the operator makes the selection.
     const el = deepEventTarget(e);
     if (el && el.matches && el.matches('select')) {
-      emit({kind: 'control_refusal', control: 'select'});
+      if (e.isTrusted) {
+        nativeChoice(el);
+      } else if (el === lastControl || el === document.activeElement) {
+        // A select the person just clicked or focused changed with no input
+        // the page can attribute to them (an automation tool set it). It may
+        // be their choice, so refuse rather than leave it out.
+        emit({kind: 'control_refusal', control: 'select'});
+      }
     }
   });
+__CHOICE_NATIVE_JS__
   listen('focusout', (e) => commitSecretValueFor(inputEventTarget(e)));
   listen('submit', commitSecretValues);
   listenOn(window, 'pagehide', commitSecretValues);
 
   listen('input', (e) => {
+    // A list that writes its choice into a text control (a calendar writing
+    // a date) sends the page's own input event right after the choice. The
+    // choice is the person's action; that event is its effect.
+    if (!e.isTrusted && performance.now() - lastChoiceAt < 1500) return;
     const fs = frameSpace();
     if (fs === null) { refuseFrame(); return; }
     refreshSecretBindings();
@@ -2144,6 +2225,8 @@ _INIT_JS = r"""
       rect: [Math.round(r.left), Math.round(r.top),
              Math.round(r.width), Math.round(r.height)],
     };
+    const choiceSearch = secret ? null : linkChoiceSearch(el, e.isTrusted);
+    if (choiceSearch) o.choice_gesture = choiceSearch.gesture;
     if (!secret && rawField !== null && field === null) {
       o.identity_withheld = identityWithheldReason;
     }
@@ -2216,6 +2299,8 @@ _INIT_JS = (
     .replace("__SUBMIT_FIELD__", json.dumps(SUBMIT_BINDING_FIELD_SELECTOR))
     .replace("__OBSERVE_SUBMIT_BINDING__", OBSERVE_SUBMIT_BINDING_JS)
     .replace("__SECTION_CONTEXT__", SECTION_CONTEXT_JS)
+    .replace("__CHOICE_CAPTURE_JS__", _choice_capture.CHOICE_CAPTURE_JS)
+    .replace("__CHOICE_NATIVE_JS__", _choice_capture.NATIVE_CHOICE_JS)
 )
 
 
@@ -2270,6 +2355,9 @@ class InteractiveRecorder:
         self._param_fields = set(param_fields)
         self._identifier_fields = set(identifier_fields)
         self._headless = headless
+        self._select_commit_at: Optional[float] = None
+        self._select_commit_selector: Optional[str] = None
+        self._pending_click_at = 0.0
         if browser_page_url and not cdp_endpoint:
             raise BrowserAttachError("browser_page_url requires a browser CDP endpoint")
         if cdp_endpoint and headless:
@@ -2415,6 +2503,16 @@ class InteractiveRecorder:
                 require_rendering_ready(self._browser, attached_page=self.page)
 
             self._context = self.page.context
+            if not self._headless:
+                # Without a listener Playwright dismisses every browser dialog
+                # itself, so a person could never answer "OK" to a confirm()
+                # and the save behind it would silently not happen. This one
+                # answers nothing: the dialog stays open for the person, and
+                # the page reports their answer (docs/CHOICES.md, "Dialogs").
+                try:
+                    self._context.on("dialog", lambda _dialog: None)
+                except Exception:
+                    pass
             if self._capture_network:
                 from openadapt_flow.network_capture import NetworkCapture
 
@@ -2529,6 +2627,8 @@ class InteractiveRecorder:
                 event_clock=self._event_clock,
                 **self._settle,
             )
+            # The page reports every alert/confirm/prompt answer (CHOICES.md).
+            self.recorder.dialogs_captured = True
             if self._owns_browser:
                 self._last_frame = self.recorder._wait_settled()
                 self._last_structural = self._structural_state()
@@ -3412,7 +3512,10 @@ class InteractiveRecorder:
         kind = event.get("kind")
         if kind == "privacy_refusal":
             self._listener_error = BrowserAttachError(
-                "a shadow input did not have a declared secret host boundary; "
+                "a dropdown or browser dialog would retain declared secret text; "
+                "recording stopped before retaining that text or another frame"
+                if event.get("reason") == "captured-text"
+                else "a shadow input did not have a declared secret host boundary; "
                 "recording stopped before accepting its value or retaining "
                 "another frame"
             )
@@ -3522,6 +3625,8 @@ class InteractiveRecorder:
             "hotkey",
             "scroll",
             "viewport",
+            "select_choice",
+            "dialog",
         }:
             return
         self._track_secret_document(
@@ -3940,13 +4045,66 @@ class InteractiveRecorder:
             # single click.
             if self._pending_click is not None:
                 self._pending_click_pumps -= 1
-                if self._pending_click_pumps <= 0:
+                # A click that loads a page can raise a browser dialog only
+                # once that page loads. Hold it while idle (any next action
+                # still flushes it at once) so the dialog joins the click
+                # that raised it; replay waits as long for it.
+                if (
+                    self._pending_click_pumps <= 0
+                    and time.monotonic() - self._pending_click_at >= _LATE_DIALOG_S
+                ):
                     self._flush_click()
             return not self._stop_condition_reached()
         return not self._stop_condition_reached()
 
     def _process(self, ev: dict[str, Any]) -> None:
         kind = ev.get("kind")
+        if kind == "dialog":
+            self._attach_dialog(ev)
+            return
+        observed_at = ev.get("_oaflow_observed_at")
+        if (
+            self._select_commit_at is not None
+            and isinstance(observed_at, (int, float))
+            and float(observed_at) - self._select_commit_at < 0.5
+            and (
+                (kind == "key" and ev.get("key") in ("Enter", "Tab"))
+                or (
+                    kind == "click"
+                    and self._select_commit_selector
+                    and isinstance(ev.get("structural"), dict)
+                    and ev["structural"].get("selector") == self._select_commit_selector
+                )
+            )
+        ):
+            # The key that closed a native select's list, or the click that
+            # opened it and reached the page only as the list closed, is part
+            # of the choice just recorded.
+            return
+        if kind == "select_choice":
+            # A native select the person changed: one choice at the
+            # control's center, recorded like a click (docs/CHOICES.md).
+            observed = ev.get("_oaflow_observed_at")
+            self._select_commit_at = (
+                float(observed) if isinstance(observed, (int, float)) else None
+            )
+            structural = ev.get("structural")
+            self._select_commit_selector = (
+                structural.get("selector") if isinstance(structural, dict) else None
+            )
+            raw = ev.get("choice") if isinstance(ev.get("choice"), dict) else {}
+            ev = {**ev, "kind": "click"}
+            ev["choice"] = {
+                "kind": "native_select",
+                "label": str(raw.get("label") or ""),
+                "value": str(raw.get("value") or ""),
+                "field": raw.get("field"),
+                "readback": "select",
+                "opening_gesture": raw.get("opening_gesture")
+                if isinstance(raw.get("opening_gesture"), str)
+                else None,
+            }
+            kind = "click"
         if kind == "input":
             self._flush_click()
             self._flush_scroll()
@@ -3973,10 +4131,16 @@ class InteractiveRecorder:
             # Settle first: the screenshots deliver the save's request event.
             # If a write was in flight, settle again once it has landed.
             ev["_oaflow_after_frame"] = self.recorder._wait_settled()
-            if self._wait_for_writes():
+            wrote = self._wait_for_writes()
+            if wrote:
                 ev["_oaflow_after_frame"] = self.recorder._wait_settled()
+                # A list that saves as soon as an option is picked is a write,
+                # not a field: it stays a click under the write rules.
+                ev.pop("choice", None)
             ev["_oaflow_structural_after"] = self._structural_state()
+            self._commit_choice(ev)
             self._pending_click = ev
+            self._pending_click_at = time.monotonic()
             self._pending_click_pumps = max(
                 1, -(-_DOUBLE_CLICK_WINDOW_MS // max(1, self._poll_ms))
             )
@@ -3995,6 +4159,12 @@ class InteractiveRecorder:
             self._flush_type()
             self._flush_scroll()
             self._record_key(ev)
+
+    def _attach_dialog(self, ev: dict[str, Any]) -> None:
+        _choice_capture.attach_dialog(self, ev)
+
+    def _commit_choice(self, ev: dict[str, Any]) -> None:
+        _choice_capture.commit_choice(self, ev)
 
     def _flush_click(self) -> None:
         pending = self._pending_click
@@ -4040,6 +4210,7 @@ class InteractiveRecorder:
             not self._same_deferred_document(self._pending_type, ev)
             or self._pending_type.get("field") != field
             or self._pending_type.get("input_session") != input_session
+            or self._pending_type.get("choice_gesture") != ev.get("choice_gesture")
         ):
             self._flush_type()  # a distinct input run or document
         if self._pending_type is None:
@@ -4047,6 +4218,7 @@ class InteractiveRecorder:
                 "_oaflow_producer_doc": ev.get("_oaflow_producer_doc"),
                 "field": field,
                 "input_session": input_session,
+                "choice_gesture": ev.get("choice_gesture"),
                 "label": ev.get("label"),
                 "secret": bool(ev.get("secret")),
                 "value": "",
@@ -4087,6 +4259,10 @@ class InteractiveRecorder:
         # parameter-proposal pass names a proposed parameter from it, gated
         # behind operator confirmation (compiler.annotate.FieldLabelAnnotator).
         label_evidence: dict[str, Any] = {}
+        if isinstance(pt.get("input_session"), str):
+            label_evidence["input_session"] = pt["input_session"]
+        if isinstance(pt.get("choice_gesture"), str):
+            label_evidence["choice_gesture"] = pt["choice_gesture"]
         if pt.get("label"):
             label_evidence["field_label"] = pt["label"]
         if pt["secret"]:
@@ -4182,6 +4358,11 @@ class InteractiveRecorder:
             "x": int(ev["x"]),
             "y": int(ev["y"]),
         }
+        if kind == "click":
+            for key in ("choice_gesture", "choice_search_gesture", "input_session"):
+                value = ev.get(key)
+                if isinstance(value, str) and len(value) <= 256:
+                    event[key] = value
         if kind == "drag":
             event.update(end_x=int(ev["end_x"]), end_y=int(ev["end_y"]))
             if ev.get("end_structural"):
@@ -4218,6 +4399,14 @@ class InteractiveRecorder:
         idr = ev.get("idr")
         if idr:
             event["identifier_region"] = [int(v) for v in idr]
+        if kind == "click" and isinstance(ev.get("choice"), dict):
+            choice = dict(ev["choice"])
+            field = choice.get("field")
+            if isinstance(field, str) and field in self._param_fields:
+                choice["param"] = field
+            event["choice"] = choice
+        if kind in ("click", "double_click") and isinstance(ev.get("dialog"), dict):
+            event["dialog"] = dict(ev["dialog"])
         after_png = ev.pop("_oaflow_after_frame", None)
         structural_after = ev.pop("_oaflow_structural_after", None)
         self.recorder.record_observed(

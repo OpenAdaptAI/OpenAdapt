@@ -75,6 +75,8 @@ from openadapt_flow.backend import (
     ActionDeliveryUncertain,
     Backend,
     BrowserPresentationGeometryBackend,
+    ChoiceBackend,
+    ChoiceRefused,
     FocusedElementActuationLeaseBackend,
     FreshActuationReacquisitionBackend,
     FreshActuationRequired,
@@ -190,6 +192,13 @@ from openadapt_flow.runtime.authorization import (
     runtime_param_text,
     runtime_params_for_gui,
 )
+from openadapt_flow.runtime.dialog_delivery import (
+    _DIALOG_WAIT_S as _DIALOG_WAIT_S,
+)
+from openadapt_flow.runtime.dialog_delivery import (
+    arm_dialog,
+    wait_for_dialog,
+)
 from openadapt_flow.runtime.durable.approval import StateDiverged
 from openadapt_flow.runtime.durable.first_local_delivery import FirstLocalDeliveryHeld
 from openadapt_flow.runtime.durable.first_local_runtime import (
@@ -268,8 +277,6 @@ _PIXEL_RECHECK_REOBSERVES = 2
 _REMOTE_HOVER_JITTER_PX = 2
 _PIXEL_RECHECK_LEVEL = 24
 _PIXEL_RECHECK_MIN_PIXELS = 4
-# How long a step that raises a browser dialog waits for it to open.
-_DIALOG_WAIT_S = 5.0
 
 # How long past its step's timeout a held record check may run under an
 # approval mode before the held report decides the item (a person).
@@ -9084,6 +9091,10 @@ class Replayer:
                             workflow,
                             result,
                         )
+                        delivery_uncertain = (
+                            delivery_uncertain
+                            or result.delivery_uncertainty is not None
+                        )
                     if selection_error is None:
                         (
                             postconditions_ok,
@@ -11331,6 +11342,28 @@ class Replayer:
 
         if step.action is not ActionKind.SELECT_OPTION:
             return None
+        if step.choice is not None:
+            if (
+                self._typed_remote_receipt_required()
+                or self.production_qualification_guard is not None
+                or self.qualification_environment_observer is not None
+            ):
+                return (
+                    f"Step '{step.id}' chooses a dropdown option without a typed "
+                    "delivery receipt; refusing before input"
+                )
+            kind, _mode = self._active_surface_binding(workflow)
+            if (
+                kind not in (None, "web")
+                or isinstance(self.backend, RemoteActuationBackend)
+                or not isinstance(self.backend, ChoiceBackend)
+            ):
+                return (
+                    f"Step '{step.id}' chooses a dropdown option, which needs "
+                    "a browser surface whose backend can read the page; "
+                    "refusing input"
+                )
+            return None
         if step.native_selection is not None:
             try:
                 Step.model_validate(step.model_dump(mode="json"))
@@ -12319,8 +12352,8 @@ class Replayer:
     ) -> _DeliveryResultT:
         """Call one backend delivery boundary with exact attempt reporting.
 
-        A typed fresh-frame mismatch or structural refusal proves that this
-        call emitted no input edge, so it preserves the step's prior delivery
+        A typed pre-mutation choice refusal, fresh-frame mismatch or structural
+        refusal proves this call emitted no input edge, preserving prior delivery
         state. Every other exception is conservative: the boundary may have
         been crossed and the step must not enter the pre-delivery retry loop.
         """
@@ -12332,6 +12365,11 @@ class Replayer:
         self._active_delivery_acknowledgers = ()
         try:
             delivered = call()
+        except ChoiceRefused:
+            result.delivery_attempted = (
+                attempted_before if attempted_before is not None else False
+            )
+            raise
         except (FreshActuationRequired, StructuralResolutionRefused):
             result.delivery_attempted = attempted_before
             raise
@@ -13460,8 +13498,24 @@ class Replayer:
         """
 
         dialog = step.dialog
+        workflow = kwargs.get("workflow")
+        guarded = bool(getattr(workflow, "dialogs_recorded", False))
+        if guarded:
+            watch = getattr(self.backend, "watch_dialogs", None)
+            if callable(watch):
+                # The recording saw every dialog the demonstration met, so
+                # from the first action on the backend answers every dialog
+                # and none is dismissed unseen by a default handler.
+                watch()
+            # A dialog the page raised after the previous step finished.
+            late = self._unexpected_dialog_error(step, kwargs.get("result"))
+            if late is not None:
+                return late
         if dialog is None:
-            return self._act_without_dialog(step, resolution, params, **kwargs)
+            error = self._act_without_dialog(step, resolution, params, **kwargs)
+            if error is not None or not guarded:
+                return error
+            return self._unexpected_dialog_error(step, kwargs.get("result"))
         arm = getattr(self.backend, "arm_dialog", None)
         take = getattr(self.backend, "take_dialogs", None)
         if not callable(arm) or not callable(take):
@@ -13469,15 +13523,23 @@ class Replayer:
                 f"Step '{step.id}' ({step.intent}) answers a browser dialog, but "
                 "the active backend cannot see browser dialogs; run aborted"
             )
+        if dialog.kind is not None:
+            scope = getattr(self.backend, "dialog_scope_error", None)
+            if not callable(scope) or scope() is not None:
+                return (
+                    f"Step '{step.id}' ({step.intent}): the browser dialog's "
+                    "producer document cannot be established "
+                    "(dialog_scope_unverified); no input was sent"
+                )
         self._arm_dialog(arm, dialog)
         try:
             error = self._act_without_dialog(step, resolution, params, **kwargs)
         finally:
-            seen = take(0.0)
+            # Keep the original one-shot arm through the entire observation
+            # window. Rearming after input would reset its document epoch.
+            seen = self._wait_for_dialog(take, dialog)
         if error is not None:
             return error
-        if not seen:
-            seen = self._wait_for_dialog(take, dialog)
         if not seen:
             return (
                 f"Step '{step.id}' ({step.intent}): the recorded browser dialog "
@@ -13492,22 +13554,90 @@ class Replayer:
             )
         return None
 
-    @staticmethod
-    def _arm_dialog(arm: Callable[..., Any], dialog: Any) -> None:
-        if dialog.message_pattern is not None:
-            arm(dialog.response, None, message_pattern=dialog.message_pattern)
+    def _unexpected_dialog_error(self, step: Step, result: Any) -> Optional[str]:
+        """Stop when the action raised a dialog the demonstration never saw.
+
+        The backend dismissed it (never accepted it), so the page may not
+        have done what the step expects. The code names the event, never the
+        dialog's text.
+        """
+
+        take = getattr(self.backend, "take_unexpected_dialogs", None)
+        if not callable(take):
+            return None
+        seen = take()
+        if not isinstance(seen, list) or not seen:
+            return None
+        if result is not None:
+            result.safety_halt = True
+            result.failure_category = "safety_halt"
+        return (
+            f"Step '{step.id}' ({step.intent}): the page showed a browser dialog "
+            "the demonstration did not (dialog_unexpected); it was dismissed, "
+            "not answered; run aborted"
+        )
+
+    _arm_dialog = staticmethod(arm_dialog)
+    _wait_for_dialog = wait_for_dialog
+
+    def _act_choice(
+        self,
+        step: Step,
+        resolution: Optional[Resolution],
+        params: Mapping[str, RuntimeParamScalar],
+        workflow: Workflow,
+        result: StepResult,
+    ) -> Optional[str]:
+        """Choose a dropdown option by its label or value (OptionChoice).
+
+        The resolved point is the control. The backend opens it, waits for
+        the options to settle, clicks the one enabled option that shows the
+        wanted value and reads the control back. Anything else (no option,
+        several, a disabled one, a control that does not show it) halts
+        before continuing; the code names the case, never the option text.
+        """
+
+        def halt(message: str) -> str:
+            result.safety_halt = True
+            result.failure_category = "safety_halt"
+            return message
+
+        contract_error = self._selection_contract_error(step, workflow)
+        if contract_error is not None:
+            return halt(contract_error)
+        if resolution is None or step.choice is None:
+            return halt(
+                f"Step '{step.id}' ({step.intent}) needs its control on screen "
+                "before choosing; run aborted"
+            )
+        if step.param is not None:
+            if step.param not in params:
+                return (
+                    f"Step '{step.id}' ({step.intent}) requires parameter "
+                    f"'{step.param}' but it was not provided"
+                )
+            wanted = runtime_param_text(params[step.param])
         else:
-            arm(dialog.response, dialog.message)
-
-    @timed_span("postcondition")
-    def _wait_for_dialog(self, take: Callable[..., Any], dialog: Any) -> list[Any]:
-        """Wait briefly for an armed dialog that opens after the input edge."""
-
-        arm = getattr(self.backend, "arm_dialog", None)
-        if callable(arm):
-            self._arm_dialog(arm, dialog)
-        seen = take(_DIALOG_WAIT_S)
-        return list(seen) if isinstance(seen, list) else []
+            wanted = step.text or ""
+        refusal = self._delivery_authorization_refusal(workflow, params, step, result)
+        if refusal is not None:
+            return refusal
+        self._require_qualification_environment_current()
+        chooser = cast(ChoiceBackend, self.backend)
+        contract = step.choice
+        point = (int(resolution.point[0]), int(resolution.point[1]))
+        try:
+            self._deliver_backend_call(
+                result,
+                lambda: chooser.choose_option(contract, wanted, point=point),
+            )
+        except ChoiceRefused as exc:
+            return halt(
+                f"Step '{step.id}' ({step.intent}) stopped before continuing: "
+                f"{exc.code}; run aborted"
+            )
+        result.actuation = "dom"
+        return None
 
     def _act_without_dialog(
         self,
@@ -14016,6 +14146,9 @@ class Replayer:
                     "this backend does not implement it"
                 )
             return None
+
+        if step.action is ActionKind.SELECT_OPTION and step.choice is not None:
+            return self._act_choice(step, resolution, params, workflow, result)
 
         if (
             step.action is ActionKind.SELECT_OPTION
@@ -18299,6 +18432,36 @@ class Replayer:
         caller passes the one final frame used by all post-action checks.
         """
 
+        if step.choice is not None:
+            confirm = getattr(self.backend, "confirm_choice", None)
+            cause_type = "choice_unverified"
+            try:
+                result.input_verified = bool(callable(confirm) and confirm())
+            except Exception as exc:
+                result.input_verified = False
+                cause_type = type(exc).__name__
+            if result.input_verified:
+                return None
+            if (
+                result.delivery_uncertainty is None
+                and result.delivery_attempted is not False
+            ):
+                result.delivery_uncertainty = ActionDeliveryUncertainty(
+                    operation=(
+                        "choice_select"
+                        if step.choice.kind == "native_select"
+                        else "choice_click"
+                    ),
+                    native=False,
+                    observed_at=datetime.now(timezone.utc).isoformat(),
+                    cause_type=cause_type,
+                )
+            result.safety_halt = True
+            result.failure_category = "safety_halt"
+            return (
+                f"Chosen option for step '{step.id}' no longer shows on its "
+                "control after the page settled (choice_unverified); run aborted"
+            )
         if step.native_selection is not None:
             result.input_verified = False
             resolution, _region, error = self._resolve_step(

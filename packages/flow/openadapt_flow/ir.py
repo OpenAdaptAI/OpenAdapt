@@ -2115,8 +2115,9 @@ class DialogResponse(BaseModel):
     A browser ``alert``/``confirm``/``prompt``/``beforeunload`` dialog is not a
     surface: it is a screen state of the page that raised it, and it blocks
     that page until it is answered. On the browser backend the step's action
-    arms a one-shot answer before delivering input; the dialog's message is
-    its identity. A dialog that does not show exactly ``message`` is
+    arms a one-shot answer before delivering input; its recorded kind and
+    message identify the dialog. Legacy contracts without a kind retain their
+    message-only behavior. A dialog that does not show exactly ``message`` is
     dismissed, never accepted, and the step halts. On a screen-driven backend
     (desktop, RDP, Citrix) a dialog is just pixels and is recorded as the
     clicks that answer it, so this field is browser-only
@@ -2131,8 +2132,16 @@ class DialogResponse(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     response: Literal["accept", "dismiss"]
+    kind: Optional[Literal["alert", "confirm", "prompt", "beforeunload"]] = None
     message: Optional[str] = Field(default=None, min_length=1, max_length=2000)
     message_pattern: Optional[str] = Field(default=None, min_length=1, max_length=4000)
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        if self.kind is None:
+            data.pop("kind", None)
+        return data
 
     @model_validator(mode="after")
     def _one_identity(self) -> "DialogResponse":
@@ -2218,6 +2227,108 @@ class NativeSelectContract(BaseModel):
         return self
 
 
+class ChoiceOptionShape(BaseModel):
+    """What the demonstrated option looked like among its siblings.
+
+    Replay finds the option list by shape, never by position: elements with
+    ``role`` (``option`` or ``treeitem``), or, for a list without ARIA, the
+    ``tag`` and every class in ``classes`` (the classes the chosen option
+    shared with the other options in its list; none for a list of bare
+    items). Only elements that appeared after the control opened count.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    role: Optional[Literal["option", "treeitem"]] = None
+    tag: str = Field(min_length=1, max_length=32, pattern=r"^[a-z][a-z0-9-]*$")
+    classes: tuple[str, ...] = Field(default=(), max_length=8)
+
+    @model_validator(mode="after")
+    def _findable(self) -> "ChoiceOptionShape":
+        # No role and no classes is a plain list of bare items (``<li>``):
+        # replay then matches the tag among elements that appeared after the
+        # control opened.
+        for token in self.classes:
+            if not re.fullmatch(r"[A-Za-z_-][A-Za-z0-9_-]{0,127}", token):
+                raise ValueError("an option class is not a plain class token")
+        return self
+
+
+class OptionChoice(BaseModel):
+    """Choose one option of a dropdown by what it says, then read it back.
+
+    One model for every dropdown family (docs/CHOICES.md):
+
+    - ``native_select``: an HTML ``<select>``. The option is set through the
+      DOM and the control's selected option is read back.
+    - ``listed_option``: anything that opens a list of options when the
+      control is clicked (ARIA listboxes, ``<div>`` lists, searchable selects,
+      type-aheads whose options load from the server). Replay clicks the
+      control, types the wanted label when the demonstration typed a search
+      (``query="label"``), waits until the option list stops changing, and
+      clicks the one option whose label (or ``value`` attribute) equals the
+      wanted value. The control must then show that label (``readback``).
+
+    The wanted value is the step's parameter when it has one, else ``label``.
+    No option, more than one, or a disabled one halts the step before the
+    option is clicked; a control that does not show the choice afterwards
+    halts it too. Position never decides which option is chosen.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    kind: Literal["native_select", "listed_option"]
+    label: str = Field(min_length=1, max_length=512)
+    value: Optional[str] = Field(default=None, max_length=512)
+    query: Literal["none", "label", "words"] = "none"
+    #: ``query="words"``: the demonstrated search was the start of words
+    #: ``[first, first + count)`` of the label. Replay types those whole
+    #: words of the wanted label, so a search that matches by word (a name
+    #: list whose labels start with an id) still finds it.
+    query_words: Optional[tuple[int, int]] = None
+    option: Optional[ChoiceOptionShape] = None
+    readback: Literal["select", "control_text", "control_value"]
+    #: Independent named form field whose committed value the choice changes.
+    #: Query text alone cannot establish that a listed option was selected.
+    commit_field: Optional[str] = Field(default=None, min_length=1, max_length=512)
+    #: The exact text the control showed after the demonstrated choice when
+    #: it is not the label (a calendar day writes a date into its field).
+    #: Such a choice is literal: replay requires this text afterwards.
+    shows: Optional[str] = Field(default=None, min_length=1, max_length=512)
+    #: How long replay waits for the options to load and settle.
+    settle_s: float = Field(default=8.0, gt=0, le=30)
+
+    @model_validator(mode="after")
+    def _consistent(self) -> "OptionChoice":
+        if self.kind == "native_select":
+            if self.option is not None or self.query != "none":
+                raise ValueError("a native select needs no option shape or search")
+            if self.readback != "select":
+                raise ValueError("a native select is read back from the select")
+        else:
+            if self.option is None:
+                raise ValueError("a listed option needs the option shape")
+            if self.readback == "select":
+                raise ValueError("a listed option is read back from its control")
+            if self.shows is not None and self.readback != "control_value":
+                raise ValueError("a shown value is read from a text control")
+        if (self.query == "words") != (self.query_words is not None):
+            raise ValueError("a word search names its words, and only a word search")
+        if self.query_words is not None and (
+            self.query_words[0] < 0 or not 1 <= self.query_words[1] <= 16
+        ):
+            raise ValueError("a word search names at least one word")
+        if not choice_text(self.label):
+            raise ValueError("a choice needs a visible label")
+        return self
+
+
+def choice_text(text: str) -> str:
+    """The comparison form of an option label: spaces collapsed, casefolded."""
+
+    return " ".join(str(text).split()).casefold()
+
+
 class Step(BaseModel):
     id: str
     intent: str = Field(description="Human-readable purpose of the step")
@@ -2253,6 +2364,14 @@ class Step(BaseModel):
         ),
     )
     native_selection: Optional[NativeSelectContract] = None
+    choice: Optional[OptionChoice] = Field(
+        default=None,
+        description=(
+            "SELECT_OPTION only: choose the option by its label or value and "
+            "read the control back (OptionChoice). The wanted value is "
+            "params[param] when param is set, else text."
+        ),
+    )
     selection_commit_key: Optional[Literal["Enter", "Tab"]] = Field(
         default=None,
         description=(
@@ -2457,6 +2576,8 @@ class Step(BaseModel):
             data.pop("target_param", None)
         if self.native_selection is None:
             data.pop("native_selection", None)
+        if self.choice is None:
+            data.pop("choice", None)
         return data
 
     @model_validator(mode="after")
@@ -2501,6 +2622,28 @@ class Step(BaseModel):
                     "native selection requires a literal SELECT_OPTION with an exact "
                     "structural anchor and no remote selection contract"
                 )
+        if self.choice is not None:
+            if (
+                self.action is not ActionKind.SELECT_OPTION
+                or self.native_selection is not None
+                or self.selection_commit_key is not None
+                or self.selection_region is not None
+                or self.secret
+                or self.anchor is None
+                or self.opens
+                or (self.param is None and self.text != self.choice.label)
+                or (self.param is not None and self.choice.shows is not None)
+            ):
+                raise ValueError(
+                    "a choice is a SELECT_OPTION on its control's anchor, with "
+                    "no other selection contract or new page, choosing its "
+                    "demonstrated label unless a parameter names the value"
+                )
+            if (
+                self.choice.kind == "native_select"
+                and not structural_locator_is_locatable(self.anchor.structural)
+            ):
+                raise ValueError("a native select choice needs the select's locator")
         if (self.selection_commit_key is None) != (self.selection_region is None):
             raise ValueError(
                 "selection_commit_key and selection_region must be set together"
@@ -2517,7 +2660,11 @@ class Step(BaseModel):
                     "option-selection contracts require the demonstrated field "
                     "anchor for fresh pre-commit re-resolution"
                 )
-        elif self.action is ActionKind.SELECT_OPTION and self.native_selection is None:
+        elif (
+            self.action is ActionKind.SELECT_OPTION
+            and self.native_selection is None
+            and self.choice is None
+        ):
             raise ValueError(
                 "SELECT_OPTION requires a native contract or selection_commit_key and selection_region"
             )
@@ -3589,6 +3736,15 @@ class Workflow(BaseModel):
     # or a hosted run summary. Empty for browser/native bundles, preserving
     # their serialized form through the compatibility serializer below.
     backend_hints: Optional[BackendHints] = None
+    dialogs_recorded: bool = Field(
+        default=False,
+        description=(
+            "The recording captured every browser dialog the demonstration "
+            "met (docs/CHOICES.md). A run of such a program stops on a dialog "
+            "no step expects (dialog_unexpected); older programs keep the "
+            "browser's default dismissal."
+        ),
+    )
     #: Locale, date order and keyboard layout recorded with the demonstration
     #: (#1897). Checked before replay; omitted from serialized bytes when unset.
     locale_invariants: Optional["LocaleInvariants"] = None
@@ -3756,6 +3912,8 @@ class Workflow(BaseModel):
             data.pop("job_authoring", None)
         if self.backend_hints is None:
             data.pop("backend_hints", None)
+        if not self.dialogs_recorded:
+            data.pop("dialogs_recorded", None)
         if self.locale_invariants is None:
             data.pop("locale_invariants", None)
         if self.surface is None:
