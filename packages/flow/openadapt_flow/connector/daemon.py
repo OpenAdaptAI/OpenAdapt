@@ -134,7 +134,9 @@ def handle_job(
         callback_body = phi_free_callback_body(job, result)
     except Exception:  # noqa: BLE001 - nothing unchecked is ever sent
         callback_body = None
-    for attempt in range(CALLBACK_ATTEMPTS if callback_body is not None else 0):
+    for attempt in range(CALLBACK_ATTEMPTS):
+        if callback_body is None:
+            break
         try:
             client.run_callback(callback_body, run_token=job.run_token)
             callback_accepted = True

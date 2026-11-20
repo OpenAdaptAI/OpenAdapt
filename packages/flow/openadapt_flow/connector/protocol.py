@@ -71,7 +71,7 @@ class ByocGovernanceError(ValueError):
 class ByocStorage(BaseModel):
     """Customer-owned storage reference (opaque relative keys)."""
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="allow")
 
     #: Hint only; the Connector's own config is authoritative.
     backend: Optional[str] = None
@@ -92,7 +92,7 @@ class GroundingModel(BaseModel):
     environment, inside the customer perimeter.
     """
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="allow")
 
     enabled: bool = False
     provider: Optional[str] = None
@@ -165,14 +165,17 @@ class ByocJob(BaseModel):
         """Fail closed unless every governance requirement is present.
 
         Args:
-            require_run_token: when True (the live default) a dispatch without a
-                run-scoped callback token is refused — we would be unable to
-                report its outcome, so we must not run it. Set False only for a
-                mock/dev control plane that bypasses callback auth.
+            require_run_token: retained for legacy callers. Live managed
+                execution always requires its callback token and session;
+                False cannot authorize an older/mock payload.
 
         Raises:
             ByocGovernanceError: on the first missing requirement.
         """
+        if self.mode != "replay":
+            raise ByocGovernanceError(
+                "byoc live connector only supports governed replay jobs"
+            )
         if self.bundle_download_url:
             raise ByocGovernanceError(
                 "byoc dispatch carries an our-owned bundle URL; the bundle must "
@@ -210,9 +213,13 @@ class ByocJob(BaseModel):
                 "byoc managed dispatch and delivery authority must be supplied "
                 "together (fail closed)"
             )
-        if self.model_extra:
+        if (
+            self.model_extra
+            or (self.storage is not None and self.storage.model_extra)
+            or self.grounding_model.model_extra
+        ):
             raise ByocGovernanceError(
-                "byoc live dispatch carries unsupported outer fields"
+                "byoc live dispatch carries unsupported governance fields"
             )
         if self.managed_dispatch is None or not self.managed_delivery_authority_url:
             raise ByocGovernanceError(
@@ -296,6 +303,8 @@ class ByocJob(BaseModel):
         )
         if set(raw) != set(FLOW_DISPATCH_WIRE_KEYS) | extension:
             raise ByocGovernanceError("byoc managed authority union is not closed")
+        if type(raw.get("schema_version")) is not int or raw["schema_version"] != 1:
+            raise ByocGovernanceError("byoc managed dispatch version is not canonical")
         authorization = raw.get("authorization")
         if not isinstance(authorization, dict) or set(authorization) - set(
             GovernedRunAuthorization.model_fields
@@ -451,6 +460,10 @@ def parse_job(
             required identifiers). The caller reports the refusal; it never runs
             a job it could not parse.
     """
+    if "lease_job_id" in payload:
+        raise ByocJobParseError(
+            "byoc payload cannot replace its authenticated lease id"
+        )
     try:
         job = ByocJob.model_validate(payload)
     except ValidationError as exc:

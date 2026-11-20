@@ -604,7 +604,7 @@ PR #2280 raised `replayer.py` by 12 lines: the call sites of the clock-text chec
 | File | Line budget |
 |---|---:|
 | `packages/flow/openadapt_flow/runtime/replayer.py` | 20057 |
-| `packages/flow/openadapt_flow/__main__.py` | 14471 |
+| `packages/flow/openadapt_flow/__main__.py` | 14335 |
 | `packages/flow/openadapt_flow/qualification.py` | 5963 |
 | `packages/flow/openadapt_flow/ir.py` | 6711 |
 | `packages/desktop/openadapt_desktop/dispatch.py` | 6524 |

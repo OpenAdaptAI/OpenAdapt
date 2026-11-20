@@ -93,10 +93,9 @@ class ConnectorSettings:
     #: this runner trusts. A dispatch whose admission key is not pinned here is
     #: refused: the control plane cannot widen what this machine will run.
     trusted_admission_keys: str = ""
-    #: Optional customer-owned Flow admission key directory (principal
-    #: registry and public keys, no private keys). When set, a governed child
-    #: verifies program admissions against it, which also covers admitter-key
-    #: and agent-policy admissions; otherwise only the pinned key is staged.
+    #: Operator-owned public, read-only Flow trust directory. The child
+    #: rechecks its current registry at input edges. Required for admitter-v2;
+    #: without it only a pinned person-v1 key snapshot can be staged.
     admission_key_dir: Optional[str] = None
     #: Local, append-only JSONL log of every request body this connector sent.
     egress_audit_log: Optional[str] = None

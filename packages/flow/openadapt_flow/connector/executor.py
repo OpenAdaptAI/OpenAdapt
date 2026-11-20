@@ -433,6 +433,7 @@ def _assert_managed_authority_is_pinned(
         or configured.password is not None
         or bool(configured.query)
         or bool(configured.fragment)
+        or configured.path not in {"", "/"}
         or delivered.scheme != "https"
         or delivered.hostname != configured.hostname
         or delivered_port != configured_port
@@ -462,6 +463,10 @@ def _verify_program_reference(job: ByocJob, bundle: Path, key_dir: Path) -> None
             "byoc program reference names another public trust key"
         )
     manifest = verify_admission(bundle, key_dir=key_dir)
+    if manifest.get("digest") != job.flow_dispatch().bundle_content_digest:
+        raise ByocGovernanceError(
+            "byoc program content digest differs from its dispatch"
+        )
     mode = manifest.get("admission_mode", "person")
     if reference["schema_version"] == "openadapt.program-admission-reference/v1":
         if mode != "person":

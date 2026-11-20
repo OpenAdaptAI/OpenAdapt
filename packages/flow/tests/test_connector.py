@@ -17,12 +17,11 @@ the child ``run`` is a fake so no GUI is launched.
 
 from __future__ import annotations
 
+import copy
 import hashlib
-import io
 import json
 import os
 import stat
-import zipfile
 from pathlib import Path
 
 import httpx
@@ -56,19 +55,44 @@ from openadapt_flow.runtime.authorization import GovernedRunAuthorization
 from openadapt_flow.runtime.durable.authority import (
     REMOTE_AUTHORITY_TOKEN_ENV,
     REMOTE_AUTHORITY_URL_ENV,
+    REMOTE_DISPATCH_SESSION_ID_ENV,
 )
+from tests.connector_v3_fixtures import build_program_case
+
+_CASE = None
+_BUNDLE_BYTES = b""
+_BUNDLE_SHA256 = ""
 
 
-def _bundle_archive_bytes() -> bytes:
-    stream = io.BytesIO()
-    info = zipfile.ZipInfo("workflow.json", date_time=(2026, 1, 1, 0, 0, 0))
-    with zipfile.ZipFile(stream, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr(info, "{}")
-    return stream.getvalue()
+@pytest.fixture(scope="module", autouse=True)
+def _signed_transport_program(module_durable_authority, tmp_path_factory):
+    # Transport tests still fake the governed child. Their bundle now carries
+    # real signatures instead of inheriting live authority from a legacy mock.
+    global _CASE, _BUNDLE_BYTES, _BUNDLE_SHA256
+    _CASE = build_program_case(tmp_path_factory.mktemp("connector-program"))
+    _BUNDLE_BYTES = _CASE["bundle_bytes"]
+    _BUNDLE_SHA256 = hashlib.sha256(_BUNDLE_BYTES).hexdigest()
 
 
-_BUNDLE_BYTES = _bundle_archive_bytes()
-_BUNDLE_SHA256 = hashlib.sha256(_BUNDLE_BYTES).hexdigest()
+@pytest.fixture(autouse=True)
+def _transport_has_no_external_readback(monkeypatch):
+    # The old transport fixture had no readback file. Keep these wire/report
+    # tests offline while leaving signature, registry and envelope gates real.
+    monkeypatch.setattr(
+        "openadapt_flow.connector.executor._run_flow_tool", lambda *_: 1
+    )
+
+
+def _settings(**overrides):
+    return ConnectorSettings(
+        **{
+            "control_plane_url": "https://app.test",
+            "org_id": "org_demo",
+            "trusted_admission_keys": _CASE["public_key_hex"],
+            "admission_key_dir": str(_CASE["key_dir"]),
+            **overrides,
+        }
+    )
 
 
 # --------------------------------------------------------------------------
@@ -99,18 +123,19 @@ def _payload(**overrides):
         "safety": {"halt.on_ambiguous": True, "effects.verify": True},
         "grounding_model": {"enabled": False, "api_key_env": ""},
     }
+    payload.update(
+        managed_dispatch=_managed_dispatch(),
+        managed_delivery_authority_url="https://app.test/api/internal/managed-delivery-permit",
+        managed_dispatch_session_id=_CASE["payload"]["managed_dispatch_session_id"],
+    )
     payload.update(overrides)
     return payload
 
 
 def _managed_dispatch(*, run_id: str | None = None) -> dict:
-    exact_run_id = run_id or _payload()["run_id"]
-    authorization = GovernedRunAuthorization(
-        bundle_content_digest="b" * 64,
-        runtime_inputs_digest="c" * 64,
-        admitted_policy_name="standard",
-        execution_profile="standard",
-        approval_source="hosted:execute-api",
+    exact_run_id = run_id or "00000000-0000-4000-8000-000000000005"
+    authorization = GovernedRunAuthorization.model_validate(
+        _CASE["dispatch"]["authorization"]
     )
     envelope = ManagedDispatchEnvelope(
         run_id=exact_run_id,
@@ -119,14 +144,9 @@ def _managed_dispatch(*, run_id: str | None = None) -> dict:
         authorization=authorization,
         dispatch_binding_sha256=dispatch_binding_sha256(exact_run_id, authorization),
     )
-    # Cloud's dispatch: the six Flow wire keys plus the authority reference.
-    qualification = {"schema_version": "test", "campaign": "synthetic"}
     return {
         **envelope.model_dump(mode="json"),
-        "qualification_admission": qualification,
-        "qualification_admission_sha256": hashlib.sha256(
-            json.dumps(qualification, sort_keys=True, separators=(",", ":")).encode()
-        ).hexdigest(),
+        "program_admission": copy.deepcopy(_CASE["dispatch"]["program_admission"]),
     }
 
 
@@ -163,7 +183,7 @@ SUCCESS_REPORT = {
 # --------------------------------------------------------------------------
 def test_execute_job_success_writes_report_to_customer_storage_only():
     job = parse_job(_payload(), lease_job_id="bjob_1")
-    settings = ConnectorSettings(profile=None)
+    settings = _settings(profile=None)
     storage = InMemoryCustomerStorage(bundle_bytes=_BUNDLE_BYTES)
 
     result = execute_job(
@@ -181,9 +201,10 @@ def test_execute_job_success_writes_report_to_customer_storage_only():
 def test_execute_job_consumes_exact_managed_dispatch_through_private_child_boundary(
     monkeypatch,
 ):
-    authority_url = "https://app.openadapt.ai/api/internal/managed-delivery-permit"
+    authority_url = "https://app.test/api/internal/managed-delivery-permit"
     token = "a" * 64
     managed_dispatch = _managed_dispatch()
+    monkeypatch.setenv(REMOTE_DISPATCH_SESSION_ID_ENV, "stale-parent-session")
     monkeypatch.setenv(REMOTE_AUTHORITY_URL_ENV, "https://stale.invalid/permit")
     monkeypatch.setenv(REMOTE_AUTHORITY_TOKEN_ENV, "stale-parent-token")
     job = parse_job(
@@ -203,46 +224,60 @@ def test_execute_job_consumes_exact_managed_dispatch_through_private_child_bound
         observed["envelope"] = json.loads(envelope_path.read_text())
         observed["authority_url"] = child_env[REMOTE_AUTHORITY_URL_ENV]
         observed["authority_token"] = child_env[REMOTE_AUTHORITY_TOKEN_ENV]
+        observed["session_id"] = child_env[REMOTE_DISPATCH_SESSION_ID_ENV]
         observed["parent_token"] = os.environ.get(REMOTE_AUTHORITY_TOKEN_ENV)
         (run_dir / "report.json").write_text(json.dumps(SUCCESS_REPORT))
         return RunOutcome(returncode=0, report=SUCCESS_REPORT)
 
-    result = execute_job(job, ConnectorSettings(), storage, runner=runner)
+    result = execute_job(job, _settings(), storage, runner=runner)
 
     assert result.status == "success"
     assert observed["mode"] == 0o600
     assert observed["envelope"] == _wire(managed_dispatch)
     assert observed["authority_url"] == authority_url
     assert observed["authority_token"] == token
+    assert observed["session_id"] == job.managed_dispatch_session_id
     assert observed["parent_token"] == "stale-parent-token"
     assert token not in json.dumps(observed["argv"])
     assert token not in json.dumps(observed["envelope"])
 
 
-def test_connector_drops_inherited_authority_from_a_job_without_an_envelope(
-    monkeypatch,
-):
+@pytest.mark.parametrize("require_run_token", [True, False])
+def test_legacy_payload_cannot_inherit_live_authority(monkeypatch, require_run_token):
     monkeypatch.setenv(REMOTE_AUTHORITY_URL_ENV, "https://stale.invalid/permit")
     monkeypatch.setenv(REMOTE_AUTHORITY_TOKEN_ENV, "stale-parent-token")
-    job = parse_job(_payload(), lease_job_id="bjob_1")
-    storage = InMemoryCustomerStorage(bundle_bytes=_BUNDLE_BYTES)
-
-    def runner(argv, run_dir: Path, child_env) -> RunOutcome:
-        assert REMOTE_AUTHORITY_URL_ENV not in child_env
-        assert REMOTE_AUTHORITY_TOKEN_ENV not in child_env
-        assert "--managed-dispatch-file" not in argv
-        (run_dir / "report.json").write_text(json.dumps(SUCCESS_REPORT))
-        return RunOutcome(returncode=0, report=SUCCESS_REPORT)
-
-    assert (
-        execute_job(job, ConnectorSettings(), storage, runner=runner).status
-        == "success"
+    monkeypatch.setenv(REMOTE_DISPATCH_SESSION_ID_ENV, "stale-parent-session")
+    job = parse_job(
+        _payload(
+            managed_dispatch=None,
+            managed_delivery_authority_url=None,
+            managed_dispatch_session_id=None,
+        ),
+        lease_job_id="bjob_1",
     )
+    storage = InMemoryCustomerStorage(bundle_bytes=_BUNDLE_BYTES)
+    calls = []
+
+    def fetch(*_):
+        calls.append("fetch")
+        raise AssertionError("legacy payload must not fetch live bytes")
+
+    monkeypatch.setattr(storage, "fetch_bundle_archive", fetch)
+    result = execute_job(
+        job,
+        _settings(),
+        storage,
+        runner=lambda *_: calls.append("run"),
+        require_run_token=require_run_token,
+    )
+    assert result.status == "failed"
+    assert result.error_code == "governance_refused"
+    assert calls == []
 
 
 def test_execute_job_refuses_child_report_for_different_substrate():
     job = parse_job(_payload(), lease_job_id="bjob_1")
-    settings = ConnectorSettings(profile=None)
+    settings = _settings(profile=None)
     storage = InMemoryCustomerStorage(bundle_bytes=_BUNDLE_BYTES)
     mismatched = {**SUCCESS_REPORT, "execution_target_kind": "citrix"}
 
@@ -384,7 +419,7 @@ def test_halt_maps_to_halt_status_and_present_flag():
         "halt": {"outcome": "halt", "reason": "identity ambiguous for patient row"},
     }
     job = parse_job(_payload(), lease_job_id="bjob_1")
-    settings = ConnectorSettings()
+    settings = _settings()
     storage = InMemoryCustomerStorage(bundle_bytes=_BUNDLE_BYTES)
 
     def runner(argv, run_dir: Path, _env) -> RunOutcome:
@@ -450,9 +485,7 @@ def test_report_write_failure_does_not_report_completed_run_as_runner_failure(
     job = parse_job(_payload(), lease_job_id="bjob_1")
     storage = _FailingReportStorage(bundle_bytes=_BUNDLE_BYTES)
 
-    result = execute_job(
-        job, ConnectorSettings(), storage, runner=_fake_success_runner(report)
-    )
+    result = execute_job(job, _settings(), storage, runner=_fake_success_runner(report))
     body = phi_free_callback_body(job, result)
 
     assert body["status"] == "halt"
@@ -473,7 +506,7 @@ def test_report_write_failure_keeps_child_failure_as_failed():
     def runner(argv, run_dir: Path, _env) -> RunOutcome:
         return RunOutcome(returncode=1, report=failed_report)
 
-    result = execute_job(job, ConnectorSettings(), storage, runner=runner)
+    result = execute_job(job, _settings(), storage, runner=runner)
     body = phi_free_callback_body(job, result)
     assert body["status"] == "failed"
     assert body["report_path"] is None
@@ -485,7 +518,7 @@ def test_report_write_failure_lease_is_not_acked_failed():
     transport = httpx.MockTransport(cp.handler)
     client = ConnectorClient("https://app.test", token=None, transport=transport)
     client.enroll(enrollment_secret="s", org_id="org_demo", name="n")
-    settings = ConnectorSettings(
+    settings = _settings(
         control_plane_url="https://app.test",
         org_id="org_demo",
         token=client.token,
@@ -604,7 +637,7 @@ def test_execute_refuses_managed_authority_on_a_different_https_origin():
     )
     result = execute_job(
         job,
-        ConnectorSettings(control_plane_url="https://app.openadapt.ai"),
+        _settings(control_plane_url="https://app.openadapt.ai"),
         InMemoryCustomerStorage(bundle_bytes=_BUNDLE_BYTES),
         runner=_fake_success_runner(SUCCESS_REPORT),
     )
@@ -616,12 +649,11 @@ def test_execute_refuses_managed_authority_on_a_different_https_origin():
     "overrides, match",
     [
         (
-            {"managed_dispatch": _managed_dispatch()},
+            {"managed_delivery_authority_url": None},
             "must be supplied together",
         ),
         (
             {
-                "managed_dispatch": _managed_dispatch(),
                 "managed_delivery_authority_url": "http://localhost/permit",
             },
             "credential-free HTTPS endpoint",
@@ -661,7 +693,7 @@ def test_execute_refuses_when_required_grounding_key_is_absent(monkeypatch):
         ),
         lease_job_id="bjob_1",
     )
-    settings = ConnectorSettings()
+    settings = _settings()
     storage = InMemoryCustomerStorage(bundle_bytes=_BUNDLE_BYTES)
 
     # A runner that would "succeed" — the governance gate must refuse BEFORE it.
@@ -686,7 +718,7 @@ def test_execute_refuses_archive_digest_mismatch_before_runner():
         called["ran"] = True
         return RunOutcome(returncode=0, report=SUCCESS_REPORT)
 
-    result = execute_job(job, ConnectorSettings(), storage, runner=runner)
+    result = execute_job(job, _settings(), storage, runner=runner)
     assert result.status == "failed"
     assert "storage bundle fetch failed" in (result.error or "")
     assert called["ran"] is False
@@ -701,7 +733,7 @@ def test_child_failure_after_archive_verification_carries_verified_digest():
     def runner(argv, run_dir: Path, _env) -> RunOutcome:
         raise RuntimeError("child unavailable")
 
-    result = execute_job(job, ConnectorSettings(), storage, runner=runner)
+    result = execute_job(job, _settings(), storage, runner=runner)
     assert result.status == "failed"
     assert result.verified_bundle_sha256 == _BUNDLE_SHA256
     callback = phi_free_callback_body(job, result)
@@ -736,7 +768,7 @@ def test_local_storage_refuses_report_ref_outside_root(tmp_path):
 
 def test_governed_run_argv_uses_the_fail_closed_run_verb():
     job = parse_job(_payload(), lease_job_id="bjob_1")
-    settings = ConnectorSettings(
+    settings = _settings(
         profile="/opt/openadapt/deployment.yaml", policy="clinical-write"
     )
     argv = build_run_argv(job, settings, Path("/b"), Path("/r"), Path("/r/params.json"))
@@ -762,7 +794,7 @@ def test_native_dispatch_routes_exact_first_class_target_kind():
         ),
         lease_job_id="bjob_1",
     )
-    argv = build_run_argv(job, ConnectorSettings(), Path("/b"), Path("/r"), None)
+    argv = build_run_argv(job, _settings(), Path("/b"), Path("/r"), None)
     assert argv[argv.index("--backend") + 1] == "citrix"
     assert "--url" not in argv
 
@@ -852,8 +884,13 @@ def test_enroll_persists_token_0600(tmp_path, monkeypatch):
     )
     assert data["token"].startswith("oaconn_")
 
-    settings = ConnectorSettings(
-        control_plane_url="https://app.test", token=data["token"], org_id="org_demo"
+    monkeypatch.delenv("BYOC_QUALIFICATION_AUTHORITY_FILE", raising=False)
+    authority_file = str(tmp_path / "operator-authority.json")
+    settings = _settings(
+        control_plane_url="https://app.test",
+        token=data["token"],
+        org_id="org_demo",
+        qualification_authority_file=authority_file,
     )
     path = save_enrollment(settings)
     assert path.exists()
@@ -862,6 +899,38 @@ def test_enroll_persists_token_0600(tmp_path, monkeypatch):
     reloaded = load_settings()
     assert reloaded.token == data["token"]
     assert reloaded.org_id == "org_demo"
+    assert reloaded.qualification_authority_file == authority_file
+    monkeypatch.setenv("BYOC_QUALIFICATION_AUTHORITY_FILE", "operator-env.json")
+    assert load_settings().qualification_authority_file == "operator-env.json"
+    assert (
+        load_settings(
+            {"qualification_authority_file": "operator-flag.json"}
+        ).qualification_authority_file
+        == "operator-flag.json"
+    )
+
+
+@pytest.mark.parametrize("verb", ["enroll", "run", "rotate-token"])
+def test_connector_cli_retains_callbacks_and_refuses_unenrolled_run(
+    verb, tmp_path, monkeypatch
+):
+    from openadapt_flow.__main__ import _cmd_connector, _connector_flags, build_parser
+
+    monkeypatch.setenv("OPENADAPT_HOME", str(tmp_path))
+    monkeypatch.delenv("BYOC_CONNECTOR_TOKEN", raising=False)
+    options = ["connector", verb, "--control-plane-url", "https://app.test"]
+    if verb == "run":
+        options += ["--secrets-dir", str(tmp_path / "secrets"), "--max-workers", "2"]
+    args = build_parser().parse_args(options)
+    assert args.func is _cmd_connector
+    flags = _connector_flags(args)
+    assert flags["control_plane_url"] == "https://app.test"
+    if verb == "run":
+        assert flags["max_workers"] == 2
+        assert flags["secrets_dir"] == str(tmp_path / "secrets")
+    if verb != "enroll":
+        # The actual moved handler must refuse before opening a connection.
+        assert args.func(args) == 2
 
 
 def test_full_loop_dispatch_execute_callback_ack():
@@ -871,7 +940,7 @@ def test_full_loop_dispatch_execute_callback_ack():
     client = ConnectorClient("https://app.test", token=None, transport=transport)
     client.enroll(enrollment_secret="s", org_id="org_demo", name="n")
 
-    settings = ConnectorSettings(
+    settings = _settings(
         control_plane_url="https://app.test",
         org_id="org_demo",
         token=client.token,
@@ -914,7 +983,7 @@ def test_callback_rejection_is_retried_but_never_acked(callback_status, monkeypa
     transport = httpx.MockTransport(cp.handler)
     client = ConnectorClient("https://app.test", transport=transport)
     client.enroll(enrollment_secret="s", org_id="org_demo", name="n")
-    settings = ConnectorSettings(
+    settings = _settings(
         control_plane_url="https://app.test",
         org_id="org_demo",
         token=client.token,
@@ -949,7 +1018,7 @@ def test_cross_org_isolation_connector_never_sees_another_orgs_job():
     # A connector enrolled for org_A.
     client = ConnectorClient("https://app.test", transport=transport)
     client.enroll(enrollment_secret="s", org_id="org_A", name="a")
-    settings = ConnectorSettings(
+    settings = _settings(
         control_plane_url="https://app.test",
         org_id="org_A",
         token=client.token,
@@ -976,6 +1045,6 @@ def test_every_connector_substrate_preserves_the_governed_approval_default(targe
     job = parse_job(
         _payload(target_kind=target, target_url=None, allowed_hosts=[], params={})
     )
-    argv = build_run_argv(job, ConnectorSettings(), Path("/bundle"), Path("/run"), None)
+    argv = build_run_argv(job, _settings(), Path("/bundle"), Path("/run"), None)
     assert "--approval-mode" not in argv
     assert resolve_approval_mode(None) == ApprovalMode.EACH_ITEM

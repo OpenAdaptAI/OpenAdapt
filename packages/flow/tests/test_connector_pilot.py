@@ -9,6 +9,7 @@ secret file) and asserts none of them appears in any byte the connector sent.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import hmac
 import io
@@ -51,6 +52,7 @@ from openadapt_flow.connector.executor import (
 from openadapt_flow.connector.protocol import parse_job
 from openadapt_flow.connector.secrets import LocalSecretStore, SecretStoreError
 from openadapt_flow.connector.storage import InMemoryCustomerStorage
+from tests.connector_v3_fixtures import build_program_case
 
 CANARY_RECORD = "ZQX-CANARY-RECORD-7731"
 CANARY_SECRET = "ZQX-CANARY-SECRET-p4ssw0rd"
@@ -66,10 +68,41 @@ def _zip(entries: dict[str, bytes]) -> bytes:
     return stream.getvalue()
 
 
-PLAIN_BUNDLE = _zip({"workflow.json": b"{}"})
+_CASE = None
+PLAIN_BUNDLE = b""
 
 
-def _payload(bundle: bytes = PLAIN_BUNDLE, **overrides):
+@pytest.fixture(scope="module", autouse=True)
+def _signed_transport_program(module_durable_authority, tmp_path_factory):
+    global _CASE, PLAIN_BUNDLE, WRAP_BUNDLE, ADMISSION, ADMITTER_KEY, VERIFY_YAML
+    _CASE = build_program_case(tmp_path_factory.mktemp("connector-pilot-program"))
+    PLAIN_BUNDLE = WRAP_BUNDLE = _CASE["bundle_bytes"]
+    ADMISSION = (_CASE["bundle_dir"] / "admission.json").read_bytes()
+    ADMITTER_KEY = _CASE["public_key_hex"]
+    VERIFY_YAML = (_CASE["bundle_dir"] / "readback/verify.yaml").read_bytes()
+
+
+@pytest.fixture(autouse=True)
+def _transport_has_no_external_readback(monkeypatch):
+    # Keep wire/secret/lease tests offline. Dedicated v3 tests retain the
+    # actual authority/crypto/Flow-parser controls; these tests fake the child.
+    monkeypatch.setattr(executor_mod, "_run_flow_tool", lambda *_: 1)
+
+
+def _configured_settings(**overrides):
+    return ConnectorSettings(
+        **{
+            "control_plane_url": "https://cloud.test",
+            "org_id": "org_pilot",
+            "trusted_admission_keys": _CASE["public_key_hex"],
+            "admission_key_dir": str(_CASE["key_dir"]),
+            **overrides,
+        }
+    )
+
+
+def _payload(bundle: bytes | None = None, **overrides):
+    bundle = PLAIN_BUNDLE if bundle is None else bundle
     payload = {
         "mode": "replay",
         "run_id": "00000000-0000-4000-8000-000000000009",
@@ -92,6 +125,11 @@ def _payload(bundle: bytes = PLAIN_BUNDLE, **overrides):
         "safety": {"halt.on_ambiguous": True},
         "grounding_model": {"enabled": False},
     }
+    payload.update(
+        managed_dispatch=_wrap_dispatch(payload["run_id"], _CASE["admission_sha256"]),
+        managed_delivery_authority_url="https://cloud.test/api/internal/managed-delivery-permit",
+        managed_dispatch_session_id=_CASE["payload"]["managed_dispatch_session_id"],
+    )
     payload.update(overrides)
     return payload
 
@@ -214,7 +252,7 @@ def test_no_canary_leaves_the_machine(tmp_path, outcome_kind):
         }
     )
     client = _client(plane, egress_audit_log=str(tmp_path / "egress.jsonl"))
-    settings = ConnectorSettings(
+    settings = _configured_settings(
         control_plane_url="https://cloud.test",
         token=TOKEN,
         poll_wait_s=0,
@@ -418,7 +456,10 @@ def test_cancelled_job_reports_failed_with_closed_code(tmp_path):
         raise AssertionError("child started after cancel")
 
     result = execute_job(
-        job, ConnectorSettings(), InMemoryCustomerStorage(PLAIN_BUNDLE), runner=runner
+        job,
+        _configured_settings(),
+        InMemoryCustomerStorage(PLAIN_BUNDLE),
+        runner=runner,
     )
     assert (
         result.status == "failed" and result.error_code == "cancelled_by_control_plane"
@@ -468,7 +509,7 @@ def test_concurrency_runs_up_to_the_server_cap(tmp_path):
         }
         return RunOutcome(returncode=0, report=report)
 
-    settings = ConnectorSettings(
+    settings = _configured_settings(
         control_plane_url="https://cloud.test",
         token=TOKEN,
         poll_wait_s=0,
@@ -495,7 +536,7 @@ def test_rotation_mints_locally_and_sends_only_a_hash(tmp_path, monkeypatch):
     plane = RecordingPlane()
     client = _client(plane)
     client.control.rotate_recommended = True
-    settings = ConnectorSettings(control_plane_url="https://cloud.test", token=TOKEN)
+    settings = _configured_settings(control_plane_url="https://cloud.test", token=TOKEN)
     save_enrollment(settings)
     events: list[str] = []
 
@@ -575,7 +616,7 @@ def test_job_naming_unknown_secret_is_refused_before_any_run():
     job = parse_job(_payload(secrets_ref="missing"), lease_job_id="bjob_s")
     result = execute_job(
         job,
-        ConnectorSettings(),
+        _configured_settings(),
         InMemoryCustomerStorage(PLAIN_BUNDLE),
         runner=lambda *a: (_ for _ in ()).throw(AssertionError("ran")),
     )
@@ -603,28 +644,21 @@ def _wrap_dispatch(run_id: str, admission_sha: str) -> dict:
     from openadapt_flow.runner.protocol import dispatch_binding_sha256
     from openadapt_flow.runtime.authorization import GovernedRunAuthorization
 
-    authorization = GovernedRunAuthorization(
-        bundle_content_digest="b" * 64,
-        runtime_inputs_digest="c" * 64,
-        admitted_policy_name="standard",
-        execution_profile="standard",
-        approval_source="hosted:program-admission:" + admission_sha,
+    authorization = GovernedRunAuthorization.model_validate(
+        _CASE["dispatch"]["authorization"]
+    ).model_copy(
+        update={"approval_source": "hosted:program-admission:" + admission_sha}
     )
     envelope = ManagedDispatchEnvelope(
         run_id=run_id,
-        bundle_content_digest="b" * 64,
-        runtime_inputs_digest="c" * 64,
+        bundle_content_digest=authorization.bundle_content_digest,
+        runtime_inputs_digest=authorization.runtime_inputs_digest,
         authorization=authorization,
         dispatch_binding_sha256=dispatch_binding_sha256(run_id, authorization),
     )
-    return {
-        **envelope.model_dump(mode="json"),
-        "program_admission": {
-            "schema_version": "openadapt.program-admission-reference/v1",
-            "admission_sha256": admission_sha,
-            "public_key_hex": ADMITTER_KEY,
-        },
-    }
+    reference = copy.deepcopy(_CASE["dispatch"]["program_admission"])
+    reference["admission_sha256"] = admission_sha
+    return {**envelope.model_dump(mode="json"), "program_admission": reference}
 
 
 def _wrap_job(admission_sha: str | None = None):
@@ -638,7 +672,9 @@ def _wrap_job(admission_sha: str | None = None):
 
 
 def _settings(**kw):
-    return ConnectorSettings(control_plane_url="https://cloud.test", **kw)
+    return ConnectorSettings(
+        control_plane_url="https://cloud.test", org_id="org_pilot", **kw
+    )
 
 
 def test_unpinned_admitter_key_is_refused():
