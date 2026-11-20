@@ -102,14 +102,19 @@ def _with_secret_env(
     """
     import os
 
-    from openadapt_flow.runtime.replayer import secret_env_vars
+    from openadapt_flow.runtime.replayer import secret_env_var, secret_env_vars
 
     out = dict(values)
-    for name, key in secret_env_vars(list(parameters)).items():
-        if name not in out:
-            value = os.environ.get(key)
-            if value:
-                out[name] = value
+    # Before compilation these can still be ordinary public inputs. Only the
+    # names actually sourced from the secret environment need a slot here;
+    # explicit public values must not acquire a new case-folding restriction.
+    sourced = [
+        name
+        for name in parameters
+        if name not in out and os.environ.get(secret_env_var(name))
+    ]
+    for name, key in secret_env_vars(sourced).items():
+        out[name] = os.environ[key]
     return out
 
 

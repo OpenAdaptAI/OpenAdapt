@@ -374,3 +374,23 @@ def test_secret_runs_persist_no_page_pixels_even_after_the_field_disappears(
         assert _black((tmp_path / path).read_bytes(), (0, 0, 320, 200))
     # Internal observation bytes remain available for checks, unmodified.
     assert not _black(before, (0, 0, 320, 200))
+
+
+def test_flow_matches_the_shared_secret_name_golden_vectors():
+    from openadapt_flow.runtime.replayer import secret_env_var, secret_env_vars
+
+    vectors = json.loads(
+        (Path(__file__).parent / "fixtures/secret-env-names.json").read_text()
+    )
+    for name, expected in vectors["cases"]:
+        assert secret_env_var(name) == expected
+    with pytest.raises(ValueError, match="collide"):
+        secret_env_vars(["token😀", "token_"])
+
+
+def test_cli_keeps_explicit_public_inputs_with_distinct_case(monkeypatch) -> None:
+    from openadapt_flow.wrap.cli import _with_secret_env
+
+    monkeypatch.delenv("OPENADAPT_FLOW_SECRET_ITEM", raising=False)
+    values = {"item": "first-public-value", "ITEM": "second-public-value"}
+    assert _with_secret_env(values, list(values)) == values
