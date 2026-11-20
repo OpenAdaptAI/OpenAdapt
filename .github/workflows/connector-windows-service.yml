@@ -94,6 +94,10 @@ jobs:
             "storage_root = '$storage'"
           ) -join "`n"
           [IO.File]::WriteAllText((Join-Path $env:CONNECTOR_DIR 'connector.toml'), "$toml`n")
+          # Plant explicit broad grants. Installation must replace them,
+          # not merely remove inheritance or update its own named entries.
+          icacls $env:CONNECTOR_DIR /grant '*S-1-1-0:(OI)(CI)R' '*S-1-5-32-545:(OI)(CI)R'
+          if ($LASTEXITCODE -ne 0) { throw 'could not plant the broad-ACL fault' }
           $rules = (Get-NetFirewallRule | Measure-Object).Count
           "FIREWALL_RULES_BEFORE=$rules" >> $env:GITHUB_ENV
 

@@ -308,30 +308,57 @@ def service_command_line(python: str, config_dir: Path) -> str:
     return f'"{python}" -m {SERVICE_MODULE} {HOST_FLAG} --config-dir "{config_dir}"'
 
 
-def acl_commands(config_dir: Path) -> list[list[str]]:
-    """icacls calls that restrict the config dir to SYSTEM, Admins, the service.
+def protect_config_directory(config_dir: Path) -> None:  # pragma: no cover - Windows CI
+    """Replace the DACL, including any pre-existing explicit broad grants.
 
-    The service account gets read on the directory (``connector.toml``) and
-    modify on ``logs``. Inheritance from ``%ProgramData%`` (which lets Users
-    read) is removed, and existing children are reset to inherit the new ACL.
+    ``icacls /grant:r`` replaces entries only for the named principals; it
+    leaves other explicit grants behind. Build the complete protected DACL
+    before attaching it, so no permissive reset is exposed in between.
+    """
+    import ntsecuritycon
+    import win32con
+    import win32security
+
+    acl = win32security.ACL()
+    inherited = win32con.OBJECT_INHERIT_ACE | win32con.CONTAINER_INHERIT_ACE
+    service_sid = win32security.LookupAccountName(None, SERVICE_ACCOUNT)[0]
+    entries = (
+        (
+            win32security.ConvertStringSidToSid(_SID_SYSTEM[1:]),
+            ntsecuritycon.FILE_ALL_ACCESS,
+        ),
+        (
+            win32security.ConvertStringSidToSid(_SID_ADMINISTRATORS[1:]),
+            ntsecuritycon.FILE_ALL_ACCESS,
+        ),
+        (
+            service_sid,
+            ntsecuritycon.FILE_GENERIC_READ | ntsecuritycon.FILE_GENERIC_EXECUTE,
+        ),
+    )
+    for sid, access in entries:
+        acl.AddAccessAllowedAceEx(win32security.ACL_REVISION, inherited, access, sid)
+    win32security.SetNamedSecurityInfo(
+        str(config_dir),
+        win32security.SE_FILE_OBJECT,
+        win32security.DACL_SECURITY_INFORMATION
+        | win32security.PROTECTED_DACL_SECURITY_INFORMATION,
+        None,
+        None,
+        acl,
+        None,
+    )
+
+
+def acl_commands(config_dir: Path) -> list[list[str]]:
+    """Make existing children inherit the exact directory ACL, then allow logs.
+
+    The parent DACL has already been replaced by protect_config_directory.
+    The service account gets read on connector.toml and modify on logs only.
     """
     return [
-        [
-            "icacls",
-            str(config_dir),
-            "/inheritance:r",
-            "/grant:r",
-            f"{_SID_SYSTEM}:(OI)(CI)F",
-            f"{_SID_ADMINISTRATORS}:(OI)(CI)F",
-            f"{SERVICE_ACCOUNT}:(OI)(CI)RX",
-        ],
         ["icacls", str(config_dir / "*"), "/reset", "/T", "/C", "/Q"],
-        [
-            "icacls",
-            str(log_dir(config_dir)),
-            "/grant",
-            f"{SERVICE_ACCOUNT}:(OI)(CI)M",
-        ],
+        ["icacls", str(log_dir(config_dir)), "/grant", f"{SERVICE_ACCOUNT}:(OI)(CI)M"],
     ]
 
 
@@ -480,7 +507,9 @@ def install_service(config_dir: Path) -> None:  # pragma: no cover - Windows
 
     for command in recovery_commands():
         _run(command)
-    # The service SID exists now, so the ACL can name the account.
+    # The service SID exists now. Replace the whole parent DACL rather than
+    # leaving any explicit Users/Everyone entries from an earlier install.
+    protect_config_directory(config_dir)
     for command in acl_commands(config_dir):
         _run(command)
 

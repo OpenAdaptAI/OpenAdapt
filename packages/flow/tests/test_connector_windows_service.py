@@ -131,20 +131,18 @@ def test_install_refuses_a_venv_interpreter() -> None:
     )
 
 
-def test_acl_grants_only_system_admins_and_the_service() -> None:
+def test_children_inherit_the_protected_acl_and_only_logs_get_write_access() -> None:
     config = Path("C:/cfg")
     commands = ws.acl_commands(config)
-    top = commands[0]
-    assert "/inheritance:r" in top and "/grant:r" in top
-    grants = [a for a in top if a.endswith(")F") or a.endswith(")RX")]
-    assert grants == [
-        "*S-1-5-18:(OI)(CI)F",
-        "*S-1-5-32-544:(OI)(CI)F",
-        "NT SERVICE\\OpenAdaptConnector:(OI)(CI)RX",
+    assert commands[0] == ["icacls", str(config / "*"), "/reset", "/T", "/C", "/Q"]
+    assert commands[1] == [
+        "icacls",
+        str(config / "logs"),
+        "/grant",
+        "NT SERVICE\\OpenAdaptConnector:(OI)(CI)M",
     ]
     flat = " ".join(" ".join(c) for c in commands)
     assert "Users" not in flat and "Everyone" not in flat
-    assert commands[2][1] == str(config / "logs")
 
 
 def test_recovery_restarts_and_never_touches_the_firewall() -> None:
