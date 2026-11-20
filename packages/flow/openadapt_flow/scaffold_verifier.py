@@ -34,7 +34,9 @@ Two read-first operator helpers live here.
     draft together. Every output directory in that plan is refused before the
     first artifact is published. Fallback reporting reads the check
     destination in that same plan, so the operator cue and the exit status
-    name the published record-check result.
+    name the published record-check result. An observed refusal and a probed
+    refusal are that same result and exit 2. An unavailable probe is not a
+    refusal.
 
 ``flow explain <run-dir>``
     Pure read-only plain-language outcome summary over a completed run's
@@ -1053,19 +1055,72 @@ def build_record_check(
     )
 
 
+@dataclass(frozen=True)
+class CheckRefusal:
+    """Refusal published at the planned check destination.
+
+    ``reason`` is set for an observed or probed refusal. It stays ``None``
+    when nothing was published or the published probe is only unavailable.
+    ``discovery_status`` is the read-discovery status when that file exists.
+    """
+
+    reason: Optional[str] = None
+    discovery_status: Optional[str] = None
+
+
+def _load_published_json(path: Path) -> Optional[dict[str, Any]]:
+    import json
+
+    try:
+        loaded = json.loads(_sealed.read_text(path))
+    except (OSError, ValueError, _sealed.SealedSetError):
+        return None
+    return loaded if isinstance(loaded, dict) else None
+
+
+def planned_check_refusal(check: Optional[VerifierGeneration]) -> CheckRefusal:
+    """Read the refusal at the check destination this command calculated.
+
+    Observed and probed refusals both count. The proof is the result when
+    its status is ``refused``. A read discovery whose status is ``refused``
+    is the same refusal when that proof was not published. Unavailable
+    discovery is not a refusal. No other directory is consulted.
+    """
+    if check is None:
+        return CheckRefusal()
+    from openadapt_flow.record_check_synthesis import PROOF_NAME
+
+    destination = check.destination
+    proof = _load_published_json(destination / PROOF_NAME)
+    proof_reason: Optional[str] = None
+    if proof is not None and proof.get("status") == "refused":
+        proof_reason = str(proof.get("refusal_reason") or "")
+    discovery = _load_published_json(destination / READ_DISCOVERY_FILE)
+    discovery_status = None
+    discovery_reason = ""
+    if discovery is not None:
+        discovery_status = str(discovery.get("status") or "")
+        discovery_reason = str(discovery.get("reason") or "")
+    if proof_reason is not None:
+        reason: Optional[str] = proof_reason or discovery_reason
+    elif discovery_status == "refused":
+        reason = discovery_reason
+    else:
+        reason = None
+    return CheckRefusal(reason, discovery_status)
+
+
 def report_draft_fallback(
     check: Optional[VerifierGeneration],
     *,
     probe_reads: bool = False,
 ) -> Optional[str]:
-    """Read this command's check result and return a recorded-read refusal.
+    """Report the planned check result and return a refusal reason.
 
-    ``check`` is the record-check generation from
-    :func:`begin_verifier_outputs`. The proof and read discovery are read
-    from that destination, the same place publication used. No other
-    directory is consulted. ``None`` means no record-check output was
-    calculated, so there is no refusal to report.
+    The reason is the published observed or probed refusal. ``None`` means
+    this command did not publish a refusal, including an unavailable probe.
     """
+    refusal = planned_check_refusal(check)
     if check is None:
         if probe_reads:
             print(
@@ -1075,46 +1130,32 @@ def report_draft_fallback(
             )
         return None
     destination = check.destination
-    if probe_reads:
-        import json as _json
-
+    if probe_reads and refusal.discovery_status == "refused":
         found = destination / READ_DISCOVERY_FILE
-        status, reason = "unavailable", ""
-        try:
-            data = _json.loads(_sealed.read_text(found))
-            status, reason = str(data.get("status")), str(data.get("reason") or "")
-        except (OSError, ValueError, _sealed.SealedSetError):
-            pass
-        if status == "refused":
-            print(
-                "Read discovery: REFUSED. A probed read confirmed the written "
-                f"values but can't see the whole save, so no check was written: "
-                f"{reason} ({found})."
-            )
-        else:
-            print(
-                "Read discovery: UNAVAILABLE. No probed read confirmed the "
-                "written values, so no read was proposed; a person must name "
-                f"one ({found})."
-            )
-    else:
+        reason = refusal.reason or ""
+        print(
+            "Read discovery: REFUSED. A probed read confirmed the written "
+            f"values but can't see the whole save, so no check was written: "
+            f"{reason} ({found})."
+        )
+        return reason
+    if probe_reads and refusal.reason is None:
+        found = destination / READ_DISCOVERY_FILE
+        print(
+            "Read discovery: UNAVAILABLE. No probed read confirmed the "
+            "written values, so no read was proposed; a person must name "
+            f"one ({found})."
+        )
+        return None
+    if refusal.reason is not None:
         from openadapt_flow.record_check_synthesis import PROOF_NAME
 
         proof_path = destination / PROOF_NAME
-        try:
-            import json as _json
-
-            proof_data = _json.loads(_sealed.read_text(proof_path))
-            if proof_data.get("status") == "refused":
-                reason = str(proof_data.get("refusal_reason") or "")
-                print(
-                    "Record check: REFUSED. A recorded read can't see the "
-                    f"whole save, so no check was written: {reason} ({proof_path})."
-                )
-                return reason
-        except (OSError, ValueError, _sealed.SealedSetError):
-            pass
-
+        print(
+            "Record check: REFUSED. A recorded read can't see the "
+            f"whole save, so no check was written: {refusal.reason} ({proof_path})."
+        )
+        return refusal.reason
     return None
 
 

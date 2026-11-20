@@ -6293,7 +6293,8 @@ def _cmd_scaffold_verifier(args: argparse.Namespace) -> int:
     # Bind the proof source, refuse a plaintext copy of a sealed input, then
     # refuse every occupied output directory before either writer runs. A
     # fresh refusal's proof and TODO draft stay one generation. Fallback
-    # readback uses the check generation from that plan.
+    # readback uses the check generation from that plan. An observed or
+    # probed refusal there is the same result and exits 2.
     check_generation, draft_generation = begin_verifier_outputs(
         source,
         out_dir,

@@ -417,6 +417,45 @@ def test_probed_read_that_cannot_see_the_whole_save_is_refused(tmp_path, app):
     assert proof["read_discovery"]["reason"] == saved["reason"]
 
 
+def _shaped_bundle(path: Path) -> Path:
+    from openadapt_flow.ir import ActionKind, Step, Workflow
+
+    Workflow(
+        name="transfer demo",
+        steps=[
+            Step(
+                id="step_002",
+                intent="click Save transfer",
+                action=ActionKind.CLICK,
+                risk="irreversible",
+            )
+        ],
+    ).save(path)
+    return path
+
+
+def _assert_probed_refusal_result(text: str, code: int, destination: Path) -> str:
+    """The planned destination published a probed refusal and the command exited 2."""
+    assert code == 2, text
+    proof = json.loads((destination / "record_check.proof.json").read_text())
+    assert proof["status"] == "refused"
+    saved = json.loads((destination / READ_DISCOVERY_FILE).read_text())
+    assert saved["status"] == "refused" and saved["needs_operator_confirmation"]
+    reason = str(proof["refusal_reason"])
+    assert reason and "collateral_unaudited" in reason
+    assert reason == saved["reason"]
+    found = destination / READ_DISCOVERY_FILE
+    assert (
+        "Read discovery: REFUSED. A probed read confirmed the written "
+        f"values but can't see the whole save, so no check was written: "
+        f"{reason} ({found})."
+    ) in text
+    assert f"Recorded read REFUSED: {reason}. This is a TODO draft." in text
+    assert "No read in the recording" not in text
+    assert "Read discovery: UNAVAILABLE" not in text
+    return reason
+
+
 def test_cli_writes_the_todo_draft_when_the_probed_read_is_refused(
     tmp_path, app, capsys
 ):
@@ -424,12 +463,75 @@ def test_cli_writes_the_todo_draft_when_the_probed_read_is_refused(
 
     rec = _recording(tmp_path / "rec", app)
     out = tmp_path / "out"
+    before = _tree(rec)
     code = main(["scaffold-verifier", str(rec), "--probe-reads", "-o", str(out)])
     text = capsys.readouterr().out
-    assert code == 0, text
     assert "Read discovery: REFUSED" in text
     assert (out / "effect_contract.yaml").is_file()
     assert not (out / "record_check.proposed.yaml").exists()
+    _assert_probed_refusal_result(text, code, out)
+    assert _tree(rec) == before
+    assert not (rec / "record_check.proof.json").exists()
+    assert not (rec / READ_DISCOVERY_FILE).exists()
+
+
+def test_cli_probed_refusal_at_the_recording_exits_refused(tmp_path, app, capsys):
+    from openadapt_flow.__main__ import main
+
+    rec = _recording(tmp_path / "rec", app)
+    code = main(["scaffold-verifier", str(rec), "--probe-reads"])
+    text = capsys.readouterr().out
+    _assert_probed_refusal_result(text, code, rec)
+    assert (rec / "effect_contract.yaml").is_file()
+    assert not (rec / "record_check.proposed.yaml").exists()
+
+
+def test_cli_probed_refusal_on_a_fresh_pair_uses_the_recording(tmp_path, app, capsys):
+    from openadapt_flow.__main__ import main
+
+    rec = _recording(tmp_path / "rec", app)
+    bundle = _shaped_bundle(tmp_path / "bundle")
+    code = main(
+        [
+            "scaffold-verifier",
+            str(bundle),
+            "--recording",
+            str(rec),
+            "--probe-reads",
+        ]
+    )
+    text = capsys.readouterr().out
+    _assert_probed_refusal_result(text, code, rec)
+    assert str(bundle / READ_DISCOVERY_FILE) not in text
+    assert str(bundle / "record_check.proof.json") not in text
+    assert (bundle / "effect_contract.yaml").is_file()
+    assert not (bundle / "record_check.proof.json").exists()
+    assert not (bundle / READ_DISCOVERY_FILE).exists()
+    assert not (rec / "effect_contract.yaml").exists()
+    assert not (rec / "record_check.proposed.yaml").exists()
+
+
+def test_cli_unavailable_probe_stays_a_non_refusal_draft(tmp_path, capsys):
+    from openadapt_flow.__main__ import main
+
+    handle = App(list_path=None)
+    try:
+        rec = _recording(tmp_path / "rec", handle)
+        code = main(["scaffold-verifier", str(rec), "--probe-reads"])
+        text = capsys.readouterr().out
+        assert code == 0, text
+        assert "Read discovery: UNAVAILABLE" in text
+        assert "Read discovery: REFUSED" not in text
+        assert "Recorded read REFUSED" not in text
+        assert "TODO draft" in text
+        assert (rec / "effect_contract.yaml").is_file()
+        assert not (rec / "record_check.proposed.yaml").exists()
+        assert not (rec / "record_check.proof.json").exists()
+        saved = json.loads((rec / READ_DISCOVERY_FILE).read_text())
+        assert saved["status"] == "unavailable"
+        assert saved["needs_operator_confirmation"] is True
+    finally:
+        handle.stop()
 
 
 def test_no_read_route_leaves_the_read_unavailable(tmp_path):
