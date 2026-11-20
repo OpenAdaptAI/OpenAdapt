@@ -186,7 +186,7 @@ through. The control is therefore a **data-flow boundary**, stated in full in
 ### Transformation freshness
 
 Outbound derivatives bind the source inventory, artifact kind, policy revision,
-sanitizer implementation, and scrubber configuration. Reuse and approval require
+complete engine Python source closure, and scrubber configuration. Reuse and approval require
 the current identity. A policy or scrubber change creates a separate unapproved
 generation from the original source, even when the transformed files are
 unchanged. Earlier directories, approvals, and archives remain intact. A rescan

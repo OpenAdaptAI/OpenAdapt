@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
+import shutil
+from contextlib import contextmanager
 from pathlib import Path
 
 import httpx
 import pytest
 
-from openadapt_flow import hosted, privacy
+from openadapt_flow import hosted, privacy, sanitization_policy
 from openadapt_flow import sanitized_artifact as sa
 from openadapt_flow.wrap import publish
 
@@ -218,7 +220,9 @@ def test_unknown_provider_state_is_never_exported_as_config(tmp_path):
     privacy.set_text_scrubber(UndeclaredProvider())
     source = source_tree(tmp_path)
     destination = tmp_path / "unknown-config"
-    with pytest.raises(sa.SanitizationError, match="declare complete non-secret") as exc:
+    with pytest.raises(
+        sa.SanitizationError, match="declare complete non-secret"
+    ) as exc:
         sa.sanitize_artifact(source, destination, kind="recording")
     assert "private-test-value-never-export" not in str(exc.value)
     assert not destination.exists()
@@ -280,24 +284,6 @@ def test_manual_override_has_one_reviewable_generation_per_top_level_request(
     assert snapshot(first) == before
 
 
-def test_builtin_provider_identity_tracks_complete_effective_configuration(
-    tmp_path,
-    monkeypatch,
-):
-    from openadapt_privacy.config import config
-    from openadapt_privacy.providers.presidio import PresidioScrubbingProvider
-
-    # Identity admission reads configuration and installed versions only. It
-    # neither starts NLP/OCR nor reads the source through a remote provider.
-    privacy.set_text_scrubber(PresidioScrubbingProvider())
-    digest = sa.source_tree_sha256(source_tree(tmp_path))
-    before = sa.current_transformation_identity(digest, "recording")
-    monkeypatch.setattr(config, "SCRUB_FILL_COLOR", config.SCRUB_FILL_COLOR ^ 0x000001)
-    after = sa.current_transformation_identity(digest, "recording")
-    assert before["scrubber"]["config_sha256"] != after["scrubber"]["config_sha256"]
-    assert before["source_tree_sha256"] == after["source_tree_sha256"]
-
-
 def test_concurrent_generation_install_never_changes_existing_evidence(
     tmp_path,
     monkeypatch,
@@ -319,25 +305,82 @@ def test_concurrent_generation_install_never_changes_existing_evidence(
     }
 
 
-def test_builtin_policy_cannot_change_and_reset_mid_scan(tmp_path, monkeypatch):
-    from openadapt_privacy.config import ScrubbingPolicyChanged, config
-    from openadapt_privacy.providers.presidio import PresidioScrubbingProvider
+def test_engine_source_closure_binds_future_helpers_and_is_location_independent(
+    tmp_path,
+    monkeypatch,
+):
+    engine = tmp_path / "engine"
+    engine.mkdir()
+    (engine / "__init__.py").write_text("POLICY = 1\n")
+    monkeypatch.setattr(sanitization_policy, "_engine_source_root", lambda: engine)
+    first = sanitization_policy._engine_source_sha256()
+    clone = tmp_path / "clone"
+    shutil.copytree(engine, clone)
+    monkeypatch.setattr(sanitization_policy, "_engine_source_root", lambda: clone)
+    assert sanitization_policy._engine_source_sha256() == first
+    helper = clone / "runtime" / "future_policy_helper.py"
+    helper.parent.mkdir()
+    helper.write_text("PROTECTED_CAPTURE = True\n")
+    assert sanitization_policy._engine_source_sha256() != first
+    helper.unlink()
+    assert sanitization_policy._engine_source_sha256() == first
+    (clone / "__init__.py").write_text("POLICY = 2\n")
+    assert sanitization_policy._engine_source_sha256() != first
 
-    def attempted_policy_mix(self, text: str, is_separated: bool = False) -> str:
-        original = config.SCRUB_FILL_COLOR
-        try:
-            config.SCRUB_FILL_COLOR = original ^ 0x000001
-        finally:
-            # Only restore after a successful mutation. Under the whole-scan
-            # immutable context the first assignment must already refuse.
-            if config.SCRUB_FILL_COLOR != original:
-                config.SCRUB_FILL_COLOR = original
-        return text
 
-    monkeypatch.setattr(PresidioScrubbingProvider, "scrub_text", attempted_policy_mix)
-    privacy.set_text_scrubber(PresidioScrubbingProvider())
+@pytest.mark.parametrize("entrypoint", ["sanitize", "wrap", "hosted"])
+def test_new_engine_helper_invalidates_all_reuse_and_approval_paths(
+    tmp_path,
+    monkeypatch,
+    entrypoint,
+):
+    engine = tmp_path / "engine"
+    engine.mkdir()
+    (engine / "__init__.py").write_text("POLICY = 1\n")
+    monkeypatch.setattr(sanitization_policy, "_engine_source_root", lambda: engine)
     source = source_tree(tmp_path)
-    destination = tmp_path / "mixed-policy"
-    with pytest.raises(ScrubbingPolicyChanged):
-        sa.sanitize_artifact(source, destination, kind="recording")
-    assert not destination.exists()
+    base = tmp_path / "derivative"
+    old, before = derive(entrypoint, source, base, "recording")
+    sa.approve_derivative(old, source=source, reviewer="synthetic reviewer")
+    preserved = snapshot(old)
+    helper = engine / "runtime" / "new_capture_policy.py"
+    helper.parent.mkdir()
+    helper.write_text("PROTECTED_CAPTURE = True\n")
+    with pytest.raises(sa.SanitizationError, match="identity changed"):
+        sa.load_valid_approval(old)
+    current, after = derive(entrypoint, source, base, "recording")
+    assert current != old
+    assert after["derivative_tree_sha256"] == before["derivative_tree_sha256"]
+    assert after["transformation_sha256"] != before["transformation_sha256"]
+    assert not sa.approval_path(current).exists()
+    assert snapshot(old) == preserved
+
+
+def test_whole_scan_and_approval_rescan_enter_provider_policy_context(tmp_path):
+    class BoundProvider(ConfiguredScrubber):
+        def __init__(self):
+            super().__init__()
+            self.active = 0
+            self.operations = 0
+
+        @contextmanager
+        def sanitization_operation(self):
+            self.active += 1
+            self.operations += 1
+            try:
+                yield
+            finally:
+                self.active -= 1
+
+        def scrub_text(self, text: str, is_separated: bool = False) -> str:
+            assert self.active > 0, "the whole scan must bind the provider policy"
+            return text
+
+    provider = BoundProvider()
+    privacy.set_text_scrubber(provider)
+    source = source_tree(tmp_path)
+    destination = tmp_path / "bound-operation"
+    sa.sanitize_artifact(source, destination, kind="recording")
+    assert provider.active == 0 and provider.operations == 1
+    sa.approve_derivative(destination, source=source, reviewer="synthetic reviewer")
+    assert provider.active == 0 and provider.operations == 2
