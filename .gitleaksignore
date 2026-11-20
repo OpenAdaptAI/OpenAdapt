@@ -192,3 +192,8 @@ b0fd15ee8584cc3b646ae9bab04b4f9acbc59292:packages/flow/tests/fixtures/bundle_com
 b0fd15ee8584cc3b646ae9bab04b4f9acbc59292:packages/flow/tests/fixtures/bundle_compatibility/2.6.0/provenance.json:generic-api-key:85
 # PR #2239: a synthetic skill task key in a test admission body, not a key.
 ed329274d4cea9c0d1c939b7a453ba81acb30565:packages/flow/tests/test_sanitized_artifact.py:generic-api-key:1367
+
+# PR #2294: deliberately synthetic sign-in sentinel in the original e2e commit.
+# No real account uses it. This exact historical finding alone is excluded;
+# a new commit, path, rule or line still scans normally.
+4f919d5a2267cae1e8668d4a0aed3d1b0291f22a:packages/flow/tests/e2e/test_wrap_sign_in_e2e.py:generic-api-key:40
