@@ -1088,9 +1088,15 @@ async def _call_skill(python: str, server: Path, params: dict[str, Any]) -> dict
     """Call the compiled task's one tool over MCP (stdio), as a client would."""
 
     from mcp import ClientSession, StdioServerParameters
-    from mcp.client.stdio import stdio_client
+    from mcp.client.stdio import get_default_environment, stdio_client
 
-    target = StdioServerParameters(command=python, args=[str(server)])
+    from openadapt_flow.second_factor import SOURCE_ENV_KEYS
+
+    # The stdio client passes only a minimal environment. A sign-in's second
+    # factor source is operator configuration the cached run needs too.
+    env = get_default_environment()
+    env.update({k: os.environ[k] for k in SOURCE_ENV_KEYS if os.environ.get(k)})
+    target = StdioServerParameters(command=python, args=[str(server)], env=env)
     async with stdio_client(target) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()

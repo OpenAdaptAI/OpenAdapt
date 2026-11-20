@@ -74,6 +74,7 @@ from openadapt_flow.ir import (
     StructuralLocator,
 )
 from openadapt_flow.native_selection_capture import demonstrated_native_choice
+from openadapt_flow.second_factor import ONE_TIME_CODE_MARKER, ONE_TIME_CODE_PARAM
 
 #: Bound on waiting for a newly opened page's first navigation.
 _NEW_PAGE_LOAD_TIMEOUT_S = 10.0
@@ -406,6 +407,14 @@ class Recorder:
         field_label = self._focused_field_label()
         if field_label:
             event["field_label"] = field_label
+        if credential is not None and credential[0] == "one-time-code":
+            self._type_one_time_code(event, text, credential[1])
+            return
+        if text == ONE_TIME_CODE_MARKER:
+            raise CredentialFieldError(
+                "the one-time code marker was typed into a field that does not "
+                "ask for a one-time code; nothing was typed"
+            )
         if credential is not None and credential[0] == "unknown":
             if text in (self._credential_inputs or {}):
                 raise CredentialFieldError(
@@ -450,6 +459,40 @@ class Recorder:
         #: what they typed must not log it).
         self.last_type_withheld = credential is not None
         self._record(event, lambda: self._backend.type_text(text))
+
+    def _type_one_time_code(
+        self, event: dict[str, Any], text: str, region: tuple[int, int, int, int]
+    ) -> None:
+        """Type a code a person supplies into the focused one-time-code field.
+
+        The agent's text is discarded (it never has the code), unless it is a
+        declared input, which is refused: a code field takes only a code. The
+        event names :data:`ONE_TIME_CODE_PARAM` and holds no value.
+        """
+        from openadapt_flow import second_factor
+
+        if text in (self._credential_inputs or {}):
+            raise CredentialFieldError(
+                "a one-time code field takes only a code from a person, not a "
+                "declared input; nothing was typed"
+            )
+        try:
+            code = second_factor.obtain("code", "recording") or ""
+        except second_factor.SecondFactorRefused as refused:
+            raise CredentialFieldError(
+                f"a one-time code field needs a code from a person ({refused})"
+            ) from None
+        event.pop("text", None)
+        event.update(
+            param=ONE_TIME_CODE_PARAM,
+            secret=True,
+            one_time="code",
+            credential="one-time-code",
+            redacted_region=list(region),
+        )
+        self._credential_fields.append((self._active_surface, "one-time-code", region))
+        self.last_type_withheld = True
+        self._record(event, lambda: self._backend.type_text(code))
 
     def press(self, key: str) -> None:
         """Press a key or chord (e.g. ``'Enter'``), recording the event."""
@@ -1405,6 +1448,7 @@ class Recorder:
             "password",
             "new-password",
             "username",
+            "one-time-code",
         ):
             # A seam that answered but could not say: fail closed.
             return "unknown", _WHOLE_FRAME

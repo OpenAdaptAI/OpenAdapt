@@ -2363,6 +2363,19 @@ class Step(BaseModel):
             " compiler.annotate.FieldLabelAnnotator)."
         ),
     )
+    one_time: Optional[Literal["code", "approval"]] = Field(
+        default=None,
+        description=(
+            "A sign-in's second factor (see openadapt_flow.second_factor)."
+            " ``code``: a secret TYPE step into a one-time-code field; the"
+            " value comes from a person through the configured source when"
+            " the step runs, is typed once and is never stored. Its param is"
+            " not a workflow input or a secret parameter. ``approval``: a WAIT"
+            " step at a push-approval prompt; the run waits until a person"
+            " says they approved it on their device. Absent on every other"
+            " step, so older bundles keep their bytes."
+        ),
+    )
     native_selection: Optional[NativeSelectContract] = None
     choice: Optional[OptionChoice] = Field(
         default=None,
@@ -2574,11 +2587,34 @@ class Step(BaseModel):
         data: dict[str, Any] = handler(self)
         if self.target_param is None:
             data.pop("target_param", None)
+        if self.one_time is None:
+            data.pop("one_time", None)
         if self.native_selection is None:
             data.pop("native_selection", None)
         if self.choice is None:
             data.pop("choice", None)
         return data
+
+    @model_validator(mode="after")
+    def _validate_one_time(self) -> "Step":
+        if self.one_time == "code" and not (
+            self.action is ActionKind.TYPE
+            and self.secret
+            and self.param
+            and self.text is None
+        ):
+            raise ValueError(
+                "a one-time code step is a secret TYPE step that names its "
+                "param and carries no text"
+            )
+        if self.one_time == "approval" and (
+            self.action is not ActionKind.WAIT
+            or self.secret
+            or self.param is not None
+            or self.text is not None
+        ):
+            raise ValueError("a one-time approval step is a WAIT with no input")
+        return self
 
     @model_validator(mode="after")
     def _validate_target_param(self) -> "Step":

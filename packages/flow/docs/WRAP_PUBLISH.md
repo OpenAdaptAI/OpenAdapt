@@ -246,6 +246,11 @@ input only as a placeholder. Without it, the first run's instruction carries
 the values to your model provider. Cached and hosted runs make no model
 calls.
 
+A sign-in that then asks for a one-time code (a field marked
+`autocomplete="one-time-code"`) or a push approval is not a task input. The
+run asks a person for it when the step runs; see
+[SECOND_FACTOR.md](SECOND_FACTOR.md).
+
 `publish` lists the secret parameters under `secret_parameters` in the upload
 and leaves them out of the call's inputs. The endpoint is callable only after
 an owner or admin attaches a vault set that holds a key named exactly like
