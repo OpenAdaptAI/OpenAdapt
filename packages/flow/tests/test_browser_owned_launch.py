@@ -7,6 +7,7 @@ the acquisition cut points that cannot be cancelled deterministically live.
 
 from __future__ import annotations
 
+import subprocess
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 from types import SimpleNamespace
@@ -15,6 +16,7 @@ import pytest
 
 from openadapt_flow.backends import _browser_process, playwright_backend
 from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+from tests import _attached_chromium
 
 
 class Cancelled(BaseException):
@@ -300,3 +302,68 @@ def test_dispatcher_attempts_remaining_closers_after_cancellation():
         dispatcher.close()
     assert caught.value is primary
     assert events == ["cancelled", "remaining"]
+
+
+def test_owned_cdp_browser_reaps_after_startup_failure(monkeypatch, tmp_path):
+    events = []
+    primary = Cancelled()
+    executable = tmp_path / "synthetic-chromium"
+    options = ["--headless=new", "--remote-debugging-address=127.0.0.1"]
+    launch = []
+
+    class Process:
+        stderr = SimpleNamespace(close=lambda: events.append("close-pipe"))
+        stopped = False
+
+        def poll(self):
+            return None
+
+        def terminate(self):
+            events.append("terminate")
+
+        def wait(self, *, timeout):
+            events.append(("wait", timeout))
+            if not self.stopped:
+                raise subprocess.TimeoutExpired(executable, timeout)
+
+        def kill(self):
+            events.append("kill")
+            self.stopped = True
+
+    process = Process()
+
+    def popen(argv, **kwargs):
+        launch.append((argv, kwargs))
+        return process
+
+    monkeypatch.setattr(
+        _attached_chromium,
+        "subprocess",
+        SimpleNamespace(
+            Popen=popen,
+            DEVNULL=subprocess.DEVNULL,
+            TimeoutExpired=subprocess.TimeoutExpired,
+        ),
+    )
+    with pytest.raises(Cancelled) as caught:
+        with _attached_chromium.owned_chromium(
+            executable, options, "about:blank", stderr=subprocess.PIPE, wait_s=5
+        ) as browser:
+            assert browser is process
+            raise primary
+
+    assert caught.value is primary
+    assert launch == [
+        (
+            [
+                str(executable),
+                "--headless=new",
+                "--remote-debugging-address=127.0.0.1",
+                "--use-mock-keychain",
+                "--password-store=basic",
+                "about:blank",
+            ],
+            {"stdout": subprocess.DEVNULL, "stderr": subprocess.PIPE},
+        )
+    ]
+    assert events == ["terminate", ("wait", 5), "kill", ("wait", 5), "close-pipe"]

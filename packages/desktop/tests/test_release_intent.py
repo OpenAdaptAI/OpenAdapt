@@ -48,9 +48,6 @@ prepare_release = _load("prepare_release")
 check_release_intent = _load("check_release_intent")
 check_release_consistency = _load("check_release_consistency")
 
-# Any subprocess in this module that would fork pytest fails; see conftest.py.
-pytestmark = pytest.mark.usefixtures("no_subprocess_fork")
-
 
 # These tests start thousands of real git processes, many of them from the
 # release scripts under test. Each git call gets no terminal input, no editor,

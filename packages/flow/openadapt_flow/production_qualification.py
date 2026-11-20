@@ -33,6 +33,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from openadapt_flow.ir import Workflow
 from openadapt_flow.private_file import (
     PrivateFileAclError,
+    open_binary,
     windows_descriptor_has_private_acl,
 )
 from openadapt_flow.qualification_admission_v2 import (
@@ -203,7 +204,7 @@ def _read_private_json(path: Path) -> object:
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
     try:
-        descriptor = os.open(path, flags)
+        descriptor = open_binary(path, flags)
     except OSError as exc:
         raise ProductionQualificationAuthorityError(
             "qualification authority file could not be opened safely"

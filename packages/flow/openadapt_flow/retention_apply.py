@@ -593,7 +593,6 @@ def apply_retention(
             os.close(root_fd)
         if _source(root, authorization, digest, resume=True):
             raise RetentionError("retention_incomplete")
-        sealed_set._forget(root)
     return {
         **preview,
         "remaining_files": 0,

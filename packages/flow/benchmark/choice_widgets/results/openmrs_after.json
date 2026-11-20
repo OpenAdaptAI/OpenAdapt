@@ -1,0 +1,250 @@
+{
+  "app": "openmrs",
+  "cases": {
+    "demo": {
+      "detail": "step_005: Step 'step_005' (click 'No') clicks a control in a repeated row that teach time did not record as a row, and other rows show the same control, and a consequential write follows (identity_uncounted) \u2014 acting could open another record; refusing to act",
+      "expected": {
+        "estimated": true,
+        "family": "Rao7d8cd9d",
+        "gender": "F",
+        "given": "Meena",
+        "relationship": "Sibling",
+        "relative": "Richard Jones"
+      },
+      "rows": [],
+      "run_success": false,
+      "score": "safe_halt",
+      "seconds": 49.3,
+      "step_results": [
+        {
+          "input_verified": null,
+          "intent": "click recorded visual target",
+          "ok": true,
+          "step": "step_000"
+        },
+        {
+          "input_verified": true,
+          "intent": "type <givenName>",
+          "ok": true,
+          "step": "step_001"
+        },
+        {
+          "input_verified": null,
+          "intent": "click recorded visual target",
+          "ok": true,
+          "step": "step_002"
+        },
+        {
+          "input_verified": true,
+          "intent": "type <familyName>",
+          "ok": true,
+          "step": "step_003"
+        },
+        {
+          "input_verified": null,
+          "intent": "click 'Female'",
+          "ok": true,
+          "step": "step_004"
+        },
+        {
+          "input_verified": null,
+          "intent": "click 'No'",
+          "ok": false,
+          "step": "step_005"
+        }
+      ]
+    },
+    "heldout": {
+      "detail": "step_005: Step 'step_005' (click 'No') clicks a control in a repeated row that teach time did not record as a row, and other rows show the same control, and a consequential write follows (identity_uncounted) \u2014 acting could open another record; refusing to act",
+      "expected": {
+        "estimated": true,
+        "family": "Rao7d8cd9h",
+        "gender": "F",
+        "given": "Meena",
+        "relationship": "Parent",
+        "relative": "Richard Jones"
+      },
+      "rows": [],
+      "run_success": false,
+      "score": "safe_halt",
+      "seconds": 49.2,
+      "step_results": [
+        {
+          "input_verified": null,
+          "intent": "click recorded visual target",
+          "ok": true,
+          "step": "step_000"
+        },
+        {
+          "input_verified": true,
+          "intent": "type <givenName>",
+          "ok": true,
+          "step": "step_001"
+        },
+        {
+          "input_verified": null,
+          "intent": "click recorded visual target",
+          "ok": true,
+          "step": "step_002"
+        },
+        {
+          "input_verified": true,
+          "intent": "type <familyName>",
+          "ok": true,
+          "step": "step_003"
+        },
+        {
+          "input_verified": null,
+          "intent": "click 'Female'",
+          "ok": true,
+          "step": "step_004"
+        },
+        {
+          "input_verified": null,
+          "intent": "click 'No'",
+          "ok": false,
+          "step": "step_005"
+        }
+      ]
+    },
+    "missing_option": {
+      "detail": "step_005: Step 'step_005' (click 'No') clicks a control in a repeated row that teach time did not record as a row, and other rows show the same control, and a consequential write follows (identity_uncounted) \u2014 acting could open another record; refusing to act",
+      "expected": null,
+      "rows": [],
+      "run_success": false,
+      "score": "safe_halt",
+      "seconds": 48.8,
+      "step_results": [
+        {
+          "input_verified": null,
+          "intent": "click recorded visual target",
+          "ok": true,
+          "step": "step_000"
+        },
+        {
+          "input_verified": true,
+          "intent": "type <givenName>",
+          "ok": true,
+          "step": "step_001"
+        },
+        {
+          "input_verified": null,
+          "intent": "click recorded visual target",
+          "ok": true,
+          "step": "step_002"
+        },
+        {
+          "input_verified": true,
+          "intent": "type <familyName>",
+          "ok": true,
+          "step": "step_003"
+        },
+        {
+          "input_verified": null,
+          "intent": "click 'Female'",
+          "ok": true,
+          "step": "step_004"
+        },
+        {
+          "input_verified": null,
+          "intent": "click 'No'",
+          "ok": false,
+          "step": "step_005"
+        }
+      ]
+    }
+  },
+  "demonstration_saved": [
+    {
+      "estimated": true,
+      "family": "Iyer7d8cd9",
+      "gender": "F",
+      "given": "Kavya",
+      "relationships": [
+        "Sibling/Sibling:Richard Jones|Kavya Iyer7d8cd9"
+      ]
+    }
+  ],
+  "label": "after 194666af960f0c577115d07a91a10f026a7c8c09",
+  "params": [
+    "familyName",
+    "givenName",
+    "relationships[0].relationshipType"
+  ],
+  "pipeline": "ok",
+  "run": "7d8cd9",
+  "steps": [
+    {
+      "action": "click",
+      "choice": null,
+      "dialog": null,
+      "intent": "click recorded visual target"
+    },
+    {
+      "action": "type",
+      "choice": null,
+      "dialog": null,
+      "intent": "type <givenName>"
+    },
+    {
+      "action": "click",
+      "choice": null,
+      "dialog": null,
+      "intent": "click recorded visual target"
+    },
+    {
+      "action": "type",
+      "choice": null,
+      "dialog": null,
+      "intent": "type <familyName>"
+    },
+    {
+      "action": "click",
+      "choice": null,
+      "dialog": null,
+      "intent": "click 'Female'"
+    },
+    {
+      "action": "click",
+      "choice": null,
+      "dialog": null,
+      "intent": "click 'No'"
+    },
+    {
+      "action": "click",
+      "choice": null,
+      "dialog": null,
+      "intent": "click 'Estimated age in years'"
+    },
+    {
+      "action": "type",
+      "choice": null,
+      "dialog": null,
+      "intent": "type '044'"
+    },
+    {
+      "action": "click",
+      "choice": null,
+      "dialog": null,
+      "intent": "click 'Family Name'"
+    },
+    {
+      "action": "select_option",
+      "choice": "listed_option",
+      "dialog": null,
+      "intent": "choose '10000GX - Richard Jones'"
+    },
+    {
+      "action": "select_option",
+      "choice": "native_select",
+      "dialog": null,
+      "intent": "choose <relationships[0].relationshipType>"
+    },
+    {
+      "action": "click",
+      "choice": null,
+      "dialog": null,
+      "intent": "click 'Register patient'"
+    }
+  ]
+}

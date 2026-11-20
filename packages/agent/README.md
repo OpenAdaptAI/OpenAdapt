@@ -7,7 +7,7 @@
 
 Your AI agent decides what to enter. OpenAdapt enters it in the app and checks that it saved.
 
-Use it if your agent reads referrals, intake forms, or authorizations and works out what belongs in the record, but a person still types the result into an app with no usable API. Examples are an electronic medical record (EMR) and a payer portal. This package is the tool your agent calls to do that typing.
+Use it if your agent works out what belongs in a record, but a person still types the result into a web, desktop or remote-desktop app with no usable API. An electronic medical record (EMR) and a payer portal are examples of highly regulated settings where it fits. This package is the tool your agent calls to do that typing.
 
 - A person or your agent shows OpenAdapt the task in the real app. OpenAdapt replays those steps, and by default a run makes no calls to a hosted AI model.
 - Before it types, OpenAdapt checks that the right record is open. After it saves, it reads the record back.
@@ -163,12 +163,12 @@ The check that stops a second entry covers one runs folder. See `--runs-dir` und
 ### Read the other fields
 
 - `label`: a short status you can display, such as "Done and checked".
-- `reason`: a code from a fixed list that names the cause, such as `invalid_input` or `request_id_conflict`. Every code is in `REASONS` in [contract.py](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/openadapt_flow/agent/contract.py), and [docs/DESIGN.md](docs/DESIGN.md#the-result-contract) explains how each one is chosen.
+- `reason`: a code from a fixed list that names the cause, such as `invalid_input` or `request_id_conflict`. Every code is in `REASONS` in [contract.py](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/openadapt_flow/agent/contract.py), and [docs/DESIGN.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/agent/docs/DESIGN.md#the-result-contract) explains how each one is chosen.
 - `what_happened` and `next_action`: fixed sentences you can show a person. They never contain input values or screen text.
 - `proof`: `local` for a `done` that was checked on your customer's computer, `simulated` for a sandbox run that didn't open the app, and `none` for every other outcome.
 - `model_calls`: on runs that reached Flow, how many AI model calls the run made. It's 0 unless model grounding, a fallback that asks an AI model where to click, is turned on (see [Security](#security)).
 - `record_changed`: `yes`, `no`, or `unknown`. It's `no` only when OpenAdapt can show that nothing was written. `request_id_conflict` gives `unknown`, because the earlier request may have saved.
-- `needs_repair`: on `needs_review` or `did_not_run` results where the run stopped at a step. It gives the step id, the reason, and a one-time `repair_token`, and never a screen. If a person turned on screen access for repairs, your agent can call `get_repair_screen` and `teach_repair` to propose a fix, which a person must approve. See [docs/REPAIR.md](docs/REPAIR.md).
+- `needs_repair`: on `needs_review` or `did_not_run` results where the run stopped at a step. It gives the step id, the reason, and a one-time `repair_token`, and never a screen. If a person turned on screen access for repairs, your agent can call `get_repair_screen` and `teach_repair` to propose a fix, which a person must approve. See [docs/REPAIR.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/agent/docs/REPAIR.md).
 
 ## Three tools
 
@@ -240,7 +240,7 @@ The SDK starts the server with only a few environment variables. To pass others,
 
 To let your agent add workflows itself, see [Teach a new workflow from your agent](#teach-a-new-workflow-from-your-agent).
 
-[scripts/smoke_client.py](scripts/smoke_client.py) is a fuller example that runs every sandbox case. From a clone of this repository, run `pip install -e .`, then:
+[scripts/smoke_client.py](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/agent/scripts/smoke_client.py) is a fuller example that runs every sandbox case. From a clone of this repository, run `pip install -e .`, then:
 
 ```bash
 python scripts/smoke_client.py -- uvx --python 3.12 openadapt-agent serve
@@ -314,7 +314,7 @@ With `--mode attended`, your agent can send a decision with `continue_attention`
 openadapt-flow console --attend --allow-actions --bundles DIR --runs RUNS_DIR
 ```
 
-[docs/DESIGN.md](docs/DESIGN.md#needs-attention) describes each decision. After a person decides, `get_run` shows the new outcome.
+[docs/DESIGN.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/agent/docs/DESIGN.md#needs-attention) describes each decision. After a person decides, `get_run` shows the new outcome.
 
 ### Describe a workflow with a card
 
@@ -341,13 +341,13 @@ Card text reaches your agent's model, so keep patient details out of it. The ser
 Each skill is named after its workflow, so `enter_referral` becomes `enter-referral`. Two names are reserved:
 
 - `computer-use`, because an assistant would load that skill for every request to control the screen.
-- `openadapt-gui-write`, the general skill for any workflow that this repository ships at [skills/openadapt-gui-write/SKILL.md](skills/openadapt-gui-write/SKILL.md).
+- `openadapt-gui-write`, the general skill for any workflow that this repository ships at [skills/openadapt-gui-write/SKILL.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/agent/skills/openadapt-gui-write/SKILL.md).
 
 If a workflow's name would come out as either one, emit-skill names the skill `openadapt-` plus the workflow's id, such as `openadapt-workflow-1a2b3c4d5e6f7a8b9c0d1e2f`. An emitted skill never replaces the general skill in the same folder.
 
 ### Record a first workflow
 
-`serve --authoring` adds recording tools, such as `observe`, `start_record`, `click`, `pause_for_input`, `stop_record`, `compile`, and `admit`. [docs/DESIGN.md](docs/DESIGN.md#recording-tools) lists all 14. A person or your agent shows the task with them, in a web app, a native Windows app, or an RDP or Citrix session, and a person stays at the computer to sign in and accept the result. A task can be learned from one or more demonstrations. The recording server doesn't turn on runs.
+`serve --authoring` adds recording tools, such as `observe`, `start_record`, `click`, `pause_for_input`, `stop_record`, `compile`, and `admit`. [docs/DESIGN.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/agent/docs/DESIGN.md#recording-tools) lists all 14. A person or your agent shows the task with them, in a web app, a native Windows app, or an RDP or Citrix session, and a person stays at the computer to sign in and accept the result. A task can be learned from one or more demonstrations. The recording server doesn't turn on runs.
 
 1. Register a recording server. The `tutorial` extra brings the browser driver that `--url` needs. `--url` opens the app in a new Chromium window with no saved sign-ins, and `--headed`, which `--url` requires, keeps that window visible so the person can sign in.
 
@@ -384,7 +384,7 @@ ChatGPT and Claude in a web browser can't start a server on your computer. To re
    openadapt-agent authoring connect '<runner link>'
    ```
 
-It claims the job, polls openadapt.ai over outgoing HTTPS, and asks you in the terminal before a chat account may drive it. Don't confuse it with the launcher's `openadapt connect`, which pairs a computer with OpenAdapt Cloud. [docs/MAILBOX_CLI.md](docs/MAILBOX_CLI.md) has the details.
+It claims the job, polls openadapt.ai over outgoing HTTPS, and asks you in the terminal before a chat account may drive it. Don't confuse it with the launcher's `openadapt connect`, which pairs a computer with OpenAdapt Cloud. [docs/MAILBOX_CLI.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/agent/docs/MAILBOX_CLI.md) has the details.
 
 ### Guard an agent you already run
 
@@ -501,7 +501,7 @@ In the middle arm, the agent opens a job and uses each item's `request_id` but k
 python packages/agent/tests/ledger_demo.py
 ```
 
-Results: [docs/task-ledger-measurement.json](docs/task-ledger-measurement.json).
+Results: [docs/task-ledger-measurement.json](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/agent/docs/task-ledger-measurement.json).
 
 ## Security
 
@@ -513,7 +513,7 @@ Results: [docs/task-ledger-measurement.json](docs/task-ledger-measurement.json).
 - Model grounding sends a screenshot to an AI model to find where to click when the recorded control can't be found. It's off by default. The deployment config can turn it on, and `--allow-model-grounding` turns it on for decisions on stopped runs. When it's on, screenshots can leave the computer.
 - `--allow-synthetic-recorded-defaults` fills missing inputs with values from the recording. Use it only for synthetic demos, because nothing checks that a workflow is synthetic.
 
-Report vulnerabilities as described in [SECURITY.md](SECURITY.md).
+Report vulnerabilities as described in [SECURITY.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/agent/SECURITY.md).
 
 ## Seals
 
@@ -559,7 +559,7 @@ Under Flow's `standard` and `regulated` profiles, each workflow version also nee
 
 ## Package history
 
-Before version 2, this package ran AI agents that drove the screen. The name now refers to the agents that call it. A customer's workflows are supplied with `--bundles` and never ship in this package or its registry listing, and an install from a registry starts read-only. The MCP registry reads [server.json](server.json), Smithery packs from [manifest.json](manifest.json), and [llms.txt](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/llms.txt) describes the package for AI assistants. See [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md).
+Before version 2, this package ran AI agents that drove the screen. The name now refers to the agents that call it. A customer's workflows are supplied with `--bundles` and never ship in this package or its registry listing, and an install from a registry starts read-only. The MCP registry reads [server.json](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/agent/server.json), Smithery packs from [manifest.json](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/agent/manifest.json), and [llms.txt](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/llms.txt) describes the package for AI assistants. See [docs/DISTRIBUTION.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/agent/docs/DISTRIBUTION.md).
 
 <!-- mcp-name: io.github.OpenAdaptAI/openadapt-agent -->
 
@@ -580,4 +580,4 @@ npx -y @anthropic-ai/mcpb@2.1.2 pack . openadapt-agent.mcpb
 
 ## License
 
-MIT. See [LICENSE](LICENSE). The full design is in [docs/DESIGN.md](docs/DESIGN.md), and product docs are at [docs.openadapt.ai](https://docs.openadapt.ai).
+MIT. See [LICENSE](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/agent/LICENSE). The full design is in [docs/DESIGN.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/agent/docs/DESIGN.md), and product docs are at [docs.openadapt.ai](https://docs.openadapt.ai).

@@ -70,8 +70,14 @@ no other heading or verdict word; any other shape fails.
 - A head binding that is not the exact `Reviewed-Head: <full SHA>` line, such
   as a bold, listed, prefixed or Unicode look-alike binding.
 
-Only comments from accounts whose `author_association` is `OWNER`, `MEMBER` or
-`COLLABORATOR` count; others neither approve nor block. A review bound to an
+Only independent review comments from accounts whose `author_association` is
+`OWNER`, `MEMBER` or `COLLABORATOR` count; other accounts cannot approve or
+veto a review. The pull request author's own declaration is different: its
+API-reported login must match the pull request author, regardless of account
+association. This supplies self-reported vendor provenance only and never
+counts as an independent review. A third party cannot declare the author's
+vendor. The existing exact-head, edit and conflicting-declaration rules apply
+to external authors too. A review bound to an
 earlier head is ignored, unless it also refers to the current head. Text inside
 Markdown code fences and `>` quotes is an example and never counts as a review
 or a BLOCK. HTML comments (`<!-- -->`) can only remove approval: an APPROVE

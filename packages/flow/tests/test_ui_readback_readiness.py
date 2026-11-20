@@ -10,6 +10,7 @@ import pytest
 
 from openadapt_flow import _browser_readiness as readiness
 from openadapt_flow.runtime.effects.ui_readback import (
+    _NATIVE_SIGN_IN_FORM,
     PlaywrightReadbackDriver,
     ReadbackSessionError,
     UiReadbackSpec,
@@ -34,10 +35,16 @@ class Handle:
 class Submitter:
     """The sign-in button of a native form that POSTs to the declared URL."""
 
+    def __init__(self, arm_result: object = True) -> None:
+        self.arm_result = arm_result
+
     def element_handle(self) -> "Submitter":
         return self
 
-    def evaluate(self, *args: Any) -> dict[str, str]:
+    def evaluate(self, expression: str, *args: Any) -> object:
+        if expression == "e => window.__openadaptReadbackAuth?.arm(e) === true":
+            return self.arm_result
+        assert expression == _NATIVE_SIGN_IN_FORM
         return {"method": "post", "target": "", "action": SIGN_IN_URL}
 
     def owner_frame(self) -> object:
@@ -202,12 +209,12 @@ def test_dynamic_readback_launch_requires_progress_before_navigation_and_input(
                 "schedule",
                 "progress",
                 "cleanup",
+                "read_only_guard",
                 "goto",
                 "fill",
                 "fill",
                 "click",
                 "signed_in",
-                "read_only_guard",
             ]
         assert browser.contexts[1].options == {
             "service_workers": "block",
@@ -226,3 +233,15 @@ def test_dynamic_readback_launch_requires_progress_before_navigation_and_input(
     )
     assert browser.closed and stopped == [True]
     assert session._username == session._password == ""
+
+
+@pytest.mark.parametrize("arm_result", [False, 1, {"armed": True}])
+def test_native_sign_in_arm_requires_literal_true(arm_result: object) -> None:
+    session = PlaywrightReadbackDriver().open(
+        resolve_spec(spec("chromium")), "synthetic-reader", "synthetic-password"
+    )
+    session._page = SimpleNamespace(locator=lambda selector: Submitter(arm_result))
+    with pytest.raises(ReadbackSessionError, match="could not be armed"):
+        session._arm_sign_in()
+    assert session._auth_allowance is None
+    assert session._auth_frame is None

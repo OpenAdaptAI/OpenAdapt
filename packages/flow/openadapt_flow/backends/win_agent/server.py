@@ -2472,13 +2472,8 @@ def _process_image_identifier(pid: int) -> Optional[str]:
     return _bounded_application_identifier(path) if path else None
 
 
-#: File identity -> sha256 of the executable's bytes. The key holds the path,
-#: size, modification and change times and the NTFS file id, so a file
-#: replaced in place or by rename is hashed again. An executable rarely
-#: changes while the agent runs, and hashing a large one on every observation
-#: would sit between resolution and input.
-_IMAGE_DIGESTS: dict[tuple[str, int, int, int, int], str] = {}
-_IMAGE_DIGEST_CACHE_SIZE = 8
+#: File-size bound for an image digest. Each request re-reads current bytes;
+#: metadata can reject concurrent changes but never authorizes cached identity.
 _IMAGE_DIGEST_MAX_BYTES = 2 * 1024 * 1024 * 1024
 
 
@@ -2498,21 +2493,15 @@ def _image_file_digest(path: str) -> Optional[str]:
 
     try:
         key = _file_key(path)
-        cached = _IMAGE_DIGESTS.pop(key, None)
-        if cached is None:
-            if key[1] > _IMAGE_DIGEST_MAX_BYTES:
-                return None
-            digest = hashlib.sha256()
-            with open(path, "rb") as image:
-                for chunk in iter(lambda: image.read(1024 * 1024), b""):
-                    digest.update(chunk)
-            if _file_key(path) != key:
-                return None
-            cached = f"sha256:{digest.hexdigest()}"
-        _IMAGE_DIGESTS[key] = cached
-        while len(_IMAGE_DIGESTS) > _IMAGE_DIGEST_CACHE_SIZE:
-            del _IMAGE_DIGESTS[next(iter(_IMAGE_DIGESTS))]
-        return cached
+        if key[1] > _IMAGE_DIGEST_MAX_BYTES:
+            return None
+        digest = hashlib.sha256()
+        with open(path, "rb") as image:
+            for chunk in iter(lambda: image.read(1024 * 1024), b""):
+                digest.update(chunk)
+        if _file_key(path) != key:
+            return None
+        return f"sha256:{digest.hexdigest()}"
     except Exception:  # noqa: BLE001 - unavailable means unverifiable
         return None
 

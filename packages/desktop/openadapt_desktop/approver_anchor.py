@@ -315,9 +315,9 @@ def _strip_mac_acl(path: Path) -> None:
     ``/Library/Application Support``."""
 
     if sys.platform == "darwin":
-        import subprocess
+        from openadapt_desktop import child_process
 
-        subprocess.run(["/bin/chmod", "-h", "-N", str(path)], check=True, capture_output=True)
+        child_process.run(["/bin/chmod", "-h", "-N", str(path)], check=True, capture_output=True)
 
 
 def _write_posix(path: Path, payload: bytes, trusted_uids: frozenset[int]) -> None:

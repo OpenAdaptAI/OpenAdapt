@@ -125,10 +125,7 @@ pub fn setup_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn show_main(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.set_focus();
-    }
+    crate::window::show_main(app);
 }
 
 /// Reflect shadow mode's on/off state in the tray. Called by the window

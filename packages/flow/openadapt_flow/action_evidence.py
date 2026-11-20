@@ -184,6 +184,10 @@ def _delivery_receipt_error(
     *,
     params: Mapping[str, RuntimeParamScalar],
 ) -> Optional[str]:
+    if step.choice is not None:
+        # docs/CHOICES.md: a dropdown choice is proven by its read-back, not
+        # by a typed delivery receipt, so receipt-bound runs refuse it.
+        return "dropdown choice steps carry no delivery receipt; refusing"
     receipt = result.delivery_receipt
     if receipt is None:
         return "GUI action lacks its exact delivery receipt"

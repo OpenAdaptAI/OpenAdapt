@@ -53,6 +53,6 @@ def test_readme_leaves_governance_language_to_the_compliance_page() -> None:
     # One link, absolute so it also works on the PyPI project page.
     assert len(re.findall(r"docs/COMPLIANCE\.md\)", readme)) == 1
     assert (
-        "(https://github.com/OpenAdaptAI/openadapt-capture/blob/main/docs/COMPLIANCE.md)"
+        "(https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/capture/docs/COMPLIANCE.md)"
         in readme
     )
