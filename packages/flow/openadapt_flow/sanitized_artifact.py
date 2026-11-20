@@ -556,7 +556,8 @@ _SHAPES: dict[str, re.Pattern[str]] = {
 
 _AUTH_REFERENCE_SHAPES = frozenset({"env_name", "http_header"})
 _AUTH_SECRET_PREFIX = re.compile(
-    r"^(?:sk_|rk_|gh[pousr]_|github_pat_|xox[abprs]-|glpat-)", re.IGNORECASE
+    r"^(?:[sr]k[-_]|gh[pousr]_|github[-_]pat[-_]|xox[a-z]*[-_]|xapp[-_]|glpat[-_])",
+    re.IGNORECASE,
 )
 
 
@@ -571,6 +572,11 @@ def _auth_reference_is_identifier(value: str) -> bool:
     from openadapt_flow.report_redaction import redact_text
 
     if _AUTH_SECRET_PREFIX.match(value) or redact_text(value)[1]:
+        return False
+    # Hex has a maximum entropy of four bits per character. Most finite
+    # samples fall below that maximum, so classify the opaque alphabet/length
+    # directly instead of relying on the general entropy threshold.
+    if re.search(r"[A-Fa-f0-9]{20,}", value):
         return False
     for run in re.findall(r"[A-Za-z0-9]{20,}", value):
         probabilities = [run.count(char) / len(run) for char in set(run)]
@@ -589,6 +595,7 @@ class _DeclaredFields:
         *,
         keys: Optional[dict[str, str]] = None,
         recurse: tuple[str, ...] = (),
+        reference_records: tuple[str, ...] = (),
         schema: Optional[tuple[str, frozenset[str]]] = None,
         derived: Optional[dict[str, str]] = None,
         comments: tuple[str, ...] = (),
@@ -598,6 +605,7 @@ class _DeclaredFields:
         #: A dotted path under which the same declaration applies again (a
         #: repaired admission embeds the admission it replaced).
         self.recurse = tuple(tuple(p.split(".")) for p in recurse)
+        self.reference_records = tuple(tuple(p.split(".")) for p in reference_records)
         self.schema = schema
         self.derived = [
             (tuple(p.split(".")), name) for p, name in (derived or {}).items()
@@ -678,6 +686,41 @@ class _DeclaredFields:
                     path = path[len(prefix) :]
                     changed = True
         return path
+
+    def invalid_reference_record(self, path: tuple[str | int, ...], value: Any) -> bool:
+        """Close a reference record before walking any unknown keys or values.
+
+        Only declared reference leaves, each a string or null, belong in the
+        record. Unknown keys (which may themselves hold credentials), nested
+        containers and other scalar types redact the whole record. A missing
+        optional record remains null. The declaration supplies the complete
+        field set; no detector decides whether an extra field is safe.
+        """
+        local = self._local(path)
+        for record in self.reference_records:
+            if not self._match(record, local):
+                continue
+            if value is None:
+                return False
+            allowed = {
+                pattern[-1]
+                for pattern, shape in self.fields
+                if len(pattern) == len(record) + 1
+                and self._match(record, pattern[:-1])
+                and shape in _AUTH_REFERENCE_SHAPES
+            }
+            return (
+                not isinstance(value, dict)
+                or not value
+                or not allowed
+                or any(
+                    not isinstance(key, str)
+                    or key not in allowed
+                    or (child is not None and not isinstance(child, str))
+                    for key, child in value.items()
+                )
+            )
+        return False
 
     def keeps_value(self, path: tuple[str | int, ...], value: str) -> bool:
         local = self._local(path)
@@ -855,6 +898,7 @@ def _declared_bundle_files() -> dict[str, _DeclaredFields]:
             "effects.*.key_field": _CONTENT,
         },
         keys={"effects.*.match": _CONTENT, "effects.*.composite_key": _CONTENT},
+        reference_records=("verifier.auth",),
         schema=("schema_version", frozenset({"openadapt.verify/v1"})),
         derived={"effects.*.probe": "new_record_probe"},
         # The attribution line ``openadapt wrap`` writes when a person
@@ -953,6 +997,11 @@ def _scrub_json_value(
     corrupting safe ``*.png`` references while keeping path and file content
     transformations bound to the same derivative inventory.
     """
+
+    if fields is not None and fields.invalid_reference_record(path, value):
+        from openadapt_flow.report_redaction import REDACTED
+
+        return REDACTED, []
 
     aggregate: dict[tuple[str, str, str], dict[str, Any]] = {}
     if isinstance(value, dict):
@@ -1124,6 +1173,37 @@ def _yaml_comments(raw: str) -> list[str]:
     return [line[line.index("#") + 1 :] for line in rest.splitlines() if "#" in line]
 
 
+def _load_reference_yaml(raw: str) -> Any:
+    """A reference document must expose every field before any exemption.
+
+    Duplicate/merged keys can hide a discarded value while byte preservation
+    retains it in the outbound text. Reject that ambiguity instead of relying
+    on the parsed last value or on a provider noticing the discarded scalar.
+    """
+    import yaml
+
+    class ReferenceLoader(yaml.SafeLoader):
+        pass
+
+    def unique_mapping(loader: Any, node: Any) -> dict[Any, Any]:
+        loader.flatten_mapping(node)
+        result: dict[Any, Any] = {}
+        for key, value in loader.construct_pairs(node):
+            try:
+                repeated = key in result
+            except TypeError as exc:
+                raise SanitizationError(
+                    "Reference document has an invalid field"
+                ) from exc
+            if repeated:
+                raise SanitizationError("Reference document repeats a field")
+            result[key] = value
+        return result
+
+    ReferenceLoader.add_constructor("tag:yaml.org,2002:map", unique_mapping)
+    return yaml.load(raw, Loader=ReferenceLoader)
+
+
 def _scrub_declared_yaml_text(
     raw: str,
     *,
@@ -1142,7 +1222,9 @@ def _scrub_declared_yaml_text(
     """
     import yaml
 
-    parsed = yaml.safe_load(raw)
+    parsed = (
+        _load_reference_yaml(raw) if fields.reference_records else yaml.safe_load(raw)
+    )
     transformed, applied = _scrub_json_value(
         parsed,
         scrubber=scrubber,
