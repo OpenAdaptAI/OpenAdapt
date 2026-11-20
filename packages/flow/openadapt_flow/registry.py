@@ -38,12 +38,12 @@ import hashlib
 import json
 import os
 import re
-import shutil
 import tempfile
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Iterator, Optional
 from urllib.parse import urljoin, urlsplit
 
 DEFAULT_INDEX_URL = (
@@ -185,11 +185,13 @@ def _state_path() -> Path:
 
 
 def _read_state() -> dict[str, Any]:
+    from openadapt_flow.registry_snapshot import json_object
+
     try:
-        state = json.loads(_state_path().read_text(encoding="utf-8"))
+        state = json_object(_state_path().read_bytes(), "registry rollback state")
     except FileNotFoundError:
         return {}
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, RegistryError) as exc:
         raise RegistryError(
             "registry rollback state is unreadable; it was not reset"
         ) from exc
@@ -233,29 +235,41 @@ def serial_problem(key: str, serial: int) -> Optional[str]:
     return None
 
 
-def record_serial(key: str, serial: int) -> None:
-    """Atomically accept an occurrence without lowering its publisher mark."""
+@contextmanager
+def _state_guard() -> Iterator[None]:
+    """Serialize publisher acceptance and the installation it permits."""
     from openadapt_flow.fleet._lock import exclusive_lock
 
+    with exclusive_lock(_state_path().with_suffix(".lock")):
+        yield
+
+
+def _record_serial_locked(key: str, serial: int) -> None:
+    """Accept a mark while the shared state/install guard is already held."""
+    if not isinstance(key, str) or not key or type(serial) is not int or serial < 0:
+        raise RegistryError("invalid publisher identity or serial")
     path = _state_path()
-    with exclusive_lock(path.with_suffix(".lock")):
-        state = _read_state()
-        serials = state.setdefault("serials", {})
-        seen = serials.get(key)
-        if seen is not None and serial < seen:
-            raise RegistryError(
-                "the index was superseded by a newer publisher occurrence"
-            )
-        if seen == serial:
-            return
-        serials[key] = serial
-        tmp = path.with_suffix(".tmp")
-        with tmp.open("w", encoding="utf-8") as stream:
-            json.dump(state, stream, indent=2, sort_keys=True)
-            stream.write("\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-        tmp.replace(path)
+    state = _read_state()
+    serials = state.setdefault("serials", {})
+    seen = serials.get(key)
+    if seen is not None and serial < seen:
+        raise RegistryError("the index was superseded by a newer publisher occurrence")
+    if seen == serial:
+        return
+    serials[key] = serial
+    tmp = path.with_suffix(".tmp")
+    with tmp.open("w", encoding="utf-8") as stream:
+        json.dump(state, stream, indent=2, sort_keys=True)
+        stream.write("\n")
+        stream.flush()
+        os.fsync(stream.fileno())
+    tmp.replace(path)
+
+
+def record_serial(key: str, serial: int) -> None:
+    """Atomically accept an occurrence without overtaking an in-flight install."""
+    with _state_guard():
+        _record_serial_locked(key, serial)
 
 
 @dataclass(frozen=True)
@@ -597,7 +611,11 @@ def _pull_snapshot(
         raise RegistryError(f"{dest} exists; pass --force to replace it")
     base = _join(index_url, entry.raw["path"].rstrip("/") + "/")
     archive = entry.raw.get("archive")
-    with tempfile.TemporaryDirectory() as tmp:
+    # Stage privately on the destination filesystem so publication is a rename.
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(
+        prefix=".openadapt-pull-", dir=dest.parent, ignore_cleanup_errors=True
+    ) as tmp:
         stage = Path(tmp) / "bundle"
         if (
             archive
@@ -632,30 +650,52 @@ def _pull_snapshot(
             Workflow.load(stage)
         except Exception as exc:  # noqa: BLE001 - report any load failure as one error
             raise RegistryError(f"bundle failed to load: {exc}") from exc
-        snapshot.require_current(now=now)
-        if serial_key is not None:
-            record_serial(serial_key, index_data["serial"])
         from openadapt_flow.skills import mark_pulled
 
-        # Mark it as pulled and expire any certification it carries: a
-        # registry certification is about our test copy, never the user's.
-        mark_pulled(
-            stage,
-            entry,
-            index_url=index_url,
-            attested_by=attested_by,
-            index_serial=index_data.get("serial") if subjects is not None else None,
-            index_issued_at=(
-                index_data.get("issued_at") if subjects is not None else None
-            ),
-        )
-        if unpacked is not None and NOTICE_NAME in unpacked:
-            (stage / NOTICE_NAME).write_bytes(unpacked[NOTICE_NAME])
-        if dest.exists():
-            shutil.rmtree(dest)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(stage, dest)
+        # Every acceptance (including list/catalog observations) takes this
+        # same guard. A newer mark cannot overtake this installation.
+        with _state_guard():
+            snapshot.require_current(now=now)
+            if serial_key is not None:
+                _record_serial_locked(serial_key, index_data["serial"])
+            # Registry certification never qualifies the user's instance.
+            mark_pulled(
+                stage,
+                entry,
+                index_url=index_url,
+                attested_by=attested_by,
+                index_serial=index_data.get("serial") if subjects is not None else None,
+                index_issued_at=(
+                    index_data.get("issued_at") if subjects is not None else None
+                ),
+            )
+            if unpacked is not None and NOTICE_NAME in unpacked:
+                (stage / NOTICE_NAME).write_bytes(unpacked[NOTICE_NAME])
+            snapshot.require_current(now=now)
+            _publish_staged_bundle(stage, dest, overwrite=overwrite)
     return dest
+
+
+def _publish_staged_bundle(stage: Path, dest: Path, *, overwrite: bool) -> None:
+    """Publish fully prepared bytes while holding the publisher-state guard.
+
+    Preserve the old destination until the final currentness check has passed;
+    restore it if publication fails. Both renames stay on one filesystem.
+    """
+    exists = dest.exists() or dest.is_symlink()
+    if exists and not overwrite:
+        raise RegistryError(f"{dest} exists; pass --force to replace it")
+    if exists and (dest.is_symlink() or not dest.is_dir()):
+        raise RegistryError("the destination is not a regular bundle directory")
+    previous = stage.parent / "previous"
+    if exists:
+        dest.replace(previous)
+    try:
+        stage.replace(dest)
+    except BaseException:
+        if exists and not dest.exists():
+            previous.replace(dest)
+        raise
 
 
 #: The license notice a registry archive carries beside the bundle's files.

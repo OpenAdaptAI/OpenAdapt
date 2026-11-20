@@ -69,8 +69,17 @@ def test_remote_listing_requires_the_same_publisher_proof_as_pull(monkeypatch, c
         ],
     }
     monkeypatch.setattr(registry, "_read", lambda *a, **k: json.dumps(data).encode())
-    monkeypatch.setattr(registry, "_read_attestation", lambda *a, **k: None)
+    from openadapt_flow import registry_snapshot
+
+    proofs = []
+
+    def absent_proof(index):
+        proofs.append(index)
+        return None
+
+    monkeypatch.setattr(registry_snapshot, "attestation_bytes", absent_proof)
     assert registry.cmd_pull(_args("https://registry.example/index.json")) == 1
+    assert proofs == ["https://registry.example/index.json"]
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "attestation" in captured.err

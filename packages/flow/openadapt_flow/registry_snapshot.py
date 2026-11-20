@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -27,8 +28,19 @@ def json_object(payload: bytes, label: str) -> dict[str, Any]:
     def constant(_value):
         raise registry.RegistryError(f"{label} contains a non-finite JSON number")
 
+    def number(text):
+        value = float(text)
+        if not math.isfinite(value):
+            raise registry.RegistryError(f"{label} contains a non-finite JSON number")
+        return value
+
     try:
-        value = json.loads(payload, object_pairs_hook=pairs, parse_constant=constant)
+        value = json.loads(
+            payload,
+            object_pairs_hook=pairs,
+            parse_constant=constant,
+            parse_float=number,
+        )
     except (ValueError, UnicodeError) as exc:
         raise registry.RegistryError(f"{label} is not valid JSON") from exc
     if not isinstance(value, dict):

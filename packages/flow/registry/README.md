@@ -178,3 +178,14 @@ This proof grants no execution, admission or instance qualification. Existing
 pulled-skill refusal still applies to emitted MCP tools and agent runs. The
 committed example index is not an attested release; the proof command does not
 sign, release, publish or configure a publisher.
+
+
+Publisher acceptance and final bundle publication share the rollback-state lock.
+Downloads are prepared in a private directory on the destination filesystem;
+currentness is checked again before the prepared directory is published. A
+newer listing or catalog observation cannot overtake an installation in that
+critical section. Failed publication restores an existing destination, and an
+unexpected destination is not overwritten without `--force`. The rollback
+ledger uses the same unambiguous JSON decoder as the index: duplicate keys and
+non-finite numbers refuse without resetting or rewriting the existing bytes.
+These are artifact-currentness checks, not runtime or instance qualification.
