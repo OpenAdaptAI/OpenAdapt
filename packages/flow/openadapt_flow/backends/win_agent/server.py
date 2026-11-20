@@ -1063,41 +1063,6 @@ def _focused_target(
     return observed[1] if observed is not None else None
 
 
-def _complete_editable_value(control: object) -> tuple[Optional[str], Optional[str]]:
-    """Full ValuePattern observation; empty is readable, never Name/MSAA.
-
-    This shares #2291's full exact ValuePattern/empty-vs-unavailable contract.
-    Editable input additionally requires observed non-password/non-read-only.
-    """
-    if _control_value(control, "IsPassword", None) is not False:
-        return None, "password_or_password_status_unavailable"
-    if _control_value(control, "ControlTypeName", None) != "EditControl":
-        return None, "not_editable_value_control"
-    method = _control_value(control, "GetValuePattern", None)
-    if not callable(method):
-        return None, "value_pattern_unavailable"
-    try:
-        pattern = method()
-        if getattr(pattern, "IsReadOnly", None) is not False:
-            return None, "read_only_or_read_only_status_unavailable"
-        value = getattr(pattern, "Value", None)
-    except Exception:
-        return None, "value_unavailable"
-    if _control_value(control, "IsPassword", None) is not False:
-        return None, "password_or_password_status_unavailable"
-    try:
-        still_editable = getattr(pattern, "IsReadOnly", None) is False
-    except Exception:
-        still_editable = False
-    if not still_editable:
-        return None, "read_only_or_read_only_status_unavailable"
-    if not isinstance(value, str):
-        return None, "value_unavailable"
-    if len(value) > _MAX_TEXT_CHARS:
-        return None, "value_exceeds_limit"
-    return value, None
-
-
 def _editable_value_observation(auto: Any, payload: dict[str, Any]) -> dict[str, Any]:
     data = _exact_object(
         payload,
@@ -1136,29 +1101,30 @@ def _editable_value_observation(auto: Any, payload: dict[str, Any]) -> dict[str,
         left <= point[0] < right and top <= point[1] < bottom
     ):
         return unavailable("point_outside_focused_target")
-    value, reason = _complete_editable_value(control)
-    if reason is not None:
-        return unavailable(reason)
-    # Do not re-resolve a locator into another object. Re-read actual focus,
-    # runtime identity, geometry/hit-test and the same full value.
-    after = _focused_target_control(auto, verify_locator_uniqueness=False)
-    if after is None or not hmac.compare_digest(after[1]["fingerprint"], fingerprint):
-        return unavailable("observation_changed")
-    after_value, reason = _complete_editable_value(after[0])
-    if reason is not None:
-        return unavailable(reason)
-    final = _focused_target_control(auto, verify_locator_uniqueness=False)
-    if (
-        after_value != value
-        or final is None
-        or not hmac.compare_digest(final[1]["fingerprint"], fingerprint)
-    ):
+    try:
+        from openadapt_flow.backends.win_agent.native_value import (
+            observe_complete_value,
+        )
+    except ModuleNotFoundError:
+        from win_agent_native_value import observe_complete_value  # type: ignore[no-redef,import-not-found]
+
+    def current_binding() -> Optional[str]:
+        current = _focused_target_control(auto, verify_locator_uniqueness=False)
+        return current[1]["fingerprint"] if current is not None else None
+
+    result = observe_complete_value(
+        control, identity=current_binding, require_editable=True
+    )
+    if not result.complete or result.proof is None or result.value is None:
+        return unavailable(result.reason or "value_observation_unavailable")
+    if current_binding() != fingerprint:
         return unavailable("observation_changed")
     return {
         "status": "ok",
-        "schema": "openadapt.native-editable-value/v1",
+        "schema": "openadapt.native-editable-value/v2",
         "complete": True,
-        "value": value,
+        "value": result.value,
+        "completeness_proof": result.proof.payload(),
         "target_fingerprint": fingerprint,
         "bounds": candidate["bounds"],
         "point": candidate["point"],
@@ -3149,7 +3115,7 @@ def make_handler_class(
                             "context_environment_v1",
                             "typed_input_v1",
                             *(
-                                ["native_keyboard_lease_v1", "native_editable_value_v1"]
+                                ["native_keyboard_lease_v1", "native_editable_value_v2"]
                                 if keyboards is not None
                                 else []
                             ),

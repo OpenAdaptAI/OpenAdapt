@@ -8,6 +8,12 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
+from openadapt_flow.backends.win_agent import native_value
+from openadapt_flow.backends.win_agent.native_value import (
+    NativeOwner,
+    NativeRead,
+    utf16_bytes,
+)
 from openadapt_flow.backends.win_agent.server import (
     AgentConfig,
     _editable_value_observation,
@@ -18,12 +24,34 @@ from openadapt_flow.backends.windows_backend import WindowsBackend
 from tests.test_native_focus_keyboard import focused_auto, png
 from tests.test_win_agent_server import RunningAgent
 
+_native_controls = {}
+
+
+@pytest.fixture(autouse=True)
+def independent_native_protocol(monkeypatch):
+    class Reader:
+        def owner(self, hwnd):
+            control, _ = _native_controls[hwnd]
+            return NativeOwner(hwnd, control.ProcessId, 9876)
+
+        def read(self, owner):
+            control, pattern = _native_controls[owner.hwnd]
+            value = getattr(control, "native_stored_value", pattern.Value)
+            units = len(utf16_bytes(value)) // 2 if isinstance(value, str) else 0
+            return NativeRead(owner, units, units, value)
+
+    monkeypatch.setattr(native_value, "Win32TextReader", Reader)
+    yield
+    _native_controls.clear()
+
 
 def editable(value=""):
     auto, control = focused_auto()
     control.IsPassword = False
     pattern = SimpleNamespace(Value=value, IsReadOnly=False)
     control.GetValuePattern = lambda: pattern
+    control.NativeWindowHandle = 12345
+    _native_controls[control.NativeWindowHandle] = (control, pattern)
     return auto, control, pattern
 
 
@@ -99,7 +127,7 @@ def test_incomplete_or_changed_observation_returns_no_value_and_no_name_fallback
     assert "value" not in result and "name" not in result
 
 
-def test_long_complete_value_matches_rdp_full_value_semantics():
+def test_long_fake_provider_native_agreement_is_complete_without_length_guessing():
     auto, _, _ = editable("prefix" + "x" * 8196 + "suffix")
     assert _editable_value_observation(auto, {})["value"].endswith("suffix")
 
@@ -121,7 +149,7 @@ def test_actual_http_getter_siblings_share_exact_value_and_lease_binding():
     )
     try:
         backend = WindowsBackend(agent.url, auth_token="unit-token")
-        assert "native_editable_value_v1" in backend.agent_capabilities()
+        assert "native_editable_value_v2" in backend.agent_capabilities()
         point = tuple(_focused_target(auto)["point"])
         assert backend.text_value_at(*point) == ""
         assert backend.focused_text_value() == ""
@@ -146,5 +174,66 @@ def test_actual_http_getter_siblings_share_exact_value_and_lease_binding():
             backend.text_value_at(*point) is None
             and backend.focused_text_value() is None
         )
+    finally:
+        agent.close()
+
+
+@pytest.mark.parametrize(
+    "field", ["schema", "missing_proof", "hash", "extent", "read_count"]
+)
+def test_http_getter_siblings_reject_legacy_or_unproven_complete_flags(field):
+    auto, _, _ = editable("exact")
+
+    def altered(operation, data):
+        result = _perform_uia_initialized(auto, operation, data)
+        if operation == "editable-value" and result.get("status") == "ok":
+            if field == "schema":
+                result["schema"] = "openadapt.native-editable-value/v1"
+            elif field == "missing_proof":
+                result.pop("completeness_proof")
+            else:
+                key, value = {
+                    "hash": ("sha256_utf16le", "0" * 64),
+                    "extent": ("utf16_units", 0),
+                    "read_count": ("native_reads", True),
+                }[field]
+                result["completeness_proof"][key] = value
+        return result
+
+    agent = RunningAgent(
+        AgentConfig(host="127.0.0.1", port=0, token="unit-token"),
+        grab_fn=png,
+        uia_fn=altered,
+    )
+    try:
+        backend = WindowsBackend(agent.url, auth_token="unit-token")
+        point = tuple(_focused_target(auto)["point"])
+        assert backend.editable_value_observation() is None
+        assert backend.focused_text_value() is None
+        assert backend.text_value_at(*point) is None
+    finally:
+        agent.close()
+
+
+def test_confirmed_provider_prefix_is_unavailable_across_all_text_readers():
+    auto, control, _ = editable("x" * 4096)
+    control.native_stored_value = "x" * 8192 + "-END"
+    result = _editable_value_observation(auto, {})
+    assert result == {
+        "status": "unavailable",
+        "complete": False,
+        "reason": "provider_native_value_disagreement",
+    }
+    agent = RunningAgent(
+        AgentConfig(host="127.0.0.1", port=0, token="unit-token"),
+        grab_fn=png,
+        uia_fn=lambda op, data: _perform_uia_initialized(auto, op, data),
+    )
+    try:
+        backend = WindowsBackend(agent.url, auth_token="unit-token")
+        point = tuple(_focused_target(auto)["point"])
+        assert backend.editable_value_observation() is None
+        assert backend.focused_text_value() is None
+        assert backend.text_value_at(*point) is None
     finally:
         agent.close()

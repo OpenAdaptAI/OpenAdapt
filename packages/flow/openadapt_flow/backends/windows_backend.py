@@ -1766,6 +1766,8 @@ class WindowsBackend:
         """
         if (x is None) != (y is None):
             return None
+        if "native_editable_value_v2" not in self.agent_capabilities():
+            return None
         leases = self._focused_keyboard_leases()
         if leases is None:
             return None

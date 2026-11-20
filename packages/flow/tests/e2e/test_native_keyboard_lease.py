@@ -673,6 +673,24 @@ $leaseButton.Location = New-Object System.Drawing.Point(650, 340)
 $leaseButton.Size = New-Object System.Drawing.Size(250, 30)
 $form.Controls.Add($leaseButton)
 $leaseFields['button'] = $leaseButton
+function Get-LeaseStoredValues {
+    $controls = @{ noteBox=$script:noteBox; leaseLong=$script:leaseFields['leaseLong-140'];
+                   leaseOversized=$script:leaseFields['leaseOversized-180'] }
+    $values = @{}
+    foreach ($id in $controls.Keys) {
+        $control = $controls[$id]
+        $text = [string]$control.Text
+        $bytes = [Text.Encoding]::UTF8.GetBytes($text)
+        $hasher = [Security.Cryptography.SHA256]::Create()
+        try { $hash = ([BitConverter]::ToString($hasher.ComputeHash($bytes))).Replace('-', '').ToLowerInvariant() }
+        finally { $hasher.Dispose() }
+        $point = $control.PointToScreen([Drawing.Point]::new([int]($control.Width / 2), [int]($control.Height / 2)))
+        $values[$id] = @{ live_length=$text.Length; sha256=$hash;
+            suffix=$text.Substring([Math]::Max(0, $text.Length - 16));
+            hwnd=$control.Handle.ToInt64(); pid=$PID; point=@($point.X, $point.Y) }
+    }
+    return $values
+}
 $form.Add_Shown({
     $points = @{}
     foreach ($key in $script:leaseFields.Keys) {
@@ -683,6 +701,9 @@ $form.Add_Shown({
     $temporary = Join-Path $PSScriptRoot 'lease-observation-points.tmp'
     [IO.File]::WriteAllText($temporary, ($points | ConvertTo-Json))
     [IO.File]::Move($temporary, (Join-Path $PSScriptRoot 'lease-observation-points.json'))
+    $temporary = Join-Path $PSScriptRoot 'lease-stored-initial.tmp'
+    [IO.File]::WriteAllText($temporary, ((Get-LeaseStoredValues) | ConvertTo-Json -Depth 5))
+    [IO.File]::Move($temporary, (Join-Path $PSScriptRoot 'lease-stored-initial.json'))
 })
 $leaseObservationTimer = New-Object System.Windows.Forms.Timer
 $leaseObservationTimer.Interval = 40
@@ -695,12 +716,14 @@ $leaseObservationTimer.Add_Tick({
         'clear-note' { $script:noteBox.Text = ''; [void]$script:noteBox.Focus(); $script:noteBox.SelectionStart = 0 }
         'paint-success' { $script:status.Text = 'Synthetic lease repaint success' }
         'paint-uncertain' { $script:status.Text = 'Synthetic lease repaint uncertain' }
+        'snapshot-observation' { }
         default { throw 'Unknown observation fixture command' }
     }
     $ack = @{ command=$command; note_value=$script:noteBox.Text; status=$script:status.Text;
-              form_handle=$form.Handle.ToInt64(); note_handle=$script:noteBox.Handle.ToInt64() }
+              form_handle=$form.Handle.ToInt64(); note_handle=$script:noteBox.Handle.ToInt64();
+              stored_values=(Get-LeaseStoredValues) }
     $temporary = Join-Path $PSScriptRoot 'lease-observation-ack.tmp'
-    [IO.File]::WriteAllText($temporary, ($ack | ConvertTo-Json))
+    [IO.File]::WriteAllText($temporary, ($ack | ConvertTo-Json -Depth 5))
     [IO.File]::Move($temporary, (Join-Path $PSScriptRoot 'lease-observation-ack.json'))
 })
 $leaseObservationTimer.Start()
@@ -722,15 +745,28 @@ def _fixture_command(root: Path, command: str) -> dict[str, Any]:
     return result
 
 
-def _editable_positive(backend, transport, aid, point, expected):
+def _stored_snapshot(root: Path, aid: str, expected: str) -> dict[str, Any]:
+    observed = _fixture_command(root, "snapshot-observation")["stored_values"][aid]
+    assert observed["live_length"] == len(expected.encode("utf-16-le")) // 2
+    assert observed["suffix"] == expected[-16:]
+    assert observed["sha256"] == _sha(expected.encode("utf-8"))
+    assert type(observed["hwnd"]) is int and observed["hwnd"] > 0
+    assert type(observed["pid"]) is int and observed["pid"] > 0
+    return observed
+
+
+def _editable_positive(backend, transport, root, aid, point, expected):
     backend.click(*point)
+    managed_before = _stored_snapshot(root, aid, expected)
     handle = backend.locate_structural(StructuralLocator(automation_id=aid))
     assert handle is not None and handle.candidate_count == 1
     observed = backend.editable_value_observation(*point)
     assert observed is not None
+    proof = observed["completeness_proof"]
+    assert type(proof["thread"]) is int and proof["thread"] > 0
     assert observed == {
         "status": "ok",
-        "schema": "openadapt.native-editable-value/v1",
+        "schema": "openadapt.native-editable-value/v2",
         "complete": True,
         "value": expected,
         "target_fingerprint": handle.target_fingerprint,
@@ -741,6 +777,17 @@ def _editable_positive(backend, transport, aid, point, expected):
             handle.region[1] + handle.region[3],
         ],
         "point": list(handle.point),
+        "completeness_proof": {
+            "schema": "openadapt.native-value-completeness/v1",
+            "method": "uia-value+wm-gettext",
+            "hwnd": managed_before["hwnd"],
+            "pid": managed_before["pid"],
+            "thread": proof["thread"],
+            "utf16_units": len(expected.encode("utf-16-le")) // 2,
+            "sha256_utf16le": _sha(expected.encode("utf-16-le")),
+            "native_reads": 2,
+            "uia_reads": 2,
+        },
     }
     assert backend.text_value_at(*point) == expected
     assert backend.focused_text_value() == expected
@@ -748,10 +795,14 @@ def _editable_positive(backend, transport, aid, point, expected):
         event for event in transport.events if event["path"] == "/uia/editable-value"
     ][-3:]
     assert len(wire) == 3 and all(event["response"] == observed for event in wire)
+    managed_after = _stored_snapshot(root, aid, expected)
+    assert managed_before == managed_after
     return {
         "case": aid,
         "length": len(expected),
         "value_sha256": _sha(expected.encode()),
+        "managed_before": managed_before,
+        "managed_after": managed_after,
         "observation": observed,
     }
 
@@ -788,7 +839,7 @@ def test_native_editable_values_and_runtime_type_retry(tmp_path, monkeypatch):
     try:
         backend = host.start_agent()
         evidence["capabilities"] = sorted(backend.agent_capabilities())
-        assert "native_editable_value_v1" in evidence["capabilities"]
+        assert "native_editable_value_v2" in evidence["capabilities"]
         transport = _Transport(backend, monkeypatch, evidence)
         transport.lease_evidence_dir = tmp_path / "runtime-lease-frames"
         host.launch_app()
@@ -807,25 +858,28 @@ def test_native_editable_values_and_runtime_type_retry(tmp_path, monkeypatch):
         backend.press("enter")
         _wait_value(backend, "patientHeader", header)
         evidence["observations"].append(
-            _editable_positive(backend, transport, "noteBox", points["noteBox"], "")
+            _editable_positive(
+                backend, transport, tmp_path, "noteBox", points["noteBox"], ""
+            )
         )
         exact = "  exact café value  "
         backend.type_text(exact)
         _wait_value(backend, "noteBox", exact)
         evidence["observations"].append(
-            _editable_positive(backend, transport, "noteBox", points["noteBox"], exact)
-        )
-        evidence["observations"].append(
             _editable_positive(
-                backend,
-                transport,
-                "leaseLong",
-                extras["leaseLong-140"],
-                "x" * 8192 + "-END",
+                backend, transport, tmp_path, "noteBox", points["noteBox"], exact
             )
         )
-
+        initial_values = tmp_path / "lease-stored-initial.json"
+        deadline = time.monotonic() + 10
+        while not initial_values.is_file():
+            assert time.monotonic() < deadline, "managed initial snapshot unavailable"
+            time.sleep(0.05)
+        evidence["managed_initial"] = json.loads(
+            initial_values.read_text(encoding="utf-8-sig")
+        )
         unavailable_reasons = {
+            "leaseLong-140": "provider_native_value_disagreement",
             "leasePassword-100": "password_or_password_status_unavailable",
             "leaseOversized-180": "value_exceeds_limit",
             "leaseReadOnly-220": "read_only_or_read_only_status_unavailable",
@@ -835,6 +889,14 @@ def test_native_editable_values_and_runtime_type_retry(tmp_path, monkeypatch):
         for name, reason in unavailable_reasons.items():
             point = extras[name]
             backend.click(*point)
+            stored = None
+            if name in {"leaseLong-140", "leaseOversized-180"}:
+                aid = "leaseLong" if name == "leaseLong-140" else "leaseOversized"
+                expected = (
+                    "x" * 8192 + "-END" if name == "leaseLong-140" else "x" * 65537
+                )
+                stored = _stored_snapshot(tmp_path, aid, expected)
+                assert stored == evidence["managed_initial"][aid]
             assert backend.editable_value_observation(*point) is None
             assert backend.text_value_at(*point) is None
             assert backend.focused_text_value() is None
@@ -850,7 +912,12 @@ def test_native_editable_values_and_runtime_type_retry(tmp_path, monkeypatch):
                 assert set(raw) == {"status", "complete", "reason"}
                 assert raw["status"] == "unavailable" and raw["complete"] is False
                 assert raw["reason"] == reason
-            evidence["observations"].append({"case": name, "unavailable": wire})
+            observation = {"case": name, "unavailable": wire}
+            if stored is not None:
+                stored_after = _stored_snapshot(tmp_path, aid, expected)
+                assert stored == stored_after
+                observation.update(managed_before=stored, managed_after=stored_after)
+            evidence["observations"].append(observation)
         assert host.rows() == baseline
 
         # This is a real observed demonstration. The operator-selected record

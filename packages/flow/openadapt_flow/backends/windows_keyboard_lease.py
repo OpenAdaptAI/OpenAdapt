@@ -19,6 +19,7 @@ from openadapt_flow.backends.win_agent.keyboard_lease import (
     _target,
     keyboard_operation,
 )
+from openadapt_flow.backends.win_agent.native_value import valid_value_proof
 from openadapt_flow.ir import ActionDeliveryReceipt
 
 
@@ -61,15 +62,16 @@ class NativeKeyboardLeaseClient:
                     "schema",
                     "complete",
                     "value",
+                    "completeness_proof",
                     "target_fingerprint",
                     "bounds",
                     "point",
                 }
                 or data["status"] != "ok"
-                or data["schema"] != "openadapt.native-editable-value/v1"
+                or data["schema"] != "openadapt.native-editable-value/v2"
                 or data["complete"] is not True
                 or not isinstance(data["value"], str)
-                or len(data["value"]) > 65536
+                or not valid_value_proof(data["value"], data["completeness_proof"])
             ):
                 return None
             target = _target(

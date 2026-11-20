@@ -551,8 +551,11 @@ if ($line -and $line -match '\\s(\\d+)\\s+Disc') {{
             Path(server_path or agent_server.__file__),
             rf"{guest_dir}\win_agent_server.py",
         )
-        keyboard_helper = Path(agent_server.__file__).with_name("keyboard_lease.py")
-        self.push_file(keyboard_helper, rf"{guest_dir}\win_agent_keyboard_lease.py")
+        for helper in ("keyboard_lease", "native_value"):
+            self.push_file(
+                Path(agent_server.__file__).with_name(helper + ".py"),
+                rf"{guest_dir}\win_agent_{helper}.py",
+            )
         bundle = generate_self_signed_cert([self.host])
         try:
             self.push_file(Path(bundle.certfile), rf"{guest_dir}\agent-cert.pem")

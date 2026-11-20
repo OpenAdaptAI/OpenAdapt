@@ -163,6 +163,17 @@ jobs:
           assert proof["passed"] is True and proof["agent_terminated"] is True and proof["fixture_terminated"] is True
           assert proof["rows_before"] == proof["rows_after"]
           assert len(proof["observations"]) == 8
+          positives = [case for case in proof["observations"] if "observation" in case]
+          assert len(positives) == 2 and {case["length"] for case in positives} == {0, 20}
+          for case in positives:
+              assert case["managed_before"] == case["managed_after"]
+              assert case["observation"]["schema"] == "openadapt.native-editable-value/v2"
+              assert case["observation"]["completeness_proof"]["method"] == "uia-value+wm-gettext"
+          long_case = next(case for case in proof["observations"] if case["case"] == "leaseLong-140")
+          assert long_case["managed_before"] == long_case["managed_after"] == proof["managed_initial"]["leaseLong"]
+          assert long_case["managed_before"]["live_length"] == 8196
+          for event in long_case["unavailable"]:
+              assert event["response"] == {"status": "unavailable", "complete": False, "reason": "provider_native_value_disagreement"}
           assert len(proof["runtime"]) == 2 and {case["case"] for case in proof["runtime"]} == {"success", "uncertain"}
           for case in proof["runtime"]:
               assert case["planted"] and case["input_attempts"][0]["response"]["no_keyboard_input_delivered"] is True
@@ -230,6 +241,7 @@ jobs:
             ${{ runner.temp }}/nkl-editable/*.log
             ${{ runner.temp }}/nkl-editable/cases/**/*.png
             ${{ runner.temp }}/nkl-editable/cases/**/editable-value-evidence.json
+            ${{ runner.temp }}/nkl-editable/cases/**/lease-stored-initial.json
             ${{ runner.temp }}/nkl-editable/cases/**/agent.log
             ${{ runner.temp }}/nkl-editable/cases/**/patient_notes.ps1
             ${{ runner.temp }}/nkl-editable/cases/**/patients.db

@@ -60,16 +60,30 @@ This advances independently verifiable action receipts and refusal evidence.
 
 ## Exact editable-value observation
 
-`text_value_at` and `focused_text_value` use one complete ValuePattern contract
-at `/uia/editable-value`. A readable empty string is a value. Password or unknown
+`text_value_at` and `focused_text_value` consume the same v2 observation at
+`/uia/editable-value`. A readable empty string is a value. Password or unknown
 password state, read-only or unknown editability, missing/ambiguous focus,
 replacement, changed value and oversized values refuse. No accessible Name,
 MSAA value, normalized text or truncated prefix substitutes for the exact
-value. Both value reads are bounded by actual focus/runtime fingerprint and
-geometry/hit-test observations. Current observed, armed and consumed keyboard
-bindings remain authoritative for the read-back. This supplies the unchanged
-baseline required by bounded zero-input retries; unknown stays a refusal.
+value. Current observed, armed and consumed keyboard bindings remain
+authoritative for read-back; unknown stays a refusal.
 
-The full-value/empty semantics match the separately reviewed approval projection
-in #2291. Its helper is not on this branch's base; merge integration should reuse
-a shared helper without importing that whole held approval change here.
+A full-looking ValuePattern string alone does not establish completeness. The
+native diagnostic independently measured live stored lengths of 4,097 and
+8,196 UTF-16 units while the UIA wire returned 4,096. The canonical
+`win_agent/native_value.py` helper now requires two stable Unicode
+WM_GETTEXTLENGTH/WM_GETTEXT extent/full reads and two exact UIA reads to agree.
+It checks caller scope, UIA HWND/PID/RuntimeId and native HWND/PID/thread around
+each read, uses bounded buffers and message deadlines, and preserves exact
+UTF-16 bytes. Missing native handles, unknown readability, incomplete copies,
+timeouts, changed identities or source disagreement are incomplete. Native text
+never silently replaces a disagreeing UIA value.
+
+Positive v2 observations carry a closed completeness proof with source method,
+owner, UTF-16 extent/hash and both read counts. Clients require that proof and
+the v2 capability; a legacy complete flag cannot authorize a baseline. Empty may
+be complete for editable input while remaining unmasked in approval projection.
+The same shared helper commit is the prerequisite for #2291's separate approval
+consumer. Incomplete or unsupported values cannot fall back to OCR that omits
+an unseen suffix. This branch does not import that whole approval change or
+claim its qualification.
