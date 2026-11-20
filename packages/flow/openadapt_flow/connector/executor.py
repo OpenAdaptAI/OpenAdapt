@@ -36,7 +36,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -58,6 +57,7 @@ from openadapt_flow.runner.dispatch_envelope import (
 from openadapt_flow.runtime.durable.authority import (
     REMOTE_AUTHORITY_TOKEN_ENV,
     REMOTE_AUTHORITY_URL_ENV,
+    REMOTE_DISPATCH_SESSION_ID_ENV,
 )
 
 #: A run-gate refusal (fail-closed admission denied) exits 2 before the replay
@@ -212,6 +212,7 @@ def build_run_argv(
     run_dir: Path,
     params_file: Optional[Path],
     managed_dispatch_file: Optional[Path] = None,
+    qualification_authority_file: Optional[Path] = None,
 ) -> list[str]:
     """The exact governed CLI invocation for a verified BYOC dispatch.
 
@@ -242,6 +243,8 @@ def build_run_argv(
         argv += ["--url", job.target_url]
     if managed_dispatch_file is not None:
         argv += ["--managed-dispatch-file", str(managed_dispatch_file)]
+    if qualification_authority_file is not None:
+        argv += ["--qualification-authority-file", str(qualification_authority_file)]
     # Preserve the governed run's approval policy and gated default. Transport
     # selection is not authority to disable a person's per-save decision.
     if settings.allow_unencrypted:
@@ -404,8 +407,12 @@ def _assert_managed_authority_is_pinned(
 ) -> None:
     """Keep the run capability on the enrolled control-plane origin."""
 
+    if not settings.org_id or settings.org_id != job.org_id:
+        raise ByocGovernanceError(
+            "byoc job is not bound to this connector's configured organization"
+        )
     if job.managed_dispatch is None:
-        return
+        raise ByocGovernanceError("byoc live execution requires managed authority")
     try:
         configured = urlsplit(settings.control_plane_url)
         delivered = urlsplit(job.managed_delivery_authority_url or "")
@@ -426,6 +433,7 @@ def _assert_managed_authority_is_pinned(
         or configured.password is not None
         or bool(configured.query)
         or bool(configured.fragment)
+        or configured.path not in {"", "/"}
         or delivered.scheme != "https"
         or delivered.hostname != configured.hostname
         or delivered_port != configured_port
@@ -435,6 +443,106 @@ def _assert_managed_authority_is_pinned(
             "byoc managed delivery authority is not pinned to the enrolled "
             "control plane (fail closed)"
         )
+
+
+def _verify_program_reference(job: ByocJob, bundle: Path, key_dir: Path) -> None:
+    """Rebind both reference forms to the exact signed local admission."""
+    from openadapt_flow.jit.authority import PrincipalRegistry
+    from openadapt_flow.jit.lifecycle import verify_admission
+
+    reference = job.program_admission()
+    if reference is None:
+        raise ByocGovernanceError("byoc program admission reference is absent")
+    public_file = key_dir / "keys" / "ed25519.pub"
+    if (
+        public_file.is_symlink()
+        or bytes.fromhex(public_file.read_text(encoding="utf-8").strip()).hex()
+        != reference["public_key_hex"]
+    ):
+        raise ByocGovernanceError(
+            "byoc program reference names another public trust key"
+        )
+    manifest = verify_admission(bundle, key_dir=key_dir)
+    if manifest.get("digest") != job.flow_dispatch().bundle_content_digest:
+        raise ByocGovernanceError(
+            "byoc program content digest differs from its dispatch"
+        )
+    mode = manifest.get("admission_mode", "person")
+    if reference["schema_version"] == "openadapt.program-admission-reference/v1":
+        if mode != "person":
+            raise ByocGovernanceError(
+                "an admitter admission cannot use a person reference"
+            )
+        return
+    if (
+        mode != "admitter_key"
+        or manifest.get("admitted_by_principal_id")
+        != reference["admitted_by_principal_id"]
+        or manifest.get("admitter_public_key") != reference["admitter_public_key_hex"]
+        or PrincipalRegistry.load(key_dir).lookup(reference["admitter_public_key_hex"])
+        != ("admitter_key", reference["admitted_by_principal_id"])
+    ):
+        raise ByocGovernanceError(
+            "byoc admitter reference does not match current local trust"
+        )
+
+
+def _stage_qualification_authority(
+    job: ByocJob, settings: ConnectorSettings, bundle: Path, run_dir: Path
+) -> Path:
+    """Use independent local authority context; never self-assert expectations."""
+    from openadapt_flow.ir import Workflow
+    from openadapt_flow.production_qualification import (
+        ProductionQualificationAuthority,
+        ProductionQualificationGuard,
+        load_production_qualification_authority,
+    )
+
+    if not settings.qualification_authority_file:
+        raise ByocGovernanceError(
+            "qualified byoc jobs require independent local authority"
+        )
+    source = Path(settings.qualification_authority_file)
+    authority = load_production_qualification_authority(source)
+    proof = job.qualification_admission()
+    expected = getattr(authority, "expected", None)
+    if (
+        not isinstance(authority, ProductionQualificationAuthority)
+        or authority.qualification_admission != proof
+        or authority.qualification_admission_sha256 != proof.artifact_sha256()
+        or expected is None
+        or expected.tenant_id != job.org_id
+        or expected.workflow_id != job.workflow_id
+        or expected.workflow_version_id != job.bundle_version_id
+        or expected.bundle_version_id != job.bundle_version_id
+        or expected.runtime_validation_id != job.runtime_validation_id
+        or expected.bundle_artifact_sha256 != job.bundle_sha256
+        or expected.bundle_content_digest != job.flow_dispatch().bundle_content_digest
+        or expected.runtime_build_identity.substrate != job.target_kind
+    ):
+        raise ByocGovernanceError(
+            "local qualification context does not match the exact job"
+        )
+    workflow = Workflow.load(bundle)
+    ProductionQualificationGuard(source, remote_permit_revalidation=True).verify(
+        workflow, for_actuation=False
+    )
+    if load_production_qualification_authority(source) != authority:
+        raise ByocGovernanceError(
+            "local qualification context changed during verification"
+        )
+    destination = run_dir / "qualification-authority.json"
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(destination, flags, 0o600)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+        stream.write(authority.model_dump_json())
+        stream.flush()
+        os.fsync(stream.fileno())
+    # Re-open with the existing owner/ACL/canonical/signature/workflow checks.
+    ProductionQualificationGuard(destination, remote_permit_revalidation=True).verify(
+        workflow, for_actuation=False
+    )
+    return destination
 
 
 def execute_job(
@@ -498,6 +606,19 @@ def _execute_job(
             job,
             "admission_key_not_pinned",
             "the program's admission key is not pinned in trusted_admission_keys",
+        )
+    if admission is not None and admission.get("admission_mode") == "admitter_key":
+        if not settings.admission_key_dir:
+            return _refused(
+                job,
+                "admission_registry_required",
+                "admitter jobs require current local public trust",
+            )
+    if admission is None and not settings.qualification_authority_file:
+        return _refused(
+            job,
+            "qualification_authority_unavailable",
+            "qualified jobs need independent local context",
         )
     if not _grounding_env_available(job):
         gm = job.grounding_model
@@ -583,13 +704,36 @@ def _execute_job(
                 )
             key_dir = tmp_path / "jit-keys"
             if settings.admission_key_dir:
-                # The customer's own registry: a private copy per run, so the
-                # child can never change the operator's trust anchors.
-                shutil.copytree(settings.admission_key_dir, key_dir, symlinks=False)
+                # The operator's public-only, read-only trust directory stays
+                # live: the shared guard can observe subsequent revocation.
+                # Signing/private material belongs outside this directory.
+                key_dir = Path(settings.admission_key_dir)
             else:
                 (key_dir / "keys").mkdir(parents=True)
                 (key_dir / "keys" / "ed25519.pub").write_text(
                     admission["public_key_hex"] + "\n", encoding="utf-8"
+                )
+            try:
+                _verify_program_reference(job, bundle_dir, key_dir)
+            except Exception:
+                return _refused(
+                    job,
+                    "program_admission_refused",
+                    "signed program or current local principal refused",
+                    verified_bundle_sha256=observed_sha256,
+                )
+        qualification_authority_file: Optional[Path] = None
+        if admission is None:
+            try:
+                qualification_authority_file = _stage_qualification_authority(
+                    job, settings, bundle_dir, run_dir
+                )
+            except Exception:
+                return _refused(
+                    job,
+                    "qualification_authority_refused",
+                    "local qualification context refused",
+                    verified_bundle_sha256=observed_sha256,
                 )
 
         try:
@@ -602,6 +746,7 @@ def _execute_job(
             for name in (
                 REMOTE_AUTHORITY_URL_ENV,
                 REMOTE_AUTHORITY_TOKEN_ENV,
+                REMOTE_DISPATCH_SESSION_ID_ENV,
                 "OPENADAPT_JIT_KEY_DIR",
                 "BYOC_CONNECTOR_TOKEN",
             ):
@@ -619,6 +764,9 @@ def _execute_job(
                     job.managed_delivery_authority_url
                 )
                 child_env[REMOTE_AUTHORITY_TOKEN_ENV] = str(job.run_token)
+                child_env[REMOTE_DISPATCH_SESSION_ID_ENV] = str(
+                    job.managed_dispatch_session_id
+                )
 
             # Independent read-back, before: a private baseline of the system
             # of record. It holds raw records and never leaves this directory.
@@ -659,6 +807,7 @@ def _execute_job(
                 run_dir,
                 params_file,
                 managed_dispatch_file,
+                qualification_authority_file,
             )
             if job_cancelled(job.lease_job_id):
                 return _refused(
