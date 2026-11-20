@@ -673,6 +673,10 @@ if ($line -and $line -match '\\s(\\d+)\\s+Disc') {{
             generate_self_signed_cert,
         )
 
+        source = Path(agent_server.__file__)
+        native_value = source.with_name("native_value.py")
+        if not native_value.is_file():
+            raise FileNotFoundError("agent native-value helper is missing")
         self.attach_console()
         self.run_ps(
             f"Stop-ScheduledTask -TaskName '{AGENT_TASK}' -ErrorAction SilentlyContinue; "
@@ -681,7 +685,8 @@ if ($line -and $line -match '\\s(\\d+)\\s+Disc') {{
             "$_.ProcessId -Force }",
             check=False,
         )
-        self.push_file(Path(agent_server.__file__), rf"{GUEST_DIR}\win_agent_server.py")
+        self.push_file(source, rf"{GUEST_DIR}\win_agent_server.py")
+        self.push_file(native_value, rf"{GUEST_DIR}\win_agent_native_value.py")
         bundle = generate_self_signed_cert([self.host])
         try:
             self.push_file(Path(bundle.certfile), rf"{GUEST_DIR}\agent-cert.pem")

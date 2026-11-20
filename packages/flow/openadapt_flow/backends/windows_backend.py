@@ -45,6 +45,7 @@ from urllib.parse import urlparse
 
 import requests
 
+from openadapt_flow.approval_mode.window_fields import valid_form_field
 from openadapt_flow.backend import ActionDeliveryUncertain, StructuralResolutionRefused
 from openadapt_flow.ir import (
     ActionDeliveryReceipt,
@@ -230,14 +231,6 @@ def _pixel_box(value: object) -> Optional[dict[str, int]]:
     if value["w"] <= 0 or value["h"] <= 0:
         return None
     return {k: int(value[k]) for k in ("x", "y", "w", "h")}
-
-
-#: The approval form-field read's contract (win_agent ``window-form-fields``).
-_FIELD_KEYS = frozenset({"kind", "rect", "text", "state"})
-_FIELD_KINDS = frozenset({"title_bar", "edit", "text", "state"})
-_FIELD_STATES = frozenset(
-    {None, "on", "off", "indeterminate", "selected", "unselected"}
-)
 
 
 def _window_frame(
@@ -1080,8 +1073,9 @@ class WindowsBackend:
         labels, buttons and cells whose text UIA reads (with toggle and
         selection state), in tree order. The caller reads those fields by value and the rest of
         the window by OCR, so a blinking caret or a hovered title-bar button
-        no longer changes the digest. None when the agent cannot say, when
-        the app shows another window, or on any doubt. Never raises.
+        no longer changes the digest. Value-backed entries require independent
+        complete-value proof. None on any doubt; approval must then refuse,
+        including when an older agent does not provide the proof. Never raises.
         """
         try:
             found = self._approval_window(exclude_step, points)
@@ -1100,26 +1094,18 @@ class WindowsBackend:
                 return None
             checked: list[dict[str, Any]] = []
             for field in fields:
-                if not isinstance(field, dict) or set(field) != _FIELD_KEYS:
+                if not valid_form_field(field, pid=pid):
                     return None
                 rect, text = field["rect"], field["text"]
-                if (
-                    field["kind"] not in _FIELD_KINDS
-                    or field["state"] not in _FIELD_STATES
-                    or not isinstance(text, str)
-                    or not isinstance(rect, list)
-                    or len(rect) != 4
-                    or any(isinstance(v, bool) or not isinstance(v, int) for v in rect)
-                    or rect[2] <= 0
-                    or rect[3] <= 0
-                ):
-                    return None
+                proof = field["value_proof"]
                 checked.append(
                     {
                         "kind": field["kind"],
                         "rect": tuple(rect),
                         "text": text,
                         "state": field["state"],
+                        "value_proof": proof,
+                        "value_identity": field["value_identity"],
                     }
                 )
             return {"bounds": bounds, "fields": checked}

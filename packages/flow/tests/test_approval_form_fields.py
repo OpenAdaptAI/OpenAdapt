@@ -12,6 +12,7 @@ by OCR).
 
 from __future__ import annotations
 
+import hashlib
 import io
 import sys
 import types
@@ -27,7 +28,50 @@ from openadapt_flow.approval_mode.form_state import (
     screen_text_state,
     window_fields_state,
 )
+from openadapt_flow.backends.win_agent.native_value import (
+    NativeOwner,
+    NativeRead,
+    valid_value_proof,
+)
 from openadapt_flow.backends.windows_backend import WindowsBackend
+
+
+def _proof(text, hwnd=100, pid=10):
+    raw = text.encode("utf-16-le", errors="surrogatepass")
+    return {
+        "schema": "openadapt.native-value-completeness/v1",
+        "method": "uia-value+wm-gettext",
+        "hwnd": hwnd,
+        "pid": pid,
+        "thread": 5,
+        "utf16_units": len(raw) // 2,
+        "sha256_utf16le": hashlib.sha256(raw).hexdigest(),
+        "native_reads": 2,
+        "uia_reads": 2,
+    }
+
+
+def _proved_fields(answer):
+    for field in answer["fields"]:
+        field["value_identity"] = (
+            "a" * 64 if field["kind"] in {"edit", "value"} else None
+        )
+        field["value_proof"] = (
+            _proof(field["text"]) if field["kind"] in {"edit", "value"} else None
+        )
+    return answer
+
+
+def _without_proofs(fields):
+    return [
+        {
+            key: value
+            for key, value in field.items()
+            if key not in {"value_proof", "value_identity"}
+        }
+        for field in fields
+    ]
+
 
 SIZE = (1024, 768)
 WINDOW = (0, 0, 1024, 720)
@@ -106,21 +150,23 @@ def _fields(
         {"kind": "text", "rect": rect, "text": text, "state": None}
         for rect, text in zip(CELLS, ("Neil", "Sorenson", "1984-03-12"))
     ]
-    return {
-        "bounds": WINDOW,
-        "fields": [
-            {
-                "kind": "title_bar",
-                "rect": TITLE_BAR,
-                "text": "Patient Notes - Benchmark Harness",
-                "state": None,
-            },
-            {"kind": "edit", "rect": SEARCH, "text": search, "state": None},
-            {"kind": "state", "rect": ROW, "text": "", "state": selected},
-            *cells,
-            {"kind": "edit", "rect": NOTE, "text": note, "state": None},
-        ],
-    }
+    return _proved_fields(
+        {
+            "bounds": WINDOW,
+            "fields": [
+                {
+                    "kind": "title_bar",
+                    "rect": TITLE_BAR,
+                    "text": "Patient Notes - Benchmark Harness",
+                    "state": None,
+                },
+                {"kind": "edit", "rect": SEARCH, "text": search, "state": None},
+                {"kind": "state", "rect": ROW, "text": "", "state": selected},
+                *cells,
+                {"kind": "edit", "rect": NOTE, "text": note, "state": None},
+            ],
+        }
+    )
 
 
 def _state(fields=None, **frame):
@@ -186,7 +232,14 @@ def test_a_field_covers_only_its_own_pixels():
     # other channel: a different field set is a different digest.
     covering = _fields()
     covering["fields"].append(
-        {"kind": "edit", "rect": (20, 296, 500, 30), "text": "", "state": None}
+        {
+            "kind": "edit",
+            "rect": (20, 296, 500, 30),
+            "text": "",
+            "state": None,
+            "value_proof": _proof(""),
+            "value_identity": "a" * 64,
+        }
     )
     assert _state(covering) != _state()
 
@@ -228,16 +281,15 @@ def test_fields_are_read_for_the_window_without_the_save_step():
     [None, "fields", {"bounds": WINDOW}, {"bounds": WINDOW, "fields": [], "x": 1}],
     ids=["none", "not-a-dict", "missing", "extra"],
 )
-def test_without_fields_the_window_is_read_by_ocr(answer):
+def test_an_advertised_but_unavailable_field_channel_never_downgrades_to_ocr(answer):
     backend = SimpleNamespace(
         approval_form_fields=lambda *_a: answer,
         approval_form_region=lambda *_a: WINDOW,
     )
     frame = _frame()
     assert approval_window_fields(backend, "save", _RESULTS) is None
-    assert approval_form_state(backend, vision, frame, "save", _RESULTS) == (
-        screen_text_state(vision, frame, [WINDOW])
-    )
+    assert screen_text_state(vision, frame, [WINDOW]) is not None
+    assert approval_form_state(backend, vision, frame, "save", _RESULTS) is None
 
 
 def test_a_request_and_recheck_through_different_channels_never_match():
@@ -289,13 +341,19 @@ _GOOD = {
         {"kind": "state", "rect": [20, 100, 600, 40], "text": "", "state": "selected"},
     ],
 }
+_proved_fields(_GOOD)
 
 
 def test_the_windows_backend_reads_the_fields_of_its_one_window():
     backend, sent = _windows_backend({"s1": (7, 10), "save": (99, 10)}, _GOOD)
     answer = backend.approval_form_fields("save")
     assert sent == [("/window/form-fields", {"hwnd": 7, "pid": 10})]
-    assert answer == {
+    assert answer is not None
+    assert answer["bounds"] == (0, 0, 1024, 720)
+    assert valid_value_proof(
+        answer["fields"][1]["text"], answer["fields"][1]["value_proof"]
+    )
+    assert {**answer, "fields": _without_proofs(answer["fields"])} == {
         "bounds": (0, 0, 1024, 720),
         "fields": [
             {
@@ -375,6 +433,8 @@ class _Rect:
 
 
 class _Control:
+    next_hwnd = 100
+
     def __init__(
         self,
         control_type,
@@ -388,6 +448,11 @@ class _Control:
         toggle=None,
         password=False,
     ):
+        self.NativeWindowHandle = _Control.next_hwnd
+        _Control.next_hwnd += 1
+        self.ProcessId = 10
+        self.parent = None
+        self.native_override = None
         self.IsPassword = password
         self._selected = selected
         self._toggle = toggle
@@ -398,13 +463,19 @@ class _Control:
         self._value = value
         self._children = list(children)
 
+    def GetRuntimeId(self):
+        return [42, self.NativeWindowHandle]
+
+    def GetParentControl(self):
+        return self.parent
+
     def GetChildren(self):
         return self._children
 
     def GetValuePattern(self):
         if self._value is None:
             raise RuntimeError("no value pattern")
-        return SimpleNamespace(Value=self._value)
+        return SimpleNamespace(Value=self._value, IsReadOnly=False)
 
     def GetSelectionItemPattern(self):
         if self._selected is None:
@@ -475,8 +546,37 @@ def _agent(monkeypatch, window, desktop=None):
         agent_server, "os", types.SimpleNamespace(**{**vars(os), "name": "nt"})
     )
     monkeypatch.setattr(agent_server, "_user32_factory", lambda: desktop or _Desktop())
+    import openadapt_flow.backends.win_agent.native_value as native
+
+    controls = {}
+
+    def attach(control, parent=None):
+        control.parent = parent
+        controls[control.NativeWindowHandle] = control
+        for child in control._children:
+            attach(child, control)
+
+    if window is not None:
+        window.NativeWindowHandle = 7
+        attach(window)
+
+    class Reader:
+        def owner(self, hwnd):
+            return NativeOwner(hwnd, controls[hwnd].ProcessId, 5)
+
+        def read(self, owner):
+            control = controls[owner.hwnd]
+            value = (
+                control._value
+                if control.native_override is None
+                else control.native_override
+            )
+            units = len(value.encode("utf-16-le", errors="surrogatepass")) // 2
+            return NativeRead(owner, units, units, value)
+
+    monkeypatch.setattr(native, "Win32TextReader", Reader)
     auto = types.SimpleNamespace(
-        ControlFromHandle=lambda hwnd: window if hwnd == 7 else None,
+        ControlFromHandle=lambda hwnd: controls.get(hwnd),
         UIAutomationInitializerInThread=_Init,
     )
     monkeypatch.setitem(sys.modules, "uiautomation", auto)
@@ -496,7 +596,12 @@ def test_the_agent_reads_the_title_bar_and_every_readable_text_field(monkeypatch
             _Control("DataItemControl", bounds=(220, 140, 420, 180), value=""),
             # A cell whose only text is its position name: not read, so its
             # pixels stay in the OCR.
-            _Control("DataItemControl", bounds=(420, 140, 620, 180), name="dob Row 0"),
+            _Control(
+                "DataItemControl",
+                bounds=(420, 140, 620, 180),
+                value="",
+                name="dob Row 0",
+            ),
         ],
     )
     window = _window(
@@ -517,7 +622,7 @@ def test_the_agent_reads_the_title_bar_and_every_readable_text_field(monkeypatch
                     offscreen=True,
                 ),
                 # A password box: no value, so its pixels stay in the OCR.
-                _Control("EditControl", bounds=(20, 110, 500, 130)),
+                _Control("EditControl", bounds=(20, 110, 500, 130), value=""),
                 row,
                 _Control(
                     "DocumentControl", bounds=(20, 340, 620, 460), value="BP 128/82"
@@ -539,7 +644,12 @@ def test_the_agent_reads_the_title_bar_and_every_readable_text_field(monkeypatch
     perform = _agent(monkeypatch, window)
     answer = perform("window-form-fields", {"hwnd": 7, "pid": 10})
     assert answer["window"] == {"hwnd": 7, "pid": 10, "bounds": [0, 0, 1024, 720]}
-    assert answer["fields"] == [
+    assert all(
+        valid_value_proof(f["text"], f["value_proof"])
+        for f in answer["fields"]
+        if f["value_proof"] is not None
+    )
+    assert _without_proofs(answer["fields"]) == [
         {
             "kind": "title_bar",
             "rect": [0, 0, 1024, 30],
@@ -547,8 +657,11 @@ def test_the_agent_reads_the_title_bar_and_every_readable_text_field(monkeypatch
             "state": None,
         },
         {"kind": "edit", "rect": [20, 44, 480, 26], "text": "Neil", "state": None},
+        {"kind": "edit", "rect": [20, 110, 480, 20], "text": "", "state": None},
         {"kind": "state", "rect": [20, 140, 600, 40], "text": "", "state": "selected"},
         {"kind": "text", "rect": [20, 140, 200, 40], "text": "Neil", "state": None},
+        {"kind": "text", "rect": [220, 140, 200, 40], "text": "", "state": None},
+        {"kind": "text", "rect": [420, 140, 200, 40], "text": "", "state": None},
         {
             "kind": "edit",
             "rect": [20, 340, 600, 120],
@@ -688,7 +801,8 @@ def test_a_value_container_does_not_hide_its_descendant_fields(monkeypatch):
     )
     perform = _agent(monkeypatch, _window(document))
     answer = perform("window-form-fields", {"hwnd": 7, "pid": 10})
-    assert [field["text"] for field in answer["fields"]] == ["actual field"]
+    assert [field["text"] for field in answer["fields"]] == ["summary", "actual field"]
+    assert [field["kind"] for field in answer["fields"]] == ["value", "edit"]
 
 
 def test_a_depth_limited_form_walk_is_incomplete(monkeypatch):
@@ -715,8 +829,13 @@ def test_an_empty_or_redacted_value_never_hides_the_visible_field(
     )
     perform = _agent(monkeypatch, _window(control))
     answer = perform("window-form-fields", {"hwnd": 7, "pid": 10})
-    assert answer["window"] is not None
-    assert answer["fields"] == []
+    if password is False:
+        assert answer["window"] is not None
+        assert answer["fields"][0]["text"] == ""
+        assert valid_value_proof("", answer["fields"][0]["value_proof"])
+    else:
+        assert answer["window"] is None
+        assert answer["fields"] == []
 
 
 def test_an_unreadable_title_never_hides_the_title_bar(monkeypatch):

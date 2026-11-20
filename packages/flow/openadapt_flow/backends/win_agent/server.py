@@ -2260,21 +2260,90 @@ _MAX_FORM_FIELDS = 512
 _TOGGLE_STATES = {0: "off", 1: "on", 2: "indeterminate"}
 
 
-def _form_field_value(control: object) -> tuple[bool, Optional[str]]:
-    """``(readable, value)`` of a control through its Value pattern."""
+def _form_exposes_value(control: object) -> bool:
+    """A visible label may also expose a value; never downgrade that value."""
     method = _control_value(control, "GetValuePattern", None)
     if not callable(method):
-        return False, None
+        return False
     try:
-        pattern = method()
-        value = getattr(pattern, "Value", None) if pattern is not None else None
-    except Exception:  # noqa: BLE001 - pattern not supported
-        return False, None
-    if not isinstance(value, str):
-        return False, None
-    # This is approval evidence, not a display preview: truncating a value
-    # before its rectangle is hidden would lose edits beyond the prefix.
-    return True, value
+        return isinstance(getattr(method(), "Value", None), str)
+    except Exception:  # noqa: BLE001 - the visible-label channel has no Value pattern
+        return False
+
+
+def _form_field_value(control: object, identity: Callable[[], Optional[str]]) -> Any:
+    """A complete identity-bound value; partial/unsupported sources refuse."""
+    if __package__:
+        from openadapt_flow.backends.win_agent.native_value import (
+            observe_complete_value,
+        )
+    else:  # standalone deployment must use its exact sibling, not an installed copy
+        from win_agent_native_value import observe_complete_value  # type: ignore[import-not-found,no-redef]
+
+    return observe_complete_value(control, identity=identity)
+
+
+def _form_value_identity(
+    control: object, window: object, hwnd: int, scope: Callable[[], bool], auto: Any
+) -> Optional[str]:
+    """Fresh immutable field/window scope, including ancestry and geometry."""
+    try:
+        if not scope() or _control_value(window, "NativeWindowHandle", None) != hwnd:
+            return None
+        pid = _control_value(window, "ProcessId", None)
+        root_id, field_id = _runtime_id(window), _runtime_id(control)
+        if (
+            not root_id
+            or not field_id
+            or not isinstance(pid, int)
+            or isinstance(pid, bool)
+        ):
+            return None
+        if _control_value(control, "ProcessId", None) != pid:
+            return None
+        live_window = auto.ControlFromHandle(hwnd)
+        live_control = auto.ControlFromHandle(
+            _control_value(control, "NativeWindowHandle", 0)
+        )
+        if (
+            live_window is None
+            or live_control is None
+            or _runtime_id(live_window) != root_id
+            or _runtime_id(live_control) != field_id
+            or _bounds(live_control) != _bounds(control)
+            or _control_value(live_control, "ControlTypeName", None)
+            != _control_value(control, "ControlTypeName", None)
+        ):
+            return None
+        chain = []
+        node = live_control
+        for _ in range(_MAX_UIA_DEPTH):
+            runtime = _runtime_id(node)
+            if not runtime or _control_value(node, "ProcessId", None) != pid:
+                return None
+            chain.append(runtime)
+            if runtime == root_id:
+                break
+            node = node.GetParentControl()
+        else:
+            return None
+        bounds = _bounds(control)
+        if bounds is None or _control_value(control, "IsOffscreen", None) is not False:
+            return None
+        return hashlib.sha256(
+            json.dumps(
+                [
+                    hwnd,
+                    pid,
+                    chain,
+                    bounds,
+                    _control_value(control, "ControlTypeName", None),
+                ],
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+    except Exception:  # noqa: BLE001 - a missing scope is never complete
+        return None
 
 
 def _form_field_state(control: object, control_type: str) -> Optional[str]:
@@ -2304,7 +2373,7 @@ def _rect(bounds: list[int]) -> list[int]:
 
 
 def _window_form_fields(
-    auto: Any, hwnd: int
+    auto: Any, hwnd: int, scope: Callable[[], bool]
 ) -> tuple[Optional[list[dict[str, Any]]], bool]:
     """The window's controls whose text UIA reads, in tree order.
 
@@ -2315,12 +2384,15 @@ def _window_form_fields(
     - ``text``, a leaf label or button with its value or name, or a leaf
       list or grid cell with its value, and ``state`` its toggle or
       selection state;
+    - ``value``, a complete container value whose pixels stay visible;
     - ``state``, a container (a grid row) whose selection state UIA reads:
       it carries no text and its pixels stay in the caller's OCR read.
 
-    A control that is off screen, or whose text cannot be read or is empty,
-    is left out, so its pixels stay in the OCR read. ``(None, False)`` when
-    UIA cannot open the window; ``truncated`` when the walk hit its bounds.
+    Value-backed entries include independent complete-value proof, including
+    empty values. Missing proof refuses the entire projection; OCR is not an
+    alternative for a hidden suffix. Off-screen controls are left out.
+    ``(None, False)`` when any required observation is unavailable;
+    ``truncated`` when the walk hit its bounds.
     """
     from_handle = getattr(auto, "ControlFromHandle", None)
     if not callable(from_handle):
@@ -2365,31 +2437,40 @@ def _window_form_fields(
                         "rect": _rect(bounds),
                         "text": title,
                         "state": None,
+                        "value_proof": None,
+                        "value_identity": None,
                     }
                 )
             continue
-        if control_type in _FORM_VALUE_TYPES and not children:
-            # A password provider may return an empty or redacted Value.
-            # Empty values and unknown password status also account for no
-            # visible text, so all of those pixels must stay in the OCR.
-            password = _control_value(control, "IsPassword", None)
-            readable, value = _form_field_value(control)
-            if (
-                bounds is not None
-                and on_screen
-                and password is False
-                and readable
-                and value
-            ):
+
+        def identity(c: object = control) -> Optional[str]:
+            return _form_value_identity(c, window, hwnd, scope, auto)
+
+        if control_type in _FORM_VALUE_TYPES:
+            if bounds is not None and on_screen:
+                value_identity = identity()
+                observed = _form_field_value(control, identity)
+                if (
+                    not observed.complete
+                    or observed.proof is None
+                    or value_identity is None
+                    or identity() != value_identity
+                ):
+                    return None, False
                 fields.append(
                     {
-                        "kind": "edit",
+                        # Container values are evidence too, but must never
+                        # hide descendants that have their own obligations.
+                        "kind": "value" if children else "edit",
                         "rect": _rect(bounds),
-                        "text": value,
+                        "text": observed.value,
                         "state": None,
+                        "value_proof": observed.proof.payload(),
+                        "value_identity": value_identity,
                     }
                 )
-            continue
+            if not children:
+                continue
         state = _form_field_state(control, control_type)
         if control_type in {"CheckBoxControl", "RadioButtonControl", "TabItemControl"}:
             if state is None:
@@ -2397,24 +2478,46 @@ def _window_form_fields(
                 # Keep these pixels in the OCR read when UIA cannot name it.
                 continue
         if not children and control_type in _FORM_NAMED_TYPES | _FORM_ITEM_TYPES:
-            readable, value = _form_field_value(control)
-            text = value if readable and value else None
-            if text is None and control_type in _FORM_NAMED_TYPES:
-                name = " ".join(str(_control_value(control, "Name", "") or "").split())
-                text = name or None
-            if bounds is not None and on_screen and text:
-                fields.append(
-                    {
-                        "kind": "text",
-                        "rect": _rect(bounds),
-                        "text": text,
-                        "state": state,
-                    }
-                )
+            text, proof, value_identity = None, None, None
+            if bounds is not None and on_screen:
+                if control_type in _FORM_ITEM_TYPES or _form_exposes_value(control):
+                    value_identity = identity()
+                    observed = _form_field_value(control, identity)
+                    if (
+                        not observed.complete
+                        or observed.proof is None
+                        or value_identity is None
+                        or identity() != value_identity
+                    ):
+                        return None, False
+                    text, proof = observed.value, observed.proof.payload()
+                else:
+                    name = " ".join(
+                        str(_control_value(control, "Name", "") or "").split()
+                    )
+                    text = name or None
+                if text is not None:
+                    fields.append(
+                        {
+                            "kind": "text",
+                            "rect": _rect(bounds),
+                            "text": text,
+                            "state": state,
+                            "value_proof": proof,
+                            "value_identity": value_identity,
+                        }
+                    )
             continue
         if state is not None and bounds is not None and on_screen:
             fields.append(
-                {"kind": "state", "rect": _rect(bounds), "text": "", "state": state}
+                {
+                    "kind": "state",
+                    "rect": _rect(bounds),
+                    "text": "",
+                    "state": state,
+                    "value_proof": None,
+                    "value_identity": None,
+                }
             )
         if children:
             if depth >= _MAX_UIA_DEPTH:
@@ -2447,10 +2550,23 @@ def _window_form_fields_operation(
         cloaked = user32.is_cloaked(candidate)
         if cloaked is None or not cloaked:
             return {"status": "ok", "window": None, "fields": []}
+
+    def unchanged() -> bool:
+        fresh = _window_operation("window-bounds", payload, user32).get("window")
+        if fresh != window:
+            return False
+        return all(
+            candidate == hwnd
+            or user32.pid_of(candidate) != pid
+            or not user32.is_visible(candidate)
+            or user32.is_cloaked(candidate) is True
+            for candidate in user32.top_level_windows()
+        )
+
     auto = auto_loader()
     with auto.UIAutomationInitializerInThread():
-        fields, truncated = _window_form_fields(auto, hwnd)
-    if fields is None or truncated:
+        fields, truncated = _window_form_fields(auto, hwnd, unchanged)
+    if fields is None or truncated or not unchanged():
         return {"status": "ok", "window": None, "fields": []}
     return {"status": "ok", "window": window, "fields": fields}
 

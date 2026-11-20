@@ -536,6 +536,10 @@ if ($line -and $line -match '\\s(\\d+)\\s+Disc') {{
 
         python = python or self.resolve_python()
         guest_dir = guest_dir or self.profile.guest_dir
+        source = Path(server_path or agent_server.__file__)
+        native_value = source.with_name("native_value.py")
+        if not native_value.is_file():
+            raise FileNotFoundError("agent native-value helper is missing")
         self.attach_console()
         self.stop_interactive("OAFlowAgent")
         # A previous agent stuck inside a UI Automation call keeps its port.
@@ -546,9 +550,10 @@ if ($line -and $line -match '\\s(\\d+)\\s+Disc') {{
             check=False,
         )
         self.push_file(
-            Path(server_path or agent_server.__file__),
+            source,
             rf"{guest_dir}\win_agent_server.py",
         )
+        self.push_file(native_value, rf"{guest_dir}\win_agent_native_value.py")
         bundle = generate_self_signed_cert([self.host])
         try:
             self.push_file(Path(bundle.certfile), rf"{guest_dir}\agent-cert.pem")

@@ -37,6 +37,8 @@ import json
 import re
 from typing import Any, Optional, Sequence
 
+from openadapt_flow.approval_mode.window_fields import valid_form_field
+
 #: (kind, "sha256:<hex>")
 FormState = tuple[str, str]
 #: x, y, width, height in frame pixels.
@@ -199,14 +201,20 @@ def window_fields_state(
         draw = ImageDraw.Draw(crop)
         rows: list[Any] = []
         for field in fields:
-            kind, text = str(field["kind"]), str(field["text"])
-            fx, fy, fw, fh = (int(v) for v in field["rect"])
-            state = field.get("state")
-            rows.append([kind, [fx, fy, fw, fh], text, state])
-            # A ``state`` entry (a selected grid row) carries no text: its
-            # pixels stay in the OCR read.
+            if not valid_form_field(field):
+                return None
+            kind, text = field["kind"], field["text"]
+            fx, fy, fw, fh = field["rect"]
+            state, proof = field["state"], field["value_proof"]
+            rows.append(
+                [kind, [fx, fy, fw, fh], text, state, proof, field["value_identity"]]
+            )
+            # State, container and empty values leave pixels visible. Only
+            # complete nonempty leaves or visible labels authorize a mask.
             inside = (
-                None if kind == "state" else _clamp((fx - x0, fy - y0, fw, fh), w, h)
+                None
+                if kind in {"state", "value"} or not text
+                else _clamp((fx - x0, fy - y0, fw, fh), w, h)
             )
             if inside is not None:
                 ix, iy, iw, ih = inside
@@ -307,11 +315,11 @@ def approval_window_fields(
     backend: Any, save_step: Optional[str], results: Sequence[Any] = ()
 ) -> Optional[dict[str, Any]]:
     """The backend's ``approval_form_fields`` answer for the approval's
-    window, or ``None`` (and the caller reads the window by OCR alone).
+    window, or ``None`` (the approval refuses when this channel is required).
 
     The same window :func:`approval_window_regions` names; the save step is
     left out and the earlier steps' points name the window on a resumed run.
-    Never raises.
+    An unreadable native value never falls back to OCR. Never raises.
     """
 
     fields_of = getattr(backend, "approval_form_fields", None)
@@ -340,16 +348,22 @@ def approval_form_state(
 ) -> Optional[FormState]:
     """The approval's form state for ``save_step``, or ``None``.
 
-    The app window's fields by value where the backend can read them,
-    otherwise the window (or the whole screen) by OCR. A request and its
-    recheck that read through different channels get different kinds, so
-    the save halts.
+    A backend offering native field reads must return complete evidence;
+    unavailable values refuse without an OCR downgrade. Backends without
+    that channel retain their existing DOM or screen read. Different read
+    channels have different kinds, so a changed channel halts the save.
     """
 
-    if frame_png is not None:
+    if callable(getattr(backend, "approval_form_fields", None)):
+        # Once a native field channel is required, no answer (including a
+        # legacy/malformed response or a missing complete value) is a refusal.
+        # OCR cannot establish equality of a hidden or omitted suffix.
+        if frame_png is None:
+            return None
         fields = approval_window_fields(backend, save_step, results)
-        if fields is not None:
-            return capture_form_state(backend, vision, frame_png, window_fields=fields)
+        if fields is None:
+            return None
+        return window_fields_state(vision, frame_png, fields)
     regions = approval_window_regions(backend, frame_png, save_step, results)
     return capture_form_state(backend, vision, frame_png, regions)
 

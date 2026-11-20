@@ -736,9 +736,15 @@ class ParallelsVM:
         host_ip = host_ip or self.host_ip()
         guest_ip = self.guest_ip()
         server = self._agent_server_path()
+        native_value = os.path.join(os.path.dirname(server), "native_value.py")
+        if not os.path.isfile(native_value):
+            raise FileNotFoundError("agent native-value helper is missing")
         launcher = os.path.abspath(os.path.join(_SCRIPT_DIR, "session1_launch.py"))
         self.exec_cmd(f"if not exist {GUEST_DIR} mkdir {GUEST_DIR}")
         self.push_file(server, f"{GUEST_DIR}/win_agent_server.py", host_ip=host_ip)
+        self.push_file(
+            native_value, f"{GUEST_DIR}/win_agent_native_value.py", host_ip=host_ip
+        )
         self.push_file(launcher, f"{GUEST_DIR}/session1_launch.py", host_ip=host_ip)
         self.exec(
             [
