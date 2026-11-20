@@ -143,6 +143,60 @@ jobs:
           --log "$env:EVIDENCE_DIR\stub-requests.json" --timeout 120
           --token-env CI_CONNECTOR_TOKEN
 
+      - name: Recover after process death during an empty poll
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $stateUrl = "http://127.0.0.1:$env:STUB_PORT/test/state"
+          $active = $false
+          for ($i = 0; $i -lt 100; $i++) {
+            $before = Invoke-RestMethod $stateUrl
+            if ($before.active_empty_polls -gt 0) { $active = $true; break }
+            Start-Sleep -Milliseconds 100
+          }
+          if (-not $active) { throw 'no active empty poll before the crash probe' }
+          $oldPid = [int](Get-CimInstance Win32_Service -Filter "Name='OpenAdaptConnector'").ProcessId
+          if ($oldPid -le 0) { throw 'service was not running before the crash probe' }
+          Stop-Process -Id $oldPid -Force
+          $recovered = $false
+          for ($i = 0; $i -lt 120; $i++) {
+            $svc = Get-CimInstance Win32_Service -Filter "Name='OpenAdaptConnector'"
+            $after = Invoke-RestMethod $stateUrl
+            if ($svc.State -eq 'Running' -and [int]$svc.ProcessId -gt 0 -and [int]$svc.ProcessId -ne $oldPid -and $after.polls -gt $before.polls) {
+              $recovered = $true; break
+            }
+            Start-Sleep -Milliseconds 500
+          }
+          if (-not $recovered) { throw 'SCM did not restart the service and resume polling' }
+          @{ old_pid = $oldPid; restarted_pid = [int]$svc.ProcessId; polls_before = $before.polls; polls_after = $after.polls; restarted_during_empty_poll = $true } |
+            ConvertTo-Json | Set-Content (Join-Path $env:EVIDENCE_DIR 'service-lifecycle.json')
+
+      - name: Refuse a revoked token without logging it or reporting a job
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $testUrl = "http://127.0.0.1:$env:STUB_PORT/test"
+          $logPath = Join-Path $env:EVIDENCE_DIR 'stub-requests.json'
+          $beforeRecords = Get-Content $logPath -Raw | ConvertFrom-Json
+          $beforeOutcomes = @($beforeRecords | Where-Object { $_.path -in @('/api/internal/run-callback', '/api/connector/ack') }).Count
+          $before = Invoke-RestMethod "$testUrl/deny-auth"
+          try {
+            $rejected = $false
+            for ($i = 0; $i -lt 80; $i++) {
+              $state = Invoke-RestMethod "$testUrl/state"
+              if ($state.auth_denials -ge ($before.auth_denials + 2)) { $rejected = $true; break }
+              Start-Sleep -Milliseconds 250
+            }
+            if (-not $rejected) { throw 'did not observe two refused-token polls' }
+            $afterRecords = Get-Content $logPath -Raw | ConvertFrom-Json
+            $afterOutcomes = @($afterRecords | Where-Object { $_.path -in @('/api/internal/run-callback', '/api/connector/ack') }).Count
+            if ($afterOutcomes -ne $beforeOutcomes) { throw 'auth rejection produced a job outcome' }
+            $serviceLog = Get-Content (Join-Path $env:CONNECTOR_DIR 'logs\connector.log') -Raw
+            if ($serviceLog.Contains($env:CI_CONNECTOR_TOKEN)) { throw 'revoked token leaked to the service log' }
+            @{ auth_denials = $state.auth_denials - $before.auth_denials; outcome_count_unchanged = $true; token_absent_from_log = $true } |
+              ConvertTo-Json | Set-Content (Join-Path $env:EVIDENCE_DIR 'service-auth-refusal.json')
+          } finally {
+            Invoke-RestMethod "$testUrl/allow-auth" | Out-Null
+          }
+
       - name: No listening socket owned by the service process
         run: |
           $ErrorActionPreference = 'Stop'
@@ -162,8 +216,19 @@ jobs:
       - name: Stop and remove the service
         run: |
           $ErrorActionPreference = 'Stop'
+          $active = $false
+          for ($i = 0; $i -lt 100; $i++) {
+            $state = Invoke-RestMethod "http://127.0.0.1:$env:STUB_PORT/test/state"
+            if ($state.active_empty_polls -gt 0) { $active = $true; break }
+            Start-Sleep -Milliseconds 100
+          }
+          if (-not $active) { throw 'no active empty poll before the stop probe' }
+          $timer = [Diagnostics.Stopwatch]::StartNew()
           openadapt-flow connector service stop
           if ($LASTEXITCODE -ne 0) { throw "stop exited $LASTEXITCODE" }
+          $timer.Stop()
+          @{ stopped_during_empty_poll = $true; elapsed_ms = $timer.ElapsedMilliseconds } |
+            ConvertTo-Json | Set-Content (Join-Path $env:EVIDENCE_DIR 'service-stop.json')
           $log = Get-Content (Join-Path $env:CONNECTOR_DIR 'logs\connector.log') -Raw
           if ($log -notmatch 'service stopped') { throw 'connector.log has no clean stop' }
           openadapt-flow connector service remove

@@ -270,3 +270,72 @@ def test_serve_without_a_token_exits_nonzero(
     logger, _ = ws.build_logger(config_dir, name="test.ws.notoken")
     assert ws.serve(config_dir, threading.Event(), logger) == 2
     assert "no connector token" in ws.log_path(config_dir).read_text("utf-8")
+
+
+@pytest.mark.parametrize("reply", [None, {"id": "leased-after-stop", "payload": {}}])
+def test_stop_during_poll_never_returns_a_new_lease(reply):
+    stop = threading.Event()
+    calls = []
+
+    def handler(request):
+        calls.append(request.url.path)
+        stop.set()
+        return (
+            httpx.Response(204)
+            if reply is None
+            else httpx.Response(200, json={"job": reply})
+        )
+
+    with ws._stoppable_client(
+        "https://cp.example", TOKEN, stop, transport=httpx.MockTransport(handler)
+    ) as client:
+        with pytest.raises(KeyboardInterrupt):
+            client.poll(1)
+        with pytest.raises(KeyboardInterrupt):
+            client.poll(1)
+    assert calls == ["/api/connector/poll"]
+
+
+def test_log_redacts_tokens_in_exception_and_stack_text(tmp_path):
+    logger, redactor = ws.build_logger(tmp_path, name="test.ws.exception")
+    redactor.add(TOKEN)
+    try:
+        raise RuntimeError("server echoed " + TOKEN)
+    except RuntimeError:
+        logger.exception("service failure", stack_info=True)
+    for handler in logger.handlers:
+        handler.flush()
+    text = ws.log_path(tmp_path).read_text()
+    assert TOKEN not in text
+    assert "RuntimeError: server echoed <redacted>" in text
+
+
+def test_auth_rejection_is_retried_without_execution_or_token_in_logs(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(ws, "_RETRY_START_S", 0.001)
+    stop = threading.Event()
+    requests = []
+
+    def handler(request):
+        requests.append(request.url.path)
+        if len(requests) == 2:
+            stop.set()
+        return httpx.Response(401, text=TOKEN)
+
+    config = tmp_path / "connector"
+    _write_config(config, "https://cp.example")
+    logger, redactor = ws.build_logger(config, name="test.ws.revoked")
+    assert (
+        ws.serve(
+            config,
+            stop,
+            logger,
+            redactor=redactor,
+            runner=_refusing_runner,
+            client_kwargs={"transport": httpx.MockTransport(handler)},
+        )
+        == 0
+    )
+    assert requests == ["/api/connector/poll", "/api/connector/poll"]
+    assert TOKEN not in ws.log_path(config).read_text()

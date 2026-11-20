@@ -49,7 +49,7 @@ def check(records: list[dict[str, Any]]) -> tuple[bool, str]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument("--log", required=True)
     parser.add_argument("--timeout", type=float, default=120.0)
     parser.add_argument("--token-env", default=None)

@@ -60,8 +60,15 @@ Cloud token creation is authenticated and organization-scoped in the dashboard.
 
 ## Windows service
 
-On Windows, run the Connector as the `OpenAdaptConnector` service instead of
-a console session. The service runs the same loop as `connector run`.
+The `OpenAdaptConnector` wrapper runs the connector loop under the Windows
+Service Control Manager. The Windows CI proof covers service lifecycle and
+refusal of an ungoverned job, rather than a successful desktop write.
+
+A service runs in session 0 and cannot directly interact with a signed-in
+user's desktop. A desktop job needs an execution agent in that user's
+interactive session. `WindowsBackend` can call a separate HTTP agent, but the
+service-to-agent governed write and read-back path has not been qualified by
+this workflow. See [Microsoft's service guidance](https://learn.microsoft.com/en-us/windows/win32/services/interactive-services).
 
 Install, from an elevated (Administrator) prompt:
 
@@ -97,10 +104,17 @@ service runs that installation's `python.exe`, and `install` refuses a venv.
   a failure (5 s, 5 s, then 60 s). A lost connection to the control plane is
   retried inside the service with backoff.
 - **Network.** Outbound only. `install` adds no firewall rule.
-- **Desktop.** Services run in session 0, which has no interactive desktop,
-  so a job that drives a desktop app cannot run from the service.
-- **Stop.** `stop` lets a running job finish and report, then exits before the
-  next poll.
+- **Desktop.** The wrapper does not create an interactive user session or
+  start an execution agent in one. Its service lifecycle proof does not
+  qualify desktop execution.
+- **Stop.** A job already running finishes and reports. A lease returned while
+  the service is stopping never starts; it is left unacknowledged for the
+  control plane to reconcile, rather than reported as completed.
+- **Token replacement.** The service account reads its configuration and can
+  write only to its log directory. Replace the enrollment token as an
+  administrator while the service is stopped, then start it again. Automatic
+  token persistence needs a separate writable-state contract; the wrapper's
+  authorization-refusal check does not prove token rotation.
 
 Update by stopping the service, installing the pinned version, and starting
 it again:

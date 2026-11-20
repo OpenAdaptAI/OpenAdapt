@@ -64,6 +64,9 @@ class StubState:
         self.polls = 0
         self.job_sent = False
         self.records: list[dict[str, Any]] = []
+        self.active_empty_polls = 0
+        self.auth_denials = 0
+        self.deny_auth = False
         self.lock = threading.Lock()
 
     def record(self, entry: dict[str, Any]) -> None:
@@ -99,6 +102,24 @@ def make_handler(state: StubState) -> type[BaseHTTPRequestHandler]:
             if data:
                 self.wfile.write(data)
 
+        def do_GET(self) -> None:  # noqa: N802
+            # Test-only lifecycle controls; this server binds loopback only.
+            if self.path == "/test/deny-auth":
+                with state.lock:
+                    state.deny_auth = True
+            elif self.path == "/test/allow-auth":
+                with state.lock:
+                    state.deny_auth = False
+            elif self.path != "/test/state":
+                return self._reply(404, {"error": "not_found"})
+            with state.lock:
+                snapshot = {
+                    "polls": state.polls,
+                    "active_empty_polls": state.active_empty_polls,
+                    "auth_denials": state.auth_denials,
+                }
+            self._reply(200, snapshot)
+
         def do_POST(self) -> None:  # noqa: N802
             length = int(self.headers.get("content-length") or 0)
             raw = self.rfile.read(length) if length else b""
@@ -117,10 +138,26 @@ def make_handler(state: StubState) -> type[BaseHTTPRequestHandler]:
                 }
             )
             if path == "/api/connector/poll":
+                with state.lock:
+                    deny_auth = state.deny_auth
+                    if deny_auth:
+                        state.auth_denials += 1
+                if deny_auth:
+                    # Deliberately hostile response: the service log must
+                    # remove its token even when a server echoes it back.
+                    return self._reply(
+                        401, {"error": self.headers.get("authorization", "")}
+                    )
                 job = state.next_poll()
                 if job is None:
-                    time.sleep(state.empty_sleep)
-                    self._reply(204, None)
+                    with state.lock:
+                        state.active_empty_polls += 1
+                    try:
+                        time.sleep(state.empty_sleep)
+                        self._reply(204, None)
+                    finally:
+                        with state.lock:
+                            state.active_empty_polls -= 1
                 else:
                     self._reply(200, {"job": job})
             elif path == "/api/internal/run-callback":
@@ -150,7 +187,9 @@ def serve(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0], allow_abbrev=False
+    )
     parser.add_argument("--log", required=True, help="JSON request log path")
     parser.add_argument("--port", type=int, default=0)
     parser.add_argument("--port-file", help="Write the bound port here")

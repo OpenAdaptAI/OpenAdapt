@@ -121,15 +121,24 @@ class TokenRedactingFilter(logging.Filter):
             self._secrets.append(secret)
 
     def filter(self, record: logging.LogRecord) -> bool:
-        if not self._secrets:
-            return True
-        message = record.getMessage()
-        redacted = message
-        for secret in self._secrets:
-            redacted = redacted.replace(secret, "<redacted>")
-        if redacted != message:
-            record.msg = redacted
-            record.args = None
+        def scrub(value: str) -> str:
+            for secret in self._secrets:
+                value = value.replace(secret, "<redacted>")
+            return value
+
+        record.msg = scrub(record.getMessage())
+        record.args = None
+        # Tracebacks are formatted after filters normally run. Redact their
+        # complete rendered text as well, without exposing exception arguments.
+        if record.exc_info:
+            record.exc_text = scrub(
+                logging.Formatter().formatException(record.exc_info)
+            )
+            record.exc_info = None
+        elif record.exc_text:
+            record.exc_text = scrub(record.exc_text)
+        if record.stack_info:
+            record.stack_info = scrub(record.stack_info)
         return True
 
 
@@ -172,11 +181,14 @@ def _stoppable_client(
     from openadapt_flow.connector.client import ConnectorClient
 
     class _StoppableClient(ConnectorClient):
-        def poll(self, wait_s: int) -> Optional[dict[str, Any]]:
+        def poll(self, wait_s: int, **kwargs: Any) -> Optional[dict[str, Any]]:
             if stop_event.is_set():
                 raise KeyboardInterrupt
-            envelope = super().poll(wait_s)
-            if stop_event.is_set() and envelope is None:
+            envelope = super().poll(wait_s, **kwargs)
+            if stop_event.is_set():
+                # A lease received while stopping must never start new work.
+                # Leave it unacknowledged for control-plane reconciliation;
+                # pretending the job completed would permit an unsafe retry.
                 raise KeyboardInterrupt
             return envelope
 
@@ -211,7 +223,7 @@ def serve(
     try:
         settings = load_settings()
     except ConnectorConfigError as exc:
-        logger.error("connector config error: %s", exc)
+        logger.error("connector config error: %s", type(exc).__name__)
         return 2
     if redactor is not None:
         redactor.add(settings.token)
@@ -616,7 +628,7 @@ def cmd_connector_service(args: argparse.Namespace) -> int:
 
 def _host(argv: Sequence[str]) -> int:  # pragma: no cover - Windows service host
     """Entry point the service control manager starts."""
-    parser = argparse.ArgumentParser(prog=SERVICE_MODULE)
+    parser = argparse.ArgumentParser(prog=SERVICE_MODULE, allow_abbrev=False)
     parser.add_argument(HOST_FLAG, action="store_true", required=True)
     parser.add_argument("--config-dir", default=None)
     args = parser.parse_args(list(argv))
