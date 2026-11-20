@@ -178,6 +178,10 @@ TREE_PROBE_JS = (
     let windows = 0;
     let last = 0;
     let busy = '';
+    // No document can be quiet before its last change (or its observer's
+    // installation) is a full window old: the earliest a later probe can
+    // answer quiet, so the caller need not look sooner.
+    let ready = 0;
     const walk = (win) => {
         let doc;
         try { doc = win.document; void doc.readyState; } catch (e) { return 'perframe'; }
@@ -187,6 +191,7 @@ TREE_PROBE_JS = (
         if (v === 'unavailable') return 'unavailable';
         if (v && !busy) busy = v;
         last = Math.max(last, win.__oaflowQuiet.last);
+        ready = Math.max(ready, win.__oaflowQuiet.last, win.__oaflowQuiet.installed);
         for (const el of doc.querySelectorAll('iframe, frame')) {
             if (!el.contentWindow) continue;
             const r = walk(el.contentWindow);
@@ -196,7 +201,7 @@ TREE_PROBE_JS = (
     };
     const r = walk(window);
     if (r) return { verdict: r, windows, last };
-    if (busy) return { verdict: busy, windows, last };
+    if (busy) return { verdict: busy, windows, last, wait: ready + windowMs - nowAbs };
     const ticks = window.__oaflowQuiet.ticks || [0, 0];
     // Two rendered top-level frames after the last change in any frame.
     if (!(ticks[0] > last)) return { verdict: 'busy:paint', windows, last };
@@ -239,6 +244,10 @@ class PageQuiescence:
         # time over all frames, the last network activity and the frame count.
         # Equal markers from two quiet probes mean nothing changed in between.
         self.marker: Optional[str] = None
+        # After a busy answer: seconds before which no probe can answer
+        # quiet (the latest change, in any frame or on the network, is not
+        # yet a full window old). 0.0 when unknown.
+        self.retry_after_s = 0.0
         try:
             page.add_init_script(QUIESCENCE_INSTALL_JS)
             page.on("request", self._on_request)
@@ -295,11 +304,16 @@ class PageQuiescence:
         frames = self._live_frames()
         if not frames:
             return None
+        self.retry_after_s = 0.0
         try:
             out = self._page.evaluate(TREE_PROBE_JS, window_ms)
         except Exception:
             return None
         verdict = out.get("verdict") if isinstance(out, dict) else None
+        try:
+            page_wait_s = max(0.0, float(out.get("wait") or 0.0) / 1000.0)
+        except (AttributeError, TypeError, ValueError):
+            page_wait_s = 0.0
         if verdict == "unavailable" or verdict is None:
             self.last_reason = "unavailable"
             return None
@@ -315,6 +329,12 @@ class PageQuiescence:
                 return None
         self.last_reason = str(verdict)
         if verdict != "quiet":
+            network_wait_s = window_s - (time.monotonic() - self._last_network)
+            # Never more than one window: a busy answer means the latest
+            # change is younger than that.
+            self.retry_after_s = min(
+                max(page_wait_s, network_wait_s, 0.0), float(window_s)
+            )
             return False
         # Network events are delivered while the evaluate calls above run.
         if self._inflight:
@@ -322,6 +342,9 @@ class PageQuiescence:
             return False
         if time.monotonic() - self._last_network < window_s:
             self.last_reason = "busy:network-recent"
+            self.retry_after_s = max(
+                0.0, window_s - (time.monotonic() - self._last_network)
+            )
             return False
         self.marker = (
             f"page:{self._frame_last:.3f}:{self._last_network:.6f}:{len(frames)}"

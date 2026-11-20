@@ -170,7 +170,7 @@ def test_runtime_declares_one_opencv_distribution_provider() -> None:
         if requirement.lower().startswith("opencv-")
     ]
 
-    assert opencv == ["opencv-python>=4.9"]
+    assert opencv == ["opencv-python>=4.9,<5.1"]
     assert all("headless" not in requirement for requirement in opencv)
 
 

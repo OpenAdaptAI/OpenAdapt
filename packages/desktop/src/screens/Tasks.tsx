@@ -220,20 +220,20 @@ export function Tasks({
         <section className="first-task" aria-label="Get started">
           <h2>Hand off your first workflow</h2>
           <p>
-            Show OpenAdapt a workflow in the app where you already do it.
-            OpenAdapt repeats it, checks each saved record, and stops to ask you
+            You or an AI agent do a workflow once, in the app where it's
+            normally done. OpenAdapt repeats it, checks each saved record, and stops to ask you
             when something doesn't match.
           </p>
           <div className="choice-row">
             <ChoiceButton
               tone="primary"
               title="Show OpenAdapt your workflow"
-              sub="Do it once on test data while OpenAdapt watches."
+              sub="Do it once on test data, or have a connected AI agent do it."
               onClick={actions.onShow}
             />
             <ChoiceButton
               title="See it work on a sample app"
-              sub="A built-in clinic app with made-up patients. No setup."
+              sub="A built-in sample app with made-up data. No setup."
               onClick={actions.onSample}
             />
           </div>

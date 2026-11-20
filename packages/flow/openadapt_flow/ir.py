@@ -751,6 +751,17 @@ class Postcondition(BaseModel):
     #: not pass for "No matches were found.".
     exact: bool = False
 
+    #: TEXT_PRESENT / TEXT_ABSENT: the clock template of a ``text`` read from
+    #: the clock (:mod:`openadapt_flow.clock_text`); checked as rendered from
+    #: the run's clock, field for field. ``text`` keeps the recorded literal.
+    text_clock: Optional[str] = Field(default=None, min_length=1, max_length=256)
+
+    @model_validator(mode="after")
+    def _valid_clock_template(self) -> "Postcondition":
+        from openadapt_flow.clock_text import check_postcondition
+
+        return check_postcondition(self)
+
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
         """Leave the local-edit fields out when unset, so every existing
@@ -759,6 +770,8 @@ class Postcondition(BaseModel):
         data: dict[str, Any] = handler(self)
         if not self.exact:
             data.pop("exact", None)
+        if self.text_clock is None:
+            data.pop("text_clock", None)
         if self.field_selector is None:
             data.pop("field_selector", None)
         if self.param is None:

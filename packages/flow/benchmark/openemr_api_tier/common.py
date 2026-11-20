@@ -125,3 +125,19 @@ def record_check(f: SpikeFixture, ref: Referral, before_ids: set[str]) -> dict[s
         correct = len(new_rows) == 1 and len(target) == 1 and nmatch == len(fields)
     return {"new_charts": len(new_rows), "readback": f"{nmatch}/{len(fields)}", "correct": correct,
             "field_check": fields}
+
+
+def owned_fixture_oracle(f: SpikeFixture, spec: Any) -> Any:
+    """The engine's REST record check for one referral on this owned fixture.
+
+    The shared oracle leaves a bounded read's completeness undeclared (#2041),
+    so on its own the engine refuses the save. This fixture is reset to a
+    known baseline of a few charts before every block, and the read names one
+    patient by last name and email under a limit of 100, so the answer is the
+    whole matching set: declare it, as #2041 did for other owned fixtures.
+    """
+    from benchmark.harness.openemr_local import OpenEMRPatientOracle
+
+    oracle = OpenEMRPatientOracle(f.api_base_url, f.token_session("oracle"), spec)
+    oracle.verifier.records_complete = True
+    return oracle

@@ -45,7 +45,8 @@ def test_no_entry_claims_certified_without_a_record() -> None:
     entries = registry.load_index(str(ROOT / "registry/index.json"))
     ids = {e.id: e for e in entries}
     assert ids["openemr/new-referral"].status == "example"
-    assert ids["openimis/claim-intake"].status == "planned"
+    # A release publishes only entries that have a bundle.
+    assert all(e.status != "planned" for e in entries)
     with pytest.raises(registry.RegistryError, match="certification"):
         registry.validate_index(
             {
@@ -93,7 +94,18 @@ def test_pull_refuses_tampered_file(tmp_path: Path) -> None:
 
 
 def test_pull_refuses_planned_and_unknown(tmp_path: Path) -> None:
-    index = str(_local_registry(tmp_path))
+    path = _local_registry(tmp_path)
+    data = json.loads(path.read_text())
+    data["workflows"].append(
+        {
+            "id": "openimis/claim-intake",
+            "title": "Enter a health-facility claim in openIMIS",
+            "status": "planned",
+            "certification": None,
+        }
+    )
+    path.write_text(json.dumps(data))
+    index = str(path)
     with pytest.raises(registry.RegistryError, match="planned"):
         registry.pull(
             "openimis/claim-intake",
@@ -118,7 +130,7 @@ def test_cli_list_and_pull(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -
     index = str(_local_registry(tmp_path))
     assert main(["pull", "--list", "--index", index]) == 0
     out = capsys.readouterr().out
-    assert "example, not certified" in out and "planned" in out
+    assert "example, not certified" in out and "planned" not in out
     assert (
         main(
             [

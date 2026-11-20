@@ -1,0 +1,21 @@
+{
+  "action_count": 29,
+  "case_count": 6,
+  "consequential_action_count": 1,
+  "effect_covered_action_count": 1,
+  "effect_required_action_count": 1,
+  "environment_contract_sha256": "fdfbefb39092e2af7cf51a2b00055dda88b5b81b6281fcf41ded1454075d37b6",
+  "generated_at": "2026-11-19T16:41:54.593859+00:00",
+  "identity_covered_action_count": 1,
+  "minimum_effect_tier": 1,
+  "passed": true,
+  "passed_case_count": 6,
+  "policy_name": "clinical-write",
+  "project_id": "42abe878-ae09-4db1-84f1-0b487676098a",
+  "project_revision": 102,
+  "refusals": [],
+  "schema_version": "openadapt.qualification-report/v1",
+  "state_changing_action_count": 0,
+  "workflow_contract_sha256": "af8451ab30e8d5120fd4b0562c6cec4ab235077f91282339a5d7d596718589e7",
+  "workflow_name": "openemr-create-synthetic-patient"
+}
