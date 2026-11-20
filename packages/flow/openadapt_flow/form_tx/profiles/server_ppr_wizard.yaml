@@ -1,0 +1,44 @@
+schema_version: openadapt.ui-profile/v1
+profile_id: server_ppr_wizard
+description: >-
+  Server-driven partial-page-reload (PPR) multi-step wizard surface with
+  asynchronous field-change re-renders, detached portal listboxes, and
+  re-minted dynamic control identifiers.
+busy_selectors:
+  - '[aria-busy="true"]'
+  - '[data-busy="true"]'
+  - '[data-ppr-busy="true"]'
+  - '[data-loading="true"]'
+  - '.loading-overlay'
+  - '.ppr-busy-mask'
+error_banner_selectors:
+  - '[role="alert"]'
+  - '[data-validation-banner]'
+  - '.validation-banner'
+  - '.error-banner'
+  - '[data-error-summary]'
+field_error_selectors:
+  - '[aria-invalid="true"]'
+  - '[data-field-error]'
+  - '.field-error'
+  - '.validation-error'
+portal_listbox_selectors:
+  - '[role="listbox"]'
+  - '[data-portal-listbox]'
+portal_option_selectors:
+  - '[role="option"]'
+  - '[data-option-value]'
+modal_dialog_selectors:
+  - 'dialog[open]'
+  - '[role="dialog"][aria-modal="true"]'
+  - '[data-modal-open="true"]'
+auth_wall_selectors:
+  - 'input[type="password"]'
+  - '[data-auth-wall="true"]'
+  - 'form[data-login-form="true"]'
+authenticated_landmark_selectors:
+  - '[data-authenticated-shell="true"]'
+keepalive_path: null
+debounce_grace_ms: 120
+settle_window_ms: 120
+max_settle_ms: 15000

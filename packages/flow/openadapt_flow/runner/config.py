@@ -50,6 +50,7 @@ from typing import Any, Literal, Optional
 from openadapt_flow.hosted import HostedError
 from openadapt_flow.private_file import (
     PrivateFileAclError,
+    open_binary,
     windows_descriptor_has_private_acl,
 )
 from openadapt_flow.runner.flow_release_receipt import HostedFlowReleaseIdentity
@@ -84,7 +85,7 @@ def _load_manifest_toml(path: Path, *, protected: bool = False) -> dict[str, Any
                 raise RunnerConfigError(
                     "hosted runner manifest is not a private regular file"
                 )
-            descriptor = os.open(path, flags)
+            descriptor = open_binary(path, flags)
         except OSError as exc:
             raise RunnerConfigError(
                 "hosted runner manifest could not be opened safely"

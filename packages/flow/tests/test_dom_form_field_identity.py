@@ -57,22 +57,24 @@ def form_page():
             browser = pw.chromium.launch(headless=True)
         except Exception as exc:  # pragma: no cover - no browser installed
             pytest.skip(f"chromium unavailable: {exc}")
-        page = browser.new_page(
-            viewport={"width": 800, "height": 400}, device_scale_factor=1
-        )
-        page.set_content(_FORM_HTML, wait_until="load")
-        backend = PlaywrightBackend(page)
-
-        def at(selector: str):
-            x, y = page.eval_on_selector(
-                selector,
-                "el => { const r = el.getBoundingClientRect();"
-                " return [r.x + r.width / 2, r.y + r.height / 2]; }",
+        try:
+            page = browser.new_page(
+                viewport={"width": 800, "height": 400}, device_scale_factor=1
             )
-            return backend.structured_text_at(int(x), int(y))
+            page.set_content(_FORM_HTML, wait_until="load")
+            backend = PlaywrightBackend(page)
 
-        yield page, at
-        browser.close()
+            def at(selector: str):
+                x, y = page.eval_on_selector(
+                    selector,
+                    "el => { const r = el.getBoundingClientRect();"
+                    " return [r.x + r.width / 2, r.y + r.height / 2]; }",
+                )
+                return backend.structured_text_at(int(x), int(y))
+
+            yield page, at
+        finally:
+            browser.close()
 
 
 def test_field_identity_is_group_labels_plus_other_values(form_page) -> None:

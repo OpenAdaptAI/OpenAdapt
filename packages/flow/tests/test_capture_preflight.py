@@ -509,8 +509,9 @@ def test_actor_primary_survives_halt_and_all_cleanup_failures(
 
 
 @pytest.mark.parametrize("failure", [None, "dispatcher", "backend", "publication"])
+@pytest.mark.parametrize("withholding_enabled", [True, False])
 def test_real_candidate_publication_waits_for_cleanup_and_reload_refuses_failed_capture(
-    local_task, tmp_path, monkeypatch, failure
+    local_task, tmp_path, monkeypatch, failure, withholding_enabled
 ):
     from contextlib import ExitStack
 
@@ -552,6 +553,9 @@ def test_real_candidate_publication_waits_for_cleanup_and_reload_refuses_failed_
             raise primary
 
     recording = Recording(jit, values, values, "generic")
+    # This completion fixture begins after __enter__. Model whether its
+    # credential configuration succeeded; the real signed writer preserves it.
+    recording._credential_withholding_enabled = withholding_enabled
     recording._session = SimpleNamespace(
         compile=compile_staged,
         compiled_recording_dir=None,
@@ -581,13 +585,20 @@ def test_real_candidate_publication_waits_for_cleanup_and_reload_refuses_failed_
     if failure is None:
         finish()
         # Candidate persistence uses JSON arrays for LiftedParam tuple fields.
-        assert json.loads(json.dumps(recording.result.candidate)) == jit.candidate()
-        assert jit.candidate()["recorder"]
-        assert (
-            lifecycle._recorder(jit.program_dir, jit.key_dir)
-            == jit.candidate()["recorder"]
-        )
-        assert FirstRunCompiler.load(compiler.dir)._jit().candidate() == jit.candidate()
+        stored = json.loads(json.dumps(recording.result.candidate))
+        recorder = lifecycle._recorder(jit.program_dir, jit.key_dir)
+        assert recorder == stored["recorder"]
+        assert recorder["credential_withholding"] is withholding_enabled
+        reloaded = FirstRunCompiler.load(compiler.dir)._jit()
+        if withholding_enabled:
+            assert stored == jit.candidate()
+            assert reloaded.candidate() == jit.candidate()
+        else:
+            for selected in (jit, reloaded):
+                with pytest.raises(
+                    AdmissionError, match="CREDENTIAL_CAPTURE_PRIVACY_MISMATCH"
+                ):
+                    selected.candidate()
         assert not list(jit.program_dir.glob("candidate-pending-*.json"))
     else:
         with pytest.raises(RuntimeError) as caught:

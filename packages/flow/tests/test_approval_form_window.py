@@ -20,6 +20,7 @@ from openadapt_flow.approval_mode.form_state import (
     screen_text_state,
 )
 from openadapt_flow.backends.windows_backend import WindowsBackend
+from openadapt_flow.ir import Workflow
 from openadapt_flow.runtime.replayer import Replayer
 
 SIZE = (1024, 768)
@@ -248,7 +249,7 @@ def test_a_refused_run_does_not_touch_the_captured_windows(monkeypatch, tmp_path
     )
     with pytest.raises(ValueError, match="refused here"):
         _replayer_on(backend).run(
-            SimpleNamespace(secret_params=()),
+            Workflow(name="synthetic legacy workflow", schema_version=2),
             bundle_dir=tmp_path / "b",
             run_dir=tmp_path / "r",
         )
@@ -281,7 +282,7 @@ def test_a_run_forgets_the_windows_an_earlier_run_captured(monkeypatch, tmp_path
     monkeypatch.setattr(Replayer, "_initial_external_network_calls", reached)
     with pytest.raises(_Reached):
         _replayer_on(backend).run(
-            SimpleNamespace(interstitials=(), secret_params=()),
+            Workflow(name="synthetic legacy workflow", schema_version=2),
             bundle_dir=tmp_path / "b",
             run_dir=tmp_path / "r",
         )

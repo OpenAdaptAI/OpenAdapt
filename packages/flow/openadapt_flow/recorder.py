@@ -278,6 +278,8 @@ class Recorder:
             _sealed.register_writer(self._sealed_writer)
         self._frames_dir = self._dir / "frames"
         self._frames_dir.mkdir(parents=True, exist_ok=True)
+        #: Set by a recorder that reports every browser dialog it met.
+        self.dialogs_captured = False
         self._events_path = self._dir / "events.jsonl"
         # Truncate any stale file.
         _sealed.write_bytes(self._events_path, b"")
@@ -526,6 +528,9 @@ class Recorder:
             "params": dict(self._params),
             "secret_params": sorted(self._withheld_param_names),
         }
+        if self.dialogs_captured:
+            # Every browser dialog met while recording is on its event.
+            meta["dialogs_captured"] = True
         if self._network_capture is not None:
             from openadapt_flow.network_capture import NETWORK_FILE
 

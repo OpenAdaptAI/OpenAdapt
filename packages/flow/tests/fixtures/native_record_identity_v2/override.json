@@ -1,0 +1,45 @@
+{
+  "schema": "openadapt.synthetic-source-override/v1",
+  "patches": [
+    {
+      "before": "# Patient Notes -- Benchmark Harness (WinForms).",
+      "after": "# Patient Notes -- Native Record Identity v2 (NEW synthetic WinForms fixture)."
+    },
+    {
+      "before": "param([string[]]$DbArgs)",
+      "after": "param([string[]]$DbArgs, [switch]$RequireSuccess)"
+    },
+    {
+      "before": "    $p.WaitForExit()\n    return $out",
+      "after": "    $p.WaitForExit()\n    if ($RequireSuccess -and $p.ExitCode -ne 0) { throw \"Database command failed\" }\n    return $out"
+    },
+    {
+      "before": "$form.Text = \"Patient Notes - Benchmark Harness\"",
+      "after": "$form.Text = \"Patient Notes - Native Record Identity v2\""
+    },
+    {
+      "before": "$form.Name = \"patientNotesForm\"",
+      "after": "$form.Name = \"patientNotesNativeIdentityV2\""
+    },
+    {
+      "before": "$form.Size = New-Object System.Drawing.Size(760, 560)",
+      "after": "$form.Size = New-Object System.Drawing.Size(900, 560)"
+    },
+    {
+      "before": "$saveButton = New-Object System.Windows.Forms.Button",
+      "after": "# NEW v2 fixture identity: a readonly standard Edit value, not a caption.\n$currentRecordId = New-Object System.Windows.Forms.TextBox\n$currentRecordId.Name = \"currentRecordId\"\n$currentRecordId.AccessibleName = \"currentRecordId\"\n$currentRecordId.ReadOnly = $true\n$currentRecordId.UseSystemPasswordChar = $false\n$currentRecordId.PasswordChar = [char]0\n$currentRecordId.TabStop = $false\n$currentRecordId.Location = New-Object System.Drawing.Point(650, 320)\n$currentRecordId.Size = New-Object System.Drawing.Size(210, 28)\n$currentRecordId.Text = \"\"\n$form.Controls.Add($currentRecordId)\n\n$saveButton = New-Object System.Windows.Forms.Button"
+    },
+    {
+      "before": "function Load-Patients {\n    param([string]$Filter)\n    $json = Invoke-Db -DbArgs @(\"list\", \"`\"$Filter`\"\")\n    $rows = @()\n    if ($json.Trim().Length -gt 0) { $rows = $json | ConvertFrom-Json }\n    $dt = New-Object System.Data.DataTable\n    [void]$dt.Columns.Add(\"id\")\n    [void]$dt.Columns.Add(\"first\")\n    [void]$dt.Columns.Add(\"last\")\n    [void]$dt.Columns.Add(\"dob\")\n    foreach ($r in $rows) {\n        [void]$dt.Rows.Add($r.id, $r.first, $r.last, $r.dob)\n    }\n    $grid.DataSource = $dt\n    if ($grid.Columns[\"id\"]) { $grid.Columns[\"id\"].Visible = $false }\n    $status.Text = \"Loaded \" + $rows.Count + \" patients\"\n}\n\n$searchButton.Add_Click({ Load-Patients -Filter $searchBox.Text })\n$searchBox.Add_KeyDown({\n    if ($_.KeyCode -eq \"Enter\") { Load-Patients -Filter $searchBox.Text; $_.SuppressKeyPress = $true }\n})\n\n$grid.Add_SelectionChanged({\n    if ($grid.SelectedRows.Count -gt 0) {\n        $row = $grid.SelectedRows[0]\n        $id = $row.Cells[\"id\"].Value\n        if ($id) {\n            $j = Invoke-Db -DbArgs @(\"get\", \"$id\")\n            $p = $j | ConvertFrom-Json\n            if ($p) {\n                $noteBox.Text = $p.note\n                $patientHeader.Text = \"Patient: \" + $p.first + \" \" + $p.last + \" (\" + $p.dob + \")\"\n            }\n        }\n    }\n})\n\n",
+      "after": "# Only the NEW fixture publishes an independently inspectable record id.\n$script:recordIdentityLoading = $false\n\nfunction ConvertTo-RecordId {\n    param($Value)\n    # SQLite INTEGER PRIMARY KEY is signed int64. Refuse aliases/coercions.\n    if ($Value -isnot [string] -and $Value -isnot [int] -and $Value -isnot [long]) {\n        throw \"Record id is not an exact integer or canonical string\"\n    }\n    $text = [Convert]::ToString($Value, [Globalization.CultureInfo]::InvariantCulture)\n    [long]$parsed = 0\n    $ok = [long]::TryParse($text, [Globalization.NumberStyles]::AllowLeadingSign,\n        [Globalization.CultureInfo]::InvariantCulture, [ref]$parsed)\n    if (-not $ok -or $parsed.ToString([Globalization.CultureInfo]::InvariantCulture) -cne $text) {\n        throw \"Record id is not canonical signed int64\"\n    }\n    return $text\n}\n\nfunction Clear-CurrentRecord {\n    $currentRecordId.Text = \"\"\n    $noteBox.Text = \"\"\n    $patientHeader.Text = \"\"\n}\n\nfunction Get-SelectedRecordId {\n    if ($grid.SelectedRows.Count -ne 1) { throw \"No unique selected record\" }\n    return ConvertTo-RecordId $grid.SelectedRows[0].Cells[\"id\"].Value\n}\n\nfunction Update-CurrentRecord {\n    Clear-CurrentRecord\n    if ($script:recordIdentityLoading) { return }\n    try {\n        $selectedId = Get-SelectedRecordId\n        $j = Invoke-Db -DbArgs @(\"get\", \"$selectedId\") -RequireSuccess\n        # Root shape is checked before PS5.1/7 pipeline enumeration.\n        if (-not $j.TrimStart().StartsWith(\"{\")) { throw \"Get requires an object root\" }\n        $p = $j | ConvertFrom-Json -ErrorAction Stop\n        if ($null -eq $p -or $p -is [array]) { throw \"No unique loaded record\" }\n        $loadedId = ConvertTo-RecordId $p.id\n        if ($loadedId -cne $selectedId) { throw \"Loaded record differs from selection\" }\n        $noteBox.Text = $p.note\n        $patientHeader.Text = \"Patient: \" + $p.first + \" \" + $p.last + \" (\" + $p.dob + \")\"\n        # A fresh selection read prevents publishing a stale in-flight load.\n        if ((Get-SelectedRecordId) -cne $loadedId) { throw \"Selection changed during load\" }\n        $currentRecordId.Text = $loadedId\n    } catch {\n        Clear-CurrentRecord\n        $status.Text = \"Record identity unavailable\"\n    }\n}\n\nfunction Load-Patients {\n    param([string]$Filter)\n    $script:recordIdentityLoading = $true\n    Clear-CurrentRecord\n    $loaded = $false\n    try {\n        $json = Invoke-Db -DbArgs @(\"list\", \"`\"$Filter`\"\") -RequireSuccess\n        if (-not $json.TrimStart().StartsWith(\"[\")) { throw \"List requires an array root\" }\n        $rows = @($json | ConvertFrom-Json -ErrorAction Stop)\n        $dt = New-Object System.Data.DataTable\n        [void]$dt.Columns.Add(\"id\")\n        [void]$dt.Columns.Add(\"first\")\n        [void]$dt.Columns.Add(\"last\")\n        [void]$dt.Columns.Add(\"dob\")\n        foreach ($r in $rows) {\n            $id = ConvertTo-RecordId $r.id\n            [void]$dt.Rows.Add($id, $r.first, $r.last, $r.dob)\n        }\n        $grid.DataSource = $dt\n        if ($grid.Columns[\"id\"]) { $grid.Columns[\"id\"].Visible = $false }\n        $status.Text = \"Loaded \" + $rows.Count + \" patients\"\n        $loaded = $true\n    } catch {\n        $grid.ClearSelection()\n        $grid.DataSource = $null\n        Clear-CurrentRecord\n        $status.Text = \"Record list unavailable\"\n    } finally {\n        $script:recordIdentityLoading = $false\n    }\n    if ($loaded) { Update-CurrentRecord }\n}\n\n$searchButton.Add_Click({ Load-Patients -Filter $searchBox.Text })\n$searchBox.Add_KeyDown({\n    if ($_.KeyCode -eq \"Enter\") { Load-Patients -Filter $searchBox.Text; $_.SuppressKeyPress = $true }\n})\n\n$grid.Add_SelectionChanged({ Update-CurrentRecord })\n\n"
+    },
+    {
+      "before": "foreach ($c in @($searchBox, $noteBox))",
+      "after": "foreach ($c in @($searchBox, $noteBox, $currentRecordId))"
+    },
+    {
+      "before": "# Record header: names the open patient, the way a chart header does. The\n# separate-session read-back (desktop_readback) confirms identity here before\n# it reads the note. No AccessibleName: UI Automation then reports the label's\n# text as its Name, and Control.Name as its AutomationId.",
+      "after": "# Legacy display caption only. The NEW v2 pack reads currentRecordId's complete\n# native value for identity; this label's Name/preview is not identity authority."
+    }
+  ]
+}

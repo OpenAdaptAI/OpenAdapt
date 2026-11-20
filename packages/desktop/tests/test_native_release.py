@@ -24,6 +24,7 @@ from scripts.native_release import (
     native_version_at_ref,
     native_versions,
     python_distribution_names,
+    run_git,
     set_native_version,
     stage_artifacts,
     sync_native_version_from_engine,
@@ -229,7 +230,17 @@ def test_linux_sidecar_installs_browser_libraries_before_the_frozen_smoke() -> N
         step for step in steps if step.get("name") == "Install Linux Chromium runtime libraries"
     )
     assert libraries["if"] == "runner.os == 'Linux'"
-    assert libraries["run"] == "uv run --locked python -m playwright install-deps chromium"
+    # The pinned Playwright's dependency list, installed through the shared
+    # cached, mirror-fallback apt action rather than `playwright install-deps`.
+    assert libraries["uses"] == (
+        "OpenAdaptAI/OpenAdapt/.github/actions/apt-install@"
+        "94f724c7dc0b0995a7108b7b99bbb53f0749cb68"
+    )
+    assert libraries["with"] == {
+        "playwright-deps": "chromium",
+        "playwright-python": "uv run --locked python",
+        "working-directory": "packages/desktop",
+    }
     aliases = next(
         step for step in steps if step.get("name") == "Alias lowercase X11 names for Flow 1.34.0"
     )
@@ -557,14 +568,7 @@ def test_set_native_version_rejects_non_semver_input(tmp_path: Path) -> None:
 
 
 def _git(tmp_path: Path, *args: str) -> str:
-    result = subprocess.run(
-        ["git", *args],
-        cwd=tmp_path,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return result.stdout.strip()
+    return run_git(tmp_path, *args).stdout.decode("utf-8").strip()
 
 
 def test_git_version_transform_requires_the_exact_reconstructed_tree(tmp_path: Path) -> None:
@@ -1416,13 +1420,7 @@ def test_git_helpers_refuse_an_option_shaped_ref(tmp_path: Path) -> None:
 
 
 def test_native_version_at_ref_reads_git_objects_not_the_working_tree() -> None:
-    head = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
+    head = _git(ROOT, "rev-parse", "HEAD")
 
     assert native_version_at_ref(head) == native_version()
     assert native_version_at_ref("HEAD") == native_version()

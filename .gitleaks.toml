@@ -44,3 +44,12 @@ regexTarget = "secret"
 regexes = [
   '''^phc_935iWKc6O7u6DCp2eFAmK5WmCwv35QXMa6LulTJ3uqh$''',
 ]
+
+# This exact made-up literal exercises credential refusal in sanitizer tests.
+# A value allowlist survives squash merges; new token values still fail.
+[[allowlists]]
+description = "The exact synthetic GitLab token in auth-reference refusal tests"
+regexTarget = "secret"
+regexes = [
+  '''^glpat-SYNTHETIC-CREDENTIAL$''',
+]

@@ -50,6 +50,7 @@ from openadapt_flow.policy import (
     effects_for_actuation,
     project_step_safety,
 )
+from openadapt_flow.private_file import open_binary as open_fd
 from openadapt_flow.runtime.authorization import RuntimeParamScalar
 from openadapt_flow.runtime.durable import attended_state as _state
 from openadapt_flow.runtime.durable.approval import (
@@ -815,7 +816,7 @@ class AttendedActionStore:
         """Persist a replace/create directory entry on POSIX."""
         if os.name == "nt":
             return
-        fd = os.open(path.parent, os.O_RDONLY)
+        fd = open_fd(path.parent, os.O_RDONLY)
         try:
             os.fsync(fd)
         finally:
@@ -830,7 +831,7 @@ class AttendedActionStore:
             return
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_name(f".{path.name}.{secrets.token_hex(8)}.tmp")
-        fd = os.open(tmp, os.O_CREAT | os.O_EXCL | os.O_WRONLY, mode)
+        fd = open_fd(tmp, os.O_CREAT | os.O_EXCL | os.O_WRONLY, mode)
         try:
             with os.fdopen(fd, "wb") as handle:
                 handle.write(payload)
@@ -910,7 +911,7 @@ class AttendedActionStore:
             self.run_dir.mkdir(parents=True, exist_ok=True)
             key = secrets.token_bytes(32)
             try:
-                fd = os.open(self.key_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+                fd = open_fd(self.key_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
             except FileExistsError:
                 return self._key(create=False)
             with os.fdopen(fd, "wb") as handle:
@@ -945,7 +946,7 @@ class AttendedActionStore:
         deadline = time.monotonic() + max(0.0, timeout_s)
         while True:
             try:
-                fd = os.open(
+                fd = open_fd(
                     self.decisions_lock_path,
                     os.O_CREAT | os.O_EXCL | os.O_WRONLY,
                     0o600,
@@ -978,7 +979,7 @@ class AttendedActionStore:
                 )
                 if not same_entry:
                     raise OSError("the lock path no longer names the owner file")
-                current_fd = os.open(
+                current_fd = open_fd(
                     self.decisions_lock_path,
                     os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
                 )

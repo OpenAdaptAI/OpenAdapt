@@ -1,0 +1,44 @@
+# OpenMRS 3 reference application (MPL-2.0 with the OpenMRS healthcare
+# disclaimer), pinned, for the dropdown and popup real-app run. Only this file
+# and the results are kept here; no OpenMRS code or assets. Synthetic patients
+# only. Lane-2 fixture ports 9660-9679.
+name: openadapt-openmrs-choice
+services:
+  gateway:
+    image: docker.io/openmrs/openmrs-reference-application-3-gateway:3.4.0
+    restart: "no"
+    depends_on: [frontend, backend]
+    ports:
+      - "127.0.0.1:9660:80"
+  frontend:
+    image: docker.io/openmrs/openmrs-reference-application-3-frontend:3.4.0
+    restart: "no"
+    environment:
+      SPA_PATH: /openmrs/spa
+      API_URL: /openmrs
+      SPA_CONFIG_URLS: ""
+      SPA_DEFAULT_LOCALE: ""
+    depends_on: [backend]
+  backend:
+    image: docker.io/openmrs/openmrs-reference-application-3-backend:3.4.0
+    restart: "no"
+    depends_on: [db]
+    environment:
+      OMRS_CONFIG_MODULE_WEB_ADMIN: "true"
+      OMRS_CONFIG_AUTO_UPDATE_DATABASE: "true"
+      OMRS_CONFIG_CREATE_TABLES: "true"
+      OMRS_CONFIG_CONNECTION_SERVER: db
+      OMRS_CONFIG_CONNECTION_DATABASE: openmrs
+      OMRS_CONFIG_CONNECTION_USERNAME: openmrs
+      OMRS_CONFIG_CONNECTION_PASSWORD: openmrs
+  db:
+    image: docker.io/library/mariadb:10.11.7
+    restart: "no"
+    command: "mysqld --character-set-server=utf8 --collation-server=utf8_general_ci"
+    environment:
+      MYSQL_DATABASE: openmrs
+      MYSQL_USER: openmrs
+      MYSQL_PASSWORD: openmrs
+      MYSQL_ROOT_PASSWORD: openmrs
+    ports:
+      - "127.0.0.1:9661:3306"

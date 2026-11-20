@@ -210,6 +210,18 @@ def _trusted_comment(comment: dict[str, Any]) -> bool:
     )
 
 
+def _pr_author_comment(comment: dict[str, Any], author: Any) -> bool:
+    """Bind self-reported provenance to the API's pull request author identity."""
+    user = comment.get("user")
+    login = user.get("login") if isinstance(user, dict) else None
+    return (
+        isinstance(author, str)
+        and bool(author.strip())
+        and isinstance(login, str)
+        and login.casefold() == author.casefold()
+    )
+
+
 # GitHub's REST timestamps. Nothing parses them; they are only compared as
 # strings, and anything other than this exact shape counts as edited.
 TIMESTAMP = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
@@ -250,10 +262,15 @@ def _review_errors(
     mentioned: list[str] = []
     for comment in comments:
         body = comment.get("body")
-        if not _trusted_comment(comment) or not isinstance(body, str):
+        trusted_review = _trusted_comment(comment)
+        from_author = _pr_author_comment(comment, pull_request_author)
+        if not isinstance(body, str) or not (trusted_review or from_author):
             continue
         unedited = _unedited_comment(comment)
         if review_headings(body):
+            # An author declaration supplies provenance, never review authority.
+            if not trusted_review:
+                continue
             if is_hidden_approval_example(body):
                 continue
             if not _review_needs_validation(body, head):

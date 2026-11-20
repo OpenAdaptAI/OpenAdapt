@@ -27,7 +27,7 @@ openadapt-flow compile rec --out bundle --name my-task
 openadapt-flow replay bundle --macos-app "Your App"
 ```
 
-Windows, Linux, RDP and Citrix: [SURFACES.md](docs/SURFACES.md#first-workflow-per-surface).
+Windows, Linux, RDP and Citrix: [SURFACES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/SURFACES.md#first-workflow-per-surface).
 
 `replay` is a rehearsal that doesn't read the record back. A production run
 (`openadapt-flow run`) also checks each save; see
@@ -108,11 +108,11 @@ correct-patient runs, against 376 for RapidOCR.
 Program-predicate proofs record which OCR engine made them, so a proof made
 under one engine isn't reused under the other.
 
-![Two runs of the same automation on a fake clinic app. Both final screens show "Encounter saved". The record check found 1 note after run 1, which is marked Done and checked, and 0 notes after run 2, which stopped and asked a person.](docs/showcase/demo-proof.png)
+![Two runs of the same automation on a fake clinic app. Both final screens show "Encounter saved". The record check found 1 note after run 1, which is marked Done and checked, and 0 notes after run 2, which stopped and asked a person.](https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/main/packages/flow/docs/showcase/demo-proof.png)
 
 *Synthetic recording. A screenshot of the page that `openadapt-flow demo`
 wrote on 2026-10-09 against the bundled fake clinic app; regenerate it with
-[`scripts/make_demo_proof_image.py`](scripts/make_demo_proof_image.py).*
+[`scripts/make_demo_proof_image.py`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/scripts/make_demo_proof_image.py).*
 
 | | Run 1: normal save | Run 2: save set to fail |
 |---|---|---|
@@ -123,7 +123,7 @@ wrote on 2026-10-09 against the bundled fake clinic app; regenerate it with
 The two final screens are identical, pixel for pixel. Only the record check
 tells the runs apart. To watch each stage in the terminal instead, run
 `openadapt-flow tutorial`, then `openadapt-flow tutorial --break-it`;
-[docs/TUTORIAL.md](docs/TUTORIAL.md) shows the output. The
+[docs/TUTORIAL.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/TUTORIAL.md) shows the output. The
 [live demo](https://app.openadapt.ai/demo) shows recorded runs on synthetic
 data.
 
@@ -142,7 +142,7 @@ data.
 The time and cost rows come from one matched comparison on MockMed, the
 bundled fake clinic app: 100 compiled runs and 20 agent runs, all scored by the
 same OCR check of the final screen
-([method](benchmark/BENCHMARK.md)). The agent was `claude-sonnet-5` with the
+([method](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/BENCHMARK.md)). The agent was `claude-sonnet-5` with the
 computer-use tool, driving the same browser through screenshots, and cost is
 model API usage at list price. That comparison ran on 2026-07-08
 with Flow 0.1.0. The Playwright column describes Playwright's documented
@@ -183,21 +183,21 @@ to test the fallbacks that pixel-only surfaces such as Citrix depend on.
 
 | Change | What happened | Evidence |
 |---|---|---|
-| Dark theme | Finished. No step matched its recorded image, so each was found another way and logged as a repair. The repaired copy then replayed on image matches alone. | [`test_record_compile_replay.py`](tests/e2e/test_record_compile_replay.py) |
+| Dark theme | Finished. No step matched its recorded image, so each was found another way and logged as a repair. The repaired copy then replayed on image matches alone. | [`test_record_compile_replay.py`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/tests/e2e/test_record_compile_replay.py) |
 | Two buttons moved | Finished. The moved buttons were found by a whole-screen image or text search and repaired. | Same file |
 | Labels renamed (Save to Submit, Open to View) | The renamed buttons were found by position or approximate text, and the repairs recorded the new labels. Flow classes a save as irreversible and refuses an irreversible step it can find only by position, so this run finished only with the save marked reversible. | Same file |
 | A pop-up blocks the screen after Save | The expected screen after the save didn't appear, so the run stopped at the save step and named the check that failed. | Same file |
-| A look-alike row above the target, or the target row removed | Stopped before the click: the row showed a different patient name. | [`test_perturbation.py`](tests/e2e/test_perturbation.py) |
-| Targets moved, relabeled, and re-themed, with their DOM ids unchanged (element locator on) | The element locator found 15 of 15. Image, text, and position matching alone found 0 of 15. | [`benchmark/structural_action/`](benchmark/structural_action/STRUCTURAL_ACTION.md) |
-| Remote desktop redrawn at 125%, 150% or 175% display scaling, or with ClearType switched | The run fitted one scale from the recorded labels and continued on a view resampled to the recorded geometry. On in-process renderings of the RDP and canvas kiosks, 17 of 24 healthy runs finished, up from 3, and all 24 runs where the record switched before Save stopped with nothing saved. Record IDs with 1/l or 0/O (the RDP fixture's `MRN A1001`) still stopped at the identity check at every render but the recorded one: that workflow always opens the recorded record, and the kiosk has no selectable text for the copy look. | [`benchmark/pixel_scale/`](benchmark/pixel_scale/README.md), [`test_pixel_scale_replay.py`](tests/test_pixel_scale_replay.py) |
-| Browser zoom, display scaling, font size, or font family changed | In the browser, zoom, scaling, and font-size changes stopped the run at the first step. In a 21-point sweep there were no wrong actions and no crashes; only the recorded settings and two serif font swaps finished, and a monospace font stopped at the identity check. With the element locator on, four of these changes produced no wrong writes. | [`benchmark/cosmetic_drift/`](benchmark/cosmetic_drift/COSMETIC_DRIFT.md), [`test_structural_action.py`](tests/e2e/test_structural_action.py) |
+| A look-alike row above the target, or the target row removed | Stopped before the click: the row showed a different patient name. | [`test_perturbation.py`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/tests/e2e/test_perturbation.py) |
+| Targets moved, relabeled, and re-themed, with their DOM ids unchanged (element locator on) | The element locator found 15 of 15. Image, text, and position matching alone found 0 of 15. | [`benchmark/structural_action/`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/structural_action/STRUCTURAL_ACTION.md) |
+| Remote desktop redrawn at 125%, 150% or 175% display scaling, or with ClearType switched | The run fitted one scale from the recorded labels and continued on a view resampled to the recorded geometry. On in-process renderings of the RDP and canvas kiosks, 17 of 24 healthy runs finished, up from 3, and all 24 runs where the record switched before Save stopped with nothing saved. Record IDs with 1/l or 0/O (the RDP fixture's `MRN A1001`) still stopped at the identity check at every render but the recorded one: that workflow always opens the recorded record, and the kiosk has no selectable text for the copy look. | [`benchmark/pixel_scale/`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/pixel_scale/README.md), [`test_pixel_scale_replay.py`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/tests/test_pixel_scale_replay.py) |
+| Browser zoom, display scaling, font size, or font family changed | In the browser, zoom, scaling, and font-size changes stopped the run at the first step. In a 21-point sweep there were no wrong actions and no crashes; only the recorded settings and two serif font swaps finished, and a monospace font stopped at the identity check. With the element locator on, four of these changes produced no wrong writes. | [`benchmark/cosmetic_drift/`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/cosmetic_drift/COSMETIC_DRIFT.md), [`test_structural_action.py`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/tests/e2e/test_structural_action.py) |
 
-![One recording replayed on two UIs. Left: the theme it was recorded on. Right: a dark theme it had never seen, where each step resolves through text or position matching.](docs/showcase/demo.gif)
+![One recording replayed on two UIs. Left: the theme it was recorded on. Right: a dark theme it had never seen, where each step resolves through text or position matching.](https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/main/packages/flow/docs/showcase/demo.gif)
 
 Left: the UI the task was recorded on. Right: a dark theme the recording never
 saw. Neither run makes a model call. The run artifacts are in
-[`docs/showcase/`](docs/showcase), and the order of fallbacks is in
-[docs/RESOLUTION_LADDER.md](docs/RESOLUTION_LADDER.md).
+[`docs/showcase/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow/docs/showcase), and the order of fallbacks is in
+[docs/RESOLUTION_LADDER.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/RESOLUTION_LADDER.md).
 
 ## Try it on your app
 
@@ -256,7 +256,7 @@ declared. Each workflow needs two things:
    the app usually reads the record back to show it, and that read, in the
    captured network traffic or a read-only database, becomes the check. The
    command tries to break the check before a person reviews it
-   ([docs/EFFECT_KIT.md](docs/EFFECT_KIT.md#a-record-check-built-from-the-apps-own-reads-scaffold-verifier)).
+   ([docs/EFFECT_KIT.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/EFFECT_KIT.md#a-record-check-built-from-the-apps-own-reads-scaffold-verifier)).
    When it finds no such read, the draft it writes checks nothing until a
    person edits it.
 2. A second way to read the record. A database connection isn't required.
@@ -264,9 +264,9 @@ declared. Each workflow needs two things:
    query, a file, report, or email the app exports, or, when you have none
    of those, the app's own record page opened in a separate signed-in
    browser session
-   ([`ui_readback`](docs/EFFECT_KIT.md#separate-session-ui-read-back-ui_readback),
+   ([`ui_readback`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/EFFECT_KIT.md#separate-session-ui-read-back-ui_readback),
    a weaker check). You configure it once in `deploy.yaml`, and nothing
-   changes in the app. See [docs/EFFECT_KIT.md](docs/EFFECT_KIT.md).
+   changes in the app. See [docs/EFFECT_KIT.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/EFFECT_KIT.md).
 
 Reading the screen the run just used doesn't count, because an app can show
 "Saved" and drop the write, as the demo shows. Without a second read, Flow can
@@ -318,12 +318,12 @@ Install the extras for the surface that records and replays the workflow:
 | Browser | `pip install 'openadapt-flow[browser]'` |
 | Native Windows | `pip install "openadapt-flow[capture,windows]"` |
 | Native macOS | `pip install 'openadapt-flow[capture,macos]'` |
-| Native Linux | `pip install 'openadapt-flow[capture,linux]'`, plus the AT-SPI packages in [`docs/desktop/LINUX_NATIVE.md`](docs/desktop/LINUX_NATIVE.md) |
+| Native Linux | `pip install 'openadapt-flow[capture,linux]'`, plus the AT-SPI packages in [`docs/desktop/LINUX_NATIVE.md`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/desktop/LINUX_NATIVE.md) |
 | Network RDP | Install `openadapt-flow[capture]` in the recorded session and `openadapt-flow[rdp]` on the runner |
 | Local RDP or Citrix client window | On macOS: `pip install 'openadapt-flow[capture,macos]'`. On Windows: `pip install "openadapt-flow[capture,windows]"` |
 
-[docs/SURFACES.md](docs/SURFACES.md) has the record and replay commands for
-each surface, and [docs/PRODUCT_STATUS.md](docs/PRODUCT_STATUS.md) lists the
+[docs/SURFACES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/SURFACES.md) has the record and replay commands for
+each surface, and [docs/PRODUCT_STATUS.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/PRODUCT_STATUS.md) lists the
 evidence for each one. A bundle is bound to the surface it was recorded on.
 
 A bundle can span several surfaces: popups and tabs a web app opens, and
@@ -336,7 +336,7 @@ openadapt-flow record --url https://portal.example --surface chart=linux:Chart -
 
 Each change of window becomes an identity-checked switch step, and an action
 in a window you did not declare stops the recording. See
-[docs/MULTI_SURFACE.md](docs/MULTI_SURFACE.md). Separately recorded bundles
+[docs/MULTI_SURFACE.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/MULTI_SURFACE.md). Separately recorded bundles
 can also be chained with `openadapt-flow compose`. Each child starts only
 after the one before it ends with a checked save, unless you allow a
 specific stop with `--allow-halt`.
@@ -374,16 +374,21 @@ app and one that drops the save, which return results without opening a
 browser.
 
 `openadapt-flow emit-mcp bundle --out server.py` writes a standalone MCP
-server for one bundle. It replays without the record check. A web bundle's
-tool takes the app's URL. A bundle recorded on Windows, macOS, Linux, RDP or
-Citrix takes none: start the server with `python server.py --config
-deploy.yaml`. Each call then runs `openadapt-flow run bundle --config
-deploy.yaml`, the governed path, so the file's app, record check, policy and
-approvals all apply.
+server for one bundle. Web and desktop tools use the same governed `run` CLI.
+Start the server with `--config deploy.yaml --profile standard
+--qualification-authority-file authority.json`; the deployment supplies the
+target and read-back. Per-call URL overrides refuse. Existing qualification,
+policy and approval checks still apply.
+
+The adapter's outer result is `REFUSED` before launch or `UNCERTAIN` after a
+launch attempt. It never asserts production eligibility from an unauthenticated
+report. Fresh bound local runtime claims are labelled separately. See the
+[governed tool observation contract](docs/MCP_GOVERNED_TOOLS.md) for the supported
+producer modes and the report-authentication prerequisite.
 
 ### From Claude Code
 
-[`examples/claude-code-demo`](examples/claude-code-demo) records one form fill
+[`examples/claude-code-demo`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow/examples/claude-code-demo) records one form fill
 in a small expenses app backed by SQLite, compiles it, and serves it to Claude
 Code over MCP with
 [openadapt-agent](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/agent). Claude Code
@@ -392,7 +397,7 @@ calls, then reads the `expenses` table itself. The tool returns `success` only
 when exactly one new row with those values is there. If the app shows "Expense
 saved." without writing the row, the tool returns `halt`.
 
-![Claude Code adds an expense through the compiled workflow, then the new row is read from SQLite](examples/claude-code-demo/demo.gif)
+![Claude Code adds an expense through the compiled workflow, then the new row is read from SQLite](https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/main/packages/flow/examples/claude-code-demo/demo.gif)
 
 ```bash
 examples/claude-code-demo/demo.sh   # install, start the app, record, compile
@@ -418,7 +423,7 @@ export OPENADAPT_FLOW_SCRUB=on
 ```
 
 The bundle and `report.json` keep literal identifiers, because the identity
-check and the audit trail need them ([docs/PRIVACY.md](docs/PRIVACY.md)). With
+check and the audit trail need them ([docs/PRIVACY.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/PRIVACY.md)). With
 `OPENADAPT_BUNDLE_KEY` set, `openadapt-flow seal ./bundle --out ./bundle-sealed`
 encrypts every bundle file that can hold patient data with AES-256-GCM, binds
 the whole file set to one sealed index, and refuses a file it doesn't know.
@@ -426,11 +431,11 @@ Runs of a sealed bundle write an encrypted run directory, and web recordings
 are encrypted from the first frame (`OPENADAPT_RECORDING_KEY`, or the bundle
 key). Data in memory, the app's own storage, file names and sizes, and desktop
 recordings are not encrypted; the source bundle you sealed is still plaintext,
-so treat it as PHI ([docs/phi_at_rest.md](docs/phi_at_rest.md)).
+so treat it as PHI ([docs/phi_at_rest.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/phi_at_rest.md)).
 
 OpenAdapt Cloud at `app.openadapt.ai` is an optional hosted control plane for
 browser workflows. Desktop and Citrix runs are self-hosted
-([docs/HOSTED.md](docs/HOSTED.md)).
+([docs/HOSTED.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/HOSTED.md)).
 
 ## When it fits
 
@@ -441,47 +446,47 @@ browser workflows. Desktop and Citrix runs are self-hosted
   check reads whatever that path covers. In a fault test with injected bad
   writes, a screen-only check passed 54 of the 72 runs that left the record
   wrong, one API read passed 9, and a read of every table passed none
-  ([`EFFECT_E2E.md`](benchmark/effect_e2e/EFFECT_E2E.md)).
+  ([`EFFECT_E2E.md`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/effect_e2e/EFFECT_E2E.md)).
 - On pixel surfaces, the identity check takes extra looks before it stops on
   a look-alike record ID: false stops on a dense record list fell from 232 to
   24 of 288 with 0 wrong-record accepts
-  ([IDENTITY_LOOKS.md](benchmark/identity_looks/IDENTITY_LOOKS.md)). A change
+  ([IDENTITY_LOOKS.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/identity_looks/IDENTITY_LOOKS.md)). A change
   in display scaling (125% to 175%) or ClearType doesn't stop a run by
   itself; a run stops when the record can't be confirmed at the new scale
-  ([benchmark/pixel_scale](benchmark/pixel_scale/README.md)).
+  ([benchmark/pixel_scale](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/pixel_scale/README.md)).
 - After a stop, the run report lists each change made before it, and undo
   steps declared in the workflow reverse them once a person approves
-  ([AFTER_A_STOP.md](docs/AFTER_A_STOP.md)).
+  ([AFTER_A_STOP.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/AFTER_A_STOP.md)).
 
 The MockMed comparison above is from July 2026 (Flow 0.1.0, 20 agent runs);
 the OpenEMR numbers are from October 2026 on a local test copy with synthetic
 patients. The systems each result ran on, and the boundary of every claim:
-[docs/LIMITS.md](docs/LIMITS.md).
+[docs/LIMITS.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/LIMITS.md).
 
 ## More documentation
 
-- [Qualify a workflow](docs/QUALIFY_A_WORKFLOW.md): `openadapt-flow qualify`
+- [Qualify a workflow](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/QUALIFY_A_WORKFLOW.md): `openadapt-flow qualify`
   runs a bundle against the normal case and deliberate faults, reads the write
   back from the system of record, and certifies it under a policy. Qualify
   and certify are defined in the [glossary](https://docs.openadapt.ai/reference/glossary/#qualify).
-  [docs/QUALIFICATION_TERMS.md](docs/QUALIFICATION_TERMS.md) has the fault
+  [docs/QUALIFICATION_TERMS.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/QUALIFICATION_TERMS.md) has the fault
   cases, what gets signed, and the policy rules.
-- [Production setup](docs/PRODUCTION.md): qualifying a bundle from its
+- [Production setup](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/PRODUCTION.md): qualifying a bundle from its
   recording, policies, multi-step processes, signed results, and release
   status.
-- [docs/CAPABILITIES.md](docs/CAPABILITIES.md): workflow programs with branches
+- [docs/CAPABILITIES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/CAPABILITIES.md): workflow programs with branches
   and loops, `for-each` over a worklist, `induce` from several recordings,
   durable checkpoint and resume, and Agent Skill output.
-- [Recording on Windows, RDP and Citrix](docs/RECORDING_ON_WINDOWS_RDP_CITRIX.md):
+- [Recording on Windows, RDP and Citrix](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/RECORDING_ON_WINDOWS_RDP_CITRIX.md):
   how a person or an agent shows a task in a native Windows app or a remote
   session, the Windows agent server, and the token.
-- [docs/BENCHMARKS.md](docs/BENCHMARKS.md): every benchmark, with method and
+- [docs/BENCHMARKS.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/BENCHMARKS.md): every benchmark, with method and
   caveats.
-- [Fleet drift patches](docs/FLEET_DRIFT_PATCHES.md): opted-in installs that
+- [Fleet drift patches](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/FLEET_DRIFT_PATCHES.md): opted-in installs that
   automate the same application share signed repairs for the same UI change,
   moved as files or through a local reference hub.
   Each tenant tests a patch on its own cases before it is used.
-- [docs/REWARD_WORKER.md](docs/REWARD_WORKER.md): `serve-reward` scores a
+- [docs/REWARD_WORKER.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/REWARD_WORKER.md): `serve-reward` scores a
   model's training episode by reading the record after it ends.
 - [docs.openadapt.ai](https://docs.openadapt.ai): the full documentation set.
 
@@ -499,7 +504,7 @@ download. A minimal host may need a one-time system-library install. Flow stops
 before the download and prints a command for the exact Python environment that
 runs it.
 
-Contributions are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md), which also
+Contributions are welcome; see [CONTRIBUTING.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/CONTRIBUTING.md), which also
 suggests first contributions.
 
 The demo GIF is generated from real run artifacts by
@@ -508,7 +513,7 @@ a real `openadapt-flow demo` run through `scripts/make_demo_proof_image.py`.
 
 ## License
 
-OpenAdapt-authored package code is licensed under the [MIT License](LICENSE).
+OpenAdapt-authored package code is licensed under the [MIT License](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/LICENSE).
 
 The openIMIS and OpenEMR reference environments fetch their third-party
 configuration (`AGPL-3.0-only` and `GPL-3.0`) from upstream at run time,

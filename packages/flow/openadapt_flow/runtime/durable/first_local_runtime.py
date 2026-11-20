@@ -5,7 +5,7 @@ from __future__ import annotations
 from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Mapping, Optional
+from typing import TYPE_CHECKING, Any, Callable, Literal, Mapping, Optional
 
 from openadapt_flow import sealed_set as _sealed
 from openadapt_flow.runtime.durable.first_local_delivery import (
@@ -16,7 +16,10 @@ from openadapt_flow.runtime.durable.first_local_delivery import (
 if TYPE_CHECKING:
     from openadapt_flow.ir import RunReport, Step, StepResult, Workflow
     from openadapt_flow.runtime.authorization import RuntimeParamScalar
-    from openadapt_flow.runtime.durable.program_checkpoint import ProgramCheckpoint
+    from openadapt_flow.runtime.durable.program_checkpoint import (
+        ProgramCheckpoint,
+        ProgramDeliveryCursor,
+    )
     from openadapt_flow.runtime.effects.effect import Effect
     from openadapt_flow.runtime.replayer import Replayer
 
@@ -30,6 +33,8 @@ class FirstLocalDeliveryStep:
     pause_digest: str = ""
     actuation: Optional[Literal["gui", "api"]] = None
     held: bool = False
+    program_cursor: Optional[ProgramDeliveryCursor] = None
+    current_program_cursor: Optional[Callable[[], ProgramDeliveryCursor]] = None
 
 
 def mark_first_local_delivery_held(result: StepResult, reason: str) -> None:
@@ -102,6 +107,12 @@ def arm_first_local_delivery(
             )
         ):
             raise FirstLocalDeliveryHeld("the current step no longer owns delivery")
+        if local.program_cursor is not None:
+            if (
+                local.current_program_cursor is None
+                or local.current_program_cursor() != local.program_cursor
+            ):
+                raise FirstLocalDeliveryHeld("the pre-callback program cursor changed")
         if local.pause_digest:
             if (
                 local.actuation != actuation
@@ -109,13 +120,21 @@ def arm_first_local_delivery(
             ):
                 raise FirstLocalDeliveryHeld("the armed step's pause changed")
         else:
-            local.pause_digest = local.durable_run.arm_first_local_delivery(
-                local.index, local.step, local.params, actuation=actuation
-            )
+            if local.program_cursor is not None:
+                local.pause_digest = local.durable_run.arm_first_local_program_delivery(
+                    local.step, local.program_cursor, actuation=actuation
+                )
+            else:
+                local.pause_digest = local.durable_run.arm_first_local_delivery(
+                    local.index, local.step, local.params, actuation=actuation
+                )
             local.actuation = actuation
     except FirstLocalDeliveryHeld as exc:
         local.held = True
         return str(exc)
+    except (ValueError, TypeError):
+        local.held = True
+        return "first_local_delivery_held: the program cursor could not be revalidated"
     return None
 
 
@@ -131,6 +150,9 @@ def run_with_output(
     **kwargs: Any,
 ) -> RunReport:
     """Keep an owned local leg fenced through its sealed output finalization."""
+    from openadapt_flow.job_authoring import require_supported_workflow
+
+    require_supported_workflow(workflow, for_execution=True, bundle_dir=bundle_dir)
     from openadapt_flow import at_rest
     from openadapt_flow.runtime.preparation import validate_dry_run_entry
 
@@ -179,7 +201,6 @@ def run_with_output(
         replayer.durable
         and replayer.delivery_authority_kind == "customer_local"
         and replayer.managed_dispatch_binding is None
-        and workflow.program is None
         and resume_from is None
         and resume_program is None
         and replayer._durable_resume_admission is None

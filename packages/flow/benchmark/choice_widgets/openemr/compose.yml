@@ -1,0 +1,56 @@
+# OpenEMR 7.0.3 (GPL; only this compose pin and results are kept here) for the
+# dropdown and popup real-app run. Synthetic data only. Lane-1 ports 9960-9979.
+
+name: openadapt-openemr-choice
+
+services:
+  mysql:
+    image: mariadb:11.4
+    command:
+      - mariadbd
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_general_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - choice_db:/var/lib/mysql
+
+  openemr:
+    image: openemr/openemr:7.0.3
+    ports:
+      - "127.0.0.1:9960:80"
+      - "127.0.0.1:9961:443"
+    environment:
+      # Triggers OpenEMR's automatic (unattended) install on first boot.
+      MYSQL_HOST: mysql
+      MYSQL_ROOT_PASS: root
+      MYSQL_USER: openemr
+      MYSQL_PASS: openemr
+      OE_USER: admin
+      OE_PASS: pass
+      # NOTE: do NOT set DOMAIN here — it makes the entrypoint run certbot
+      # against a public CA, which cannot validate "localhost" and exits the
+      # container. Omitting it uses a self-signed cert (the live test connects
+      # with TLS verification disabled: OPENEMR_FHIR_VERIFY_TLS=0).
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      # OpenEMR writes sqlconf.php only after the auto-install completes.
+      test: ["CMD", "test", "-f", "/var/www/localhost/htdocs/openemr/sites/default/sqlconf.php"]
+      interval: 15s
+      timeout: 5s
+      retries: 80
+    volumes:
+      - choice_sites:/var/www/localhost/htdocs/openemr/sites
+      - choice_logs:/var/log
+
+volumes:
+  choice_db:
+  choice_sites:
+  choice_logs:

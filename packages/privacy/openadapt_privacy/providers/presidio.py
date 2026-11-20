@@ -389,6 +389,32 @@ class PresidioScrubbingProvider(ScrubbingProvider, TextScrubbingMixin):
     name: str = "PRESIDIO"
     capabilities: List[str] = [Modality.TEXT, Modality.PIL_IMAGE]
 
+    def sanitization_operation(self):
+        """Keep one immutable effective policy for a complete outbound scan."""
+        from openadapt_privacy.config import privacy_operation
+
+        return privacy_operation()
+
+    def sanitization_config(self) -> dict:
+        """Non-secret effective policy and local dependency/model identities."""
+        from importlib.metadata import PackageNotFoundError, version
+
+        policy = effective_config()
+        versions = {}
+        for name in (
+            "presidio-analyzer",
+            "presidio-anonymizer",
+            "presidio-image-redactor",
+            "spacy",
+            "Pillow",
+            policy.SPACY_MODEL_NAME,
+        ):
+            try:
+                versions[name] = version(name)
+            except PackageNotFoundError:
+                versions[name] = "unavailable"
+        return {"policy_sha256": policy.policy_digest(), "dependencies": versions}
+
     def validate_ready(self, modalities: list[str]) -> None:
         """Validate every local dependency before any source content is read."""
         super().validate_ready(modalities)

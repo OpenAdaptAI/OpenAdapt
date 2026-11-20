@@ -66,26 +66,30 @@ def frames():
             browser = playwright.chromium.launch(headless=True)
         except Exception as exc:  # noqa: BLE001 - no browser on this machine
             pytest.skip(f"chromium unavailable: {exc}")
-        context = browser.new_context()
+        try:
+            context = browser.new_context()
 
-        def handle(route):
-            url = route.request.url
-            if url.startswith("http://parent.test/"):
-                route.fulfill(content_type="text/html", body=_PARENT_HTML)
-            elif url.startswith("http://child.test/"):
-                route.fulfill(content_type="text/html", body=_CHILD_HTML)
-            else:
-                route.abort()
+            def handle(route):
+                url = route.request.url
+                if url.startswith("http://parent.test/"):
+                    route.fulfill(content_type="text/html", body=_PARENT_HTML)
+                elif url.startswith("http://child.test/"):
+                    route.fulfill(content_type="text/html", body=_CHILD_HTML)
+                else:
+                    route.abort()
 
-        context.route("**/*", handle)
-        context.add_init_script(init)
-        page = context.new_page()
-        page.goto(PARENT)
-        child = page.frame_locator("#shell >> #pay")
-        child.locator("#card_name").wait_for()
-        child_frame = next(f for f in page.frames if f.url.startswith("http://child"))
-        yield page, child, child_frame
-        browser.close()
+            context.route("**/*", handle)
+            context.add_init_script(init)
+            page = context.new_page()
+            page.goto(PARENT)
+            child = page.frame_locator("#shell >> #pay")
+            child.locator("#card_name").wait_for()
+            child_frame = next(
+                f for f in page.frames if f.url.startswith("http://child")
+            )
+            yield page, child, child_frame
+        finally:
+            browser.close()
 
 
 def _sent(frame) -> list[dict]:

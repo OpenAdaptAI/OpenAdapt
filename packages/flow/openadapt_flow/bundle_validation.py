@@ -66,6 +66,13 @@ from openadapt_flow.ir import (
     Workflow,
     business_decision_transitions,
 )
+from openadapt_flow.job_authoring import (
+    SUPPORTED_BUNDLE_SCHEMAS,
+    JobAuthoringError,
+    check_workflow_input,
+    parse_authoring_json,
+    require_supported_workflow,
+)
 from openadapt_flow.traversal import iter_workflow_steps
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -517,10 +524,18 @@ def source_canonical_payload(raw: dict, file_hashes: dict[str, str]) -> bytes:
     exactly one canonical projection; a mismatch never tries another digest.
     """
     version = bundle_schema_version(raw)
+    try:
+        check_workflow_input(
+            raw, default_version=1, allowed_fields=Workflow.model_fields
+        )
+    except JobAuthoringError:
+        raise BundleSchemaError("invalid workflow authoring contract") from None
     content = copy.deepcopy(raw)
     content.pop("manifest", None)
     if version == 2:
         _source_v2_omissions(content)
+    elif version == 3:
+        pass  # Independently declared: no historical schema-2 omissions.
     elif version != 1:
         raise BundleSchemaError(f"no canonical format rule for schema {version}")
     return json.dumps(
@@ -528,6 +543,7 @@ def source_canonical_payload(raw: dict, file_hashes: dict[str, str]) -> bytes:
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=False,
+        allow_nan=version != 3,
     ).encode("utf-8")
 
 
@@ -602,6 +618,14 @@ def derive_verified_workflow(
         if source._loaded_seal.encrypted
         else None,
     )
+    target = _updated_workflow(source, update)
+    transfer_verified_load_capability(source, target)
+    if _authored_contract_changed(source, target):
+        invalidate_derivative_certification(target)
+    return target
+
+
+def _updated_workflow(source: "Workflow", update: dict[str, Any]) -> "Workflow":
     if type(update) is not dict or any(
         type(name) is not str
         or name not in type(source).model_fields
@@ -610,14 +634,52 @@ def derive_verified_workflow(
     ):
         raise BundleIntegrityError("derivation cannot replace source authority fields")
     payload = source.model_dump(mode="python")
-    payload.update(update)
-    target = type(source).model_validate(payload)
-    transfer_verified_load_capability(source, target)
+    payload.update(copy.deepcopy(update))
+    return type(source).model_validate(payload)
+
+
+def derive_authored_workflow(
+    source: "Workflow", *, update: dict[str, Any]
+) -> "Workflow":
+    """Author fresh content or a verified derivative without inheriting a decision.
+
+    A genuine new workflow needs no persisted source. Any loaded state or
+    persisted manifest requires the verified derivation path, including its asset and
+    capability checks. An unchecked load cannot become fresh by dropping its
+    manifest. Contract changes expire the previous certification and governed
+    authorization template; saving creates integrity, not qualification.
+    """
+    if (
+        (source.manifest is not None and source.manifest.content_digest)
+        or source._loaded_seal is not None
+        or source._unverified_load
+        or has_verified_load_capability(source)
+    ):
+        return derive_verified_workflow(source, update=update)
+    target = _updated_workflow(source, update)
+    if _authored_contract_changed(source, target):
+        invalidate_derivative_certification(target)
+    return target
+
+
+def _authored_contract_changed(source: "Workflow", target: "Workflow") -> bool:
     if target.model_dump(exclude={"manifest"}) != source.model_dump(
         exclude={"manifest"}
     ):
-        invalidate_derivative_certification(target)
-    return target
+        return True
+    qualification = target.qualification
+    if qualification is not None and qualification.last_certification is not None:
+        from openadapt_flow.qualification import workflow_contract_digest
+
+        # Parsing an older source into today's explicit fields can change its
+        # certification contract even when the rendered model values compare
+        # equal. The existing contract projection decides; no fallback or old
+        # signature is attached to the new representation.
+        return (
+            workflow_contract_digest(target)[0]
+            != qualification.last_certification.workflow_contract_sha256
+        )
+    return False
 
 
 def invalidate_derivative_certification(workflow: "Workflow") -> None:
@@ -931,6 +993,7 @@ def _workflow_content(workflow: "Workflow") -> dict:
     Excludes the ``manifest`` field itself (the digest lives INSIDE the
     manifest, so it must be computed over everything else) so the digest is a
     pure function of the semantic bundle content."""
+    require_supported_workflow(workflow)
     content = workflow.model_dump(mode="json", exclude={"manifest"})
     _apply_sealed_canonical_omissions(
         workflow,
@@ -949,7 +1012,11 @@ def compute_content_digest(workflow: "Workflow", file_hashes: dict[str, str]) ->
         "files": dict(sorted(file_hashes.items())),
     }
     canonical = json.dumps(
-        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=workflow.schema_version != 3,
     )
     return _sha256_bytes(canonical.encode("utf-8"))
 
@@ -1067,6 +1134,7 @@ def build_manifest(
         ),
     )
     return BundleManifest(
+        schema_version=3 if workflow.schema_version == 3 else SCHEMA_VERSION,
         content_digest=digest,
         file_hashes=file_hashes,
         provenance=provenance,
@@ -1087,11 +1155,19 @@ class BundleSchemaError(ValueError):
     """The bundle format is unsupported or lacks a deterministic upgrade step."""
 
 
+def parse_bundle_json(data: str | bytes | bytearray) -> Any:
+    """Retain legacy parsing; classify new-format refusals as schema errors."""
+    try:
+        return parse_authoring_json(data)
+    except JobAuthoringError:
+        raise BundleSchemaError("invalid job-authoring JSON format") from None
+
+
 def bundle_schema_version(data: dict) -> int:
     if not isinstance(data, dict):
         raise BundleSchemaError("workflow.json must contain an object")
     version = data.get("schema_version", 1)
-    if type(version) is not int or not 1 <= version <= SCHEMA_VERSION:
+    if type(version) is not int or version not in SUPPORTED_BUNDLE_SCHEMAS:
         raise BundleSchemaError(f"unsupported bundle schema version: {version!r}")
     return version
 
@@ -1109,6 +1185,12 @@ _BUNDLE_UPGRADERS = {1: _upgrade_v1_to_v2}
 def migrate_bundle_dict(data: dict) -> dict:
     """Upgrade one explicit format step at a time without changing the source."""
     version = bundle_schema_version(data)
+    try:
+        check_workflow_input(
+            data, default_version=1, allowed_fields=Workflow.model_fields
+        )
+    except JobAuthoringError:
+        raise BundleSchemaError("invalid workflow authoring contract") from None
     upgraded = copy.deepcopy(data)
     while version < SCHEMA_VERSION:
         upgrader = _BUNDLE_UPGRADERS.get(version)
@@ -1728,6 +1810,19 @@ def validate_workflow(workflow: "Workflow") -> ValidationReport:
     are unique, terminals are reachable, and no unconditional cycle can spin
     forever. The safety rule spans BOTH shapes via the canonical step traversal.
     """
+    try:
+        require_supported_workflow(workflow)
+    except JobAuthoringError:
+        return ValidationReport(
+            workflow_name=getattr(workflow, "name", "unsupported"),
+            issues=[
+                ValidationIssue(
+                    category="structure",
+                    code="unsupported_authoring_contract",
+                    message="Workflow schema or job authoring binding is not supported",
+                )
+            ],
+        )
     issues: list[ValidationIssue] = []
     seen_state_ids: set[str] = set()
     seen_step_ids: set[str] = set()

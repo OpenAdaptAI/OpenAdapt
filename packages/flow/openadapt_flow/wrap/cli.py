@@ -17,6 +17,8 @@ def build_parser() -> argparse.ArgumentParser:
         prog="openadapt wrap",
         allow_abbrev=False,
         epilog=(
+            "openadapt wrap export --bundle BUNDLE --out NEW_DIR prepares an "
+            "untrusted local candidate (see docs/WRAP_CANDIDATE.md). "
             "openadapt wrap publish --task TASK publishes the task's admitted "
             "program as an OpenAdapt Cloud endpoint (see its --help)."
         ),
@@ -236,6 +238,10 @@ def _task(args: argparse.Namespace, parser: argparse.ArgumentParser) -> WrappedT
 
 def main(argv: Sequence[str] | None = None) -> int:
     rows = list(sys.argv[1:] if argv is None else argv)
+    if rows[:1] == ["export"]:
+        from openadapt_flow.wrap.candidate import main as candidate_main
+
+        return candidate_main(rows[1:])
     if rows[:1] == ["publish"]:
         from openadapt_flow.wrap.publish import main as publish_main
 
