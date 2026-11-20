@@ -231,10 +231,13 @@ def test_create_mode_allows_benign_server_defaults_and_flags_unexpected_sensitiv
         "tags": [],
         "preferences": {},
     }
+    # A populated business default must be explicitly declared by the contract.
+    implicit_verdict = judge.evaluate(None, r1_clean, intended_delta={"fname": "Rosa"})
+    assert not implicit_verdict.passed and implicit_verdict.extra_fields == ("status",)
     clean_verdict = judge.evaluate(
         None,
         r1_clean,
-        intended_delta={"fname": "Rosa"},
+        intended_delta={"fname": "Rosa", "status": "active"},
     )
     assert clean_verdict.passed is True
     assert clean_verdict.frame_preserved is True
@@ -249,11 +252,18 @@ def test_create_mode_allows_benign_server_defaults_and_flags_unexpected_sensitiv
     bad_verdict = judge.evaluate(
         None,
         r1_contaminated,
-        intended_delta={"fname": "Rosa"},
+        intended_delta={"fname": "Rosa", "status": "active"},
     )
     assert bad_verdict.passed is False
     assert bad_verdict.frame_preserved is False
     assert set(bad_verdict.extra_fields) == {"credit_limit", "is_superuser"}
+
+    for unintended_status in ("approved", "admin"):
+        assert not judge.evaluate(
+            None,
+            {**r1_clean, "status": unintended_status},
+            intended_delta={"fname": "Rosa", "status": "active"},
+        ).passed
 
 
 # ---------------------------------------------------------------------------
@@ -497,15 +507,27 @@ def test_safe_normalized_entailment_oracle_scalars_and_structured_telecom() -> N
         ],
     }
 
+    implicit_verdict = judge.evaluate(r0, r1, intended_delta=intended)
+    assert (
+        not implicit_verdict.passed
+        and "telecom.0.rank" in implicit_verdict.extra_fields
+    )
+    intended["telecom"][0]["rank"] = 1
     verdict = judge.evaluate(r0, r1, intended_delta=intended)
     assert verdict.passed is True
     assert verdict.frame_preserved is True
     assert verdict.intent_satisfied is True
 
-    # Direct subset object check: benign "rank": 1 passes, contradictory "use" or non-metadata key fails.
+    # Explicit rank is checked as intent; undeclared rank and contradictory siblings fail.
+    implicit_rank, _ = oracle.entails(
+        "telecom.0",
+        {"system": "phone", "value": "+15550188", "use": "home"},
+        {"system": "phone", "value": "+15550188", "use": "home", "rank": 1},
+    )
+    assert implicit_rank is False
     ok_sub, _ = oracle.entails(
         "telecom.0",
-        {"system": "phone", "value": "+1-555-0188", "use": "home"},
+        {"system": "phone", "value": "+1-555-0188", "use": "home", "rank": 1},
         {"system": "phone", "value": "+15550188", "use": "home", "rank": 1},
     )
     assert ok_sub is True

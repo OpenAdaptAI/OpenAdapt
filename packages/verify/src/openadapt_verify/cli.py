@@ -429,19 +429,34 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     txi.add_argument("--har", help="HAR 1.2 trace file")
     txi.add_argument("--recording", help="OpenAdapt recording dir or network.jsonl")
-    txi.add_argument("--out", required=True, help="Output JSON path for lens or certified pack")
-    txi.add_argument("--sandbox-url", help="Declared staging/sandbox URL for 6-probe certification")
+    txi.add_argument(
+        "--out",
+        required=True,
+        help="Output JSON path for lens or unqualified probe report",
+    )
+    txi.add_argument(
+        "--sandbox-url", help="Declared staging/sandbox URL for 6-probe observation"
+    )
     txi.add_argument("--sample-record", help="Sample JSON record for sandbox probing")
-    txi.add_argument("--sample-update", help="Sample JSON update delta for sandbox probing")
+    txi.add_argument(
+        "--sample-update", help="Sample JSON update delta for sandbox probing"
+    )
     txi.add_argument("--allow-remote-sandbox", action="store_true")
 
     txr = sub.add_parser(
         "tx-run",
         help="Execute or wrap an agent write through the O(1) TransactionalCommitEngine",
     )
-    txr.add_argument("--lens", required=True, help="EntityLensSpec or CertifiedLensPack JSON file")
+    txr.add_argument(
+        "--lens", required=True, help="EntityLensSpec or LensProbeReport JSON file"
+    )
     txr.add_argument("--task", required=True, help="TxTask JSON file")
     txr.add_argument("--state", help="State/receipts directory")
+    txr.add_argument(
+        "--prototype-unqualified",
+        action="store_true",
+        help="Allow experimental HTTP mutation with UNCERTAIN results and no automatic undo",
+    )
     txr.add_argument("command", nargs=argparse.REMAINDER)
 
     args = parser.parse_args(argv)
@@ -470,6 +485,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 task_path=args.task,
                 state_dir=args.state,
                 command=args.command,
+                allow_unqualified_prototype=args.prototype_unqualified,
             )
         if args.command_name == "run":
             return _run(args)

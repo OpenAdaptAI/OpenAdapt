@@ -38,7 +38,6 @@ DEFAULT_ALLOWED_SERVER_DEFAULTS: tuple[str, ...] = (
     "uuid",
     "created_at",
     "createdAt",
-    "status",
 )
 
 DEFAULT_ORACLE_METADATA_KEYS: frozenset[str] = frozenset(
@@ -46,7 +45,6 @@ DEFAULT_ORACLE_METADATA_KEYS: frozenset[str] = frozenset(
         "id",
         "_id",
         "uuid",
-        "rank",
         "version",
         "versionId",
         "etag",
@@ -55,9 +53,6 @@ DEFAULT_ORACLE_METADATA_KEYS: frozenset[str] = frozenset(
         "updated_at",
         "updatedAt",
         "lastUpdated",
-        "meta",
-        "extension",
-        "period",
     }
 )
 
@@ -765,17 +760,7 @@ class SafeNormalizedEntailmentOracle(EntailmentOracle):
             for extra_key in extra_keys:
                 extra_val = stored_value[extra_key]
                 if before_map is not None and extra_key in before_map:
-                    if not strict_equal(
-                        extra_val, before_map[extra_key]
-                    ) and extra_key not in {
-                        "version",
-                        "versionId",
-                        "etag",
-                        "updated_at",
-                        "updatedAt",
-                        "lastUpdated",
-                        "meta",
-                    }:
+                    if not strict_equal(extra_val, before_map[extra_key]):
                         return (
                             False,
                             f"existing sibling key {extra_key!r} under {field_path!r} mutated",

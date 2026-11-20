@@ -31,6 +31,7 @@ from openadapt_flow.tx.receipt import (
     load_or_create_signing_key,
     verify_tx_receipt,
 )
+from openadapt_flow.tx.sqlite_authority import SQLiteAtomicRowAuthority
 from openadapt_flow.tx.types import (
     CERTIFIED_LENS_PACK_SCHEMA,
     ENTITY_LENS_SCHEMA,
@@ -46,6 +47,7 @@ from openadapt_flow.tx.types import (
     JudgeProtocol,
     JudgeTier,
     JudgeVerdict,
+    LensProbeReport,
     OCCStatus,
     TxCommitResult,
     TxOutcome,
@@ -71,6 +73,8 @@ __all__ = [
     "TX_RECEIPT_SCHEMA",
     "CertificationProbeResult",
     "CertifiedLensPack",
+    "LensProbeReport",
+    "SQLiteAtomicRowAuthority",
     "CodecKind",
     "EndpointTemplate",
     "EntailmentOracle",

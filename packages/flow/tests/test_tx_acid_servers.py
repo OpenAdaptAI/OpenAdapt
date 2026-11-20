@@ -46,9 +46,9 @@ def test_import_boundary_zero_vision_or_ml_imports() -> None:
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     root_mod = alias.name.split(".")[0]
-                    assert (
-                        root_mod not in forbidden
-                    ), f"{py_file.name} imports {root_mod}"
+                    assert root_mod not in forbidden, (
+                        f"{py_file.name} imports {root_mod}"
+                    )
             elif isinstance(node, ast.ImportFrom) and node.module:
                 root_mod = node.module.split(".")[0]
                 assert root_mod not in forbidden, f"{py_file.name} imports {root_mod}"
@@ -264,9 +264,9 @@ def test_50k_seed_speed_and_8_worker_background_concurrency() -> None:
                 assert st == 200
             assert bg.ops_completed >= 24
             assert bg.creates_completed + bg.updates_completed == bg.ops_completed
-            assert (
-                bg.errors == []
-            ), f"Unexpected SQLite/HTTP concurrency errors: {bg.errors}"
+            assert bg.errors == [], (
+                f"Unexpected SQLite/HTTP concurrency errors: {bg.errors}"
+            )
 
 
 def test_fault_injecting_proxy_all_6_write_faults_plus_occ_race() -> None:

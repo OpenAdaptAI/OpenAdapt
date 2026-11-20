@@ -77,6 +77,7 @@ def tx_verified(
     task_id_arg: str = "task_id",
     actor_id: str = "agent",
     workdir: Optional[Union[str, Path]] = None,
+    allow_unqualified_prototype: bool = False,
 ) -> Callable[[F], F]:
     """Wrap a Python agent/tool write function in an O(1) TransactionalCommitEngine."""
     loaded = load_lens_or_pack(lens)
@@ -85,6 +86,7 @@ def tx_verified(
         loaded,
         workdir=workdir,
         judge=judge,
+        allow_unqualified_prototype=allow_unqualified_prototype,
     )
 
     def decorate(fn: F) -> F:
@@ -159,7 +161,8 @@ def run_cli_induce(
         print(
             json.dumps(
                 {
-                    "certified": pack.certified,
+                    "certified": False,
+                    "probes_passed": pack.probes_passed,
                     "sensitivity": pack.sensitivity,
                     "specificity": pack.specificity,
                     "write_mode": pack.lens.write_mode,
@@ -169,7 +172,7 @@ def run_cli_induce(
                 sort_keys=True,
             )
         )
-        return 0 if pack.certified else 4
+        return 0 if pack.probes_passed and not pack.probe_integrity_errors() else 4
 
     Path(out_path).write_text(
         json.dumps(lens.model_dump(), indent=2, sort_keys=True),
@@ -195,6 +198,7 @@ def run_cli_tx(
     task_path: str,
     state_dir: Optional[str],
     command: list[str],
+    allow_unqualified_prototype: bool = False,
 ) -> int:
     """CLI handler for ``openadapt-verify tx-run``."""
     loaded = load_lens_or_pack(lens_path)
@@ -208,7 +212,12 @@ def run_cli_tx(
 
     judge = FrameAndIntentJudge()
     if not cmd:
-        engine = TransactionalCommitEngine(loaded, workdir=state_dir, judge=judge)
+        engine = TransactionalCommitEngine(
+            loaded,
+            workdir=state_dir,
+            judge=judge,
+            allow_unqualified_prototype=allow_unqualified_prototype,
+        )
         res = engine.execute(task)
     else:
         with SessionWireTap(
@@ -220,6 +229,7 @@ def run_cli_tx(
                 workdir=state_dir,
                 judge=judge,
                 wire_tap=tap,
+                allow_unqualified_prototype=allow_unqualified_prototype,
             )
             env = {
                 **os.environ,

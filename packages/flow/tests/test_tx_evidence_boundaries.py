@@ -12,6 +12,7 @@ from openadapt_flow.tx.judge import (
     strict_equal,
 )
 from openadapt_flow.tx.lens import TransactionalCommitEngine
+from openadapt_flow.tx.receipt import task_key_for
 from openadapt_flow.tx.types import CertifiedLensPack, TxTask
 from tests import test_tx_lens as _lens_cases
 from tests.test_tx_lens import _make_replace_lens, _StubWireTap
@@ -61,10 +62,18 @@ def test_certified_boolean_without_the_complete_probe_record_is_refused(
 ):
     base_url, _ = live_app
     pack = CertifiedLensPack(
-        lens=_make_replace_lens(base_url), certified=True, sensitivity=1, specificity=1
+        lens=_make_replace_lens(base_url),
+        certified=False,
+        probes_passed=True,
+        sensitivity=1,
+        specificity=1,
     ).with_computed_digest()
     with pytest.raises(ValueError, match="incomplete_probe_set"):
-        TransactionalCommitEngine(pack, workdir=tmp_path / "invalid")
+        TransactionalCommitEngine(
+            pack,
+            workdir=tmp_path / "invalid",
+            allow_unqualified_prototype=True,
+        )
 
 
 def test_precommit_read_cannot_return_a_different_entity(
@@ -75,13 +84,15 @@ def test_precommit_read_cannot_return_a_different_entity(
     monkeypatch.setattr(
         store,
         "get_one",
-        lambda entity_id: original("rec-0002")
-        if entity_id == "rec-0001"
-        else original(entity_id),
+        lambda entity_id: (
+            original("rec-0002") if entity_id == "rec-0001" else original(entity_id)
+        ),
     )
     before = store.sql_writes_executed
     engine = TransactionalCommitEngine(
-        _make_replace_lens(base_url), workdir=tmp_path / "wrong-read"
+        _make_replace_lens(base_url),
+        workdir=tmp_path / "wrong-read",
+        allow_unqualified_prototype=True,
     )
     result = engine.execute(
         TxTask(
@@ -98,7 +109,9 @@ def test_precommit_read_cannot_return_a_different_entity(
 def test_undo_refuses_to_overwrite_an_intervening_human_edit(live_app, tmp_path: Path):
     base_url, store = live_app
     engine = TransactionalCommitEngine(
-        _make_replace_lens(base_url), workdir=tmp_path / "undo"
+        _make_replace_lens(base_url),
+        workdir=tmp_path / "undo",
+        allow_unqualified_prototype=True,
     )
     result = engine.execute(
         TxTask(
@@ -108,7 +121,7 @@ def test_undo_refuses_to_overwrite_an_intervening_human_edit(live_app, tmp_path:
             intended_delta={"phone": "555-2222"},
         )
     )
-    assert result.outcome == "CONFIRMED" and result.can_compensate
+    assert result.outcome == "UNCERTAIN" and not result.can_compensate
     store.direct_concurrent_touch(
         "rec-0001", notes_override="human edit after operation"
     )
@@ -121,7 +134,9 @@ def test_undo_refuses_to_overwrite_an_intervening_human_edit(live_app, tmp_path:
 def test_same_task_id_cannot_authorize_a_second_target(live_app, tmp_path: Path):
     base_url, store = live_app
     engine = TransactionalCommitEngine(
-        _make_replace_lens(base_url), workdir=tmp_path / "request-id"
+        _make_replace_lens(base_url),
+        workdir=tmp_path / "request-id",
+        allow_unqualified_prototype=True,
     )
     first = TxTask(
         task_id="one-request",
@@ -129,7 +144,7 @@ def test_same_task_id_cannot_authorize_a_second_target(live_app, tmp_path: Path)
         entity_id="rec-0001",
         intended_delta={"phone": "555-2222"},
     )
-    assert engine.execute(first).outcome == "CONFIRMED"
+    assert engine.execute(first).outcome == "UNCERTAIN"
     writes_before = store.sql_writes_executed
     assert (
         engine.execute(first.model_copy(update={"entity_id": "rec-0002"})).outcome
@@ -144,7 +159,10 @@ def test_unobserved_callable_cannot_claim_a_confirmed_transaction(
     base_url, store = live_app
     tap = _StubWireTap(base_url)
     engine = TransactionalCommitEngine(
-        _make_replace_lens(base_url), workdir=tmp_path / "unobserved", wire_tap=tap
+        _make_replace_lens(base_url),
+        workdir=tmp_path / "unobserved",
+        wire_tap=tap,
+        allow_unqualified_prototype=True,
     )
     existing = store.direct_inspect("rec-0001")["phone"]
     result = engine.wrap_action(
@@ -169,7 +187,10 @@ def test_one_observed_write_to_a_different_record_is_refuted(live_app, tmp_path)
     base_url, store = live_app
     with SessionWireTap(base_url) as tap:
         engine = TransactionalCommitEngine(
-            _make_replace_lens(base_url), workdir=tmp_path / "wrong-wire", wire_tap=tap
+            _make_replace_lens(base_url),
+            workdir=tmp_path / "wrong-wire",
+            wire_tap=tap,
+            allow_unqualified_prototype=True,
         )
         intended = store.direct_inspect("rec-0001")["phone"]
 
@@ -202,7 +223,9 @@ def test_saved_har_and_undo_preimage_are_encrypted(live_app, tmp_path):
 
     base_url, store = live_app
     engine = TransactionalCommitEngine(
-        _make_replace_lens(base_url), workdir=tmp_path / "encrypted-state"
+        _make_replace_lens(base_url),
+        workdir=tmp_path / "encrypted-state",
+        allow_unqualified_prototype=True,
     )
     result = engine.execute(
         TxTask(
@@ -212,8 +235,10 @@ def test_saved_har_and_undo_preimage_are_encrypted(live_app, tmp_path):
             intended_delta={"phone": "555-2222"},
         )
     )
-    assert result.outcome == "CONFIRMED"
-    preimage = tmp_path / "encrypted-state" / "encrypted-state" / "undo_r0.json"
+    assert result.outcome == "UNCERTAIN"
+    preimage = (
+        tmp_path / "encrypted-state" / task_key_for("encrypted-state") / "undo_r0.json"
+    )
     assert crypto.is_encrypted(preimage.read_bytes())
     assert b"First1" not in preimage.read_bytes()
     har = {
@@ -229,16 +254,22 @@ def test_saved_har_and_undo_preimage_are_encrypted(live_app, tmp_path):
 def test_default_state_keeps_idempotency_across_engine_instances(live_app):
     base_url, store = live_app
     lens = _make_replace_lens(base_url)
-    first = TransactionalCommitEngine(lens)
+    first = TransactionalCommitEngine(
+        lens,
+        allow_unqualified_prototype=True,
+    )
     task = TxTask(
         task_id="durable-default",
         operation="update",
         entity_id="rec-0001",
         intended_delta={"phone": "555-2222"},
     )
-    assert first.execute(task).outcome == "CONFIRMED"
+    assert first.execute(task).outcome == "UNCERTAIN"
     writes_before = store.sql_writes_executed
-    second = TransactionalCommitEngine(lens)
+    second = TransactionalCommitEngine(
+        lens,
+        allow_unqualified_prototype=True,
+    )
     assert second.workdir == first.workdir
     assert second.execute(task).outcome == "BLOCKED_PRECOMMIT"
     assert store.sql_writes_executed == writes_before

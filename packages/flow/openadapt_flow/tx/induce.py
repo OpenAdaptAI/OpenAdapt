@@ -33,6 +33,7 @@ from openadapt_flow.tx.types import (
     JudgeVerdict,
     WriteMode,
     effective_volatile_fields,
+    open_exact_http,
 )
 
 
@@ -1119,7 +1120,7 @@ def _http_json(
         method=method.upper(),
     )
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with open_exact_http(req, timeout=timeout) as resp:
             status = int(resp.status)
             resp_headers = {k.lower(): v for k, v in resp.headers.items()}
             raw_bytes = resp.read()
@@ -2238,7 +2239,8 @@ def certify_lens_on_sandbox(
 
     pack = CertifiedLensPack(
         lens=lens,
-        certified=certified,
+        certified=False,
+        probes_passed=certified,
         sensitivity=sensitivity,
         specificity=specificity,
         probes=tuple(probes),

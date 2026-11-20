@@ -49,7 +49,6 @@ from openadapt_flow.tx.types import (
     OCCStatus,
     TxOutcome,
     WireSessionSummary,
-    canonical_sha256,
     salted_sha256,
 )
 
@@ -69,7 +68,7 @@ class TxReceiptPayload(BaseModel):
 
     schema_version: Literal["openadapt.tx-receipt/v1"] = "openadapt.tx-receipt/v1"
     issued_at: str
-    task_id_sha256: str
+    task_id_hmac_sha256: str
     entity_name: str
     operation: Literal["create", "update"]
     outcome: TxOutcome
@@ -83,6 +82,7 @@ class TxReceiptPayload(BaseModel):
     rows_read: int = Field(ge=0)
     verification_scope: Literal["target_record"] = "target_record"
     collateral_effects_verified: Literal[False] = False
+    qualification_state: Literal["unqualified", "atomic_row_enforced"] = "unqualified"
 
 
 def _utc_now_iso() -> str:
@@ -109,10 +109,13 @@ def _loads_strict_json(raw: bytes) -> dict[str, Any]:
 
 
 def task_key_for(task_id: str) -> str:
-    """Derive a safe per-task directory key under ``workdir``."""
-    if _SAFE_KEY_RE.fullmatch(task_id) and task_id not in _RESERVED_DIR_NAMES:
-        return task_id
-    return f"task-{canonical_sha256(task_id)[:24]}"
+    """Use a keyed opaque directory identity, including for low-entropy request IDs."""
+    from openadapt_flow import at_rest, crypto
+
+    key = (crypto.resolve_key(None) or at_rest.local_key()).encode("utf-8")
+    return "task-" + salted_sha256(
+        key, {"domain": "tx-task-directory/v1", "task": task_id}
+    )
 
 
 def write_private_bytes(path: Path, data: bytes, *, overwrite: bool = True) -> None:
@@ -285,6 +288,7 @@ def issue_tx_receipt(
     private_key: Optional[Ed25519PrivateKey] = None,
     task_key: Optional[str] = None,
     issued_at: Optional[str] = None,
+    qualification_state: Literal["unqualified", "atomic_row_enforced"] = "unqualified",
 ) -> tuple[str, Path]:
     """Issue a signed COSE_Sign1 + SCITT Merkle-logged ``tx-receipt.cose``.
 
@@ -323,13 +327,16 @@ def issue_tx_receipt(
     statement_dict: dict[str, Any] = {
         "schema_version": TX_RECEIPT_SCHEMA,
         "issued_at": issued_at or _utc_now_iso(),
-        "task_id_sha256": canonical_sha256(task_id),
+        "task_id_hmac_sha256": salted_sha256(
+            salt, {"domain": "tx-public-task/v1", "task": task_id}
+        ),
         "entity_name": entity_name,
         "operation": operation,
         "outcome": outcome,
         "occ_status": occ_status,
         "intended_delta_salted_sha256": salted_sha256(salt, dict(intended_delta)),
         "rows_read": int(rows_read),
+        "qualification_state": qualification_state,
     }
     if r0 is not None:
         statement_dict["r0_salted_sha256"] = salted_sha256(salt, dict(r0))

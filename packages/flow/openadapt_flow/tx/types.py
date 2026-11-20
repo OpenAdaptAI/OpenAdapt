@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import urllib.request
 from typing import Any, Literal, Mapping, Optional, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
 ENTITY_LENS_SCHEMA = "openadapt.entity-lens/v1"
-CERTIFIED_LENS_PACK_SCHEMA = "openadapt.certified-lens-pack/v1"
+LENS_PROBE_REPORT_SCHEMA = "openadapt.lens-probe-report/v1"
+CERTIFIED_LENS_PACK_SCHEMA = LENS_PROBE_REPORT_SCHEMA
 TX_RECEIPT_SCHEMA = "openadapt.tx-receipt/v1"
 
 TxOutcome = Literal["CONFIRMED", "REFUTED", "UNCERTAIN", "BLOCKED_PRECOMMIT"]
@@ -57,6 +59,22 @@ def salted_sha256(salt_bytes: bytes, obj: Any) -> str:
 
     payload = json.dumps(obj, sort_keys=True, separators=(",", ":"), default=str)
     return hmac.new(salt_bytes, payload.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+class _RefuseRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(
+        self, req: Any, fp: Any, code: int, msg: str, headers: Any, newurl: str
+    ) -> None:
+        return None
+
+
+def open_exact_http(request: Any, *, timeout: float) -> Any:
+    """No redirects: response attribution and credentials stay at the declared endpoint."""
+    import urllib.request
+
+    return urllib.request.build_opener(_RefuseRedirects()).open(
+        request, timeout=timeout
+    )
 
 
 class _FrozenModel(BaseModel):
@@ -249,6 +267,7 @@ class TxCommitResult(_FrozenModel):
     can_compensate: bool = False
     verification_scope: Literal["target_record"] = "target_record"
     collateral_effects_verified: Literal[False] = False
+    qualification_state: Literal["unqualified", "atomic_row_enforced"] = "unqualified"
     receipt_path: Optional[str] = None
     receipt_id: Optional[str] = None
     rows_read: int = 0
@@ -266,19 +285,23 @@ class CertificationProbeResult(_FrozenModel):
     detail: str = ""
 
 
-class CertifiedLensPack(_FrozenModel):
-    """Admitted Lens specification backed by 100% fault-gate sensitivity and specificity."""
+class LensProbeReport(_FrozenModel):
+    """Unqualified observations from bounded probes; never an execution authority."""
 
     schema_version: str = CERTIFIED_LENS_PACK_SCHEMA
     lens: EntityLensSpec
-    certified: bool
+    certified: Literal[False] = False
+    probes_passed: bool = False
     sensitivity: float
     specificity: float
     probes: tuple[CertificationProbeResult, ...] = ()
     pack_sha256: str = ""
 
     def admission_errors(self) -> tuple[str, ...]:
-        """Check the complete local probe record; this is not a trusted attestation."""
+        return ("unqualified_probe_report", *self.probe_integrity_errors())
+
+    def probe_integrity_errors(self) -> tuple[str, ...]:
+        """Check observation consistency without conferring execution authority."""
         expected = {
             "clean_roundtrip": "benign",
             "benign_concurrent_other_record": "benign",
@@ -288,7 +311,7 @@ class CertifiedLensPack(_FrozenModel):
             "fault_no_persist": "harmful",
         }
         errors: list[str] = []
-        if not self.certified or self.sensitivity != 1.0 or self.specificity != 1.0:
+        if not self.probes_passed or self.sensitivity != 1.0 or self.specificity != 1.0:
             errors.append("uncertified_probe_results")
         if len(self.probes) != len(expected) or {
             p.probe_name for p in self.probes
@@ -308,10 +331,14 @@ class CertifiedLensPack(_FrozenModel):
             errors.append("pack_digest_mismatch")
         return tuple(dict.fromkeys(errors))
 
-    def with_computed_digest(self) -> "CertifiedLensPack":
+    def with_computed_digest(self) -> "LensProbeReport":
         data = self.model_dump(exclude={"pack_sha256"})
         digest = canonical_sha256(data)
         return self.model_copy(update={"pack_sha256": digest})
+
+
+# Source compatibility only: the legacy name cannot carry certified=True.
+CertifiedLensPack = LensProbeReport
 
 
 def check_mapping_subset(

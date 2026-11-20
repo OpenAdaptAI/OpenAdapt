@@ -530,7 +530,11 @@ def test_replace_mode_update_preserves_untouched_fields_in_o1_reads(
     base_url, store = live_app
     workdir = tmp_path / "tx-work"
     lens = _make_replace_lens(base_url)
-    engine = TransactionalCommitEngine(lens, workdir=workdir)
+    engine = TransactionalCommitEngine(
+        lens,
+        workdir=workdir,
+        allow_unqualified_prototype=True,
+    )
 
     before = store.direct_inspect("rec-2500")
     assert before is not None
@@ -545,8 +549,8 @@ def test_replace_mode_update_preserves_untouched_fields_in_o1_reads(
     )
     result = engine.execute(task)
 
-    assert result.outcome == "CONFIRMED"
-    assert result.occ_status == "UNCONTESTED"
+    assert result.outcome == "UNCERTAIN"
+    assert result.occ_status == "UNKNOWN"
     assert result.rows_read == 2
     assert store.sql_rows_read == 2  # Exactly 2 rows read out of 5,000!
     assert store.sql_writes_executed == 1
@@ -575,8 +579,8 @@ def test_replace_mode_update_preserves_untouched_fields_in_o1_reads(
     assert result.receipt_path is not None
     verified = verify_tx_receipt(result.receipt_path, engine.public_key)
     assert verified["schema_version"] == TX_RECEIPT_SCHEMA
-    assert verified["outcome"] == "CONFIRMED"
-    assert verified["occ_status"] == "UNCONTESTED"
+    assert verified["outcome"] == "UNCERTAIN"
+    assert verified["occ_status"] == "UNKNOWN"
     assert verified["rows_read"] == 2
     assert "r0_salted_sha256" in verified
     assert "r1_salted_sha256" in verified
@@ -598,7 +602,11 @@ def test_wrap_action_catches_partial_put_clobber_and_compensates(
     base_url, store = live_app
     workdir = tmp_path / "tx-wrap"
     lens = _make_replace_lens(base_url)
-    engine = TransactionalCommitEngine(lens, workdir=workdir)
+    engine = TransactionalCommitEngine(
+        lens,
+        workdir=workdir,
+        allow_unqualified_prototype=True,
+    )
 
     baseline = store.direct_inspect("rec-1234")
     assert baseline is not None
@@ -624,7 +632,7 @@ def test_wrap_action_catches_partial_put_clobber_and_compensates(
     result = engine.wrap_action(task, naive_partial_put_agent)
 
     assert result.outcome == "REFUTED"
-    assert result.can_compensate is True
+    assert result.can_compensate is False
     assert result.rows_read == 2
     assert result.judge_verdict is not None
     expected_clobbered = {
@@ -645,14 +653,19 @@ def test_wrap_action_catches_partial_put_clobber_and_compensates(
     for field_name in expected_clobbered:
         assert damaged[field_name] is None
 
-    # One-click compensate restores r0 across a fresh engine instance sharing workdir:
-    recovery_engine = TransactionalCommitEngine(lens, workdir=workdir)
-    assert recovery_engine.compensate(task.task_id) is True
+    # HTTP cannot promise atomic undo; retain a review proposal across fresh engines:
+    recovery_engine = TransactionalCommitEngine(
+        lens,
+        workdir=workdir,
+        allow_unqualified_prototype=True,
+    )
+    assert recovery_engine.compensate(task.task_id) is False
+    assert recovery_engine.compensation_proposal(task.task_id) is not None
 
     restored = store.direct_inspect("rec-1234")
     assert restored is not None
     for col in BUSINESS_FIELDS:
-        assert restored[col] == baseline[col]
+        assert restored[col] == damaged[col]
 
 
 def test_wrap_action_wire_tap_collateral_and_create_delete_compensation(
@@ -666,6 +679,7 @@ def test_wrap_action_wire_tap_collateral_and_create_delete_compensation(
         lens,
         workdir=tmp_path / "tx-wire",
         wire_tap=wire_tap,
+        allow_unqualified_prototype=True,
     )
 
     create_task = TxTask(
@@ -712,15 +726,16 @@ def test_wrap_action_wire_tap_collateral_and_create_delete_compensation(
     assert res.outcome == "REFUTED"
     assert "wire_collateral_mutation" in res.reasons
     assert res.entity_id == created_holder["id"]
-    assert res.can_compensate is True
+    assert res.can_compensate is False
 
     verified = verify_tx_receipt(res.receipt_path or "", engine.public_key)
     assert verified["wire_collateral_mutations"] == 1
     assert verified["wire_mutations_allowed"] == 1
 
-    # Compensate a create -> calls DELETE /records/{id} and verifies 404!
-    assert engine.compensate(create_task.task_id) is True
-    assert store.direct_inspect(created_holder["id"]) is None
+    # Unqualified HTTP create cannot authorize automatic deletion.
+    assert engine.compensate(create_task.task_id) is False
+    assert engine.compensation_proposal(create_task.task_id) is not None
+    assert store.direct_inspect(created_holder["id"]) is not None
 
 
 # ---------------------------------------------------------------------------
@@ -734,7 +749,11 @@ def test_precommit_short_name_identity_mismatch_blocks_zero_writes(
 ) -> None:
     base_url, store = live_app
     lens = _make_replace_lens(base_url)
-    engine = TransactionalCommitEngine(lens, workdir=tmp_path / "tx-id-guard")
+    engine = TransactionalCommitEngine(
+        lens,
+        workdir=tmp_path / "tx-id-guard",
+        allow_unqualified_prototype=True,
+    )
 
     # rec-0010 is seeded with first_name="Li", last_name="Chen"
     rec10 = store.direct_inspect("rec-0010")
@@ -807,7 +826,11 @@ def test_duplicate_create_and_crash_safe_ledger_across_engine_instances(
     shared_workdir = tmp_path / "shared-tx-workdir"
     lens = _make_replace_lens(base_url)
 
-    engine_1 = TransactionalCommitEngine(lens, workdir=shared_workdir)
+    engine_1 = TransactionalCommitEngine(
+        lens,
+        workdir=shared_workdir,
+        allow_unqualified_prototype=True,
+    )
     store.reset_counters()
 
     # 4a. Duplicate email already exists in the 5,000-row table -> zero writes!
@@ -844,12 +867,16 @@ def test_duplicate_create_and_crash_safe_ledger_across_engine_instances(
         },
     )
     first_res = engine_1.execute(unique_create)
-    assert first_res.outcome == "CONFIRMED"
+    assert first_res.outcome == "UNCERTAIN"
     assert first_res.rows_read == 1  # 0 duplicate matches + 1 post-commit read
     assert store.sql_writes_executed == 1
 
     store.reset_counters()
-    engine_2 = TransactionalCommitEngine(lens, workdir=shared_workdir)
+    engine_2 = TransactionalCommitEngine(
+        lens,
+        workdir=shared_workdir,
+        allow_unqualified_prototype=True,
+    )
     retry_res = engine_2.execute(unique_create)
     assert retry_res.outcome == "BLOCKED_PRECOMMIT"
     assert "ledger_hold_active" in retry_res.reasons
@@ -870,7 +897,11 @@ def test_duplicate_create_and_crash_safe_ledger_across_engine_instances(
     engine_1.ledger.begun(crash_key, "crashed-attempt-1", write_key_bound=True)
 
     store.reset_counters()
-    engine_3 = TransactionalCommitEngine(lens, workdir=shared_workdir)
+    engine_3 = TransactionalCommitEngine(
+        lens,
+        workdir=shared_workdir,
+        allow_unqualified_prototype=True,
+    )
     after_crash_res = engine_3.execute(crash_task)
     assert after_crash_res.outcome == "BLOCKED_PRECOMMIT"
     assert "ledger_hold_active" in after_crash_res.reasons
@@ -892,7 +923,11 @@ def test_occ_detects_same_record_races_while_ignoring_other_row_traffic(
     lens = _make_replace_lens(base_url)
 
     # 5a. Concurrent edit between r0 read and PUT -> If-Match fails with HTTP 412
-    engine_if_match = TransactionalCommitEngine(lens, workdir=tmp_path / "occ-412")
+    engine_if_match = TransactionalCommitEngine(
+        lens,
+        workdir=tmp_path / "occ-412",
+        allow_unqualified_prototype=True,
+    )
 
     def race_after_r0_get(entity_id: str) -> None:
         if entity_id == "rec-0500":
@@ -919,7 +954,11 @@ def test_occ_detects_same_record_races_while_ignoring_other_row_traffic(
 
     # 5b. Concurrent edit between write and r1 read (bumping version by +2 overall)
     #     -> surfaces CONCURRENT_MODIFICATION + UNCERTAIN instead of CONFIRMED!
-    engine_ver_jump = TransactionalCommitEngine(lens, workdir=tmp_path / "occ-vjump")
+    engine_ver_jump = TransactionalCommitEngine(
+        lens,
+        workdir=tmp_path / "occ-vjump",
+        allow_unqualified_prototype=True,
+    )
 
     def race_after_write(entity_id: str) -> None:
         if entity_id == "rec-0501":
@@ -968,7 +1007,9 @@ def test_occ_detects_same_record_races_while_ignoring_other_row_traffic(
         w.start()
     try:
         engine_isolated = TransactionalCommitEngine(
-            lens, workdir=tmp_path / "occ-isolated"
+            lens,
+            workdir=tmp_path / "occ-isolated",
+            allow_unqualified_prototype=True,
         )
         for idx in range(5):
             target_num = 4000 + idx
@@ -982,8 +1023,8 @@ def test_occ_detects_same_record_races_while_ignoring_other_row_traffic(
                     intended_delta={"phone": f"(555) 900-{idx:04d}"},
                 )
             )
-            assert clean_res.outcome == "CONFIRMED"
-            assert clean_res.occ_status == "UNCONTESTED"
+            assert clean_res.outcome == "UNCERTAIN"
+            assert clean_res.occ_status == "UNKNOWN"
             assert clean_res.rows_read == 2
     finally:
         stop_bg.set()
@@ -1129,6 +1170,7 @@ def test_occ_author_attribution_and_pre_send_reread(
     author_engine = TransactionalCommitEngine(
         author_lens,
         workdir=tmp_path / "occ-author",
+        allow_unqualified_prototype=True,
     )
     baseline = store.direct_inspect("rec-0600")
     assert baseline is not None
@@ -1158,6 +1200,7 @@ def test_occ_author_attribution_and_pre_send_reread(
         reread_lens,
         workdir=tmp_path / "occ-reread",
         pre_send_reread=True,
+        allow_unqualified_prototype=True,
     )
 
     def touch_once_after_first_get(entity_id: str) -> None:
@@ -1194,7 +1237,9 @@ def test_identity_codec_opt_in_and_certified_pack_and_lazy_judge(
 
     # Without casefold codec on first_name, "li" != "Li" -> BLOCKED_PRECOMMIT
     strict_engine = TransactionalCommitEngine(
-        base_lens, workdir=tmp_path / "strict-case"
+        base_lens,
+        workdir=tmp_path / "strict-case",
+        allow_unqualified_prototype=True,
     )
     strict_res = strict_engine.execute(
         TxTask(
@@ -1218,7 +1263,9 @@ def test_identity_codec_opt_in_and_certified_pack_and_lazy_judge(
         }
     )
     casefold_engine = TransactionalCommitEngine(
-        casefold_lens, workdir=tmp_path / "optin-case"
+        casefold_lens,
+        workdir=tmp_path / "optin-case",
+        allow_unqualified_prototype=True,
     )
     ok_res = casefold_engine.execute(
         TxTask(
@@ -1229,9 +1276,9 @@ def test_identity_codec_opt_in_and_certified_pack_and_lazy_judge(
             intended_delta={"phone": "(555) 1010"},
         )
     )
-    assert ok_res.outcome == "CONFIRMED"
+    assert ok_res.outcome == "UNCERTAIN"
 
-    # CertifiedLensPack rejects uncertified packs and accepts certified ones
+    # Legacy pack names retain probe observations, but never grant authority
     uncertified_pack = CertifiedLensPack(
         lens=base_lens,
         certified=False,
@@ -1239,17 +1286,26 @@ def test_identity_codec_opt_in_and_certified_pack_and_lazy_judge(
         specificity=1.0,
     ).with_computed_digest()
     with pytest.raises(ValueError, match="uncertified"):
-        TransactionalCommitEngine(uncertified_pack, workdir=tmp_path / "uncert")
+        TransactionalCommitEngine(
+            uncertified_pack,
+            workdir=tmp_path / "uncert",
+            allow_unqualified_prototype=True,
+        )
 
     certified_pack = CertifiedLensPack(
         lens=base_lens,
-        certified=True,
+        certified=False,
+        probes_passed=True,
         sensitivity=1.0,
         specificity=1.0,
     ).with_computed_digest()
     with pytest.raises(ValueError, match="incomplete_probe_set"):
-        TransactionalCommitEngine(certified_pack, workdir=tmp_path / "cert")
-    # Real loopback qualification must supply the six complete probe results.
+        TransactionalCommitEngine(
+            certified_pack,
+            workdir=tmp_path / "cert",
+            allow_unqualified_prototype=True,
+        )
+    # Real loopback probes must supply six complete observations; they remain unqualified.
     from openadapt_flow.tx.induce import certify_lens_on_sandbox
 
     qualified_pack = certify_lens_on_sandbox(
@@ -1265,10 +1321,13 @@ def test_identity_codec_opt_in_and_certified_pack_and_lazy_judge(
         },
         sample_update={"phone": "555-4444"},
     )
-    assert qualified_pack.certified
-    assert not qualified_pack.admission_errors()
+    assert qualified_pack.probes_passed and not qualified_pack.certified
+    assert not qualified_pack.probe_integrity_errors()
+    assert qualified_pack.admission_errors() == ("unqualified_probe_report",)
     cert_engine = TransactionalCommitEngine(
-        qualified_pack, workdir=tmp_path / "qualified"
+        qualified_pack,
+        workdir=tmp_path / "qualified",
+        allow_unqualified_prototype=True,
     )
     assert cert_engine.lens == qualified_pack.lens
 
@@ -1293,7 +1352,11 @@ def test_identity_codec_opt_in_and_certified_pack_and_lazy_judge(
 
     fake_judge_mod.FrameAndIntentJudge = FrameAndIntentJudge  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "openadapt_flow.tx.judge", fake_judge_mod)
-    lazy_engine = TransactionalCommitEngine(base_lens, workdir=tmp_path / "lazy-judge")
+    lazy_engine = TransactionalCommitEngine(
+        base_lens,
+        workdir=tmp_path / "lazy-judge",
+        allow_unqualified_prototype=True,
+    )
     assert isinstance(lazy_engine.judge, FrameAndIntentJudge)
 
     # Nested + dotted deep_merge preserves untouched sibling keys

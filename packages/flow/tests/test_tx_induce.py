@@ -714,7 +714,8 @@ def test_silent_clobber_put_archetype_induces_replace_and_certifies(
     assert pack.lens.write_mode == "replace"
     assert pack.sensitivity == 1.0
     assert pack.specificity == 1.0
-    assert pack.certified is True
+    assert pack.probes_passed is True
+    assert pack.certified is False
     assert len(pack.probes) == 6
     assert {p.probe_name for p in pack.probes} == {
         "clean_roundtrip",
@@ -910,7 +911,8 @@ def test_paginated_normalizing_2000_row_archetype_and_remote_refusal(
     assert pack.lens.write_mode == "patch"
     assert pack.sensitivity == 1.0
     assert pack.specificity == 1.0
-    assert pack.certified is True
+    assert pack.probes_passed is True
+    assert pack.certified is False
     assert all(p.passed for p in pack.probes)
     # Disposable probe records were cleaned up via delete_endpoint (only bg thread rows remain).
     assert normalizing_server.count_rows() == rows_before + bg_counter["inserted"]
@@ -944,6 +946,7 @@ def test_allow_remote_sandbox_opt_in_bypasses_loopback_guard(
         allow_remote_sandbox=True,
     )
     assert pack.certified is False
+    assert pack.probes_passed is False
 
 
 # ==============================================================================
@@ -978,6 +981,7 @@ def test_broken_custom_lenses_fail_certification(
         wrong_get_lens, sample_record=sample_rec, sample_update=sample_upd
     )
     assert pack_wrong_get.certified is False
+    assert pack_wrong_get.probes_passed is False
     assert pack_wrong_get.specificity < 1.0
 
     # 3b. Broken get_one pointing at the 200-capped collection endpoint instead of /{id}.
@@ -1006,6 +1010,7 @@ def test_broken_custom_lenses_fail_certification(
         sample_update={"street": "20 ELM ST"},
     )
     assert pack_collection_get.certified is False
+    assert pack_collection_get.probes_passed is False
 
     # 3c. Broken lens that ignores clobbered fields by marking user business fields volatile!
     clobber_blind_lens = EntityLensSpec(
@@ -1028,6 +1033,7 @@ def test_broken_custom_lenses_fail_certification(
         clobber_blind_lens, sample_record=sample_rec, sample_update=sample_upd
     )
     assert pack_clobber_blind.certified is False
+    assert pack_clobber_blind.probes_passed is False
     assert pack_clobber_blind.sensitivity < 1.0
     clobber_probe = next(
         p for p in pack_clobber_blind.probes if p.probe_name == "fault_partial_clobber"
@@ -1066,6 +1072,7 @@ def test_broken_custom_lenses_fail_certification(
         judge=_WeakIntentOnlyJudge(),
     )
     assert pack_weak_judge.certified is False
+    assert pack_weak_judge.probes_passed is False
     assert pack_weak_judge.sensitivity < 1.0
 
     # 3e. Unrefined naive patch lens on silent-clobber PUT server fails clean_roundtrip.
@@ -1077,6 +1084,7 @@ def test_broken_custom_lenses_fail_certification(
         refine_quirks=False,
     )
     assert pack_unrefined.certified is False
+    assert pack_unrefined.probes_passed is False
     assert pack_unrefined.specificity < 1.0
 
 
@@ -1148,7 +1156,8 @@ def test_intended_inputs_codecs_phone_isodate_and_llm_proposer_veto(
         },
         sample_update={"priority": 4},
     )
-    assert pack_create.certified is True
+    assert pack_create.probes_passed is True
+    assert pack_create.certified is False
     assert pack_create.sensitivity == 1.0
     assert pack_create.specificity == 1.0
 
@@ -1182,6 +1191,7 @@ def test_intended_inputs_codecs_phone_isodate_and_llm_proposer_veto(
         sample_update={"title": "Test 2"},
     )
     assert vetoed_pack.certified is False
+    assert vetoed_pack.probes_passed is False
 
     def _good_llm_proposer(_har: Mapping[str, Any]) -> EntityLensSpec:
         return EntityLensSpec(
@@ -1212,7 +1222,8 @@ def test_intended_inputs_codecs_phone_isodate_and_llm_proposer_veto(
         sample_update={"title": "LLM certified candidate"},
         auth_headers={"X-Sandbox-Token": "verified-token"},
     )
-    assert admitted_pack.certified is True
+    assert admitted_pack.probes_passed is True
+    assert admitted_pack.certified is False
     assert admitted_pack.lens.write_mode == "replace"
     assert admitted_pack.sensitivity == 1.0
     assert admitted_pack.specificity == 1.0
@@ -1315,9 +1326,9 @@ def test_induce_generality_and_import_boundaries() -> None:
         "work" + "arena",
     )
     for token in banned_tokens:
-        assert (
-            token not in source_lower
-        ), f"Banned app name {token!r} found in induce.py"
+        assert token not in source_lower, (
+            f"Banned app name {token!r} found in induce.py"
+        )
 
     refused_modules = [
         "numpy",

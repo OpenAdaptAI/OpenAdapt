@@ -417,6 +417,26 @@ def is_mutation_request(
     """Return ``(is_mutation, is_graphql_mutation)`` for any HTTP request."""
     upper = method.strip().upper()
     if upper in READ_METHODS:
+        parts = urlsplit(path_or_url)
+        query = parse_qsl(parts.query, keep_blank_values=True)
+        documents = [value for name, value in query if name == "query"]
+        if parts.path.rstrip("/").lower().endswith("/graphql") or documents:
+            if len(documents) != 1:
+                return (True, False)
+            operation_names = [
+                value for name, value in query if name == "operationName"
+            ]
+            if len(operation_names) > 1:
+                return (True, False)
+            classified = _classify_single_graphql_doc(
+                documents[0],
+                operation_name=operation_names[0] if operation_names else None,
+                is_graphql_endpoint=parts.path.rstrip("/").lower().endswith("/graphql"),
+            )
+            if classified is not None:
+                return classified
+            if parts.path.rstrip("/").lower().endswith("/graphql"):
+                return (True, False)
         return (False, False)
     if upper == "POST":
         return classify_graphql_post(path_or_url, request_body, request_headers)
@@ -1482,6 +1502,13 @@ class SessionWireTap:
             resp = conn.getresponse()
             resp_body = resp.read()
             resp_headers = list(resp.msg.items())
+            if 300 <= resp.status < 400:
+                return (
+                    502,
+                    "Bad Gateway",
+                    [("Content-Type", "application/json")],
+                    b'{"error":"redirect_refused"}',
+                )
             return (
                 resp.status,
                 resp.reason or _status_text(resp.status),
@@ -1693,8 +1720,20 @@ class SessionWireTap:
             fetch_fn = getattr(route, "fetch", None)
             fulfill_fn = getattr(route, "fulfill", None)
             if callable(fetch_fn) and callable(fulfill_fn):
-                fetched = fetch_fn()
+                fetched = fetch_fn(max_redirects=0)
                 resp_status, resp_headers, resp_body = _extract_route_response(fetched)
+                if resp_status is not None and 300 <= resp_status < 400:
+                    self._finalize_request(
+                        ticket,
+                        request_headers=req_headers,
+                        request_body=req_body,
+                        response_status=resp_status,
+                        response_headers=[],
+                        response_body=b"",
+                        duration_ms=(time.perf_counter() - t0) * 1000.0,
+                    )
+                    route.abort()
+                    return
                 elapsed_ms = (time.perf_counter() - t0) * 1000.0
                 self._finalize_request(
                     ticket,
@@ -1708,22 +1747,17 @@ class SessionWireTap:
                 fulfill_fn(response=fetched)
                 return
 
-            continued_resp = route.continue_()
-            if continued_resp is None:
-                continued_resp = getattr(route, "response", None)
-            resp_status, resp_headers, resp_body = _extract_route_response(
-                continued_resp
-            )
-            elapsed_ms = (time.perf_counter() - t0) * 1000.0
+            # Without fetch(max_redirects=0), no network request is authorized.
             self._finalize_request(
                 ticket,
                 request_headers=req_headers,
                 request_body=req_body,
-                response_status=resp_status,
-                response_headers=resp_headers,
-                response_body=resp_body,
-                duration_ms=elapsed_ms,
+                response_status=None,
+                response_headers=[],
+                response_body=None,
+                duration_ms=(time.perf_counter() - t0) * 1000.0,
             )
+            route.abort()
 
         page_or_context.route("**/*", _handle_route)
         return _handle_route

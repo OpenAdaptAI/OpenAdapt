@@ -24,6 +24,7 @@ from openadapt_flow.tx import (
 )
 from openadapt_flow.tx.induce import certify_lens_on_sandbox
 from openadapt_flow.tx.types import CertifiedLensPack
+
 from openadapt_verify.cli import main as verify_cli_main
 from openadapt_verify.tx import tx_verified
 
@@ -288,7 +289,8 @@ def test_end_to_end_network_capture_to_certified_pack_and_cli_tx_run(
         )
         assert rc == 0
         pack_data = json.loads(pack_path.read_text())
-        assert pack_data["certified"] is True
+        assert pack_data["certified"] is False
+        assert pack_data["probes_passed"] is True
         assert pack_data["sensitivity"] == 1.0
         assert pack_data["specificity"] == 1.0
         assert pack_data["lens"]["write_mode"] == "replace"
@@ -311,7 +313,9 @@ def test_end_to_end_network_capture_to_certified_pack_and_cli_tx_run(
             sample_record=json.loads(sample_rec_path.read_text()),
             sample_update=json.loads(sample_upd_path.read_text()),
         )
-        assert reviewed_pack.certified and not reviewed_pack.admission_errors()
+        assert not reviewed_pack.certified and reviewed_pack.probes_passed
+        assert not reviewed_pack.probe_integrity_errors()
+        assert reviewed_pack.admission_errors() == ("unqualified_probe_report",)
         pack_path.write_text(json.dumps(reviewed_pack.model_dump()))
 
         clean_id = "TSK-0005"
@@ -335,6 +339,7 @@ def test_end_to_end_network_capture_to_certified_pack_and_cli_tx_run(
         rc_run = verify_cli_main(
             [
                 "tx-run",
+                "--prototype-unqualified",
                 "--lens",
                 str(pack_path),
                 "--task",
@@ -343,7 +348,7 @@ def test_end_to_end_network_capture_to_certified_pack_and_cli_tx_run(
                 str(state_dir),
             ]
         )
-        assert rc_run == 0
+        assert rc_run == 3
         after_row = dict(
             conn.execute("SELECT * FROM tasks WHERE id = ?", (clean_id,)).fetchone()
         )
@@ -360,7 +365,8 @@ def test_end_to_end_network_capture_to_certified_pack_and_cli_tx_run(
             priv_key.public_key(),
             log_dir=state_dir / "log",
         )
-        assert verified_payload["outcome"] == "CONFIRMED"
+        assert verified_payload["outcome"] == "UNCERTAIN"
+        assert verified_payload["qualification_state"] == "unqualified"
         assert verified_payload["rows_read"] == 2
 
         # Rogue external agent attempts a collateral second write through OPENADAPT_TX_PROXY_URL
@@ -399,6 +405,7 @@ def test_end_to_end_network_capture_to_certified_pack_and_cli_tx_run(
         rc_rogue = verify_cli_main(
             [
                 "tx-run",
+                "--prototype-unqualified",
                 "--lens",
                 str(pack_path),
                 "--task",
@@ -439,7 +446,12 @@ def test_tx_verified_decorator(tmp_path: Path) -> None:
         )
         tid = "TSK-0002"
 
-        @tx_verified(lens, actor_id="tx-agent", workdir=tmp_path / "dec_state")
+        @tx_verified(
+            lens,
+            actor_id="tx-agent",
+            workdir=tmp_path / "dec_state",
+            allow_unqualified_prototype=True,
+        )
         def update_task_status(entity_id: str, status: str) -> None:
             row = dict(
                 conn.execute(

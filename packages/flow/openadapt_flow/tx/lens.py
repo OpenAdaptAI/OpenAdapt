@@ -1,10 +1,8 @@
-"""O(1) Entity Lens Client and Transactional Commit Engine (tx.lens).
+"""Target-row observations and storage-enforced mutation coordination.
 
-Provides pre-commit targeted reads and identity/duplicate guards, safe payload
-merging (eliminating silent partial-``PUT`` clobbers), optimistic concurrency
-control (``ETag`` / ``If-Match`` + post-commit version & author attribution),
-session wire-tap enforcement, two-law verification, crash-safe ``write_ledger``
-idempotency, witnessed COSE_Sign1 receipts, and one-click compensation.
+HTTP prototypes retain read-back evidence and encrypted undo proposals without
+asserting atomicity. The separate SQLite backend compares and writes one row
+inside a storage transaction. Receipts state that narrow qualification scope.
 """
 
 from __future__ import annotations
@@ -13,6 +11,7 @@ import copy
 import json
 import re
 import secrets
+import sqlite3
 import time
 import urllib.error
 import urllib.parse
@@ -34,6 +33,7 @@ from openadapt_flow.tx.receipt import (
     task_key_for,
     write_private_record,
 )
+from openadapt_flow.tx.sqlite_authority import SQLiteAtomicRowAuthority
 from openadapt_flow.tx.types import (
     ENTITY_LENS_SCHEMA,
     CertifiedLensPack,
@@ -52,6 +52,7 @@ from openadapt_flow.tx.types import (
     WireTapProtocol,
     canonical_sha256,
     effective_volatile_fields,
+    open_exact_http,
 )
 from openadapt_flow.write_ledger import FileLedger, Lease, Ledger
 
@@ -548,7 +549,7 @@ class EntityLensClient:
         raw_bytes = b""
         resp_headers: dict[str, str] = {}
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:
+            with open_exact_http(req, timeout=self.timeout_s) as resp:
                 status_code = int(resp.status)
                 raw_bytes = resp.read()
                 resp_headers = {k: v for k, v in resp.headers.items()}
@@ -820,16 +821,28 @@ class TransactionalCommitEngine:
         ledger: Optional[Ledger] = None,
         pre_send_reread: bool = False,
         timeout_s: float = 10.0,
+        atomic_authority: Optional[SQLiteAtomicRowAuthority] = None,
+        allow_unqualified_prototype: bool = False,
     ) -> None:
         if isinstance(lens, CertifiedLensPack):
-            errors = lens.admission_errors()
+            # Revalidate copied models as well as parsed JSON; model_copy can bypass validation.
+            report = CertifiedLensPack.model_validate(lens.model_dump())
+            errors = report.probe_integrity_errors()
             if errors:
                 raise ValueError(
-                    "Refusing uncertified CertifiedLensPack: " + ",".join(errors)
+                    "Refusing inconsistent probe report: " + ",".join(errors)
                 )
-            self.lens = lens.lens
+            self.lens = report.lens
         else:
             self.lens = lens
+
+        if atomic_authority is not None:
+            if type(atomic_authority) is not SQLiteAtomicRowAuthority:
+                raise ValueError("unrecognized atomic mutation authority")
+            if atomic_authority.id_column != self.lens.id_field:
+                raise ValueError("atomic authority identity differs from the lens")
+        self.atomic_authority = atomic_authority
+        self.allow_unqualified_prototype = allow_unqualified_prototype
 
         if workdir is None:
             from openadapt_flow.at_rest import local_key_path
@@ -875,14 +888,58 @@ class TransactionalCommitEngine:
 
     # -- internal helpers -----------------------------------------------------
 
+    def _read_one(
+        self, entity_id: str
+    ) -> tuple[LensHttpResponse, Optional[dict[str, Any]], int]:
+        if self.atomic_authority is None:
+            return self.client.get_one(entity_id)
+        try:
+            record = self.atomic_authority.read(entity_id)
+        except (OSError, ValueError, sqlite3.Error):
+            return (
+                LensHttpResponse(status_code=None, network_error="atomic_read_failed"),
+                None,
+                0,
+            )
+        if record is None:
+            return LensHttpResponse(status_code=404), None, 0
+        response = LensHttpResponse(
+            status_code=200,
+            json_body=record,
+            etag='"' + canonical_sha256(record) + '"',
+            extracted_entity_id=entity_id,
+        )
+        return response, record, 1
+
+    def _unqualified_block(self, task: TxTask, t0: float) -> TxCommitResult:
+        return self._finalize_result(
+            task=task,
+            outcome="BLOCKED_PRECOMMIT",
+            occ_status="UNKNOWN",
+            entity_id=task.entity_id,
+            r0=None,
+            r1=None,
+            wire_summary=None,
+            judge_verdict=None,
+            reasons=("enforcing_mutation_authority_required",),
+            can_compensate=False,
+            rows_read=0,
+            t0=t0,
+        )
+
     def _effective_volatile_fields(self) -> tuple[str, ...]:
-        return effective_volatile_fields(self.lens)
+        fields = effective_volatile_fields(self.lens)
+        if self.atomic_authority is not None:
+            fields = (*fields, self.atomic_authority.revision_column)
+        return tuple(dict.fromkeys(fields))
 
     def _version_field_name(
         self,
         r0: Optional[Mapping[str, Any]],
         r1: Mapping[str, Any],
     ) -> Optional[str]:
+        if self.atomic_authority is not None:
+            return self.atomic_authority.revision_column
         configured = (
             self.lens.get_one.version_field or self.lens.write_endpoint.version_field
         )
@@ -916,7 +973,9 @@ class TransactionalCommitEngine:
                 "entity_name": self.lens.entity_name,
             }
         )
-        return self._ledger.key_for(contract_digest, {}, write_key=task.task_id)
+        return self._ledger.key_for(
+            contract_digest, {}, write_key=task_key_for(task.task_id)
+        )
 
     def _acquire_gate_or_block(
         self,
@@ -978,7 +1037,11 @@ class TransactionalCommitEngine:
             if not found:
                 mismatches.append(field_path)
                 continue
-            codec = self.lens.field_codecs.get(field_path)
+            codec = (
+                self.lens.field_codecs.get(field_path)
+                if self.atomic_authority is None
+                else None
+            )
             matched, _ = _codec_matches(expected_val, actual_val, codec)
             if not matched:
                 mismatches.append(field_path)
@@ -1005,6 +1068,9 @@ class TransactionalCommitEngine:
             "entity_name": self.lens.entity_name,
             "operation": operation,
             "entity_id": entity_id,
+            "atomic_binding": self.atomic_authority.binding_sha256
+            if self.atomic_authority
+            else None,
         }
         meta_bytes = (
             json.dumps(meta, sort_keys=True, separators=(",", ":")) + "\n"
@@ -1048,7 +1114,7 @@ class TransactionalCommitEngine:
                     ),
                 )
 
-            resp, r0, fetched = self.client.get_one(task.entity_id)
+            resp, r0, fetched = self._read_one(task.entity_id)
             rows_read += fetched
             if r0 is None:
                 detail = (
@@ -1205,6 +1271,7 @@ class TransactionalCommitEngine:
         ledger_key: str,
         attempt_id: str,
         t0: float,
+        atomic_postimage: Optional[Mapping[str, Any]] = None,
     ) -> TxCommitResult:
         reasons: list[str] = []
         unblocked_collateral = False
@@ -1217,6 +1284,7 @@ class TransactionalCommitEngine:
                 or wire_summary.mutations_allowed != 1
                 or len(observed) != 1
                 or observed[0].response_status is None
+                or not 200 <= observed[0].response_status < 300
             )
             if incomplete_wire:
                 reasons.append("wire_evidence_incomplete")
@@ -1288,7 +1356,7 @@ class TransactionalCommitEngine:
                 t0=t0,
             )
 
-        r1_resp, r1, fetched = self.client.get_one(entity_id)
+        r1_resp, r1, fetched = self._read_one(entity_id)
         rows_read += fetched
 
         if r1 is None:
@@ -1363,8 +1431,22 @@ class TransactionalCommitEngine:
                             if int_v1 > int_v0 + 1
                             else "concurrent_version_not_next"
                         )
-                    elif occ_status != "CONCURRENT_MODIFICATION":
+                    elif (
+                        occ_status != "CONCURRENT_MODIFICATION"
+                        and atomic_postimage is not None
+                    ):
                         occ_status = "UNCONTESTED"
+
+        from openadapt_flow.tx.judge import strict_equal
+
+        if atomic_postimage is not None:
+            if not strict_equal(r1, atomic_postimage):
+                occ_status = "CONCURRENT_MODIFICATION"
+                reasons.append("postcommit_state_changed")
+            elif occ_status != "CONCURRENT_MODIFICATION":
+                occ_status = "UNCONTESTED"
+        else:
+            reasons.append("unqualified_observation_only")
 
         eval_kwargs: dict[str, Any] = {
             "volatile_fields": self._effective_volatile_fields(),
@@ -1404,6 +1486,8 @@ class TransactionalCommitEngine:
             outcome = "REFUTED"
         elif action_error is not None or incomplete_wire:
             outcome = "UNCERTAIN"
+        elif atomic_postimage is None:
+            outcome = "UNCERTAIN"
         else:
             outcome = "CONFIRMED"
 
@@ -1415,26 +1499,26 @@ class TransactionalCommitEngine:
             delivered=True,
         )
 
-        can_compensate = False
-        strong_etag = bool(r1_resp.etag and not r1_resp.etag.startswith("W/"))
-        if occ_status != "CONCURRENT_MODIFICATION" and strong_etag:
-            postimage = {
-                "entity_id": entity_id,
-                "lens_sha256": canonical_sha256(self.lens.model_dump()),
-                "record": r1,
-            }
-            write_private_record(
-                self.workdir / task_key_for(task.task_id) / "undo_postcommit.json",
-                json.dumps(postimage, sort_keys=True).encode("utf-8"),
-            )
-            if task.operation == "update" and r0 is not None:
-                can_compensate = True
-            elif (
-                task.operation == "create"
-                and entity_id is not None
-                and self.lens.delete_endpoint is not None
-            ):
-                can_compensate = True
+        can_compensate = bool(
+            atomic_postimage is not None
+            and self.atomic_authority is not None
+            and occ_status == "UNCONTESTED"
+            and task.operation == "update"
+            and r0 is not None
+        )
+        postimage = {
+            "entity_id": entity_id,
+            "lens_sha256": canonical_sha256(self.lens.model_dump()),
+            "record": dict(atomic_postimage) if atomic_postimage is not None else r1,
+            "atomic_binding": self.atomic_authority.binding_sha256
+            if can_compensate
+            else None,
+            "automatic_execution_allowed": can_compensate,
+        }
+        write_private_record(
+            self.workdir / task_key_for(task.task_id) / "undo_postcommit.json",
+            json.dumps(postimage, sort_keys=True).encode("utf-8"),
+        )
 
         return self._finalize_result(
             task=task,
@@ -1449,6 +1533,8 @@ class TransactionalCommitEngine:
             can_compensate=can_compensate,
             rows_read=rows_read,
             t0=t0,
+            atomic_enforced=atomic_postimage is not None
+            and occ_status == "UNCONTESTED",
         )
 
     def _finalize_result(
@@ -1466,6 +1552,7 @@ class TransactionalCommitEngine:
         can_compensate: bool,
         rows_read: int,
         t0: float,
+        atomic_enforced: bool = False,
     ) -> TxCommitResult:
         rec_id, rec_path = issue_tx_receipt(
             self.workdir,
@@ -1480,6 +1567,9 @@ class TransactionalCommitEngine:
             wire_summary=wire_summary,
             rows_read=rows_read,
             private_key=self._signing_key,
+            qualification_state="atomic_row_enforced"
+            if atomic_enforced
+            else "unqualified",
         )
         elapsed_ms = round((time.perf_counter() - t0) * 1000.0, 3)
         return TxCommitResult(
@@ -1491,6 +1581,9 @@ class TransactionalCommitEngine:
             judge_verdict=judge_verdict,
             reasons=reasons,
             can_compensate=can_compensate,
+            qualification_state="atomic_row_enforced"
+            if atomic_enforced
+            else "unqualified",
             receipt_path=str(rec_path),
             receipt_id=rec_id,
             rows_read=rows_read,
@@ -1500,8 +1593,30 @@ class TransactionalCommitEngine:
     # -- public execution API -------------------------------------------------
 
     def execute(self, task: TxTask) -> TxCommitResult:
-        """Execute ``task`` directly via the Lens API with O(1) ACID-like guards."""
+        """Execute a storage-enforced update or an explicit unqualified HTTP prototype."""
         t0 = time.perf_counter()
+        if (
+            self.atomic_authority is None or task.operation != "update"
+        ) and not self.allow_unqualified_prototype:
+            return self._unqualified_block(task, t0)
+        if (
+            self.atomic_authority is not None
+            and self.atomic_authority.revision_column in task.intended_delta
+        ):
+            return self._finalize_result(
+                task=task,
+                outcome="BLOCKED_PRECOMMIT",
+                occ_status="UNKNOWN",
+                entity_id=task.entity_id,
+                r0=None,
+                r1=None,
+                wire_summary=None,
+                judge_verdict=None,
+                reasons=("reserved_atomic_revision_field",),
+                can_compensate=False,
+                rows_read=0,
+                t0=t0,
+            )
         ledger_key = self._ledger_key(task)
         lease, blocked = self._acquire_gate_or_block(task, ledger_key, t0)
         if blocked is not None:
@@ -1519,9 +1634,7 @@ class TransactionalCommitEngine:
                 and task.entity_id is not None
                 and r0 is not None
             ):
-                recheck_resp, r0_recheck, recheck_rows = self.client.get_one(
-                    task.entity_id
-                )
+                recheck_resp, r0_recheck, recheck_rows = self._read_one(task.entity_id)
                 rows_read += recheck_rows
                 v_field = self._version_field_name(r0, r0_recheck or {})
                 etag_changed = (
@@ -1551,15 +1664,33 @@ class TransactionalCommitEngine:
                     )
 
             payload = self._build_write_payload(task, r0)
-            attempt_id = f"{task.task_id}-{secrets.token_hex(6)}"
+            attempt_id = f"{task_key_for(task.task_id)}-{secrets.token_hex(6)}"
             self._ledger.begun(ledger_key, attempt_id, write_key_bound=True)
 
-            write_resp = self.client.write(
-                task.operation,
-                payload,
-                entity_id=task.entity_id,
-                if_match=r0_etag if task.operation == "update" else None,
-            )
+            atomic_postimage = None
+            if self.atomic_authority is not None and task.operation == "update":
+                assert r0 is not None and task.entity_id is not None
+                try:
+                    changed = self.atomic_authority.compare_update(
+                        task.entity_id, expected=r0, values=payload
+                    )
+                    atomic_postimage = changed.record if changed.applied else None
+                    write_resp = LensHttpResponse(
+                        status_code=200 if changed.applied else 412,
+                        json_body=changed.record,
+                        extracted_entity_id=task.entity_id,
+                    )
+                except (OSError, ValueError, sqlite3.Error):
+                    write_resp = LensHttpResponse(
+                        status_code=None, network_error="atomic_mutation_failed"
+                    )
+            else:
+                write_resp = self.client.write(
+                    task.operation,
+                    payload,
+                    entity_id=task.entity_id,
+                    if_match=r0_etag if task.operation == "update" else None,
+                )
 
             if write_resp.status_code in (409, 412):
                 self._ledger.resolved(
@@ -1632,6 +1763,7 @@ class TransactionalCommitEngine:
                 r0=r0,
                 wire_summary=None,
                 action_error=action_err,
+                atomic_postimage=atomic_postimage,
                 rows_read=rows_read,
                 ledger_key=ledger_key,
                 attempt_id=attempt_id,
@@ -1647,6 +1779,8 @@ class TransactionalCommitEngine:
     ) -> TxCommitResult:
         """Wrap an external CUA/browser/agent callable inside O(1) transactional guards."""
         t0 = time.perf_counter()
+        if not self.allow_unqualified_prototype:
+            return self._unqualified_block(task, t0)
         ledger_key = self._ledger_key(task)
         lease, blocked = self._acquire_gate_or_block(task, ledger_key, t0)
         if blocked is not None:
@@ -1658,7 +1792,7 @@ class TransactionalCommitEngine:
             if early_block is not None:
                 return early_block
 
-            attempt_id = f"{task.task_id}-{secrets.token_hex(6)}"
+            attempt_id = f"{task_key_for(task.task_id)}-{secrets.token_hex(6)}"
             self._ledger.begun(ledger_key, attempt_id, write_key_bound=True)
 
             if self.wire_tap is not None:
@@ -1721,100 +1855,73 @@ class TransactionalCommitEngine:
         finally:
             lease.release()
 
-    def compensate(self, task_id: str) -> bool:
-        """One-click undo: restore ``r0`` on updates or ``DELETE`` on creates."""
+    def compensation_proposal(self, task_id: str) -> Optional[Path]:
+        """Retain an encrypted review proposal; this path grants no mutation authority."""
         task_dir = self.workdir / task_key_for(task_id)
-        meta_path = task_dir / "undo_meta.json"
-        r0_path = task_dir / "undo_r0.json"
-
-        operation: Optional[str] = None
-        entity_id: Optional[str] = None
-        if meta_path.is_file():
-            try:
-                meta = json.loads(read_private_record(meta_path))
-                operation = meta.get("operation")
-                entity_id = meta.get("entity_id")
-            except (OSError, ValueError):
-                return False
-
-        # Refuse to erase changes made after the recorded operation. A fresh ETag alone
-        # would merely authorize overwriting a newer user's edit.
-        postimage_path = task_dir / "undo_postcommit.json"
         try:
-            postimage = json.loads(read_private_record(postimage_path))
+            meta = json.loads(read_private_record(task_dir / "undo_meta.json"))
+            post = json.loads(read_private_record(task_dir / "undo_postcommit.json"))
+            before = (
+                json.loads(read_private_record(task_dir / "undo_r0.json"))
+                if meta.get("operation") == "update"
+                else None
+            )
+        except (OSError, ValueError):
+            return None
+        proposal = task_dir / "undo_proposal.json"
+        write_private_record(
+            proposal,
+            json.dumps(
+                {
+                    "schema": "openadapt.undo-proposal/v1",
+                    "meta": meta,
+                    "observed_after": post,
+                    "before": before,
+                    "automatic_execution_authority": False,
+                },
+                sort_keys=True,
+            ).encode("utf-8"),
+        )
+        return proposal
+
+    def compensate(self, task_id: str) -> bool:
+        """Only the enforcing backend may compare and undo; HTTP undo is refused."""
+        if self.atomic_authority is None:
+            self.compensation_proposal(task_id)
+            return False
+        task_dir = self.workdir / task_key_for(task_id)
+        try:
+            meta = json.loads(read_private_record(task_dir / "undo_meta.json"))
+            post = json.loads(read_private_record(task_dir / "undo_postcommit.json"))
+            before = json.loads(read_private_record(task_dir / "undo_r0.json"))
         except (OSError, ValueError):
             return False
-        if postimage.get("entity_id") != entity_id or postimage.get(
-            "lens_sha256"
-        ) != canonical_sha256(self.lens.model_dump()):
-            return False
-        current_resp, current_record, _ = self.client.get_one(entity_id or "")
-        from openadapt_flow.tx.judge import strict_equal
-
         if (
-            current_record is None
-            or not strict_equal(current_record, postimage.get("record"))
-            or not current_resp.etag
-            or current_resp.etag.startswith("W/")
+            meta.get("operation") != "update"
+            or not post.get("automatic_execution_allowed")
+            or meta.get("atomic_binding") != self.atomic_authority.binding_sha256
+            or post.get("atomic_binding") != self.atomic_authority.binding_sha256
+            or post.get("lens_sha256") != canonical_sha256(self.lens.model_dump())
+            or post.get("entity_id") != meta.get("entity_id")
+            or not isinstance(before, dict)
+            or not isinstance(post.get("record"), dict)
         ):
             return False
-
-        if operation == "update":
-            if not r0_path.is_file():
-                return False
-            try:
-                r0 = json.loads(read_private_record(r0_path))
-            except (OSError, ValueError):
-                return False
-            if not isinstance(r0, dict):
-                return False
-            if not entity_id:
-                found_id, raw_id = _get_path(r0, self.lens.id_field)
-                if found_id and raw_id is not None:
-                    entity_id = str(raw_id)
-            if not entity_id:
-                return False
-
-            restore_payload = strip_readonly_volatile(
-                r0,
-                self._effective_volatile_fields(),
+        entity_id = meta.get("entity_id")
+        if not isinstance(entity_id, str):
+            return False
+        try:
+            changed = self.atomic_authority.compare_update(
+                entity_id, expected=post["record"], values=before
             )
-            if (
-                self.lens.expected_author is not None
-                and self.lens.write_endpoint.author_field is not None
-            ):
-                restore_payload[self.lens.write_endpoint.author_field] = (
-                    self.lens.expected_author
-                )
+        except (OSError, ValueError, sqlite3.Error):
+            return False
+        if not changed.applied or changed.record is None:
+            return False
+        from openadapt_flow.tx.judge import strict_equal
 
-            write_resp = self.client.write(
-                "update",
-                restore_payload,
-                entity_id=entity_id,
-                if_match=current_resp.etag,
-            )
-            if not write_resp.ok:
-                return False
-
-            _, restored_record, _ = self.client.get_one(entity_id)
-            if restored_record is None:
-                return False
-            verdict = self.judge.evaluate(
-                r0,
-                restored_record,
-                {},
-                volatile_fields=self._effective_volatile_fields(),
-                field_codecs=self.lens.field_codecs,
-            )
-            return verdict.passed
-
-        if operation == "create":
-            if not entity_id or self.lens.delete_endpoint is None:
-                return False
-            del_resp = self.client.delete(entity_id, if_match=current_resp.etag)
-            if del_resp.status_code not in (200, 202, 204, 404):
-                return False
-            check_resp, _, _ = self.client.get_one(entity_id)
-            return check_resp.status_code == 404
-
-        return False
+        revision = self.atomic_authority.revision_column
+        return strict_equal(
+            {k: v for k, v in before.items() if k != revision},
+            {k: v for k, v in changed.record.items() if k != revision},
+        )

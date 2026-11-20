@@ -646,9 +646,9 @@ def test_o1_write_completeness_with_10k_rows_and_5_concurrent_writers(
             w.join(timeout=5.0)
 
     assert not bg_errors
-    assert (
-        sum(bg_write_counts) >= 20
-    ), "Background writers must actively mutate SQLite concurrently"
+    assert sum(bg_write_counts) >= 20, (
+        "Background writers must actively mutate SQLite concurrently"
+    )
 
     # Zero interference from 10,000 seed rows or 5 concurrent background writers!
     assert summary.session_id == "tx-o1"
@@ -1087,7 +1087,8 @@ class _DuckRoute:
         self.continued = True
         return self._send_upstream()
 
-    def fetch(self) -> _DuckResponse:
+    def fetch(self, *, max_redirects: int) -> _DuckResponse:
+        assert max_redirects == 0
         return self._send_upstream()
 
     def fulfill(self, *, response: _DuckResponse) -> None:
@@ -1122,9 +1123,9 @@ def test_duck_typed_playwright_route_interception_and_abort(
     page = _DuckPage()
     tap.attach_playwright_route(page)
     assert page.registered_pattern == "**/*"
-    assert (
-        tap._server is None
-    ), "attach_playwright_route must not require opening a proxy port"
+    assert tap._server is None, (
+        "attach_playwright_route must not require opening a proxy port"
+    )
 
     # Local scheme about:blank passes straight through uncounted
     r_local = page.dispatch(_DuckRoute(_DuckRequest("about:blank", "GET")))
@@ -1252,9 +1253,9 @@ def test_wire_tap_generality_and_import_boundaries(tmp_path: Path) -> None:
     source = WIRE_TAP_PATH.read_text(encoding="utf-8")
     lowered = source.lower()
     for app_name in FORBIDDEN_APP_NAMES:
-        assert (
-            app_name not in lowered
-        ), f"Forbidden app name {app_name!r} in wire_tap.py"
+        assert app_name not in lowered, (
+            f"Forbidden app name {app_name!r} in wire_tap.py"
+        )
 
     tree = ast.parse(source, filename=str(WIRE_TAP_PATH))
     allowed_non_stdlib = {

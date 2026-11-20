@@ -494,11 +494,11 @@ jobs:
         run: |
           python -m venv "$RUNNER_TEMP/tests"
           "$RUNNER_TEMP/tests/bin/python" -m pip install --quiet --no-cache-dir \
-            --find-links "$RUNNER_TEMP/dist" \
+            --find-links "$RUNNER_TEMP/dist" 'openadapt-verify[mysql]' \
             "$RUNNER_TEMP"/dist/openadapt_types-*.whl \
             "$RUNNER_TEMP"/dist/openadapt_flow-*.whl \
             "$RUNNER_TEMP"/dist/openadapt_verify-*.whl \
-            'openadapt-verify[mysql]' 'psycopg[binary]' pytest==9.2.0
+            'psycopg[binary]' pytest==9.2.0
           cd packages/verify
           "$RUNNER_TEMP/tests/bin/python" -m pytest -q -p no:cacheprovider \
             tests/test_quickstart.py tests/test_guard.py tests/test_import_boundary.py \
