@@ -8,7 +8,7 @@ and gates pack updates through explicit immutable admission.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal, Optional, Sequence
+from typing import Callable, Literal, Optional, Sequence
 
 from openadapt_flow.form_tx.types import (
     ControlKind,
@@ -120,8 +120,25 @@ def admit_candidate_into_pack(
     prefill_policy: Optional[PrefillPolicy] = None,
     triggers_re_render: bool = False,
     required_in_pack: bool = False,
+    approval_id: Optional[str] = None,
+    qualification_check: Optional[Callable[[FormPack], bool]] = None,
 ) -> FormPack:
-    """Produce a new immutable ``FormPack`` containing the admitted ``candidate``."""
+    """Apply a proposal only after explicit approval and qualification of the new pack.
+
+    ``qualification_check`` is a caller-supplied trusted qualification hook, not
+    evidence inferred from repeated operator answers. It must assess the exact
+    resulting pack and return the Boolean ``True``. No rule is promoted by default.
+    """
+    if not approval_id or not approval_id.strip():
+        raise ValueError("Rule admission requires an explicit approval_id")
+    if qualification_check is None:
+        raise ValueError("Rule admission requires qualification of the resulting pack")
+
+    def qualified(updated_pack: FormPack) -> FormPack:
+        if qualification_check(updated_pack) is not True:
+            raise ValueError("Resulting pack did not pass qualification")
+        return updated_pack
+
     if candidate.pack_id != pack.pack_id:
         raise ValueError(
             f"Candidate pack_id {candidate.pack_id!r} does not match pack {pack.pack_id!r}"
@@ -157,7 +174,9 @@ def admit_candidate_into_pack(
             triggers_re_render=triggers_re_render,
             required_in_pack=required_in_pack,
         )
-        return pack.model_copy(update={"bindings": (*pack.bindings, new_binding)})
+        return qualified(
+            pack.model_copy(update={"bindings": (*pack.bindings, new_binding)})
+        )
 
     if candidate.proposed_kind == "prefill_policy":
         if not candidate.proposed_dossier_key:
@@ -196,7 +215,7 @@ def admit_candidate_into_pack(
                     required_in_pack=required_in_pack,
                 )
             )
-        return pack.model_copy(update={"bindings": tuple(updated_bindings)})
+        return qualified(pack.model_copy(update={"bindings": tuple(updated_bindings)}))
 
     raise ValueError(
         f"Candidate kind {candidate.proposed_kind!r} cannot be admitted as a field binding"
@@ -207,12 +226,13 @@ class RuleAccumulator:
     """Accumulates human resolutions across runs and induces consensus patch candidates."""
 
     def __init__(self) -> None:
-        # pack_id -> field_signature -> list of per-run _ResolutionDescriptor
-        self._observations: dict[str, dict[str, list[_ResolutionDescriptor]]] = {}
+        # Evidence is bound to an exact parent pack and one descriptor per run.
+        self._observations: dict[str, dict[str, dict[str, _ResolutionDescriptor]]] = {}
+        self._pack_digests: dict[str, str] = {}
         # pack_id -> set of field_signatures that had intra-run or inter-run contradiction
         self._contradicted: dict[str, set[str]] = {}
-        # pack_id -> seen idempotency_keys to prevent duplicate replay of the same run
-        self._seen_idempotency_keys: dict[str, set[str]] = {}
+        # Reused keys must identify the same scoped decision, not hide contradictions.
+        self._seen_idempotency_keys: dict[str, dict[str, str]] = {}
         # pack_id -> candidate_id -> admitted PackPatchCandidate
         self._admitted: dict[str, dict[str, PackPatchCandidate]] = {}
 
@@ -220,12 +240,29 @@ class RuleAccumulator:
         self,
         pack_id: str,
         records: Sequence[HumanResolutionRecord],
+        *,
+        run_id: Optional[str] = None,
+        pack_digest: Optional[str] = None,
     ) -> None:
-        """Record eligible human resolution records from one completed/halted run."""
+        """Record support from an identified run of one exact pack version.
+
+        Legacy calls without scope are accepted but cannot establish support.
+        The caller supplies run and pack identity from the execution session;
+        changing an operator idempotency key never creates another supporting run.
+        """
         if not pack_id:
             raise ValueError("pack_id must be non-empty")
 
-        seen_keys = self._seen_idempotency_keys.setdefault(pack_id, set())
+        if run_id is None or pack_digest is None:
+            return
+        if not run_id.strip() or not pack_digest.strip():
+            raise ValueError("run_id and pack_digest must be non-empty")
+        known_digest = self._pack_digests.get(pack_id)
+        if known_digest is not None and known_digest != pack_digest:
+            raise ValueError("Cannot mix rule evidence from different pack versions")
+        self._pack_digests[pack_id] = pack_digest
+
+        seen_keys = self._seen_idempotency_keys.setdefault(pack_id, {})
         pack_obs = self._observations.setdefault(pack_id, {})
         pack_contradicted = self._contradicted.setdefault(pack_id, set())
 
@@ -233,12 +270,18 @@ class RuleAccumulator:
         for rec in records:
             if not _is_eligible_record(rec):
                 continue
-            if rec.idempotency_key in seen_keys:
-                continue
-            seen_keys.add(rec.idempotency_key)
             sig = rec.field_signature.strip()
             if not sig:
                 continue
+            decision_digest = canonical_sha256(
+                {"run_id": run_id, "record": rec.model_dump()}
+            )
+            prior_digest = seen_keys.get(rec.idempotency_key)
+            if prior_digest is not None:
+                if prior_digest != decision_digest:
+                    pack_contradicted.add(sig)
+                continue
+            seen_keys[rec.idempotency_key] = decision_digest
             desc = _describe_resolution(rec)
             per_run_by_sig.setdefault(sig, set()).add(desc)
 
@@ -247,10 +290,10 @@ class RuleAccumulator:
                 pack_contradicted.add(sig)
                 continue
             (only_desc,) = tuple(descriptors)
-            history = pack_obs.setdefault(sig, [])
-            if any(prev != only_desc for prev in history):
+            history = pack_obs.setdefault(sig, {})
+            if any(prev != only_desc for prev in history.values()):
                 pack_contradicted.add(sig)
-            history.append(only_desc)
+            history[run_id] = only_desc
 
     def induce_candidates(
         self,
@@ -272,7 +315,7 @@ class RuleAccumulator:
             history = pack_obs[sig]
             if len(history) < min_support:
                 continue
-            unique = set(history)
+            unique = set(history.values())
             if len(unique) != 1:
                 continue
             (consensus,) = tuple(unique)
@@ -286,6 +329,7 @@ class RuleAccumulator:
             cand_digest = canonical_sha256(
                 {
                     "pack_id": pack_id,
+                    "pack_digest": self._pack_digests.get(pack_id),
                     "field_signature": sig,
                     "proposed_kind": consensus.proposed_kind,
                     "proposed_dossier_key": consensus.proposed_dossier_key,
@@ -326,8 +370,21 @@ class RuleAccumulator:
         prefill_policy: Optional[PrefillPolicy] = None,
         triggers_re_render: bool = False,
         required_in_pack: bool = False,
+        approval_id: Optional[str] = None,
+        qualification_check: Optional[Callable[[FormPack], bool]] = None,
     ) -> FormPack:
-        """Gate and admit ``candidate`` into a new immutable ``FormPack``."""
+        """Require current evidence, explicit approval, and qualification before promotion."""
+        if self._pack_digests.get(pack.pack_id) != pack.digest():
+            raise ValueError(
+                "Candidate evidence does not match the current pack digest"
+            )
+        current_candidates = {
+            item.candidate_id: item for item in self.induce_candidates(pack.pack_id)
+        }
+        if current_candidates.get(candidate.candidate_id) != candidate:
+            raise ValueError(
+                "Candidate is not supported by current accumulated evidence"
+            )
         updated_pack = admit_candidate_into_pack(
             pack=pack,
             candidate=candidate,
@@ -337,6 +394,8 @@ class RuleAccumulator:
             prefill_policy=prefill_policy,
             triggers_re_render=triggers_re_render,
             required_in_pack=required_in_pack,
+            approval_id=approval_id,
+            qualification_check=qualification_check,
         )
         admitted_cand = candidate.model_copy(update={"admitted": True})
         self._admitted.setdefault(pack.pack_id, {})[candidate.candidate_id] = (
