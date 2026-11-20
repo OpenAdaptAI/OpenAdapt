@@ -539,6 +539,77 @@ def test_candidate_reads_follow_the_written_path(url, paths):
     assert items and all(p.rsplit("/", 1)[1] in {"7", "4711"} for p in items)
 
 
+def _tree(directory: Path) -> dict[str, bytes]:
+    return {
+        path.relative_to(directory).as_posix(): path.read_bytes()
+        for path in sorted(directory.rglob("*"))
+        if path.is_file()
+    }
+
+
+def test_probed_refusal_does_not_replace_part_of_an_earlier_generation(tmp_path, app):
+    rec = _recording(tmp_path / "rec", app)
+    out = tmp_path / "out"
+    result = build_record_check(rec, out, probe_reads=True, complete_read=True)
+    assert result is not None
+    assert (out / "record_check.proposed.yaml").is_file()
+    proof = json.loads((out / "record_check.proof.json").read_text())
+    assert proof["status"] != "refused"
+    assert proof["read_discovery"]["status"] == "promoted"
+    assert proof["approved"] is False
+    before = _tree(out)
+    with pytest.raises(SystemExit, match="already holds a verifier generation"):
+        build_record_check(rec, out, probe_reads=True)
+    assert _tree(out) == before
+
+
+def test_unavailable_probe_does_not_replace_part_of_an_earlier_generation(
+    tmp_path, app
+):
+    rec = _recording(tmp_path / "rec", app)
+    out = tmp_path / "out"
+    assert (
+        build_record_check(rec, out, probe_reads=True, complete_read=True) is not None
+    )
+    before = _tree(out)
+    handle = App(list_path=None)
+    try:
+        other = _recording(tmp_path / "other", handle)
+        with pytest.raises(SystemExit, match="already holds a verifier generation"):
+            build_record_check(other, out, probe_reads=True)
+    finally:
+        handle.stop()
+    assert _tree(out) == before
+    saved = json.loads((out / READ_DISCOVERY_FILE).read_text())
+    assert saved["status"] == "promoted"
+
+
+def test_cli_probed_refusal_keeps_the_earlier_generation(tmp_path, app, capsys):
+    from openadapt_flow.__main__ import main
+
+    rec = _recording(tmp_path / "rec", app)
+    out = tmp_path / "out"
+    code = main(
+        [
+            "scaffold-verifier",
+            str(rec),
+            "--probe-reads",
+            "--complete-read",
+            "-o",
+            str(out),
+        ]
+    )
+    text = capsys.readouterr().out
+    assert code in (0, 1), text
+    assert (out / "record_check.proposed.yaml").is_file()
+    before = _tree(out)
+    with pytest.raises(SystemExit, match="already holds a verifier generation"):
+        main(["scaffold-verifier", str(rec), "--probe-reads", "-o", str(out)])
+    assert _tree(out) == before
+    proof = json.loads((out / "record_check.proof.json").read_text())
+    assert proof["read_discovery"]["status"] == "promoted"
+
+
 def test_cli_flags(tmp_path, app, capsys):
     from openadapt_flow.__main__ import main
 

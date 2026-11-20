@@ -26,6 +26,11 @@ Two read-first operator helpers live here.
     review + qualification commands next. A demonstration with no consequential
     (write-shaped) step is REFUSED rather than scaffolded.
 
+    Candidate, proof, read-discovery, coverage, identity and TODO-draft files
+    are one generation. A directory that already holds any of them is refused
+    before those files change. One command shares a single snapshot, so a
+    fresh refusal can still write its proof and TODO draft together.
+
 ``flow explain <run-dir>``
     Pure read-only plain-language outcome summary over a completed run's
     artifacts (``report.json``, ``REPORT.md``, ``receipt.json``): what
@@ -41,6 +46,7 @@ network, except ``scaffold-verifier --probe-reads``, which sends read-only
 
 from __future__ import annotations
 
+import os
 import shlex
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -595,7 +601,144 @@ Next commands:
 """
 
 
-def write_draft(source: Path, out_dir: Optional[Path] = None) -> tuple[Path, int]:
+def _directory_key(path: Path) -> str:
+    return os.path.abspath(os.fspath(path))
+
+
+def generation_filenames() -> tuple[str, ...]:
+    """Files one scaffold-verifier result publishes as a single generation."""
+    from openadapt_flow.fault_gate import COVERAGE_FILE
+    from openadapt_flow.record_check_identity import IDENTITY_PROPOSED_NAME
+    from openadapt_flow.record_check_synthesis import PROOF_NAME, PROPOSED_NAME
+
+    return (
+        PROPOSED_NAME,
+        PROOF_NAME,
+        READ_DISCOVERY_FILE,
+        CONTRACT_FILENAME,
+        COVERAGE_FILE,
+        IDENTITY_PROPOSED_NAME,
+    )
+
+
+@dataclass(frozen=True)
+class VerifierGeneration:
+    """Verifier outputs snapshotted before this command writes.
+
+    The snapshot is not refreshed. Files this command adds stay in the same
+    generation. A directory that already had any of them is refused before
+    those bytes change.
+    """
+
+    destination: Path
+    prior: tuple[str, ...]
+
+    @classmethod
+    def open(cls, destination: Path) -> VerifierGeneration:
+        destination = Path(destination)
+        prior = tuple(
+            name
+            for name in generation_filenames()
+            if _sealed.is_file(destination / name)
+        )
+        return cls(destination=destination, prior=prior)
+
+    def refuse_if_occupied(self) -> None:
+        if not self.prior:
+            return
+        listed = ", ".join(self.prior)
+        raise ScaffoldRefused(
+            "scaffold-verifier REFUSED: the output directory already holds a "
+            f"verifier generation ({listed}) in {self.destination}. Nothing "
+            "was written. Those files were kept unchanged. Use a new --out "
+            "directory so a later result cannot replace only part of an "
+            "earlier one."
+        )
+
+
+def publish_generation(
+    destination: Path, generation: Optional[VerifierGeneration]
+) -> VerifierGeneration:
+    """Refuse an occupied destination, then return the generation to write into."""
+    if generation is None:
+        generation = VerifierGeneration.open(destination)
+    elif _directory_key(generation.destination) != _directory_key(destination):
+        raise ScaffoldRefused(
+            "scaffold-verifier REFUSED: the output directory does not match "
+            "the generation already opened. Nothing was written."
+        )
+    generation.refuse_if_occupied()
+    return generation
+
+
+def record_check_output_dir(
+    source: Path,
+    out_dir: Optional[Path],
+    recording: Optional[Path] = None,
+) -> Optional[Path]:
+    """Directory :func:`build_record_check` publishes into, if it can."""
+    kind = classify_target(source)
+    recording_dir = source if kind == "recording" else recording
+    if recording_dir is None:
+        return None
+    return out_dir or recording_dir
+
+
+def bind_record_check_proof(
+    prove: Optional[str],
+    proof_source: Optional[Fixture],
+) -> None:
+    """Bind a caller-owned proof source before inspection or output.
+
+    A missing, mismatched or foreign fixture is refused here. The target is
+    not classified and no output directory is opened.
+    """
+    from openadapt_flow.record_check_proof import ProofUnavailable, require_fixture
+
+    if prove is not None:
+        try:
+            require_fixture(prove, proof_source)
+        except ProofUnavailable as exc:
+            raise ScaffoldRefused(f"scaffold-verifier --prove: {exc}") from exc
+    elif proof_source is not None:
+        raise ScaffoldRefused("scaffold-verifier: a proof source requires --prove")
+
+
+def begin_verifier_outputs(
+    source: Path,
+    out_dir: Optional[Path],
+    recording: Optional[Path] = None,
+    *,
+    prove: Optional[str] = None,
+    proof_source: Optional[Fixture] = None,
+) -> tuple[Optional[VerifierGeneration], VerifierGeneration]:
+    """Snapshot output directories before scaffold-verifier writes anything.
+
+    The proof source is bound before the target is classified, so a fixture
+    that does not match refuses without opening an output directory.
+    """
+    bind_record_check_proof(prove, proof_source)
+    opened: dict[str, VerifierGeneration] = {}
+
+    def one(directory: Path) -> VerifierGeneration:
+        key = _directory_key(directory)
+        if key not in opened:
+            opened[key] = VerifierGeneration.open(directory)
+        return opened[key]
+
+    check_dir = record_check_output_dir(source, out_dir, recording)
+    return (
+        one(check_dir) if check_dir is not None else None,
+        one(out_dir or source),
+    )
+
+
+def write_draft(
+    source: Path,
+    out_dir: Optional[Path] = None,
+    *,
+    generation: Optional[VerifierGeneration] = None,
+) -> tuple[Path, int]:
     """Build and write the draft contract; return ``(path, candidate_count)``."""
     source_kind = classify_target(source)
     if source_kind == "bundle":
@@ -623,7 +766,9 @@ def write_draft(source: Path, out_dir: Optional[Path] = None) -> tuple[Path, int
         candidates=candidates,
     )
     _refuse_plaintext_output(source, out_dir)
-    destination = (out_dir or source) / CONTRACT_FILENAME
+    destination_dir = out_dir or source
+    publish_generation(destination_dir, generation)
+    destination = destination_dir / CONTRACT_FILENAME
     destination.parent.mkdir(parents=True, exist_ok=True)
     # Sealed in memory when the destination is an encrypted bundle/recording.
     _sealed.write_text(destination, text)
@@ -641,6 +786,17 @@ def _refuse_plaintext_output(source: Path, out_dir: Optional[Path]) -> None:
             "scaffold-verifier: the source is encrypted, so its drafts are "
             "written inside it, encrypted. Drop --out; nothing was written."
         )
+
+
+def _claim_output(
+    recording_dir: Path,
+    out_dir: Optional[Path],
+    generation: Optional[VerifierGeneration],
+) -> tuple[Path, VerifierGeneration]:
+    """Plaintext boundary first, then refuse an occupied generation."""
+    _refuse_plaintext_output(recording_dir, out_dir)
+    destination = out_dir or recording_dir
+    return destination, publish_generation(destination, generation)
 
 
 # ---------------------------------------------------------------------------
@@ -673,6 +829,7 @@ def build_record_check(
     fault_gate: bool = False,
     probe_reads: bool = False,
     probe_base: Optional[str] = None,
+    generation: Optional[VerifierGeneration] = None,
 ) -> Optional[RecordCheckResult]:
     """Build, fault-test and write a proposed record check.
 
@@ -692,19 +849,16 @@ def build_record_check(
     used only when a probe confirms the written values. Otherwise
     ``read_discovery.json`` records every probe and the read stays
     unavailable (``None`` is returned, for the TODO draft).
+
+    ``generation`` is the output snapshot taken before this command writes.
+    An occupied destination is refused before any of its files change.
     """
 
     import tempfile
 
-    from openadapt_flow.record_check_proof import ProofUnavailable, require_fixture
+    from openadapt_flow.record_check_proof import ProofUnavailable
 
-    if prove is not None:
-        try:
-            require_fixture(prove, proof_source)
-        except ProofUnavailable as exc:
-            raise ScaffoldRefused(f"scaffold-verifier --prove: {exc}") from exc
-    elif proof_source is not None:
-        raise ScaffoldRefused("scaffold-verifier: a proof source requires --prove")
+    bind_record_check_proof(prove, proof_source)
 
     from openadapt_flow import record_check_synthesis as rcs
 
@@ -765,8 +919,7 @@ def build_record_check(
         if proposal.search.read_discovery is not None:
             import json
 
-            _refuse_plaintext_output(recording_dir, out_dir)
-            destination = out_dir or recording_dir
+            destination, generation = _claim_output(recording_dir, out_dir, generation)
             destination.mkdir(parents=True, exist_ok=True)
             _sealed.write_text(
                 destination / READ_DISCOVERY_FILE,
@@ -777,8 +930,7 @@ def build_record_check(
     if proposal.refused:
         import json
 
-        _refuse_plaintext_output(recording_dir, out_dir)
-        destination = out_dir or recording_dir
+        destination, generation = _claim_output(recording_dir, out_dir, generation)
         destination.mkdir(parents=True, exist_ok=True)
         if proposal.search.read_discovery is not None:
             _sealed.write_text(
@@ -792,6 +944,7 @@ def build_record_check(
             json.dumps(proposal.proof(), indent=2, sort_keys=True, default=str) + "\n",
         )
         return None
+    destination, generation = _claim_output(recording_dir, out_dir, generation)
     if prove:
         from openadapt_flow.record_check_proof import prove_live
 
@@ -808,7 +961,6 @@ def build_record_check(
                 )
         except ProofUnavailable as exc:
             raise ScaffoldRefused(f"scaffold-verifier --prove: {exc}") from exc
-    destination = out_dir or recording_dir
     identity_path = None
     if bundle_dir is not None:
         from openadapt_flow import record_check_identity
@@ -821,7 +973,7 @@ def build_record_check(
         identity_path = record_check_identity.write_identity_proposals(
             proposals, destination
         )
-    check, proof = rcs.write(proposal, destination)
+    check, proof = rcs.write(proposal, destination, generation=generation)
     if proposal.search.read_discovery is not None:
         import json
 

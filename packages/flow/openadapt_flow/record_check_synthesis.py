@@ -67,6 +67,7 @@ from openadapt_flow.runtime.effects.surfaces import surface_probe
 
 if TYPE_CHECKING:
     from openadapt_flow.rest_setup import RestReadContext, RestReadSetup
+    from openadapt_flow.scaffold_verifier import VerifierGeneration
 
 #: The network capture ``record --capture-network`` writes. Read here without
 #: importing the recorder side, so the format has one owner
@@ -2315,7 +2316,8 @@ _HEADER_WORKING = """\
 _HEADER_DRAFT = """\
 # DRAFT record check from `openadapt-flow scaffold-verifier`. It is NOT working:
 # its fault test found misses (listed below and in {proof_file}). Fix the reads
-# or add the missing ones, then run scaffold-verifier again.
+# or add the missing ones, then run scaffold-verifier into a new output
+# directory. An existing generation is left unchanged.
 #
 {misses}
 #
@@ -2350,12 +2352,23 @@ def render(proposal: Proposal) -> str:
     return header + yaml.safe_dump(doc, sort_keys=False, allow_unicode=True)
 
 
-def write(proposal: Proposal, out_dir: Path) -> tuple[Path, Path]:
+def write(
+    proposal: Proposal,
+    out_dir: Path,
+    *,
+    generation: Optional[VerifierGeneration] = None,
+) -> tuple[Path, Path]:
     """Write the proposed check and its proof; return both paths.
 
     The fault gate's coverage record goes beside them (``check_coverage.json``).
+    An output directory that already holds a verifier generation is refused
+    before either file changes. ``generation`` is the caller's pre-write
+    snapshot, so sibling files from the same command are not a prior result.
     """
 
+    from openadapt_flow.scaffold_verifier import publish_generation
+
+    publish_generation(out_dir, generation)
     out_dir.mkdir(parents=True, exist_ok=True)
     check = out_dir / PROPOSED_NAME
     proof = out_dir / PROOF_NAME
@@ -2413,5 +2426,8 @@ def summary(proposal: Proposal, check: Path, proof: Path) -> str:
             "`openadapt-flow qualify <bundle> --verify " + check.name + "`."
         )
     else:
-        lines.append("Next: fix the misses above, then run scaffold-verifier again.")
+        lines.append(
+            "Next: fix the misses above, then run scaffold-verifier into a new "
+            "output directory. An existing generation is left unchanged."
+        )
     return "\n".join(lines)

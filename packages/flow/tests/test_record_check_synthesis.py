@@ -36,6 +36,7 @@ from openadapt_flow.record_check_synthesis import (
     SynthesisError,
     render,
     synthesize,
+    write,
 )
 from openadapt_flow.runtime.effects import Effect, EffectKind, Verdict
 from openadapt_flow.runtime.effects.effect import EffectState
@@ -43,6 +44,7 @@ from openadapt_flow.runtime.effects.surfaces import (
     SurfaceRoutedVerifier,
     surface_probe,
 )
+from openadapt_flow.scaffold_verifier import build_record_check
 from openadapt_flow.verify_run import VerifyRunError, parse_verify_config
 from tests._record_check_fixtures import (
     NOTE,
@@ -715,6 +717,94 @@ def test_cli_falls_back_to_the_todo_draft_without_reads(tmp_path, capsys):
     ) in out
     assert "REFUSED" not in out
     assert (rec / "effect_contract.yaml").is_file()
+
+
+def _tree(directory: Path) -> dict[str, bytes]:
+    return {
+        path.relative_to(directory).as_posix(): path.read_bytes()
+        for path in sorted(directory.rglob("*"))
+        if path.is_file()
+    }
+
+
+def test_fresh_complete_read_then_refusal_keeps_every_output_byte(
+    tmp_path, e2e_service
+):
+    """A later refusal must not pair a new proof with an older candidate."""
+    rec = effect_e2e_recording(tmp_path / "rec", e2e_service.base_url)
+    out = tmp_path / "out"
+    code = main(["scaffold-verifier", str(rec), "--complete-read", "--out", str(out)])
+    assert code in (0, 1)
+    proposed = out / PROPOSED_NAME
+    assert proposed.is_file()
+    assert b"needs_operator_confirmation: true" in proposed.read_bytes()
+    proof = json.loads((out / PROOF_NAME).read_text())
+    assert proof["status"] != "refused"
+    assert proof["approved"] is False
+    before = _tree(out)
+    with pytest.raises(SystemExit, match="already holds a verifier generation"):
+        main(["scaffold-verifier", str(rec), "--out", str(out)])
+    assert _tree(out) == before
+
+
+def test_refusal_then_complete_read_keeps_the_refused_generation(tmp_path, e2e_service):
+    rec = effect_e2e_recording(tmp_path / "rec", e2e_service.base_url)
+    out = tmp_path / "out"
+    code = main(["scaffold-verifier", str(rec), "--out", str(out)])
+    assert code == 2
+    assert not (out / PROPOSED_NAME).exists()
+    proof = json.loads((out / PROOF_NAME).read_text())
+    assert proof["status"] == "refused"
+    assert (out / "effect_contract.yaml").is_file()
+    before = _tree(out)
+    with pytest.raises(SystemExit, match="already holds a verifier generation"):
+        main(
+            [
+                "scaffold-verifier",
+                str(rec),
+                "--complete-read",
+                "--out",
+                str(out),
+            ]
+        )
+    assert _tree(out) == before
+
+
+def test_build_record_check_refuses_reuse_before_replacing_a_candidate(
+    tmp_path, e2e_service
+):
+    rec = effect_e2e_recording(tmp_path / "rec", e2e_service.base_url)
+    out = tmp_path / "out"
+    result = build_record_check(rec, out, complete_read=True)
+    assert result is not None
+    assert (out / PROPOSED_NAME).is_file()
+    before = _tree(out)
+    with pytest.raises(SystemExit, match="already holds a verifier generation"):
+        build_record_check(rec, out)
+    assert _tree(out) == before
+    assert not (out / "effect_contract.yaml").exists()
+
+
+def test_write_refuses_an_occupied_generation_before_replacing_it(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "app.db"
+    conn = sqlite3.connect(path)
+    conn.execute(
+        'CREATE TABLE visits (id INTEGER PRIMARY KEY, "patient_id" TEXT, note TEXT)'
+    )
+    conn.execute("INSERT INTO visits VALUES (1, 'p1', ?)", (NOTE,))
+    conn.commit()
+    conn.close()
+    rec = write_recording(tmp_path / "rec", {"patient-id": "p1", "note": NOTE})
+    proposal = synthesize(rec, db_path=path)
+    out = tmp_path / "out"
+    write(proposal, out)
+    assert (out / PROPOSED_NAME).is_file()
+    before = _tree(out)
+    with pytest.raises(SystemExit, match="already holds a verifier generation"):
+        write(proposal, out)
+    assert _tree(out) == before
 
 
 # ---------------------------------------------------------------------------

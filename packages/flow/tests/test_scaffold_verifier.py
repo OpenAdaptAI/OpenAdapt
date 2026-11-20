@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pytest
 
+from openadapt_flow import crypto, sealed_set
 from openadapt_flow.__main__ import build_parser, main
 from openadapt_flow.ir import (
     ActionKind,
@@ -27,6 +28,7 @@ from openadapt_flow.ir import (
     StepResult,
     Workflow,
 )
+from openadapt_flow.record_check_synthesis import PROOF_NAME, PROPOSED_NAME
 from openadapt_flow.scaffold_verifier import (
     CONTRACT_FILENAME,
     candidates_from_bundle,
@@ -238,6 +240,102 @@ class TestScaffoldVerifier:
         helptext = parser.format_help()
         assert "scaffold-verifier" in helptext
         assert "explain" in helptext
+
+
+def _tree(directory: Path) -> dict[str, bytes]:
+    return {
+        path.relative_to(directory).as_posix(): path.read_bytes()
+        for path in sorted(directory.rglob("*"))
+        if path.is_file()
+    }
+
+
+def test_write_draft_refuses_an_occupied_generation(tmp_path: Path) -> None:
+    rec = _recording_dir(tmp_path)
+    out = tmp_path / "out"
+    out.mkdir()
+    prior = b"prior-candidate: true\n"
+    (out / PROPOSED_NAME).write_bytes(prior)
+    with pytest.raises(SystemExit, match="already holds a verifier generation"):
+        write_draft(rec, out)
+    assert (out / PROPOSED_NAME).read_bytes() == prior
+    assert not (out / CONTRACT_FILENAME).exists()
+    assert _tree(out) == {PROPOSED_NAME: prior}
+
+
+def _sealed_recording(rec: Path, key: str, *, generation: dict[str, bytes]) -> None:
+    events = (
+        json.dumps(
+            {
+                "i": 0,
+                "kind": "click",
+                "x": 5,
+                "y": 5,
+                "field_label": "Save encounter",
+            }
+        ).encode()
+        + b"\n"
+    )
+    with sealed_set.writing(rec, "recording", key) as writer:
+        writer.write(
+            "meta.json",
+            json.dumps({"params": {"note": "Synthetic note"}}).encode(),
+        )
+        writer.write("events.jsonl", events)
+        for name, payload in generation.items():
+            writer.write(name, payload)
+
+
+def test_sealed_draft_reuse_and_plaintext_out_leave_the_set_unchanged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    key = "synthetic-generation-key"
+    monkeypatch.setenv(crypto.ENV_KEY, key)
+    rec = tmp_path / "rec"
+    _sealed_recording(rec, key, generation={})
+    assert main(["scaffold-verifier", str(rec)]) == 0
+    opened = sealed_set.SealedSet.open(rec, key)
+    assert CONTRACT_FILENAME in opened.files()
+    draft = opened.read_bytes(CONTRACT_FILENAME)
+    before = _tree(rec)
+    with pytest.raises(SystemExit, match="Drop --out"):
+        main(["scaffold-verifier", str(rec), "--out", str(tmp_path / "plain")])
+    assert not (tmp_path / "plain").exists()
+    assert _tree(rec) == before
+    with pytest.raises(SystemExit, match="already holds a verifier generation"):
+        main(["scaffold-verifier", str(rec)])
+    assert _tree(rec) == before
+    again = sealed_set.SealedSet.open(rec, key)
+    assert again.read_bytes(CONTRACT_FILENAME) == draft
+    outside = b"".join(
+        path.read_bytes()
+        for path in tmp_path.rglob("*")
+        if path.is_file() and rec not in path.parents and path != rec
+    )
+    assert draft not in outside
+
+
+def test_sealed_candidate_reuse_keeps_the_prior_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    key = "synthetic-generation-key"
+    monkeypatch.setenv(crypto.ENV_KEY, key)
+    rec = tmp_path / "rec"
+    proposed = b"schema_version: prior\nneeds_operator_confirmation: true\n"
+    proof = b'{"approved": false, "status": "draft"}\n'
+    _sealed_recording(
+        rec,
+        key,
+        generation={PROPOSED_NAME: proposed, PROOF_NAME: proof},
+    )
+    before = _tree(rec)
+    with pytest.raises(SystemExit, match="already holds a verifier generation"):
+        main(["scaffold-verifier", str(rec)])
+    assert _tree(rec) == before
+    opened = sealed_set.SealedSet.open(rec, key)
+    assert opened.read_bytes(PROPOSED_NAME) == proposed
+    assert opened.read_bytes(PROOF_NAME) == proof
+    assert CONTRACT_FILENAME not in opened.files()
 
 
 # ---------------------------------------------------------------------------
