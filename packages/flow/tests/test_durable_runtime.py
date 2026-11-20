@@ -267,9 +267,17 @@ class _StopBeforeInput(Replayer):
     """Add an authorization refusal to a synthetic run before any input."""
 
     stop_before_step = None
+    stop_before_params = None
 
     def _fresh_actuation_authorization_refusal(self, workflow, params, step):
         refusal = super()._fresh_actuation_authorization_refusal(workflow, params, step)
+        if self.stop_before_params is not None and any(
+            name not in params
+            or params[name] != value
+            or type(params[name]) is not type(value)
+            for name, value in self.stop_before_params.items()
+        ):
+            return refusal
         if self.stop_before_step is None or self.stop_before_step == step.id:
             return refusal or "synthetic operator stop before input"
         return refusal
