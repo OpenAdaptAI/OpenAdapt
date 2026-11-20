@@ -39,8 +39,10 @@
   redirect a saved position. Native selection revalidates the semantic
   option atomically before emitting change events and selects that exact
   option even when different labels share a value. It avoids extra focus
-  callbacks and revalidates after `input` before emitting `change`; drift after
-  the first event is reported as uncertain delivery. Native selects respect
+  callbacks and revalidates after `input` before emitting `change`. Native and
+  listed read-back require one stable shown/committed state inside a fixed
+  deadline. Failures after any backend-owned mutation retain uncertain
+  delivery, including opening, search and final confirmation. Native selects respect
   disabled option groups and fieldsets. A choice on a field passed to
   `--param` becomes that parameter. Interactive and attached recording no
   longer refuse a native `<select>`, and lists that choose on press or on

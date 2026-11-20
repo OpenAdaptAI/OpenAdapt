@@ -87,7 +87,7 @@ def test_a_choice_compiles_to_one_parameterized_step_and_answers_the_confirm(
         # The plain div exposes no label-to-code map for an unseen label.
         # The recorded code is valid only for the demonstrated label.
         assert not ok
-        assert "choice_commit_unknown" in detail
+        assert "choice_unverified" in detail
         assert records == []
         return
     assert ok, detail
@@ -109,7 +109,7 @@ def test_a_missing_option_stops_before_the_save(
         tmp_path_factory.mktemp("run"),
     )
     assert not ok
-    assert "choice_missing" in detail
+    assert "choice_unverified" in detail
     assert "Cardiology" not in detail
     assert records == []
 

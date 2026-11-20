@@ -12,11 +12,13 @@ record, compile and run).
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Iterator
 
 import pytest
 
 from benchmark.choice_widgets.app import ChoiceApp, Server
+from openadapt_flow.backend import ActionDeliveryUncertain
 from openadapt_flow.backends.choice import BrowserChoice, ChoiceRefused
 from openadapt_flow.ir import ChoiceOptionShape, OptionChoice, Step
 
@@ -102,7 +104,7 @@ def _choose(
     query: str = "",
     prepare: Any = None,
     check: Any = None,
-) -> tuple[dict[str, Any] | ChoiceRefused, str, bool]:
+) -> tuple[dict[str, Any] | ChoiceRefused | ActionDeliveryUncertain, str, bool]:
     from openadapt_flow.backends.playwright_backend import PlaywrightBackend
 
     selector, fields = WIDGETS[kind]
@@ -125,10 +127,10 @@ def _choose(
         point = (int(box["x"] + box["width"] / 2), int(box["y"] + box["height"] / 2))
         backend = PlaywrightBackend(page)
         try:
-            outcome: dict[str, Any] | ChoiceRefused = backend.choose_option(
-                contract, wanted, point=point
+            outcome: dict[str, Any] | ChoiceRefused | ActionDeliveryUncertain = (
+                backend.choose_option(contract, wanted, point=point)
             )
-        except ChoiceRefused as exc:
+        except (ChoiceRefused, ActionDeliveryUncertain) as exc:
             outcome = exc
         page.wait_for_timeout(300)
         confirmed = backend.confirm_choice()
@@ -148,8 +150,9 @@ def test_chooses_a_held_out_option_by_its_label(
     if kind in {"aria_listbox", "div_dropdown", "async_combobox"}:
         # No label-to-code mapping is exposed by these plain ARIA lists.
         # A held-out label must refuse before selection, not guess its code.
-        assert isinstance(outcome, ChoiceRefused), outcome
-        assert outcome.code == "choice_commit_unknown"
+        assert isinstance(outcome, ActionDeliveryUncertain), outcome
+        assert outcome.operation == "choice_open"
+        assert outcome.cause_type == "choice_commit_unknown"
         assert value == ""
         assert not confirmed
         return
@@ -199,8 +202,13 @@ def test_refuses_instead_of_guessing(
             "Select2 hides disabled options from a search; that is choice_missing"
         )
     outcome, value, confirmed = _choose(server, browser, kind, "Cardiology", query)
-    assert isinstance(outcome, ChoiceRefused), outcome
-    assert outcome.code == code
+    if kind == "native":
+        assert isinstance(outcome, ChoiceRefused), outcome
+        assert outcome.code == code
+    else:
+        assert isinstance(outcome, ActionDeliveryUncertain), outcome
+        assert outcome.operation == "choice_open"
+        assert outcome.cause_type == code
     assert "Cardiology" not in str(outcome)
     # Nothing was chosen.
     assert value in ("", None)
@@ -277,8 +285,9 @@ def test_rechecks_the_semantic_option_after_the_list_settles(
         assert value == "CARD"
         assert confirmed
     else:
-        assert isinstance(outcome, ChoiceRefused), outcome
-        assert outcome.code == "choice_changed"
+        assert isinstance(outcome, ActionDeliveryUncertain), outcome
+        assert outcome.operation == "choice_open"
+        assert outcome.cause_type == "choice_changed"
         assert presses == [0]
         assert value in ("", None)
         assert not confirmed
@@ -414,8 +423,8 @@ def test_a_choice_the_page_reverts_is_not_confirmed(
     outcome, value, _ = _choose(
         server, browser, "aria_listbox", "Cardiology", "surprise=confirm"
     )
-    assert isinstance(outcome, ChoiceRefused)
-    assert outcome.code == "choice_unverified"
+    assert isinstance(outcome, ActionDeliveryUncertain)
+    assert outcome.cause_type == "choice_unverified"
     assert value == ""
 
 
@@ -498,7 +507,9 @@ def test_a_changing_option_census_is_never_accepted_at_its_deadline(
         box = page.locator(selector).first.bounding_box()
         point = (int(box["x"] + box["width"] / 2), int(box["y"] + box["height"] / 2))
         backend = PlaywrightBackend(page)
-        with pytest.raises(ChoiceRefused) as error:
+        with pytest.raises(
+            ChoiceRefused if kind == "native" else ActionDeliveryUncertain
+        ) as error:
             backend.choose_option(
                 OptionChoice(
                     label="Cardiology",
@@ -509,7 +520,11 @@ def test_a_changing_option_census_is_never_accepted_at_its_deadline(
                 "Cardiology",
                 point=point,
             )
-        assert error.value.code == "choice_unsettled"
+        assert (
+            error.value.code
+            if isinstance(error.value, ChoiceRefused)
+            else error.value.cause_type
+        ) == "choice_unsettled"
         assert page.locator("[name=department]").input_value() == ""
         assert page.evaluate("window.choiceEffects") == 0
     finally:
@@ -645,8 +660,9 @@ def test_label_or_query_echo_cannot_hide_an_uncommitted_or_wrong_value(
         })""")
         ),
     )
-    assert isinstance(outcome, ChoiceRefused), outcome
-    assert outcome.code == "choice_unverified"
+    assert isinstance(outcome, ActionDeliveryUncertain), outcome
+    assert outcome.operation == "choice_click"
+    assert outcome.cause_type == "choice_unverified"
     assert value in ("", "WRONG")
     assert not confirmed
     if kind == "async_combobox":
@@ -676,6 +692,55 @@ def test_replaced_controls_do_not_inherit_an_old_choice_proof(
         )
         assert outcome["label"] == "cardiology"
         page.locator(selector).evaluate("el => el.replaceWith(el.cloneNode(true))")
+        from openadapt_flow.ir import (
+            ActionKind,
+            Anchor,
+            StepResult,
+            StructuralLocator,
+            Workflow,
+        )
+        from openadapt_flow.runtime import Replayer
+
+        replay = Replayer.__new__(Replayer)
+        replay.backend = backend
+        step = Step(
+            id="choice",
+            intent="choose",
+            action=ActionKind.SELECT_OPTION,
+            text="Cardiology",
+            anchor=Anchor(
+                template="unused-confirmation.png",
+                structural=StructuralLocator(selector=selector),
+                region=(
+                    int(box["x"]),
+                    int(box["y"]),
+                    int(box["width"]),
+                    int(box["height"]),
+                ),
+                click_point=point,
+            ),
+            choice=OptionChoice(
+                label="Cardiology", value="CARD", commit_field="department", **fields
+            ),
+        )
+        result = StepResult(
+            step_id="choice", intent="choose", ok=False, delivery_attempted=True
+        )
+        error = replay._verify_selected_option(
+            step,
+            "Cardiology",
+            b"",
+            Path("."),
+            Workflow(name="test", steps=[step]),
+            result,
+        )
+        assert "choice_unverified" in error
+        assert result.input_verified is False
+        assert result.delivery_uncertainty is not None
+        assert result.delivery_uncertainty.operation == (
+            "choice_select" if kind == "native" else "choice_click"
+        )
+        assert result.delivery_uncertainty.cause_type == "choice_unverified"
         assert not backend.confirm_choice()
     finally:
         page.close()
@@ -873,3 +938,119 @@ def test_native_input_callback_drift_stops_before_change_with_uncertain_delivery
         assert not backend.confirm_choice()
     finally:
         page.close()
+
+
+@pytest.mark.parametrize(
+    ("kind", "fault", "delay"),
+    [
+        ("native", "value", 0),
+        ("native", "label", 0),
+        ("native", "replaced", 0),
+        ("native", "value", 50),
+        ("aria_listbox", "value", 0),
+        ("div_dropdown", "value", 0),
+        ("async_combobox", "value", 0),
+        ("select2", "value", 0),
+    ],
+)
+def test_post_delivery_drift_is_uncertain_across_native_and_listed_choices(
+    server: Server, browser: Any, kind: str, fault: str, delay: int
+) -> None:
+    def prepare(page: Any) -> None:
+        page.evaluate(
+            """([kind, fault, delay]) => {
+          const field = document.querySelector('[name=department]');
+          window.commitEdges = 0;
+          const mutate = () => {
+            if (fault === 'replaced') field.replaceWith(field.cloneNode(true));
+            else if (fault === 'label') field.selectedOptions[0].label = 'Wrong label';
+            else if (kind === 'native') field.selectedOptions[0].value = 'WRONG';
+            else field.value = 'WRONG';
+          };
+          if (kind === 'native') field.addEventListener('change', () => {
+            commitEdges++;
+            if (delay) setTimeout(mutate, delay); else mutate();
+          });
+          else document.addEventListener('mousedown', event => {
+            if (!event.target.closest('[role=option],.dd-item')) return;
+            commitEdges++; setTimeout(mutate, delay);
+          }, true);
+        }""",
+            [kind, fault, delay],
+        )
+
+    edges: list[int] = []
+    outcome, _value, confirmed = _choose(
+        server,
+        browser,
+        kind,
+        "Cardiology",
+        prepare=prepare,
+        check=lambda page: edges.append(page.evaluate("commitEdges")),
+    )
+    assert isinstance(outcome, ActionDeliveryUncertain), outcome
+    assert outcome.operation == (
+        "choice_select" if kind == "native" else "choice_click"
+    )
+    assert outcome.cause_type == "choice_unverified"
+    assert edges[0] >= 1
+    assert not confirmed
+
+
+@pytest.mark.parametrize("kind", ["native", "aria_listbox"])
+def test_recovered_readback_must_restart_its_stability_window(
+    server: Server, browser: Any, kind: str
+) -> None:
+    def prepare(page: Any) -> None:
+        page.evaluate(
+            """kind => {
+          const field = document.querySelector('[name=department]');
+          const drift = () => {
+            window.commitAt = performance.now();
+            const target = kind === 'native' ? field.selectedOptions[0] : field;
+            setTimeout(() => target.value = 'WRONG', 60);
+            setTimeout(() => target.value = 'CARD', 180);
+          };
+          if (kind === 'native') field.addEventListener('change', drift);
+          else document.addEventListener('mousedown', event => {
+            if (event.target.closest('[role=option]')) drift();
+          }, true);
+        }""",
+            kind,
+        )
+
+    elapsed: list[float] = []
+    outcome, value, confirmed = _choose(
+        server,
+        browser,
+        kind,
+        "Cardiology",
+        prepare=prepare,
+        check=lambda page: elapsed.append(page.evaluate("performance.now()-commitAt")),
+    )
+    assert isinstance(outcome, dict), outcome
+    assert value == "CARD"
+    assert confirmed
+    # _choose includes its existing300ms final confirm delay; the choice
+    # itself must wait beyond the recovered state's full stable interval.
+    assert elapsed[0] >= 800
+
+
+@pytest.mark.parametrize("prior", [None, False, True])
+def test_pre_mutation_choice_refusal_preserves_earlier_delivery_scope(prior) -> None:
+    from openadapt_flow.ir import StepResult
+    from openadapt_flow.runtime import Replayer
+
+    replay = Replayer.__new__(Replayer)
+    replay._active_delivery_acknowledgers = ()
+    result = StepResult(
+        step_id="choice", intent="choose", ok=False, delivery_attempted=prior
+    )
+
+    def refuse():
+        raise ChoiceRefused("choice_control_missing")
+
+    with pytest.raises(ChoiceRefused):
+        replay._deliver_backend_call(result, refuse)
+    assert result.delivery_attempted is (prior if prior is not None else False)
+    assert result.delivery_uncertainty is None

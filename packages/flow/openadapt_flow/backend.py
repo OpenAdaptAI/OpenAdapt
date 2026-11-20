@@ -45,12 +45,12 @@ class StructuralElementNotActionable(StructuralResolutionRefused):
 
 
 class ChoiceRefused(RuntimeError):
-    """The choice stopped before an option was clicked or was not confirmed.
+    """A choice refused before every backend-owned mutation.
 
-    ``code`` is one of ``choice_control_missing``, ``choice_search_missing``,
-    ``choice_missing``, ``choice_ambiguous``, ``choice_disabled`` and
-    ``choice_unverified``. The message never carries option text: option
-    labels can be patient data.
+    Opening, search input, value assignment and option events already cross
+    delivery boundaries. A failure after any of those is instead
+    :class:`ActionDeliveryUncertain`. ``code`` never carries option text:
+    option labels can be patient data.
     """
 
     def __init__(self, code: str, detail: str = "") -> None:
@@ -605,9 +605,11 @@ class NativeSelectBackend(Protocol):
 class ChoiceBackend(Protocol):
     """Choose a dropdown option by its label or value (docs/CHOICES.md).
 
-    ``choose_option`` raises :class:`ChoiceRefused` when no option, more
-    than one, or a disabled one shows the wanted value, or when the control
-    does not show the choice afterwards.
+    ``choose_option`` may raise :class:`ChoiceRefused` only before every
+    backend-owned mutation. After opening, search, assignment or option input,
+    failures raise :class:`ActionDeliveryUncertain`. A successful choice has a
+    stable shown and independent committed value; later confirmation remains
+    an observation, never permission to repeat input.
     """
 
     def choose_option(

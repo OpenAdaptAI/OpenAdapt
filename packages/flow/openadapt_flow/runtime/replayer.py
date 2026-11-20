@@ -9101,6 +9101,10 @@ class Replayer:
                             workflow,
                             result,
                         )
+                        delivery_uncertain = (
+                            delivery_uncertain
+                            or result.delivery_uncertainty is not None
+                        )
                     if selection_error is None:
                         (
                             postconditions_ok,
@@ -12358,8 +12362,8 @@ class Replayer:
     ) -> _DeliveryResultT:
         """Call one backend delivery boundary with exact attempt reporting.
 
-        A typed fresh-frame mismatch or structural refusal proves that this
-        call emitted no input edge, so it preserves the step's prior delivery
+        A typed pre-mutation choice refusal, fresh-frame mismatch or structural
+        refusal proves this call emitted no input edge, preserving prior delivery
         state. Every other exception is conservative: the boundary may have
         been crossed and the step must not enter the pre-delivery retry loop.
         """
@@ -12371,6 +12375,11 @@ class Replayer:
         self._active_delivery_acknowledgers = ()
         try:
             delivered = call()
+        except ChoiceRefused:
+            result.delivery_attempted = (
+                attempted_before if attempted_before is not None else False
+            )
+            raise
         except (FreshActuationRequired, StructuralResolutionRefused):
             result.delivery_attempted = attempted_before
             raise
@@ -18442,9 +18451,28 @@ class Replayer:
 
         if step.choice is not None:
             confirm = getattr(self.backend, "confirm_choice", None)
-            result.input_verified = bool(callable(confirm) and confirm())
+            cause_type = "choice_unverified"
+            try:
+                result.input_verified = bool(callable(confirm) and confirm())
+            except Exception as exc:
+                result.input_verified = False
+                cause_type = type(exc).__name__
             if result.input_verified:
                 return None
+            if (
+                result.delivery_uncertainty is None
+                and result.delivery_attempted is not False
+            ):
+                result.delivery_uncertainty = ActionDeliveryUncertainty(
+                    operation=(
+                        "choice_select"
+                        if step.choice.kind == "native_select"
+                        else "choice_click"
+                    ),
+                    native=False,
+                    observed_at=datetime.now(timezone.utc).isoformat(),
+                    cause_type=cause_type,
+                )
             result.safety_halt = True
             result.failure_category = "safety_halt"
             return (

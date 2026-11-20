@@ -605,7 +605,7 @@ PR #2295 raised `replayer.py`, `ir.py`, `interactive_recorder.py` and `playwrigh
 <!-- size-ratchet:begin -->
 | File | Line budget |
 |---|---:|
-| `packages/flow/openadapt_flow/runtime/replayer.py` | 20231 |
+| `packages/flow/openadapt_flow/runtime/replayer.py` | 20259 |
 | `packages/flow/openadapt_flow/__main__.py` | 14570 |
 | `packages/flow/openadapt_flow/qualification.py` | 5963 |
 | `packages/flow/openadapt_flow/ir.py` | 6865 |

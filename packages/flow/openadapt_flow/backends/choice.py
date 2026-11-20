@@ -208,12 +208,13 @@ _READBACK_JS = (
   if (!el || !el.isConnected) return {ok: false, gone: true};
   if (mode === 'control_value') {
     const input = el.closest('input, textarea') || el;
-    return {ok: norm(input.value) === label};
+    return {ok: norm(input.value) === label, shown: norm(input.value)};
   }
   let node = el;
   for (let depth = 0; node && depth < 4; depth++, node = node.parentElement) {
     if (node === document.body || node.tagName === 'FORM') break;
-    if (showsLabel(shownText(node, shape), label)) return {ok: true};
+    const shown = shownText(node, shape);
+    if (showsLabel(shown, label)) return {ok: true, shown: shown};
   }
   return {ok: false};
 }"""
@@ -229,6 +230,9 @@ _COMMIT_FIELD_JS = r"""(el, field) => {
     node => node.name === field || (!node.name && node.id === field));
   return matches.length === 1 ? matches[0] : null;
 }"""
+
+_FIELD_BOUND_JS = "(el, args) => (" + _COMMIT_FIELD_JS + ")(el, args[0]) === args[1]"
+
 
 _FIELD_STATE_JS = (
     "el => {"
@@ -303,13 +307,6 @@ class BrowserChoice:
         if proof is None:
             return False
         try:
-            if proof.contract.kind == "native_select":
-                observed = proof.handle.evaluate(_NATIVE_READ_JS)
-                return (
-                    isinstance(observed, dict)
-                    and observed.get("value") == proof.value
-                    and observed.get("label") == proof.label
-                )
             return bool(self._readback(proof.scope, proof.handle, proof).get("ok"))
         except Exception:
             return False
@@ -374,14 +371,7 @@ class BrowserChoice:
             raise ChoiceRefused(
                 "choice_changed", "the option changed after the list settled"
             )
-        observed = handle.evaluate(_NATIVE_READ_JS)
-        if (
-            not isinstance(observed, dict)
-            or observed.get("value") != chosen["value"]
-            or observed.get("label") != chosen["label"]
-        ):
-            raise ChoiceRefused("choice_unverified", "the select shows another option")
-        self._proof = _ChoiceProof(
+        proof = _ChoiceProof(
             scope,
             handle,
             (located.x, located.y),
@@ -389,6 +379,8 @@ class BrowserChoice:
             chosen["label"],
             chosen["value"],
         )
+        self._await_readback(proof)
+        self._proof = proof
         return {"label": chosen["label"], "value": chosen["value"]}
 
     @staticmethod
@@ -420,7 +412,7 @@ class BrowserChoice:
               const stillSelected = () => matchingOption() === option
                 && sel.selectedOptions.length === 1 && sel.selectedOptions[0] === option
                 && sel.value === value;
-              if (!stillSelected()) return false;
+              if (!stillSelected()) return 'selection_changed';
               sel.dispatchEvent(new Event('input', {bubbles: true}));
               if (!stillSelected()) return 'input_changed';
               sel.dispatchEvent(new Event('change', {bubbles: true}));
@@ -428,12 +420,16 @@ class BrowserChoice:
             }""",
             [chosen["label"], chosen["value"], want, wanted],
         )
-        if outcome == "input_changed":
+        if outcome in ("input_changed", "selection_changed"):
             raise ActionDeliveryUncertain(
                 operation="choice_select",
                 native=False,
                 target_fingerprint=None,
-                cause_type="NativeChoiceChangedAfterInput",
+                cause_type=(
+                    "NativeChoiceChangedAfterInput"
+                    if outcome == "input_changed"
+                    else "NativeChoiceChangedAfterSelection"
+                ),
             )
         if not isinstance(outcome, bool):
             raise ValueError("invalid native choice commit result")
@@ -473,92 +469,76 @@ class BrowserChoice:
         shape["classes"] = list(shape["classes"])
         mark = "data-oaflow-choice-" + uuid.uuid4().hex[:12]
         want = choice_text(wanted)
+        phase = "choice_open"
         try:
-            scope.evaluate(_MARK_PRE_JS, [shape, mark])
             try:
+                # Instrumentation, the opener and query all mutate the page.
+                # Any later failure belongs to this attempted delivery scope.
+                scope.evaluate(_MARK_PRE_JS, [shape, mark])
                 self._page.mouse.click(int(point[0]), int(point[1]))
-            except Exception as exc:
-                raise ActionDeliveryUncertain(
-                    operation="choice_open",
-                    native=False,
-                    target_fingerprint=None,
-                    cause_type=type(exc).__name__,
-                ) from exc
-            if contract.query != "none":
-                self._page.wait_for_timeout(150)
-                if not scope.evaluate(_FOCUSED_TEXT_ENTRY_JS):
-                    self._close()
-                    raise ChoiceRefused(
-                        "choice_search_missing", "no search box took focus"
-                    )
-                if field.evaluate(_FIELD_IS_QUERY_JS):
-                    self._close()
-                    raise ChoiceRefused(
-                        "choice_commit_unknown",
-                        "query text is not an independent commit",
-                    )
-                self._page.keyboard.type(search_text(contract, wanted))
-            try:
+                if contract.query != "none":
+                    self._page.wait_for_timeout(150)
+                    if not scope.evaluate(_FOCUSED_TEXT_ENTRY_JS):
+                        raise ChoiceRefused(
+                            "choice_search_missing", "no search box took focus"
+                        )
+                    if field.evaluate(_FIELD_IS_QUERY_JS):
+                        raise ChoiceRefused(
+                            "choice_commit_unknown",
+                            "query text is not an independent commit",
+                        )
+                    self._page.keyboard.type(search_text(contract, wanted))
                 matches = self._settled_matches(
                     scope, shape, mark, want, wanted, contract
                 )
                 self._decide(matches)
-            except ChoiceRefused:
-                self._close()
-                raise
-            option = scope.evaluate_handle(
-                _UNIQUE_CANDIDATE_JS, [shape, mark, want, wanted]
-            ).as_element()
-            if option is None:
-                self._close()
-                raise ChoiceRefused(
-                    "choice_changed", "the option changed after the list settled"
-                )
-            chosen = matches[0]
-            before = field.evaluate(_FIELD_STATE_JS)
-            if not isinstance(before, dict):
-                self._close()
-                raise ChoiceRefused(
-                    "choice_commit_unknown", "the committed field left the page"
-                )
-            try:
+                option = scope.evaluate_handle(
+                    _UNIQUE_CANDIDATE_JS, [shape, mark, want, wanted]
+                ).as_element()
+                if option is None:
+                    raise ChoiceRefused(
+                        "choice_changed", "the option changed after the list settled"
+                    )
+                chosen = matches[0]
+                before = field.evaluate(_FIELD_STATE_JS)
+                if not isinstance(before, dict):
+                    raise ChoiceRefused(
+                        "choice_commit_unknown", "the committed field left the page"
+                    )
                 expected_value = self._expected_commit_value(
                     contract, wanted, chosen, before
                 )
-            except ChoiceRefused:
-                self._close()
-                raise
-            try:
+                phase = "choice_click"
                 option.click(timeout=5000)
-            except Exception as exc:
-                raise ActionDeliveryUncertain(
-                    operation="choice_click",
-                    native=False,
-                    target_fingerprint=None,
-                    cause_type=type(exc).__name__,
-                ) from exc
-        finally:
-            try:
+            finally:
                 scope.evaluate(_UNMARK_JS, mark)
-            except Exception:
-                pass
-        proof = _ChoiceProof(
-            scope,
-            handle,
-            (located.x, located.y),
-            contract,
-            chosen["label"],
-            expected_value,
-            field_handle=field,
-        )
-        deadline = time.monotonic() + _READBACK_S
-        while True:
-            observed = self._readback(scope, handle, proof)
-            if observed.get("ok"):
-                break
-            if time.monotonic() >= deadline:
-                raise ChoiceRefused("choice_unverified", "the control does not show it")
-            time.sleep(_POLL_S)
+            proof = _ChoiceProof(
+                scope,
+                handle,
+                (located.x, located.y),
+                contract,
+                chosen["label"],
+                expected_value,
+                field_handle=field,
+            )
+            self._await_readback(proof)
+        except ChoiceRefused as exc:
+            self._close()
+            raise ActionDeliveryUncertain(
+                operation=phase,
+                native=False,
+                target_fingerprint=None,
+                cause_type=exc.code,
+            ) from exc
+        except ActionDeliveryUncertain:
+            raise
+        except Exception as exc:
+            raise ActionDeliveryUncertain(
+                operation=phase,
+                native=False,
+                target_fingerprint=None,
+                cause_type=type(exc).__name__,
+            ) from exc
         self._proof = proof
         return {"label": chosen["label"], "value": chosen["value"]}
 
@@ -643,6 +623,15 @@ class BrowserChoice:
             raise ChoiceRefused("choice_disabled", "the option is disabled")
 
     def _readback(self, scope: Any, handle: Any, proof: _ChoiceProof) -> dict[str, Any]:
+        if proof.contract.kind == "native_select":
+            observed = handle.evaluate(_NATIVE_READ_JS)
+            if not isinstance(observed, dict):
+                return {"ok": False}
+            return {
+                "ok": observed.get("value") == proof.value
+                and observed.get("label") == proof.label,
+                "state": (observed.get("value"), observed.get("label")),
+            }
         shape = None
         if proof.contract.option is not None:
             shape = proof.contract.option.model_dump(mode="json")
@@ -655,9 +644,9 @@ class BrowserChoice:
         )
         if not isinstance(observed, dict) or not observed.get("ok"):
             return {"ok": False}
-        # Never reacquire a replaced control by its old point: that is a
-        # different observation and may belong to another form or record.
-        if proof.field_handle is None:
+        if proof.field_handle is None or not handle.evaluate(
+            _FIELD_BOUND_JS, [proof.contract.commit_field, proof.field_handle]
+        ):
             return {"ok": False}
         committed = proof.field_handle.evaluate(_FIELD_STATE_JS)
         if not isinstance(committed, dict):
@@ -666,8 +655,55 @@ class BrowserChoice:
             return {"ok": False}
         return {
             "ok": committed["selectedLabel"] is None
-            or committed["selectedLabel"] == proof.label
+            or committed["selectedLabel"] == proof.label,
+            "state": (
+                observed.get("shown"),
+                committed["value"],
+                committed["selectedLabel"],
+            ),
         }
+
+    def _await_readback(self, proof: _ChoiceProof) -> None:
+        """Prove one stable post-delivery state inside one fixed deadline."""
+        deadline = time.monotonic() + _READBACK_S
+        stable_since: Optional[float] = None
+        prior: Any = None
+        try:
+            while True:
+                observed = self._readback(proof.scope, proof.handle, proof)
+                now = time.monotonic()
+                if now >= deadline:
+                    break
+                if observed.get("ok"):
+                    state = observed.get("state")
+                    if stable_since is None or state != prior:
+                        stable_since, prior = now, state
+                    elif now - stable_since >= _STABLE_S:
+                        return
+                else:
+                    stable_since, prior = None, None
+                time.sleep(_POLL_S)
+        except Exception as exc:
+            raise ActionDeliveryUncertain(
+                operation=(
+                    "choice_select"
+                    if proof.contract.kind == "native_select"
+                    else "choice_click"
+                ),
+                native=False,
+                target_fingerprint=None,
+                cause_type=type(exc).__name__,
+            ) from exc
+        raise ActionDeliveryUncertain(
+            operation=(
+                "choice_select"
+                if proof.contract.kind == "native_select"
+                else "choice_click"
+            ),
+            native=False,
+            target_fingerprint=None,
+            cause_type="choice_unverified",
+        )
 
     def _close(self) -> None:
         try:

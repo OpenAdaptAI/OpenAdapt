@@ -77,8 +77,19 @@ boundary is opaque, stops recording before it is retained.
    when replaying the demonstrated label. A new label without an observable
    mapping stops before option actuation. Query echo, a merely nonempty field
    change and nearby label text cannot establish the committed value.
-6. The original control and field must remain connected and agree after the
-   page settles. Replaced elements do not inherit the old proof by position.
+6. The original control and uniquely bound field must remain connected and
+   agree. Both shown and committed state must stay unchanged for the same
+   350ms stable window used by the option census, inside one fixed 3-second
+   read-back deadline. Invalid or changed observations reset that window,
+   never extend the deadline. Replaced elements do not inherit an old proof.
+
+The delivery scope starts at the first backend-owned mutation: native value
+assignment, or listed-control instrumentation, opening and search input. A
+failure after that boundary is `ActionDeliveryUncertain`, including a missing
+option after the opener or a failed final confirmation. The original reason
+stays in its structured cause code. It is not proof that no input occurred,
+and the runtime does not retry. Refusals that precede every mutation remain
+`ChoiceRefused`. Reading the final value does not verify any business effect.
 
 Native DOM selection sends no extra focus action. It validates the selected
 option again after the page handles `input`, before emitting `change`. Drift
