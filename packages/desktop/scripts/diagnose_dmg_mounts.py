@@ -1,7 +1,9 @@
 """Read-only, failure-time observations of this build's scoped DMG resources.
 
-Path matching is not exclusive ownership or cleanup authority. No file contents,
-process arguments, environment, detach, kill or retry are collected/performed.
+Path matching is not exclusive ownership or cleanup authority. File contents,
+process arguments and environment are not collected. Observed holders are never
+signaled and images are never detached. Only an owned query child may be
+terminated on a limit, then reaped. No retries are performed.
 """
 
 from __future__ import annotations
@@ -52,9 +54,9 @@ def snapshot(raw: bytes, root: Path) -> list[dict]:
         if path.parent != root:
             continue
         entities = image.get("system-entities")
-        if not isinstance(entities, list) or len(entities) > 8:
+        if not isinstance(entities, list) or not entities or len(entities) > 8:
             raise Incomplete("invalid_scoped_entities")
-        mounts = []
+        identities = []
         for entity in entities:
             if not isinstance(entity, dict):
                 raise Incomplete("invalid_scoped_entities")
@@ -69,11 +71,22 @@ def snapshot(raw: bytes, root: Path) -> list[dict]:
                     r"/Volumes/dmg\.[A-Za-z0-9_-]+", mount
                 ):
                     raise Incomplete("invalid_scoped_mount")
-                mounts.append((device, mount))
-        found.append({"path": str(path), "pid_hint": int(match[1]), "mounts": sorted(mounts)})
+            # Unmounted whole devices are scoped identities too, not query targets.
+            identities.append((device, mount))
+        found.append(
+            {
+                "path": str(path),
+                "pid_hint": int(match[1]),
+                "entities": sorted(identities, key=lambda identity: identity[0]),
+            }
+        )
     found.sort(key=lambda item: item["path"])
     if len(found) > 4 or len({item["path"] for item in found}) != len(found):
         raise Incomplete("ambiguous_or_excessive_images")
+    devices = [device for image in found for device, _ in image["entities"]]
+    mounts = [mount for image in found for _, mount in image["entities"] if mount is not None]
+    if len(set(devices)) != len(devices) or len(set(mounts)) != len(mounts):
+        raise Incomplete("ambiguous_scoped_entities")
     return found
 
 
@@ -146,7 +159,9 @@ def collect(root: Path, *, run, clock=time.monotonic) -> dict:
                     "processes": processes(query([*LSOF, "--", image["path"]])),
                 }
             ]
-            for device, mount in image["mounts"]:
+            for device, mount in image["entities"]:
+                if mount is None:
+                    continue
                 handles.append(
                     {
                         "scope": "mounted_filesystem",
