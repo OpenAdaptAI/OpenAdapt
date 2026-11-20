@@ -11,8 +11,10 @@ from __future__ import annotations
 
 import re
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import Any, Mapping, Optional, Sequence
+from enum import Enum
+from typing import Any, Callable, Iterator, Mapping, Optional, Sequence, cast
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
@@ -84,6 +86,92 @@ _DEFAULT_PLACEHOLDERS: tuple[str, ...] = (
     "Select...",
     "Choose...",
 )
+
+
+class _EffectState(Enum):
+    NO_DISPATCH = "no_dispatch"
+    MAY_HAVE_DISPATCHED = "may_have_dispatched"
+    DELIVERY_UNCERTAIN = "delivery_uncertain"
+
+
+class _SurfaceOperationFailure(Exception):
+    """Value-free backend failure; the original exception remains its cause."""
+
+    def __init__(self, operation: str, error_kind: str) -> None:
+        super().__init__(f"Surface {operation} failed ({error_kind})")
+
+
+class _EffectTrackedSurface:
+    """Track dispatch before entering a backend, including popup children.
+
+    A backend actuator may send a write and then fail while settling. Neither
+    an exception nor a zero mutation counter proves that no write was sent.
+    Unknown callable methods are conservatively actuators; only the protocol's
+    explicit observer/local-counter methods are exempt.
+    """
+
+    _READ_ONLY_METHODS = frozenset(
+        {"snapshot", "ping_keepalive", "reset_mutation_counter"}
+    )
+
+    def __init__(self, surface: FormSurfaceBackend, session: ReconcilerSession):
+        self._surface = surface
+        self._session = session
+
+    def __getattr__(self, name: str) -> Any:
+        try:
+            value = getattr(self._surface, name)
+        except Exception as exc:
+            raise _SurfaceOperationFailure(name, type(exc).__name__) from exc
+        if not callable(value):
+            return value
+        if name == "open_popup_surface":
+            return self._open_popup_surface
+
+        def invoke(*args: Any, **kwargs: Any) -> Any:
+            return self._invoke(name, value, *args, **kwargs)
+
+        return invoke
+
+    def _invoke(
+        self, name: str, method: Callable[..., Any], *args: Any, **kwargs: Any
+    ) -> Any:
+        if name not in self._READ_ONLY_METHODS:
+            if self._session._effect_state is _EffectState.NO_DISPATCH:
+                self._session._effect_state = _EffectState.MAY_HAVE_DISPATCHED
+            self._session._dispatch_attempts += 1
+        try:
+            return method(*args, **kwargs)
+        except Exception as exc:
+            raise _SurfaceOperationFailure(name, type(exc).__name__) from exc
+
+    @contextmanager
+    def _open_popup_surface(
+        self, *args: Any, **kwargs: Any
+    ) -> Iterator[FormSurfaceBackend]:
+        try:
+            manager = self._invoke(
+                "open_popup_surface", self._surface.open_popup_surface, *args, **kwargs
+            )
+            pending: Optional[BaseException] = None
+            with manager as child:
+                try:
+                    yield cast(
+                        FormSurfaceBackend, _EffectTrackedSurface(child, self._session)
+                    )
+                except BaseException as exc:
+                    pending = exc
+                    raise
+            # A backend context manager cannot suppress a child delivery error
+            # or cancellation and let the reconciler proceed to a receipt.
+            if pending is not None:
+                raise pending
+        except _SurfaceOperationFailure:
+            raise
+        except Exception as exc:
+            raise _SurfaceOperationFailure(
+                "open_popup_surface", type(exc).__name__
+            ) from exc
 
 
 class ReconcilerSession:
@@ -178,6 +266,9 @@ class ReconcilerSession:
         self._pre_commit_mutations: int = 0
         self._last_result: Optional[FormTxResult] = None
         self._bound_surface: Optional[FormSurfaceBackend] = None
+        self._effect_state = _EffectState.NO_DISPATCH
+        self._dispatch_attempts = 0
+        self._effect_failure_result: Optional[FormTxResult] = None
 
 
 def _is_action_button(ctrl: ObservedControl) -> bool:
@@ -473,7 +564,72 @@ class FormReconciler:
         )
         if active is None:
             raise ValueError("FormReconciler requires a FormSurfaceBackend instance")
+        if session is not None:
+            if isinstance(active, _EffectTrackedSurface):
+                if active._session is session:
+                    return cast(FormSurfaceBackend, active)
+                # An injected judge may retain a supplied surface. Reusing it
+                # for another session must not charge dispatch to the old one.
+                active = active._surface
+            return cast(FormSurfaceBackend, _EffectTrackedSurface(active, session))
         return active
+
+    def _effect_failure(
+        self, session: ReconcilerSession, failure: Exception
+    ) -> FormTxResult:
+        uncertain = session._effect_state is not _EffectState.NO_DISPATCH
+        if uncertain:
+            session._effect_state = _EffectState.DELIVERY_UNCERTAIN
+        result = self._build_result(
+            session,
+            outcome=(
+                FormTxOutcome.DELIVERY_UNCERTAIN
+                if uncertain
+                else FormTxOutcome.HALTED_NEEDS_HUMAN
+            ),
+            safe_to_retry=not uncertain,
+            receipt=None,
+            what_happened=(
+                "Delivery may have occurred; reconcile the system of record before another attempt."
+                if uncertain
+                else f"{failure}; stopped before any actuator was invoked."
+            ),
+        )
+        return result
+
+    def _guard_effects(
+        self,
+        session: ReconcilerSession,
+        advance: Callable[[], FormTxResult],
+        *,
+        preserve_decision_refusals: bool = False,
+    ) -> FormTxResult:
+        if session._effect_failure_result is not None:
+            return session._effect_failure_result
+        attempts_before = session._dispatch_attempts
+        try:
+            return advance()
+        except _SurfaceOperationFailure as exc:
+            return self._effect_failure(session, exc)
+        except Exception as exc:
+            # Preserve explicit invalid/stale human-decision refusals when this
+            # invocation did not attempt another actuator. Backend ValueErrors
+            # are wrapped above, so they cannot take this path.
+            if (
+                preserve_decision_refusals
+                and isinstance(exc, ValueError)
+                and session._dispatch_attempts == attempts_before
+            ):
+                raise
+            if session._effect_state is _EffectState.NO_DISPATCH:
+                raise
+            return self._effect_failure(session, exc)
+        except BaseException:
+            # Cancellation and process-control exceptions keep their normal
+            # propagation semantics, while a later resume still cannot resend.
+            if session._effect_state is not _EffectState.NO_DISPATCH:
+                self._effect_failure(session, RuntimeError("execution interrupted"))
+            raise
 
     def _build_result(
         self,
@@ -510,6 +666,11 @@ class FormReconciler:
             what_happened=what_happened,
         )
         session._last_result = result
+        if outcome is FormTxOutcome.DELIVERY_UNCERTAIN:
+            # All uncertainty paths, including pre-existing mutation/transition
+            # budget refusals, block re-entry and changed idempotency keys.
+            session._effect_state = _EffectState.DELIVERY_UNCERTAIN
+            session._effect_failure_result = result
         return result
 
     def _match_modal_rule(
@@ -1462,6 +1623,17 @@ class FormReconciler:
         *,
         surface: Optional[FormSurfaceBackend] = None,
     ) -> FormTxResult:
+        """Advance safely; an uncertain delivery freezes this session against resend."""
+        return self._guard_effects(
+            session, lambda: self._run_until_halt_or_done(session, surface=surface)
+        )
+
+    def _run_until_halt_or_done(
+        self,
+        session: ReconcilerSession,
+        *,
+        surface: Optional[FormSurfaceBackend] = None,
+    ) -> FormTxResult:
         """Advance ``session`` deterministically until verified completion or a governed halt."""
         active_surface = self._resolve_surface(surface, session)
         pack = session.pack
@@ -2038,6 +2210,20 @@ class FormReconciler:
             raise ValueError("Human decision modal changed; observe and review again")
 
     def apply_human_resolution(
+        self,
+        session: ReconcilerSession,
+        resolution: HumanResolutionInput,
+        *,
+        surface: Optional[FormSurfaceBackend] = None,
+    ) -> FormTxResult:
+        """Apply a live human decision through the same dispatch safety boundary."""
+        return self._guard_effects(
+            session,
+            lambda: self._apply_human_resolution(session, resolution, surface=surface),
+            preserve_decision_refusals=True,
+        )
+
+    def _apply_human_resolution(
         self,
         session: ReconcilerSession,
         resolution: HumanResolutionInput,
