@@ -18,6 +18,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
+from openadapt_flow.private_file import open_binary
+
 
 class MaintenanceError(ValueError):
     """Maintenance could not preserve an exact source or durable publication."""
@@ -31,7 +33,7 @@ def _root_directory_lock(root: Path, deadline: float) -> Iterator[None]:
         return
     import fcntl
 
-    descriptor = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    descriptor = open_binary(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     acquired = False
     try:
         original = os.fstat(descriptor)
@@ -88,7 +90,7 @@ def mutation_lock(root: Path, *, wait_s: float = 10.0) -> Iterator[None]:
         raise MaintenanceError("unsafe_mutation_lock_directory")
     path = lock_root / (hashlib.sha256(os.fsencode(root)).hexdigest() + ".lock")
     flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
-    descriptor = os.open(path, flags, 0o600)
+    descriptor = open_binary(path, flags, 0o600)
     acquired = False
     try:
         info = os.fstat(descriptor)
@@ -140,7 +142,7 @@ def sync_directory(path: Path) -> None:
     """Refuse unsupported directory durability rather than claim it."""
     if os.name != "posix":
         raise MaintenanceError("directory_durability_unsupported")
-    descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    descriptor = open_binary(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
         os.fsync(descriptor)
     finally:
@@ -180,7 +182,7 @@ def durable_replace(
     if os.name != "posix":
         raise MaintenanceError("directory_durability_unsupported")
     staging_path = _staging_parent(path)
-    parent = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    parent = open_binary(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     staging: int | None = None
     temporary = f".openadapt-header-{secrets.token_hex(16)}.tmp"
     created = False
@@ -188,14 +190,16 @@ def durable_replace(
         info = os.fstat(parent)
         if (info.st_dev, info.st_ino) != expected_parent:
             raise MaintenanceError("source_directory_replaced")
-        staging = os.open(staging_path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        staging = open_binary(
+            staging_path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+        )
         stage_info = os.fstat(staging)
         current = staging_path.lstat()
         if (stage_info.st_dev, stage_info.st_ino) != (current.st_dev, current.st_ino):
             raise MaintenanceError("staging_directory_replaced")
         if stage_info.st_dev != info.st_dev:
             raise MaintenanceError("cross_device_staging")
-        descriptor = os.open(
+        descriptor = open_binary(
             temporary,
             os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
             0o600,
