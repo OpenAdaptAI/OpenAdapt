@@ -37,6 +37,7 @@ import fnmatch
 import hashlib
 import json
 import os
+import re
 import shutil
 import tempfile
 from dataclasses import dataclass
@@ -166,8 +167,10 @@ def index_freshness_problem(
     issued = _parse_stamp(index.get("issued_at"))
     expires = _parse_stamp(index.get("expires_at"))
     serial = index.get("serial")
-    if issued is None or expires is None or not isinstance(serial, int):
+    if issued is None or expires is None or type(serial) is not int or serial < 0:
         return "the index has no valid issued_at, expires_at and serial"
+    if expires <= issued or expires - issued > INDEX_LIFETIME:
+        return "the index has an invalid or overlong validity interval"
     now = now or datetime.now(timezone.utc)
     if issued > now + _CLOCK_SKEW:
         return f"the index was issued in the future ({index['issued_at']})"
@@ -184,9 +187,22 @@ def _state_path() -> Path:
 def _read_state() -> dict[str, Any]:
     try:
         state = json.loads(_state_path().read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except FileNotFoundError:
         return {}
-    return state if isinstance(state, dict) else {}
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RegistryError(
+            "registry rollback state is unreadable; it was not reset"
+        ) from exc
+    if not isinstance(state, dict) or not isinstance(state.get("serials", {}), dict):
+        raise RegistryError("registry rollback state is malformed; it was not reset")
+    if any(
+        not isinstance(key, str) or type(value) is not int or value < 0
+        for key, value in state.get("serials", {}).items()
+    ):
+        raise RegistryError(
+            "registry rollback state has an invalid serial; it was not reset"
+        )
+    return state
 
 
 def identity_key(identity: Any, attested_by: Optional[str] = None) -> str:
@@ -218,18 +234,27 @@ def serial_problem(key: str, serial: int) -> Optional[str]:
 
 
 def record_serial(key: str, serial: int) -> None:
-    """Keep the highest serial seen for this attesting identity."""
+    """Atomically accept an occurrence without lowering its publisher mark."""
+    from openadapt_flow.fleet._lock import exclusive_lock
 
-    state = _read_state()
-    serials = state.setdefault("serials", {})
-    if not isinstance(serials.get(key), int) or serial > serials[key]:
+    path = _state_path()
+    with exclusive_lock(path.with_suffix(".lock")):
+        state = _read_state()
+        serials = state.setdefault("serials", {})
+        seen = serials.get(key)
+        if seen is not None and serial < seen:
+            raise RegistryError(
+                "the index was superseded by a newer publisher occurrence"
+            )
+        if seen == serial:
+            return
         serials[key] = serial
-        path = _state_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".tmp")
-        tmp.write_text(
-            json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-        )
+        with tmp.open("w", encoding="utf-8") as stream:
+            json.dump(state, stream, indent=2, sort_keys=True)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
         tmp.replace(path)
 
 
@@ -317,7 +342,11 @@ def _read(
         raise RegistryError(f"{location} is outside the index's directory")
     if path.stat().st_size > limit:
         raise RegistryError(f"{location} is larger than {limit} bytes")
-    return path.read_bytes()
+    with path.open("rb") as stream:
+        payload = stream.read(limit + 1)
+    if len(payload) > limit:
+        raise RegistryError(f"{location} is larger than {limit} bytes")
+    return payload
 
 
 def _join(base: str, rel: str) -> str:
@@ -346,11 +375,38 @@ def _safe_rel(rel: Any) -> bool:
 
 def validate_index(index: dict[str, Any]) -> list[Entry]:
     """Check the index shape and the status rules. Returns its entries."""
+    if (
+        not isinstance(index, dict)
+        or type(index.get("schema_version", 1)) is not int
+        or index.get("schema_version", 1) not in (1, 2)
+    ):
+        raise RegistryError("unsupported registry index schema")
+    items = index.get("workflows", [])
+    if not isinstance(items, list) or len(items) > MAX_ARCHIVE_MEMBERS:
+        raise RegistryError("workflows must be a bounded list")
     entries = []
     seen = set()
-    for item in index.get("workflows", []):
+    for item in items:
+        if not isinstance(item, dict):
+            raise RegistryError("each workflow entry must be an object")
         wid = item.get("id", "")
-        key = (wid, item.get("version"))
+        version = item.get("version")
+        if not isinstance(wid, str) or (
+            version is not None and not isinstance(version, str)
+        ):
+            raise RegistryError("workflow id and version must be strings")
+        files = item.get("files", {})
+        if not isinstance(files, dict) or len(files) > MAX_ARCHIVE_MEMBERS:
+            raise RegistryError(f"{wid}: files must be a bounded object")
+        component = r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}"
+        if re.fullmatch(component + "/" + component, wid) is None:
+            raise RegistryError("workflow id must name one safe app/task reference")
+        if (
+            version is not None
+            and re.fullmatch(r"[0-9A-Za-z][0-9A-Za-z.+-]{0,127}", version) is None
+        ):
+            raise RegistryError("workflow version is not a safe reference component")
+        key = (wid, version)
         if "/" not in wid or "@" in wid or key in seen:
             raise RegistryError(f"bad or duplicate workflow id {wid!r}")
         seen.add(key)
@@ -439,12 +495,11 @@ def private_tier_url_problem(url: str) -> Optional[str]:
     return None
 
 
-def load_index(index_url: str = DEFAULT_INDEX_URL) -> list[Entry]:
-    try:
-        data = json.loads(_read(index_url))
-    except json.JSONDecodeError as exc:
-        raise RegistryError(f"index is not JSON: {exc}") from exc
-    return validate_index(data)
+def load_index(index_url: str = DEFAULT_INDEX_URL, **options: Any) -> list[Entry]:
+    """Read a publisher-verified index; local authoring requires an explicit flag."""
+    from openadapt_flow.registry_snapshot import load_snapshot
+
+    return load_snapshot(index_url, **options).entries
 
 
 def find(entries: list[Entry], workflow_id: str) -> Entry:
@@ -504,60 +559,39 @@ def pull(
     the local test signer; both only from the local disk (an index you are
     authoring). An attestation that is present must always hold.
     """
-    from openadapt_flow import registry_attest
+    from openadapt_flow.registry_snapshot import load_snapshot
 
-    remote = _remote(index_url)
-    if remote and not index_url.startswith("https://"):
-        raise RegistryError(f"{index_url}: plain http is refused; use https")
-    for flag, used in (
-        ("--allow-unsigned", allow_unsigned),
-        ("--allow-test-key", allow_test_key),
-    ):
-        if used and remote:
-            raise RegistryError(
-                f"{flag} applies only to an index on the local disk, never to "
-                f"{index_url}"
-            )
-    local_root = None if remote else Path(index_url).resolve().parent
-    raw_index = _read(index_url)
-    try:
-        index_data = json.loads(raw_index)
-    except json.JSONDecodeError as exc:
-        raise RegistryError(f"index is not JSON: {exc}") from exc
-    entry = find(validate_index(index_data), workflow_id)
+    snapshot = load_snapshot(
+        index_url,
+        allow_unsigned=allow_unsigned,
+        allow_test_key=allow_test_key,
+        identity=identity,
+        trusted_root=trusted_root,
+        now=now,
+    )
+    return _pull_snapshot(snapshot, workflow_id, out, overwrite=overwrite, now=now)
+
+
+def _pull_snapshot(
+    snapshot: Any,
+    workflow_id: str,
+    out: Optional[Path | str] = None,
+    *,
+    overwrite: bool = False,
+    now: Optional[datetime] = None,
+) -> Path:
+    """Materialize only the entry owned by this exact verified occurrence."""
+    snapshot.require_current(now=now)
+    index_url = snapshot.index_url
+    index_data = snapshot.data
+    entry = find(snapshot.entries, workflow_id)
     if entry.status == "planned":
         raise RegistryError(f"{workflow_id} is planned and has no bundle yet")
-    attestation = _read_attestation(index_url)
-    attested_by: Optional[str] = None
-    subjects: Optional[dict[str, str]] = None
-    serial_key: Optional[str] = None
-    if attestation is None:
-        if remote or not allow_unsigned:
-            raise RegistryError(
-                f"the index has no attestation ({registry_attest.ATTESTATION_NAME})"
-            )
-    else:
-        pinned = identity or registry_attest.REGISTRY_IDENTITY
-        try:
-            attested_by, subjects = registry_attest.verify(
-                attestation,
-                allow_test_key=allow_test_key and not remote,
-                identity=pinned,
-                trusted_root=trusted_root,
-            )
-        except registry_attest.AttestationError as exc:
-            raise RegistryError(str(exc)) from exc
-        if (
-            subjects.get(registry_attest.INDEX_SUBJECT)
-            != hashlib.sha256(raw_index).hexdigest()
-        ):
-            raise RegistryError("the attestation does not name this index")
-        problem = index_freshness_problem(index_data, now=now)
-        serial_key = identity_key(pinned, attested_by)
-        if problem is None:
-            problem = serial_problem(serial_key, index_data["serial"])
-        if problem is not None:
-            raise RegistryError(problem)
+    remote = _remote(index_url)
+    local_root = None if remote else Path(index_url).resolve().parent
+    subjects = snapshot.subjects or None
+    attested_by = snapshot.attested_by
+    serial_key = snapshot.serial_key
     dest = Path(out) if out else Path(entry.id.split("/", 1)[1])
     if dest.exists() and not overwrite:
         raise RegistryError(f"{dest} exists; pass --force to replace it")
@@ -598,6 +632,9 @@ def pull(
             Workflow.load(stage)
         except Exception as exc:  # noqa: BLE001 - report any load failure as one error
             raise RegistryError(f"bundle failed to load: {exc}") from exc
+        snapshot.require_current(now=now)
+        if serial_key is not None:
+            record_serial(serial_key, index_data["serial"])
         from openadapt_flow.skills import mark_pulled
 
         # Mark it as pulled and expire any certification it carries: a
@@ -618,8 +655,6 @@ def pull(
             shutil.rmtree(dest)
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(stage, dest)
-    if serial_key is not None:
-        record_serial(serial_key, index_data["serial"])
     return dest
 
 
@@ -772,19 +807,19 @@ def cmd_pull(args: Any) -> int:
                 return 1
             print(f"Sigstore trusted root refreshed: {path}")
             return 0
-        if args.list or not args.workflow:
-            for entry in load_index(args.index):
-                print(_describe(entry))
-            return 0
-        entry = find(load_index(args.index), args.workflow)
-        dest = pull(
-            args.workflow,
-            args.out,
-            index_url=args.index,
-            overwrite=args.force,
+        from openadapt_flow.registry_snapshot import load_snapshot
+
+        snapshot = load_snapshot(
+            args.index,
             allow_unsigned=getattr(args, "allow_unsigned", False),
             allow_test_key=getattr(args, "allow_test_key", False),
         )
+        if args.list or not args.workflow:
+            for entry in snapshot.entries:
+                print(_describe(entry))
+            return 0
+        entry = find(snapshot.entries, args.workflow)
+        dest = _pull_snapshot(snapshot, args.workflow, args.out, overwrite=args.force)
     except RegistryError as exc:
         print(f"pull: {exc}", file=sys.stderr)
         return 1

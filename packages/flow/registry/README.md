@@ -149,3 +149,32 @@ Don't add files copied from an AGPL application; see `AGENTS.md`.
 [`benchmark/openemr_local`](../benchmark/openemr_local) brings up a matching
 synthetic copy. `openadapt-flow intake new-referral referral.pdf` can fill
 `params.json` from a referral document.
+
+## Catalog proof for consumers
+
+Listing and pulling use one publisher-verified index snapshot. Local unsigned
+source inspection also needs `--allow-unsigned`; it cannot establish a
+published catalog. The CLI reports metadata from the same snapshot whose
+entry was installed. Publisher high-water updates share a cross-process lock;
+an unreadable existing rollback ledger is refused rather than reset.
+
+A catalog consumer can retain a portable proof and verify it offline:
+
+```bash
+python -m openadapt_flow.registry_catalog export --index INDEX_URL --out index.proof.json
+python -m openadapt_flow.registry_catalog verify index.proof.json
+```
+
+Export requires the production registry publisher. It retains the exact public
+index and attestation bytes, plus indexed workflow and manifest JSON. Verification
+rechecks the pinned publisher, expiry, serial, file hashes, sealed asset membership
+and canonical program digests. Its summary distinguishes the entry digest,
+`workflow.json` file hash, bundle content digest and workflow contract digest.
+A catalog must match the latter identities to the signed evidence for that exact
+program. A different program's Seal, a matching name or a caller's `verified`
+field supplies no such evidence.
+
+This proof grants no execution, admission or instance qualification. Existing
+pulled-skill refusal still applies to emitted MCP tools and agent runs. The
+committed example index is not an attested release; the proof command does not
+sign, release, publish or configure a publisher.
