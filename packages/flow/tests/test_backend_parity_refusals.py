@@ -151,7 +151,10 @@ def test_a_desktop_mcp_tool_runs_the_governed_cli_with_every_param_intact(
         run_dir.mkdir(parents=True, exist_ok=True)
         from openadapt_flow.qualification import workflow_contract_sha256
         from openadapt_flow.runtime.authorization import runtime_inputs_digest
-        from tests._mcp_report import synthetic_production_report
+        from tests._mcp_report import (
+            bind_synthetic_invocation,
+            synthetic_production_report,
+        )
 
         workflow = Workflow.load(out_path.parent / "bundle")
         report = synthetic_production_report(
@@ -166,7 +169,9 @@ def test_a_desktop_mcp_tool_runs_the_governed_cli_with_every_param_intact(
             execution_entry_url=None,
             params=seen["params"],
         )
-        (run_dir / "report.json").write_text(report.model_dump_json())
+        (run_dir / "report.json").write_text(
+            bind_synthetic_invocation(report, argv).model_dump_json()
+        )
         return types.SimpleNamespace(returncode=0, stdout="", stderr="")
 
     out_path = emit_mcp_server(bundle, tmp_path / "mcp" / "server.py")
@@ -206,7 +211,8 @@ def test_a_desktop_mcp_tool_runs_the_governed_cli_with_every_param_intact(
     out = asyncio.run(
         call_generated_tool(server, {"kind": "REAL", "section": "S", "workflow": "W"})
     )
-    assert out["success"] is True and out["outcome"] == "VERIFIED"
+    assert out["success"] is False and out["outcome"] == "UNCERTAIN"
+    assert out["runtime_reported"]["outcome"] == "VERIFIED"
     assert seen["params"] == {"kind": "REAL", "section": "S", "workflow": "W"}
     assert seen["argv"][1:5] == [
         "-m",

@@ -398,7 +398,7 @@ def _load_emitted_tool(
 
     from openadapt_flow.qualification import workflow_contract_sha256
     from openadapt_flow.runtime.authorization import runtime_inputs_digest
-    from tests._mcp_report import synthetic_production_report
+    from tests._mcp_report import bind_synthetic_invocation, synthetic_production_report
 
     fastmcp = types.ModuleType("mcp.server.fastmcp")
 
@@ -428,6 +428,7 @@ def _load_emitted_tool(
             governed_runtime_inputs_digest=runtime_inputs_digest(workflow, params, {}),
             params=params,
         ).model_dump(mode="json")
+        report = bind_synthetic_invocation(report, argv).model_dump(mode="json")
         # Planted legacy/coarse fields must not override the typed envelope.
         report.update(report_fields)
         run_dir = Path(argv[argv.index("--run-dir") + 1])
@@ -508,15 +509,13 @@ def test_emitted_mcp_tool_never_reports_success_for_unverified(
     calling agent as success: only a VERIFIED outcome does."""
     tool = _load_emitted_tool(tmp_path, monkeypatch, fields)
     out = tool(note="synthetic note")
-    assert out["success"] is expected_success
-    if fields["execution_profile"] == "standard":
-        assert out["outcome"] == fields["execution_outcome"]
-        assert out["transaction_outcome"] == fields["transaction_outcome"]
+    assert out["success"] is False and out["production_eligible"] is False
+    assert out["retry_allowed"] is False and out["outcome"] == "UNCERTAIN"
+    assert out["transaction_outcome"] == "RECONCILIATION_REQUIRED"
+    if expected_success:
+        assert out["runtime_reported"]["outcome"] == "VERIFIED"
     else:
-        assert out["outcome"] == "HALTED"
-        assert out["transaction_outcome"] == "RECONCILIATION_REQUIRED"
-    assert out["production_eligible"] is expected_success
-    assert out["run_dir"]
+        assert out["runtime_reported"] is None
 
 
 # -- CLI ----------------------------------------------------------------------

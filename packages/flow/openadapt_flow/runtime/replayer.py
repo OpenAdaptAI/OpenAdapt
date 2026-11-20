@@ -94,7 +94,6 @@ from openadapt_flow.backend import (
     StructuralResolutionRefused,
     SubmitBindingBackend,
 )
-from openadapt_flow.bundle_validation import compute_parameter_schema_digest
 from openadapt_flow.identity_signals import (
     normalize_signal_text,
     parameterize_identity_text,
@@ -173,6 +172,11 @@ from openadapt_flow.qualification_faults import (
     verify_fault_mutation_receipt,
 )
 from openadapt_flow.run_gate import is_consequential
+from openadapt_flow.run_invocation import (
+    InvocationContext,
+    initial_run_report,
+    invocation_kwargs,
+)
 from openadapt_flow.runtime import clock_checks as _clock_checks
 from openadapt_flow.runtime import heal as heal_mod
 from openadapt_flow.runtime import healing as healing_mod
@@ -1611,6 +1615,7 @@ class Replayer:
         resume_from: Optional[int] = None,
         resume_program: Optional[ProgramCheckpoint] = None,
         run_id: Optional[str] = None,
+        invocation_context: Optional[InvocationContext] = None,
         idempotency_key: Optional[str] = None,
         execution_target_kind: Optional[ExecutionTargetKind] = None,
         surface_override: bool = False,
@@ -1643,6 +1648,7 @@ class Replayer:
             resume_from=resume_from,
             resume_program=resume_program,
             run_id=run_id,
+            **invocation_kwargs(invocation_context),
             idempotency_key=idempotency_key,
             execution_target_kind=execution_target_kind,
             surface_override=surface_override,
@@ -1688,6 +1694,7 @@ class Replayer:
         resume_from: Optional[int] = None,
         resume_program: Optional[ProgramCheckpoint] = None,
         run_id: Optional[str] = None,
+        invocation_context: Optional[InvocationContext] = None,
         idempotency_key: Optional[str] = None,
         execution_target_kind: Optional[ExecutionTargetKind] = None,
         surface_override: bool = False,
@@ -1892,8 +1899,6 @@ class Replayer:
         params = merged
         self._outcome_worklists = deepcopy(worklists or {})
 
-        from openadapt_flow.qualification import workflow_contract_sha256
-
         # Keep the admitted base parameter scope separate from row-derived
         # program-loop bindings. Last-edge authorization hashes this base scope
         # together with the caller-owned worklist, then proves the active
@@ -2009,40 +2014,20 @@ class Replayer:
             self._durable_initial_delivery_guard = _ManagedInitialDeliveryGuard()
         (run_dir / "steps").mkdir(parents=True, exist_ok=True)
 
-        report = RunReport(
-            workflow_name=workflow.name,
-            started_at=(
-                durable_run.started_at
-                if durable_run is not None
-                else datetime.now(timezone.utc).isoformat()
-            ),
-            execution_profile=(
-                self.governed_authorization.execution_profile
-                if self.governed_authorization is not None
-                else "demo"
-            ),
+        report = initial_run_report(
+            self,
+            workflow,
+            durable_run=durable_run,
+            invocation_context=invocation_context,
             execution_target_kind=execution_target_kind,
-            recorded_surface=workflow.surface,
             surface_override=surface_override,
             execution_origin=execution_origin,
             execution_entry_url=execution_entry_url,
-            bundle_content_digest=(
-                workflow.manifest.content_digest if workflow.manifest else None
-            ),
-            workflow_contract_sha256=workflow_contract_sha256(workflow),
-            source_recording_sha256=(
-                workflow.manifest.provenance.source_recording_sha256
-                if workflow.manifest
-                else None
-            ),
-            parameter_schema_sha256=(compute_parameter_schema_digest(workflow)),
-            run_id_sha256=hashlib.sha256(self._run_id.encode("utf-8")).hexdigest(),
             params=params,
             model_calls=prior_model_calls,
             external_network_calls=prior_external_network_calls,
-            screenshots_may_leave_box=(
-                self._screenshots_may_leave_box or prior_screenshots_may_leave_box
-            ),
+            screenshots_may_leave_box=self._screenshots_may_leave_box
+            or prior_screenshots_may_leave_box,
             idempotency_key=idempotency_key,
         )
         self._begin_approval_item(

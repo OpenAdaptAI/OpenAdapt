@@ -32,7 +32,7 @@ from openadapt_flow.jit.compile_agent import compile_agent as make_jit
 from openadapt_flow.jit.signature import TaskSignature
 from openadapt_flow.qualification import workflow_contract_sha256
 from openadapt_flow.runtime.authorization import runtime_inputs_digest
-from tests._mcp_report import synthetic_production_report
+from tests._mcp_report import bind_synthetic_invocation, synthetic_production_report
 from tests._mcp_tools import call_generated_tool
 
 COMPILED_PARAMETERS = [
@@ -568,12 +568,15 @@ def test_portable_templates_keep_injective_aliases_and_original_keys(
             else None,
             params=observed,
         )
-        (run_dir / "report.json").write_text(report.model_dump_json())
+        (run_dir / "report.json").write_text(
+            bind_synthetic_invocation(report, argv).model_dump_json()
+        )
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
     monkeypatch.setattr("subprocess.run", controlled_child)
     result = function(**arguments)
-    assert result["success"] is True and result["outcome"] == "VERIFIED"
+    assert result["success"] is False and result["outcome"] == "UNCERTAIN"
+    assert result["runtime_reported"]["outcome"] == "VERIFIED"
     assert calls == [values]
     # A raw workflow key named url was allocated a distinct data alias above.
     # The actual legacy URL field never redirects either surface's target.

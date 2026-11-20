@@ -16,7 +16,7 @@ from openadapt_flow.emit import mcp_governed as adapter
 from openadapt_flow.ir import RegistryOrigin, Step, Workflow
 from openadapt_flow.qualification import workflow_contract_sha256
 from openadapt_flow.runtime.authorization import runtime_inputs_digest
-from tests._mcp_report import synthetic_production_report
+from tests._mcp_report import bind_synthetic_invocation, synthetic_production_report
 from tests._mcp_tools import call_generated_tool
 
 
@@ -86,6 +86,7 @@ def report_for(wf, params, profile="standard"):
 
 def runner(monkeypatch, report, *, returncode=0, mutate=None):
     calls = []
+    first_context = []
 
     def run(argv, **kwargs):
         calls.append(argv)
@@ -98,6 +99,14 @@ def runner(monkeypatch, report, *, returncode=0, mutate=None):
         value = (
             report.model_dump(mode="json") if hasattr(report, "model_dump") else report
         )
+        if isinstance(value, dict):
+            if not first_context:
+                first_context.append(
+                    bind_synthetic_invocation(
+                        value, argv
+                    ).invocation_context.model_dump(mode="json")
+                )
+            value["invocation_context"] = dict(first_context[0])
         if mutate:
             value = mutate(value)
         if value is not None:
@@ -127,7 +136,13 @@ def test_every_origin_and_surface_uses_one_pinned_child(
     params = {"note": "SYNTHETIC_CALLER_VALUE"}
     calls = runner(monkeypatch, report_for(wf, params, profile))
     result = adapter.run_governed(bundle, params, **options)
-    assert result["success"] is True and result["outcome"] == "VERIFIED"
+    if profile == "regulated":
+        assert result["outcome"] == "REFUSED" and calls == []
+        return
+    assert result["success"] is False and result["outcome"] == "UNCERTAIN"
+    assert result["production_eligible"] is False and result["retry_allowed"] is False
+    assert result["runtime_reported"]["outcome"] == "VERIFIED"
+    assert result["producer_assurance"] == "LOCAL_OWNED_PROCESS_UNAUTHENTICATED"
     assert len(calls) == 1
     argv = calls[0]
     assert argv[1:5] == ["-m", "openadapt_flow", "run", str(bundle)]
@@ -268,7 +283,7 @@ def test_postlaunch_failures_preserve_uncertainty(tmp_path, monkeypatch, fault):
     assert len(calls) == 1
     assert result["success"] is False and result["production_eligible"] is False
     assert result["transaction_outcome"] == "RECONCILIATION_REQUIRED"
-    assert result["outcome"] == "HALTED"
+    assert result["outcome"] == "UNCERTAIN"
     text = json.dumps(result)
     assert "PRIVATE" not in text and "nothing ran" not in text.lower()
 
@@ -280,7 +295,7 @@ def test_stateful_params_and_target_changes_cannot_reuse_old_completion(
     wf, bundle, options = setup(tmp_path, origin=origin)
     first = {"note": "first"}
     calls = runner(monkeypatch, report_for(wf, first))
-    assert adapter.run_governed(bundle, first, **options)["success"] is True
+    assert adapter.run_governed(bundle, first, **options)["outcome"] == "UNCERTAIN"
     assert (
         adapter.run_governed(bundle, {"note": "second"}, **options)[
             "transaction_outcome"
@@ -307,7 +322,7 @@ def test_stateful_params_and_target_changes_cannot_reuse_old_completion(
     changed["runtime"]["profile"] = "standard"
     changed["backend"]["url"] = "https://synthetic.invalid/"
     config.write_text(json.dumps(changed))
-    assert adapter.run_governed(bundle, first, **options)["success"] is True
+    assert adapter.run_governed(bundle, first, **options)["runtime_reported"] is None
     assert len(calls) == 4
 
 
@@ -538,8 +553,8 @@ def test_existing_windows_private_file_contract_precedes_param_delivery(
     result = adapter.run_governed(bundle, params, **options)
     assert len(inspected) == 1
     assert len(calls) == int(private)
-    assert result["success"] is private
-    assert result["outcome"] == ("VERIFIED" if private else "REFUSED")
+    assert result["success"] is False
+    assert result["outcome"] == ("UNCERTAIN" if private else "REFUSED")
 
 
 def test_unknown_directory_identity_is_not_accepted(tmp_path, monkeypatch):

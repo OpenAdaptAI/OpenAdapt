@@ -80,3 +80,34 @@ def synthetic_production_report(
         external_network_calls="none",
     )
     return RunReport.model_validate_json(report.model_dump_json(), strict=True)
+
+
+def bind_synthetic_invocation(report, argv):
+    """CONTROLLED transport fixture only; never a real producer or admission."""
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    import yaml
+
+    from openadapt_flow.deployment import DeploymentConfig
+    from openadapt_flow.run_invocation import derive_context
+    from openadapt_flow.surface_selection import resolve_backend_config
+
+    cfg = DeploymentConfig.model_validate(
+        yaml.safe_load(Path(argv[argv.index("--config") + 1]).read_bytes())
+    )
+    context = derive_context(
+        argv[argv.index("--invocation-challenge") + 1],
+        cfg=cfg,
+        backend=resolve_backend_config(SimpleNamespace(), cfg),
+        effects=cfg.effects,
+        actuation=cfg.actuation,
+        profile=argv[argv.index("--profile") + 1],
+    )
+    data = (
+        report.model_dump(mode="json")
+        if hasattr(report, "model_dump")
+        else dict(report)
+    )
+    data["invocation_context"] = context.model_dump(mode="json")
+    return RunReport.model_validate_json(__import__("json").dumps(data), strict=True)

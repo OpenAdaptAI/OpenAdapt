@@ -28,7 +28,7 @@ from openadapt_flow.emit.mcp_tool import emit_mcp_server
 from openadapt_flow.ir import ActionKind, Step, Workflow
 from openadapt_flow.qualification import workflow_contract_sha256
 from openadapt_flow.runtime.authorization import runtime_inputs_digest
-from tests._mcp_report import synthetic_production_report
+from tests._mcp_report import bind_synthetic_invocation, synthetic_production_report
 from tests._mcp_tools import call_generated_tool, registered_server, sdk_modules
 
 ENTRY_POINTS = ("web", "linux", "citrix", "compiled")
@@ -133,7 +133,9 @@ def test_genuine_sdk_registers_and_dispatches_generated_tool(
             else None,
             params=params,
         )
-        (run / "report.json").write_text(report.model_dump_json())
+        (run / "report.json").write_text(
+            bind_synthetic_invocation(report, argv).model_dump_json()
+        )
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
     def compiled(task, params):
@@ -181,7 +183,8 @@ def test_genuine_sdk_registers_and_dispatches_generated_tool(
         assert result == {"verified": True}
         assert seen == [values]
     else:
-        assert result["success"] is True and result["outcome"] == "VERIFIED"
+        assert result["success"] is False and result["outcome"] == "UNCERTAIN"
+        assert result["runtime_reported"]["outcome"] == "VERIFIED"
         assert seen == [values]
     assert "RECORDED_VALUE_MUST_NOT_BE_EMITTED" not in path.read_text()
 

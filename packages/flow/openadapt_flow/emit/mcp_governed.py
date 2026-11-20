@@ -11,24 +11,31 @@ import hashlib
 import json
 import math
 import os
+import secrets
 import stat
 import subprocess
 import sys
 import tempfile
+from argparse import Namespace
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlsplit
 
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+
 from openadapt_flow.ir import RunReport, Workflow
+from openadapt_flow.run_invocation import derive_context, producer_supported
+from openadapt_flow.surface_selection import resolve_backend_config
 
 _MAX_REPORT_BYTES = 20 * 1024 * 1024
 
 SERVER_TEMPLATE = '''\
 """Governed MCP tool. Target and readback come only from --config.
 
-Start with --config deploy.yaml --profile standard (or regulated) and
+Start with --config deploy.yaml --profile standard and
 --qualification-authority-file PATH. The existing CLI verifies that authority;
 this server never creates it. Each call has a private params file and fresh run.
+The outer result is never production proof. Regulated calls refuse before launch.
 """
 from __future__ import annotations
 
@@ -55,9 +62,10 @@ def {func_name}({param_sig_first}url: str | None = None) -> dict:
     Args:
 {param_docs}        url: Legacy target override. Every non-null value refuses.
     Returns:
-        Only a bound production VERIFIED report can report success. Missing or
-        invalid evidence after launch requires reconciliation; do not retry the
-        write automatically. REFUSED before launch means this tool ran no child.
+        REFUSED means no child ran. Every launched call returns UNCERTAIN,
+        with no production eligibility or automatic retry. Fresh bound local
+        runtime claims may be reported separately; they are not authenticated
+        production evidence. Reconcile actual effects before another attempt.
     """
     return run_governed(
         BUNDLE_DIR, {params_dict}, config=DEPLOYMENT, profile=PROFILE,
@@ -80,28 +88,123 @@ if __name__ == "__main__":
 '''
 
 
+class RuntimeReportedOutcome(BaseModel):
+    """An allowlisted local runtime claim, never independent production proof."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+    outcome: Literal[
+        "VERIFIED", "COMPLETED_UNVERIFIED", "HALTED", "FAILED", "ROLLED_BACK"
+    ]
+    transaction_outcome: (
+        Literal[
+            "VERIFIED",
+            "HALTED_BEFORE_EFFECT",
+            "RECONCILIATION_REQUIRED",
+            "FAILED_PLATFORM",
+            "CANCELED",
+            "REJECTED_POLICY",
+            "COMPLETED_UNVERIFIED",
+            "ROLLED_BACK",
+            "SAVED_AWAITING_CHECK",
+        ]
+        | None
+    )
+    success: bool
+    production_eligible: bool
+    execution_completed: bool
+
+    @model_validator(mode="after")
+    def _consistent(self):
+        if self.success != (self.outcome == "VERIFIED"):
+            raise ValueError("inconsistent local runtime completion claim")
+        if self.production_eligible and not (
+            self.success
+            and self.execution_completed
+            and self.transaction_outcome == "VERIFIED"
+        ):
+            raise ValueError("inconsistent local runtime eligibility claim")
+        return self
+
+
+class MCPObservation(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    success: Literal[False] = False
+    production_eligible: Literal[False] = False
+    retry_allowed: Literal[False] = False
+    outcome: Literal["REFUSED", "UNCERTAIN"]
+    transaction_outcome: Literal["RECONCILIATION_REQUIRED"] | None
+    execution_may_have_occurred: bool
+    producer_assurance: Literal[
+        "NOT_LAUNCHED", "UNATTRIBUTED", "LOCAL_OWNED_PROCESS_UNAUTHENTICATED"
+    ]
+    run_dir: str | None = None
+    runtime_reported: RuntimeReportedOutcome | None = None
+    detail: str
+
+    @field_validator("success", "production_eligible", "retry_allowed", mode="before")
+    @classmethod
+    def _false_only(cls, value):
+        if value is not False:
+            raise ValueError("outer production and retry claims are unavailable")
+        return value
+
+    @model_validator(mode="after")
+    def _phase(self):
+        refused = self.outcome == "REFUSED"
+        if refused != (not self.execution_may_have_occurred):
+            raise ValueError("observation delivery phase mismatch")
+        if refused != (self.producer_assurance == "NOT_LAUNCHED"):
+            raise ValueError("observation assurance phase mismatch")
+        if refused != (self.transaction_outcome is None):
+            raise ValueError("observation transaction phase mismatch")
+        if (self.runtime_reported is not None) != (
+            self.producer_assurance == "LOCAL_OWNED_PROCESS_UNAUTHENTICATED"
+        ):
+            raise ValueError("runtime claim attribution mismatch")
+        return self
+
+
 def _refused() -> dict[str, Any]:
-    return {
-        "success": False,
-        "outcome": "REFUSED",
-        "transaction_outcome": None,
-        "production_eligible": False,
-        "detail": "No child ran. Supply --config deploy.yaml, --profile standard "
-        "or regulated, and --qualification-authority-file for the exact bundle "
-        "and intended instance. Per-call URL overrides are refused.",
-    }
+    return MCPObservation(
+        outcome="REFUSED",
+        transaction_outcome=None,
+        execution_may_have_occurred=False,
+        producer_assurance="NOT_LAUNCHED",
+        detail="No child ran. Only a serial Standard local invocation with a pinned "
+        "deployment (--config deploy.yaml) and existing qualification authority "
+        "is supported. Regulated "
+        "and independent production-report assurance are unavailable. Per-call "
+        "URL overrides and unsupported producer paths are refused.",
+    ).model_dump(mode="json")
 
 
-def _uncertain(run: Path) -> dict[str, Any]:
-    return {
-        "success": False,
-        "outcome": "HALTED",
-        "transaction_outcome": "RECONCILIATION_REQUIRED",
-        "production_eligible": False,
-        "run_dir": str(run),
-        "detail": "The child was launched without a trustworthy bound completion. "
-        "A write may have landed. Reconcile the retained run before another attempt.",
-    }
+def _uncertain(run: Path, report: RunReport | None = None) -> dict[str, Any]:
+    claim = None
+    if (
+        report is not None
+        and report.execution_outcome is not None
+        and report.execution_completed is not None
+    ):
+        claim = RuntimeReportedOutcome(
+            outcome=report.execution_outcome,
+            transaction_outcome=report.transaction_outcome,
+            success=report.success,
+            production_eligible=report.production_eligible,
+            execution_completed=report.execution_completed,
+        )
+    return MCPObservation(
+        outcome="UNCERTAIN",
+        transaction_outcome="RECONCILIATION_REQUIRED",
+        execution_may_have_occurred=True,
+        run_dir=str(run),
+        runtime_reported=claim,
+        producer_assurance=(
+            "UNATTRIBUTED" if claim is None else "LOCAL_OWNED_PROCESS_UNAUTHENTICATED"
+        ),
+        detail="The child may have executed. Its local report is not independently "
+        "authenticated production evidence. Reconcile actual effects before another "
+        "attempt; do not retry automatically.",
+    ).model_dump(mode="json")
 
 
 def _directory_identity(run: Path) -> tuple[int, int]:
@@ -199,7 +302,7 @@ def run_governed(
     """Launch one pinned governed child, with no retry or direct-actuation path."""
     if (
         legacy_url is not None
-        or profile not in {"standard", "regulated"}
+        or profile != "standard"
         or not config
         or not authority_file
     ):
@@ -238,6 +341,23 @@ def run_governed(
             or workflow_contract_sha256(workflow) != expected_workflow_contract
         ):
             return _refused()
+        startup = Namespace(
+            profile=profile,
+            config=config,
+            config_sha256=hashlib.sha256(config_bytes).hexdigest(),
+        )
+        if not producer_supported(startup, cfg, workflow):
+            return _refused()
+        backend = resolve_backend_config(Namespace(), cfg, workflow)
+        challenge = secrets.token_hex(32)
+        expected_context = derive_context(
+            challenge,
+            cfg=cfg,
+            backend=backend,
+            effects=cfg.effects,
+            actuation=cfg.actuation,
+            profile=profile,
+        )
         inputs_digest = runtime_inputs_digest(workflow, params, {})
         work = Path(tempfile.mkdtemp(prefix="openadapt_flow_mcp_"))
         run = work / "run"
@@ -266,6 +386,8 @@ def run_governed(
             hashlib.sha256(config_bytes).hexdigest(),
             "--profile",
             profile,
+            "--invocation-challenge",
+            challenge,
             "--qualification-authority-file",
             str(authority_file),
             "--pin-digest",
@@ -286,6 +408,7 @@ def run_governed(
         envelope = report.outcome_envelope
         if (
             envelope is None
+            or report.invocation_context != expected_context
             or report.execution_profile != profile
             or report.bundle_content_digest != expected_bundle_digest
             or report.workflow_contract_sha256 != expected_workflow_contract
@@ -305,22 +428,10 @@ def run_governed(
                 or report.execution_origin != f"{parts.scheme}://{parts.netloc}"
             ):
                 return _uncertain(run)
-        verified = (
-            report.success
-            and report.production_eligible
-            and report.execution_outcome == "VERIFIED"
-            and report.transaction_outcome == "VERIFIED"
-        )
-        return {
-            "success": bool(verified),
-            "outcome": report.execution_outcome,
-            "transaction_outcome": report.transaction_outcome,
-            "production_eligible": bool(verified),
-            "run_dir": str(run),
-            "heal_count": report.heal_count,
-            "model_calls": report.model_calls,
-            "total_ms": report.total_ms,
-        }
+        # Correlation is local attribution only. No pinned producer/report
+        # authentication contract exists here, even for sealed-set artifacts.
+        return _uncertain(run, report)
+
     except Exception:
         return _uncertain(run)
     finally:
