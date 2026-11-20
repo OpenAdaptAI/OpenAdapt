@@ -1665,82 +1665,6 @@ def _postconditions(
     return expect
 
 
-def _defer_selection_text_checks(
-    steps: list[Step], after_frames: Mapping[str, Optional[bytes]]
-) -> list[dict[str, Any]]:
-    """Check a selection's screen text after the click that makes the selection.
-
-    A search or filter often selects its first result by itself, so the
-    demonstration's after-frame shows the selected record's details ("Patient:
-    <name>"), and the text check compiled for the search asserts them. On a
-    run where another record now comes first, the search shows that record's
-    details instead, and the run stops although the next click is about to
-    select the right one.
-
-    Such a check moves to the next step when all of this holds, so it still
-    runs before anything that writes:
-
-    - the next step is a click with its own identity check (it selects one
-      record, and the identity check confirms which);
-    - the next step is reversible and needs no risk review;
-    - the text is still on the screen in the next step's recorded
-      after-frame (the click re-established it);
-    - the step keeps at least one other postcondition, so it is not left
-      unchecked.
-
-    Steps change in place; each move is returned as a compile note.
-    """
-
-    from openadapt_flow.vision.ocr import text_present
-
-    notes: list[dict[str, Any]] = []
-    for step, nxt in zip(steps, steps[1:]):
-        texts = [
-            pc
-            for pc in step.expect
-            if pc.kind is PostconditionKind.TEXT_PRESENT
-            and pc.text
-            and not getattr(pc, "exact", False)
-            and not getattr(pc, "text_clock", None)
-        ]
-        if len(texts) != 1 or len(step.expect) < 2:
-            continue
-        pc = texts[0]
-        nxt_after = after_frames.get(nxt.id)
-        if (
-            nxt.action is not ActionKind.CLICK
-            or nxt.identity_armed is not True
-            or nxt.risk != "reversible"
-            or nxt.risk_review_required
-            or nxt_after is None
-            or any(
-                other.kind is PostconditionKind.TEXT_PRESENT and other.text == pc.text
-                for other in nxt.expect
-            )
-        ):
-            continue
-        try:
-            persists = text_present(nxt_after, pc.text)
-        except Exception:  # noqa: BLE001 - unreadable evidence: keep the check
-            persists = False
-        if not persists:
-            continue
-        step.expect = [other for other in step.expect if other is not pc]
-        nxt.expect = [*nxt.expect, pc]
-        notes.append(
-            {
-                "change": "defer_selection_text_check",
-                "step": step.id,
-                "to_step": nxt.id,
-                "evidence": (
-                    "the next click selects a record under its own identity "
-                    "check and its recorded after-frame still shows the text"
-                ),
-            }
-        )
-    return notes
-
-
 def _structural_postconditions(event: dict) -> list[Postcondition]:
     """Structural fallback postconditions from a recorded event.
 
@@ -4334,12 +4258,8 @@ def _compile_recording(
                 len(decisions),
             )
 
-    # A screen-state text check that a following selection click establishes
-    # again (see _defer_selection_text_checks): checked after that click.
-    compile_deferral_notes = _defer_selection_text_checks(
-        steps,
-        {step.id: sa for step, _sb, sa, _event in pending},
-    )
+    # Each postcondition stays on its producing step. Later display persistence,
+    # reversible risk and target identity do not authorize delaying that check.
 
     # Default fix-up passes (see compiler.fixup_passes): replace a demonstrated
     # gesture that asserts nothing with an equivalent checked one, using only
@@ -4364,7 +4284,6 @@ def _compile_recording(
         *compile_notes,
         *guard_notes,
         *native_selection_notes,
-        *compile_deferral_notes,
     ]
     for note in compile_notes:
         logger.info("compile-pass %s: %s", note["step"], note["change"])

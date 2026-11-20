@@ -1,12 +1,7 @@
-"""Find a moved record's row by its identity band, and check a selection's
-text after the click that makes it.
+"""Propose one moved row from its recorded identity band.
 
-On the real AVC444 remote-desktop lab, a decoy patient sharing the target's
-first name and sorted above it stopped every run (10 of 10): the search
-auto-selected the decoy, so the search step's text check named the wrong
-patient, and the next click's recorded position now held the decoy. The
-resolver now proposes the one row whose recorded identity band verifies;
-the identity check at that point still decides. Real OCR on rendered rows.
+Rendered synthetic OCR exercises the proposal; the existing identity check
+still decides whether the proposed point may be used.
 """
 
 from __future__ import annotations
@@ -17,14 +12,7 @@ from types import SimpleNamespace
 from PIL import Image, ImageDraw, ImageFont
 
 import openadapt_flow.vision as vision
-from openadapt_flow.compiler.compile import _defer_selection_text_checks
-from openadapt_flow.ir import (
-    ActionKind,
-    Anchor,
-    Postcondition,
-    PostconditionKind,
-    Step,
-)
+from openadapt_flow.ir import Anchor
 from openadapt_flow.runtime.identity_template import build_identity_template
 from openadapt_flow.runtime.resolver import _identity_row_point
 
@@ -112,64 +100,3 @@ def test_no_template_or_band_means_no_proposal():
 def test_an_unreadable_frame_is_no_proposal():
     broken = SimpleNamespace(ocr=lambda _png: 1 / 0)
     assert _identity_row_point(_anchor(), _frame([TARGET]), broken) is None
-
-
-# -- the compile pass ---------------------------------------------------------
-
-BANNER = "Patient: Neil Sorenson (1984-03-12)"
-
-
-def _steps(*, risk="reversible", armed=True, action=ActionKind.CLICK, others=1):
-    region = Postcondition(
-        kind=PostconditionKind.REGION_STABLE, region=(0, 0, 10, 10), phash="0" * 16
-    )
-    text = Postcondition(kind=PostconditionKind.TEXT_PRESENT, text=BANNER)
-    search = Step(
-        id="step_002",
-        action=ActionKind.CLICK,
-        intent="click 'Search'",
-        expect=[region] * others + [text],
-    )
-    select = Step(
-        id="step_003",
-        action=action,
-        intent="click 'Neil'",
-        risk=risk,
-        identity_armed=armed,
-        expect=[region],
-    )
-    return [search, select]
-
-
-def _banner_frame(text: str = BANNER) -> bytes:
-    image = Image.new("RGB", SIZE, "white")
-    ImageDraw.Draw(image).text((40, 40), text, fill="black", font=_font(20))
-    out = io.BytesIO()
-    image.save(out, format="PNG")
-    return out.getvalue()
-
-
-def test_a_selection_text_check_moves_to_the_selecting_click():
-    steps = _steps()
-    notes = _defer_selection_text_checks(steps, {"step_003": _banner_frame()})
-    assert [n["change"] for n in notes] == ["defer_selection_text_check"]
-    assert [pc.kind for pc in steps[0].expect] == [PostconditionKind.REGION_STABLE]
-    assert steps[1].expect[-1].text == BANNER
-
-
-def _unmoved(steps, frames) -> bool:
-    before = [list(s.expect) for s in steps]
-    notes = _defer_selection_text_checks(steps, frames)
-    return not notes and [list(s.expect) for s in steps] == before
-
-
-def test_the_check_stays_unless_every_condition_holds():
-    frame = {"step_003": _banner_frame()}
-    assert _unmoved(_steps(risk="irreversible"), frame)
-    assert _unmoved(_steps(armed=False), frame)
-    assert _unmoved(_steps(action=ActionKind.TYPE), frame)
-    # The step would be left with no check at all.
-    assert _unmoved(_steps(others=0), frame)
-    # The click did not re-establish the text, or there is no frame.
-    assert _unmoved(_steps(), {"step_003": _banner_frame("Patient: someone else")})
-    assert _unmoved(_steps(), {})

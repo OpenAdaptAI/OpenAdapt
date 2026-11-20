@@ -17,6 +17,7 @@ import pytest
 import openadapt_flow.runtime.replayer as replayer_mod
 from openadapt_flow.ir import StepResult
 from openadapt_flow.runtime.replayer import Replayer
+from openadapt_flow.runtime.typed_echo import TYPED_ECHO_REREADS
 
 
 def _verify(monkeypatch, answers, calls=None):
@@ -64,7 +65,7 @@ def test_a_value_that_never_reads_still_halts_after_the_bounded_rereads(monkeypa
     error, result, calls, _backend = _verify(monkeypatch, [(False, True)])
     assert error is not None and "not readable" in error
     assert result.input_verified is False
-    assert len(calls) == 1 + replayer_mod.TYPED_ECHO_REREADS
+    assert len(calls) == 1 + TYPED_ECHO_REREADS
 
 
 @pytest.mark.parametrize("answer", [(True, True), (False, False)])

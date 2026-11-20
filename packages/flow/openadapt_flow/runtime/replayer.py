@@ -258,6 +258,7 @@ from openadapt_flow.runtime.resolver import (
 from openadapt_flow.runtime.row_dates import _ROW_DATE_PATTERNS, _row_dates  # noqa: F401
 from openadapt_flow.runtime.step_timing import timed_span
 from openadapt_flow.runtime.surfaces import SurfaceRouter
+from openadapt_flow.runtime.typed_echo import read_typed_echo
 from openadapt_flow.verification import (
     EffectContractMutationError,
     verifier_effect_tier,
@@ -438,11 +439,6 @@ PC_STRUCTURAL_TEMPLATE_THRESHOLD = 0.8
 # viewport width: a centered crop can hide the value's beginning or suffix.
 # With no focusing click (e.g. Tab between fields), use the whole frame.
 FIELD_REGION_HEIGHT = 240
-# Typed-input verification: when the field changed but the value is not yet
-# readable, re-read it on fresh frames this many times, this far apart (a
-# remote display echoes typed text after the focus change).
-TYPED_ECHO_REREADS = 2
-TYPED_ECHO_WAIT_S = 1.0
 MASKED_FIELD_REGION_WIDTH = 640
 FIELD_REGION_PAD = 16
 
@@ -18198,40 +18194,14 @@ class Replayer:
         allow_masked: bool = False,
         allow_retry: bool = True,
     ) -> Optional[str]:
-        """Verify a TYPE action landed; one guarded refocus-and-retype retry.
+        """Verify TYPE; retry input only after exact unchanged-field proof.
 
-        A retry needs a browser surface, structural browser observations and
-        exact field readback proving no change. An opaque or native surface
-        cannot prove where the first input went and must halt. For a browser,
-        re-click the field (when its point is known), select-all so a false-negative
-        first attempt is replaced rather than duplicated, retype. When the
-        region DID change but the value cannot be read (a dialog over the
-        field, an unexpected re-render), retyping is not safe — select-all
-        could destroy pre-existing field content and the re-click could
-        re-fire whatever now sits at that point — so the run halts
-        immediately with the accurate reason. Typed input that cannot be
-        confirmed must never be reported as success (VALIDATION.md 'focus
-        stolen' finding).
+        Bounded read-only observations live in ``typed_echo``. A changed but
+        unreadable field always halts; remaining browser/structural guards
+        decide whether an unchanged field permits one refocus/retype.
         """
-        landed, changed = self._typed_input_landed(
-            text,
-            field_point,
-            baseline_png,
-            field_region=field_region,
-            baseline_field_value=baseline_field_value,
-            allow_masked=allow_masked,
-        )
-        # A remote display can paint the focus change at once and the typed
-        # characters a moment later, after the settle saw two equal frames
-        # (measured on a real AVC444 session: 14 of 20 runs). Re-read on
-        # fresh frames a bounded number of times. Nothing is retyped, and
-        # only the exact value read in the field counts, so the verdict can
-        # only become what an earlier read would have proven.
-        rereads = 0
-        while changed and not landed and rereads < TYPED_ECHO_REREADS:
-            rereads += 1
-            time.sleep(TYPED_ECHO_WAIT_S)
-            landed, changed = self._typed_input_landed(
+        landed, changed = read_typed_echo(
+            lambda: self._typed_input_landed(
                 text,
                 field_point,
                 baseline_png,
@@ -18239,6 +18209,7 @@ class Replayer:
                 baseline_field_value=baseline_field_value,
                 allow_masked=allow_masked,
             )
+        )
         if landed:
             result.input_verified = True
             return None
