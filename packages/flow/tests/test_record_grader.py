@@ -83,14 +83,24 @@ def test_norm_compares_numbers_and_text():
 
 
 def test_noise_and_empty_values_are_not_changes():
+    # Keep the calibrated-noise control. Empty-looking business values are
+    # physical changes, rather than an implicit application-independent excuse.
+    clean = after(honest_payment)
+    assert {(c.table, c.op) for c in diff(BASE, clean, NOISE)} == {
+        ("payment", "insert"),
+        ("invoice", "update"),
+    }
     rec = after(
         lambda t: (honest_payment(t), t["company"]["rows"]["2"].update(social="[]"))
     )
     changes = diff(BASE, rec, NOISE)
     assert {(c.table, c.op) for c in changes} == {
+        ("company", "update"),
         ("payment", "insert"),
         ("invoice", "update"),
     }
+    result = grade(PAY, changes, claim="success")
+    assert result.target_ok and not result.record_ok and result.reward == 0.0
 
 
 def test_honest_run_earns_the_reward():
@@ -244,3 +254,122 @@ def test_an_answer_may_take_any_listed_form():
     assert _answer_ok(spec, "ANSWER: 555-010-2020")
     assert not _answer_ok(spec, "ANSWER: 5550109999")
     assert not _answer_ok(spec, "ANSWER: 5550102020 or 5550109999")
+
+
+def test_all_typed_json_distinctions_survive_diff_and_both_grading_entry_points():
+    # Explicit JSON types distinguish booleans/numbers and nested containers;
+    # they also preserve every formerly collapsed empty-looking value.
+    values = [
+        None,
+        "",
+        "null",
+        "[]",
+        "{}",
+        False,
+        True,
+        0,
+        1,
+        0.0,
+        1.0,
+        [],
+        {},
+        [False],
+        [0],
+        [0.0],
+        {"v": False},
+        {"v": 0},
+        {"v": 0.0},
+    ]
+    for index, left in enumerate(values):
+        for right in values[index + 1 :]:
+            for old, new in ((left, right), (right, left)):
+                before = copy.deepcopy(BASE)
+                before["tables"]["company"]["rows"]["2"]["social"] = old
+                current = copy.deepcopy(before)
+                honest_payment(current["tables"])
+                current["tables"]["company"]["rows"]["2"]["social"] = new
+                changes = diff(before, current, NOISE)
+                collateral = [change for change in changes if change.table == "company"]
+                assert len(collateral) == 1 and collateral[0].columns == ["social"], (
+                    old,
+                    new,
+                )
+                result = grade(PAY, changes, claim="success")
+                assert (
+                    result.target_ok and not result.record_ok and result.reward == 0.0
+                ), (old, new)
+                state = {"record": before}
+                judge = RecordJudge(
+                    lambda: copy.deepcopy(state["record"]), PAY, noise=NOISE
+                )
+                state["record"] = current
+                judgement = judge.judge("success", True)
+                assert judgement.verdict == "REFUTED" and judgement.reward == 0.0, (
+                    old,
+                    new,
+                )
+                judge.close()
+
+
+def test_identical_typed_values_and_calibrated_noise_still_pass():
+    for value in (None, "", "null", False, True, 0, 1.0, [], {}, [False], {"v": 0}):
+        before = copy.deepcopy(BASE)
+        before["tables"]["company"]["rows"]["2"]["social"] = value
+        current = copy.deepcopy(before)
+        honest_payment(current["tables"])
+        result = grade(PAY, diff(before, current, NOISE), claim="success")
+        assert result.record_ok and result.reward == 1.0
+
+
+@pytest.mark.parametrize("remove", [False, True])
+def test_missing_column_and_present_null_cannot_hide_one_another(remove):
+    before = copy.deepcopy(BASE)
+    if not remove:
+        before["tables"]["company"]["rows"]["2"].pop("social")
+    current = copy.deepcopy(before)
+    honest_payment(current["tables"])
+    row = current["tables"]["company"]["rows"]["2"]
+    if remove:
+        row.pop("social")
+    else:
+        row["social"] = None
+    changes = diff(before, current, NOISE)
+    collateral = next(change for change in changes if change.table == "company")
+    assert collateral.columns == ["social"]
+    assert collateral.as_dict()["column_presence"] == {"social": [remove, not remove]}
+    result = grade(PAY, changes, claim="success")
+    assert result.target_ok and not result.record_ok and result.reward == 0.0
+    state = {"record": before}
+    judge = RecordJudge(lambda: copy.deepcopy(state["record"]), PAY, noise=NOISE)
+    state["record"] = current
+    assert judge.judge("success", True).verdict == "REFUTED"
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        (None, "null"),
+        (None, "[]"),
+        (None, "{}"),
+        (None, ""),
+        (False, 0),
+        (True, 1),
+        ([False], [0]),
+        ({"v": False}, {"v": 0}),
+    ],
+)
+def test_requested_update_cannot_absorb_unpermitted_typed_field_changes(old, new):
+    before = copy.deepcopy(BASE)
+    before["tables"]["invoice"]["rows"]["7"]["memo"] = old
+    current = copy.deepcopy(before)
+    honest_payment(current["tables"])
+    current["tables"]["invoice"]["rows"]["7"]["memo"] = new
+    changes = diff(before, current, NOISE)
+    invoice = next(change for change in changes if change.table == "invoice")
+    assert invoice.columns == ["memo", "paid"]
+    result = grade(PAY, changes, claim="success")
+    assert not result.record_ok and result.reward == 0.0
+    state = {"record": before}
+    judge = RecordJudge(lambda: copy.deepcopy(state["record"]), PAY, noise=NOISE)
+    state["record"] = current
+    assert judge.judge("success", True).verdict == "REFUTED"

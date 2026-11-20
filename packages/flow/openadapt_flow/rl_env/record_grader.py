@@ -47,12 +47,22 @@ from typing import Any, Iterable, Optional
 Record = dict[str, Any]
 
 _NUM = re.compile(r"^-?\d+(\.\d+)?$")
-#: Values an app writes interchangeably for "nothing" when it re-saves a form.
-_EMPTY = (None, "", "[]", "{}", "null")
 
 
 def _same(a: Any, b: Any) -> bool:
-    return a == b or (a in _EMPTY and b in _EMPTY)
+    """Preserve the types and structure observed by the record reader.
+
+    Semantic matching in a task does not excuse a physical record change.
+    Only the separately calibrated noise profile may omit changed columns.
+    """
+
+    if type(a) is not type(b):
+        return False
+    if isinstance(a, dict):
+        return a.keys() == b.keys() and all(_same(v, b[k]) for k, v in a.items())
+    if isinstance(a, list):
+        return len(a) == len(b) and all(_same(x, y) for x, y in zip(a, b))
+    return bool(a == b)
 
 
 def norm(v: Any) -> str:
@@ -86,6 +96,13 @@ class Change:
         if self.op == "update":
             before, after = self.before or {}, self.after or {}
             d["columns"] = {c: [before.get(c), after.get(c)] for c in self.columns}
+            presence = {
+                c: [c in before, c in after]
+                for c in self.columns
+                if (c in before) != (c in after)
+            }
+            if presence:
+                d["column_presence"] = presence
         else:
             d["row"] = self.row
         return d
@@ -122,12 +139,12 @@ def diff(
             out.append(Change(name, "delete", k, brows[k], None))
         for k in brows.keys() & arows.keys():
             b, a = brows[k], arows[k]
-            if b == a:
+            if _same(b, a):
                 continue
             cols = sorted(
                 c
                 for c in set(b) | set(a)
-                if not _same(b.get(c), a.get(c)) and c not in skip
+                if c not in skip and (c not in b or c not in a or not _same(b[c], a[c]))
             )
             if cols:
                 out.append(Change(name, "update", k, b, a, cols))
