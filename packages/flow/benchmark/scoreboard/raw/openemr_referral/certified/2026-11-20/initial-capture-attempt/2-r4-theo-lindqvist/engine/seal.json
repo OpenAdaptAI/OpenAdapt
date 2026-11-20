@@ -1,0 +1,13 @@
+{
+  "algorithm": "ed25519",
+  "issued_at": "2026-11-20T00:21:40Z",
+  "issuer": "local",
+  "key_id": "seal-ed25519-ca08dd7f42a4be01",
+  "outcome": "VERIFIED",
+  "public_key": "UQOSlj3iCypSdSwrUYYOcLbS6yy25yM6syjHVnqcHBg=",
+  "run_id": "engine",
+  "schema": "openadapt.local-seal/v1",
+  "signature": "LIVIrpBPBFk9cXEaksGLB8oQIpvyybhnLbxPyZQwRXfF7rCvEKB60b2uUDg0Rnjv6LhL7/9vcPQzbIMQen1hCQ==",
+  "subject_kind": "run-report",
+  "subject_sha256": "e3451acf25d8448b9a326f96d4dfd31cfafc7f533bd182dfa688ba40df2d8bca"
+}
