@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 from typing import Optional
 
+from openadapt_flow._browser_readiness import require_rendering_ready
 from openadapt_flow.copilot_bridge import CopilotSessionBridge, CopilotViewState
 from openadapt_flow.copilot_protocol import CopilotRunBinding
 from openadapt_flow.form_tx.receipt import verify_form_tx_receipt
@@ -177,6 +178,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         if len(pages) != 1:
             parser.error("page URL must select exactly one existing page")
         page = pages[0]
+        require_rendering_ready(browser, attached_page=page)
         surface = PlaywrightFormSurface(page, profile)
         reconciler = FormReconciler(surface)
         session = reconciler.create_session(pack, dossier)

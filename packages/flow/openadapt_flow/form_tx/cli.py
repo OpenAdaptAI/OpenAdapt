@@ -319,12 +319,14 @@ def build_parser() -> argparse.ArgumentParser:
     """Build the ``argparse.ArgumentParser`` for ``form_tx`` CLI operations."""
     parser = argparse.ArgumentParser(
         prog="openadapt-form-tx",
+        allow_abbrev=False,
         description="Governed Form & Wizard Transaction pack compiler and inspector.",
     )
     subparsers = parser.add_subparsers(dest="subcommand", required=True)
 
     induce = subparsers.add_parser(
         "induce-pack",
+        allow_abbrev=False,
         help="Induce a declarative FormPack from structural form snapshots.",
     )
     induce.add_argument(
@@ -377,6 +379,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     inspect_p = subparsers.add_parser(
         "inspect-pack",
+        allow_abbrev=False,
         help="Print deterministic summary and digest of a FormPack JSON file.",
     )
     inspect_p.add_argument(
@@ -392,6 +395,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     profiles_p = subparsers.add_parser(
         "list-profiles",
+        allow_abbrev=False,
         help="List available UIProfileSpec definitions.",
     )
     profiles_p.add_argument(

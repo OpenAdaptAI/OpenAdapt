@@ -39,6 +39,7 @@ from openadapt_flow.form_tx.types import (
     HumanDecisionAction,
     HumanResolutionInput,
 )
+from openadapt_flow.private_file import open_binary
 from openadapt_flow.report_redaction import redact_text
 
 COPILOT_STATE_SCHEMA: Literal["openadapt.copilot-state/v1"] = (
@@ -385,7 +386,7 @@ class CopilotSessionBridge:
         )
         private_session_directory(self._dir)
         flags = os.O_RDWR | os.O_CREAT | os.O_APPEND
-        fd = os.open(str(self.decisions_path), flags, 0o600)
+        fd = open_binary(str(self.decisions_path), flags, 0o600)
         try:
             if fcntl is not None:
                 fcntl.flock(fd, fcntl.LOCK_EX)
