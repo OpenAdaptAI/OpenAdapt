@@ -102,7 +102,7 @@ def test_native_windows_campaign_reads_back_normal_and_all_faults(
                     }
                 ],
                 "inputs": {"params": {"note": DEMO_NOTE}},
-                "campaign": {"trials": 1, "policy": "clinical-write"},
+                "campaign": {"trials": 3, "policy": "clinical-write"},
             },
             env={},
         )
@@ -150,13 +150,51 @@ def test_native_windows_campaign_reads_back_normal_and_all_faults(
         )
         assert result.passed and result.certified and not result.partial
         assert result.result["fault_driver"]["kind"] == "windows-generic"
-        assert len(result.result["cases"]) == 6
+        assert len(result.result["cases"]) == 18
         assert all(case["passed"] for case in result.result["cases"])
         assert result.result["silent_incorrect_success_count"] == 0
         assert result.result["verifier_model_calls"] == 0
-        evidence.update(
-            completed=True, result=result.result, admission_note=result.admission_note
+        from base64 import b64decode
+
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+        from openadapt_flow.qualification_admission import (
+            SIGNATURE_DOMAIN,
+            QualificationAdmissionEnvelope,
+            QualificationAdmissionError,
+            expected_from_payload,
+            verify_qualification_admission,
         )
+        from openadapt_flow.qualification_dev_signer import LOCAL_DEV_PUBLIC_BYTES
+        from openadapt_flow.qualify.result import result_sha256
+
+        assert result.admission_note is None
+        admission = QualificationAdmissionEnvelope.model_validate_json(
+            (result.out / "qualification" / "admission.local.json").read_text()
+        )
+        Ed25519PublicKey.from_public_bytes(LOCAL_DEV_PUBLIC_BYTES).verify(
+            b64decode(admission.signature, validate=True),
+            SIGNATURE_DOMAIN + admission.payload.canonical_bytes(),
+        )
+        assert admission.payload.campaign.outcomes_sha256 == result_sha256(
+            result.result
+        )
+        assert all(
+            task.observed_trials >= 3 for task in admission.payload.campaign.tasks
+        )
+        with pytest.raises(QualificationAdmissionError, match="local-dev"):
+            verify_qualification_admission(
+                admission,
+                trusted_signers={},
+                expected=expected_from_payload(admission.payload),
+            )
+        evidence.update(
+            completed=True,
+            result=result.result,
+            admission_sha256=admission.artifact_sha256(),
+            admission_verified=True,
+        )
+
     finally:
         host.close()
         if os.environ.get("OAFLOW_WINDOWS_QUALIFICATION_EVIDENCE"):

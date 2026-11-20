@@ -150,7 +150,7 @@ jobs:
           cases = list(ET.parse("runs/windows-qualification-junit.xml").getroot().iter("testcase"))
           assert len(cases) == 1 and not any(c.find(tag) is not None for c in cases for tag in ("skipped", "failure", "error"))
           evidence = json.load(open(os.environ["OAFLOW_WINDOWS_QUALIFICATION_EVIDENCE"]))
-          assert evidence["completed"] and len(evidence["result"]["cases"]) == 6
+          assert evidence["completed"] and len(evidence["result"]["cases"]) == 18 and evidence["admission_verified"]
           assert all(case["passed"] for case in evidence["result"]["cases"])
           PYCODE
       - name: Keep the evidence
