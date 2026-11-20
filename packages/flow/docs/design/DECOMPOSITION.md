@@ -600,19 +600,21 @@ PR #2239 raised `__main__.py` and `terminal_verification_v2.py`: its review fixe
 
 PR #2280 raised `replayer.py` by 12 lines: the call sites of the clock-text check and the first-local fence's risk view, whose bodies live in `runtime/clock_checks.py`.
 
+PR #2295 raised `replayer.py`, `ir.py`, `interactive_recorder.py` and `playwright_backend.py`: the dropdown choice contract, its dispatch and read-back, unexpected-dialog stops, and the recorder's choice and dialog hooks; the page-side capture code and the actuator live in `choice_capture.py` and `backends/choice.py`. The pinned dialog methods delegate to `runtime/dialog_delivery.py`, preserving the original document arm without rearming after input.
+
 <!-- size-ratchet:begin -->
 | File | Line budget |
 |---|---:|
-| `packages/flow/openadapt_flow/runtime/replayer.py` | 19975 |
+| `packages/flow/openadapt_flow/runtime/replayer.py` | 20138 |
 | `packages/flow/openadapt_flow/__main__.py` | 14530 |
 | `packages/flow/openadapt_flow/qualification.py` | 5963 |
-| `packages/flow/openadapt_flow/ir.py` | 6702 |
+| `packages/flow/openadapt_flow/ir.py` | 6865 |
 | `packages/desktop/openadapt_desktop/dispatch.py` | 6524 |
 | `packages/capture/openadapt_capture/recorder.py` | 4836 |
-| `packages/flow/openadapt_flow/interactive_recorder.py` | 4620 |
+| `packages/flow/openadapt_flow/interactive_recorder.py` | 4808 |
 | `packages/flow/openadapt_flow/runtime/durable/attended.py` | 4368 |
 | `packages/flow/openadapt_flow/terminal_verification_v2.py` | 3673 |
-| `packages/flow/openadapt_flow/backends/playwright_backend.py` | 6727 |
+| `packages/flow/openadapt_flow/backends/playwright_backend.py` | 6832 |
 <!-- size-ratchet:end -->
 
 ## 7. Coordination with work in flight
