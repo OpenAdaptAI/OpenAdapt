@@ -129,12 +129,11 @@ def test_preview_and_capability_changes_stop_later_getters_and_discard_data(
 ):
     target = CountedControl(change=change)
     result = invoke(monkeypatch, target, entry)
-    if entry == "probe" and change in {"legacy", "name"}:
-        # A non-value capability result need not inspect preview fallbacks.
-        assert result is False
-        assert "legacy_call" not in target.calls and "Name" not in target.calls
-    else:
-        assert result is None
+    if entry == "probe":
+        # The availability probe no longer touches any text/pattern getter.
+        assert result is True and target.calls == []
+        return
+    assert result is None
     if change == "pattern_lookup":
         assert "pattern_call" not in target.calls
     if change in {"pattern_lookup", "pattern_call"}:
@@ -168,7 +167,14 @@ def test_known_nonsensitive_controls_keep_qualified_values_and_explicit_previews
 
 @pytest.mark.parametrize("operation", ["read", "window-form-fields"])
 @pytest.mark.parametrize(
-    "version", [None, "openadapt.native-value-completeness/v1", True]
+    "version",
+    [
+        None,
+        "openadapt.native-value-completeness/v1",
+        "openadapt.native-value-completeness/v2",
+        "openadapt.native-value-completeness/v3",
+        True,
+    ],
 )
 def test_old_client_new_server_refuses_protocol_before_any_provider_access(
     operation, version
@@ -202,7 +208,7 @@ def test_new_client_old_closed_server_refuses_before_any_getter(operation):
     calls = []
 
     def legacy_route(path, payload):
-        assert payload["value_contract"] == PROOF_SCHEMA
+        assert payload["value_contract"] == server.VALUE_READ_CONTRACT
         required = {"locator"} if operation == "read" else {"hwnd", "pid"}
         try:
             server._exact_object(
@@ -252,3 +258,177 @@ def test_semantic_candidate_metadata_cannot_open_a_later_name_getter(
         server._candidate(target, get=server._read_control_value)
     assert type(error.value).__name__ == "ValueUnavailable"
     assert "Value" not in target.calls and "legacy_call" not in target.calls
+
+
+@pytest.mark.parametrize(
+    "fault", ["missing", "lookup", "call", "none", "object", "integer"]
+)
+def test_unknown_value_capability_never_becomes_a_caption_or_mask(monkeypatch, fault):
+    class Target(CountedControl):
+        @property
+        def GetPropertyValueEx(self):
+            if fault == "missing":
+                return None
+            if fault == "lookup":
+                raise RuntimeError("availability lookup failed")
+
+            def query(property_id, ignore_default):
+                assert ignore_default == 1
+                if property_id == 30019:
+                    return self.IsPassword
+                assert property_id == 30043
+                if fault == "call":
+                    raise RuntimeError("availability query failed")
+                return {"none": None, "object": object(), "integer": 0}[fault]
+
+            return query
+
+    target = Target()
+    result = invoke(monkeypatch, target, "form")
+    assert result["window"] is None and result["fields"] == []
+    assert target.calls == []
+
+
+@pytest.mark.parametrize("fault", ["lookup", "call", "readability", "value"])
+def test_known_value_capability_failure_never_downgrades_to_name_mask(
+    monkeypatch, fault
+):
+    class Target(CountedControl):
+        @property
+        def GetValuePattern(self):
+            self.calls.append("pattern_lookup")
+            if fault == "lookup":
+                raise RuntimeError("pattern lookup failed")
+            outer = self
+
+            def factory():
+                outer.calls.append("pattern_call")
+                if fault == "call":
+                    raise RuntimeError("pattern query failed")
+
+                class Pattern:
+                    @property
+                    def IsReadOnly(self):
+                        if fault == "readability":
+                            raise RuntimeError("readability failed")
+                        return False
+
+                    @property
+                    def Value(self):
+                        outer.calls.append("Value")
+                        raise RuntimeError("value failed")
+
+                return Pattern()
+
+            return factory
+
+    target = Target()
+    result = invoke(monkeypatch, target, "form")
+    assert result["window"] is None and result["fields"] == []
+    assert "Name" not in target.calls and "legacy_call" not in target.calls
+
+
+@pytest.mark.parametrize("status", [True, None])
+@pytest.mark.parametrize("stage", ["lookup", "call"])
+def test_availability_metadata_change_obeys_shared_sensitive_guard(
+    monkeypatch, stage, status
+):
+    class Target(CountedControl):
+        @property
+        def GetPropertyValueEx(self):
+            if stage == "lookup":
+                self._status = status
+
+            def query(property_id, ignore_default):
+                assert ignore_default == 1
+                if property_id == 30019:
+                    return self._status
+                assert property_id == 30043
+                self.calls.append("availability_call")
+                self._status = status
+                return False
+
+            return query
+
+    target = Target()
+    assert server._form_exposes_value(target) is None
+    assert target.calls == ([] if stage == "lookup" else ["availability_call"])
+
+
+def test_known_absent_value_pattern_keeps_caption_separate_and_rechecks_after_name(
+    monkeypatch,
+):
+    target = CountedControl()
+    target._value = None
+    result = invoke(monkeypatch, target, "form")
+    assert result["window"] is not None
+    field = result["fields"][0]
+    assert field["kind"] == "text" and field["text"] == "fixture label"
+    assert field["value_proof"] is None and field["value_identity"] is None
+    assert "pattern_lookup" not in target.calls and "Value" not in target.calls
+
+    class ChangingCaption(CountedControl):
+        @property
+        def Name(self):
+            self._value = "new required value"
+            return self._name
+
+        @Name.setter
+        def Name(self, value):
+            self._name = value
+
+    target = ChangingCaption()
+    target._value = None
+    changed = invoke(monkeypatch, target, "form")
+    assert changed["window"] is None and changed["fields"] == []
+
+
+@pytest.mark.parametrize("operation", ["read", "window-form-fields"])
+@pytest.mark.parametrize(
+    "helper_version",
+    [
+        "openadapt.native-value-completeness/v1",
+        "openadapt.native-value-completeness/v2",
+    ],
+)
+def test_new_server_old_helper_refuses_before_provider_access(
+    monkeypatch, operation, helper_version
+):
+    calls = []
+    monkeypatch.setattr(
+        server,
+        "_native_value_api",
+        lambda: SimpleNamespace(PROOF_SCHEMA=helper_version),
+    )
+
+    class NoProvider:
+        def __getattr__(self, name):
+            calls.append(name)
+            raise AssertionError("old helper must refuse before content reads")
+
+    payload = (
+        {"locator": {"automation_id": "field"}}
+        if operation == "read"
+        else {"hwnd": 7, "pid": 10}
+    )
+    payload["value_contract"] = server.VALUE_READ_CONTRACT
+    with pytest.raises(
+        server.AgentRequestError, match="incompatible native value contract"
+    ):
+        if operation == "read":
+            server._perform_uia_initialized(NoProvider(), operation, payload)
+        else:
+            server._window_form_fields_operation(payload, NoProvider(), NoProvider())
+    assert calls == []
+
+
+def test_changing_only_helper_cannot_make_old_server_advertise_new_consumer_policy():
+    # Historical87d negotiated against helper.PROOF_SCHEMA. The new client
+    # sends a server-consumer namespace, deliberately different from ANY
+    # supported helper proof version, so helper-only replacement cannot turn
+    # the old read/probe/preview semantics into the new protocol.
+    assert server.VALUE_READ_CONTRACT.startswith("openadapt.native-value-read/")
+    assert server.VALUE_READ_CONTRACT != PROOF_SCHEMA
+    for version in ("v1", "v2", "v3"):
+        old_server_helper_contract = "openadapt.native-value-completeness/" + version
+        assert server.VALUE_READ_CONTRACT != old_server_helper_contract

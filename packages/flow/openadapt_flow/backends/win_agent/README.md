@@ -71,7 +71,12 @@ a token.** The client refuses plaintext to a non-loopback host by default
 then polls `/health`. This is what the opt-in e2e harness uses.
 
 ### B. At user logon — unattended VM
-1. Copy this folder into the guest, e.g. `C:\oa\win_agent\`.
+1. Copy this entire folder into the guest, e.g. `C:\oa\win_agent\`,
+   including `server.py` and its `native_value.py` sibling. The programmatic
+   single-file deployments name that same helper `win_agent_native_value.py`.
+   The standalone server loads only these exact local sibling files and refuses
+   missing or conflicting copies; it never falls back to an installed package.
+   Client and agent must agree on the server-owned read contract (openadapt.native-value-read/v1) and helper proof v3 before value/preview reads.
 2. Register a logon scheduled task **running as the interactive user** (not
    SYSTEM), highest privileges:
 

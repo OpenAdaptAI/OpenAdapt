@@ -946,16 +946,26 @@ What is not:
 - Values chosen by clicking (not typing), drag and drop, and WebSocket
   traffic are checked only by the write adapter or the read-back, if at all.
 - The instruction detector on approval forms is a heuristic display aid.
-- On Windows, a desktop approval reads the app window's text fields, labels,
-  buttons and grid cells by their UI Automation value or name and paints them
-  out of the OCR read. It trusts that a standard control draws the text UI
-  Automation reports; a control that paints other text under the same
-  rectangle would hide a change there. Custom-drawn text that UI Automation
-  does not expose stays in the OCR read, and any other window of the app
-  sends the whole window back to OCR alone.
-  Values used to mask a control retain the complete text, rather than the
-  preview prefix. Password, empty and state-unreadable controls stay in OCR;
-  unknown subtrees are not treated as fully read controls.
+- On Windows, value-backed approval controls require identity-bound agreement
+  between exact UI Automation values and independent native extent/full reads.
+  Missing, sensitive, incomplete or disagreeing values, unknown subtrees and
+  another visible owned window refuse the advertised native projection; the
+  whole window is not downgraded to OCR. Empty complete values remain covered.
+  Password status and value-pattern availability use raw UIA properties with
+  default values ignored; an unsupported default False is unknown. A named
+  control is a separate caption channel only when its value-pattern
+  absence is known; a failed/unknown value probe cannot hide required data in
+  a caption mask. This does not prove a caption is a record identity.
+  The remaining unmasked pixels are read by OCR. The projection still trusts
+  that standard controls render the qualified text inside their rectangles;
+  custom painting that violates that relationship is not qualified.
+  Structural field values require the same complete-value contract. Name/MSAA
+  and clipped previews do not authorize business-value or absence predicates;
+  unknown markers remain indeterminate. No complete native row-inventory
+  source is qualified. Structural uniqueness is checked at both observation
+  endpoints, with fresh fixed-control identity during reads, not continuously
+  or as authority for a later write. Current complete-value Flow/save and
+  held-out application qualification remain pending.
 - No live model has been run against these fixtures yet; the live-model test
   is off by default because it costs money.
 

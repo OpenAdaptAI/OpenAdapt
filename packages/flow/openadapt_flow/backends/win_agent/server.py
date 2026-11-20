@@ -1363,14 +1363,58 @@ _MAX_READ_ROWS = 200
 _MAX_ROW_DEPTH = 4
 
 
+_STANDALONE_NATIVE_VALUE_API: Any = None
+
+
 def _native_value_api() -> Any:
-    """Use the canonical package helper or its exact standalone sibling."""
+    """Use the package helper or load only the exact local deployment sibling.
+
+    The three programmatic launchers use win_agent_native_value.py; the
+    documented copied-folder/run_agent.bat route keeps native_value.py. Never
+    search installed modules, and refuse conflicting local copies. A process
+    binds the selected source once, as it does its own loaded server source.
+    """
     if __package__:
         from openadapt_flow.backends.win_agent import native_value
-    else:
-        import win_agent_native_value as native_value  # type: ignore[import-not-found,no-redef]
 
-    return native_value
+        return native_value
+    global _STANDALONE_NATIVE_VALUE_API
+    if _STANDALONE_NATIVE_VALUE_API is not None:
+        return _STANDALONE_NATIVE_VALUE_API
+    import importlib.util
+    from pathlib import Path
+
+    directory = Path(__file__).resolve().parent
+    sources = []
+    for name in ("win_agent_native_value.py", "native_value.py"):
+        path = directory / name
+        if path.is_symlink():
+            raise ImportError("native-value helper must be an exact local file")
+        if path.is_file():
+            sources.append((path, path.read_bytes()))
+    if not sources:
+        raise ModuleNotFoundError("exact local native-value helper is missing")
+    if any(raw != sources[0][1] for _, raw in sources[1:]):
+        raise ImportError("conflicting local native-value helpers")
+    path, raw = sources[0]
+    key = (
+        "_win_agent_native_value_"
+        + hashlib.sha256(str(path).encode() + raw).hexdigest()
+    )
+    spec = importlib.util.spec_from_file_location(key, path)
+    if spec is None or spec.loader is None:
+        raise ImportError("exact local native-value helper cannot be loaded")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[key] = module
+    try:
+        # Execute the exact bytes selected above, not a same-name installed
+        # module or a second path read after validating the selected source.
+        exec(compile(raw, str(path), "exec"), module.__dict__)
+    except Exception:
+        sys.modules.pop(key, None)
+        raise
+    _STANDALONE_NATIVE_VALUE_API = module
+    return module
 
 
 def _read_control_value(control: object, name: str, default: Any) -> Any:
@@ -1382,8 +1426,18 @@ def _read_control_value(control: object, name: str, default: Any) -> Any:
     return value
 
 
+# This contract belongs to the SERVER consumer semantics, not to the helper.
+# Updating a helper beside an older server cannot advertise a new read policy.
+VALUE_READ_CONTRACT = "openadapt.native-value-read/v1"
+_EXPECTED_VALUE_PROOF_SCHEMA = "openadapt.native-value-completeness/v3"
+
+
 def _require_value_contract(value: object) -> None:
-    if value != _native_value_api().PROOF_SCHEMA or not isinstance(value, str):
+    if (
+        not isinstance(value, str)
+        or value != VALUE_READ_CONTRACT
+        or _native_value_api().PROOF_SCHEMA != _EXPECTED_VALUE_PROOF_SCHEMA
+    ):
         raise AgentRequestError(
             400, "invalid_schema", "incompatible native value contract"
         )
@@ -2442,24 +2496,28 @@ _MAX_FORM_FIELDS = 512
 _TOGGLE_STATES = {0: "off", 1: "on", 2: "indeterminate"}
 
 
+_UIA_IS_VALUE_PATTERN_AVAILABLE = 30043
+
+
 def _form_exposes_value(control: object) -> Optional[bool]:
-    """Value capability, or unknown; an unknown must not fall back to Name."""
+    """Known value capability, known absence, or unknown; never guess by text.
+
+    UIA's availability property is VT_BOOL. Ignore default values so a missing
+    property yields the reserved unsupported object, not a default False that
+    could authorize Name fallback. Provider failures remain unknown. The probe
+    itself never touches a Value/Legacy/Name getter.
+    """
     guard = _native_value_api().require_non_sensitive_value
     try:
         guard(control)
-        method = _control_value(control, "GetValuePattern", None)
+        method = _control_value(control, "GetPropertyValueEx", None)
         guard(control)
         if not callable(method):
-            return False
-        try:
-            pattern = method()
-            guard(control)
-            value = getattr(pattern, "Value", None)
-        except Exception:  # noqa: BLE001 - unsupported value capability
-            value = None
+            return None
+        available = method(_UIA_IS_VALUE_PATTERN_AVAILABLE, 1)
         guard(control)
-        return isinstance(value, str)
-    except Exception:  # noqa: BLE001 - a sensitive/unknown capability is not absence
+        return available if type(available) is bool else None
+    except Exception:  # noqa: BLE001 - unknown capability is not absence
         return None
 
 
@@ -2692,6 +2750,8 @@ def _window_form_fields(
                             str(_control_value(control, "Name", "") or "").split()
                         )
                         guard(control)
+                        if _form_exposes_value(control) is not False:
+                            return None, False
                     except Exception:  # noqa: BLE001 - no sensitive/unknown fallback
                         return None, False
                     text = name or None

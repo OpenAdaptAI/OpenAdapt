@@ -221,7 +221,24 @@ def test_native_approval_completeness_refuses_a_provider_prefix(tmp_path, monkey
                     )
 
                 observed = server._form_field_value(control, identity)
-                uia_value = control.GetValuePattern().Value
+                api = server._native_value_api()
+                raw_status = control.GetPropertyValueEx(30019, 1)
+                status_measurement = {
+                    "source": "GetPropertyValueEx(30019,1)",
+                    "kind": type(raw_status).__name__,
+                    "value": raw_status if type(raw_status) is bool else None,
+                }
+                uia_value = None
+                if type(raw_status) is bool and raw_status is False:
+                    # This separate provider-prefix measurement is diagnostic
+                    # only and obeys the same shared pre/post getter guard.
+                    api.require_non_sensitive_value(control)
+                    method = control.GetValuePattern
+                    api.require_non_sensitive_value(control)
+                    pattern = method()
+                    api.require_non_sensitive_value(control)
+                    uia_value = pattern.Value
+                    api.require_non_sensitive_value(control)
                 rect = control.BoundingRectangle
                 point = (
                     int((rect.left + rect.right) / 2),
@@ -232,10 +249,15 @@ def test_native_approval_completeness_refuses_a_provider_prefix(tmp_path, monkey
             phase = {
                 "name": name,
                 "managed_before": managed,
-                "uia_utf16_units": len(uia_value.encode("utf-16-le")) // 2,
+                "raw_password_status": status_measurement,
+                "uia_utf16_units": len(uia_value.encode("utf-16-le")) // 2
+                if uia_value is not None
+                else None,
                 "uia_sha256_utf16le": hashlib.sha256(
                     uia_value.encode("utf-16-le")
-                ).hexdigest(),
+                ).hexdigest()
+                if uia_value is not None
+                else None,
                 "direct_complete": observed.complete,
                 "direct_reason": observed.reason,
                 "fields": fields,

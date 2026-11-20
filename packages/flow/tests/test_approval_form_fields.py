@@ -34,6 +34,7 @@ from openadapt_flow.backends.win_agent.native_value import (
     NativeRead,
     valid_value_proof,
 )
+from openadapt_flow.backends.win_agent.server import VALUE_READ_CONTRACT
 from openadapt_flow.backends.windows_backend import WindowsBackend
 
 
@@ -349,7 +350,10 @@ def test_the_windows_backend_reads_the_fields_of_its_one_window():
     backend, sent = _windows_backend({"s1": (7, 10), "save": (99, 10)}, _GOOD)
     answer = backend.approval_form_fields("save")
     assert sent == [
-        ("/window/form-fields", {"hwnd": 7, "pid": 10, "value_contract": PROOF_SCHEMA})
+        (
+            "/window/form-fields",
+            {"hwnd": 7, "pid": 10, "value_contract": VALUE_READ_CONTRACT},
+        )
     ]
     assert answer is not None
     assert answer["bounds"] == (0, 0, 1024, 720)
@@ -477,6 +481,13 @@ class _Control:
     def GetChildren(self):
         return self._children
 
+    def GetPropertyValueEx(self, property_id, ignore_default):
+        assert ignore_default == 1
+        if property_id == 30019:
+            return self.IsPassword
+        assert property_id == 30043
+        return self._value is not None
+
     def GetValuePattern(self):
         if self._value is None:
             raise RuntimeError("no value pattern")
@@ -592,7 +603,7 @@ def _agent(monkeypatch, window, desktop=None):
 
     def perform(operation, payload):
         if operation in {"read", "window-form-fields"}:
-            payload = {"value_contract": PROOF_SCHEMA, **payload}
+            payload = {"value_contract": VALUE_READ_CONTRACT, **payload}
         return agent_server._perform_uia(operation, payload)
 
     return perform

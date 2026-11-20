@@ -111,25 +111,44 @@ def test_actual_launch_paths_preflight_and_copy_exact_sibling(
         )
 
 
-@pytest.mark.parametrize("missing", [False, True])
-def test_standalone_server_requires_exact_local_helper_without_package_fallback(
-    tmp_path, missing
+@pytest.mark.parametrize(
+    "layout", ["renamed", "copied_folder", "both_identical", "conflicting", "missing"]
+)
+def test_standalone_server_requires_exact_local_helper_for_every_documented_layout(
+    tmp_path, layout
 ):
-    shutil.copyfile(server.__file__, tmp_path / "win_agent_server.py")
-    if not missing:
-        shutil.copyfile(
-            Path(server.__file__).with_name("native_value.py"),
-            tmp_path / "win_agent_native_value.py",
+    source = Path(server.__file__).with_name("native_value.py")
+    destination = tmp_path / (
+        "server.py" if layout == "copied_folder" else "win_agent_server.py"
+    )
+    shutil.copyfile(server.__file__, destination)
+    if layout in {"renamed", "both_identical", "conflicting"}:
+        shutil.copyfile(source, tmp_path / "win_agent_native_value.py")
+    if layout in {"copied_folder", "both_identical"}:
+        shutil.copyfile(source, tmp_path / "native_value.py")
+    elif layout == "conflicting":
+        (tmp_path / "native_value.py").write_text(
+            "raise AssertionError('conflicting file must never execute')\n"
         )
-    script = """import sys
-sys.path.insert(0, sys.argv[1])
-import win_agent_server as server
+    script = """import importlib.util,sys,hashlib
+from pathlib import Path
+from types import SimpleNamespace
+# A same-name installed/preloaded module cannot satisfy the local-source rule.
+sys.modules['win_agent_native_value'] = SimpleNamespace(PROOF_SCHEMA='poison')
+sys.modules['native_value'] = SimpleNamespace(PROOF_SCHEMA='poison')
+spec = importlib.util.spec_from_file_location('isolated_agent', sys.argv[1])
+server = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = server
+spec.loader.exec_module(server)
+helper = server._native_value_api()
+assert Path(helper.__file__).resolve().parent == Path(sys.argv[1]).resolve().parent
+assert Path(helper.__spec__.origin).resolve() == Path(helper.__file__).resolve()
+assert hashlib.sha256(Path(helper.__file__).read_bytes()).hexdigest() == sys.argv[2]
+assert helper.PROOF_SCHEMA == 'openadapt.native-value-completeness/v3'
 value = server._form_field_value(None, lambda: 'scope')
 assert not value.complete and value.value is None
-import win_agent_native_value as helper
-from pathlib import Path
-assert Path(helper.__file__).resolve().parent == Path(sys.argv[1]).resolve()
-print('exact standalone helper imported; incomplete observation refused')
+assert server._native_value_api() is helper
+print('exact local helper imported; incomplete observation refused')
 """
     env = {
         key: value
@@ -137,14 +156,27 @@ print('exact standalone helper imported; incomplete observation refused')
         if key not in {"PYTHONPATH", "PYTHONHOME"}
     }
     result = subprocess.run(
-        [sys.executable, "-S", "-c", script, str(tmp_path)],
+        [
+            sys.executable,
+            "-I",
+            "-S",
+            "-c",
+            script,
+            str(destination),
+            hashlib.sha256(source.read_bytes()).hexdigest(),
+        ],
         cwd=tmp_path,
         env=env,
         text=True,
         capture_output=True,
     )
-    if missing:
-        assert result.returncode != 0 and "win_agent_native_value" in result.stderr
+    if layout in {"missing", "conflicting"}:
+        assert result.returncode != 0
+        assert (
+            "exact local native-value helper"
+            if layout == "missing"
+            else "conflicting local native-value helpers"
+        ) in result.stderr
     else:
         assert result.returncode == 0, result.stderr
         assert "incomplete observation refused" in result.stdout

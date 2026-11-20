@@ -47,7 +47,7 @@ import requests
 
 from openadapt_flow.approval_mode.window_fields import valid_form_field
 from openadapt_flow.backend import ActionDeliveryUncertain, StructuralResolutionRefused
-from openadapt_flow.backends.win_agent.native_value import PROOF_SCHEMA
+from openadapt_flow.backends.win_agent.server import VALUE_READ_CONTRACT
 from openadapt_flow.backends.win_agent.value_protocol import (
     locator_scope,
     valid_structural_response,
@@ -1089,7 +1089,7 @@ class WindowsBackend:
             hwnd, pid = found
             typed = self._post_typed_read(
                 "/window/form-fields",
-                {"hwnd": hwnd, "pid": pid, "value_contract": PROOF_SCHEMA},
+                {"hwnd": hwnd, "pid": pid, "value_contract": VALUE_READ_CONTRACT},
             )
             payload = typed.payload
             if payload is None or set(payload) != {"status", "window", "fields"}:
@@ -1559,7 +1559,7 @@ class WindowsBackend:
             "/uia/read",
             {
                 "locator": scope,
-                "value_contract": PROOF_SCHEMA,
+                "value_contract": VALUE_READ_CONTRACT,
                 **({"rows": True} if rows else {}),
             },
         )

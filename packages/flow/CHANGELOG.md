@@ -19,30 +19,23 @@
 
 ### Fixes
 
-- Approval form projections retain complete control values, including edits
-  beyond the preview length. Empty, redacted or state-unreadable controls
-  stay in the OCR read. A failed or depth-limited UI Automation walk does
-  not certify a complete control read, and a container cannot hide its
-  unread descendants ([#2291](https://github.com/OpenAdaptAI/OpenAdapt/pull/2291)).
-
-- A desktop approval no longer halts on a form that did not change
-  ([#2189](https://github.com/OpenAdaptAI/OpenAdapt/issues/2189)). On the
-  hosted Windows governed run, two reads of the same Patient Notes window
-  gave different OCR words (the caret in the search box, the title bar's
-  close button, a selected grid row), so every resumed approval stopped
-  with `form_changed_after_approval`. The win_agent has a new typed read,
-  `window-form-fields` (capability `window_form_fields_v1`): the approval
-  window's frame, its title bar, and every on-screen text field, label,
-  button and list or grid cell whose text UI Automation reads, with toggle
-  and selection state. The approval's form state (kind `window_fields`)
-  reads those controls by value, paints them out of the window crop, and
-  reads the rest of the window by OCR. A changed value still changes the
-  digest through either channel. Cells count only by value, never by a
-  positional name. The agent answers no window when the app shows any other
-  window or the walk is incomplete, and the window is then read by OCR as
-  before; a request and a recheck read through different channels never
-  match. The governed run now resumes to `VERIFIED` with the note on the
-  target row only.
+- Native approval and structural field reads require exact UIA values to agree
+  with independent native extent/full reads under the same control identity.
+  Missing, sensitive, incomplete or disagreeing values refuse the observation;
+  an advertised native approval channel does not fall back to OCR. Empty
+  complete values remain values. A container cannot hide unread descendants
+  ([#2291](https://github.com/OpenAdaptAI/OpenAdapt/pull/2291)).
+- Value reads negotiate a server-owned read contract and require helper proof v3
+  before any preview or value getter. One
+  current sensitivity guard protects values, previews and capability probes.
+  Failed/unknown capability probes cannot become caption masks. Structural
+  previews and unqualified row inventories do not authorize effect checks.
+- Approval form state reads proven values separately from the remaining OCR
+  pixels, so caret/title-bar display noise need not alter an unchanged field's
+  value digest ([#2189](https://github.com/OpenAdaptAI/OpenAdapt/issues/2189)).
+  Current complete-value approval/structural qualification is pending. The
+  native observation fixture excludes a full Flow save; earlier short-note
+  governed evidence does not qualify this new source or unbounded values.
 
 ## v3.3.0 (2026-11-19)
 
