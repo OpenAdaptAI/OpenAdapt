@@ -1925,11 +1925,15 @@ __CHOICE_CAPTURE_JS__
     // A choice is judged on the list this press lands in, before a page that
     // chooses on press (not on click) can remove it.
     const choice = lastControl ? optionEvidence(target) : null;
+    const owner = choice && choiceGestureOwns(choice.el, choiceGesture) ? choiceGesture : null;
+    pointerChoiceLink = choice ? {} : choicePointerLink(target, e.isTrusted);
     choiceDown = choice ? {
-      ...pointerDown, choice: choice, control: lastControl,
+      ...pointerDown, choice: choice, control: owner ? owner.control : lastControl,
+      openingGesture: owner ? owner.token : null,
+      searchInputSession: owner && !owner.ambiguous ? owner.searchSession : null,
       fields: namedFieldValues(), consumed: false,
     } : null;
-    if (!choice) lastControl = target;
+    if (!choice) lastControl = choiceGesture ? choiceGesture.control : target;
     actionSeq += 1;
   });
 
@@ -2063,7 +2067,9 @@ __CHOICE_CAPTURE_JS__
     const section = sectionEvidence(target);
     if (section) pointerEvent.section = section;
     if (choiceOfClick) pointerEvent.choice = choiceOfClick;
+    else if (e.isTrusted) Object.assign(pointerEvent, pointerChoiceLink);
     emitInFrameSpace(pointerEvent);
+    pointerChoiceLink = {};
   });
 
   listen('contextmenu', (e) => {
@@ -2219,6 +2225,8 @@ __CHOICE_NATIVE_JS__
       rect: [Math.round(r.left), Math.round(r.top),
              Math.round(r.width), Math.round(r.height)],
     };
+    const choiceSearch = secret ? null : linkChoiceSearch(el, e.isTrusted);
+    if (choiceSearch) o.choice_gesture = choiceSearch.gesture;
     if (!secret && rawField !== null && field === null) {
       o.identity_withheld = identityWithheldReason;
     }
@@ -4092,6 +4100,9 @@ class InteractiveRecorder:
                 "value": str(raw.get("value") or ""),
                 "field": raw.get("field"),
                 "readback": "select",
+                "opening_gesture": raw.get("opening_gesture")
+                if isinstance(raw.get("opening_gesture"), str)
+                else None,
             }
             kind = "click"
         if kind == "input":
@@ -4199,6 +4210,7 @@ class InteractiveRecorder:
             not self._same_deferred_document(self._pending_type, ev)
             or self._pending_type.get("field") != field
             or self._pending_type.get("input_session") != input_session
+            or self._pending_type.get("choice_gesture") != ev.get("choice_gesture")
         ):
             self._flush_type()  # a distinct input run or document
         if self._pending_type is None:
@@ -4206,6 +4218,7 @@ class InteractiveRecorder:
                 "_oaflow_producer_doc": ev.get("_oaflow_producer_doc"),
                 "field": field,
                 "input_session": input_session,
+                "choice_gesture": ev.get("choice_gesture"),
                 "label": ev.get("label"),
                 "secret": bool(ev.get("secret")),
                 "value": "",
@@ -4246,6 +4259,10 @@ class InteractiveRecorder:
         # parameter-proposal pass names a proposed parameter from it, gated
         # behind operator confirmation (compiler.annotate.FieldLabelAnnotator).
         label_evidence: dict[str, Any] = {}
+        if isinstance(pt.get("input_session"), str):
+            label_evidence["input_session"] = pt["input_session"]
+        if isinstance(pt.get("choice_gesture"), str):
+            label_evidence["choice_gesture"] = pt["choice_gesture"]
         if pt.get("label"):
             label_evidence["field_label"] = pt["label"]
         if pt["secret"]:
@@ -4341,6 +4358,11 @@ class InteractiveRecorder:
             "x": int(ev["x"]),
             "y": int(ev["y"]),
         }
+        if kind == "click":
+            for key in ("choice_gesture", "choice_search_gesture", "input_session"):
+                value = ev.get(key)
+                if isinstance(value, str) and len(value) <= 256:
+                    event[key] = value
         if kind == "drag":
             event.update(end_x=int(ev["end_x"]), end_y=int(ev["end_y"]))
             if ev.get("end_structural"):

@@ -73,6 +73,7 @@ def test_a_choice_compiles_to_one_parameterized_step_and_answers_the_confirm(
     assert workflow.params["department"] == "Cardiology"
     assert workflow.steps[-1].dialog is not None
     assert workflow.steps[-1].dialog.response == "accept"
+    assert workflow.steps[-1].dialog.kind == "confirm"
 
     ok, detail, records = _run(
         server,
@@ -82,6 +83,13 @@ def test_a_choice_compiles_to_one_parameterized_step_and_answers_the_confirm(
         "order=rev&delay=600",
         tmp_path_factory.mktemp("run"),
     )
+    if kind == "div_dropdown":
+        # The plain div exposes no label-to-code map for an unseen label.
+        # The recorded code is valid only for the demonstrated label.
+        assert not ok
+        assert "choice_commit_unknown" in detail
+        assert records == []
+        return
     assert ok, detail
     assert [(r["patient_name"], r["department"]) for r in records] == [
         (f"Held out {kind}", "ORTH")
@@ -156,7 +164,9 @@ def test_the_persons_own_dialog_answer_is_recorded(
         json.loads(line) for line in (rec / "events.jsonl").read_text().splitlines()
     ]
     dialogs = [e["dialog"] for e in events if e.get("dialog")]
-    assert dialogs == [{"response": "dismiss", "message": "Register this patient?"}]
+    assert dialogs == [
+        {"response": "dismiss", "message": "Register this patient?", "type": "confirm"}
+    ]
     assert json.loads((rec / "meta.json").read_text())["dialogs_captured"] is True
     assert server.app.records[before:] == []
 
@@ -198,7 +208,7 @@ def test_choice_and_dialog_metadata_never_persists_declared_secrets(
         record_interactive,
     )
 
-    secret = "synthetic-private-sentinel-539d8c"
+    secret = "-".join(("synthetic", "private", "sentinel", "539d8c"))
 
     def drive(page: Any, pump: Any) -> None:
         page.wait_for_selector("#patient_name")
@@ -267,3 +277,92 @@ def test_choice_and_dialog_metadata_never_persists_declared_secrets(
     for artifact in (tmp_path / "rec").rglob("*"):
         if artifact.suffix in (".json", ".jsonl"):
             assert secret not in artifact.read_text()
+
+
+def test_a_foreign_document_dialog_does_not_borrow_the_pending_click(
+    server: Server, tmp_path: Path
+) -> None:
+    from openadapt_flow.interactive_recorder import (
+        BrowserAttachError,
+        record_interactive,
+    )
+
+    def drive(page: Any, pump: Any) -> None:
+        page.context.on("dialog", lambda dialog: dialog.accept())
+        page.evaluate("""() => {
+          const frame = document.createElement('iframe'); frame.id = 'foreign';
+          frame.srcdoc = '<p>Another document</p>'; document.body.appendChild(frame);
+          const button = document.createElement('button'); button.id = 'cross-dialog';
+          button.textContent = 'Ask another document';
+          button.onclick = () => frame.contentWindow.confirm('Synthetic confirmation');
+          document.body.appendChild(button);
+        }""")
+        page.frame_locator("#foreign").locator("p").wait_for()
+        for _ in range(15):
+            pump()
+        page.locator("#cross-dialog").click()
+        for _ in range(30):
+            pump()
+
+    with pytest.raises(BrowserAttachError, match="document"):
+        record_interactive(
+            server.base + "/w/native", tmp_path / "rec", headless=True, script=drive
+        )
+
+
+@pytest.mark.parametrize("search_target", ["owned_popup", "unrelated_field"])
+def test_search_folding_links_come_from_the_actual_input_owner(
+    server: Server, tmp_path: Path, search_target: str
+) -> None:
+    import json
+
+    from openadapt_flow.interactive_recorder import record_interactive
+
+    def drive(page: Any, pump: Any) -> None:
+        page.locator(".select2-selection").click()
+        for _ in range(10):
+            pump()
+        if search_target == "owned_popup":
+            # An extra click in the popup search is part of the same gesture.
+            page.locator(".select2-search__field").click()
+        else:
+            # Keep the popup open while typing a matching substring elsewhere.
+            # Temporal proximity and text overlap cannot establish ownership.
+            page.locator("#patient_name").focus()
+        for _ in range(10):
+            pump()
+        page.keyboard.type("Card")
+        for _ in range(10):
+            pump()
+        page.locator(".select2-results__option", has_text="Cardiology").click()
+        for _ in range(20):
+            pump()
+
+    rec = record_interactive(
+        server.base + "/w/select2", tmp_path / "rec", headless=True, script=drive
+    )
+    events = [
+        json.loads(line) for line in (rec / "events.jsonl").read_text().splitlines()
+    ]
+    opener = next(event for event in events if event.get("choice_gesture"))
+    typed = next(event for event in events if event.get("kind") == "type")
+    choice = next(event["choice"] for event in events if event.get("choice"))
+    if search_target == "owned_popup":
+        search_click = next(
+            event for event in events if event.get("choice_search_gesture")
+        )
+        assert search_click["choice_search_gesture"] == opener["choice_gesture"]
+        assert (
+            typed["choice_gesture"]
+            == opener["choice_gesture"]
+            == choice["opening_gesture"]
+        )
+        assert (
+            typed["input_session"]
+            == search_click["input_session"]
+            == choice["search_input_session"]
+        )
+    else:
+        assert "choice_gesture" not in typed
+        assert choice["search_input_session"] is None
+        assert not any(event.get("choice_search_gesture") for event in events)

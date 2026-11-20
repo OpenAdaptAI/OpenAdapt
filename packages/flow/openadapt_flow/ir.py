@@ -2101,8 +2101,9 @@ class DialogResponse(BaseModel):
     A browser ``alert``/``confirm``/``prompt``/``beforeunload`` dialog is not a
     surface: it is a screen state of the page that raised it, and it blocks
     that page until it is answered. On the browser backend the step's action
-    arms a one-shot answer before delivering input; the dialog's message is
-    its identity. A dialog that does not show exactly ``message`` is
+    arms a one-shot answer before delivering input; its recorded kind and
+    message identify the dialog. Legacy contracts without a kind retain their
+    message-only behavior. A dialog that does not show exactly ``message`` is
     dismissed, never accepted, and the step halts. On a screen-driven backend
     (desktop, RDP, Citrix) a dialog is just pixels and is recorded as the
     clicks that answer it, so this field is browser-only
@@ -2117,8 +2118,16 @@ class DialogResponse(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     response: Literal["accept", "dismiss"]
+    kind: Optional[Literal["alert", "confirm", "prompt", "beforeunload"]] = None
     message: Optional[str] = Field(default=None, min_length=1, max_length=2000)
     message_pattern: Optional[str] = Field(default=None, min_length=1, max_length=4000)
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        if self.kind is None:
+            data.pop("kind", None)
+        return data
 
     @model_validator(mode="after")
     def _one_identity(self) -> "DialogResponse":
@@ -2265,6 +2274,9 @@ class OptionChoice(BaseModel):
     query_words: Optional[tuple[int, int]] = None
     option: Optional[ChoiceOptionShape] = None
     readback: Literal["select", "control_text", "control_value"]
+    #: Independent named form field whose committed value the choice changes.
+    #: Query text alone cannot establish that a listed option was selected.
+    commit_field: Optional[str] = Field(default=None, min_length=1, max_length=512)
     #: The exact text the control showed after the demonstrated choice when
     #: it is not the label (a calendar day writes a date into its field).
     #: Such a choice is literal: replay requires this text afterwards.

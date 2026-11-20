@@ -2590,9 +2590,10 @@ class PlaywrightBackend:
         # steps keeps Playwright's default (dismiss) exactly as before.
         self._dialog_listening = False
         self._dialog_armed: Optional[
-            tuple[str, Optional[str], Optional[re.Pattern[str]]]
+            tuple[str, Optional[str], Optional[re.Pattern[str]], Optional[str], int]
         ] = None
         self._dialogs_seen: list[dict[str, Any]] = []
+        self._dialog_document_generation = 0
         self._choice: Any = None
         self._screenshot_scale = screenshot_scale
         self._screenshot_mask_selectors = screenshot_mask_selectors
@@ -5852,6 +5853,7 @@ class PlaywrightBackend:
         response: str,
         message: Optional[str],
         message_pattern: Optional[str] = None,
+        kind: Optional[str] = None,
     ) -> None:
         """Answer the next dialog with ``response`` if it shows ``message``.
 
@@ -5865,15 +5867,21 @@ class PlaywrightBackend:
 
         if response not in ("accept", "dismiss"):
             raise ValueError("a dialog response is 'accept' or 'dismiss'")
-        if not self._dialog_listening:
-            self.page.on("dialog", self._on_dialog)
-            self._dialog_listening = True
+        if kind not in (None, "alert", "confirm", "prompt", "beforeunload"):
+            raise ValueError("unsupported dialog kind")
+        self.watch_dialogs()
         pattern = (
             re.compile(message_pattern, re.DOTALL)
             if message_pattern is not None
             else None
         )
-        self._dialog_armed = (response, message, pattern)
+        self._dialog_armed = (
+            response,
+            message,
+            pattern,
+            kind,
+            self._dialog_document_generation,
+        )
         self._dialogs_seen = []
 
     def watch_dialogs(self) -> None:
@@ -5887,7 +5895,26 @@ class PlaywrightBackend:
 
         if not self._dialog_listening:
             self.page.on("dialog", self._on_dialog)
+            for event in ("frameattached", "framedetached", "framenavigated"):
+                self.page.on(event, self._dialog_document_changed)
             self._dialog_listening = True
+
+    def _dialog_document_changed(self, _frame: Any) -> None:
+        self._dialog_document_generation += 1
+
+    def dialog_scope_error(self) -> Optional[str]:
+        """Native Dialog events expose a page, not their producer document.
+
+        A recorded kind is a new scoped contract. One unchanged document is
+        the conservative observable scope; iframe trees cannot be attributed.
+        """
+        try:
+            frames = self.page.frames
+            if len(frames) == 1 and frames[0] == self.page.main_frame:
+                return None
+        except Exception:
+            pass
+        return "browser dialog producer document is ambiguous"
 
     def take_unexpected_dialogs(self) -> list[dict[str, Any]]:
         """The dialogs shown while no step had armed an answer, then clear."""
@@ -5948,11 +5975,23 @@ class PlaywrightBackend:
         armed, self._dialog_armed = self._dialog_armed, None
         matched = False
         if armed is not None:
-            _response, expected, pattern = armed
+            _response, expected, pattern, expected_kind, generation = armed
             if pattern is not None:
                 matched = pattern.fullmatch(message) is not None
             else:
                 matched = expected is None or expected == message
+            matched = matched and (expected_kind is None or expected_kind == kind)
+            if expected_kind is not None:
+                try:
+                    same_page = dialog.page == self.page
+                except Exception:
+                    same_page = False
+                matched = (
+                    matched
+                    and same_page
+                    and generation == self._dialog_document_generation
+                    and self.dialog_scope_error() is None
+                )
         response = armed[0] if armed is not None and matched else "dismiss"
         self._dialogs_seen.append(
             {

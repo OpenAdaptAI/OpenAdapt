@@ -77,9 +77,13 @@ const optionValue = (el) => {
   const v = el.getAttribute('data-value') ?? el.getAttribute('value');
   return v === null ? null : String(v);
 };
-const optionDisabled = (el) => !!el.closest('[aria-disabled=true]')
-  || el.matches(':disabled')
-  || Array.from(el.classList).some((c) => /disabled/i.test(c));
+const optionDisabled = (el) => {
+  if (el.matches(':disabled') || el.closest('[aria-disabled=true],[inert],fieldset[disabled]')) return true;
+  for (let node = el; node; node = node.parentElement) {
+    if (Array.from(node.classList).some((c) => /disabled/i.test(c))) return true;
+  }
+  return false;
+};
 const shownText = (root, shape) => {
   // The text a person sees in ``root``: visible text nodes only, and never
   // the text of an option list that sits inside the control.
@@ -120,7 +124,7 @@ _NATIVE_CENSUS_JS = (
   const sel = el && el.closest ? el.closest('select') : null;
   if (!sel || sel.multiple) return null;
   return {
-    disabled: sel.matches(':disabled'),
+    disabled: sel.matches(':disabled') || !!sel.closest('[inert],[aria-disabled=true]'),
     value: sel.value,
     options: Array.from(sel.options).map((o) => ({
       value: o.value, label: norm(o.label || o.text),
@@ -136,7 +140,7 @@ _NATIVE_READ_JS = (
     + _HELPERS
     + r"""
   const sel = el && el.closest ? el.closest('select') : null;
-  if (!sel) return null;
+  if (!sel || !sel.isConnected) return null;
   const o = sel.selectedOptions[0];
   return {value: sel.value, label: o ? norm(o.label || o.text) : ''};
 }"""
@@ -219,6 +223,39 @@ _READBACK_JS = (
 _READBACK_CALL_JS = "(el, args) => (" + _READBACK_JS + ")([el, ...args])"
 
 
+_COMMIT_FIELD_JS = r"""(el, field) => {
+  const scope = el.closest('form') || document;
+  const matches = Array.from(scope.querySelectorAll('input,select,textarea')).filter(
+    node => node.name === field || (!node.name && node.id === field));
+  return matches.length === 1 ? matches[0] : null;
+}"""
+
+_FIELD_STATE_JS = (
+    "el => {"
+    + _HELPERS
+    + r"""
+  if (!el || !el.isConnected) return null;
+  const selected = el.tagName === 'SELECT' ? el.selectedOptions[0] : null;
+  return {value: String(el.value || ''),
+    selectedLabel: selected ? norm(selected.label || selected.text) : null,
+    multiple: el.multiple === true,
+    disabled: el.matches(':disabled'),
+    options: el.tagName === 'SELECT' ? Array.from(el.options).map(o => ({
+      label: norm(o.label || o.text), value: o.value,
+      disabled: o.disabled || !!o.closest('optgroup[disabled]')
+    })) : null};
+}"""
+)
+
+_FIELD_IS_QUERY_JS = r"""el => {
+  let active = document.activeElement;
+  while (active && active.shadowRoot && active.shadowRoot.activeElement) {
+    active = active.shadowRoot.activeElement;
+  }
+  return active === el;
+}"""
+
+
 @dataclass
 class _ChoiceProof:
     scope: Any
@@ -227,6 +264,7 @@ class _ChoiceProof:
     contract: OptionChoice
     label: str
     value: Optional[str]
+    field_handle: Any = None
 
 
 class BrowserChoice:
@@ -365,7 +403,8 @@ class BrowserChoice:
                 + r"""
                   const [label, value, want, wanted] = args;
                   const sel = el.closest('select');
-                  if (!sel || sel.multiple || sel.matches(':disabled')) return false;
+                  if (!sel || sel.multiple || sel.matches(':disabled')
+                      || sel.closest('[inert],[aria-disabled=true]')) return false;
                   const matches = Array.from(sel.options).filter(o => o.value !== ''
                     && (norm(o.label || o.text) === want || o.value === wanted));
                   if (matches.length !== 1) return false;
@@ -396,6 +435,24 @@ class BrowserChoice:
         located: Any,
     ) -> dict[str, Any]:
         assert contract.option is not None
+        if not contract.commit_field:
+            raise ChoiceRefused(
+                "choice_commit_unknown", "no independent form field was recorded"
+            )
+        field = handle.evaluate_handle(
+            _COMMIT_FIELD_JS, contract.commit_field
+        ).as_element()
+        if field is None:
+            raise ChoiceRefused(
+                "choice_commit_unknown", "the committed field is missing or ambiguous"
+            )
+        initial_field = field.evaluate(_FIELD_STATE_JS)
+        if not isinstance(initial_field, dict) or initial_field["multiple"]:
+            raise ChoiceRefused(
+                "choice_commit_unknown", "a single committed field is required"
+            )
+        if initial_field["disabled"]:
+            raise ChoiceRefused("choice_disabled", "the committed field is disabled")
         shape = contract.option.model_dump(mode="json")
         shape["classes"] = list(shape["classes"])
         mark = "data-oaflow-choice-" + uuid.uuid4().hex[:12]
@@ -418,6 +475,12 @@ class BrowserChoice:
                     raise ChoiceRefused(
                         "choice_search_missing", "no search box took focus"
                     )
+                if field.evaluate(_FIELD_IS_QUERY_JS):
+                    self._close()
+                    raise ChoiceRefused(
+                        "choice_commit_unknown",
+                        "query text is not an independent commit",
+                    )
                 self._page.keyboard.type(search_text(contract, wanted))
             try:
                 matches = self._settled_matches(
@@ -436,6 +499,19 @@ class BrowserChoice:
                     "choice_changed", "the option changed after the list settled"
                 )
             chosen = matches[0]
+            before = field.evaluate(_FIELD_STATE_JS)
+            if not isinstance(before, dict):
+                self._close()
+                raise ChoiceRefused(
+                    "choice_commit_unknown", "the committed field left the page"
+                )
+            try:
+                expected_value = self._expected_commit_value(
+                    contract, wanted, chosen, before
+                )
+            except ChoiceRefused:
+                self._close()
+                raise
             try:
                 option.click(timeout=5000)
             except Exception as exc:
@@ -456,7 +532,8 @@ class BrowserChoice:
             (located.x, located.y),
             contract,
             chosen["label"],
-            chosen["value"],
+            expected_value,
+            field_handle=field,
         )
         deadline = time.monotonic() + _READBACK_S
         while True:
@@ -468,6 +545,42 @@ class BrowserChoice:
             time.sleep(_POLL_S)
         self._proof = proof
         return {"label": chosen["label"], "value": chosen["value"]}
+
+    @staticmethod
+    def _expected_commit_value(
+        contract: OptionChoice,
+        wanted: str,
+        chosen: dict[str, Any],
+        before: dict[str, Any],
+    ) -> str:
+        """Resolve an exact expected value before the option's input edge."""
+
+        if before["multiple"] or before["disabled"]:
+            raise ChoiceRefused(
+                "choice_commit_unknown", "a single enabled field is required"
+            )
+        if contract.shows is not None:
+            return contract.shows
+        if chosen["value"] is not None:
+            return str(chosen["value"])
+        options = before.get("options")
+        if isinstance(options, list):
+            matches = [
+                option
+                for option in options
+                if option["label"] == chosen["label"]
+                and (chosen["value"] is None or option["value"] == chosen["value"])
+            ]
+            BrowserChoice._decide(matches)
+            return str(matches[0]["value"])
+        if (
+            choice_text(wanted) == choice_text(contract.label)
+            and contract.value is not None
+        ):
+            return contract.value
+        raise ChoiceRefused(
+            "choice_commit_unknown", "no exact value mapping is visible for this label"
+        )
 
     def _settled_matches(
         self,
@@ -524,18 +637,21 @@ class BrowserChoice:
         observed = handle.evaluate(
             _READBACK_CALL_JS, [proof.contract.readback, expected, shape]
         )
-        if isinstance(observed, dict) and observed.get("gone"):
-            # The control re-rendered: read the element now at the same point.
-            fresh = scope.evaluate_handle(
-                "([x, y]) => document.elementFromPoint(x, y)", list(proof.point)
-            ).as_element()
-            if fresh is None:
-                return {"ok": False}
-            proof.handle = fresh
-            observed = fresh.evaluate(
-                _READBACK_CALL_JS, [proof.contract.readback, expected, shape]
-            )
-        return observed if isinstance(observed, dict) else {"ok": False}
+        if not isinstance(observed, dict) or not observed.get("ok"):
+            return {"ok": False}
+        # Never reacquire a replaced control by its old point: that is a
+        # different observation and may belong to another form or record.
+        if proof.field_handle is None:
+            return {"ok": False}
+        committed = proof.field_handle.evaluate(_FIELD_STATE_JS)
+        if not isinstance(committed, dict):
+            return {"ok": False}
+        if committed["multiple"] or committed["value"] != proof.value:
+            return {"ok": False}
+        return {
+            "ok": committed["selectedLabel"] is None
+            or committed["selectedLabel"] == proof.label
+        }
 
     def _close(self) -> None:
         try:

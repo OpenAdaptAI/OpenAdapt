@@ -19,6 +19,9 @@ CHOICE_CAPTURE_JS = r"""
   // must then show the option's label (checked from Python once the screen
   // settles, through choiceCommit).
   let actionSeq = 0;
+  let choiceGesture = null;
+  let choiceGestureSerial = 0;
+  let pointerChoiceLink = {};
   const shownAt = new WeakMap();
   const builtClasses = new WeakMap();
   const choiceObserver = new MutationObserver((records) => {
@@ -72,6 +75,71 @@ CHOICE_CAPTURE_JS = r"""
       const position = getComputedStyle(node).position;
       return position === 'absolute' || position === 'fixed';
     } catch (e) { return false; }
+  }
+  function choiceVisible(el) {
+    if (!el || !el.isConnected) return false;
+    const style = getComputedStyle(el), r = el.getBoundingClientRect();
+    return style.display !== 'none' && style.visibility !== 'hidden'
+      && Number(style.opacity) !== 0 && r.width > 0 && r.height > 0
+      && r.right > 0 && r.bottom > 0 && r.left < innerWidth && r.top < innerHeight;
+  }
+  function popupSnapshot() {
+    const nodes = document.querySelectorAll('*'), state = new WeakMap();
+    // An incomplete census proves no newly shown unlabelled popup.
+    if (nodes.length > 10000) return {state: state, complete: false};
+    for (const node of nodes) if (popupLike(node)) state.set(node, choiceVisible(node));
+    return {state: state, complete: true};
+  }
+  function gestureMutation(node, gesture, requireAdded) {
+    for (let cur = node; cur && cur !== document.documentElement; cur = cur.parentElement) {
+      const mark = shownAt.get(cur);
+      if (mark && mark.seq >= gesture.seq && (!requireAdded || mark.added)) return true;
+    }
+    return false;
+  }
+  function choiceGestureOwns(node, gesture) {
+    if (!node || !gesture || !gesture.control.isConnected) return false;
+    // Explicit accessibility ownership is stronger than temporal proximity.
+    for (let control = gesture.control, depth = 0; control && depth < 4;
+         control = control.parentElement, depth++) {
+      if (control.matches('[role=combobox],[role=listbox]') && control.contains(node)) return true;
+      for (const attr of ['aria-controls', 'aria-owns']) {
+        const ids = String(control.getAttribute(attr) || '').split(/\s+/).filter(Boolean);
+        if (ids.some(id => { const owned = document.getElementById(id); return owned && owned.contains(node); })) return true;
+      }
+    }
+    if (!gesture.snapshot.complete) return false;
+    for (let popup = node; popup && popup !== document.body; popup = popup.parentElement) {
+      if (!popupLike(popup) || !choiceVisible(popup)) continue;
+      const before = gesture.snapshot.state.get(popup);
+      if (before === undefined && gestureMutation(popup, gesture, true)) return true;
+      if (before === false && gestureMutation(popup, gesture, false)) return true;
+    }
+    return false;
+  }
+  function choiceSearchFor(el, gesture) {
+    return !!el && isTextEntry(el) && !secretStates.has(el)
+      && !!gesture && (el === gesture.control || choiceGestureOwns(el, gesture));
+  }
+  function linkChoiceSearch(el, trusted) {
+    const gesture = choiceGesture;
+    if (!trusted || !choiceSearchFor(el, gesture)) return null;
+    const session = inputSessionFor(el);
+    if (gesture.searchSession && gesture.searchSession !== session) gesture.ambiguous = true;
+    gesture.searchSession = session;
+    return gesture.ambiguous ? null : {gesture: gesture.token, session: session};
+  }
+  function choicePointerLink(target, trusted) {
+    if (!trusted) { choiceGesture = null; return {}; }
+    const input = target && target.closest ? target.closest('input,textarea,[contenteditable]') : null;
+    const search = linkChoiceSearch(input, trusted);
+    if (search) return {choice_search_gesture: search.gesture, input_session: search.session};
+    choiceGesture = {
+      token: DOC_ID + ':choice-gesture:' + String(++choiceGestureSerial),
+      control: target, seq: actionSeq + 1, snapshot: popupSnapshot(),
+      searchSession: null, ambiguous: false,
+    };
+    return {choice_gesture: choiceGesture.token};
   }
   function appearedThisAction(el) {
     // Inserted since the previous press, or a floating container (a popup)
@@ -134,7 +202,7 @@ CHOICE_CAPTURE_JS = r"""
           }
         }
       }
-      if (!el || !shape || !appearedThisAction(el)) return null;
+      if (!el || !shape || !(appearedThisAction(el) || choiceGestureOwns(el, choiceGesture))) return null;
       const label = choiceNorm(el.innerText || el.textContent);
       if (!label || label.length > 512) return null;
       const rawValue = el.getAttribute('data-value') ?? el.getAttribute('value');
@@ -219,9 +287,11 @@ CHOICE_CAPTURE_JS = r"""
     // A form field by its name wins over an unnamed control keyed by id
     // (a search box beside the field that also changed).
     const named = changedAll.filter((key) => key.startsWith('name:'));
-    const changed = (named.length ? named : changedAll).map((key) => key.slice(key.indexOf(':') + 1));
+    const changed = named.length ? named : changedAll;
+    const fieldKey = changed.length === 1 ? changed[0] : null;
     const committed = {readback: readback, shows: shown,
-                       field: changed.length === 1 ? changed[0] : null};
+                       field: fieldKey ? fieldKey.slice(fieldKey.indexOf(':') + 1) : null,
+                       field_value: fieldKey ? after[fieldKey] : null};
     return choiceTextIsSafe(committed) ? committed : null;
   }
   function choicePointerEvent(down) {
@@ -244,9 +314,13 @@ CHOICE_CAPTURE_JS = r"""
       choice: {
         token: token, shape: down.choice.shape, label: down.choice.label,
         value: down.choice.value, disabled: down.choice.disabled,
+        opening_gesture: down.openingGesture || null,
+        search_input_session: down.searchInputSession || null,
       },
     };
     if (down.sid_withheld) out.sid_withheld = down.sid_withheld;
+    choiceGesture = null;
+    lastControl = null;
     return out;
   }
   let choiceSerial = 0;
@@ -319,8 +393,13 @@ NATIVE_CHOICE_JS = r"""
         choice: {
           label: label, value: value.slice(0, 512),
           field: field,
+          opening_gesture: choiceGesture && (choiceGesture.control === el
+            || (choiceGesture.control.closest && choiceGesture.control.closest('select') === el))
+            ? choiceGesture.token : null,
         },
       };
+      choiceGesture = null;
+      lastControl = null;
       if (rowIdentity.withheld) out.sid_withheld = rowIdentity.withheld;
       emitInFrameSpace(out);
     } catch (e) {
@@ -345,6 +424,13 @@ def attach_dialog(recorder: Any, ev: dict[str, Any]) -> None:
         recorder.done = True
         return
     pending = recorder._pending_click
+    if pending is not None and not recorder._same_deferred_document(pending, ev):
+        recorder._listener_error = BrowserAttachError(
+            "a browser dialog came from another document than its pending click; "
+            "recording stopped because ownership cannot be proven"
+        )
+        recorder.done = True
+        return
     if pending is None or response not in ("accept", "dismiss") or "dialog" in pending:
         recorder._listener_error = BrowserAttachError(
             "a browser dialog opened without exactly one click that raised "
@@ -355,6 +441,7 @@ def attach_dialog(recorder: Any, ev: dict[str, Any]) -> None:
     pending["dialog"] = {
         "response": response,
         "message": str(ev.get("message") or "")[:2000],
+        "type": ev.get("type"),
     }
 
 
@@ -409,4 +496,13 @@ def commit_choice(recorder: Any, ev: dict[str, Any]) -> None:
         "readback": commit["readback"],
         "shows": commit.get("shows") if isinstance(commit.get("shows"), str) else None,
         "field": commit.get("field") if isinstance(commit.get("field"), str) else None,
+        "field_value": commit.get("field_value")
+        if isinstance(commit.get("field_value"), str)
+        else None,
+        "opening_gesture": raw.get("opening_gesture")
+        if isinstance(raw.get("opening_gesture"), str)
+        else None,
+        "search_input_session": raw.get("search_input_session")
+        if isinstance(raw.get("search_input_session"), str)
+        else None,
     }

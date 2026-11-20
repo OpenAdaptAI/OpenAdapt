@@ -176,7 +176,10 @@ def test_a_native_select_change_is_recorded_as_a_choice(
     events = [
         json.loads(line) for line in (rec / "events.jsonl").read_text().splitlines()
     ]
-    choices = [e["choice"] for e in events if e.get("choice")]
+    choices = [dict(e["choice"]) for e in events if e.get("choice")]
+    opener = next(e for e in events if e.get("choice_gesture"))
+    assert len(choices) == 1
+    assert choices[0].pop("opening_gesture") == opener["choice_gesture"]
     assert choices == [
         {
             "kind": "native_select",

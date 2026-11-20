@@ -27,7 +27,11 @@
   same-shaped siblings that appeared after the previous press), never from a
   widget library. Replay opens the control, types the wanted value when the
   person searched, waits for the options to settle, clicks the one enabled
-  option whose label or value matches, and reads the control back. A
+  option whose label or value matches, and reads the control back against an
+  independent named field and an
+  exact expected committed value. A new label with no observable code mapping
+  stops before selection. Search folding requires causal opener/input-session
+  evidence and preserves the opening control's identity guards. A
   missing, duplicate or disabled option, or a control that does not show the
   choice, halts before the next step (`choice_missing`, `choice_ambiguous`,
   `choice_disabled`, `choice_changed`, `choice_unverified`). The option is
@@ -42,7 +46,9 @@
   silently missing from the recording.
 - Browser `alert`/`confirm` answers are recorded in interactive and attached
   recording, from the value the page received, and attached to the click
-  that raised them, including a dialog the next page raises after a save.
+  that raised them in the same producer document. The compiled answer also
+  requires the recorded dialog kind; a matching message on a different kind
+  is dismissed. A dialog from a different document stops recording.
   A headed recording leaves the dialog for the person instead of letting
   Playwright dismiss it. A program recorded this way stops on a dialog no
   step expects (`dialog_unexpected`), including a before-unload warning

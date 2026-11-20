@@ -106,7 +106,13 @@ def _choose(
     from openadapt_flow.backends.playwright_backend import PlaywrightBackend
 
     selector, fields = WIDGETS[kind]
-    contract = OptionChoice(label="Cardiology", settle_s=4.0, **fields)
+    contract = OptionChoice(
+        label="Cardiology",
+        value="CARD",
+        settle_s=4.0,
+        commit_field="department",
+        **fields,
+    )
     page = browser.new_page(viewport={"width": 1280, "height": 800})
     try:
         page.goto(f"{server.base}/w/{kind}" + (f"?{query}" if query else ""))
@@ -139,6 +145,14 @@ def test_chooses_a_held_out_option_by_its_label(
     server: Server, browser: Any, kind: str
 ) -> None:
     outcome, value, confirmed = _choose(server, browser, kind, "Orthopaedics")
+    if kind in {"aria_listbox", "div_dropdown", "async_combobox"}:
+        # No label-to-code mapping is exposed by these plain ARIA lists.
+        # A held-out label must refuse before selection, not guess its code.
+        assert isinstance(outcome, ChoiceRefused), outcome
+        assert outcome.code == "choice_commit_unknown"
+        assert value == ""
+        assert not confirmed
+        return
     assert isinstance(outcome, dict), outcome
     assert outcome["label"] == "orthopaedics"
     assert value == "ORTH"
@@ -194,7 +208,17 @@ def test_refuses_instead_of_guessing(
 
 
 @pytest.mark.parametrize("kind", ["aria_listbox", "div_dropdown", "chosen"])
-@pytest.mark.parametrize("fault", ["reorder", "duplicate", "disabled", "removed"])
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "reorder",
+        "duplicate",
+        "disabled",
+        "removed",
+        "ancestor_disabled",
+        "fieldset_disabled",
+    ],
+)
 def test_rechecks_the_semantic_option_after_the_list_settles(
     server: Server,
     browser: Any,
@@ -221,6 +245,11 @@ def test_rechecks_the_semantic_option_after_the_list_settles(
                 target.parentElement.appendChild(target.cloneNode(true));
               } else if (fault === 'disabled') {
                 target.setAttribute('aria-disabled', 'true');
+              } else if (fault === 'ancestor_disabled') {
+                target.parentElement.classList.add('disabled');
+              } else if (fault === 'fieldset_disabled') {
+                const group = document.createElement('fieldset'); group.disabled = true;
+                target.parentElement.appendChild(group); group.appendChild(target);
               } else {
                 target.remove();
               }
@@ -471,7 +500,12 @@ def test_a_changing_option_census_is_never_accepted_at_its_deadline(
         backend = PlaywrightBackend(page)
         with pytest.raises(ChoiceRefused) as error:
             backend.choose_option(
-                OptionChoice(label="Cardiology", settle_s=0.6, **fields),
+                OptionChoice(
+                    label="Cardiology",
+                    settle_s=0.6,
+                    commit_field="department",
+                    **fields,
+                ),
                 "Cardiology",
                 point=point,
             )
@@ -525,7 +559,9 @@ def test_receipt_bound_choices_refuse_before_real_browser_input(
                     selector=selector, tag="select" if kind == "native" else "button"
                 ),
             ),
-            choice=OptionChoice(label="Cardiology", **fields),
+            choice=OptionChoice(
+                label="Cardiology", value="CARD", commit_field="department", **fields
+            ),
         )
         workflow = Workflow(name="choice", steps=[step])
         replay = Replayer(PlaywrightBackend(page))
@@ -557,5 +593,191 @@ def test_receipt_bound_choices_refuse_before_real_browser_input(
             assert page.evaluate("window.choiceEffects") == 0
             assert result.delivery_attempted in (None, False)
             assert result.safety_halt
+    finally:
+        page.close()
+
+
+@pytest.mark.parametrize(
+    ("kind", "fault"),
+    [
+        ("aria_listbox", "wrong_code"),
+        ("div_dropdown", "wrong_code"),
+        ("async_combobox", "wrong_code"),
+        ("async_combobox", "ignored_option"),
+    ],
+)
+def test_label_or_query_echo_cannot_hide_an_uncommitted_or_wrong_value(
+    server: Server, browser: Any, kind: str, fault: str
+) -> None:
+    def prepare(page: Any) -> None:
+        page.evaluate(
+            """fault => {
+          document.addEventListener('mousedown', event => {
+            if (!event.target.closest('[role=option],.dd-item')) return;
+            if (fault === 'ignored_option') {
+              event.preventDefault(); event.stopImmediatePropagation();
+            } else {
+              setTimeout(() => document.querySelector('[name=department]').value = 'WRONG', 0);
+            }
+          }, true);
+          if (fault === 'ignored_option') document.addEventListener('click', event => {
+            if (event.target.closest('[role=option]')) {
+              event.preventDefault(); event.stopImmediatePropagation();
+            }
+          }, true);
+        }""",
+            fault,
+        )
+
+    observed: list[dict[str, str]] = []
+    outcome, value, confirmed = _choose(
+        server,
+        browser,
+        kind,
+        "Cardiology",
+        prepare=prepare,
+        check=lambda page: observed.append(
+            page.evaluate("""() => ({
+          shown: document.querySelector('#department-input')?.value
+            || document.querySelector('#department-btn')?.textContent
+            || document.querySelector('.dd-value')?.textContent || '',
+          committed: document.querySelector('[name=department]').value
+        })""")
+        ),
+    )
+    assert isinstance(outcome, ChoiceRefused), outcome
+    assert outcome.code == "choice_unverified"
+    assert value in ("", "WRONG")
+    assert not confirmed
+    if kind == "async_combobox":
+        assert observed[0]["shown"] == "Cardiology"
+    assert observed[0]["committed"] != "CARD"
+
+
+@pytest.mark.parametrize("kind", ["native", "aria_listbox"])
+def test_replaced_controls_do_not_inherit_an_old_choice_proof(
+    server: Server, browser: Any, kind: str
+) -> None:
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+    selector, fields = WIDGETS[kind]
+    page = browser.new_page(viewport={"width": 1280, "height": 800})
+    try:
+        page.goto(server.base + "/w/" + kind)
+        box = page.locator(selector).first.bounding_box()
+        point = (int(box["x"] + box["width"] / 2), int(box["y"] + box["height"] / 2))
+        backend = PlaywrightBackend(page)
+        outcome = backend.choose_option(
+            OptionChoice(
+                label="Cardiology", value="CARD", commit_field="department", **fields
+            ),
+            "Cardiology",
+            point=point,
+        )
+        assert outcome["label"] == "cardiology"
+        page.locator(selector).evaluate("el => el.replaceWith(el.cloneNode(true))")
+        assert not backend.confirm_choice()
+    finally:
+        page.close()
+
+
+@pytest.mark.parametrize("actual", ["alert", "prompt"])
+def test_same_message_wrong_dialog_kind_is_dismissed(
+    server: Server, browser: Any, actual: str
+) -> None:
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+    from openadapt_flow.ir import DialogResponse
+    from openadapt_flow.runtime import Replayer
+
+    page = browser.new_page()
+    try:
+        page.goto(server.base + "/w/native")
+        backend = PlaywrightBackend(page)
+        Replayer._arm_dialog(
+            backend.arm_dialog,
+            DialogResponse(
+                response="accept", message="Synthetic confirmation", kind="confirm"
+            ),
+        )
+        page.evaluate("kind => window[kind]('Synthetic confirmation')", actual)
+        seen = backend.take_dialogs()
+        assert len(seen) == 1
+        assert seen[0]["type"] == actual
+        assert seen[0]["matched"] is False
+        assert seen[0]["response"] == "dismiss"
+    finally:
+        page.close()
+
+
+def test_legacy_dialog_serialization_keeps_its_original_shape() -> None:
+    from openadapt_flow.ir import DialogResponse
+
+    legacy = DialogResponse(response="accept", message="Continue?")
+    assert "kind" not in legacy.model_dump(mode="json")
+
+
+@pytest.mark.parametrize("fault", ["frame_attached", "new_document"])
+def test_dialog_authority_does_not_survive_a_document_scope_change(
+    server: Server, browser: Any, fault: str
+) -> None:
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+    page = browser.new_page()
+    try:
+        page.goto(server.base + "/w/native")
+        backend = PlaywrightBackend(page)
+        backend.arm_dialog("accept", "Synthetic confirmation", kind="confirm")
+        if fault == "frame_attached":
+            page.evaluate("""() => {
+                const frame = document.createElement('iframe');
+                frame.srcdoc = '<p>Another document</p>'; document.body.appendChild(frame);
+            }""")
+            page.frame_locator("iframe").locator("p").wait_for()
+        else:
+            page.goto(server.base + "/w/native?new-document=1")
+        assert page.evaluate("confirm('Synthetic confirmation')") is False
+        seen = backend.take_dialogs()
+        assert len(seen) == 1
+        assert seen[0]["matched"] is False
+        assert seen[0]["response"] == "dismiss"
+    finally:
+        page.close()
+
+
+def test_an_ambiguous_dialog_scope_refuses_the_step_before_input(
+    server: Server, browser: Any
+) -> None:
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+    from openadapt_flow.ir import ActionKind, DialogResponse, Step
+    from openadapt_flow.runtime import Replayer
+
+    page = browser.new_page()
+    try:
+        page.goto(server.base + "/w/native")
+        page.evaluate("""() => {
+            const frame = document.createElement('iframe');
+            frame.srcdoc = '<p>Another document</p>'; document.body.appendChild(frame);
+        }""")
+        page.frame_locator("iframe").locator("p").wait_for()
+        page.evaluate(
+            "window.inputEdges = 0; addEventListener('keydown', () => inputEdges++)"
+        )
+        replay = Replayer.__new__(Replayer)
+        replay.backend = PlaywrightBackend(page)
+        error = replay._act(
+            Step(
+                id="s",
+                intent="confirm",
+                action=ActionKind.KEY,
+                key="Enter",
+                dialog=DialogResponse(
+                    response="accept", message="Continue?", kind="confirm"
+                ),
+            ),
+            None,
+            {},
+        )
+        assert "dialog_scope_unverified" in error
+        assert page.evaluate("inputEdges") == 0
     finally:
         page.close()

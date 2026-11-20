@@ -140,16 +140,38 @@ def _declare_choice_params(
         param_values.append(label)
 
 
-def _plain_click(step: Step) -> bool:
+def _choice_action_is_local(step: Step, event: dict) -> bool:
+    """A choice gesture cannot absorb independent authority or record effects."""
     return (
-        step.action is ActionKind.CLICK
-        and step.anchor is not None
-        and not step.effects
+        not step.effects
+        and not event.get("effects")
         and step.dialog is None
         and not step.opens
         and not step.closes_surface
         and step.submit_binding is None
         and step.api_binding is None
+        and step.guard is None
+        and step.wait_until is None
+        and step.read_gate is None
+        and step.target_param is None
+        and step.risk != "irreversible"
+        and not any(
+            condition.kind
+            in (
+                PostconditionKind.URL_CHANGED,
+                PostconditionKind.TITLE_CHANGED,
+                PostconditionKind.NEW_TAB_OPENED,
+            )
+            for condition in step.expect
+        )
+    )
+
+
+def _plain_click(step: Step, event: dict) -> bool:
+    return (
+        step.action is ActionKind.CLICK
+        and step.anchor is not None
+        and _choice_action_is_local(step, event)
     )
 
 
@@ -189,8 +211,17 @@ def _choice_contract(choice: dict, query: Optional[str]) -> Optional[OptionChoic
             {
                 "kind": "listed_option",
                 "label": label,
-                "value": choice.get("value")
-                if isinstance(choice.get("value"), str)
+                "value": (
+                    choice["value"]
+                    if isinstance(choice.get("value"), str)
+                    else (
+                        choice["field_value"]
+                        if isinstance(choice.get("field_value"), str)
+                        else None
+                    )
+                ),
+                "commit_field": choice.get("field")
+                if isinstance(choice.get("field"), str)
                 else None,
                 "query": (
                     "none"
@@ -215,6 +246,44 @@ def _choice_contract(choice: dict, query: Optional[str]) -> Optional[OptionChoic
         return None
 
 
+def _choice_opening_matches(opening: dict, choice: dict) -> bool:
+    expected = choice.get("opening_gesture")
+    return expected is None or (
+        isinstance(expected, str)
+        and bool(expected)
+        and opening.get("choice_gesture") == expected
+    )
+
+
+def _choice_search_is_bound(
+    opening: dict, typed: dict, choice: dict, search_click: Optional[dict] = None
+) -> bool:
+    """Require recorder proof linking this input session to this opener.
+
+    The recorder emits the gesture link only for the opening control or its
+    newly shown popup. Matching words, adjacency and screen geometry do not
+    prove that a field is the list's search input.
+    """
+    gesture = opening.get("choice_gesture")
+    session = typed.get("input_session")
+    return (
+        isinstance(gesture, str)
+        and bool(gesture)
+        and isinstance(session, str)
+        and bool(session)
+        and typed.get("choice_gesture") == gesture
+        and choice.get("opening_gesture") == gesture
+        and choice.get("search_input_session") == session
+        and (
+            search_click is None
+            or (
+                search_click.get("choice_search_gesture") == gesture
+                and search_click.get("input_session") == session
+            )
+        )
+    )
+
+
 def _fold_choices(
     pending: list[tuple[Step, Optional[bytes], Optional[bytes], dict]],
     aliases: dict[str, str],
@@ -228,8 +297,9 @@ def _fold_choices(
     the previous press hit showed the label once the screen settled. A
     native select's choice is a click at the select. The fold takes, in
     order, the control's opening click, an optional search typed into the
-    list (only when the typed text is part of the label, so replay can type
-    the wanted label instead), and the option click, and keeps the control's
+    list (only with a recorder-bound input session whose text is part of
+    the label, so replay can type the wanted label instead), and the option
+    click, and keeps the control's
     anchor. Anything else stays as the clicks and keys it was, with a note.
     """
 
@@ -239,30 +309,47 @@ def _fold_choices(
         if not isinstance(choice, dict) or step.action is not ActionKind.CLICK:
             out.append((step, before, after, event))
             continue
+        if not _choice_action_is_local(step, event):
+            out.append((step, before, after, event))
+            notes.append(
+                {
+                    "change": "choice_not_folded",
+                    "step": step.id,
+                    "reason": "the option click has an independent action contract",
+                }
+            )
+            continue
         native = choice.get("kind") == "native_select"
         absorbed: list[tuple[Step, Optional[bytes], Optional[bytes], dict]] = []
         query: Optional[str] = None
         reason: Optional[str] = None
         if native:
             locator = step.anchor.structural if step.anchor is not None else None
-            # Keys the person pressed on the select, then the click that
-            # focused it, belong to the same choice.
+            # Only absorb keys when a matching opening click bounds the
+            # gesture. Adjacent keys alone need not belong to this select.
+            opening = len(out) - 1
             while (
-                out
-                and out[-1][0].action is ActionKind.KEY
-                and out[-1][0].key in _CHOICE_KEYS
+                opening >= 0
+                and out[opening][0].action is ActionKind.KEY
+                and out[opening][0].key in _CHOICE_KEYS
+                and out[opening][0].surface == step.surface
+                and _choice_action_is_local(out[opening][0], out[opening][3])
             ):
-                absorbed.insert(0, out.pop())
-            if out and _plain_click(out[-1][0]):
-                prior = out[-1][0].anchor.structural if out[-1][0].anchor else None
+                opening -= 1
+            if opening >= 0 and _plain_click(out[opening][0], out[opening][3]):
+                prior_step = out[opening][0]
+                prior = prior_step.anchor.structural if prior_step.anchor else None
                 if (
                     prior is not None
                     and locator is not None
                     and locator.selector
                     and prior.selector == locator.selector
                     and (prior.frame_path or None) == (locator.frame_path or None)
+                    and prior_step.surface == step.surface
+                    and _choice_opening_matches(out[opening][3], choice)
                 ):
-                    absorbed.insert(0, out.pop())
+                    absorbed = out[opening:]
+                    del out[opening:]
             # The focusing click saw the control before the change; the
             # change event already shows the new value.
             control = (
@@ -271,27 +358,52 @@ def _fold_choices(
                 else step
             )
         else:
+            opening = len(out) - 1
             if out and out[-1][0].action is ActionKind.TYPE:
-                typed = out[-1][0]
+                typed, _typed_before, _typed_after, typed_event = out[-1]
                 text = typed.text or ""
+                opening -= 1
+                search_click: Optional[dict] = None
+                if opening >= 0 and out[opening][3].get("choice_search_gesture"):
+                    search_step, _b, _a, search_click = out[opening]
+                    if (
+                        not _plain_click(search_step, search_click)
+                        or search_step.surface != step.surface
+                    ):
+                        reason = (
+                            "the popup search click has an independent action contract"
+                        )
+                    opening -= 1
                 if (
                     typed.secret
                     or typed.param is not None
+                    or not _choice_action_is_local(typed, typed_event)
+                    or typed.surface != step.surface
                     or not text.strip()
                     or text.casefold().strip()
                     not in str(choice.get("label") or "").casefold()
                 ):
-                    reason = (
-                        "the search typed before the option is not part of its label"
-                    )
-                else:
-                    absorbed.insert(0, out.pop())
+                    reason = "the preceding input is not a literal local choice search"
+                elif opening < 0 or not _choice_search_is_bound(
+                    out[opening][3], typed_event, choice, search_click
+                ):
+                    reason = "the recorded search is not bound to the opening control"
+                elif reason is None:
                     query = text
-            if reason is None and out and _plain_click(out[-1][0]):
-                absorbed.insert(0, out.pop())
-            elif reason is None:
-                reason = "no click opened the list"
-            control = absorbed[0][0] if absorbed and reason is None else step
+            if reason is None:
+                if (
+                    opening < 0
+                    or not _plain_click(out[opening][0], out[opening][3])
+                    or out[opening][0].surface != step.surface
+                    or out[opening][3].get("choice_search_gesture")
+                ):
+                    reason = "no click opened the list"
+                elif not _choice_opening_matches(out[opening][3], choice):
+                    reason = "the option is not bound to the opening control"
+                else:
+                    absorbed = out[opening:]
+                    del out[opening:]
+            control = absorbed[0][0] if absorbed else step
         contract = _choice_contract(choice, query) if reason is None else None
         if contract is None:
             # Restore what was taken off and keep the clicks as they were.
@@ -310,37 +422,9 @@ def _fold_choices(
         anchor = (
             control.anchor.model_copy(deep=True) if control.anchor is not None else None
         )
-        crop_reason = control.identifier_crop_missing_reason
-        identity_update: dict[str, Any] = {}
-        if (
-            anchor is not None
-            and structural_locator_is_locatable(anchor.structural)
-            and not anchor.structured_identity
-            and not anchor.record_key
-            and (anchor.identifier_crop is not None or anchor.context_text)
-        ):
-            # The automatic text and pixel band beside a form control holds
-            # its label, the neighbouring fields and part of the control,
-            # whose look changes with focus, hover and every typed value. It
-            # is not record identity (a record row on the web carries DOM row
-            # identity, kept above). The control is found by its locator and
-            # the choice is proven by its read-back.
-            anchor = anchor.model_copy(
-                update={
-                    "identifier_crop": None,
-                    "identifier_region": None,
-                    "context_text": None,
-                    "identity_template": None,
-                }
-            )
-            crop_reason = (
-                "a dropdown control is located by its DOM locator and checked "
-                "by reading the choice back; its label band is not record identity"
-            )
-            identity_update = {
-                "identity_armed": False,
-                "identity_unarmed_reason": crop_reason,
-            }
+        # A control locator identifies where to act, not which record owns
+        # it. Folding must retain every identity tier from the opening click,
+        # including its pixel/OCR guard when no structured row was recorded.
         try:
             chosen = control.model_copy(
                 update={
@@ -355,8 +439,6 @@ def _fold_choices(
                     "param": param,
                     "choice": contract,
                     "anchor": anchor,
-                    "identifier_crop_missing_reason": crop_reason,
-                    **identity_update,
                     "expect": list(step.expect),
                     "risk": step.risk,
                 }
@@ -2373,6 +2455,7 @@ def _dialog_identity(raw: dict, exclude_texts: tuple[str, ...]) -> DialogRespons
     """
 
     response = raw.get("response")
+    kind = raw.get("type")
     message = str(raw.get("message") or "")
     values = sorted(
         (v for v in exclude_texts if len(v.strip()) >= _SURFACE_PARAM_MIN_CHARS),
@@ -2392,13 +2475,15 @@ def _dialog_identity(raw: dict, exclude_texts: tuple[str, ...]) -> DialogRespons
             "compile again"
         )
     if len(pieces) == 1 and not re.search(r"\d", message):
-        return DialogResponse.model_validate({"response": response, "message": message})
+        return DialogResponse.model_validate(
+            {"response": response, "message": message, "kind": kind}
+        )
     pattern = ".+".join(
         r"\d+".join(re.escape(part) for part in re.split(r"\d+", piece))
         for piece in pieces
     )
     return DialogResponse.model_validate(
-        {"response": response, "message_pattern": pattern}
+        {"response": response, "message_pattern": pattern, "kind": kind}
     )
 
 

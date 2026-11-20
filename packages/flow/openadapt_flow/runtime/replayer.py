@@ -13524,15 +13524,23 @@ class Replayer:
                 f"Step '{step.id}' ({step.intent}) answers a browser dialog, but "
                 "the active backend cannot see browser dialogs; run aborted"
             )
+        if dialog.kind is not None:
+            scope = getattr(self.backend, "dialog_scope_error", None)
+            if not callable(scope) or scope() is not None:
+                return (
+                    f"Step '{step.id}' ({step.intent}): the browser dialog's "
+                    "producer document cannot be established "
+                    "(dialog_scope_unverified); no input was sent"
+                )
         self._arm_dialog(arm, dialog)
         try:
             error = self._act_without_dialog(step, resolution, params, **kwargs)
         finally:
-            seen = take(0.0)
+            # Keep the original one-shot arm through the entire observation
+            # window. Rearming after input would reset its document epoch.
+            seen = take(_DIALOG_WAIT_S)
         if error is not None:
             return error
-        if not seen:
-            seen = self._wait_for_dialog(take, dialog)
         if not seen:
             return (
                 f"Step '{step.id}' ({step.intent}): the recorded browser dialog "
@@ -13572,20 +13580,13 @@ class Replayer:
 
     @staticmethod
     def _arm_dialog(arm: Callable[..., Any], dialog: Any) -> None:
+        options = {"kind": dialog.kind} if dialog.kind is not None else {}
         if dialog.message_pattern is not None:
-            arm(dialog.response, None, message_pattern=dialog.message_pattern)
+            arm(
+                dialog.response, None, message_pattern=dialog.message_pattern, **options
+            )
         else:
-            arm(dialog.response, dialog.message)
-
-    @timed_span("postcondition")
-    def _wait_for_dialog(self, take: Callable[..., Any], dialog: Any) -> list[Any]:
-        """Wait briefly for an armed dialog that opens after the input edge."""
-
-        arm = getattr(self.backend, "arm_dialog", None)
-        if callable(arm):
-            self._arm_dialog(arm, dialog)
-        seen = take(_DIALOG_WAIT_S)
-        return list(seen) if isinstance(seen, list) else []
+            arm(dialog.response, dialog.message, **options)
 
     def _act_choice(
         self,

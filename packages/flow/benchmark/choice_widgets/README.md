@@ -40,7 +40,13 @@ held-out job cannot be expressed), `record_refused`, `n/a`.
 (the signed-in-session path), records, compiles, then runs each case in the
 same browser, scored from the app's database (OpenEMR) or REST API (OpenMRS).
 
-## Results
+## Historical results
+
+These tables describe the commits named in the retained JSON, not the latest
+PR head. Later safety fixes require exact committed-field values, causal
+search ownership and scoped dialog authority. Unmapped held-out custom
+labels now refuse before option selection; real-app end-to-end saves have
+not been re-established on the final implementation.
 
 Before: `origin/main` 36b9a40f9. After: the implementation commits recorded
 in each JSON's `label`; these measurements precede the extraction of recorder
@@ -73,7 +79,7 @@ compiler's existing `risk_overrides` data. It does not change the engine's
 risk policy or qualify any real application. The raw output marks this flag
 in each result.
 
-- The final synthetic run at `d32bb3113` has 30 verified cases, 46 safe
+- The historical synthetic run at `d32bb3113` has 30 verified cases, 46 safe
   stops and 4 inapplicable date-picker cases, out of 80. All nine applicable
   held-out choices save the parameter value, including the type-ahead,
   Tom Select and registration pages. The baseline has 40 recording refusals,
