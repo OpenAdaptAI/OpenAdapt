@@ -1,0 +1,10 @@
+{
+  "case_id": "patient-notes-native-record-identity-v2",
+  "base_sha256": "0e3dcd2e8347b0f5574577c206e7c5f9c341093b3802ae45f89581fab58f1193",
+  "database_source_sha256": "7bc09cde1c2d4a31366e71532fffa499dc24e12a80fe03f77a6fd5964261fd0a",
+  "override_sha256": "f367b8b931501e7a259caf42c49961f74619900e4d5e3e77f987713a222443d0",
+  "fixture_sha256": "976a91bc5d31fa80c76ed3af4b6a1f81d1d33d1c2eac57975e3a05f287d7ae08",
+  "readback_template_sha256": "d2850db8b147684cbaf2bcc6f0c84b320d8fa5c3ee6a7a96c49fa753f965c082",
+  "unchanged_save_handler_sha256": "78ba979a868ba4d03c44a1a884ee5efa56c476ca462eebe2e255b375076a51f9",
+  "native_validation_performed": false
+}
