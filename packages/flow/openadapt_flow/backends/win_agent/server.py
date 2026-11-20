@@ -1405,14 +1405,11 @@ def _native_value_api() -> Any:
     if spec is None or spec.loader is None:
         raise ImportError("exact local native-value helper cannot be loaded")
     module = importlib.util.module_from_spec(spec)
-    sys.modules[key] = module
-    try:
-        # Execute the exact bytes selected above, not a same-name installed
-        # module or a second path read after validating the selected source.
-        exec(compile(raw, str(path), "exec"), module.__dict__)
-    except Exception:
-        sys.modules.pop(key, None)
-        raise
+    # Execute the exact selected bytes without changing the interpreter's
+    # global import cache. The helper uses concrete annotations, so its
+    # dataclasses do not need a registered module to resolve forward strings.
+    # Do not inherit this server's future-annotations compiler flag.
+    exec(compile(raw, str(path), "exec", dont_inherit=True), module.__dict__)
     _STANDALONE_NATIVE_VALUE_API = module
     return module
 

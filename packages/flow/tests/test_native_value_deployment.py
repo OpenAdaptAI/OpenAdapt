@@ -140,7 +140,12 @@ spec = importlib.util.spec_from_file_location('isolated_agent', sys.argv[1])
 server = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = server
 spec.loader.exec_module(server)
+cache_before = {name: sys.modules[name] for name in ('win_agent_native_value', 'native_value')}
 helper = server._native_value_api()
+assert helper.__name__ not in sys.modules
+assert all(sys.modules[name] is value for name, value in cache_before.items())
+assert not any(name.startswith('_win_agent_native_value_') for name in sys.modules)
+assert helper.NativeOwner.__annotations__ == {'hwnd': int, 'pid': int, 'thread': int}
 assert Path(helper.__file__).resolve().parent == Path(sys.argv[1]).resolve().parent
 assert Path(helper.__spec__.origin).resolve() == Path(helper.__file__).resolve()
 assert hashlib.sha256(Path(helper.__file__).read_bytes()).hexdigest() == sys.argv[2]
