@@ -1,7 +1,8 @@
 """Generated entry points use the installed MCP SDK; no SDK stand-ins.
 
 The controlled CLI/compiler results exercise argument dispatch without an app.
-Web calls stop at the genuine pulled-skill admission seam before browser work.
+Portable calls use a controlled governed child with typed synthetic reports.
+No synthetic report or dummy authority establishes real qualification.
 """
 
 from __future__ import annotations
@@ -22,9 +23,12 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from openadapt_flow.compile_agent.emit import emit_mcp
+from openadapt_flow.deployment import DeploymentConfig
 from openadapt_flow.emit.mcp_tool import emit_mcp_server
 from openadapt_flow.ir import ActionKind, Step, Workflow
-
+from openadapt_flow.qualification import workflow_contract_sha256
+from openadapt_flow.runtime.authorization import runtime_inputs_digest
+from tests._mcp_report import bind_synthetic_invocation, synthetic_production_report
 from tests._mcp_tools import call_generated_tool, registered_server, sdk_modules
 
 ENTRY_POINTS = ("web", "linux", "citrix", "compiled")
@@ -75,6 +79,32 @@ def _load(path: Path) -> tuple[dict[str, Any], Any]:
     return namespace, tool
 
 
+def _configure_portable(function, root: Path, surface: str) -> None:
+    targets = {
+        "web": {"url": "https://synthetic.invalid/"},
+        "linux": {"linux_app": "Synthetic", "linux_window_title": "Synthetic"},
+        "citrix": {
+            "rdp_window_title": "Synthetic",
+            "rdp_readiness_text": "Synthetic",
+        },
+    }
+    config = DeploymentConfig.model_validate(
+        {
+            "backend": {"kind": surface, **targets[surface]},
+            "runtime": {"profile": "standard"},
+        }
+    )
+    deployment = root / "deploy.yaml"
+    deployment.write_text(config.model_dump_json(exclude_unset=True))
+    authority = root / "not-an-authority.json"
+    # The adapter only stats this fixture. The controlled child never verifies
+    # it; this file is deliberately not a real qualification authority.
+    authority.write_text('{"fixture":"synthetic-transport-not-authority"}')
+    function.__globals__.update(
+        DEPLOYMENT=str(deployment), PROFILE="standard", AUTHORITY_FILE=str(authority)
+    )
+
+
 @pytest.mark.parametrize("entry", ENTRY_POINTS)
 def test_genuine_sdk_registers_and_dispatches_generated_tool(
     tmp_path, monkeypatch, entry
@@ -87,16 +117,24 @@ def test_genuine_sdk_registers_and_dispatches_generated_tool(
         params = json.loads(Path(argv[argv.index("--params-file") + 1]).read_text())
         seen.append(params)
         run = Path(argv[argv.index("--run-dir") + 1])
-        run.mkdir(parents=True)
+        run.mkdir(parents=True, exist_ok=True)
+        workflow = Workflow.load(tmp_path / entry / "input")
+        assert workflow.manifest is not None
+        report = synthetic_production_report(
+            profile="standard",
+            workflow_name=workflow.name,
+            bundle_content_digest=workflow.manifest.content_digest,
+            workflow_contract_sha256=workflow_contract_sha256(workflow),
+            governed_runtime_inputs_digest=runtime_inputs_digest(workflow, params, {}),
+            execution_target_kind=entry,
+            execution_origin="https://synthetic.invalid" if entry == "web" else None,
+            execution_entry_url="https://synthetic.invalid/"
+            if entry == "web"
+            else None,
+            params=params,
+        )
         (run / "report.json").write_text(
-            json.dumps(
-                {
-                    "execution_outcome": "VERIFIED",
-                    "transaction_outcome": "VERIFIED",
-                    "production_eligible": True,
-                    "model_calls": 0,
-                }
-            )
+            bind_synthetic_invocation(report, argv).model_dump_json()
         )
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
@@ -107,10 +145,6 @@ def test_genuine_sdk_registers_and_dispatches_generated_tool(
     namespace, _ = _load(path)
     monkeypatch.setattr("subprocess.run", cli)
     monkeypatch.setattr("openadapt_flow.compile_agent.run_compiled_params", compiled)
-    monkeypatch.setattr(
-        "openadapt_flow.skills.pulled_skill_refusal",
-        lambda *a, **k: "synthetic admission refusal",
-    )
     function = next(
         value
         for name, value in namespace.items()
@@ -119,17 +153,16 @@ def test_genuine_sdk_registers_and_dispatches_generated_tool(
     )
     ordered_names = sorted(names) if entry == "compiled" else names
     arguments = list(inspect.signature(function).parameters)
-    if entry == "web":
-        assert arguments.pop(0) == "url"
+    if entry != "compiled":
+        assert arguments.pop() == "url"
+        assert inspect.signature(function).parameters["url"].default is None
     values = {name: f"VALUE_{i}" for i, name in enumerate(ordered_names)}
     supplied = (
         dict(values) if entry == "compiled" else dict(zip(arguments, values.values()))
     )
-    if entry == "web":
-        supplied["url"] = "http://127.0.0.1:1"
-    namespace["DEPLOYMENT"] = str(tmp_path / "deploy.yaml")
-    # runpy's returned mapping can differ from a function's globals mapping.
-    function.__globals__["DEPLOYMENT"] = namespace["DEPLOYMENT"]
+    if entry != "compiled":
+        # runpy's returned mapping can differ from the function's globals.
+        _configure_portable(function, tmp_path, entry)
     shapes: list[str] = []
     result = asyncio.run(
         call_generated_tool(namespace, supplied, observed_shapes=shapes)
@@ -146,15 +179,12 @@ def test_genuine_sdk_registers_and_dispatches_generated_tool(
             else "content_and_structured_tuple"
         )
     assert shapes == [expected_shape]
-    if entry == "web":
-        assert result["success"] is False and result["outcome"] == "REFUSED"
-        assert result["detail"] == "synthetic admission refusal"
-        assert seen == []
-    elif entry == "compiled":
+    if entry == "compiled":
         assert result == {"verified": True}
         assert seen == [values]
     else:
-        assert result["success"] is True and result["outcome"] == "VERIFIED"
+        assert result["success"] is False and result["outcome"] == "UNCERTAIN"
+        assert result["runtime_reported"]["outcome"] == "VERIFIED"
         assert seen == [values]
     assert "RECORDED_VALUE_MUST_NOT_BE_EMITTED" not in path.read_text()
 
@@ -176,11 +206,23 @@ def test_all_entry_points_keep_sdk_symbols_separate_from_parameters(names):
             path = _emit(Path(directory) / entry, entry, names)
             _, tool = _load(path)
             properties = tool.parameters["properties"]
-            assert len(properties) == len(names) + (entry == "web")
-            assert set(tool.parameters["required"]) == set(properties)
-            assert all(schema["type"] == "string" for schema in properties.values())
+            assert len(properties) == len(names) + (entry != "compiled")
             if entry == "compiled":
+                assert set(tool.parameters["required"]) == set(properties)
+                assert all(schema["type"] == "string" for schema in properties.values())
                 assert set(properties) == set(names)
+            else:
+                assert set(tool.parameters["required"]) == set(properties) - {"url"}
+                assert all(
+                    schema["type"] == "string"
+                    for name, schema in properties.items()
+                    if name != "url"
+                )
+                assert {part["type"] for part in properties["url"]["anyOf"]} == {
+                    "string",
+                    "null",
+                }
+                assert properties["url"]["default"] is None
 
 
 @pytest.mark.parametrize("entry", ENTRY_POINTS)
@@ -230,11 +272,45 @@ def test_sdk_argument_validation_refuses_before_any_effect(
     monkeypatch.setattr("openadapt_flow.compile_agent.run_compiled_params", forbidden)
     monkeypatch.setattr("openadapt_flow.skills.pulled_skill_refusal", forbidden)
     supplied = {} if invalid == "missing" else {"note": ["not a string"]}
-    if entry == "web":
-        supplied["url"] = "http://127.0.0.1:1"
+    # Omit the optional legacy URL field: these are genuine SDK-invalid data,
+    # not the handler's separate target-override refusal.
     _, exceptions, _ = sdk_modules()
     with pytest.raises(exceptions.ToolError) as caught:
         asyncio.run(call_generated_tool(namespace, supplied))
     # Genuine SDK validation, rather than a handler exception or fake context.
     assert type(caught.value.__cause__).__name__ == "ValidationError"
     assert effects == []
+
+
+@pytest.mark.parametrize("entry", ["web", "linux", "citrix"])
+@pytest.mark.parametrize(
+    "override", ["", "https://synthetic.invalid/", "https://other.synthetic.invalid/"]
+)
+def test_portable_legacy_url_override_refuses_before_governed_child(
+    tmp_path, monkeypatch, entry, override
+):
+    path = _emit(tmp_path / entry, entry, ["note"])
+    namespace, _ = _load(path)
+    function = next(
+        value
+        for name, value in namespace.items()
+        if name.startswith("run_sdk_matrix") and inspect.isfunction(value)
+    )
+    _configure_portable(function, tmp_path, entry)
+    calls = []
+
+    def forbidden(*args, **kwargs):
+        calls.append("dispatch")
+        pytest.fail("a legacy URL override reached the governed child")
+
+    monkeypatch.setattr("subprocess.run", forbidden)
+    result = asyncio.run(
+        call_generated_tool(
+            namespace,
+            {"note": "synthetic data", "url": override},
+        )
+    )
+    assert result["success"] is False and result["outcome"] == "REFUSED"
+    assert result["production_eligible"] is False
+    assert "No child ran" in result["detail"]
+    assert calls == []

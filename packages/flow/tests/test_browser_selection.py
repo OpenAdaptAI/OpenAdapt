@@ -8,6 +8,8 @@ import pytest
 
 from openadapt_flow import _browser_setup as bs
 
+KEYCHAIN_ARGS = ["--use-mock-keychain", "--password-store=basic"]
+
 
 @pytest.fixture(autouse=True)
 def _driver_present(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -25,7 +27,10 @@ def test_auto_prefers_installed_browser(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setattr(
         bs, "ensure_bundled_chromium", lambda **_: pytest.fail("no download")
     )
-    assert bs.chromium_launch_options(headless=True) == {"channel": "chrome"}
+    assert bs.chromium_launch_options(headless=True) == {
+        "channel": "chrome",
+        "args": KEYCHAIN_ARGS,
+    }
 
 
 def test_auto_without_installed_browser_gets_headless_shell(
@@ -36,8 +41,8 @@ def test_auto_without_installed_browser_gets_headless_shell(
     monkeypatch.setattr(bs, "_bundled_present", lambda *, only_shell: False)
     monkeypatch.setattr(bs, "_install_headless_shell", lambda: calls.append("shell"))
     monkeypatch.setattr(bs, "ensure_chromium_installed", lambda: calls.append("full"))
-    assert bs.chromium_launch_options(headless=True) == {}
-    assert bs.chromium_launch_options(headless=True) == {}
+    assert bs.chromium_launch_options(headless=True) == {"args": KEYCHAIN_ARGS}
+    assert bs.chromium_launch_options(headless=True) == {"args": KEYCHAIN_ARGS}
     assert calls == ["shell"]
 
 
@@ -45,7 +50,7 @@ def test_headed_needs_full_build(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str] = []
     monkeypatch.setattr(bs, "installed_browser_channel", lambda: None)
     monkeypatch.setattr(bs, "ensure_chromium_installed", lambda: calls.append("full"))
-    assert bs.chromium_launch_options(headless=False) == {}
+    assert bs.chromium_launch_options(headless=False) == {"args": KEYCHAIN_ARGS}
     assert calls == ["full"]
 
 
@@ -53,7 +58,7 @@ def test_bundled_env_skips_installed_browser(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setenv(bs.BROWSER_ENV, "bundled")
     monkeypatch.setattr(bs, "installed_browser_channel", lambda: "chrome")
     monkeypatch.setattr(bs, "ensure_bundled_chromium", lambda **_: None)
-    assert bs.chromium_launch_options(headless=True) == {}
+    assert bs.chromium_launch_options(headless=True) == {"args": KEYCHAIN_ARGS}
 
 
 def test_unknown_choice_refused(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -82,8 +87,8 @@ def test_broken_channel_falls_back_to_bundled(
     chromium = _Chromium(fail_channel=True)
     assert bs.launch_chromium(chromium, headless=True) == "browser"
     assert chromium.calls == [
-        {"headless": True, "channel": "msedge"},
-        {"headless": True},
+        {"headless": True, "channel": "msedge", "args": KEYCHAIN_ARGS},
+        {"headless": True, "args": KEYCHAIN_ARGS},
     ]
 
 
@@ -91,8 +96,23 @@ def test_explicit_channel_failure_is_not_hidden(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv(bs.BROWSER_ENV, "chrome")
+    chromium = _Chromium(fail_channel=True)
     with pytest.raises(RuntimeError, match="policy blocked"):
-        bs.launch_chromium(_Chromium(fail_channel=True), headless=True)
+        bs.launch_chromium(chromium, headless=True)
+    assert chromium.calls == [
+        {"headless": True, "channel": "chrome", "args": KEYCHAIN_ARGS}
+    ]
+
+
+@pytest.mark.parametrize("headless", [True, False], ids=["headless", "headed-options"])
+def test_bundled_launch_passes_both_keychain_flags(
+    monkeypatch: pytest.MonkeyPatch, headless: bool
+) -> None:
+    monkeypatch.setenv(bs.BROWSER_ENV, "bundled")
+    monkeypatch.setattr(bs, "ensure_bundled_chromium", lambda **_: None)
+    chromium = _Chromium(fail_channel=False)
+    assert bs.launch_chromium(chromium, headless=headless) == "browser"
+    assert chromium.calls == [{"headless": headless, "args": KEYCHAIN_ARGS}]
 
 
 def test_installed_channel_probe_uses_paths(
@@ -140,17 +160,21 @@ def native_browser() -> Any:
 
     with sync_playwright() as driver:
         browser = driver.chromium.launch(headless=True)
-        yield browser
-        browser.close()
+        try:
+            yield browser
+        finally:
+            browser.close()
 
 
 @pytest.fixture
 def native_page(native_browser: Any) -> Any:
     page = native_browser.new_page(viewport={"width": 1280, "height": 800})
-    page.set_content(_NATIVE_FORM)
-    page.locator("#choice").focus()
-    yield page
-    page.close()
+    try:
+        page.set_content(_NATIVE_FORM)
+        page.locator("#choice").focus()
+        yield page
+    finally:
+        page.close()
 
 
 def _native_contract() -> Any:

@@ -197,7 +197,7 @@ jobs:
 
       - name: Install Linux Chromium runtime libraries
         if: runner.os == 'Linux'
-        uses: ./.github/actions/apt-install
+        uses: OpenAdaptAI/OpenAdapt/.github/actions/apt-install@94f724c7dc0b0995a7108b7b99bbb53f0749cb68
         with:
           # The pinned Playwright's own list, installed through the cache and
           # mirror fallback instead of `playwright install-deps`.
@@ -245,7 +245,7 @@ jobs:
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
         timeout-minutes: 10
-        uses: ./.github/actions/apt-install
+        uses: OpenAdaptAI/OpenAdapt/.github/actions/apt-install@94f724c7dc0b0995a7108b7b99bbb53f0749cb68
         with:
           packages: >-
             libayatana-appindicator3-dev
@@ -308,11 +308,22 @@ jobs:
         run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 
       - name: Build native installer packages
+        id: native_bundle
+        env:
+          # Supported logging only; keep the existing non-GUI CI packaging path.
+          TAURI_CLI_VERBOSITY: ${{ runner.os == 'macOS' && '1' || '0' }}
         run: >-
           npm run tauri build --
           --bundles ${{ matrix.bundles }}
           --target ${{ matrix.target }}
           --config src-tauri/tauri.adhoc.conf.json
+
+      - name: Read scoped DMG diagnostics after bundle failure
+        if: ${{ failure() && runner.os == 'macOS' && steps.native_bundle.outcome == 'failure' }}
+        timeout-minutes: 1
+        run: >-
+          python scripts/diagnose_dmg_mounts.py
+          --bundle-root "src-tauri/target/${{ matrix.target }}/release/bundle/macos"
 
       # Reuse the installer build's compiled dependencies. These tests protect
       # the native URL and deep-link dispatch boundaries before artifact upload.

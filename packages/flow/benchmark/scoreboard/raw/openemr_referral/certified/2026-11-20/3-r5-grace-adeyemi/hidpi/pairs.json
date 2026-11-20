@@ -1,0 +1,644 @@
+{
+  "scale": 2,
+  "pairs": [
+    {
+      "frame": "steps/step_000_after.png",
+      "frame_sha256": "b8b144d3a755c51e50c22721ef9b6247663274d96945ba414bd4ad3cdbdfaf49",
+      "copy": "step_000_after@2x.png",
+      "copy_sha256": "7f76440cfd43d542b9955bad857e0d445ae2d2dd6db11bab4e93f2e4a595d74b",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.604
+    },
+    {
+      "frame": "steps/step_000_before.png",
+      "frame_sha256": "0fd08a6f9c246e1d1411edc16db35dd9e7250dde93a2eb2cae3294ae3819f49e",
+      "copy": "step_000_before@2x.png",
+      "copy_sha256": "f947e1c863a4e39e7bba91cb35b5624403f0179da36c1d566005f9cee22fbfac",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.604
+    },
+    {
+      "frame": "steps/step_001_after.png",
+      "frame_sha256": "8173c5f9a4f55fea260b6df13594c2797760c78e93e140d1480f028346e88dda",
+      "copy": "step_001_after@2x.png",
+      "copy_sha256": "efca5e5d43132d9c1e436f0404f0ed8634766cf1c2cbd2e6d5cdb91c8b999380",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.604
+    },
+    {
+      "frame": "steps/step_001_before.png",
+      "frame_sha256": "b2e9c3e163957f122a2426f6e3c453b46bdc3bfe7c2c6caa22e0310a5931673e",
+      "copy": "step_001_before@2x.png",
+      "copy_sha256": "7f76440cfd43d542b9955bad857e0d445ae2d2dd6db11bab4e93f2e4a595d74b",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.604
+    },
+    {
+      "frame": "steps/step_003_after.png",
+      "frame_sha256": "d52504879e593bf24e53e61f0d000c7063de083cbfb6fda5ad805c8f1567d8cb",
+      "copy": "step_003_after@2x.png",
+      "copy_sha256": "c442d395550f5250f02024da7f99d149a073ea6855f76910166aaaab19b8be9b",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.604
+    },
+    {
+      "frame": "steps/step_003_before.png",
+      "frame_sha256": "8173c5f9a4f55fea260b6df13594c2797760c78e93e140d1480f028346e88dda",
+      "copy": "step_003_before@2x.png",
+      "copy_sha256": "efca5e5d43132d9c1e436f0404f0ed8634766cf1c2cbd2e6d5cdb91c8b999380",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.604
+    },
+    {
+      "frame": "steps/step_005_after.png",
+      "frame_sha256": "3ec8b8e69c17cb59dca3404d20e90789915cfd8de8ef378b8d2dadcd8e6fcda6",
+      "copy": "step_005_after@2x.png",
+      "copy_sha256": "f99e67036fc23372987e3fe007d0ea51aac5eb6f7d18acb11ab309fd9d3a03ee",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.604
+    },
+    {
+      "frame": "steps/step_005_before.png",
+      "frame_sha256": "be33073ad3404b13519a1c70b7fcb7216b3029869a2c2f93dbd8e0b3d01d36d2",
+      "copy": "step_005_before@2x.png",
+      "copy_sha256": "c442d395550f5250f02024da7f99d149a073ea6855f76910166aaaab19b8be9b",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.604
+    },
+    {
+      "frame": "steps/step_006_after.png",
+      "frame_sha256": "641ac5fc171309163c781462838147f09748945f846638576e13ff06e80096d5",
+      "copy": "step_006_after@2x.png",
+      "copy_sha256": "fc48907d4dbb3ffd42e8902f9770852910467ee56e8bda45d4b57dab98e5bee4",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.604
+    },
+    {
+      "frame": "steps/step_006_before.png",
+      "frame_sha256": "3ec8b8e69c17cb59dca3404d20e90789915cfd8de8ef378b8d2dadcd8e6fcda6",
+      "copy": "step_006_before@2x.png",
+      "copy_sha256": "f99e67036fc23372987e3fe007d0ea51aac5eb6f7d18acb11ab309fd9d3a03ee",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.604
+    },
+    {
+      "frame": "steps/step_008_after.png",
+      "frame_sha256": "544f7b0ebc11b72e8f450af0502e7f0988dcd5a3447604973814d7461368d406",
+      "copy": "step_008_after@2x.png",
+      "copy_sha256": "21996c9a98d9a945101d66ed3fb481e0b64cefadecdc44b3471e0218f0d8901f",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.604
+    },
+    {
+      "frame": "steps/step_008_before.png",
+      "frame_sha256": "204f4c91e654b060775c5df80bb67449b71c1303e02d9ed893f0f4bcbfb54d44",
+      "copy": "step_008_before@2x.png",
+      "copy_sha256": "fc48907d4dbb3ffd42e8902f9770852910467ee56e8bda45d4b57dab98e5bee4",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.604
+    },
+    {
+      "frame": "steps/step_009_after.png",
+      "frame_sha256": "60b5a0795e203d316ef261edd3104840fd055eaf604364dfdc9e7c356db58866",
+      "copy": "step_009_after@2x.png",
+      "copy_sha256": "a42bbc7693aaa7b1bd13861a331f2c3af5d27deddc73dbc6064b9f6e36ad7f51",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.604
+    },
+    {
+      "frame": "steps/step_009_before.png",
+      "frame_sha256": "544f7b0ebc11b72e8f450af0502e7f0988dcd5a3447604973814d7461368d406",
+      "copy": "step_009_before@2x.png",
+      "copy_sha256": "21996c9a98d9a945101d66ed3fb481e0b64cefadecdc44b3471e0218f0d8901f",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.604
+    },
+    {
+      "frame": "steps/step_011_after.png",
+      "frame_sha256": "5b76e3041c3903a14cad97ae107cd379d4e61c3e46481d4a141002ed8fe7d7b5",
+      "copy": "step_011_after@2x.png",
+      "copy_sha256": "3f88876c1bb78c2e3f0b4b02a8db4820a11f89a59c1b32a6d49d453c5fcb4501",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.879
+    },
+    {
+      "frame": "steps/step_011_before.png",
+      "frame_sha256": "a7ef4d8c611a3b6683e417403c8b18038ad45ae3f36bc71309212aea9557cdcb",
+      "copy": "step_011_before@2x.png",
+      "copy_sha256": "a42bbc7693aaa7b1bd13861a331f2c3af5d27deddc73dbc6064b9f6e36ad7f51",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.604
+    },
+    {
+      "frame": "steps/step_012_after.png",
+      "frame_sha256": "fbd3fb758d1bd5f2038dda19580d1b4d2a17c2b30601bb023f2cde3f056e46b0",
+      "copy": "step_012_after@2x.png",
+      "copy_sha256": "5a744095b06d56bf1445b004026fb82ecccae943683131f4b1f0ffb505550383",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.886
+    },
+    {
+      "frame": "steps/step_012_before.png",
+      "frame_sha256": "5b76e3041c3903a14cad97ae107cd379d4e61c3e46481d4a141002ed8fe7d7b5",
+      "copy": "step_012_before@2x.png",
+      "copy_sha256": "3f88876c1bb78c2e3f0b4b02a8db4820a11f89a59c1b32a6d49d453c5fcb4501",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.879
+    },
+    {
+      "frame": "steps/step_013_after.png",
+      "frame_sha256": "5351531afe3e2c56d4d46dfad1f676692923abe656689cb326fd671738b9ab17",
+      "copy": "step_013_after@2x.png",
+      "copy_sha256": "3932ca72b5303bc73803dbf627b9e8f5ae89c5a81d3cbb5a4e9d84cae4113480",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.604
+    },
+    {
+      "frame": "steps/step_013_before.png",
+      "frame_sha256": "d20c1197f8c8999aefaf3669be9dd61b4e86067b2792944d46adb9432d4ab0fb",
+      "copy": "step_013_before@2x.png",
+      "copy_sha256": "5a744095b06d56bf1445b004026fb82ecccae943683131f4b1f0ffb505550383",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.698
+    },
+    {
+      "frame": "steps/step_015_after.png",
+      "frame_sha256": "6e01a9a766265c2c7bad88f9a1f98f549355328217f7ee365051658f0853d6ed",
+      "copy": "step_015_after@2x.png",
+      "copy_sha256": "79b1483938481e769583f45f6e8a75f0446983c986b4fd094793e390fd330a75",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 7.064
+    },
+    {
+      "frame": "steps/step_015_before.png",
+      "frame_sha256": "5351531afe3e2c56d4d46dfad1f676692923abe656689cb326fd671738b9ab17",
+      "copy": "step_015_before@2x.png",
+      "copy_sha256": "3932ca72b5303bc73803dbf627b9e8f5ae89c5a81d3cbb5a4e9d84cae4113480",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.604
+    },
+    {
+      "frame": "steps/step_016_after.png",
+      "frame_sha256": "3adeddb97238602b25761a43eb6552a39f5090a309adac0c597afe44fd589d13",
+      "copy": "step_016_after@2x.png",
+      "copy_sha256": "3ac5535685d12bc4629539b99e866c7aff93e4f7485635a87315e191d3994c8d",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.658
+    },
+    {
+      "frame": "steps/step_016_before.png",
+      "frame_sha256": "6e01a9a766265c2c7bad88f9a1f98f549355328217f7ee365051658f0853d6ed",
+      "copy": "step_016_before@2x.png",
+      "copy_sha256": "79b1483938481e769583f45f6e8a75f0446983c986b4fd094793e390fd330a75",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 7.064
+    },
+    {
+      "frame": "steps/step_017_after.png",
+      "frame_sha256": "f08b73ca53bb83da927a2e6b6e9e836a8c9b7090b8ce9024806e1cbccb2ef18c",
+      "copy": "step_017_after@2x.png",
+      "copy_sha256": "f40ee1e4091efbdf1bf495588a1a7745959d6476709c33504401ffb9c28317f5",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.971
+    },
+    {
+      "frame": "steps/step_017_before.png",
+      "frame_sha256": "3adeddb97238602b25761a43eb6552a39f5090a309adac0c597afe44fd589d13",
+      "copy": "step_017_before@2x.png",
+      "copy_sha256": "3ac5535685d12bc4629539b99e866c7aff93e4f7485635a87315e191d3994c8d",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.658
+    },
+    {
+      "frame": "steps/step_018_after.png",
+      "frame_sha256": "19e4e677013a172c0533a0305183516e81788b8334d39fcdf5a937ad5a63acde",
+      "copy": "step_018_after@2x.png",
+      "copy_sha256": "0dd52beb8464d6704f61854ec2eb2742983f6892edcf7c0603d039c597611ab8",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.992
+    },
+    {
+      "frame": "steps/step_018_before.png",
+      "frame_sha256": "f08b73ca53bb83da927a2e6b6e9e836a8c9b7090b8ce9024806e1cbccb2ef18c",
+      "copy": "step_018_before@2x.png",
+      "copy_sha256": "f40ee1e4091efbdf1bf495588a1a7745959d6476709c33504401ffb9c28317f5",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.971
+    },
+    {
+      "frame": "steps/step_020_after.png",
+      "frame_sha256": "8cf5603f60d91e1de3b4e9ff217a44f778a82e50aae1c238859610826eb2ed13",
+      "copy": "step_020_after@2x.png",
+      "copy_sha256": "f0f7430d3ae44f61681a1f259de623c3f03b079da6d99396e737632278145c4b",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.992
+    },
+    {
+      "frame": "steps/step_020_before.png",
+      "frame_sha256": "5ee091825256c3a00561ed25a4b39c3410e0709832de2455f17a705e3e4295bf",
+      "copy": "step_020_before@2x.png",
+      "copy_sha256": "0dd52beb8464d6704f61854ec2eb2742983f6892edcf7c0603d039c597611ab8",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.992
+    },
+    {
+      "frame": "steps/step_021_after.png",
+      "frame_sha256": "2119476df67e38141828bef6aacaa0ef84f3008f70082e3cec8095d738d2c44c",
+      "copy": "step_021_after@2x.png",
+      "copy_sha256": "46abe3ca5436aa59cef30f4b503f61c7f3d43a1c3bc8b86ec0741e9017bf6a08",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.992
+    },
+    {
+      "frame": "steps/step_021_before.png",
+      "frame_sha256": "8cf5603f60d91e1de3b4e9ff217a44f778a82e50aae1c238859610826eb2ed13",
+      "copy": "step_021_before@2x.png",
+      "copy_sha256": "f0f7430d3ae44f61681a1f259de623c3f03b079da6d99396e737632278145c4b",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.992
+    },
+    {
+      "frame": "steps/step_023_after.png",
+      "frame_sha256": "b70ae0c93e0f571fa93f2dbc50ca6c5c2d90ce789f8c4d1aac9726f612f09eb8",
+      "copy": "step_023_after@2x.png",
+      "copy_sha256": "218b10a17a096954f4d4b70c1a5e09e75acaa752dc537ce82368c5a1ae823483",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.992
+    },
+    {
+      "frame": "steps/step_023_before.png",
+      "frame_sha256": "514e8112e5e74d1aa42c592777bfbb2ee76dd4cd53a28de11e0027cecd6315ab",
+      "copy": "step_023_before@2x.png",
+      "copy_sha256": "46abe3ca5436aa59cef30f4b503f61c7f3d43a1c3bc8b86ec0741e9017bf6a08",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.992
+    },
+    {
+      "frame": "steps/step_024_after.png",
+      "frame_sha256": "9ec4345b3641fa01ad7c5c81530898205f58fd024ed40b7686eead16cf95b918",
+      "copy": "step_024_after@2x.png",
+      "copy_sha256": "32e89a74dee09f77c8c94fa88e7e7c6e1649f5ad4a24608cc200d60b9d2dbdfc",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 7.382
+    },
+    {
+      "frame": "steps/step_024_before.png",
+      "frame_sha256": "b70ae0c93e0f571fa93f2dbc50ca6c5c2d90ce789f8c4d1aac9726f612f09eb8",
+      "copy": "step_024_before@2x.png",
+      "copy_sha256": "218b10a17a096954f4d4b70c1a5e09e75acaa752dc537ce82368c5a1ae823483",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.992
+    },
+    {
+      "frame": "steps/step_025_after.png",
+      "frame_sha256": "ad7af9bb99f14f5a92d3a53a70323a634a24af83d8785062694eb7dba1e8b35c",
+      "copy": "step_025_after@2x.png",
+      "copy_sha256": "f564c8bdc099eaf2cf7cfa93f8bc723a72e8d33c8976c682d3519c4285ab0ec8",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 7.137
+    },
+    {
+      "frame": "steps/step_025_before.png",
+      "frame_sha256": "4d5c1f01e9af7a1c6e1673e7cf436bf89e76c77b49b6ed36411e612c0b427414",
+      "copy": "step_025_before@2x.png",
+      "copy_sha256": "32e89a74dee09f77c8c94fa88e7e7c6e1649f5ad4a24608cc200d60b9d2dbdfc",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 7.194
+    },
+    {
+      "frame": "steps/step_027_after.png",
+      "frame_sha256": "8de20fdb72b9007e93fb67b489045f0e59e5bdb5e53c580b6ebe15b65f195453",
+      "copy": "step_027_after@2x.png",
+      "copy_sha256": "895bb24e0d964dd79d2f14ac2cac4e7d96bce77fa6f0ce30e78bd6679d928a7f",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.992
+    },
+    {
+      "frame": "steps/step_027_before.png",
+      "frame_sha256": "ad7af9bb99f14f5a92d3a53a70323a634a24af83d8785062694eb7dba1e8b35c",
+      "copy": "step_027_before@2x.png",
+      "copy_sha256": "f564c8bdc099eaf2cf7cfa93f8bc723a72e8d33c8976c682d3519c4285ab0ec8",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 7.137
+    },
+    {
+      "frame": "steps/step_029_after.png",
+      "frame_sha256": "bbbe8897ee5e55d5d2feefffdc85b3320f6a4e65ecd71db9041b455fcead3909",
+      "copy": "step_029_after@2x.png",
+      "copy_sha256": "1ed8c7022371dfe482879f624b7f53ff827f8453aa71ce97e38dcd6a6b01c273",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.992
+    },
+    {
+      "frame": "steps/step_029_before.png",
+      "frame_sha256": "9575524f132c7d42620fde89406ac3aed2eb204573c3916452f55cc67184b8ea",
+      "copy": "step_029_before@2x.png",
+      "copy_sha256": "895bb24e0d964dd79d2f14ac2cac4e7d96bce77fa6f0ce30e78bd6679d928a7f",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.992
+    },
+    {
+      "frame": "steps/step_030_after.png",
+      "frame_sha256": "69db672f3aa40af2acb36722fa06628507a6ce57a40c339b5d2bb893939d36d0",
+      "copy": "step_030_after@2x.png",
+      "copy_sha256": "8dd3de06c26b7ffa602048ce9713b8529c70429976c12c3604aa358b3af01fcd",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.992
+    },
+    {
+      "frame": "steps/step_030_before.png",
+      "frame_sha256": "bbbe8897ee5e55d5d2feefffdc85b3320f6a4e65ecd71db9041b455fcead3909",
+      "copy": "step_030_before@2x.png",
+      "copy_sha256": "1ed8c7022371dfe482879f624b7f53ff827f8453aa71ce97e38dcd6a6b01c273",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.992
+    },
+    {
+      "frame": "steps/step_032_after.png",
+      "frame_sha256": "aea373ea7e15c1f79edf1b1e2ecead3ac3c63d4a90f4361409a6482bba2c9e2c",
+      "copy": "step_032_after@2x.png",
+      "copy_sha256": "f22bc3c9b746cf41d335b79f9f7980c63559e4e8bc651147575003ce0539d2d7",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.992
+    },
+    {
+      "frame": "steps/step_032_before.png",
+      "frame_sha256": "31b9d231700f6fc9bcc1d0cea0971cd80d260b6f78b0bab13b32cad09c21ab0b",
+      "copy": "step_032_before@2x.png",
+      "copy_sha256": "8dd3de06c26b7ffa602048ce9713b8529c70429976c12c3604aa358b3af01fcd",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.992
+    },
+    {
+      "frame": "steps/step_033_after.png",
+      "frame_sha256": "0cd935407895a5c3ee2f7654af6a07e5a5c5c38121fb892ec40d0e385fc17ad1",
+      "copy": "step_033_after@2x.png",
+      "copy_sha256": "01e5b8161d45dee8979ebe2d33e5871891b2c23bafbd34920794f906d046e5be",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.992
+    },
+    {
+      "frame": "steps/step_033_before.png",
+      "frame_sha256": "aea373ea7e15c1f79edf1b1e2ecead3ac3c63d4a90f4361409a6482bba2c9e2c",
+      "copy": "step_033_before@2x.png",
+      "copy_sha256": "f22bc3c9b746cf41d335b79f9f7980c63559e4e8bc651147575003ce0539d2d7",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.992
+    },
+    {
+      "frame": "steps/step_035_after.png",
+      "frame_sha256": "f3df7652d31314d41f3952726f8c66799e206d20d686c6992a5bd0f2ff453caa",
+      "copy": "step_035_after@2x.png",
+      "copy_sha256": "73b4d015183d2626887090b8abb9b68ed005b4ef46e8265068d8870f3d51ef48",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.992
+    },
+    {
+      "frame": "steps/step_035_before.png",
+      "frame_sha256": "e1ef81952e525583ffb7c3cfda006df9fd1e3ab194868e6358de6aca28656f0d",
+      "copy": "step_035_before@2x.png",
+      "copy_sha256": "01e5b8161d45dee8979ebe2d33e5871891b2c23bafbd34920794f906d046e5be",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.992
+    },
+    {
+      "frame": "steps/step_036_after.png",
+      "frame_sha256": "8fc9f08d3e8b5020e6ee6de175d0256f1e9986ce3148f539dce3f06213aa447f",
+      "copy": "step_036_after@2x.png",
+      "copy_sha256": "43813d388372da8bbbba1d40dd6856a91f5169173e57f5490a8a1a29415313bd",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 7.293
+    },
+    {
+      "frame": "steps/step_036_before.png",
+      "frame_sha256": "f3df7652d31314d41f3952726f8c66799e206d20d686c6992a5bd0f2ff453caa",
+      "copy": "step_036_before@2x.png",
+      "copy_sha256": "73b4d015183d2626887090b8abb9b68ed005b4ef46e8265068d8870f3d51ef48",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.992
+    },
+    {
+      "frame": "steps/step_037_after.png",
+      "frame_sha256": "53f6881a34f9c1a9da383e387ffa0a4e45a37290d399f87adb6cc1ce49b3fb08",
+      "copy": "step_037_after@2x.png",
+      "copy_sha256": "e5476bde3c9a9bdb3247ab41d4f1fcd3ce60c0a1fd85561326022c655de8d7d9",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 7.137
+    },
+    {
+      "frame": "steps/step_037_before.png",
+      "frame_sha256": "bcf08dc21c279ffc0f2de6b253844375fb013d3444483befded46cfa2c0828f6",
+      "copy": "step_037_before@2x.png",
+      "copy_sha256": "43813d388372da8bbbba1d40dd6856a91f5169173e57f5490a8a1a29415313bd",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 7.137
+    },
+    {
+      "frame": "steps/step_039_after.png",
+      "frame_sha256": "70863115304bd68ba7268978a91699dd768ce1ddf5c4b3c5776e9e9715ec31e6",
+      "copy": "step_039_after@2x.png",
+      "copy_sha256": "00e9072cb6706c1ab2c379cafeef1b026ce2d2e812ce8e472b0274ddad4ec338",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 5.316
+    },
+    {
+      "frame": "steps/step_039_before.png",
+      "frame_sha256": "53f6881a34f9c1a9da383e387ffa0a4e45a37290d399f87adb6cc1ce49b3fb08",
+      "copy": "step_039_before@2x.png",
+      "copy_sha256": "e5476bde3c9a9bdb3247ab41d4f1fcd3ce60c0a1fd85561326022c655de8d7d9",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 7.137
+    },
+    {
+      "frame": "steps/step_040_after.png",
+      "frame_sha256": "f7d02f24d23558ad199e0eb89bc7e50588d9b6cdd81829e868d1228d77fdd630",
+      "copy": "step_040_after@2x.png",
+      "copy_sha256": "fc6ce30083cbdb89a3e6fc399d43c635cc29a318354caca8b744c20a455b8610",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 6.692
+    },
+    {
+      "frame": "steps/step_040_before.png",
+      "frame_sha256": "70863115304bd68ba7268978a91699dd768ce1ddf5c4b3c5776e9e9715ec31e6",
+      "copy": "step_040_before@2x.png",
+      "copy_sha256": "00e9072cb6706c1ab2c379cafeef1b026ce2d2e812ce8e472b0274ddad4ec338",
+      "copy_size": [
+        2560,
+        1600
+      ],
+      "max_tile_diff": 5.316
+    }
+  ],
+  "missing": []
+}

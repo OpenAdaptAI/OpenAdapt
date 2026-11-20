@@ -30,12 +30,14 @@ import yaml
 
 from benchmark.record_check_proof import main, prove_live
 from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
+from openadapt_flow.ir import ActionKind, Step, Workflow
 from openadapt_flow.record_check_synthesis import (
     PROOF_NAME,
     PROPOSED_NAME,
     SynthesisError,
     render,
     synthesize,
+    write,
 )
 from openadapt_flow.runtime.effects import Effect, EffectKind, Verdict
 from openadapt_flow.runtime.effects.effect import EffectState
@@ -43,6 +45,7 @@ from openadapt_flow.runtime.effects.surfaces import (
     SurfaceRoutedVerifier,
     surface_probe,
 )
+from openadapt_flow.scaffold_verifier import CONTRACT_FILENAME, build_record_check
 from openadapt_flow.verify_run import VerifyRunError, parse_verify_config
 from tests._record_check_fixtures import (
     NOTE,
@@ -674,13 +677,141 @@ def test_cli_writes_a_working_check_and_its_proof(tmp_path, e2e_service, capsys)
     assert (tmp_path / "out" / PROPOSED_NAME).is_file()
 
 
-def test_cli_exits_nonzero_for_a_draft(tmp_path, e2e_service, capsys):
+def test_cli_refuses_an_observed_partial_read_with_an_open_collateral_miss(
+    tmp_path, e2e_service, capsys
+):
     rec = effect_e2e_recording(tmp_path / "rec", e2e_service.base_url)
     code = main(["scaffold-verifier", str(rec), "--prove", "effect-e2e"])
     out = capsys.readouterr().out
+    assert code == 2, out
+    assert "Record check: REFUSED" in out
+    assert "This is a TODO draft." in out
+    assert "No read in the recording" not in out
+    assert "collateral_unaudited" in out
+    assert not (rec / PROPOSED_NAME).exists()
+    assert (rec / "effect_contract.yaml").is_file()
+    proof = json.loads((rec / PROOF_NAME).read_text())
+    assert proof["status"] == "refused"
+    assert "collateral_unaudited" in proof["refusal_reason"]
+    assert f"Recorded read REFUSED: {proof['refusal_reason']}" in out
+
+
+def _write_shaped_bundle(path: Path) -> Path:
+    Workflow(
+        name="triage demo",
+        steps=[
+            Step(
+                id="step_002",
+                intent="click Save encounter",
+                action=ActionKind.CLICK,
+                risk="irreversible",
+            )
+        ],
+    ).save(path)
+    return path
+
+
+def test_occupied_bundle_does_not_publish_into_the_fresh_recording(
+    tmp_path, e2e_service
+):
+    """A bundle plus --recording is one plan with two output directories.
+
+    An earlier draft in the bundle must refuse the command before a fresh
+    recording receives a refused proof.
+    """
+    rec = effect_e2e_recording(tmp_path / "rec", e2e_service.base_url)
+    bundle = _write_shaped_bundle(tmp_path / "bundle")
+    prior = b"prior-contract: true\n"
+    (bundle / CONTRACT_FILENAME).write_bytes(prior)
+    rec_before = _tree(rec)
+    bundle_before = _tree(bundle)
+    with pytest.raises(SystemExit, match="already holds a verifier generation"):
+        main(["scaffold-verifier", str(bundle), "--recording", str(rec)])
+    assert _tree(rec) == rec_before
+    assert _tree(bundle) == bundle_before
+    assert not (rec / PROOF_NAME).exists()
+    assert (bundle / CONTRACT_FILENAME).read_bytes() == prior
+
+
+def test_fresh_bundle_and_recording_publish_both_destinations(
+    tmp_path, e2e_service, capsys
+):
+    """Publish the proof and TODO draft, and report that published refusal.
+
+    The proof is in the recording and the TODO draft is in the bundle. The
+    cue and the exit status come from that proof, not from the bundle.
+    """
+    rec = effect_e2e_recording(tmp_path / "rec", e2e_service.base_url)
+    bundle = _write_shaped_bundle(tmp_path / "bundle")
+    code = main(["scaffold-verifier", str(bundle), "--recording", str(rec)])
+    out = capsys.readouterr().out
+    assert code == 2, out
+    proof = json.loads((rec / PROOF_NAME).read_text())
+    assert proof["status"] == "refused"
+    assert proof["approved"] is False
+    reason = proof["refusal_reason"]
+    assert reason and "collateral_unaudited" in reason
+    proof_path = rec / PROOF_NAME
+    assert (
+        "Record check: REFUSED. A recorded read can't see the whole save, "
+        f"so no check was written: {reason} ({proof_path})."
+    ) in out
+    assert f"Recorded read REFUSED: {reason}. This is a TODO draft." in out
+    assert "No read in the recording" not in out
+    assert str(bundle / PROOF_NAME) not in out
+    assert not (rec / PROPOSED_NAME).exists()
+    assert not (rec / CONTRACT_FILENAME).exists()
+    assert (bundle / CONTRACT_FILENAME).is_file()
+    assert not (bundle / PROOF_NAME).exists()
+
+
+def test_explicit_out_keeps_artifacts_that_stay_in_the_inputs(
+    tmp_path, e2e_service, capsys
+):
+    rec = effect_e2e_recording(tmp_path / "rec", e2e_service.base_url)
+    bundle = _write_shaped_bundle(tmp_path / "bundle")
+    (bundle / CONTRACT_FILENAME).write_bytes(b"prior-contract: true\n")
+    (rec / PROOF_NAME).write_bytes(b'{"approved": false, "status": "draft"}\n')
+    rec_before = _tree(rec)
+    bundle_before = _tree(bundle)
+    out_dir = tmp_path / "out"
+    code = main(
+        [
+            "scaffold-verifier",
+            str(bundle),
+            "--recording",
+            str(rec),
+            "--out",
+            str(out_dir),
+        ]
+    )
+    text = capsys.readouterr().out
+    assert code == 2, text
+    assert _tree(rec) == rec_before
+    assert _tree(bundle) == bundle_before
+    proof = json.loads((out_dir / PROOF_NAME).read_text())
+    assert proof["status"] == "refused"
+    reason = proof["refusal_reason"]
+    assert (
+        "Record check: REFUSED. A recorded read can't see the whole save, "
+        f"so no check was written: {reason} ({out_dir / PROOF_NAME})."
+    ) in text
+    assert f"Recorded read REFUSED: {reason}. This is a TODO draft." in text
+    assert str(rec / PROOF_NAME) not in text
+    assert "No read in the recording" not in text
+    assert not (out_dir / PROPOSED_NAME).exists()
+    assert (out_dir / CONTRACT_FILENAME).is_file()
+
+
+def test_cli_exits_nonzero_for_a_draft(tmp_path, e2e_service, capsys):
+    rec = effect_e2e_recording(tmp_path / "rec", e2e_service.base_url)
+    code = main(
+        ["scaffold-verifier", str(rec), "--complete-read", "--prove", "effect-e2e"]
+    )
+    out = capsys.readouterr().out
     assert code == 1
     assert "DRAFT (not working)" in out
-    assert "MISS: collateral_unaudited" in out
+    assert "Live fault suite (effect-e2e): FAILED" in out
 
 
 def test_cli_falls_back_to_the_todo_draft_without_reads(tmp_path, capsys):
@@ -688,8 +819,100 @@ def test_cli_falls_back_to_the_todo_draft_without_reads(tmp_path, capsys):
     code = main(["scaffold-verifier", str(rec)])
     out = capsys.readouterr().out
     assert code == 0
-    assert "TODO draft" in out
+    assert (
+        "No read in the recording returns the saved record (no network capture, "
+        "--db or --verifier), so this is a TODO draft."
+    ) in out
+    assert "REFUSED" not in out
     assert (rec / "effect_contract.yaml").is_file()
+
+
+def _tree(directory: Path) -> dict[str, bytes]:
+    return {
+        path.relative_to(directory).as_posix(): path.read_bytes()
+        for path in sorted(directory.rglob("*"))
+        if path.is_file()
+    }
+
+
+def test_fresh_complete_read_then_refusal_keeps_every_output_byte(
+    tmp_path, e2e_service
+):
+    """A later refusal must not pair a new proof with an older candidate."""
+    rec = effect_e2e_recording(tmp_path / "rec", e2e_service.base_url)
+    out = tmp_path / "out"
+    code = main(["scaffold-verifier", str(rec), "--complete-read", "--out", str(out)])
+    assert code in (0, 1)
+    proposed = out / PROPOSED_NAME
+    assert proposed.is_file()
+    assert b"needs_operator_confirmation: true" in proposed.read_bytes()
+    proof = json.loads((out / PROOF_NAME).read_text())
+    assert proof["status"] != "refused"
+    assert proof["approved"] is False
+    before = _tree(out)
+    with pytest.raises(SystemExit, match="already holds a verifier generation"):
+        main(["scaffold-verifier", str(rec), "--out", str(out)])
+    assert _tree(out) == before
+
+
+def test_refusal_then_complete_read_keeps_the_refused_generation(tmp_path, e2e_service):
+    rec = effect_e2e_recording(tmp_path / "rec", e2e_service.base_url)
+    out = tmp_path / "out"
+    code = main(["scaffold-verifier", str(rec), "--out", str(out)])
+    assert code == 2
+    assert not (out / PROPOSED_NAME).exists()
+    proof = json.loads((out / PROOF_NAME).read_text())
+    assert proof["status"] == "refused"
+    assert (out / "effect_contract.yaml").is_file()
+    before = _tree(out)
+    with pytest.raises(SystemExit, match="already holds a verifier generation"):
+        main(
+            [
+                "scaffold-verifier",
+                str(rec),
+                "--complete-read",
+                "--out",
+                str(out),
+            ]
+        )
+    assert _tree(out) == before
+
+
+def test_build_record_check_refuses_reuse_before_replacing_a_candidate(
+    tmp_path, e2e_service
+):
+    rec = effect_e2e_recording(tmp_path / "rec", e2e_service.base_url)
+    out = tmp_path / "out"
+    result = build_record_check(rec, out, complete_read=True)
+    assert result is not None
+    assert (out / PROPOSED_NAME).is_file()
+    before = _tree(out)
+    with pytest.raises(SystemExit, match="already holds a verifier generation"):
+        build_record_check(rec, out)
+    assert _tree(out) == before
+    assert not (out / "effect_contract.yaml").exists()
+
+
+def test_write_refuses_an_occupied_generation_before_replacing_it(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "app.db"
+    conn = sqlite3.connect(path)
+    conn.execute(
+        'CREATE TABLE visits (id INTEGER PRIMARY KEY, "patient_id" TEXT, note TEXT)'
+    )
+    conn.execute("INSERT INTO visits VALUES (1, 'p1', ?)", (NOTE,))
+    conn.commit()
+    conn.close()
+    rec = write_recording(tmp_path / "rec", {"patient-id": "p1", "note": NOTE})
+    proposal = synthesize(rec, db_path=path)
+    out = tmp_path / "out"
+    write(proposal, out)
+    assert (out / PROPOSED_NAME).is_file()
+    before = _tree(out)
+    with pytest.raises(SystemExit, match="already holds a verifier generation"):
+        write(proposal, out)
+    assert _tree(out) == before
 
 
 # ---------------------------------------------------------------------------

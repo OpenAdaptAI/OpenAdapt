@@ -1,0 +1,62 @@
+{
+  "authorized_by": "Richard Abrich in Advisor fable on 2026-11-19: 'yes do the new runs for 2x frames.' Signing authorized by 'you do it' at15:16UTC; scope r3,r4,r5,r6, synthetic OpenEMR only. Resumed by Codex from those contexts.",
+  "bundle_content_digest": "10e4594523362a0c79a8a533742a71b5b73178d32378c7bc934b51a2b006bc1c",
+  "runs": [
+    {
+      "n": 1,
+      "ref": "r3-ines-carvalho",
+      "expected": "VERIFIED",
+      "execution_outcome": "VERIFIED",
+      "transaction_outcome": "VERIFIED",
+      "new_charts": 1,
+      "changed_charts": 0,
+      "seal_key_id": "seal-ed25519-ca08dd7f42a4be01",
+      "report_sha256": "e37a0f5ed19066611796f45f8459a55cd4f7c9d778f449154a0e668561b1bb6b",
+      "halt_reason": null,
+      "mismatches": [
+        "no 2x copy of step_016_before.png: no copy"
+      ]
+    },
+    {
+      "n": 2,
+      "ref": "r4-theo-lindqvist",
+      "expected": "VERIFIED",
+      "execution_outcome": "VERIFIED",
+      "transaction_outcome": "VERIFIED",
+      "new_charts": 1,
+      "changed_charts": 0,
+      "seal_key_id": "seal-ed25519-ca08dd7f42a4be01",
+      "report_sha256": "e3451acf25d8448b9a326f96d4dfd31cfafc7f533bd182dfa688ba40df2d8bca",
+      "halt_reason": null,
+      "mismatches": []
+    },
+    {
+      "n": 3,
+      "ref": "r5-grace-adeyemi",
+      "expected": "VERIFIED",
+      "execution_outcome": "VERIFIED",
+      "transaction_outcome": "VERIFIED",
+      "new_charts": 1,
+      "changed_charts": 0,
+      "seal_key_id": "seal-ed25519-ca08dd7f42a4be01",
+      "report_sha256": "a8ad2734114829b8fdcfa630cf7a3148060d339b58b2077ced251d9a83357560",
+      "halt_reason": null,
+      "mismatches": [
+        "no 2x copy of step_016_before.png: no copy"
+      ]
+    },
+    {
+      "n": 4,
+      "ref": "r6-rosa-delgado",
+      "expected": "HALTED_BEFORE_EFFECT",
+      "execution_outcome": "HALTED",
+      "transaction_outcome": "HALTED_BEFORE_EFFECT",
+      "new_charts": 0,
+      "changed_charts": 0,
+      "seal_key_id": "seal-ed25519-ca08dd7f42a4be01",
+      "report_sha256": "d88239140ed9b5bd60563dc1aeeb65e5efe634961fc92334d1632457031f9a02",
+      "halt_reason": "Postconditions failed for step 'step_039' (click 'Create New Patient'): expected screen state not reached (semantic drift) \u2014 failed: text_present 'No matches were found.' \u2014 run aborted",
+      "mismatches": []
+    }
+  ]
+}

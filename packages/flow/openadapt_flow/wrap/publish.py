@@ -56,6 +56,8 @@ PUBLISH_SCHEMA = "openadapt.wrap-publish/v1"
 MANIFEST_NAME = "openadapt-wrap-publish.json"
 READBACK_PATH = "readback/verify.yaml"
 EXECUTE_REQUEST_SCHEMA = "openadapt.execute-request/v1"
+#: The definition's code when the endpoint's secret parameters have no vault set.
+VAULT_SET_REQUIRED = "vault_set_required"
 #: The policy a task certifies under when its task file names none.
 DEFAULT_POLICY = "clinical-write"
 
@@ -165,6 +167,31 @@ def _record_check(bundle: Path) -> tuple[dict[str, Any], str, str]:
             "BUNDLE_UNREADABLE", "the admitted bundle carries no content digest"
         )
     return check, record_check_digest(workflow), str(digest)
+
+
+def _secret_parameters(bundle: Path, parameters: Sequence[str]) -> list[str]:
+    """The task inputs the admitted program types from a secret, sorted.
+
+    A sign-in the first run found (a password field and the username paired
+    with it) makes those inputs secret parameters (``ir.Step.secret``).
+    """
+    from openadapt_flow.ir import Workflow
+
+    try:
+        names = set(Workflow.load(bundle).secret_params)
+    except Exception:  # noqa: BLE001 - _record_check already loaded it
+        raise PublishError(
+            "BUNDLE_UNREADABLE", "the admitted bundle cannot be loaded"
+        ) from None
+    from openadapt_flow.runtime.replayer import secret_env_vars
+
+    try:
+        secret_env_vars(sorted(names))
+        if not names.issubset(parameters):
+            raise ValueError("secret parameter is not a declared task input")
+    except ValueError as exc:
+        raise PublishError("SECRET_PARAMETER_NAMES", str(exc)) from None
+    return sorted(names)
 
 
 def _run_shape(staged: Path, policy: str) -> dict[str, Any]:
@@ -316,15 +343,20 @@ def stage(
     shutil.copytree(bundle, staged, symlinks=True, ignore=local_only)
     (staged / READBACK_PATH).parent.mkdir(parents=True, exist_ok=True)
     _stage_hosted_admission(staged, checks, admission, key_dir)
+    secret = _secret_parameters(bundle, parameters)
+    public = [name for name in parameters if name not in secret]
     manifest = {
         "schema": PUBLISH_SCHEMA,
-        "parameters": list(parameters),
+        "parameters": public,
         "input_schema": {
             "type": "object",
-            "properties": {name: {"type": "string"} for name in parameters},
-            "required": list(parameters),
+            "properties": {name: {"type": "string"} for name in public},
+            "required": public,
             "additionalProperties": False,
         },
+        # Sign-in values the program types from a secret. A hosted call never
+        # carries them: the endpoint's vault set (secrets_ref) supplies them.
+        "secret_parameters": secret,
         "workflow_digest": content_digest,
         "record_check_sha256": check_digest,
         "saves": len(check["saves"]),
@@ -638,6 +670,16 @@ def fetch_definition(
             ),
             "code": None,
         }
+    if status == 409 and code == VAULT_SET_REQUIRED:
+        return {
+            "callable": False,
+            "reason": (
+                "the endpoint signs in with secret parameters, and no vault set "
+                "holding them is attached. An owner or admin attaches one in the "
+                "dashboard, or with PUT .../workflow/{id}/secrets"
+            ),
+            "code": code,
+        }
     if status == 409:
         return {
             "callable": False,
@@ -695,6 +737,9 @@ def curl_examples(endpoint: str, definition: Optional[Mapping[str, Any]]) -> lis
         body[name] = value
     parameters: dict[str, str] = {}
     for row in definition["parameter_schema"]:
+        if isinstance(row, dict) and row.get("secret") is True:
+            # Supplied by the endpoint's vault set, never by the caller.
+            continue
         label = row.get("name") if isinstance(row, dict) else None
         if not isinstance(label, str) or not re.fullmatch(
             r"[A-Za-z_][A-Za-z0-9_]{0,63}", label
@@ -858,29 +903,17 @@ def _check_public_target(url: str) -> str:
 # -- one review of what will be uploaded ----------------------------------------
 
 
-def _derive(source: Path, destination: Path, kind: str) -> dict[str, Any]:
-    """The sanitized derivative of ``source``, reused while ``source`` is unchanged."""
+def _derive(source: Path, destination: Path, kind: str) -> tuple[Path, dict[str, Any]]:
+    """Reuse the current transformation or create a separate unapproved generation."""
     from openadapt_flow import safe_errors
     from openadapt_flow.sanitized_artifact import (
         SanitizationError,
-        load_and_verify_derivative,
-        sanitize_artifact,
-        source_tree_sha256,
+        ensure_current_derivative,
     )
 
-    if destination.is_symlink():
-        raise PublishError("BUNDLE_UNSAFE", "the publish directory is a symbolic link")
     label = "program" if kind == "bundle" else "recording"
     try:
-        if destination.exists():
-            try:
-                manifest = load_and_verify_derivative(destination)
-                if manifest.get("source_tree_sha256") == source_tree_sha256(source):
-                    return manifest
-            except SanitizationError:
-                pass
-            shutil.rmtree(destination)
-        return sanitize_artifact(source, destination, kind=kind)
+        return ensure_current_derivative(source, destination, kind=kind)
     except SanitizationError as exc:
         raise PublishError(
             "SANITIZATION_FAILED",
@@ -912,6 +945,7 @@ def review_summary(
     org_id: Optional[str] = None,
 ) -> list[str]:
     """A short summary of exactly what will leave the machine."""
+    secret = list(program.manifest.get("secret_parameters") or [])
     files = list(bundle_manifest.get("files") or [])
     changed = sum(1 for row in files if isinstance(row, dict) and row.get("changed"))
     unresolved = len(bundle_manifest.get("residual_findings") or [])
@@ -922,7 +956,17 @@ def review_summary(
         *([f"  org         {org_id}"] if org_id else []),
         f"  workflow    {name} ({destination})",
         f"  program     {program.manifest['saves']} saving step(s), each read back "
-        "by the task's verify.yaml; inputs: " + ", ".join(parameters),
+        "by the task's verify.yaml; inputs: "
+        + (", ".join(name for name in parameters if name not in secret) or "none"),
+        *(
+            [
+                f"  sign-in     {', '.join(secret)}: secret parameters; no value "
+                "leaves this machine. Each hosted call reads them from the "
+                "endpoint's vault set (secrets_ref)"
+            ]
+            if secret
+            else []
+        ),
         f"  upload      the sanitized program: {len(files)} files, "
         f"{max(1, round(size / 1024))} KB, {changed} changed by the scrubber, "
         f"{unresolved} unresolved findings",
@@ -1180,7 +1224,9 @@ def run(args: argparse.Namespace) -> int:
         route = upload_route(org_id, args.workflow_id)
 
         bundle_derivative = program.record_dir / "sanitized-bundle"
-        bundle_manifest = _derive(program.staged, bundle_derivative, "bundle")
+        bundle_derivative, bundle_manifest = _derive(
+            program.staged, bundle_derivative, "bundle"
+        )
         if bundle_manifest.get("execution_semantics") != "preserved":
             raise PublishError(
                 "SANITIZATION_CHANGED_PROGRAM",
@@ -1191,7 +1237,9 @@ def run(args: argparse.Namespace) -> int:
         derivatives = [(bundle_derivative, program.staged)]
         recording_derivative = program.record_dir / "sanitized-recording"
         if evidence is not None:
-            _derive(evidence.recording, recording_derivative, "recording")
+            recording_derivative, _ = _derive(
+                evidence.recording, recording_derivative, "recording"
+            )
             derivatives.append((recording_derivative, evidence.recording))
 
         summary = review_summary(
@@ -1402,6 +1450,15 @@ def _finish(
         f"Published. Endpoint: {endpoint}",
         f"Dashboard: {result.get('dashboard_url')}",
     ]
+    secret = list(program.manifest.get("secret_parameters") or [])
+    if secret:
+        document["secret_parameters"] = secret
+        lines.append(
+            "Sign-in: each call reads "
+            + ", ".join(secret)
+            + " from the endpoint's vault set. An owner or admin attaches one "
+            "(Dashboard, Secrets) holding those names before the first call."
+        )
     if check.get("callable"):
         lines.append(
             "The endpoint is callable. Each call returns an execution id; its "

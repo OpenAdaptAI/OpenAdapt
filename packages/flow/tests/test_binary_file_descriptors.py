@@ -109,3 +109,32 @@ def test_binary_open_refuses_an_explicit_text_mode(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     assert_explicit_text_mode_refused(tmp_path, monkeypatch, open_binary)
+
+
+def test_copilot_offline_decision_records_preserve_physical_bytes(tmp_path, crt_files):
+    import json
+
+    from openadapt_flow.copilot_bridge import CopilotSessionBridge
+    from openadapt_flow.form_tx.types import HumanDecisionAction, HumanResolutionInput
+
+    bridge = CopilotSessionBridge(tmp_path / "mailbox")
+    decision = HumanResolutionInput(
+        halt_id="binary-halt",
+        action=HumanDecisionAction.PROVIDE_VALUE,
+        actor_id="synthetic-operator",
+        provided_value="reader café\r\nsecond line\x1a",
+        idempotency_key="binary-decision",
+    )
+    expected = (
+        json.dumps(
+            decision.model_dump(mode="json"),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        )
+        + "\n"
+    ).encode("utf-8")
+    assert bridge.append_decision(decision) == (True, 1)
+    assert bridge.decisions_path.read_bytes() == expected
+    assert bridge.append_decision(decision) == (False, 1)
+    assert bridge.decisions_path.read_bytes() == expected

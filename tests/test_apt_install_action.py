@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 import yaml
+from _apt_action_reference import APT_ACTION_REF
 
 ROOT = Path(__file__).resolve().parents[1]
 ACTION = ROOT / ".github" / "actions" / "apt-install"
@@ -242,7 +243,7 @@ def _cached_uses():
         document = yaml.safe_load(path.read_text(encoding="utf-8"))
         for job_name, job in (document.get("jobs") or {}).items():
             for step in job.get("steps") or []:
-                if step.get("uses") != "./.github/actions/apt-install":
+                if step.get("uses") != APT_ACTION_REF:
                     continue
                 options = step.get("with") or {}
                 if str(options.get("use-cache", "true")) == "false":

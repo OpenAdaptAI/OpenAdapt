@@ -11,6 +11,7 @@ import re
 from pathlib import Path
 
 import pytest
+from _apt_action_reference import APT_ACTION_REF, APT_ACTION_SOURCE
 
 GITHUB = Path(__file__).resolve().parents[1] / ".github"
 RELEASES = [
@@ -22,9 +23,19 @@ RELEASES = [
     "actions/build-desktop-windows-installers/action.yml",
 ]
 
-# Local actions that can cache but take a `use-cache` input. A release passes
+# Actions that can cache but take a `use-cache` input. A release passes
 # `use-cache: "false"`, and the action gates every cache step on that input.
 CACHE_OPTIONAL = {"actions/apt-install"}
+
+
+def _cache_optional_action(uses: str) -> str | None:
+    local = uses.removeprefix("./.github/")
+    if local in CACHE_OPTIONAL:
+        return local
+    if uses.startswith(f"{APT_ACTION_SOURCE}@"):
+        assert uses == APT_ACTION_REF, ("unreviewed infrastructure helper ref", uses)
+        return "actions/apt-install"
+    return None
 
 
 def _steps(text: str) -> list[tuple[str, str]]:
@@ -68,6 +79,8 @@ def test_release_workflow_restores_no_cache(name: str) -> None:
 def test_local_actions_a_release_uses_are_checked_too(name: str) -> None:
     text = (GITHUB / name).read_text(encoding="utf-8")
     for uses, _ in _steps(text):
+        if _cache_optional_action(uses):
+            continue
         if uses.startswith("./.github/"):
             local = uses.removeprefix("./.github/")
             if local in CACHE_OPTIONAL:
@@ -79,7 +92,7 @@ def test_local_actions_a_release_uses_are_checked_too(name: str) -> None:
 def test_releases_turn_off_the_cache_of_cache_optional_actions(name: str) -> None:
     text = (GITHUB / name).read_text(encoding="utf-8")
     for uses, block in _steps(text):
-        if uses.removeprefix("./.github/") in CACHE_OPTIONAL:
+        if _cache_optional_action(uses):
             assert re.search(r'^\s+use-cache: "false"$', block, re.MULTILINE), (
                 name,
                 block,

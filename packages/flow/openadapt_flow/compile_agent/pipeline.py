@@ -341,6 +341,9 @@ class _HarnessedAgent:
         # A browser page gets the DOM harness; any other surface (a native
         # window, an RDP or Citrix client window) gets the surface harness.
         harness_type = Harness if computer.page is not None else SurfaceHarness
+        if self.readback is not None and hasattr(self.readback, "withheld"):
+            session = getattr(computer, "session", None)
+            self.readback.withheld = lambda: getattr(session, "withheld_params", ())
         self.harness = harness_type(
             computer,
             self.gate,
@@ -540,6 +543,7 @@ class FirstRunCompiler:
             teach_authorization=self.teach_authorization,
             on_screen=self.on_screen,
             before_capture=self.before_capture,
+            withhold_credentials=True,
         )
 
         # Resolve only the fixed task-local promoted-repair pointer.
@@ -584,6 +588,21 @@ class FirstRunCompiler:
             cfg, values, path = self._pending
             capture_baseline(cfg, values, path)
             self._receipt_baseline = path
+
+    def _secret_params(self) -> frozenset[str]:
+        """The task inputs the program withholds as secret parameters.
+
+        A sign-in found in run 1 (a password field and the username paired
+        with it) makes its inputs secret: the bundle types them from
+        ``OPENADAPT_FLOW_SECRET_<NAME>`` and stores no value.
+        """
+
+        return withheld_params(self._jit().bundle_dir) & frozenset(self.task.params)
+
+    def _public_params(self) -> list[str]:
+        """The task's parameters that are not secret, sorted."""
+
+        return sorted(set(self.task.params) - self._secret_params())
 
     def save_spec(self) -> Path:
         return _write_json(
@@ -698,7 +717,6 @@ class FirstRunCompiler:
             "emitted.json",
         ):
             (self.out_dir / stale).unlink(missing_ok=True)
-        _write_run1_values(self.out_dir / RUN1_VALUES_FILE, values)
         attempt = self.dir / "attempts" / _stamp()
         harnessed = _HarnessedAgent(
             agent,
@@ -726,6 +744,16 @@ class FirstRunCompiler:
         result: JitResult = jit.run(**params)
         seconds = time.monotonic() - started
         after = self.observer.system_of_record
+        # A sign-in value the recording withheld (a password, and the username
+        # paired with it) is never saved in the record and never kept here:
+        # not in run 1's value digests, the record check or the proposal.
+        withheld = self._secret_params()
+        public = {k: v for k, v in values.items() if k not in withheld}
+        if jit.candidate() is not None:
+            # Only a draft is ever admitted against these digests. A refused or
+            # failed capture has no bundle to say which inputs were secret, so
+            # it keeps no digest of any input.
+            _write_run1_values(self.out_dir / RUN1_VALUES_FILE, public)
         harness = harnessed.harness
         run1: dict[str, Any] = {
             "attempt": str(attempt),
@@ -785,7 +813,7 @@ class FirstRunCompiler:
         if result.status != lifecycle_status_draft():
             return done(result.status, result.detail)
         check = check_run_record(
-            self._baseline, after, expect=self.expect, values=values
+            self._baseline, after, expect=self.expect, values=public
         )
         run1["record_check"] = check.to_dict()
         _write_json(attempt / "run1.json", run1)
@@ -796,7 +824,7 @@ class FirstRunCompiler:
                 "; ".join(check.reasons) + f" (draft set aside at {kept})",
                 record_check=check.to_dict(),
             )
-        proposed = self._propose(self._baseline or [], after or [], values)
+        proposed = self._propose(self._baseline or [], after or [], public)
         if trace_data is not None:
             run1["code_action"]["program"] = self._check_trace(jit, trace_data)
             _write_json(attempt / "run1.json", run1)
@@ -896,7 +924,9 @@ class FirstRunCompiler:
             **extra,
             "file": str(self.out_dir / PROPOSED_FILE),
             # Confirming the checks also confirms these as the parameters.
-            "params": sorted(self.task.params),
+            "params": self._public_params(),
+            # Sign-in values the program types from a secret, never stores.
+            "secret_params": sorted(self._secret_params()),
             "effects": [
                 {
                     "kind": e.get("kind"),
@@ -1051,7 +1081,7 @@ class FirstRunCompiler:
                 if (match.get(key) or {}).get("literal") != wanted:
                     raise ValueError(f"the check does not pin {key!r} to {wanted!r}")
             bound = {v.get("param") for v in match.values() if isinstance(v, dict)}
-            unbound = sorted(set(self.task.params) - bound)
+            unbound = sorted(set(self._public_params()) - bound)
             if unbound:
                 raise ValueError(f"no check reads back input(s) {unbound}")
         # A check built from other reads than the task's verifier (for
@@ -1065,9 +1095,9 @@ class FirstRunCompiler:
             "effects": effects,
         }
         parse_verify_config(config, source="confirmed checks")
-        if self.task.params:
+        if self._public_params():
             jit.confirm_params(
-                principal_id=name, accept_params=sorted(self.task.params), confirm="ok"
+                principal_id=name, accept_params=self._public_params(), confirm="ok"
             )
         path = self.out_dir / CONFIRMED_FILE
         _write_private(
@@ -1085,7 +1115,7 @@ class FirstRunCompiler:
                 ).hexdigest(),
                 "contract_sha256": sha256_tagged(config),
                 "dropped_fields": sorted(drop_fields),
-                "params_confirmed": sorted(self.task.params),
+                "params_confirmed": self._public_params(),
             },
         )
         lifecycle._event(jit.program_dir, "record_checks_confirmed", principal_id=name)
@@ -1195,7 +1225,11 @@ class FirstRunCompiler:
                     f"review {self.dir}, then pass review= to show them here",
                 )
             status = jit.status()
-            shown = {"steps": status["steps"], "params": sorted(self.task.params)}
+            shown = {
+                "steps": status["steps"],
+                "params": self._public_params(),
+                "secret_params": sorted(self._secret_params()),
+            }
             if not review("review", shown):
                 return self._result("draft", f"{person} did not confirm the review")
             jit.review(
@@ -1288,6 +1322,13 @@ class FirstRunCompiler:
         line = f"openadapt-flow compile-agent run {self.dir}"
         return f"{line} {flags}".rstrip()
 
+    def require_credential_withholding(self) -> None:
+        """Verify capture privacy before exposing any protected cached artifact."""
+        jit = self._jit()
+        lifecycle.require_credential_withholding(
+            jit.program_dir, bundle_dir=jit.bundle_dir, key_dir=jit.key_dir
+        )
+
     def emit(self) -> dict[str, Any]:
         """Write the Agent Skill, the MCP server, and the CLI line."""
 
@@ -1296,6 +1337,7 @@ class FirstRunCompiler:
         jit = self._jit()
         if not jit.admitted:
             raise lifecycle.AdmissionError("emit an admitted program only")
+        self.require_credential_withholding()
         cli = self.cli_line()
         skill = emit_skill_for(jit.bundle_dir, self.out_dir / "skill", cli)
         mcp = emit_mcp(self, self.out_dir / "mcp" / "server.py")
@@ -1332,6 +1374,7 @@ class FirstRunCompiler:
                 run_dir=None,
                 detail="this task has no admitted program; compile an agent run first",
             )
+        self.require_credential_withholding()
         result, receipt, path = self._governed("run", values, lambda: jit.run(**params))
         outcome = _receipt_outcome(receipt)
         verified = result.status == "VERIFIED" and outcome == "VERIFIED"
@@ -1350,6 +1393,19 @@ class FirstRunCompiler:
             detail=result.detail,
             inbox_item=result.inbox_item,
         )
+
+
+def withheld_params(bundle_dir: Path) -> frozenset[str]:
+    """A bundle's secret parameters, or none when it can't be read."""
+
+    from openadapt_flow.ir import Workflow
+
+    if not (Path(bundle_dir) / "workflow.json").is_file():
+        return frozenset()
+    try:
+        return frozenset(Workflow.load(Path(bundle_dir)).secret_params)
+    except Exception:  # noqa: BLE001 - an unreadable draft withholds nothing new
+        return frozenset()
 
 
 def _receipt_outcome(receipt: Optional[Mapping[str, Any]]) -> Optional[str]:
