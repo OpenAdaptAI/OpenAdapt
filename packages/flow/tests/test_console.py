@@ -59,7 +59,7 @@ from openadapt_flow.runtime.durable.continuation import (  # noqa: E402
     activate_continuation_token,
 )
 from openadapt_flow.runtime.effects import Effect, EffectKind  # noqa: E402
-from tests.browser_readiness import ReadyBrowserMixin  # noqa: E402
+from tests.browser_readiness import ReadyBrowserMixin, assert_chromium_launch_args  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # fixtures: a real bundle, a halted run, a paused run, a skill library
@@ -1851,6 +1851,7 @@ def test_attended_console_closes_backend_when_server_path_raises(monkeypatch):
 
 def test_attended_web_playwright_lifecycle_stays_on_owner_thread(monkeypatch):
     import openadapt_flow.__main__ as cli
+    from openadapt_flow._browser_readiness import chromium_launch_args
     from openadapt_flow.runtime.durable.attended import AttendedExecutionResult
 
     args = cli.build_parser().parse_args(
@@ -1889,7 +1890,10 @@ def test_attended_web_playwright_lifecycle_stays_on_owner_thread(monkeypatch):
             mark("browser-close")
 
     class Chromium:
-        def launch(self, *, headless):
+        name = "chromium"
+
+        def launch(self, *, headless, args):
+            assert_chromium_launch_args(args)
             assert headless is False
             mark("browser-launch")
             return Browser()
@@ -1934,7 +1938,7 @@ def test_attended_web_playwright_lifecycle_stays_on_owner_thread(monkeypatch):
     def fake_launch_options(*, headless):
         assert headless is False
         mark("ensure-browser")
-        return {}
+        return {"args": chromium_launch_args()}
 
     monkeypatch.setattr(
         "openadapt_flow._browser_setup.chromium_launch_options",

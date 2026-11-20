@@ -191,9 +191,11 @@ def page():
             browser = pw.chromium.launch(headless=True)
         except Exception as exc:  # pragma: no cover - no browser installed
             pytest.skip(f"chromium unavailable: {exc}")
-        page = browser.new_page(viewport={"width": 640, "height": 400})
-        yield page
-        browser.close()
+        try:
+            page = browser.new_page(viewport={"width": 640, "height": 400})
+            yield page
+        finally:
+            browser.close()
 
 
 class _Computer:

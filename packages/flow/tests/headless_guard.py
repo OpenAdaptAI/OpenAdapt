@@ -4,30 +4,37 @@ from __future__ import annotations
 
 import importlib
 import os
+import subprocess
 from functools import wraps
+from pathlib import Path
 from typing import Any
 
 import pytest
+
+
+def _headed(options: dict[str, Any]) -> bool:
+    ignored = options.get("ignore_default_args") or []
+    return (
+        options.get("headless") is False
+        or options.get("devtools") is True
+        or ignored is True
+        or any(
+            str(arg).split("=", 1)[0] in {"--headless", "-headless"} for arg in ignored
+        )
+        or bool(os.environ.get("PWDEBUG"))
+    )
 
 
 class _LaunchGuard:
     def __init__(self) -> None:
         self.patch = pytest.MonkeyPatch()
         self.item: Any = None
+        self.shell_present: dict[Path, bool] = {}
 
     def options(self, options: dict[str, Any]) -> dict[str, Any]:
         if os.environ.get("CI", "").strip().lower() in {"true", "1"}:
             return options
-        ignored = options.get("ignore_default_args") or []
-        removes_headless = ignored is True or any(
-            str(arg).split("=", 1)[0] in {"--headless", "-headless"} for arg in ignored
-        )
-        headed = (
-            options.get("headless") is False
-            or options.get("devtools") is True
-            or removes_headless
-            or bool(os.environ.get("PWDEBUG"))
-        )
+        headed = _headed(options)
         allowed = (
             self.item is not None
             and self.item.get_closest_marker("headed") is not None
@@ -44,17 +51,51 @@ class _LaunchGuard:
             options["headless"] = True
         return options
 
-    def sync_launch(self, original: Any) -> Any:
+    def fixture_options(
+        self, browser_type: Any, options: dict[str, Any], *, persistent: bool
+    ) -> dict[str, Any]:
+        options = self.options(options)
+        if getattr(browser_type, "name", None) != "chromium":
+            return options
+        from openadapt_flow._browser_readiness import chromium_launch_args
+
+        options["args"] = chromium_launch_args(options.get("args"))
+        if (
+            persistent
+            or _headed(options)
+            or options.get("executable_path") is not None
+            or options.get("channel") is not None
+        ):
+            return options
+
+        # Implicit headless launches select Playwright's matching shell. Only
+        # override that choice when its shell is absent and its full build exists.
+        from openadapt_flow._browser_setup import _bundled_present
+
+        full = Path(browser_type.executable_path)
+        if full.is_file():
+            if full not in self.shell_present:
+                try:
+                    self.shell_present[full] = _bundled_present(only_shell=True)
+                except (OSError, subprocess.SubprocessError):
+                    return options
+            if not self.shell_present[full]:
+                options["executable_path"] = str(full)
+        return options
+
+    def sync_launch(self, original: Any, *, persistent: bool) -> Any:
         @wraps(original)
         def guarded(browser_type: Any, *args: Any, **kwargs: Any) -> Any:
-            return original(browser_type, *args, **self.options(kwargs))
+            options = self.fixture_options(browser_type, kwargs, persistent=persistent)
+            return original(browser_type, *args, **options)
 
         return guarded
 
-    def async_launch(self, original: Any) -> Any:
+    def async_launch(self, original: Any, *, persistent: bool) -> Any:
         @wraps(original)
         async def guarded(browser_type: Any, *args: Any, **kwargs: Any) -> Any:
-            return await original(browser_type, *args, **self.options(kwargs))
+            options = self.fixture_options(browser_type, kwargs, persistent=persistent)
+            return await original(browser_type, *args, **options)
 
         return guarded
 
@@ -71,7 +112,12 @@ class _LaunchGuard:
                 continue
             for name in ("launch", "launch_persistent_context"):
                 self.patch.setattr(
-                    browser_type, name, wrap(getattr(browser_type, name))
+                    browser_type,
+                    name,
+                    wrap(
+                        getattr(browser_type, name),
+                        persistent=name == "launch_persistent_context",
+                    ),
                 )
 
     @pytest.hookimpl(hookwrapper=True)

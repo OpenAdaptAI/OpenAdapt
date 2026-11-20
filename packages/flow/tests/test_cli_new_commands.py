@@ -45,7 +45,7 @@ from openadapt_flow.runtime.durable.checkpoint import (
 )
 from openadapt_flow.runtime.durable.program_checkpoint import bundle_version
 from tests._approver_keys import approvers_yaml
-from tests.browser_readiness import ReadyBrowserMixin
+from tests.browser_readiness import ReadyBrowserMixin, assert_chromium_launch_args
 
 # ---------------------------------------------------------------------------
 # worklist loading + relation binding
@@ -395,7 +395,10 @@ class _FakeBrowser(ReadyBrowserMixin):
 
 
 class _FakeChromium:
-    def launch(self, headless=True):
+    name = "chromium"
+
+    def launch(self, headless=True, *, args):
+        assert_chromium_launch_args(args)
         return _FakeBrowser()
 
 
