@@ -319,6 +319,8 @@ langgraph = ["langgraph>=1.2,<2", "langchain-core>=1.7,<2"]
 Homepage = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow"
 Repository = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow"
 Issues = "https://github.com/OpenAdaptAI/OpenAdapt/issues"
+Documentation = "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/README.md"
+Changelog = "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/CHANGELOG.md"
 
 [project.scripts]
 openadapt-flow = "openadapt_flow.__main__:main"
@@ -385,6 +387,8 @@ exclude = [
     # Grader-soundness ledgers and summaries are repository-only.
     "/benchmark/grader_soundness/results",
     "/benchmark/verifier_baselines/inputs",
+    # Vendored third-party widget builds for the choice-widgets fixture.
+    "/benchmark/choice_widgets/vendor",
     "/public-demo",
     "/benchmark/reliability",
     "/docs/validation/IDENTITY_ROC.md",
@@ -455,6 +459,8 @@ exclude = [
     # Grader-soundness ledgers and summaries are repository-only.
     "/benchmark/grader_soundness/results",
     "/benchmark/verifier_baselines/inputs",
+    # Vendored third-party widget builds for the choice-widgets fixture.
+    "/benchmark/choice_widgets/vendor",
     "/public-demo",
     "/THIRD_PARTY_NOTICES.md",
     "/benchmark/openimis_claims",

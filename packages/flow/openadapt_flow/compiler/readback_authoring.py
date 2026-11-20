@@ -72,6 +72,7 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from openadapt_flow import sealed_set as _sealed
+from openadapt_flow.bundle_validation import derive_authored_workflow
 from openadapt_flow.compiler.effect_mining import _commit_labels
 from openadapt_flow.ir import ActionKind, Step, Workflow
 from openadapt_flow.runtime.effects.effect import (
@@ -507,7 +508,7 @@ def apply_check(
     ]
     new_save = save.model_copy(update={"effects": [*kept, effect]})
     steps = [new_save if s.id == save.id else s for s in task]
-    updated = workflow.model_copy(update={"steps": steps})
+    updated = derive_authored_workflow(workflow, update={"steps": steps})
     outcome = CheckOutcome(
         save_step=save.id,
         removed_steps=[s.id for s in check],
@@ -662,7 +663,7 @@ def admit_check(
         raise CheckError(
             "no demonstrated check to admit" + (f" on {step_id}" if step_id else "")
         )
-    return workflow.model_copy(update={"steps": steps}), admitted
+    return derive_authored_workflow(workflow, update={"steps": steps}), admitted
 
 
 def outcome_json(outcome: CheckOutcome) -> str:

@@ -3028,8 +3028,10 @@ def doctor(backend: str | None, install_browser: bool, recording: bool):
             _correct_released_flow_x11_sonames()
             try:
                 from openadapt_flow._browser_setup import (
+                    BROWSER_ENV,
                     _chromium_present,
                     _missing_chromium_system_libs,
+                    installed_browser_channel,
                 )
             except (ImportError, AttributeError):
                 failures.append("browser-diagnostics")
@@ -3110,11 +3112,35 @@ def doctor(backend: str | None, install_browser: bool, recording: bool):
                                     "system libraries are ready."
                                 )
                             elif not install_browser:
+                                choice = os.environ.get(BROWSER_ENV)
+                                selection = (choice or "auto").strip().lower()
+                                if choice is not None:
+                                    click.echo(f"  {BROWSER_ENV} is set to {choice!r}.")
+                                channel = (
+                                    installed_browser_channel()
+                                    if selection == "auto"
+                                    else selection
+                                )
+                                if channel in ("chrome", "msedge"):
+                                    name = "Chrome" if channel == "chrome" else "Edge"
+                                    message = (
+                                        f"OpenAdapt will use {name}. Nothing will be "
+                                        "downloaded if it starts successfully."
+                                    )
+                                elif selection in ("auto", "bundled"):
+                                    message = (
+                                        "Playwright's headless Chromium will be "
+                                        "downloaded once if missing, on the first "
+                                        "web action."
+                                    )
+                                else:
+                                    message = (
+                                        f"Flow will reject this {BROWSER_ENV} value. "
+                                        "Use auto, chrome, msedge, or bundled."
+                                    )
                                 click.echo(
                                     "  [READY] Browser: Playwright and Chromium's "
-                                    "system libraries are ready. OpenAdapt will try "
-                                    "to download the matching Chromium build on the "
-                                    "first web action."
+                                    f"system libraries are ready. {message}"
                                 )
 
     if recording and backend is not None and native_host_supported:
@@ -3185,8 +3211,6 @@ def doctor(backend: str | None, install_browser: bool, recording: bool):
                 "  [--] PyTorch not installed (needed only for `openadapt train` "
                 "and `openadapt eval run --checkpoint`)"
             )
-
-        import os
 
         for key, agent in (
             ("ANTHROPIC_API_KEY", "api-claude"),

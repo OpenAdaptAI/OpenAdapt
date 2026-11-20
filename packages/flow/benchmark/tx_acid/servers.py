@@ -20,6 +20,7 @@ from __future__ import annotations
 import http.client
 import json
 import os
+import re
 import sqlite3
 import tempfile
 import threading
@@ -27,6 +28,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from itertools import chain, islice
 from typing import Any, Iterator, Literal, Mapping, Optional
 from urllib.parse import parse_qs, urlencode, urlparse, urlsplit
 
@@ -249,15 +251,46 @@ class BaseSorServer:
         t0 = time.perf_counter()
         conn.execute("BEGIN IMMEDIATE;")
         try:
-            conn.executemany(
-                self._seed_insert_sql(), self._generate_seed_rows(self.seed_rows)
-            )
+            self._insert_seed_batches(conn)
+            # Indexes are part of fixture initialization too. One commit avoids
+            # repeated WAL synchronization and rolls back an incomplete seed.
+            self._create_indexes(conn)
             conn.execute("COMMIT;")
         except Exception:
             conn.execute("ROLLBACK;")
             raise
-        self._create_indexes(conn)
         self.seed_duration_ms = (time.perf_counter() - t0) * 1000.0
+
+    def _insert_seed_batches(self, conn: sqlite3.Connection) -> None:
+        """Insert the same seed stream with bounded multi-row statements.
+
+        All fixtures share this path. Bound parameters retain value types; the
+        portable 999-variable ceiling also covers Python 3.10 SQLite builds.
+        """
+        prefix, separator, values = self._seed_insert_sql().partition("VALUES")
+        if (
+            not separator
+            or re.fullmatch(r"\s*\(\s*\?(?:\s*,\s*\?)*\s*\)\s*;?\s*", values) is None
+        ):
+            raise ValueError("seed INSERT must have one positional VALUES row")
+        values = values.strip().removesuffix(";").strip()
+        width = values.count("?")
+        variable_limit = 999
+        if hasattr(conn, "getlimit"):
+            variable_limit = min(
+                variable_limit, conn.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER)
+            )
+        if width > variable_limit:
+            raise ValueError("seed row exceeds the connection parameter limit")
+        batch_rows = min(128, variable_limit // width)
+        rows = iter(self._generate_seed_rows(self.seed_rows))
+        while batch := list(islice(rows, batch_rows)):
+            if any(len(row) != width for row in batch):
+                raise ValueError("seed row shape differs from its INSERT")
+            conn.execute(
+                prefix + "VALUES " + ",".join([values] * len(batch)),
+                tuple(chain.from_iterable(batch)),
+            )
 
     def journal_mode(self) -> str:
         row = self._conn().execute("PRAGMA journal_mode;").fetchone()

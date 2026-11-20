@@ -364,11 +364,3 @@ def test_per_receipt_key_rotation_keeps_equal_values_unlinkable_and_legacy_audit
             audit_legacy_tx_receipt(receipt, key.public_key())
     assert values[0]["task_id_hmac_sha256"] != values[1]["task_id_hmac_sha256"]
     assert values[0]["entity_name_hmac_sha256"] != values[1]["entity_name_hmac_sha256"]
-
-
-def test_legacy_audit_facade_is_the_same_integrity_only_function():
-    from openadapt_verify.tx import audit_legacy_tx_receipt as verify_audit
-
-    from openadapt_flow.tx import audit_legacy_tx_receipt as flow_audit
-
-    assert flow_audit is verify_audit is audit_legacy_tx_receipt

@@ -632,6 +632,10 @@ def test_doctor_fails_for_missing_chromium_system_libraries(monkeypatch, backend
 
 
 def test_doctor_reports_lazy_browser_download_after_host_is_ready(monkeypatch):
+    monkeypatch.delenv("OPENADAPT_FLOW_BROWSER", raising=False)
+    monkeypatch.setattr(
+        "openadapt_flow._browser_setup.installed_browser_channel", lambda: None
+    )
     monkeypatch.setattr("importlib.util.find_spec", lambda _name: object())
     monkeypatch.setattr(
         "openadapt_flow._browser_setup._missing_chromium_system_libs", lambda: []
@@ -644,7 +648,7 @@ def test_doctor_reports_lazy_browser_download_after_host_is_ready(monkeypatch):
 
     assert result.exit_code == 0, result.output
     assert "system libraries are ready" in result.output
-    assert "will try to download" in result.output
+    assert "headless Chromium will be downloaded once if missing" in result.output
 
 
 def test_doctor_fails_when_chromium_cannot_be_inspected(monkeypatch):

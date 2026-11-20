@@ -42,6 +42,7 @@ Run from the repository root with a Python that has openadapt-flow installed:
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
 import shutil
@@ -150,7 +151,7 @@ def recorded_media(spec: dict) -> dict:
     return out
 
 
-def trace(spec: dict, runs: Path, digest: str) -> dict:
+def trace(spec: dict, runs: Path, digest: str, display_derivation: dict | None = None) -> dict:
     """The certified runs, played in order as loop iterations.
 
     ``runs`` holds summary.json and one directory per referral
@@ -178,6 +179,12 @@ def trace(spec: dict, runs: Path, digest: str) -> dict:
         report = json.loads(report_path.read_text())
         result = json.loads(result_path.read_text())
         seal = json.loads(seal_path.read_text())
+        for filename in ("report.json", "seal.json"):
+            published = subprocess.run(
+                ["git", "show", f"{CERTIFIED_COMMIT}:{CERTIFIED_PATH}/{row['n']}-{row['ref']}/engine/{filename}"],
+                cwd=REPO, check=True, capture_output=True,
+            ).stdout
+            assert published == (run / "engine" / filename).read_bytes(), f"{row['ref']}: {filename} differs from the linked source commit"
         assert report["bundle_content_digest"] == digest, f"{row['ref']} ran a different bundle"
         assert report["execution_outcome"] == row["execution_outcome"]
         assert report["model_calls"] == 0
@@ -276,19 +283,26 @@ def trace(spec: dict, runs: Path, digest: str) -> dict:
             "bundle_content_digest": digest,
             "profile": "standard",
             "model_calls": 0,
+            "evidence_kind": "independent_certified_body_runs",
+            "display_derivation": display_derivation,
             "runs": sources,
             "note": (
-                "Each iteration is one certified engine run of the referral body, in run order. "
-                "The trace ends with the referral that stopped."
+                "The display combines four independent certified runs of the source body, "
+                "with the fixture reset before each run. The authored loop is a display "
+                "wrapper; it was neither qualified nor executed as a loop. The trace ends "
+                "with the body run that stopped."
             ),
         },
     }
 
 
 def main() -> int:
-    global BUNDLE, OUT
-    ap = argparse.ArgumentParser()
+    global BUNDLE, OUT, CERTIFIED_PATH, CERTIFIED_COMMIT, CERTIFIED_URL
+    ap = argparse.ArgumentParser(allow_abbrev=False)
     ap.add_argument("--runs", type=Path, help="the certified runs (summary.json and one directory per referral)")
+    ap.add_argument("--display-titles", type=Path, default=OUT / "display-titles.json", help="reviewed titles bound to exact compiled node groups")
+    ap.add_argument("--source-commit", default=CERTIFIED_COMMIT, help="commit containing the published, sealed run reports")
+    ap.add_argument("--source-path", default=CERTIFIED_PATH, help="repository path of the published, sealed run reports")
     ap.add_argument("--bundle", type=Path, default=BUNDLE, help="the compiled referral bundle the runs used")
     ap.add_argument("--out", type=Path, default=OUT, help="fixture directory (default: fixtures/openemr-referral)")
     ap.add_argument(
@@ -301,6 +315,14 @@ def main() -> int:
         ),
     )
     args = ap.parse_args()
+    if Path(args.source_path).is_absolute() or ".." in Path(args.source_path).parts:
+        ap.error("--source-path must stay within the source repository")
+    CERTIFIED_COMMIT = subprocess.run(
+        ["git", "rev-parse", "--verify", f"{args.source_commit}^{{commit}}"],
+        cwd=REPO, check=True, text=True, capture_output=True,
+    ).stdout.strip()
+    CERTIFIED_PATH = args.source_path
+    CERTIFIED_URL = f"https://github.com/OpenAdaptAI/OpenAdapt/blob/{CERTIFIED_COMMIT}/{CERTIFIED_PATH}"
     BUNDLE = args.bundle.expanduser().resolve()
     out = args.out.expanduser().resolve()
     if out != OUT and not (out / "worklist.csv").exists():
@@ -309,6 +331,27 @@ def main() -> int:
     OUT = out
     manifest = json.loads((BUNDLE / "manifest.json").read_text())
     OUT.mkdir(parents=True, exist_ok=True)
+    worklist_reports = []
+    if args.runs:
+        runs_root = args.runs.expanduser().resolve()
+        summary = json.loads((runs_root / "summary.json").read_text())
+        with (OUT / "worklist.csv").open(newline="") as stream:
+            fields = csv.DictReader(stream).fieldnames
+        assert fields, "the display worklist needs declared columns"
+        rows = []
+        for row in sorted(summary["runs"], key=lambda item: item["n"]):
+            report_path = runs_root / f"{row['n']}-{row['ref']}" / "engine/report.json"
+            assert sha256(report_path) == row["report_sha256"], "worklist report differs from its signed digest"
+            report = json.loads(report_path.read_text())
+            assert report["bundle_content_digest"] == manifest["content_digest"], "worklist report belongs to another body"
+            params = report.get("params") or {}
+            assert all(isinstance(params.get(field), str) for field in fields), "worklist report has a missing declared input"
+            rows.append({field: params[field] for field in fields})
+            worklist_reports.append(row["report_sha256"])
+        with (OUT / "worklist.csv").open("w", newline="") as stream:
+            writer = csv.DictWriter(stream, fieldnames=fields, lineterminator="\n")
+            writer.writeheader()
+            writer.writerows(rows)
     with tempfile.TemporaryDirectory() as tmp:
         body = BUNDLE
         if args.ui_structure:
@@ -331,6 +374,33 @@ def main() -> int:
         flow("visualize", str(loop_dir), "--format", "json", "-o", str(local))
         spec = json.loads(public.read_text())
         folds = fold(json.loads(local.read_text()))
+        display_titles_sha256 = None
+        if args.display_titles:
+            assert args.display_titles.is_file(), "reviewed display titles are missing"
+            title_data = json.loads(args.display_titles.read_text())
+            overrides = title_data["groups"]
+            assert len(overrides) == len(folds["groups"]), "reviewed titles belong to different compiled sections"
+            for group, override in zip(folds["groups"], overrides):
+                assert group["nodes"] == override["nodes"], "reviewed title belongs to different compiled nodes"
+                assert isinstance(override["title"], str) and 0 < len(override["title"]) <= 200
+                group["title"] = override["title"]
+            display_titles_sha256 = sha256(args.display_titles)
+        loop_manifest = json.loads((loop_dir / "manifest.json").read_text())
+        display_derivation = {
+            "kind": "authored_for_each_visualization",
+            "source_body_content_digest": manifest["content_digest"],
+            "display_bundle_content_digest": loop_manifest["content_digest"],
+            "executed": False,
+            "qualified": False,
+            "reviewed_display_titles_sha256": display_titles_sha256,
+            "worklist_source": "signed body-run params in summary order",
+            "worklist_report_sha256": worklist_reports,
+            "record_count": len(worklist_reports),
+            "node_to_body_step": {
+                node["id"]: node["id"].split("::s::", 1)[1]
+                for node in spec["nodes"] if node["kind"] == "action"
+            },
+        }
     (OUT / "spec.json").write_text(json.dumps(spec, indent=2) + "\n")
     folds["source"] = {
         # A bundle outside the repository is named by what it is; its content
@@ -341,6 +411,7 @@ def main() -> int:
             else "openemr/new-referral, certified for clinical-write"
         ),
         "body_content_digest": manifest["content_digest"],
+        "display_derivation": display_derivation,
         "source_recording_sha256": manifest["provenance"]["source_recording_sha256"],
         "sections": (
             "compiled by Flow (openadapt-flow sections"
@@ -353,7 +424,7 @@ def main() -> int:
     shutil.rmtree(OUT / "media", ignore_errors=True)
     (OUT / "media.json").write_text(json.dumps(recorded_media(spec), indent=2) + "\n")
     if args.runs:
-        (OUT / "trace.json").write_text(json.dumps(trace(spec, args.runs.expanduser(), manifest["content_digest"]), indent=2) + "\n")
+        (OUT / "trace.json").write_text(json.dumps(trace(spec, args.runs.expanduser(), manifest["content_digest"], display_derivation), indent=2) + "\n")
     print(f"Wrote {OUT}: spec, folds, media{', trace' if args.runs else ''}")
     return 0
 

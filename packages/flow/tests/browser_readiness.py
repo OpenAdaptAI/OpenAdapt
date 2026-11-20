@@ -10,6 +10,11 @@ from __future__ import annotations
 from openadapt_flow import _browser_readiness as readiness
 
 
+def assert_chromium_launch_args(args) -> None:
+    """Keep browser doubles aligned with the shared Chromium launch contract."""
+    assert args == ["--use-mock-keychain", "--password-store=basic"]
+
+
 class ReadyBrowserMixin:
     _readiness_failure = ""
 

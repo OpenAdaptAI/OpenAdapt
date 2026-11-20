@@ -133,6 +133,8 @@ capture = "openadapt_capture.cli:main"
 Homepage = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/capture"
 Repository = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/capture"
 Issues = "https://github.com/OpenAdaptAI/OpenAdapt/issues"
+Documentation = "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/capture/README.md"
+Changelog = "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/capture/CHANGELOG.md"
 
 
 

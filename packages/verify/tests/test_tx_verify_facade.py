@@ -496,3 +496,13 @@ def test_facade_exports_enforcing_backend_and_unqualified_report_defaults():
         {"lens": lens.model_dump(), "sensitivity": 0, "specificity": 0}
     )
     assert isinstance(report, LensProbeReport) and report.certified is False
+
+
+def test_legacy_audit_facade_is_the_same_integrity_only_function():
+    """The optional facade's alias contract belongs to its installed consumer."""
+    from openadapt_flow.tx import audit_legacy_tx_receipt as flow_audit
+    from openadapt_flow.tx.receipt import audit_legacy_tx_receipt
+
+    from openadapt_verify.tx import audit_legacy_tx_receipt as verify_audit
+
+    assert flow_audit is verify_audit is audit_legacy_tx_receipt

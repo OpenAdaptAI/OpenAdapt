@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import ast
 import json
+import sqlite3
 import time
 from pathlib import Path
+
+import pytest
 
 import benchmark as _bm_pkg
 
@@ -496,3 +499,78 @@ def test_runner_metrics_pluggable_factory_and_report_generation() -> None:
     md = render_markdown_report(report)
     assert "## Aggregate Comparison Across All 3 Systems of Record" in md
     assert "`partial_put_clobber`" in md
+
+
+@pytest.mark.parametrize(
+    "server_type", [ClinicalChartServer, ReplaceTaskServer, ClaimsLedgerServer]
+)
+def test_bulk_seed_preserves_every_row_and_builds_indexes_in_one_transaction(
+    server_type, monkeypatch
+):
+    """All fixture schemas share a bounded seed, not one statement per row."""
+    connect = sqlite3.connect
+    inserts = []
+    index_transactions = []
+
+    def traced_connect(*args, **kwargs):
+        connection = connect(*args, **kwargs)
+
+        def trace(statement):
+            # Record counts/state only, never expanded parameter values.
+            if statement.startswith("INSERT INTO "):
+                inserts.append(True)
+            elif statement.startswith("CREATE INDEX "):
+                index_transactions.append(connection.in_transaction)
+
+        connection.set_trace_callback(trace)
+        return connection
+
+    monkeypatch.setattr(sqlite3, "connect", traced_connect)
+    server = server_type(seed_rows=137)
+    try:
+        connection = server._conn()
+        actual = [
+            tuple(row)
+            for row in connection.execute(
+                f"SELECT * FROM {server.table_name} ORDER BY id"
+            )
+        ]
+        expected = sorted(server._generate_seed_rows(137), key=lambda row: row[0])
+        assert actual == expected
+        assert len(inserts) < 137 // 2
+        assert index_transactions == [True, True]
+        assert server.count_rows() == 137
+        assert server.journal_mode().lower() == "wal"
+    finally:
+        server.close()
+
+
+@pytest.mark.parametrize(
+    "server_type", [ClinicalChartServer, ReplaceTaskServer, ClaimsLedgerServer]
+)
+def test_index_failure_rolls_back_the_seed_for_every_fixture(server_type, tmp_path):
+    """Failed initialization must not leave committed rows or partial indexes."""
+
+    class FailedIndexes(server_type):
+        def _create_indexes(self, connection):
+            super()._create_indexes(connection)
+            raise RuntimeError("synthetic index failure")
+
+    database = tmp_path / "seed.sqlite3"
+    server = FailedIndexes.__new__(FailedIndexes)
+    try:
+        with pytest.raises(RuntimeError, match="synthetic index failure"):
+            server.__init__(seed_rows=137, db_path=str(database))
+    finally:
+        server.close()
+    with sqlite3.connect(database) as connection:
+        assert (
+            connection.execute(
+                f"SELECT COUNT(*) FROM {server_type.table_name}"
+            ).fetchone()[0]
+            == 0
+        )
+        indexes = connection.execute(
+            f"PRAGMA index_list({server_type.table_name})"
+        ).fetchall()
+        assert all(row[3] != "c" for row in indexes)

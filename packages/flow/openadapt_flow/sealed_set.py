@@ -47,7 +47,6 @@ from __future__ import annotations
 import base64
 import fnmatch
 import hashlib
-import hmac
 import io
 import json
 import os
@@ -557,7 +556,12 @@ def _open_index(
 
 
 class SealedSet:
-    """A verified, opened sealed set. Plaintext is only ever held in memory."""
+    """A verified, caller-owned sealed-set snapshot.
+
+    Keep this handle for an operation to reuse its derived key. Independent
+    path-helper reads open a fresh handle; no reader or passphrase is retained
+    by the module. Caller inputs and derived keys remain sensitive memory.
+    """
 
     sealed = True
 
@@ -917,7 +921,6 @@ class SealedSetWriter:
             # the one recomputed from the sealed index on open.
             self._header["set_digest"] = digest
             self._write_header()
-            _forget(self.root)
             return digest
 
 
@@ -928,19 +931,11 @@ class SealedSetWriter:
 # write through it.
 
 _WRITERS: dict[str, SealedSetWriter] = {}
-_OPENED: dict[tuple[str, str], tuple[str, SealedSet]] = {}
 _STATE_LOCK = threading.RLock()
 
 
 def _abs(path: Path | str) -> str:
     return os.path.abspath(os.fspath(path))
-
-
-def _forget(root: Path) -> None:
-    key = _abs(root)
-    with _STATE_LOCK:
-        for cached in [k for k in _OPENED if k[0] == key]:
-            _OPENED.pop(cached, None)
 
 
 @contextmanager
@@ -998,22 +993,16 @@ def _locate(path: Path | str) -> tuple[Optional[str], str]:
 
 
 def open_set(root: Path | str, key: Optional[str] = None) -> SealedSet:
-    """Open and verify a sealed set once per process and key."""
+    """Open and verify a fresh caller-owned reader for this request.
+
+    Reuse the returned handle explicitly within an operation, rather than
+    retaining credentials or readers across unrelated calls.
+    """
     base = _abs(root)
     header = read_header(base)
     passphrase = _require_passphrase(Path(base), str(header["kind"]), key)
-    # Keyed by the complete header so a DEK rewrap invalidates old-key entries.
-    # Never keyed by any digest of the passphrase; a
-    # cached set is reused only for the same passphrase (constant-time check).
-    cache_key = (base, _sha256(json.dumps(header, sort_keys=True).encode("utf-8")))
-    with _STATE_LOCK:
-        cached = _OPENED.get(cache_key)
-    if cached is not None and hmac.compare_digest(
-        cached[0].encode("utf-8"), passphrase.encode("utf-8")
-    ):
-        return cached[1]
     try:
-        opened = SealedSet.open(base, passphrase)
+        return SealedSet.open(base, passphrase)
     except crypto.CryptoError as exc:
         if key is None and not _configured(str(header["kind"])):
             # Opened with the local key because nothing was configured: the
@@ -1023,9 +1012,6 @@ def open_set(root: Path | str, key: Optional[str] = None) -> SealedSet:
                 + " (The local key did not open it.)"
             ) from exc
         raise
-    with _STATE_LOCK:
-        _OPENED[cache_key] = (passphrase, opened)
-    return opened
 
 
 def _configured(kind: str) -> bool:

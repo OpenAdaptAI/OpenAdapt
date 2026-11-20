@@ -606,7 +606,7 @@ def test_strict_treats_a_plaintext_copy_inside_a_set_as_plaintext(
     cli._unsealed_output_check(
         argparse.Namespace(func=cli._cmd_certify, bundle=str(sealed))
     )
-    sealed_set._OPENED.clear()  # a new process: the set is opened afresh
+    # Independent helper reads reopen the set even within this process.
     nested = sealed / "nested"
     shutil.copytree(plain, nested)
     for target in (nested, sealed):  # planted plaintext taints the whole set
@@ -782,6 +782,6 @@ def test_strict_rechecks_a_set_it_already_opened(
     cli._unsealed_output_check(
         argparse.Namespace(func=cli._cmd_certify, bundle=str(sealed))
     )
-    sealed_set.open_set(sealed)  # a warm cache, as in a long-lived process
+    sealed_set.open_set(sealed)  # a prior caller-owned authenticated read
     (sealed / "notes.txt").write_text("plaintext patient note")
     _assert_refused(cli, sealed)

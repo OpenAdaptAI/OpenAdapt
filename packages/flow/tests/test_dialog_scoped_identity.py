@@ -61,13 +61,15 @@ def page_backend():
             browser = pw.chromium.launch(headless=True)
         except Exception as exc:  # pragma: no cover - no browser installed
             pytest.skip(f"chromium unavailable: {exc}")
-        page = browser.new_page(
-            viewport={"width": 1000, "height": 400}, device_scale_factor=1
-        )
-        page.set_content(_PAGE_HTML, wait_until="load")
-        page.frame_locator("#body").locator("#confirm").wait_for()
-        yield page, PlaywrightBackend(page)
-        browser.close()
+        try:
+            page = browser.new_page(
+                viewport={"width": 1000, "height": 400}, device_scale_factor=1
+            )
+            page.set_content(_PAGE_HTML, wait_until="load")
+            page.frame_locator("#body").locator("#confirm").wait_for()
+            yield page, PlaywrightBackend(page)
+        finally:
+            browser.close()
 
 
 def _center(page, selector: str, frame: str | None = None) -> tuple[int, int]:
