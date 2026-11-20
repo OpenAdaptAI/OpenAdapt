@@ -187,6 +187,17 @@ declaration does not name, or a file with another schema id, is scrubbed. So
 the scrubber does not rewrite `v1` or `step_002`, and the signed admission
 and the bundle's digests still verify after scrubbing.
 
+Authentication references use a narrower publication profile. Each name has
+at most 19 alphanumeric characters in total, ignoring separators. Its words
+start with a letter and use one separator style: `_` or `-`. Examples include
+`ACCESS_TOKEN`, `NOTES_READER_KEY`, and `X-Api-Key`. Environment-variable names
+also use the declared uppercase shape. Known credential patterns are refused
+even within this limit. Any invalid or ambiguous value redacts the whole
+`AuthRef` record and marks the bundle `not-preserved`; broader names can remain
+in local configurations. This profile does not prove that an arbitrary short
+identifier is free of sensitive content. Sanitization never resolves these
+references or reads their credential values.
+
 Sanitization covers the design-time derivative only. Live values, screenshots,
 identity crops, model requests, and system-of-record checks can reintroduce PHI.
 They must remain inside the deployment's declared trusted runtime boundary.
