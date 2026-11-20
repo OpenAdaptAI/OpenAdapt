@@ -15,7 +15,7 @@ The engine evidence remains 1280×800. The 2560×1600 companions are separate di
 
 ## Authorization and signatures
 
-The founder authorized the four synthetic referrals in Advisor fable on 19 November: “yes do the new runs for 2x frames”, followed by “you do it” for signing. The scoped SSH authorization names only r3–r6, this bundle, the standard profile and the existing demo Seal key. It was signed, anchored and timestamped before the corrected runs. Its SHA-256 is `27a7c62df5aadca9dbcf03e2431e4f5c52bfbf1b6b5562225c5000d0bd838016`; Rekor index 4011200742, 2026-11-20 00:25:23 UTC. No private key is published.
+The founder authorized the four synthetic referrals in Advisor fable on 19 November: “yes do the new runs for 2x frames”, followed by “you do it” for signing. The scoped SSH authorization names only r3–r6, this bundle, the standard profile and the existing demo Seal key. It was signed, anchored and timestamped before the corrected runs. Its SHA-256 is `27a7c62df5aadca9dbcf03e2431e4f5c52bfbf1b6b5562225c5000d0bd838016`; Rekor index 4011200742, 2026-11-20 00:25:23 UTC. No private key is published. The public verification key is the existing approved registry at `../2026-10-20/seal-key.json`; both new local registry copies were byte-equivalent public entries and are kept only with the local source runs, avoiding duplicate key registries in the public tree.
 
 All four Seals were checked live against Rekor and the GitHub SSH key list and offline against the pinned Seal key and Sigstore TSA root. The verifier reports `before_run` for each. Seal Rekor indexes: r3 4011311201, r4 4011313265, r5 4011317256, r6 4011321057. Each report's existing redaction check found nothing further to redact. No raw credential, private evidence directory, identity crop or database snapshot is committed.
 
@@ -38,7 +38,7 @@ The runner refuses an unexpected transaction, wrong chart counts, a duplicate st
 
 ```sh
 openadapt-flow local-seal verify 1-r3-ines-carvalho/engine 2-r4-theo-lindqvist/engine \
-  3-r5-grace-adeyemi/engine 4-r6-rosa-delgado/engine --keys seal-key.json \
+  3-r5-grace-adeyemi/engine 4-r6-rosa-delgado/engine --keys ../2026-10-20/seal-key.json \
   --require-anchor --require-timestamp --authorization run-authorization
 ```
 
