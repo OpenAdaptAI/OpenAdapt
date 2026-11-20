@@ -98,6 +98,8 @@ from typing import (
 from urllib.parse import urlsplit
 from uuid import UUID
 
+from openadapt_flow.cli_params import _parse_params as _parse_params
+from openadapt_flow.cli_params import _replay_params as _replay_params
 from openadapt_flow.private_file import open_binary
 from openadapt_flow.run_invocation import invocation_kwargs
 from openadapt_flow.vision_hint import vision_hint
@@ -110,17 +112,6 @@ if TYPE_CHECKING:  # pragma: no cover
     from openadapt_flow.tutorial import BreakItResult
 
 _VIEWPORT = {"width": 1280, "height": 800}
-
-
-def _parse_params(pairs: Sequence[str] | None) -> dict[str, str]:
-    """Parse repeated ``--param k=v`` flags into a dict."""
-    params: dict[str, str] = {}
-    for pair in pairs or []:
-        if "=" not in pair:
-            raise SystemExit(f"--param expects k=v, got {pair!r}")
-        key, value = pair.split("=", 1)
-        params[key] = value
-    return params
 
 
 def _parse_identifier_region_arg(
@@ -288,43 +279,6 @@ def _resolve_record_capture_window(
     if owner is None and title is None:
         return None
     return {"owner": owner, "title": title}
-
-
-def _replay_params(
-    pairs: Sequence[str] | None,
-    params_file: str | None = None,
-) -> dict[str, "RuntimeParamScalar"]:
-    """Load replay bindings without requiring sensitive values in argv.
-
-    ``--params-file`` is intended for managed runners: the file can be staged
-    inside the per-run boundary while process listings contain only its path.
-    Explicit ``--param`` flags remain supported and override file values.
-    """
-    import json
-
-    from openadapt_flow.runtime.authorization import is_runtime_param_scalar
-
-    params: dict[str, RuntimeParamScalar] = {}
-    if params_file:
-        path = Path(params_file)
-        try:
-            from openadapt_flow import sealed_set
-
-            raw = json.loads(sealed_set.read_text(path))
-        except (OSError, json.JSONDecodeError) as exc:
-            raise SystemExit(f"--params-file could not be read as JSON: {exc}") from exc
-        if not isinstance(raw, dict):
-            raise SystemExit("--params-file must contain one JSON object")
-        if len(raw) > 100:
-            raise SystemExit("--params-file may contain at most 100 parameters")
-        for key, value in raw.items():
-            if not isinstance(key, str) or not key:
-                raise SystemExit("--params-file keys must be non-empty strings")
-            if not is_runtime_param_scalar(value):
-                raise SystemExit(f"--params-file value for {key!r} must be a scalar")
-            params[key] = value
-    params.update(_parse_params(pairs))
-    return params
 
 
 def _with_drift(url: str, drift: str | None) -> str:
@@ -4515,6 +4469,12 @@ def _cmd_run(args: argparse.Namespace) -> int:
         )
         return 2
     runtime_params = _replay_params(args.param, getattr(args, "params_file", None))
+    if dispatch_file and set(runtime_params) & set(workflow.secret_params):
+        print(
+            "run REFUSED: secret parameters must come from the runner's vault "
+            "environment, never the params file. Nothing was executed."
+        )
+        return 2
     runtime_worklists = (
         qualification_case["worklists"]
         if qualification_case is not None
@@ -13288,69 +13248,9 @@ def build_parser() -> argparse.ArgumentParser:
     ps.add_argument("--once", action="store_true", help="Run one relay cycle and exit")
     ps.set_defaults(func=_cmd_business_decisions_serve)
 
-    # --- connector: the BYOC (bring-your-own-cloud) outbound-pull daemon -------
-    p = sub.add_parser(
-        "connector",
-        help=(
-            "BYOC connector: enroll this machine with OpenAdapt Cloud and run "
-            "governed jobs LOCALLY (customer owns the data boundary; PHI stays "
-            "on this side)"
-        ),
-        allow_abbrev=False,
-    )
-    csub = p.add_subparsers(dest="connector_cmd", required=True)
+    from openadapt_flow.cli_connector import register_connector_parser
 
-    pe = csub.add_parser(
-        "enroll",
-        help="Enroll against a mock/development control plane and persist its token",
-        allow_abbrev=False,
-    )
-    pe.add_argument(
-        "--control-plane-url", help="Control plane base URL (or CONTROL_PLANE_URL)"
-    )
-    pe.add_argument(
-        "--enrollment-secret", help="Org enrollment secret (or BYOC_ENROLLMENT_SECRET)"
-    )
-    pe.add_argument("--org-id", help="Org id to enroll under (or BYOC_ORG_ID)")
-    pe.add_argument("--name", help="Connector name (or BYOC_CONNECTOR_NAME)")
-    pe.add_argument(
-        "--profile", help="Path to the deployment.yaml governed runs use as --config"
-    )
-    pe.add_argument(
-        "--policy", help="Pinned admitted policy name (else the deployment config's)"
-    )
-    pe.add_argument("--storage-backend", help="Customer storage backend (local)")
-    pe.add_argument(
-        "--storage-root",
-        help="Customer storage root dir (a full-disk-encrypted volume)",
-    )
-    pe.set_defaults(func=_cmd_connector)
-
-    pr = csub.add_parser(
-        "run",
-        help="Poll the control plane and run governed jobs until interrupted",
-        allow_abbrev=False,
-    )
-    pr.add_argument(
-        "--control-plane-url", help="Control plane base URL (or CONTROL_PLANE_URL)"
-    )
-    pr.add_argument("--token", help="Per-connector token (or BYOC_CONNECTOR_TOKEN)")
-    pr.add_argument("--org-id", help="Org id (or BYOC_ORG_ID)")
-    pr.add_argument(
-        "--profile", help="Path to the deployment.yaml governed runs use as --config"
-    )
-    pr.add_argument(
-        "--policy", help="Pinned admitted policy name (else the deployment config's)"
-    )
-    pr.add_argument("--storage-backend", help="Customer storage backend (local)")
-    pr.add_argument("--storage-root", help="Customer storage root dir")
-    pr.add_argument(
-        "--poll-wait", type=int, help="Long-poll wait seconds (or BYOC_POLL_WAIT_S)"
-    )
-    pr.add_argument(
-        "--once", action="store_true", help="Poll once then exit (cron-style)"
-    )
-    pr.set_defaults(func=_cmd_connector)
+    register_connector_parser(sub, _cmd_connector)
 
     from openadapt_flow.cli_admit import register_admit_parser
     from openadapt_flow.cli_api import register_api_parser

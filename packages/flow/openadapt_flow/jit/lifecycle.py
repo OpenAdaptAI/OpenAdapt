@@ -109,6 +109,7 @@ RECORDER_FIELDS = (
     "recorded_by",
     "agent_principal_id",
     "dialect",
+    "credential_withholding",
     # What the agent was allowed to do and who signed it. Absent (None) on
     # drafts from before teach authorizations, which still verify.
     "teach_scope",
@@ -534,6 +535,40 @@ def _recorder(program: Path, key_dir: Optional[Path]) -> dict[str, Any]:
     return block
 
 
+def require_credential_withholding(
+    program_dir: Path | str,
+    *,
+    bundle_dir: Path | str | None = None,
+    key_dir: Path | str | None = None,
+) -> None:
+    """Require protection evidenced by the selected artifact's signed source.
+
+    Legacy missing markers remain valid ordinary records. They cannot satisfy
+    a caller that requested protected capture. Unsigned task/cache metadata is
+    never proof, and a neighboring draft cannot authorize another bundle.
+    """
+    program = Path(program_dir)
+    bundle = Path(bundle_dir) if bundle_dir is not None else program / "bundle"
+    keys = Path(key_dir) if key_dir is not None else None
+    canonical = (program / "bundle").resolve()
+    foreign = bundle.resolve() != canonical
+    if foreign and not (bundle / ADMISSION_FILE).is_file():
+        raise AdmissionError(
+            "CREDENTIAL_CAPTURE_PRIVACY_MISMATCH: the selected bundle has no "
+            "admitted credential-withholding proof"
+        )
+    if (bundle / ADMISSION_FILE).is_file() or foreign:
+        record = verify_admission(bundle, key_dir=keys)
+    else:
+        record = _recorder(program, keys)
+    if record.get("credential_withholding") is not True:
+        raise AdmissionError(
+            "CREDENTIAL_CAPTURE_PRIVACY_MISMATCH: protected capture was requested "
+            "but this program has no signed credential-withholding proof; "
+            "record it again with credential observation"
+        )
+
+
 def _is_recording_agent(name: str, recorder: Mapping[str, Any]) -> bool:
     """``name`` is the agent principal the signed recorder block names."""
 
@@ -812,7 +847,7 @@ def admission_status(
     review = _evidence_at(program / REVIEW_FILE, digest)
     canary = _evidence_at(program / CANARY_FILE, digest)
     params = _evidence_at(program / PARAMS_FILE, digest)
-    task_params = _task_params(candidate)
+    task_params = _task_params(candidate, program)
     readback = (canary or {}).get("readback")
     problems = _readback_problems(readback) if readback is not None else None
     try:
@@ -872,8 +907,20 @@ def _require_draft(program: Path) -> dict[str, Any]:
     return candidate
 
 
-def _task_params(candidate: Mapping[str, Any]) -> list[str]:
-    return sorted((candidate.get("task") or {}).get("params") or {})
+def _task_params(
+    candidate: Mapping[str, Any], program: Optional[Path] = None
+) -> list[str]:
+    """The task's parameters the program takes as values, sorted.
+
+    With ``program``, a secret parameter of its bundle (a sign-in value the
+    recording withheld, see ``ir.Step.secret``) is left out: it is typed from
+    ``OPENADAPT_FLOW_SECRET_<NAME>`` and is not a value parameter.
+    """
+
+    names = set((candidate.get("task") or {}).get("params") or {})
+    if program is not None and (Path(program) / "bundle" / "workflow.json").is_file():
+        names -= set(_load_workflow(Path(program) / "bundle").secret_params)
+    return sorted(names)
 
 
 def _has_terminal() -> bool:
@@ -939,7 +986,7 @@ def confirm_params(
     name, _ = resolve_actor(principal_id, program, key_dir=key_dir)
     if not _confirm_ok(confirm):
         raise AdmissionError("confirm_params accepts confirm empty, ok, yes, or True")
-    task_params = _task_params(candidate)
+    task_params = _task_params(candidate, program)
     if sorted(accept_params) != task_params:
         raise AdmissionError(
             f"accept_params {sorted(accept_params)} must be the task's "
@@ -1154,7 +1201,7 @@ def record_review(
         raise AdmissionError("review accepts confirm empty, ok, yes, or True")
     workflow = _load_workflow(program / "bundle")
     digest = _digest(workflow)
-    task_params = _task_params(candidate)
+    task_params = _task_params(candidate, program)
     params = _evidence_at(program / PARAMS_FILE, digest)
     if task_params and params is None:
         raise AdmissionError(
@@ -1326,7 +1373,7 @@ def _evidence_gates(
     teach_authorization_gate(
         program, candidate, key_dir=key_dir, approver_root=approver_root, trust=trust
     )
-    task_params = _task_params(candidate)
+    task_params = _task_params(candidate, program)
     if task_params and _evidence_at(program / PARAMS_FILE, digest) is None:
         raise AdmissionError(f"confirm the parameters {task_params} first")
     canary = _evidence_at(program / CANARY_FILE, digest)
@@ -1504,7 +1551,7 @@ def _write_manifest(
         "workflow_id": candidate.get("workflow_id"),
         "digest": digest,
         "task": candidate.get("task"),
-        "params": _task_params(candidate),
+        "params": _task_params(candidate, program),
         "policy": candidate.get("policy"),
         "admitted_by_principal_id": name,
         "admitted_at": _now(),
@@ -1534,6 +1581,8 @@ def _write_manifest(
         "signing_key": fingerprint_of(private.public_key()),
         **(extra or {}),
     }
+    if "credential_withholding" in recorder:
+        body["credential_withholding"] = recorder["credential_withholding"]
     if candidate.get("teach_authorization"):
         # The bundle carries who authorized the teaching. Only written when
         # present, so manifests from before teach authorizations verify.

@@ -32,7 +32,11 @@ MANAGED_QUALIFICATION_AUTHORITY_CAPABILITY = "managed_qualification_authority_v2
 
 
 class ConnectorClientError(HostedError):
-    """An outbound control-plane call failed."""
+    """An outbound call failed. HTTP errors omit untrusted response bodies.
+
+    A remote error can echo credentials or fragments of them, so truncating
+    that body before a downstream log filter cannot make it safe to render.
+    """
 
 
 class ConnectorClient:
@@ -77,9 +81,7 @@ class ConnectorClient:
             body["org_id"] = org_id
         resp = self._client.post("/api/connector/register", json=body, headers=headers)
         if resp.status_code != 200:
-            raise ConnectorClientError(
-                f"enroll refused: {resp.status_code} {resp.text[:300]}"
-            )
+            raise ConnectorClientError(f"enroll refused: HTTP {resp.status_code}")
         data = resp.json()
         token = data.get("token")
         if token:
@@ -100,9 +102,7 @@ class ConnectorClient:
         if resp.status_code == 204:
             return None
         if resp.status_code != 200:
-            raise ConnectorClientError(
-                f"poll failed: {resp.status_code} {resp.text[:300]}"
-            )
+            raise ConnectorClientError(f"poll failed: HTTP {resp.status_code}")
         data = resp.json()
         return data.get("job")
 
@@ -117,9 +117,7 @@ class ConnectorClient:
         )
         # 409 = the lease was already released/re-offered; not fatal, move on.
         if resp.status_code not in (200, 409):
-            raise ConnectorClientError(
-                f"ack failed: {resp.status_code} {resp.text[:300]}"
-            )
+            raise ConnectorClientError(f"ack failed: HTTP {resp.status_code}")
         return resp.json() if resp.content else {}
 
     def run_callback(self, body: dict[str, Any], *, run_token: Optional[str]) -> None:
@@ -137,6 +135,4 @@ class ConnectorClient:
             "/api/internal/run-callback", json=body, headers=headers
         )
         if not 200 <= resp.status_code < 300:
-            raise ConnectorClientError(
-                f"run-callback failed: {resp.status_code} {resp.text[:300]}"
-            )
+            raise ConnectorClientError(f"run-callback failed: HTTP {resp.status_code}")

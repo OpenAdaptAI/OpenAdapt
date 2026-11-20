@@ -320,6 +320,7 @@ def test_all_cdp_acquisitions_check_their_selected_page() -> None:
         "interactive_recorder.py": "start",
         "cli_worklist_pool.py": "_open",
         "agent_guard/session.py": "_connect",
+        "copilot_runtime.py": "main",
     }
     observed = {}
     for path in root.rglob("*.py"):
@@ -490,3 +491,112 @@ def test_ci_browser_models_keep_readiness_before_business_use(failure: str) -> N
         assert "readiness-cancel" in events
     if failure:
         assert "business-use" not in events
+
+
+@pytest.mark.parametrize("failure", ["", "progress", "cancel"])
+def test_copilot_attach_checks_selected_page_before_form_start(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    from openadapt_flow import copilot_runtime
+    from openadapt_flow.form_tx import playwright_surface
+    from openadapt_flow.form_tx.types import (
+        FormPack,
+        FormTxOutcome,
+        InputDossier,
+        UIProfileSpec,
+    )
+
+    browser = Browser(failure)
+    context = Context(browser, failure)
+    browser.contexts.append(context)
+    context.pages = [context.page]
+    context.page.url = "https://synthetic.invalid/form"
+    entered, stopped = [], []
+
+    @contextmanager
+    def playwright():
+        try:
+            yield SimpleNamespace(
+                chromium=SimpleNamespace(connect_over_cdp=lambda _: browser)
+            )
+        finally:
+            stopped.append(True)
+
+    monkeypatch.setitem(
+        sys.modules, "playwright.sync_api", SimpleNamespace(sync_playwright=playwright)
+    )
+    pack, dossier, profile = (
+        SimpleNamespace(ui_profile_id="synthetic"),
+        object(),
+        SimpleNamespace(profile_id="synthetic"),
+    )
+    for model, value in (
+        (FormPack, pack),
+        (InputDossier, dossier),
+        (UIProfileSpec, profile),
+    ):
+        monkeypatch.setattr(
+            model, "model_validate_json", lambda _text, result=value: result
+        )
+
+    def surface(page, selected_profile):
+        assert page is context.page and selected_profile is profile
+        assert [call[0] for call in page.calls] == [
+            readiness._START,
+            readiness._PROGRESS,
+            readiness._CANCEL,
+        ]
+        assert all(handle.disposed for handle in page.handles)
+        entered.append("surface")
+        return object()
+
+    class Reconciler:
+        def __init__(self, selected_surface):
+            entered.append("reconciler")
+
+        def create_session(self, selected_pack, selected_dossier):
+            assert selected_pack is pack and selected_dossier is dossier
+            return object()
+
+    class Runtime:
+        def __init__(self, *args, **kwargs):
+            entered.append("runtime")
+
+        def start(self):
+            return SimpleNamespace(
+                halts=(), run_id="synthetic", outcome=FormTxOutcome.VERIFIED_DONE
+            )
+
+    monkeypatch.setattr(playwright_surface, "PlaywrightFormSurface", surface)
+    monkeypatch.setattr(copilot_runtime, "FormReconciler", Reconciler)
+    monkeypatch.setattr(copilot_runtime, "CopilotFormRuntime", Runtime)
+    source = tmp_path / "input.json"
+    source.write_text("{}")
+    args = [
+        "--pack",
+        str(source),
+        "--dossier",
+        str(source),
+        "--profile",
+        str(source),
+        "--session-dir",
+        str(tmp_path / "session"),
+        "--operator-id",
+        "synthetic",
+        "--cdp-endpoint",
+        "http://127.0.0.1:9222",
+        "--page-url",
+        context.page.url,
+    ]
+    if failure:
+        error = Cancelled if failure == "cancel" else readiness.BrowserReadinessError
+        with pytest.raises(error):
+            copilot_runtime.main(args)
+        assert entered == []
+    else:
+        assert copilot_runtime.main(args) == 0
+        assert entered == ["surface", "reconciler", "runtime"]
+    assert stopped == [True]
+    assert not browser.closed and not context.closed
+    assert all(handle.disposed for handle in context.page.handles)
+    assert not (tmp_path / "session").exists()

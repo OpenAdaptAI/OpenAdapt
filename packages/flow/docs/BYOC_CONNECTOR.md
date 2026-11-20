@@ -58,6 +58,80 @@ Every flag also resolves from an environment variable
 `connector enroll` remains available for mock/development control planes; live
 Cloud token creation is authenticated and organization-scoped in the dashboard.
 
+## Windows service
+
+The `OpenAdaptConnector` wrapper runs the connector loop under the Windows
+Service Control Manager. The Windows CI proof covers service lifecycle and
+refusal of an ungoverned job, rather than a successful desktop write.
+
+A service runs in session 0 and cannot directly interact with a signed-in
+user's desktop. A desktop job needs an execution agent in that user's
+interactive session. `WindowsBackend` can call a separate HTTP agent, but the
+service-to-agent governed write and read-back path has not been qualified by
+this workflow. See [Microsoft's service guidance](https://learn.microsoft.com/en-us/windows/win32/services/interactive-services).
+
+Install, from an elevated (Administrator) prompt:
+
+```powershell
+pip install "openadapt-flow[vision,connector-windows]==<version>"
+# Put the token and settings in the machine-wide config file:
+#   C:\ProgramData\OpenAdapt\connector\connector.toml
+openadapt-flow connector service install
+openadapt-flow connector service start
+openadapt-flow connector service status
+```
+
+Install into a regular Python installation, not a virtual environment: the
+service runs that installation's `python.exe`, and `install` refuses a venv.
+
+`connector.toml` takes the same keys `connector enroll` writes
+(`control_plane_url`, `token`, `org_id`, `profile`, `storage_backend`,
+`storage_root`, ...) under a `[connector]` table. Pass `--config-dir` to
+`install` to use a different directory.
+
+- **Config location.** `%ProgramData%\OpenAdapt\connector`. The service sets
+  `OPENADAPT_HOME` to it.
+- **Account.** The service runs as the virtual account
+  `NT SERVICE\OpenAdaptConnector`, not as LocalSystem. Give that account
+  access to the storage root and anything the deployment profile names.
+- **Permissions.** `install` removes inherited permissions from the config
+  directory. Only SYSTEM, Administrators and the service account can read
+  `connector.toml`, which holds the token. The service account can write only
+  to `logs`.
+- **Logs.** `%ProgramData%\OpenAdapt\connector\logs\connector.log`, rotated at
+  5 MB with five old files kept. The token is never written to the log.
+- **Start and recovery.** Delayed automatic start. The service restarts after
+  a failure (5 s, 5 s, then 60 s). A lost connection to the control plane is
+  retried inside the service with backoff.
+- **Network.** Outbound only. `install` adds no firewall rule.
+- **Desktop.** The wrapper does not create an interactive user session or
+  start an execution agent in one. Its service lifecycle proof does not
+  qualify desktop execution.
+- **Stop.** A job already running finishes and reports. A lease returned while
+  the service is stopping never starts; it is left unacknowledged for the
+  control plane to reconcile, rather than reported as completed.
+- **Token replacement.** The service account reads its configuration and can
+  write only to its log directory. Replace the enrollment token as an
+  administrator while the service is stopped, then start it again. Automatic
+  token persistence needs a separate writable-state contract; the wrapper's
+  authorization-refusal check does not prove token rotation.
+
+Update by stopping the service, installing the pinned version, and starting
+it again:
+
+```powershell
+openadapt-flow connector service stop
+pip install "openadapt-flow[vision,connector-windows]==<new version>"
+openadapt-flow connector service start
+```
+
+Uninstall with `openadapt-flow connector service remove`. The config
+directory, with the token, is kept; delete it to remove the enrollment, and
+revoke the token in Cloud settings.
+
+On other operating systems, `connector service` prints a message and exits
+with code 2; run `connector run` under systemd or launchd instead.
+
 ## Data boundary and safety
 
 * **Down (to the Connector):** a PHI-free job *descriptor* only — run/workflow

@@ -3960,7 +3960,12 @@ def _compile_recording(
     # form, whatever the screen did after the click (a slow recording can
     # capture the page before it changes). Explicit risk_overrides below
     # still win.
-    for step in _form_submit_steps(steps, binding_observations):
+    credential_kinds = {
+        step.id: str(event["credential"])
+        for step, _before, _after, event in pending
+        if step.secret and isinstance(event.get("credential"), str)
+    }
+    for step in _form_submit_steps(steps, binding_observations, credential_kinds):
         if step.risk != "irreversible":
             step.risk = "irreversible"
             step.risk_explanation = "it submits the form the run typed into"
@@ -4258,6 +4263,9 @@ def _compile_recording(
                 len(decisions),
             )
 
+    # Each postcondition stays on its producing step. Later display persistence,
+    # reversible risk and target identity do not authorize delaying that check.
+
     # Default fix-up passes (see compiler.fixup_passes): replace a demonstrated
     # gesture that asserts nothing with an equivalent checked one, using only
     # the recording's own frames. Every change is recorded in
@@ -4277,7 +4285,11 @@ def _compile_recording(
         pixel_verify_enabled=pixel_verify_enabled,
         drop_redundant_keys=drop_redundant_keys,
     )
-    compile_notes = [*compile_notes, *guard_notes, *native_selection_notes]
+    compile_notes = [
+        *compile_notes,
+        *guard_notes,
+        *native_selection_notes,
+    ]
     for note in compile_notes:
         logger.info("compile-pass %s: %s", note["step"], note["change"])
 
@@ -4654,16 +4666,30 @@ def _compile_recording(
 
 
 def _form_submit_steps(
-    steps: list[Step], observations: dict[str, object]
+    steps: list[Step],
+    observations: dict[str, object],
+    credential_kinds: Optional[dict[str, str]] = None,
 ) -> list[Step]:
     """Clicks on the labelled submit button of the one form owning every
-    field typed into since the previous such click."""
+    field typed into since the previous such click.
 
+    A sign-in is not a save: when the fields typed since the previous such
+    click are exactly a username and a current password the recorder withheld
+    (``credential_kinds``, from each secret TYPE event's ``credential``), its
+    submit button signs in and writes no record. A lone password (a PIN or a
+    re-authentication), a ``new-password`` field (a password change or sign-up)
+    or any other typed field keeps the escalation, and the keyword risk
+    inference still classifies the button on its own label.
+    """
+
+    kinds = credential_kinds or {}
     found: list[Step] = []
     typed = False
+    typed_kinds: list[Optional[str]] = []
     for step in steps:
         if step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION):
             typed = True
+            typed_kinds.append(kinds.get(step.id) if step.secret else None)
             continue
         raw = observations.get(step.id)
         if (
@@ -4672,8 +4698,10 @@ def _form_submit_steps(
             and step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK)
             and _is_form_save(raw)
         ):
-            found.append(step)
+            if sorted(map(str, typed_kinds)) != ["password", "username"]:
+                found.append(step)
             typed = False
+            typed_kinds = []
     return found
 
 

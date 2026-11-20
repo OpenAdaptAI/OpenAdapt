@@ -199,6 +199,15 @@ ed329274d4cea9c0d1c939b7a453ba81acb30565:packages/flow/tests/test_sanitized_arti
 # PR #2293: moved Ed25519 type annotation; AST matches prior source and has no literal.
 7571d9c86e1911d70b17e81cfa72ea7464a192cf:packages/flow/openadapt_flow/tx/lens.py:generic-api-key:885
 
+# PR #2294: deliberately synthetic sign-in sentinel in the original e2e commit.
+# No real account uses it. This exact historical finding alone is excluded;
+# a new commit, path, rule or line still scans normally.
+4f919d5a2267cae1e8668d4a0aed3d1b0291f22a:packages/flow/tests/e2e/test_wrap_sign_in_e2e.py:generic-api-key:40
+# PR #2308: exact historical Python type annotations, reviewed as source code.
+e0b16824b36b96f65b416b607a3d065205fd94af:packages/flow/openadapt_flow/form_tx/receipt.py:generic-api-key:57
+e0b16824b36b96f65b416b607a3d065205fd94af:packages/flow/openadapt_flow/form_tx/receipt.py:generic-api-key:120
+e0b16824b36b96f65b416b607a3d065205fd94af:packages/flow/openadapt_flow/form_tx/receipt.py:generic-api-key:132
+e0b16824b36b96f65b416b607a3d065205fd94af:packages/flow/openadapt_flow/form_tx/reconciler.py:generic-api-key:102
 # PR #2295: synthetic privacy sentinel, never a credential. Later source builds
 # the same test value at runtime; this pins only the historical false positive.
 e4ebb9330cf3fcbf3de89a76d912cf3609163b22:packages/flow/tests/test_choice_widgets_e2e.py:generic-api-key:201
