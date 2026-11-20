@@ -4,10 +4,10 @@ Provides ``CopilotViewState``, ``CopilotFieldHighlight``, and ``CopilotSessionBr
 for zero-cloud communication between the local Python ``form_tx`` runner and the
 OpenAdapt Chrome extension over Chrome Native Messaging.
 
-All state updates are written atomically via temp-file rename (``copilot_state.json``)
-and all operator resolutions are appended with ``os.O_APPEND`` and deduplicated by
-``idempotency_key`` (``copilot_decisions.jsonl``). Secret and password-like keys are
-redacted to ``"<secret>"`` so sensitive credentials never appear in plaintext.
+Native operator decisions use a run-bound SQLite mailbox with durable claims.
+State updates use atomic rename. State projections suppress recognized credential
+fields, and the native channel refuses secret-field value entry. Legacy unbound
+JSONL helpers remain offline evidence APIs and grant no runtime authority.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ import json
 import os
 import re
 import tempfile
+import time
 from pathlib import Path
 from typing import Any, Literal, Mapping, Optional
 
@@ -26,13 +27,21 @@ except ImportError:  # pragma: no cover - Windows fallback
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from openadapt_flow.copilot_protocol import (
+    BoundDecisionStore,
+    CopilotBoundDecision,
+    CopilotRunBinding,
+    private_session_directory,
+)
 from openadapt_flow.form_tx.types import (
     FormHaltItem,
     FormTxOutcome,
+    HumanDecisionAction,
     HumanResolutionInput,
 )
+from openadapt_flow.report_redaction import redact_text
 
-COPILOT_STATE_SCHEMA = "openadapt.copilot-state/v1"
+COPILOT_STATE_SCHEMA: Literal["openadapt.copilot-state/v1"] = "openadapt.copilot-state/v1"
 COPILOT_STATE_FILE = "copilot_state.json"
 COPILOT_DECISIONS_FILE = "copilot_decisions.jsonl"
 REDACTED_SECRET = "<secret>"
@@ -89,8 +98,10 @@ def _redact_value(value: Any, *, key_hint: Optional[str] = None) -> Any:
         return tuple(_redact_value(item) for item in value)
     if isinstance(value, list):
         return [_redact_value(item) for item in value]
-    if isinstance(value, str) and _TOKEN_VALUE_RE.match(value.strip()):
-        return REDACTED_SECRET
+    if isinstance(value, str):
+        if _TOKEN_VALUE_RE.match(value.strip()):
+            return REDACTED_SECRET
+        return redact_text(value)[0]
     return value
 
 
@@ -108,6 +119,38 @@ def _redact_halt_item(halt: FormHaltItem) -> FormHaltItem:
     else:
         portal_val = _redact_value(halt.portal_value)
         dossier_val = _redact_value(halt.dossier_value)
+    if secret_target:
+        halt = halt.model_copy(
+            update={
+                "message": "Sensitive field requires an on-screen operator action.",
+                "available_options": (),
+                "allowed_actions": tuple(
+                    a
+                    for a in halt.allowed_actions
+                    if a
+                    in {
+                        HumanDecisionAction.FIXED_ON_SCREEN,
+                        HumanDecisionAction.ESCALATE_TO_OWNER,
+                        HumanDecisionAction.ABORT_RUN,
+                    }
+                ),
+            }
+        )
+    else:
+        halt = halt.model_copy(
+            update={
+                "message": str(_redact_value(halt.message)),
+                "available_options": tuple(
+                    option.model_copy(
+                        update={
+                            "label": str(_redact_value(option.label)),
+                            "value": str(_redact_value(option.value)),
+                        }
+                    )
+                    for option in halt.available_options
+                ),
+            }
+        )
     if portal_val != halt.portal_value or dossier_val != halt.dossier_value:
         return halt.model_copy(
             update={
@@ -142,6 +185,7 @@ class CopilotViewState(BaseModel):
 
     schema_version: Literal["openadapt.copilot-state/v1"] = COPILOT_STATE_SCHEMA
     run_id: str = Field(min_length=1)
+    binding: Optional[CopilotRunBinding] = None
     outcome: FormTxOutcome
     status_line: str
     fields_filled_auto: int = Field(ge=0)
@@ -188,13 +232,18 @@ class CopilotSessionBridge:
         return self._dir / COPILOT_DECISIONS_FILE
 
     def publish_state(self, state: CopilotViewState) -> None:
+        """Serialize state publication with bound decision acceptance."""
+        with BoundDecisionStore(self._dir).transaction():
+            self._publish_state(state)
+
+    def _publish_state(self, state: CopilotViewState) -> None:
         """Atomically write ``copilot_state.json`` via temp-file rename."""
         validated = (
             state
             if isinstance(state, CopilotViewState)
             else CopilotViewState.model_validate(state)
         )
-        self._dir.mkdir(parents=True, exist_ok=True)
+        private_session_directory(self._dir)
         payload = (
             json.dumps(
                 validated.model_dump(mode="json"),
@@ -212,10 +261,7 @@ class CopilotSessionBridge:
         )
         tmp_path = Path(tmp_name)
         try:
-            try:
-                os.chmod(tmp_fd, 0o600)
-            except OSError:
-                pass
+            os.chmod(tmp_fd, 0o600)
             view = memoryview(payload)
             written = 0
             while written < len(view):
@@ -238,10 +284,94 @@ class CopilotSessionBridge:
             return None
         return CopilotViewState.model_validate_json(raw)
 
+    def publish_owned_state(
+        self, state: CopilotViewState, *, expected_binding: Optional[CopilotRunBinding]
+    ) -> None:
+        """Refuse another live runner's session while updating a run generation."""
+        with BoundDecisionStore(self._dir).transaction():
+            current = self.read_state()
+            actual = current.binding if current else None
+            if expected_binding is None:
+                if actual is not None and actual.expires_at_unix > time.time():
+                    raise ValueError("copilot session already has an active owner")
+            elif actual != expected_binding:
+                raise ValueError("copilot session ownership changed")
+            self._publish_state(state)
+
+    def _validate_bound_decision(self, item: CopilotBoundDecision) -> None:
+        state = self.read_state()
+        if (
+            state is None
+            or state.binding is None
+            or state.binding != item.binding
+            or state.run_id != item.binding.run_id
+            or item.binding.expires_at_unix <= time.time()
+        ):
+            raise ValueError("decision does not match the active run generation")
+        decision = item.decision
+        if (
+            decision.actor_id != item.binding.operator_id
+            or decision.actor_role != "operator"
+        ):
+            raise ValueError("decision operator does not match the local run")
+        halt = next((h for h in state.halts if h.halt_id == decision.halt_id), None)
+        if halt is None or decision.action not in halt.allowed_actions:
+            raise ValueError("decision must resolve a current allowed halt action")
+        if decision.mapped_dossier_key not in (None, halt.dossier_key):
+            raise ValueError("decision cannot remap a field to another dossier key")
+        sensitive_target = (
+            is_secret_key_name(halt.dossier_key)
+            or is_secret_key_name(halt.control_id)
+            or is_secret_key_name(halt.field_label)
+            or is_secret_selector(halt.dom_selector)
+        )
+        manual_actions = {
+            HumanDecisionAction.FIXED_ON_SCREEN,
+            HumanDecisionAction.ESCALATE_TO_OWNER,
+            HumanDecisionAction.ABORT_RUN,
+        }
+        if sensitive_target and decision.action not in manual_actions:
+            raise ValueError("secret targets require an on-screen action or a stop")
+        if (
+            decision.note
+            or _redact_value(decision.provided_value) != decision.provided_value
+        ):
+            raise ValueError(
+                "decision must not contain secret values or free-text notes"
+            )
+        if (
+            decision.action != HumanDecisionAction.PROVIDE_VALUE
+            and decision.provided_value is not None
+        ):
+            raise ValueError("this action must not contain a provided value")
+
+    def append_bound_decision(self, item: CopilotBoundDecision) -> tuple[bool, int]:
+        """Accept only a current run-bound native message; do not apply it here."""
+        return BoundDecisionStore(self._dir).append(item, self._validate_bound_decision)
+
+    def claim_bound_decision(
+        self, binding: CopilotRunBinding
+    ) -> Optional[CopilotBoundDecision]:
+        """Durably claim one decision before the live runtime applies effects."""
+
+        def validate_binding() -> None:
+            current = self.read_state()
+            if (
+                current is None
+                or current.binding != binding
+                or binding.expires_at_unix <= time.time()
+            ):
+                raise ValueError("copilot session ownership or generation changed")
+
+        return BoundDecisionStore(self._dir).claim(binding, validate_binding)
+
     def append_decision(
         self, decision: HumanResolutionInput | Mapping[str, Any]
     ) -> tuple[bool, int]:
-        """Validate and append ``decision`` with ``os.O_APPEND`` and idempotency dedup.
+        """Legacy unbound evidence helper, never consumed by the native runtime.
+
+        Use ``append_bound_decision`` for operator actions. This JSONL log is
+        retained for existing offline consumers and grants no runtime authority.
 
         Returns ``(accepted_new, total_count)`` where ``accepted_new`` is ``False``
         when ``decision.idempotency_key`` was already recorded.
@@ -251,7 +381,7 @@ class CopilotSessionBridge:
             if isinstance(decision, HumanResolutionInput)
             else HumanResolutionInput.model_validate(decision)
         )
-        self._dir.mkdir(parents=True, exist_ok=True)
+        private_session_directory(self._dir)
         flags = os.O_RDWR | os.O_CREAT | os.O_APPEND
         fd = os.open(str(self.decisions_path), flags, 0o600)
         try:
