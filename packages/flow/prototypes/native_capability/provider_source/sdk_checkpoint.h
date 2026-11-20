@@ -10,7 +10,7 @@ enum class GuardReason {
     None, Deadline, OwnerUnavailable, OwnerMismatch, ElementUnavailable,
     RuntimeUnavailable, ScopeChanged, Sensitive, PrivacyUnknown, CleanupUnknown
 };
-enum class GuardEvent { Enter, PrivacyObserved, Accepted, Refused };
+enum class GuardEvent { Enter, PrivacyObserved, Accepted, Refused, PrivacyBegin };
 struct PrivacyObservation {
     HRESULT status = E_UNEXPECTED;
     VARTYPE kind = VT_EMPTY;

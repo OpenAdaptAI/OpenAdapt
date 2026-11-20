@@ -19,11 +19,12 @@ enum class Case { Supported, NormalNull, ExplicitUnsupported, PatternError, Sens
 enum class Event { WindowCreate, WindowDestroy, ProviderOptions, HostProvider,
     Property, Pattern, QueryInterface, AddRef, Release, Semantic, Action,
     Guard, ErrorGetter, WindowText, UnknownInterface, PrivacyObserved, PropertyOutput,
-    ErrorSet, OracleGetter, PatternOutput, WindowObject };
+    ErrorSet, OracleGetter, PatternOutput, WindowObject, PumpExit, WindowCleanup, WindowFinalDestroy };
 struct Entry { Event event; LONG argument; HRESULT status; unsigned phase; DWORD thread; std::uint64_t generation; VARTYPE kind; bool boolean_observed; VARIANT_BOOL boolean; };
 struct State {
     std::mutex mutex;
     std::vector<Entry> entries;
+    std::array<std::uint64_t, 24> event_counts{};
     bool overflow = false;
     std::atomic<HWND> hwnd{nullptr};
     std::atomic<std::uint64_t> generation{0};
@@ -31,13 +32,15 @@ struct State {
     std::atomic<unsigned> forbidden{0}, unknown{0}, live_objects{0};
     std::atomic<PrivacyMode> privacy{PrivacyMode::False};
     Case selected = Case::Supported;
-    std::atomic<bool> stop{false};
+    std::atomic<bool> stop{false}, window_final_destroyed{false}, class_unregistered{false},
+        cleanup_failed{false}, ui_completed{false};
     std::atomic<DWORD> ui_thread{0};
     PatternMode pattern = PatternMode::Supported;
     HANDLE ready = nullptr, destroyed = nullptr;
     ObservedScope issued_scope{};
     void add(Event event, LONG argument = 0, HRESULT status = S_OK, const PrivacyObservation* raw = nullptr) noexcept {
         std::lock_guard<std::mutex> lock(mutex);
+        ++event_counts[static_cast<unsigned>(event)];
         if (entries.size() >= 1024) { overflow = true; return; }
         entries.push_back({event, argument, status, phase.load(), GetCurrentThreadId(), generation.load(),
             static_cast<VARTYPE>(raw ? raw->kind : VT_EMPTY), raw && raw->boolean_observed,
@@ -226,25 +229,88 @@ LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpar
         data->state->hwnd = nullptr; ++data->state->generation;
         data->state->add(Event::WindowDestroy); SetEvent(data->state->destroyed); PostQuitMessage(0); return 0;
     }
+    if (data && message == WM_NCDESTROY) {
+        const LRESULT result = DefWindowProcW(hwnd, message, wparam, lparam);
+        SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
+        data->state->window_final_destroyed = true;
+        data->state->add(Event::WindowFinalDestroy);
+        return result;
+    }
     return DefWindowProcW(hwnd, message, wparam, lparam);
 }
 void window_thread(State& state) {
     state.ui_thread = GetCurrentThreadId();
     MSG queue{}; PeekMessageW(&queue, nullptr, 0, 0, PM_NOREMOVE);
     const HRESULT initialized = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    if (initialized != S_OK && initialized != S_FALSE) { SetEvent(state.ready); return; }
-    auto* provider = new Provider(state); WindowData data{&state, provider};
+    if (initialized != S_OK && initialized != S_FALSE) {
+        state.cleanup_failed = true; SetEvent(state.ready); return;
+    }
+    auto* provider = new Provider(state);
+    // Heap callback storage survives a failed DestroyWindow/late proxy callback.
+    // Its owned Provider reference is released only after final destruction.
+    auto* data = new WindowData{&state, provider};
     WNDCLASSW klass{}; klass.lpfnWndProc = window_proc;
     klass.hInstance = GetModuleHandleW(nullptr); klass.lpszClassName = L"OpenAdaptOwnedProviderSource";
     const ATOM registered = RegisterClassW(&klass);
     HWND hwnd = registered ? CreateWindowExW(0, klass.lpszClassName, L"", WS_OVERLAPPED,
-        0, 0, 64, 64, nullptr, nullptr, klass.hInstance, &data) : nullptr;
+        0, 0, 64, 64, nullptr, nullptr, klass.hInstance, data) : nullptr;
     SetEvent(state.ready);
-    if (hwnd && state.stop.load()) DestroyWindow(hwnd);
-    if (hwnd && !state.stop.load()) { MSG message; while (GetMessageW(&message, nullptr, 0, 0) > 0) { TranslateMessage(&message); DispatchMessageW(&message); } }
-    state.phase = 6; state.add(Event::ErrorSet, 1, SetErrorInfo(0, nullptr)); provider->Release();
-    if (registered) UnregisterClassW(klass.lpszClassName, klass.hInstance);
-    CoUninitialize();
+    int outcome = hwnd ? 1 : 2;  // early stop / failed creation; not normal WM_QUIT.
+    if (hwnd && !state.stop.load()) {
+        MSG message{};
+        while (true) {
+            const BOOL read = GetMessageW(&message, nullptr, 0, 0);
+            if (read == 0) { outcome = 0; break; }
+            if (read == -1) { outcome = -1; state.cleanup_failed = true; break; }
+            TranslateMessage(&message); DispatchMessageW(&message);
+        }
+    }
+    state.phase = 6;
+    state.add(Event::PumpExit, outcome, outcome == 0 ? S_OK : E_FAIL);
+    // Every pump exit reaches the SAME creator-thread destruction path.
+    if (state.hwnd.load()) {
+        const BOOL destroyed = DestroyWindow(state.hwnd.load());
+        state.add(Event::WindowCleanup, 0, destroyed ? S_OK : E_FAIL);
+        if (!destroyed) state.cleanup_failed = true;
+    }
+    const bool gone = state.window_final_destroyed.load() && state.hwnd.load() == nullptr;
+    state.add(Event::WindowCleanup, 1, gone ? S_OK : E_FAIL);
+    if (gone) {
+        delete data; provider->Release();
+        const BOOL unregistered = registered && UnregisterClassW(klass.lpszClassName, klass.hInstance);
+        state.class_unregistered = unregistered != FALSE;
+        state.add(Event::WindowCleanup, 2, unregistered ? S_OK : E_FAIL);
+        if (!unregistered) state.cleanup_failed = true;
+        const HRESULT clear_error = SetErrorInfo(0, nullptr);
+        state.add(Event::ErrorSet, 1, clear_error);
+        if (clear_error != S_OK) state.cleanup_failed = true;
+        CoUninitialize();
+    } else {
+        // Do not release Provider or free GWLP_USERDATA while a window may use
+        // it. This failed path remains UNQUALIFIED; all storage is retained to
+        // process end under the mandatory outer Job. No apartment cleanup claim.
+        state.cleanup_failed = true;
+    }
+    state.ui_completed = gone && state.class_unregistered.load() && !state.cleanup_failed.load();
+    state.add(Event::WindowCleanup, 3, state.ui_completed ? S_OK : E_FAIL);
+}
+struct Snapshot {
+    std::vector<Entry> entries;
+    std::array<std::uint64_t, 24> event_counts;
+    bool overflow, complete, cleanup_complete;
+    unsigned forbidden, unknown, live_objects;
+    ObservedScope issued;
+};
+Snapshot snapshot(State& state) {
+    std::lock_guard<std::mutex> lock(state.mutex);
+    const unsigned live = state.live_objects.load();
+    const bool cleanup = state.ui_completed && state.window_final_destroyed &&
+        state.class_unregistered && !state.cleanup_failed;
+    // Under the valid owned COM reference contract, zero objects + joined UI
+    // thread after both apartments close means no later valid callback exists.
+    // Otherwise this is a locked stable PARTIAL snapshot, never a whole trace.
+    return {state.entries, state.event_counts, state.overflow, cleanup && live == 0 && !state.overflow, cleanup,
+        state.forbidden.load(), state.unknown.load(), live, state.issued_scope};
 }
 void emit_scope(const ObservedScope& observed) {
     std::cout << "{\"hwnd\":" << reinterpret_cast<std::uintptr_t>(observed.hwnd)
@@ -254,7 +320,7 @@ void emit_scope(const ObservedScope& observed) {
     for (std::size_t i = 0; i < observed.runtime.size; ++i) { if (i) std::cout << ','; std::cout << observed.runtime.values[i]; }
     std::cout << "]}";
 }
-void emit_trace(const State& state) {
+void emit_trace(const Snapshot& state) {
     std::size_t ordinal = 0;
     for (const auto& entry : state.entries) {
         std::cout << "{\"role\":\"trace\",\"ordinal\":" << ordinal++ << ",\"event\":" << static_cast<unsigned>(entry.event)
@@ -319,7 +385,9 @@ int wmain(int argc, wchar_t** argv) {
         }
     }
     if (initialized == S_OK || initialized == S_FALSE) {
-        state.add(Event::ErrorSet, 1, SetErrorInfo(0, nullptr)); CoUninitialize();
+        const HRESULT clear_error = SetErrorInfo(0, nullptr);
+        state.add(Event::ErrorSet, 1, clear_error);
+        if (clear_error != S_OK) state.cleanup_failed = true; CoUninitialize();
     }
     state.stop = true;
     if (state.hwnd.load()) PostMessageW(state.hwnd.load(), WM_CLOSE, 0, 0);
@@ -327,8 +395,9 @@ int wmain(int argc, wchar_t** argv) {
     // A hung call cannot earn a clean receipt. The REQUIRED retained outer Job
     // terminates this whole owned process at 20s and preserves partial capture.
     ui.join(); CloseHandle(state.ready); CloseHandle(state.destroyed);
-    emit_trace(state);
-    const bool trace_clean = state.forbidden == 0 && state.unknown == 0 && !state.overflow && state.live_objects == 0;
+    const Snapshot retained = snapshot(state);
+    emit_trace(retained);
+    const bool trace_clean = retained.complete && retained.forbidden == 0 && retained.unknown == 0 && !retained.overflow;
     bool expected = false;
     switch (state.selected) {
     case Case::Supported: expected = bound && reason == GuardReason::None && observation.capability == cap::Capability::Supported; break;
@@ -355,14 +424,17 @@ int wmain(int argc, wchar_t** argv) {
         << ",\"acquire_hr\":" << observation.acquire_hresult << ",\"acquire_nonnull\":" << observation.acquire_nonnull
         << ",\"query_attempted\":" << observation.query_attempted
         << ",\"query_hr\":" << observation.query_hresult << ",\"query_nonnull\":" << observation.query_nonnull
-        << ",\"forbidden\":" << state.forbidden << ",\"unexplained\":" << state.unknown
-        << ",\"trace_overflow\":" << state.overflow << ",\"live_objects\":" << state.live_objects
+        << ",\"forbidden\":" << retained.forbidden << ",\"unexplained\":" << retained.unknown
+        << ",\"trace_overflow\":" << retained.overflow << ",\"live_objects\":" << retained.live_objects
+        << ",\"trace_complete\":" << retained.complete << ",\"cleanup_complete\":" << retained.cleanup_complete
         << ",\"trace_clean\":" << trace_clean << ",\"expected_outcome\":" << expected
         << ",\"observed_scope\":";
     if (!observed_available) std::cout << "null"; else emit_scope(observed);
-    std::cout << ",\"oracle_scope\":"; emit_scope(state.issued_scope);
-    std::cout << ",\"runtime_adoption\":false}" << std::endl;
+    std::cout << ",\"oracle_scope\":"; emit_scope(retained.issued);
+    std::cout << ",\"event_counts\":[";
+    for (std::size_t i = 0; i < retained.event_counts.size(); ++i) { if (i) std::cout << ','; std::cout << retained.event_counts[i]; }
+    std::cout << "],\"runtime_adoption\":false}" << std::endl;
     const bool passed = expected && trace_clean;
-    if (state.live_objects == 0) delete state_ptr;
+    if (retained.complete) delete state_ptr;
     return passed ? 0 : 94;
 }

@@ -18,8 +18,14 @@ SPEC.loader.exec_module(AUDIT)
 
 def records(case=0, pattern=0):
     rows = []
+    current_generation = 0
 
     def add(event, argument=0, phase=5, kind=0, boolean=0, hr=0):
+        nonlocal current_generation
+        if event == 0:
+            current_generation = 1
+        if event == 1:
+            current_generation = 2
         rows.append(
             dict(
                 role="trace",
@@ -28,8 +34,8 @@ def records(case=0, pattern=0):
                 argument=argument,
                 hr=hr,
                 phase=phase,
-                thread=71,
-                generation=1,
+                thread=73 if event in (11, 15) else 71,
+                generation=current_generation,
                 kind=kind,
                 boolean_observed=kind == 11 and hr == 0,
                 boolean=boolean,
@@ -37,6 +43,7 @@ def records(case=0, pattern=0):
         )
 
     def private(phase, kind=11, boolean=0, hr=0):
+        add(11, 400, phase)
         add(4, 30019, phase)
         add(16, 30019, phase, kind, boolean, hr)
         add(15, 100, phase, kind, boolean, hr)
@@ -45,6 +52,10 @@ def records(case=0, pattern=0):
         add(11, 0, stage)
         if owner:
             add(1, phase=6)
+            add(23, phase=6)
+            add(21, phase=6)
+            for action in (1, 2, 3):
+                add(22, action, phase=6)
             add(11, 303, stage)
             return
         if expired:
@@ -91,6 +102,8 @@ def records(case=0, pattern=0):
         trace_overflow=False,
         live_objects=0,
         trace_clean=True,
+        trace_complete=True,
+        cleanup_complete=True,
         expected_outcome=True,
         observed_scope={**scope, "runtime_id": [2, -7, 23]},
         oracle_scope=scope,
@@ -146,6 +159,8 @@ def records(case=0, pattern=0):
                 if case == 3
                 else 0,
             )
+            if case not in (1, 2, 3):
+                add(6, pattern + 1, 0)
             if case in (1, 2, 3):
                 result.update(
                     capability=2 if case == 2 else 0,
@@ -184,8 +199,15 @@ def records(case=0, pattern=0):
             result["expected_outcome"] = False
     if case != 15:
         add(1, phase=6)
+        add(23, phase=6)
+        add(21, phase=6)
+        for action in (1, 2, 3):
+            add(22, action, phase=6)
     add(8, phase=6)
     add(17, 1, phase=6)
+    result["event_counts"] = [
+        sum(r["event"] == event for r in rows) for event in range(24)
+    ]
     rows.append(result)
     return rows
 
@@ -368,6 +390,140 @@ class ProviderSourceTests(unittest.TestCase):
             package["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"],
             ["openadapt_flow"],
         )
+
+
+def recensus(rows):
+    for ordinal, row in enumerate(rows[:-1]):
+        row["ordinal"] = ordinal
+    rows[-1]["event_counts"] = [
+        sum(r["event"] == event for r in rows[:-1]) for event in range(24)
+    ]
+    return rows
+
+
+class TraceCompletenessTests(unittest.TestCase):
+    def test_original_six_fault_transforms_with_recomputed_census(self):
+        for pattern in range(3):
+            for fault in (
+                "missing_pattern_path",
+                "missing_property_pairs",
+                "wrong_pattern_output",
+                "wrong_generation",
+                "extra_guard",
+                "overflow_dword",
+            ):
+                with self.subTest(pattern=pattern, fault=fault):
+                    rows = records(0, pattern)
+                    if fault == "missing_pattern_path":
+                        rows = [r for r in rows if r.get("event") not in (5, 19, 6)]
+                    elif fault == "missing_property_pairs":
+                        rows = [r for r in rows if r.get("event") not in (4, 16)]
+                    elif fault == "wrong_pattern_output":
+                        row = next(r for r in rows if r.get("event") == 19)
+                        row.update(
+                            hr=-2147467259, argument=-(10015, 10010, 10002)[pattern]
+                        )
+                    elif fault == "wrong_generation":
+                        for row in rows[:-1]:
+                            row["generation"] = 999
+                    elif fault == "extra_guard":
+                        row = copy.deepcopy(rows[7])
+                        row.update(event=11, argument=99, phase=0)
+                        rows.insert(8, row)
+                    else:
+                        for key in ("oracle_scope", "observed_scope"):
+                            rows[-1][key]["pid"] = 2**32 + 41
+                    self.assertFalse(AUDIT.audit(recensus(rows), 0, pattern))
+
+    def test_deletion_truncation_extra_generation_across_all_selectors(self):
+        for case in range(16):
+            if case == 8:
+                continue
+            for pattern in range(3):
+                for fault in (
+                    "delete_path",
+                    "truncate",
+                    "extra",
+                    "generation",
+                    "output",
+                ):
+                    with self.subTest(case=case, pattern=pattern, fault=fault):
+                        rows = records(case, pattern)
+                        if fault == "delete_path":
+                            target = (
+                                (5, 19, 6) if rows[-1]["acquire_attempted"] else (0,)
+                            )
+                            rows = [r for r in rows if r.get("event") not in target]
+                        elif fault == "truncate":
+                            rows = rows[: len(rows) // 2] + [rows[-1]]
+                        elif fault == "extra":
+                            row = copy.deepcopy(rows[6])
+                            row.update(event=11, argument=99)
+                            rows.insert(8, row)
+                        elif fault == "generation":
+                            rows[6]["generation"] = 991
+                        else:
+                            outputs = [r for r in rows if r.get("event") == 19]
+                            if outputs:
+                                outputs[0]["argument"] *= -1
+                            else:
+                                rows[-1]["guard_reason"] = 0
+                        self.assertFalse(AUDIT.audit(recensus(rows), case, pattern))
+
+    def test_snapshot_and_all_exit_cleanup_are_required(self):
+        for fault in (
+            "partial",
+            "cleanup_unknown",
+            "live_callback",
+            "pump_error",
+            "missing_final",
+            "missing_unregistration",
+            "reordered_cleanup",
+        ):
+            rows = records()
+            if fault == "partial":
+                rows[-1]["trace_complete"] = False
+            elif fault == "cleanup_unknown":
+                rows[-1]["cleanup_complete"] = False
+            elif fault == "live_callback":
+                rows[-1]["live_objects"] = 1
+            elif fault == "pump_error":
+                row = next(r for r in rows if r.get("event") == 21)
+                row.update(argument=-1, hr=-2147467259)
+            elif fault == "missing_final":
+                rows = [r for r in rows if r.get("event") != 23]
+            elif fault == "missing_unregistration":
+                rows = [
+                    r for r in rows if not (r.get("event") == 22 and r["argument"] == 2)
+                ]
+            else:
+                a = next(r for r in rows if r.get("event") == 22 and r["argument"] == 1)
+                b = next(r for r in rows if r.get("event") == 22 and r["argument"] == 3)
+                a["argument"], b["argument"] = 3, 1
+            self.assertFalse(AUDIT.audit(recensus(rows), 0, 0), fault)
+
+    def test_every_event_has_closed_arguments_and_dword_scope(self):
+        rows = records()
+        for index in range(len(rows) - 1):
+            changed = copy.deepcopy(rows)
+            changed[index]["argument"] = 999999
+            self.assertFalse(AUDIT.audit(recensus(changed), 0, 0), index)
+        for key in ("pid", "tid", "session", "creation_low", "creation_high"):
+            changed = records()
+            for channel in ("oracle_scope", "observed_scope"):
+                changed[-1][channel][key] = 2**32
+            self.assertFalse(AUDIT.audit(changed, 0, 0), key)
+
+    def test_raw_read_interval_and_independent_census_cannot_be_empty(self):
+        for event in (4, 16, 15):
+            rows = [r for r in records() if r.get("event") != event]
+            self.assertFalse(AUDIT.audit(recensus(rows), 0, 0))
+        rows = records()
+        rows[-1]["event_counts"] = [0] * 24
+        self.assertFalse(AUDIT.audit(rows, 0, 0))
+        rows = records()
+        rows[-1]["event_counts"][0] = True
+        self.assertFalse(AUDIT.audit(rows, 0, 0))
 
 
 class HarnessSourceTests(unittest.TestCase):

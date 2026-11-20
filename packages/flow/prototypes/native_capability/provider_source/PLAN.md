@@ -160,6 +160,48 @@ wrong scope, empty-capture, empty-compiler and unknown-Job faults are PURE
 controls. No native compile, provider or Flow import occurs. They do not test
 the C++ implementation or prove its Windows behavior.
 
+## Source review correction and remaining bounds
+
+The first candidate `85160db022ec7ab2df4cc74ed7204ac265b596ff` remains preserved.
+The non-author source review found three classes of defect: matching only
+remaining request/output subsets could accept missing evidence; some message-
+pump exits could leave window callback storage alive incorrectly; and emitting
+from a mutable trace could race late proxy callbacks. Six own PURE-record
+before controls actually returned false acceptance. No provider was executed.
+
+The successor uses one closed model for all16 selectors and three patterns.
+Each raw privacy call has a begin/end interval with an actual provider request
+and output. A captured event census, nonempty required target acquisition and
+interface path, case-specific server output, client HRESULT/stage attribution,
+exact Windows DWORD ranges, monotonic window generation and mandatory teardown
+records must agree. Recomputing a row count after deleting the provider path
+cannot create that missing evidence. Missing, truncated, extra, wrong-mode or
+wrong-generation records refuse. This is an unsigned diagnostic agreement
+check, not proof that arbitrary fabricated records are authentic.
+
+Every UI message-pump exit now reaches the same creator-thread DestroyWindow
+path. WM_NCDESTROY must complete before callback storage or the owned provider
+reference is released; class unregistration is checked. Failed destruction
+keeps heap callback storage/provider alive until the owned process ends and
+remains unqualified. GetMessage error and failed cleanup are retained; they
+never become successful absence or a clean window teardown.
+
+Trace emission uses a locked immutable snapshot. A whole-trace claim requires
+the UI thread joined, both normal apartment teardown paths finished, the own
+window finally destroyed, class unregistered, no overflow and zero remaining
+owned COM objects. Under the valid COM reference contract this prevents later
+valid callbacks. Residual objects/callback uncertainty produces only a locked
+partial snapshot and cannot pass. It does not protect against an invalid
+native caller invoking a released object or qualify arbitrary proxy lifetime.
+
+The25 local unittest methods include the original six fault transforms,
+stronger recomputed-census controls, fault families across all selectors,
+partial/late-callback and failed window/class teardown records. These remain
+PURE tests of Python evidence rules and fake process sequencing. They do not
+execute or validate C++ cleanup, Win32 calls, provider callbacks or UIA core.
+The same non-author peer must review the exact successor; no native decision
+follows from this correction.
+
 ## Proposed future execution, currently prohibited
 
 The first future attempt would use one freshly reviewed exact source tree and

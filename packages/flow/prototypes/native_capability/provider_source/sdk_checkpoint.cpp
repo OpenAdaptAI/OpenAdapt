@@ -54,6 +54,8 @@ bool Checkpoint::native_owner(ObservedScope& observed) noexcept {
 bool Checkpoint::nonsensitive() noexcept {
     if (reason_ != GuardReason::None) return false;
     if (GetTickCount64() >= deadline_) return refuse(GuardReason::Deadline);
+    if (trace_) trace_(trace_context_, stage_, GuardEvent::PrivacyBegin,
+        GuardReason::None, S_OK, nullptr);
     VARIANT raw; VariantInit(&raw);
     const HRESULT status = element_->GetCurrentPropertyValueEx(UIA_IsPasswordPropertyId, TRUE, &raw);
     // Never inspect a BSTR/object/array or coerce another numeric type.
