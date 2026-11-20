@@ -65,7 +65,7 @@ from openadapt_flow.ir import (
     StructuralHandle,
     StructuralLocator,
 )
-from openadapt_flow.vision.match import Match
+from openadapt_flow.vision.match import EXPECTED_SPOT_JITTER_PX, Match
 from openadapt_flow.vision.ocr import (
     AmbiguousOcrMatchError,
     ContradictoryOcrEvidenceError,
@@ -800,9 +800,14 @@ def _model_grounded(
 
 
 def _identity_row_point(
-    anchor: Anchor, screen_png: bytes, vision: Any
+    anchor: Anchor,
+    screen_png: bytes,
+    vision: Any,
+    *,
+    template_png: Optional[bytes] = None,
+    viewport: Optional[tuple[int, int]] = None,
 ) -> Optional[tuple[Point, Region]]:
-    """Find the target's row by its recorded identity band, on pixels.
+    """Corroborate a unique identity row with independent target evidence.
 
     A list that gained, lost or reordered rows moves the recorded record to
     another row, and a different record can take its place (a search that
@@ -815,14 +820,16 @@ def _identity_row_point(
     vertical position, and each row's text is checked against the recorded
     identity template. The click moves vertically with the band only when
     exactly one row verifies; any other count is no proposal. The point is
-    only a proposal: the step's unchanged identity check reads the band at
-    the new point and admits or refuses the click, and the rung is ranked
+    only a proposal, and requires a fresh target-template match in that row's
+    projected crop. Missing/occluded target evidence never borrows identity
+    as proof of target presence. The unchanged identity check reads the band
+    at the new point and admits or refuses the click, and the rung is ranked
     with geometry, below OCR, so an irreversible step still refuses it.
     """
 
     template = anchor.identity_template
     band = anchor.identifier_region
-    if template is None or band is None:
+    if template is None or band is None or template_png is None:
         return None
     from openadapt_flow.runtime.identity_template import verify_template_identity
 
@@ -862,7 +869,42 @@ def _identity_row_point(
         anchor.region[2],
         anchor.region[3],
     )
-    return point, region
+    # Identity locates a candidate row; it does not prove that its action
+    # target survived. Reuse the existing matcher, threshold and expected-spot
+    # jitter only within this row's projected target crop, on the SAME frame.
+    try:
+        frame_size = viewport if viewport is not None else png_size(screen_png)
+        scope = pad_region(region, EXPECTED_SPOT_JITTER_PX, frame_size)
+        match = vision.find_template(
+            screen_png,
+            template_png,
+            search_region=scope,
+            threshold=TEMPLATE_THRESHOLD,
+            prefer_near=(region[0], region[1]),
+        )
+        if (
+            match is None
+            or not math.isfinite(match.confidence)
+            or match.confidence < TEMPLATE_THRESHOLD
+        ):
+            return None
+        mx, my, mw, mh = match.region
+        matched_region = (mx, my, mw, mh)
+        sx, sy, sw, sh = scope
+        if (
+            mw <= 0
+            or mh <= 0
+            or not (sx <= mx and sy <= my and mx + mw <= sx + sw and my + mh <= sy + sh)
+        ):
+            return None
+        point = _scaled_click_point(anchor, matched_region)
+        if not _point_in_region(point, matched_region) or not _point_in_region(
+            match.point, matched_region
+        ):
+            return None
+    except Exception:  # noqa: BLE001 - unknown/ambiguous target evidence: no proposal
+        return None
+    return point, matched_region
 
 
 def resolve(
@@ -1221,11 +1263,14 @@ def resolve(
     # surfaces only (see _identity_row_point). It runs before the landmark
     # geometry estimate, which can only repeat the recorded position: when
     # rows moved, that position may now hold a different record. It only
-    # proposes; the identity check at the new point decides. Named
+    # proposes after independent target evidence; the unchanged identity
+    # check at the new point decides. Named
     # ``geometry``: a positional estimate below OCR, so an irreversible step
     # still refuses it.
     if structural is None:
-        found = _identity_row_point(anchor, screen_png, vision)
+        found = _identity_row_point(
+            anchor, screen_png, vision, template_png=template_png, viewport=viewport
+        )
         if found is not None:
             point, region = found
             resolution = Resolution(
